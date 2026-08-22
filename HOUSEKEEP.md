@@ -4721,3 +4721,66 @@ o experimento estava certo — e foi justamente por rodá-lo cru, medindo tudo q
 mudou em vez de só o que eu esperava, que o achado verdadeiro apareceu. Se eu
 tivesse mudado a capacidade e olhado só o ack, teria concluído "não adiantou" e
 descartado a correção junto com a hipótese.
+
+---
+
+## H161 — `markChatUnread`: a melhor pista já disponível foi gasta, e o `BLOCKED` sai reforçado
+
+**Data**: 2026-08-22
+**Contexto**: seguir a pista que a H160 registrou e deliberadamente não perseguiu.
+
+**Onde**: `internal/wa-headless/probe_markunread2_test.go` (novo), linha
+`markChatUnread`.
+
+**Por que a pista era boa**: a H160 consertou o `MarkRead` trocando de MÓDULO —
+chamávamos `sendConversationSeen`, a referência chama
+`WAWebUpdateUnreadChatAction.sendSeen`, e o contador passou a se mexer. O mesmo
+módulo exporta `markUnread`. Uma linha `BLOCKED` desde a H78 por *"duas
+primitivas medidas, nenhuma marca"* ganhou, pela primeira vez, um candidato
+específico com precedente de sucesso no mesmo dia.
+
+**Medição**, três primitivas no mesmo chat, cada uma em separado:
+
+```
+inicial                                        markedUnread=false unreadCount=0
+Cmd.markChatUnread(chat, true)          ok     markedUnread=false unreadCount=undef
+UpdateUnreadChatAction.markUnread(...)  ok     markedUnread=false unreadCount=undef
+markUnread com presença anunciada       ok     markedUnread=false unreadCount=undef
+restauro (sendSeen)                            markedUnread=false unreadCount=0
+```
+
+**As três retornam sem erro e nenhuma vira `markedUnread`.** O `BLOCKED` continua,
+com evidência três vezes melhor do que tinha.
+
+**A forma da terceira NÃO foi chutada.** A primeira tentativa passou `{chat}` e
+levou `Cannot read properties of undefined (reading 'markUnread')` — de dentro da
+função, não do require. Em vez de tentar variações, li a assinatura da própria
+função:
+
+```js
+function h(e, t, n) {
+  return n === void 0 && (n = !0),
+    E({allowAction: n, chat: o("WAWebStateUtils").unproxy(e), unread: t})
+}
+```
+
+`markUnread(chat, unread, allowAction = true)` — posicional, três argumentos.
+Isso é mais barato e mais confiável que enumerar nomes, e é a evolução natural da
+regra da H143: **quando o nome existe e a chamada falha, leia a assinatura.**
+
+**Um defeito do meu instrumento, e ele já estava catalogado por mim mesmo.** A
+primeira versão guardou o modelo do chat numa variável e leu dela; depois da
+primeira chamada, `unreadCount` virou não-numérico. Não era a página quebrando —
+`markUnread` passa o chat por `WAWebStateUtils.unproxy`, e o objeto em mãos deixa
+de ser o vivo. É exatamente o *"A COLEÇÃO É RELIDA, não se confia no modelo em
+mãos"* que escrevi na H143, aplicado a um caso novo. Custou uma rodada.
+
+**Status**: não corrigido, e agora com a pista específica gasta. Fica registrado
+que `unreadCount` vira **indefinido** (não zero) depois de qualquer das três — o
+que é uma mudança de estado real, só não a que o verbo pede.
+
+**Lição**: *uma pista boa merece ser gasta, e gastá-la é resultado.* A linha
+estava `BLOCKED` com duas primitivas; agora está `BLOCKED` com três, incluindo a
+da referência e a da família que consertou a vizinha no mesmo dia. Isso não muda
+o estado e muda o que a próxima pessoa precisa tentar — que é o único jeito de um
+`BLOCKED` não virar dívida permanente.
