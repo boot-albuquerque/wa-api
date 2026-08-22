@@ -19351,7 +19351,7 @@ ter sido rediagnosticada três vezes é histórico legítimo.
 <!-- f-status: corrigido -->
 
 
-## F216 — carrossel: HSCROLL_CARDS renderiza, ALBUM_IMAGE não, e o remetente não vê o próprio
+## F216 — carrossel HSCROLL_CARDS: da medição em campo à capability entregue
 
 **Data**: 2026-08-22
 **Contexto**: implementação da superfície de mensagem interativa que faltava
@@ -19464,14 +19464,32 @@ Nota que fecha a F215: M5 e M6 produziram os erros `no session found for` no
 nosso log e **renderizaram na mesma**. Confirma que aquele erro é do nosso
 próprio eco e não afeta a entrega.
 
-**Status**: `HSCROLL_CARDS` **sem embrulho** está provado em SEIS direções e nos
-dois lados de cada uma, em iOS e Android, com conta pessoal e business. É o que
-vai para a rota (integrado em 30531ae). Ver [F217] para a diferença de
-`Title` entre plataformas, descoberta nesta ronda. `ALBUM_IMAGE` fica fora da superfície pública: não é
+**Status**: **CORRIGIDO**. `HSCROLL_CARDS` sem embrulho está provado em SEIS
+direções e nos dois lados de cada uma, em iOS e Android, com conta pessoal e
+business. A capability está entregue:
+
+- adapter `SendCarousel` / `buildCarouselCard` (6d4c050)
+- cadeia HTTP completa e rota `POST /chat/send/carousel` (30531ae): porta, caso
+  de uso, handler, wiring, rota stdio e devui
+- 11 testes, incluindo pela ROTA REGISTRADA, e
+  `TestSendCarousel_AlbumImageIsNeverExposed`
+- verificado em campo pela rota real: `3EB0308E8260BCDCB73D0A`, 200 com dois
+  cartões
+
+**Controlo negativo executado** por mim ao integrar: troquei
+`CarouselHScrollCards` por `CarouselAlbumImage` em `send_carousel.go:112` e dois
+testes falharam — `CardType = "album_image", want "hscroll_cards"` e
+`ALBUM_IMAGE must not leak`. Segundo controlo, renomeando a rota registada para
+`/chat/send/carrossel`: três gates morderam (`TestGolden`,
+`TestStdioRoutesMatchRegisteredHTTPRoutes`, `TestRegisteredHTTPRoutesHaveStdioEntry`).
+
+Ver [F217] para a diferença de `Title` entre plataformas, descoberta nesta
+ronda, e **[F221]** para o `ALBUM_IMAGE`, que saiu deste achado por não ser o
+mesmo problema. `ALBUM_IMAGE` fica fora da superfície pública: não é
 suportado como enum de carrossel, e o caminho real (`MessageAssociation`) é
 outra tarefa.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F212 — o trim de histórico é INERTE: consulta duas bases de dados diferentes
 
@@ -20116,3 +20134,55 @@ proibitivo — o que faria as pessoas deixarem de o correr, que é pior.
 precisa de ser medido antes de ser escolhida.
 
 <!-- f-status: aberto -->
+
+## F221 — `ALBUM_IMAGE` não é um enum de carrossel: o álbum é outro mecanismo
+
+**Data**: 2026-08-22
+**Contexto**: separado da [F216] ao arrumá-la. Estava a manter aquele achado
+`aberto` depois de a capability do carrossel estar entregue, o que fazia a
+lista mentir — o defeito que a F211 apanhou.
+
+**Onde**: `internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.proto`,
+`InteractiveMessage.CarouselMessage.CarouselCardType`, valor `ALBUM_IMAGE = 2`.
+Exposto no domínio como `domain.CarouselAlbumImage` e montado em
+`pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`.
+
+**Medição em campo** — três variantes, todas fotografadas nos dois telemóveis:
+
+| variante | remetente | destinatário |
+|---|---|---|
+| `ALBUM_IMAGE` com botões nos cartões | incompatível | incompatível |
+| `ALBUM_IMAGE` **sem** `nativeFlowMessage` nos cartões | incompatível | incompatível |
+| `ALBUM_IMAGE` com `messageVersion = 2` | incompatível | incompatível |
+
+O cliente responde sempre *"Você recebeu uma mensagem, mas o conteúdo não é
+compatível com sua versão do WhatsApp"*. O servidor ACEITA as três (`200`,
+`status: sent`) — outra vez o padrão da armadilha #26: o código de estado não
+distingue.
+
+As hipóteses H1 (o álbum proíbe `nativeFlowMessage`) e H2 (é questão de
+`messageVersion`) estão **REFUTADAS por medição**, não por leitura.
+
+**Por que não se faz**: o álbum no WhatsApp não é um tipo de carrossel. No
+Baileys ele é `MessageAssociation` com `AssociationType.MEDIA_ALBUM` e
+`albumParentKey` — **mensagens separadas ligadas por uma chave de mensagem-pai**.
+É um mecanismo diferente, com envio diferente, e nenhuma variante do enum do
+carrossel lá chega. Perseguir o enum é reescrever o bug de quem já o tentou.
+
+**O que fica no código, e porquê**: `domain.CarouselAlbumImage` e o ramo que o
+traduz no adapter PERMANECEM. São verdade de protocolo — o enum existe no
+`.proto` — e apagá-los faria o próximo leitor pensar que nunca foram
+considerados. O que NÃO existe é exposição pública: a rota
+`/chat/send/carousel` fixa `HSCROLL_CARDS`, travado por
+`TestSendCarousel_AlbumImageIsNeverExposed`.
+
+**Se alguém reabrir isto**: o caminho é implementar `MessageAssociation` /
+`MEDIA_ALBUM` como capability própria de envio de álbum, não mexer no
+carrossel. Comece por `internal/wa-noise/.../waE2E` à procura de
+`MessageAssociation`, e leia a F216 para a metodologia — sem fotografia dos
+dois lados não há resultado, porque o `200` mente.
+
+**Status**: não se faz. Decisão consciente e registada, como o `CLAUDE.md`
+exige quando divergimos do que Baileys/Evolution fazem.
+
+<!-- f-status: nao-se-faz -->
