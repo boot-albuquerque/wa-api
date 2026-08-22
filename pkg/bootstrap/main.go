@@ -40,6 +40,7 @@ const (
 
 type server struct {
 	DB                  *sqlx.DB
+	StoreDB             *sqlx.DB
 	Router              *mux.Router
 	ExPath              string
 	Mode                ServerMode
@@ -76,6 +77,26 @@ func resolveLogLevel(raw string) (zerolog.Level, bool) {
 		return zerolog.InfoLevel, false
 	}
 	return lvl, true
+}
+
+// openStoreDB returns a *sqlx.DB handle to the wa-noise store database and an
+// optional closer. For Postgres the store lives in the same database as the
+// app, so the existing handle is reused (no closer). For SQLite the store is a
+// separate file (main.db), so a dedicated connection is opened.
+func openStoreDB(dbType, connStr string, appDB *sqlx.DB) (*sqlx.DB, func()) {
+	if dbType == "postgres" {
+		return appDB, func() {}
+	}
+	sdb, err := sqlx.Open("sqlite", connStr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to open store database for trim")
+		os.Exit(1)
+	}
+	return sdb, func() {
+		if err := sdb.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to close store database connection")
+		}
+	}
 }
 
 // killchannel helpers now delegate to appCtx.KillChannel (internal/app).
@@ -373,6 +394,9 @@ func Main() {
 		os.Exit(1)
 	}
 
+	storeDB, storeDBClose := openStoreDB(config.Type, storeConnStr, db)
+	defer storeDBClose()
+
 	// Initialize the schema
 	if err = dbmig.InitializeSchema(db); err != nil {
 		log.Fatal().Err(err).Msg("Failed to initialize schema")
@@ -389,10 +413,11 @@ func Main() {
 	}
 
 	s := &server{
-		Router: mux.NewRouter(),
-		DB:     db,
-		ExPath: exPath,
-		Mode:   serverMode,
+		Router:  mux.NewRouter(),
+		DB:      db,
+		StoreDB: storeDB,
+		ExPath:  exPath,
+		Mode:    serverMode,
 	}
 	s.SessionOrchestrator = newSessionOrchestrator(s)
 	initCustomHandlers(s)

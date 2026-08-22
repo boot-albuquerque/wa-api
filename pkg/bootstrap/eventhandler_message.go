@@ -344,7 +344,7 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to save message to history")
 		} else {
-			err = trimMessageHistory(evh.DB, evh.UserID, evt.Info.Chat.String(), historyLimit)
+			err = trimMessageHistory(evh.DB, evh.StoreDB, evh.UserID, evt.Info.Chat.String(), historyLimit)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to trim message history")
 			}

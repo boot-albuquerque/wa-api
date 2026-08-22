@@ -19527,17 +19527,52 @@ daquela base). Em qualquer dos casos, o trim de `message_history` **não pode**
 depender do sucesso do trim de segredos — são bases distintas e falhas
 independentes.
 
-**Teste que o travaria** (ainda não escrito): o teste atual
-`pkg/infra/db/message_history_test.go:29` **CRIA** `wanoise_message_secrets` na
-mesma base do teste. É um dublê MAIS SIMPLES que a produção — a armadilha #1 do
-`ARMADILHAS.md` — e por isso abençoa exatamente o código que falha em campo. O
-teste tem de usar DUAS bases, como a produção usa.
+**Testes que o travam** (escritos nesta sessão):
 
-**Status**: não corrigido — fora do escopo da tarefa atual (carrossel/PIX), e
-o `CLAUDE.md` proíbe corrigir de graça sem perguntar. Pergunta pendente ao
-utilizador: corrigir agora ou fica para depois?
+1. `TestTrimMessageHistory_TwoDBs_TrimsBothTablesAcrossDatabases` — reproduz a
+   topologia de produção: `message_history` na app DB, `wanoise_message_secrets`
+   numa store DB SEPARADA. Confirma que ambas as tabelas são aparadas.
+2. `TestTrimMessageHistory_TwoDBs_HistoryTrimmedWhenStoreDBFails` — o teste de
+   ORDEM: com a store DB sem a tabela `wanoise_message_secrets` (simulando o
+   defeito original), o `message_history` TEM de ser aparado. Inverter a
+   dependência faz este teste falhar.
+3. `TestTrimMessageHistory_TwoDBs_NilStoreDBStillTrimsHistory` — storeDB nil
+   (caminho Postgres onde ambas vivem na mesma base) não impede o trim.
+4. `TestTrimMessageHistory_SecretsFailureIsNonFatal` — falha no DELETE dos
+   segredos NÃO retorna erro (a invariante central da correção).
 
-<!-- f-status: aberto -->
+**Controlos negativos EXECUTADOS**:
+
+Reintroduzida a dependência fatal (secrets error retorna antes do history
+delete). Dois testes falharam como esperado:
+
+```
+--- FAIL: TestTrimMessageHistory_SecretsFailureIsNonFatal (0.02s)
+    errorpaths_test.go:258: TrimMessageHistory failed — secrets failure must be non-fatal: failed to trim message secrets: SQL logic error: no such table: wanoise_message_secrets (1)
+--- FAIL: TestTrimMessageHistory_TwoDBs_HistoryTrimmedWhenStoreDBFails (0.02s)
+    message_history_test.go:295: TrimMessageHistory must not fail when store DB fails: failed to trim message secrets: SQL logic error: no such table: wanoise_message_secrets (1)
+```
+
+**Correção aplicada**: segundo handle `*sqlx.DB` para a store database, passado
+por `UserEventHandler.StoreDB`. O trim agora opera em três passos: (1) SELECT
+dos message_id a aparar (app DB), (2) DELETE dos segredos (store DB, erro
+logado mas não fatal), (3) DELETE do histórico (app DB). A falha do passo 2 não
+impede o passo 3 — era exatamente esta dependência que tornava a funcionalidade
+inteira inerte.
+
+Ficheiros modificados:
+- `pkg/infra/db/message_history.go` — `TrimMessageHistory` recebe `storeDB`
+- `pkg/bootstrap/lifecycle.go` — `UserEventHandler` ganha campo `StoreDB`
+- `pkg/bootstrap/main.go` — abre `storeDB` a partir do `storeConnStr`
+- `pkg/bootstrap/session_attach_hook_adapter.go` — passa `StoreDB` ao handler
+- `pkg/bootstrap/eventhandler_message.go` — passa `StoreDB` na chamada
+- `pkg/infra/db/message_history_test.go` — testes com DUAS bases separadas
+- `pkg/infra/db/errorpaths_test.go` — actualizado para nova assinatura
+
+**Status**: corrigido — testes acima travam o defeito e os controlos negativos
+confirmam que mordem.
+
+<!-- f-status: corrigido -->
 
 ## F213 — PIX via `payment_info` + `pix_static_code` NÃO renderiza em conta pessoal
 

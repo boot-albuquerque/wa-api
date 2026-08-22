@@ -1178,7 +1178,17 @@ rules_frozen=true
 #   log.Warn() calls so logcov counted it as covered. The ratio moves from
 #   468/625=74.88% to 467/624=74.84%, rounding 749->748. This is dead code
 #   removal, not dilution — nothing is lost.
-min_func_coverage=747
+# F212 (2026-08-22): min_func_coverage 747 -> 748 (ratchet-UP honesto).
+# ENTRAM (2):
+#   pkg/infra/db.trimMessageSecrets        COBERTA (loga em Error a falha de
+#     purga de secrets, com tabela, userid e chatjid — o operador precisa
+#     saber que a purga falhou, mesmo que seja non-fatal).
+#   pkg/bootstrap.Main.func3               UNCOVERED (closure que abre o segundo
+#     handle *sqlx.DB para o storeDB em SQLite; o log de falha e' o Fatal do
+#     main, nao da closure).
+# covered SOBE 468->469 (+1: trimMessageSecrets). Denominador sobe 625->627
+# (+2). Razao: 469/627=74.80% -> 748 decimos.
+min_func_coverage=748
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1632,7 +1642,12 @@ min_errpath_coverage=870
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
 # F207 (2026-08-22): min_eligible 625 -> 624 (-1, ratchet-DOWN honesto).
 # SAI (1): auth.NewTokenCache, dead code removed. See min_func_coverage above.
-min_eligible=629
+# F212 (2026-08-22): min_eligible 629 -> 631 (+2, ratchet-UP honesto).
+# As duas funcoes novas sao as mesmas enumeradas na justificativa de
+# min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
+# ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
+# statements e caminho de erro, Main.func3 tem defers e caminho de erro.
+min_eligible=631
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.

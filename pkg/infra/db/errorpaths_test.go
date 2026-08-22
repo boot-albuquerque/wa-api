@@ -241,33 +241,36 @@ func TestSaveMessageToHistory_ReportsErrorWhenTableIsMissing(t *testing.T) {
 	}
 }
 
-func TestTrimMessageHistory_ReportsSecretsFailureFirst(t *testing.T) {
-	db := newHistoryDB(t)
-	mustExec(t, db, "DROP TABLE wanoise_message_secrets")
-
-	err := TrimMessageHistory(db, "u1", "c", 5)
-	if err == nil {
-		t.Fatal("TrimMessageHistory succeeded without wanoise_message_secrets")
+func TestTrimMessageHistory_SecretsFailureIsNonFatal(t *testing.T) {
+	appDB := newHistoryDB(t)
+	if err := SaveMessageToHistory(appDB, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-	if !strings.Contains(err.Error(), "failed to trim message secrets") {
-		t.Errorf("error = %v, want the secrets failure", err)
+
+	brokenStore, serr := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "broken.db")+SQLitePragmas)
+	if serr != nil {
+		t.Fatalf("open broken store: %v", serr)
+	}
+	t.Cleanup(func() { brokenStore.Close() })
+
+	err := TrimMessageHistory(appDB, brokenStore, "u1", "c", 0)
+	if err != nil {
+		t.Fatalf("TrimMessageHistory failed — secrets failure must be non-fatal: %v", err)
+	}
+	if n := countHistory(t, appDB, "u1", "c"); n != 0 {
+		t.Fatalf("history not trimmed: %d left", n)
 	}
 }
 
 func TestTrimMessageHistory_ReportsHistoryFailure(t *testing.T) {
-	db := newHistoryDB(t)
-	// message_history precisa existir — o DELETE dos segredos faz um subselect
-	// nela, então derrubá-la faria a falha cair no primeiro passo. O trigger
-	// deixa a leitura passar e aborta só o DELETE, que é o ramo sob teste.
-	mustExec(t, db, `CREATE TRIGGER block_history_delete BEFORE DELETE ON message_history
+	appDB := newHistoryDB(t)
+	mustExec(t, appDB, `CREATE TRIGGER block_history_delete BEFORE DELETE ON message_history
 		BEGIN SELECT RAISE(ABORT, 'deletes are blocked'); END`)
-	if err := SaveMessageToHistory(db, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
+	if err := SaveMessageToHistory(appDB, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	// limit 0 faz a linha semeada entrar no subselect, então o DELETE de fato
-	// tenta remover algo e o trigger dispara.
-	err := TrimMessageHistory(db, "u1", "c", 0)
+	err := TrimMessageHistory(appDB, nil, "u1", "c", 0)
 	if err == nil {
 		t.Fatal("TrimMessageHistory succeeded against an aborting delete trigger")
 	}
@@ -276,11 +279,11 @@ func TestTrimMessageHistory_ReportsHistoryFailure(t *testing.T) {
 	}
 }
 
-// TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver cobre o ramo
-// postgres da seleção de SQL sem servidor: sqlx.NewDb aceita um nome de driver
-// arbitrário, então DriverName() reporta "postgres" enquanto o backend real
-// continua sendo o SQLite. O SQL do ramo postgres usa OFFSET sem LIMIT, que o
-// SQLite recusa — e é exatamente essa recusa que prova qual ramo rodou.
+// TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver covers the
+// postgres branch of the SQL selection: sqlx.NewDb accepts an arbitrary driver
+// name, so DriverName() reports "postgres" while the real backend remains
+// SQLite. The postgres SQL uses OFFSET without LIMIT, which SQLite rejects —
+// and that rejection proves which branch ran.
 func TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver(t *testing.T) {
 	raw := newHistoryDB(t)
 	pg := sqlx.NewDb(raw.DB, "postgres")
@@ -288,12 +291,12 @@ func TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver(t *testing.T)
 	if got := pg.DriverName(); got != "postgres" {
 		t.Fatalf("DriverName = %q, want postgres", got)
 	}
-	err := TrimMessageHistory(pg, "u1", "c", 5)
+	err := TrimMessageHistory(pg, nil, "u1", "c", 5)
 	if err == nil {
 		t.Fatal("postgres-shaped query ran on sqlite; the driver branch was not taken")
 	}
-	if !strings.Contains(err.Error(), "failed to trim message secrets") {
-		t.Errorf("error = %v, want the secrets step to fail first", err)
+	if !strings.Contains(err.Error(), "failed to select message ids for trim") {
+		t.Errorf("error = %v, want the select step to fail with postgres syntax", err)
 	}
 }
 

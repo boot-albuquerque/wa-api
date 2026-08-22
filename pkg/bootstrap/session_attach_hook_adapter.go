@@ -62,6 +62,7 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		UserID:         userID,
 		Token:          token,
 		DB:             h.s.DB,
+		StoreDB:        h.s.StoreDB,
 		NotifyFn:       h.s.SendNotification,
 		mode:           h.s.Mode,
 	}

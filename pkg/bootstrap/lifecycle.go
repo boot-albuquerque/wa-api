@@ -14,13 +14,13 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// db field declaration as *sqlx.DB
 type UserEventHandler struct {
 	WAClient       *wanoise.Client
 	EventHandlerID uint32
 	UserID         string
 	Token          string
 	DB             *sqlx.DB
+	StoreDB        *sqlx.DB
 	NotifyFn       func(method string, params map[string]interface{})
 	mode           ServerMode
 }

@@ -2151,7 +2151,7 @@ pkg/bootstrap.KillChannel.Delete	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Get	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Set	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Signal	ELIGIBLE	uncovered:L1
-pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:289)
+pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:310)
 pkg/bootstrap.Main.func1	EXCLUDED	X6
 pkg/bootstrap.Main.func2	ELIGIBLE	covered
 pkg/bootstrap.MetricasRetry	EXCLUDED	X1
@@ -2321,6 +2321,9 @@ pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newSessionOrchestrator.func1	EXCLUDED	X6
 pkg/bootstrap.newSessionOrchestrator.func2	EXCLUDED	X6
 pkg/bootstrap.newSessionOrchestrator.func3	EXCLUDED	X6
+pkg/bootstrap.openStoreDB	ELIGIBLE	covered
+pkg/bootstrap.openStoreDB.func1	EXCLUDED	X6
+pkg/bootstrap.openStoreDB.func2	EXCLUDED	X6
 pkg/bootstrap.outboxDefer	ELIGIBLE	covered
 pkg/bootstrap.outboxDisponivel	EXCLUDED	X1
 pkg/bootstrap.outboxEnqueue	ELIGIBLE	covered
@@ -2357,7 +2360,7 @@ pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:21
 pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
 pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	covered
-pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:75)
+pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:76)
 pkg/bootstrap.resolveTokenCacheTTL	ELIGIBLE	uncovered:L1
 pkg/bootstrap.resolverChaveHMAC	ELIGIBLE	covered
 pkg/bootstrap.runOutboxSweeper	ELIGIBLE	uncovered:L1
@@ -2398,7 +2401,7 @@ pkg/bootstrap.setupWebhookOutbox	ELIGIBLE	covered
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:453);uncovered:L3(zerolog,main.go:470)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:478);uncovered:L3(zerolog,main.go:495)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
 pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
@@ -2407,7 +2410,7 @@ pkg/bootstrap.startOutboxSweeper	EXCLUDED	X1
 pkg/bootstrap.startOutboxSweeper.func1	EXCLUDED	X6
 pkg/bootstrap.startSessionEventQueue	ELIGIBLE	uncovered:L1
 pkg/bootstrap.startSessionEventQueue.func1	EXCLUDED	X6
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:506)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:531)
 pkg/bootstrap.stopSessionEventQueue	ELIGIBLE	covered
 pkg/bootstrap.stopSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.sweepOutboxOnce	ELIGIBLE	covered
@@ -2548,6 +2551,7 @@ pkg/infra/db.pushDueAt	ELIGIBLE	uncovered:L1
 pkg/infra/db.s3ConfigRow.toRecord	EXCLUDED	X1
 pkg/infra/db.scanOutboxRows	ELIGIBLE	covered
 pkg/infra/db.scanOutboxRows.func1	EXCLUDED	X1
+pkg/infra/db.trimMessageSecrets	ELIGIBLE	covered
 pkg/infra/egress.IsHTTPURL	ELIGIBLE	uncovered:L2(S-consume,egress.go:25)
 pkg/infra/egress.IsReservedOrLoopback	ELIGIBLE	covered
 pkg/infra/egress.SystemResolver	EXCLUDED	X1
