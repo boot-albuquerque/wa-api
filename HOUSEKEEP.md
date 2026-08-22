@@ -6076,3 +6076,64 @@ foi medido usa perfil temporário e mede o mecanismo, não o caminho completo.
 **Lição**: *o instante em que uma coisa morre não é o instante em que o sistema
 sabe disso.* Três camadas discordaram por centenas de milissegundos — o driver, o
 sistema operacional e o reaper —, e a correta é a que muda uma vez só.
+
+---
+
+## H184 — auditoria de sucesso silencioso: nenhuma escrita mente, e há DOIS padrões de honestidade
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "observabilidade sem sucesso silencioso".
+
+**A pergunta**: existe alguma escrita que devolve sucesso sem ter lido nada de
+volta? Foi o defeito da H175 (`chats.Clear`) e o da H155 (`react.Remove`), os dois
+já corrigidos — e a pergunta é se sobrou mais algum.
+
+**Resultado: nenhum.** Das 49 escritas exportadas, zero devolvem sucesso sem
+poder justificá-lo.
+
+### O instrumento errou primeiro, e foi corrigido antes de virar achado
+
+A primeira varredura acusou **35 de 49**. Estava errada: quase todas são
+invólucros de uma linha que delegam a um helper que VERIFICA — `block.Block` tem
+39 bytes e é `return b.set(...)`. Reportar isso teria produzido 35 falsos
+positivos, que é exatamente a classe de achado que este repositório chama de pior
+que nenhum. Corrigido para **seguir a delegação** até três níveis.
+
+**E o instrumento foi validado por dois casos discriminantes**, escolhidos porque
+eu sabia a resposta:
+
+- `chatstate.SetArchived` → delega para `set`, que relê e **falha** com
+  `ErrUnchanged` quando o campo não mexeu. Auditor certo.
+- `group.Promote` → delega para `setAdmin`, que devolve `Verified: false` para
+  mudança real, porque este build não confirma na mesma sessão (H65). Auditor
+  certo de novo, e este era o caso capaz de desmenti-lo.
+
+Sem esses dois, a auditoria seria um regex opinando.
+
+### Os dois padrões, e a diferença que importa
+
+| padrão | pacotes | o que faz |
+|---|---|---|
+| **erro** | `block`, `channel`, `chats`, `chatstate`, `edit`, `revoke` | recusa quando a pós-condição não ocorre; o chamador **tem** de tratar |
+| **sinalizador** | `channel`, `chats`, `group`, `pin`, `react` | devolve `Verified: false`; o chamador **pode** ignorar |
+
+O sinalizador é usado exatamente onde verificar é impossível — confirmação só
+entre sessões (H58, H65, H162) —, e nesses casos ele é a resposta honesta: erro
+seria mentir sobre uma operação que provavelmente funcionou.
+
+**Mas a honestidade do sinalizador é DISPONÍVEL, não IMPOSTA.** Um chamador que
+não lê o campo recebe um sucesso indistinguível de um verificado. Do lado dele, é
+sucesso silencioso outra vez — só que a culpa mudou de lugar.
+
+**Registrado como observação de desenho, não como defeito**: a escolha entre os
+dois padrões está correta caso a caso, e transformar sinalizador em erro faria
+capacidades que funcionam passarem a falhar. Se a Fase 2 quiser fechar essa
+brecha, o caminho não é o tipo de retorno — é um teste de fronteira no `pkg/` que
+recuse ignorar o campo.
+
+**Status**: item medido, nenhum defeito. Uma brecha de contrato descrita.
+
+**Lição**: *uma auditoria por padrão textual precisa de dois casos cuja resposta
+você já sabe — um de cada lado.* Eu tinha os dois de graça, do trabalho da própria
+Fase 1, e sem eles teria publicado 35 falsos positivos ou confiado num verde que
+não medi.
