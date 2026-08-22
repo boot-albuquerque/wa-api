@@ -17798,5 +17798,102 @@ o defeito é de todas elas, e a correção também. Não foi enumerado.
 tem de falhar o teste se for chamado. Sem essa parte, um teste que só verifique
 o status passaria com a chamada de rede ainda a acontecer.
 
-**Status**: **não corrigido** — achado de lado durante a medição da F204,
-fora do escopo. Registado por CLAUDE.md; não corrigido de graça.
+**Status**: **CORRIGIDO** em 2026-08-21, com autorização explícita do humano
+("sim, pode corrigir").
+
+**Onde estava, exatamente**: `pkg/infra/wa-noise/mapping/jid/parse.go:16-17`. Sem
+`@`, `ParseJID` colava o servidor por omissão **sem olhar para a string**. A
+leniência em si é deliberada (F203, decisão 35=a: um campo chamado `Phone` que
+exige `@s.whatsapp.net` é contrato surpreendente); o que não era deliberado é
+aceitar qualquer coisa.
+
+**Correção**: a forma nua passa a exigir só dígitos, 5 a 15 (o teto do E.164). O
+piso é generoso de propósito — o objetivo é separar "número" de "texto", não
+policiar planos de numeração, e recusar de mais é PIOR que o defeito: quem tem
+um número válido deixa de conseguir usar a rota, e isso não aparece em nenhum
+teste da guarda.
+
+**Um segundo defeito, achado ao corrigir**: `arg[0]` na linha 13 entrava em
+PÂNICO com string vazia. Nunca derrubou nada só porque os use cases guardam o
+campo vazio antes de chamar — um chamador descuidado de distância. Corrigido na
+mesma linha.
+
+**Verificado em campo** (mesma medição que abriu a entrada):
+
+```
+antes:  {"Phone":"abc"} -> HTTP 500 em 75.003 ms
+depois: {"Phone":"abc"} -> HTTP 400 em      17 ms   {"code":"invalid_phone_or_jid"}
+        {"Phone":"5511000000001"} -> HTTP 422 em 251 ms   (a F204, intacta)
+```
+
+**Testes**: `TestParseJID_RecusaOQueNaoEhTelefone` (o valor medido em campo mais
+os vizinhos), `TestParseJID_AceitaTelefoneReal` (o caminho de SUCESSO, com os
+números das duas sessões de campo), e — pela ROTA REGISTADA, com `gorilla/mux` —
+`TestBlockUser_LixoNaoChegaAhRede` e `TestBlockUser_NumeroRealContinuaAhChegar`.
+
+A asserção que faz o teste de rota morder **não é o status**: é que o transporte
+tenha ZERO chamadas. Um handler que devolvesse 400 DEPOIS de chamar a rede
+passaria no teste de status e continuaria a pendurar 75 segundos.
+
+**Dois testes existentes ABENÇOAVAM o defeito, e por isso mudaram**:
+
+- `TestParseJID_JustPlus` afirmava que `ParseJID("+")` devolvia `ok` com
+  utilizador vazio — o defeito em miniatura, um `@s.whatsapp.net` sem
+  utilizador a caminho da rede.
+- `TestParseJID_EmptyString` dizia em comentário "Pode panic em `arg[0]`; o
+  teste é apenas para forçar a leitura" e **engolia o pânico com `recover`**. Um
+  teste que apanha o pânico em vez de o proibir confirma o defeito e ainda
+  aparece verde no relatório.
+
+**O dublê teve de ser alinhado** (`contractsfake/chat.go`): o `ResolveJID` por
+omissão colava o servidor a qualquer coisa e passou a divergir da produção.
+Alinhado com a mesma regra e com o mesmo comentário de proveniência —
+armadilha nº1, um dublê mais permissivo esconde exatamente o defeito que a
+guarda existe para travar.
+
+**E o alinhamento revelou dados de teste que a produção também recusa**: cinco
+testes de grupo e de contactos usavam `"55A"`, `"55B"`, `"1"` e `"5511"` como
+telefones. Passavam só porque o dublê era mais permissivo. Trocados por números
+plausíveis — o valor era incidental nesses testes, que medem outra coisa.
+
+**Controlos negativos, os três mordendo à primeira**:
+
+```
+CN-1 remover a guarda        -> FAIL "status 200, quero 400", com o corpo a dizer
+                                {"Details":"User blocked"} para {"Phone":"abc"}
+CN-2 guarda só de comprimento -> FAIL TestParseJID_RecusaOQueNaoEhTelefone
+CN-3 teto baixado para 11    -> FAIL "ParseJID(+55...) = not ok", número real recusado
+```
+
+O CN-3 é o que protege contra o exagero: sem ele, apertar a guarda até recusar
+utilizadores reais passaria em todos os outros testes.
+
+**Os dois gates puxaram em direções opostas, e é um padrão que vai repetir-se.**
+A guarda nasceu como um ajudante, `ehTelefonePlausivel`. O gate de log-coverage
+recusou-a: é um ponto de decisão com ramos e sem registo próprio. Fazê-la
+registar duplicaria o log que `ParseJID` já faz — as duas fontes de verdade que
+o `CLAUDE.md` proíbe —, então a decisão foi inlinada junto do seu log. **E aí o
+lint reclamou**: `ParseJID` subiu para complexidade 11.
+
+O conserto de um gate criou trabalho no outro, e a saída não foi mexer em
+nenhuma baseline: `strings.ContainsFunc` com uma closure substitui o laço com
+`break`, o que baixa a complexidade, e a closure sai do denominador de log pela
+regra X6 (`METRIC.md`) por não ser goroutine, defer nem middleware. Os dois
+gates ficaram satisfeitos e nenhuma trava foi afrouxada.
+
+Vale registar porque a tentação, das duas vezes, era subir um número.
+
+**Nota de método, e é a segunda vez nesta sessão**: o CN-2 foi corrido primeiro
+com `go build ./... 2>&1 | head -2 && echo "compila: sim"`, que imprimiu
+"compila: sim" com o build QUEBRADO — o `&&` vê o código de saída do `head`, não
+o do `go build`. É a armadilha que já está no meu registo de sessão e mesmo
+assim voltou. Refeito capturando o estado antes de filtrar (`build exit=0`), e
+com uma mutação que compila: o predicado passa a aceitar tudo em vez de
+desaparecer.
+
+**Não enumerado, e fica para quem pegar**: a entrada dizia "verificar também se
+a mesma normalização serve outras rotas". `ParseJID` tem 3 chamadores fora de
+testes (`resolver.go` ×2, `runtime/session/provider.go`), e o do provider recebe
+sempre um JID já qualificado — logo a guarda não o afeta. As rotas que passam
+telefone nu vão todas por `ResolveJID`, e portanto ficam cobertas. **Isto é
+leitura de código, não medição**: só `/user/block` foi medido em campo.

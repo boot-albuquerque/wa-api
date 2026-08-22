@@ -78,8 +78,8 @@ func TestCheckUserUseCase_Execute(t *testing.T) {
 			name: "dois telefones",
 			checkFunc: func(context.Context, string, []string) ([]domain.WhatsAppCheck, error) {
 				return []domain.WhatsAppCheck{
-					{Query: "5511", IsIn: true, JID: "5511@s.whatsapp.net", VerifiedName: "Alice"},
-					{Query: "5522", IsIn: false},
+					{Query: "5511987654321", IsIn: true, JID: "5511@s.whatsapp.net", VerifiedName: "Alice"},
+					{Query: "5522987654321", IsIn: false},
 				}, nil
 			},
 			wantLen: 2,
@@ -96,7 +96,7 @@ func TestCheckUserUseCase_Execute(t *testing.T) {
 			logger := &contractsfake.Logger{}
 			uc := user.NewCheckUserUseCase(cd, logger)
 
-			got, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511", "5522"}})
+			got, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321", "5522987654321"}})
 			if tt.wantIs != nil {
 				if !errors.Is(err, tt.wantIs) {
 					t.Fatalf("err = %v, queria %v", err, tt.wantIs)
@@ -113,7 +113,7 @@ func TestCheckUserUseCase_Execute(t *testing.T) {
 				t.Fatalf("len = %d, queria %d", len(got), tt.wantLen)
 			}
 			if tt.wantLen > 0 {
-				if got[0].Query != "5511" || !got[0].IsInWhatsapp || got[0].VerifiedName != "Alice" {
+				if got[0].Query != "5511987654321" || !got[0].IsInWhatsapp || got[0].VerifiedName != "Alice" {
 					t.Errorf("primeiro resultado = %+v", got[0])
 				}
 				if got[1].IsInWhatsapp {
@@ -204,7 +204,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		{
 			name:    "sem sessão",
 			session: errNoSession,
-			req:     domain.GetAvatarRequest{Phone: "5511"},
+			req:     domain.GetAvatarRequest{Phone: "5511987654321"},
 			wantErr: true,
 			wantIs:  errNoSession,
 		},
@@ -221,7 +221,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		},
 		{
 			name: "falha ao buscar a foto",
-			req:  domain.GetAvatarRequest{Phone: "5511"},
+			req:  domain.GetAvatarRequest{Phone: "5511987654321"},
 			picFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 				return nil, boom
 			},
@@ -229,7 +229,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		},
 		{
 			name: "contato sem foto",
-			req:  domain.GetAvatarRequest{Phone: "5511"},
+			req:  domain.GetAvatarRequest{Phone: "5511987654321"},
 			picFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 				return nil, nil
 			},
@@ -237,7 +237,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		},
 		{
 			name: "foto encontrada",
-			req:  domain.GetAvatarRequest{Phone: "5511", Preview: true},
+			req:  domain.GetAvatarRequest{Phone: "5511987654321", Preview: true},
 			picFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 				return &domain.AvatarInfo{ID: "pic-1", URL: "https://img/1.jpg"}, nil
 			},
@@ -308,10 +308,10 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		t.Parallel()
 		cd := &contractsfake.ContactDirectory{
 			GetUserInfoFunc: func(_ context.Context, _ string, jids []domain.JID) (any, error) {
-				if len(jids) != 1 || jids[0] != domain.JID("5511") {
+				if len(jids) != 1 || jids[0] != domain.JID("5511987654321") {
 					t.Errorf("jids = %v, queria só o telefone válido", jids)
 				}
-				return map[string]string{"5511": "Alice"}, nil
+				return map[string]string{"5511987654321": "Alice"}, nil
 			},
 		}
 		jr := &contractsfake.JIDResolver{
@@ -325,7 +325,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetUserUseCase(cd, jr, logger)
 
-		data, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511", "quebrado"}})
+		data, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321", "quebrado"}})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -333,7 +333,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		if err := json.Unmarshal(data, &payload); err != nil {
 			t.Fatalf("resposta não é JSON: %v", err)
 		}
-		if payload["users"]["5511"] != "Alice" {
+		if payload["users"]["5511987654321"] != "Alice" {
 			t.Errorf("payload = %v", payload)
 		}
 		if !logger.Logged("Failed to parse JID") {
@@ -349,7 +349,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetUserUseCase(cd, &contractsfake.JIDResolver{}, logger)
 
-		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511"}})
+		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321"}})
 		if !errors.Is(err, boom) {
 			t.Fatalf("err = %v, queria boom", err)
 		}
@@ -371,7 +371,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		uc := user.NewGetUserUseCase(cd, &contractsfake.JIDResolver{}, logger)
 
 		var unsupported *json.UnsupportedTypeError
-		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511"}})
+		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321"}})
 		if !errors.As(err, &unsupported) {
 			t.Fatalf("err = %v, queria json.UnsupportedTypeError", err)
 		}

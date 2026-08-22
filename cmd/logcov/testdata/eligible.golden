@@ -1872,6 +1872,7 @@ pkg/application/contracts/contractsfake.UserRepository.DeleteUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.ListUsers	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
+pkg/application/contracts/contractsfake.pareceTelefone	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
 pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:339);uncovered:L2(S-ret,orchestrator.go:412);uncovered:L2(S-ret,orchestrator.go:414)
 pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:356)
@@ -2885,6 +2886,7 @@ pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveJID	ELIGIBLE	uncovered:
 pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveQualifiedJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,resolver.go:43)
 pkg/infra/wa-noise/mapping/jid.NewJIDResolverAdapter	EXCLUDED	X1
 pkg/infra/wa-noise/mapping/jid.ParseJID	ELIGIBLE	covered
+pkg/infra/wa-noise/mapping/jid.ParseJID.func1	EXCLUDED	X6
 pkg/infra/wa-noise/mapping/jid.ToJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,resolver.go:57)
 pkg/infra/wa-noise/mapping/jid.ToJIDs	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/mapping/platform.GetPlatformTypeEnum	EXCLUDED	X1

@@ -54,10 +54,34 @@ func (f *JIDResolver) ResolveJID(ctx context.Context, raw string) (domain.JID, e
 	//
 	// Armadilha nº1 do ARMADILHAS.md: quando o objeto atravessa uma
 	// transformação no caminho real, o dublê tem de atravessá-la também.
+	//
+	// E imita também a GUARDA, acrescentada pela F209: a produção só aplica o
+	// servidor por omissão a algo que PAREÇA um telefone (só dígitos, 5 a 15).
+	// `{"Phone":"abc"}` é RECUSADO — sem isso ia para a rede e o pedido ficava
+	// pendurado 75 segundos. Um dublê mais permissivo que a produção esconde
+	// exatamente o defeito que a guarda existe para travar.
 	if !strings.Contains(raw, "@") {
+		if !pareceTelefone(raw) {
+			return "", fmt.Errorf("contractsfake: %q não é telefone plausível", raw)
+		}
 		return domain.JID(raw + "@s.whatsapp.net"), nil
 	}
 	return domain.JID(raw), nil
+}
+
+// pareceTelefone espelha `ehTelefonePlausivel` de
+// pkg/infra/wa-noise/mapping/jid/parse.go. Os limites vivem lá; se mudarem,
+// mudam aqui — é duplicação consciente, porque o dublê não pode importar infra.
+func pareceTelefone(raw string) bool {
+	if len(raw) < 5 || len(raw) > 15 {
+		return false
+	}
+	for _, r := range raw {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // ResolveQualifiedJID implementa port.JIDResolver.
