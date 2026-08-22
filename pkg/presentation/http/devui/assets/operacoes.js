@@ -28,8 +28,13 @@ export const ENVIO = [
   { id: "video", rotulo: "Vídeo", rota: "/chat/send/video",
     campos: [telefone, ficheiro("Video", "vídeo"), legenda] },
 
+  // A legenda do áudio existe, mas NÃO é um campo do protocolo: o WhatsApp não
+  // tem legenda em áudio, e a API envia-a como mensagem de texto SEPARADA, logo
+  // a seguir (F116). São duas mensagens e dois ids — o painel diz isso no
+  // rótulo para o operador não ser surpreendido pelo que vê no telemóvel.
   { id: "audio", rotulo: "Áudio", rota: "/chat/send/audio",
-    campos: [telefone, ficheiro("Audio", "áudio")] },
+    campos: [telefone, ficheiro("Audio", "áudio"),
+             { nome: "Caption", rotulo: "legenda (vai como mensagem separada)" }] },
 
   { id: "document", rotulo: "Documento", rota: "/chat/send/document",
     campos: [telefone, ficheiro("Document", "ficheiro"),

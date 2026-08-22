@@ -152,7 +152,28 @@ type SendAudioResult struct {
 	MessageID string `json:"message_id"`
 	Timestamp int64  `json:"timestamp,omitempty"`
 	Status    string `json:"status"`
+
+	// CaptionMessageID e CaptionStatus descrevem a legenda, que vai como
+	// mensagem SEPARADA porque o protocolo não tem campo de legenda em áudio
+	// (F116). Ambos ausentes quando não houve legenda a enviar.
+	//
+	// São dois campos e não um porque o envio NÃO é atómico: o áudio pode sair
+	// e a legenda falhar. Sem `CaptionStatus`, o cliente veria um 200 e teria
+	// de adivinhar se a legenda chegou.
+	CaptionMessageID string `json:"caption_message_id,omitempty"`
+	CaptionStatus    string `json:"caption_status,omitempty"`
 }
+
+// Estados possíveis de CaptionStatus.
+const (
+	// CaptionSent: a legenda saiu como mensagem própria, e o id dela está em
+	// CaptionMessageID.
+	CaptionSent = "sent"
+	// CaptionFailed: o ÁUDIO saiu, a legenda não. O pedido continua
+	// bem-sucedido de propósito — devolver erro faria o cliente reenviar e
+	// duplicar o áudio, que já está entregue e não se desfaz.
+	CaptionFailed = "failed"
+)
 
 // AudioPayload é o anexo de áudio já resolvido (bytes em mãos, MIME
 // decidido, PTT e Seconds resolvidos) que SendAudioUseCase passa a
@@ -226,11 +247,20 @@ type SendContactResult struct {
 
 // SendLocationRequest representa o payload de envio de localização.
 type SendLocationRequest struct {
-	Phone     string  `json:"Phone"`
-	Name      string  `json:"Name,omitempty"`
-	Latitude  float64 `json:"Latitude"`
-	Longitude float64 `json:"Longitude"`
-	ID        string  `json:"Id,omitempty"`
+	Phone string `json:"Phone"`
+	Name  string `json:"Name,omitempty"`
+	// PONTEIRO, e não float64, para separar "não informado" de "zero" (F121).
+	//
+	// Zero é coordenada VÁLIDA — o ponto onde o equador cruza o meridiano de
+	// Greenwich, no golfo da Guiné. Com float64 as duas situações colidiam e
+	// um envio legítimo para lá era recusado com "missing Latitude".
+	//
+	// A mudança só AMPLIA o que é aceite: quem omite o campo continua a receber
+	// 400, e quem manda 0 passa a ser aceite em vez de recusado. Nenhum cliente
+	// existente perde comportamento.
+	Latitude  *float64 `json:"Latitude"`
+	Longitude *float64 `json:"Longitude"`
+	ID        string   `json:"Id,omitempty"`
 }
 
 // SendLocationResult representa o resultado do envio de localização.

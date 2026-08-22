@@ -5335,7 +5335,7 @@ lease ainda não existe" (D1, `cluster.go`).
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: nao-se-faz -->
 
 ## F108 — `/session/connect` responde 200 "connecting" mesmo com a posse NEGADA
 
@@ -5959,6 +5959,50 @@ use case):
     handler_send_audio_test.go:462: Caption preenchido causou rejeicao pela rota registrada — o contrato publico aceita o campo (F116): status=400 corpo=...
 ```
 
+### CORRIGIDO POR COMPORTAMENTO NOVO (2026-08-22), a pedido do humano
+
+A decisão 50=b tinha mandado travar a divergência. O humano escolheu outra via:
+**entregar a legenda de forma automática, como mensagem de texto separada.**
+
+Registo a ressalva que fiz antes de implementar, porque ela continua verdadeira:
+isto é **comportamento inventado por nós**. O protocolo do WhatsApp não tem
+legenda em áudio — `waE2E.AudioMessage` não define o campo — logo a única
+entrega possível é uma segunda mensagem. É o que um humano faria, e é uma
+escolha de produto, não uma correção de fidelidade.
+
+**O que se ganha**: o campo deixa de mentir. Antes era aceite e ficava inerte.
+
+**O que se paga, e está no contrato em vez de escondido**:
+
+1. **São DUAS mensagens e dois ids.** A resposta ganhou `caption_message_id`.
+2. **NÃO É ATÓMICO.** O áudio pode sair e a legenda falhar. Nesse caso o pedido
+   continua bem-sucedido de propósito: devolver erro faria o cliente reenviar e
+   DUPLICAR o áudio, que já está entregue e não se desfaz. `caption_status`
+   distingue `sent` de `failed`, e a falha é registada em `Error`.
+3. **A ORDEM é deliberada**: áudio primeiro, legenda depois. Ao contrário, o
+   destinatário lê um comentário antes de saber a que se refere.
+
+**Verificado em campo**:
+
+```
+com legenda:  200 {"message_id":"3EB07DD6…","caption_message_id":"3EB03FF5…",
+                   "caption_status":"sent"}
+sem legenda:  200 {"message_id":"3EB0CE7E…"}   <- nenhum campo extra, nenhuma
+                                                  mensagem a mais
+```
+
+**Testes**: `LegendaVaiComoMensagemSeparada` (com a asserção de que os dois ids
+DIFEREM), `SemLegendaNaoEnviaTexto` (o limite — sem isto, cada áudio mandaria
+uma mensagem vazia atrás) e `LegendaFalhaMasAudioJaFoi` (o modo de falha que
+este desenho cria e que não existia antes).
+
+**Controlos negativos, os três mordendo**: legenda volta a ser inerte; ordem
+invertida (legenda antes do áudio); e falha da legenda a derrubar o pedido.
+
+**devui**: o áudio passou a oferecer o campo, com o rótulo a dizer "vai como
+mensagem separada" — o operador não pode ser surpreendido pelo que vê no
+telemóvel.
+
 <!-- f-status: corrigido -->
 
 ## F117 — `Waveform` sumiu da superfície pública de áudio, mas o histórico a enviava
@@ -6342,6 +6386,31 @@ Controlo negativo EXECUTADO (mutação: remover as guardas `== 0` do use case):
 ```
 
 ---
+
+### CORRIGIDO DE FACTO (2026-08-22), a pedido do humano
+
+A decisão 50=b tinha mandado TRAVAR a divergência sem mexer no contrato. O
+humano reverteu-a para este caso, e bem: a correção só AMPLIA o que é aceite.
+
+`Latitude`/`Longitude` passaram de `float64` para `*float64`, e a validação de
+`== 0` para `== nil`. Quem omite o campo continua a receber 400; quem manda 0
+passa a ser aceite. **Nenhum cliente perde comportamento** — foi isso que a
+tornou barata.
+
+**Verificado em campo**: `{"Latitude":0,"Longitude":0}` — o golfo da Guiné —
+devolveu 200 e a mensagem saiu. Antes era 400 `missing_latitude`.
+
+**DOIS testes abençoavam o defeito e foram invertidos**:
+`TestSendLocation_ZeroLatitudeRejected`/`ZeroLongitudeRejected` tratavam "zero
+foi aceite" como FALHA, e o teste de rota chamava-se
+`..._Rejected_ViaRegisteredRoute` e descrevia o 400 como "defeito HISTÓRICO
+preservado". Agora são `ZeroEhCoordenadaValida` e `ZeroEhAceite_ViaRegisteredRoute`.
+
+Acrescentado o limite que faltava: `CampoAusenteContinua400_ViaRegisteredRoute`.
+Sem ele, a correção teria trocado uma recusa errada por uma aceitação errada.
+
+**Controlo negativo**: repor `== nil || *req.Latitude == 0` faz o teste falhar
+com "coordenada valida recusada: missing Latitude in payload".
 
 <!-- f-status: corrigido -->
 
@@ -7893,7 +7962,7 @@ pelo teste citado acima, para que ninguém o redescubra em produção. Documenta
 na entrada porque um "sucesso" que não distingue do fracasso é exatamente o
 tipo de coisa que vira diagnóstico errado seis meses depois.
 
-<!-- f-status: aberto -->
+<!-- f-status: nao-se-faz -->
 
 ## F136
 

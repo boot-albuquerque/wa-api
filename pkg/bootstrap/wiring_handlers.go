@@ -159,7 +159,10 @@ func initCustomHandlers(s *server) {
 	sendMessageUC := message.NewSendMessageUseCase(chatMessenger, jidResolver, linkPreviewFetcher, logger)
 	sendImageUC := message.NewSendImageUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
 	sendDocumentUC := message.NewSendDocumentUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
-	sendAudioUC := message.NewSendAudioUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	// O chatMessenger entra DUAS vezes: como porta de media e como porta de
+	// texto. A legenda do audio vai como mensagem de texto separada (F116),
+	// porque o protocolo nao tem campo de legenda em audio.
+	sendAudioUC := message.NewSendAudioUseCase(chatMessenger, jidResolver, mediaFetcher, chatMessenger, logger)
 	stickerProcessor := sticker.NewProcessor()
 	sendStickerUC := message.NewSendStickerUseCase(chatMessenger, jidResolver, mediaFetcher, stickerProcessor, logger)
 	sendVideoUC := message.NewSendVideoUseCase(chatMessenger, jidResolver, mediaFetcher, logger)

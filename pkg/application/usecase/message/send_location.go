@@ -31,20 +31,23 @@ func NewSendLocationUseCase(sm appport.SimpleMessenger, jr appport.JIDResolver, 
 // Execute valida os campos obrigatórios, resolve o destinatário e envia a
 // localização pela porta de verdade.
 //
-// A validação Latitude == 0 / Longitude == 0 confunde "campo ausente" com
-// "valor zero" — um ponto exatamente sobre o equador ou o meridiano de
-// Greenwich é rejeitado como se estivesse faltando. Este é o comportamento
-// HISTÓRICO (`git show 41bc8e2^:handlers.go`, em torno da linha 1913) e é
-// preservado aqui de propósito: corrigi-lo é mudança de contrato público,
-// não decisão desta capability — ver HOUSEKEEP.md.
+// A validação é `== nil`, e não `== 0` (F121, corrigido em 2026-08-22).
+//
+// O comportamento HISTÓRICO (`git show 41bc8e2^:handlers.go`, linha ~1913)
+// validava `== 0` e por isso confundia "campo ausente" com "valor zero": um
+// ponto sobre o equador ou o meridiano de Greenwich era recusado com "missing
+// Latitude". Zero é coordenada válida.
+//
+// A correção só AMPLIA: omitir o campo continua a dar 400; mandar 0 passa a ser
+// aceite. Nenhum cliente perde comportamento — foi isso que a tornou barata.
 func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req domain.SendLocationRequest) (*domain.SendLocationResult, error) {
 	if req.Phone == "" {
 		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
-	if req.Latitude == 0 {
+	if req.Latitude == nil {
 		return nil, apperr.New("missing_latitude", apperr.CategoryValidation, "missing Latitude in payload", false, nil)
 	}
-	if req.Longitude == 0 {
+	if req.Longitude == nil {
 		return nil, apperr.New("missing_longitude", apperr.CategoryValidation, "missing Longitude in payload", false, nil)
 	}
 
@@ -59,7 +62,7 @@ func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req do
 		return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
 	}
 
-	payload := domain.LocationPayload{Latitude: req.Latitude, Longitude: req.Longitude, Name: req.Name}
+	payload := domain.LocationPayload{Latitude: *req.Latitude, Longitude: *req.Longitude, Name: req.Name}
 
 	sent, err := uc.messages.SendLocation(ctx, txtID, recipient, payload, req.ID)
 	if err != nil {

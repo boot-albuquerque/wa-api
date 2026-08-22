@@ -163,15 +163,23 @@ func TestSendLocation_RejectMissingRequiredField(t *testing.T) {
 	}
 }
 
-// TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute prova
-// pela rota registrada o defeito HISTÓRICO preservado (CAP-08A, ver
-// HOUSEKEEP.md F121): Latitude=0 ou Longitude=0 é indistinguível de campo
-// ausente e é rejeitado com 400, mesmo sendo um valor geograficamente válido
-// (equador / meridiano de Greenwich).
-func TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute(t *testing.T) {
+// TestSendLocation_ZeroEhAceite_ViaRegisteredRoute prova, PELA ROTA REGISTADA,
+// que zero é coordenada válida.
+//
+// Este teste dizia o CONTRÁRIO até 2026-08-22: chamava-se
+// `ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute` e tratava o 400 como o
+// comportamento a preservar, descrevendo-o como "defeito HISTÓRICO preservado".
+// Era a quarta vez nesta sessão que um teste travava o defeito em vez do
+// comportamento correto.
+//
+// A F121 trocou Latitude/Longitude para *float64: nil é "não informado", e 0 é
+// o equador ou o meridiano de Greenwich. Verificado em campo — um envio para
+// (0, 0), no golfo da Guiné, devolveu 200 e a mensagem saiu.
+func TestSendLocation_ZeroEhAceite_ViaRegisteredRoute(t *testing.T) {
 	bodies := map[string]string{
 		"zero_latitude":  `{"Phone":"5511999999999","Latitude":0,"Longitude":-46.6333}`,
 		"zero_longitude": `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":0}`,
+		"ambos_zero":     `{"Phone":"5511999999999","Latitude":0,"Longitude":0}`,
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
@@ -180,11 +188,33 @@ func TestSendLocation_ZeroLatitudeOrLongitude_Rejected_ViaRegisteredRoute(t *tes
 
 			rec := sendLocationServe(t, sm, jr, body, msgAuthed)
 
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s recusado com %d: zero é coordenada válida (F121). corpo: %s",
+					name, rec.Code, rec.Body.String())
+			}
+			if n := len(sm.SendLocationCalls); n != 1 {
+				t.Fatalf("%s aceite, mas SendLocation foi chamado %d vez(es)", name, n)
+			}
+		})
+	}
+}
+
+// E o limite: campo AUSENTE continua a ser 400. Sem isto, a correção teria
+// trocado uma recusa errada por uma aceitação errada.
+func TestSendLocation_CampoAusenteContinua400_ViaRegisteredRoute(t *testing.T) {
+	bodies := map[string]string{
+		"sem_latitude":  `{"Phone":"5511999999999","Longitude":-46.6333}`,
+		"sem_longitude": `{"Phone":"5511999999999","Latitude":-23.5505}`,
+	}
+	for name, body := range bodies {
+		t.Run(name, func(t *testing.T) {
+			sm := &contractsfake.SimpleMessenger{}
+			rec := sendLocationServe(t, sm, &contractsfake.JIDResolver{}, body, msgAuthed)
 			if rec.Code == http.StatusOK {
-				t.Fatalf("%s produziu 200 falso: %s", name, rec.Body.String())
+				t.Fatalf("%s produziu 200: campo ausente não é zero", name)
 			}
 			if n := len(sm.SendLocationCalls); n != 0 {
-				t.Fatalf("%s rejeitado, mas SendLocation foi chamado %d vez(es)", name, n)
+				t.Fatalf("%s recusado, mas SendLocation foi chamado %d vez(es)", name, n)
 			}
 		})
 	}

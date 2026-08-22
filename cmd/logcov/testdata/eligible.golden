@@ -1979,7 +1979,7 @@ pkg/application/usecase/message.NewSendTemplateUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendVideoUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSubscribePresenceUseCase	EXCLUDED	X1
 pkg/application/usecase/message.ReactUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,react.go:34);uncovered:L2(S-ret,react.go:38);uncovered:L2(S-consume,react.go:42);uncovered:L2(S-ret,react.go:43);uncovered:L2(S-ret,react.go:48)
-pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:69);uncovered:L2(S-ret,send_audio.go:72);uncovered:L2(S-ret,send_audio.go:124);uncovered:L2(S-ret,send_audio.go:129)
+pkg/application/usecase/message.SendAudioUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_audio.go:76);uncovered:L2(S-ret,send_audio.go:79);uncovered:L2(S-ret,send_audio.go:131);uncovered:L2(S-ret,send_audio.go:136)
 pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio	ELIGIBLE	covered
 pkg/application/usecase/message.SendButtonsUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_buttons.go:95);uncovered:L2(S-ret,send_buttons.go:119)
 pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes	ELIGIBLE	covered
@@ -1990,7 +1990,7 @@ pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovere
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:81);uncovered:L2(S-ret,send_list.go:84);uncovered:L2(S-ret,send_list.go:87);uncovered:L2(S-ret,send_list.go:108)
-pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:42);uncovered:L2(S-ret,send_location.go:45);uncovered:L2(S-ret,send_location.go:48)
+pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:45);uncovered:L2(S-ret,send_location.go:48);uncovered:L2(S-ret,send_location.go:51)
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
@@ -2001,7 +2001,7 @@ pkg/application/usecase/message.SendVideoUseCase.decodeDataVideo	ELIGIBLE	covere
 pkg/application/usecase/message.SubscribePresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,subscribe_presence.go:32);uncovered:L2(S-consume,subscribe_presence.go:36);uncovered:L2(S-ret,subscribe_presence.go:37)
 pkg/application/usecase/message.acceptedButtonTypes	EXCLUDED	X1
 pkg/application/usecase/message.checkStickerDataURISize	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_sticker.go:199)
-pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:234);uncovered:L2(S-ret,send_audio.go:246)
+pkg/application/usecase/message.decodeAudioDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_audio.go:270);uncovered:L2(S-ret,send_audio.go:282)
 pkg/application/usecase/message.decodeDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_document.go:219);uncovered:L2(S-ret,send_document.go:231)
 pkg/application/usecase/message.decodeVideoDataURIWithLimit	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_video.go:199);uncovered:L2(S-ret,send_video.go:211)
 pkg/application/usecase/message.decodedBase64Len	EXCLUDED	X1
@@ -2010,7 +2010,7 @@ pkg/application/usecase/message.isDataURI	EXCLUDED	X1
 pkg/application/usecase/message.isDataURIAudio	EXCLUDED	X1
 pkg/application/usecase/message.isDataURIImage	EXCLUDED	X1
 pkg/application/usecase/message.isDataVideo	EXCLUDED	X1
-pkg/application/usecase/message.isHTTPAudioURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_audio.go:258)
+pkg/application/usecase/message.isHTTPAudioURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_audio.go:294)
 pkg/application/usecase/message.isHTTPDocumentURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_document.go:243)
 pkg/application/usecase/message.isHTTPImageURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_image.go:255)
 pkg/application/usecase/message.isHTTPVideoURL	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,send_video.go:223)

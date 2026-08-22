@@ -47,14 +47,21 @@ type SendAudioUseCase struct {
 	jids    appport.JIDResolver
 	fetcher appport.MediaFetcher
 	logger  appport.Logger
+
+	// texts envia a legenda como mensagem SEPARADA (F116). O protocolo do
+	// WhatsApp não tem campo de legenda em áudio: `waE2E.AudioMessage` não o
+	// define, e o histórico também não o tinha. A legenda vai como texto a
+	// seguir, que é o que um humano faria.
+	texts appport.TextMessenger
 }
 
 // NewSendAudioUseCase cria uma nova instância do usecase.
-func NewSendAudioUseCase(mm appport.MediaMessenger, jr appport.JIDResolver, mf appport.MediaFetcher, l appport.Logger) *SendAudioUseCase {
+func NewSendAudioUseCase(mm appport.MediaMessenger, jr appport.JIDResolver, mf appport.MediaFetcher, tm appport.TextMessenger, l appport.Logger) *SendAudioUseCase {
 	return &SendAudioUseCase{
 		media:   mm,
 		jids:    jr,
 		fetcher: mf,
+		texts:   tm,
 		logger:  l,
 	}
 }
@@ -154,6 +161,35 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 	}
 
 	uc.logger.Info(ctx, "audio sent", "msgID", result.MessageID)
+
+	// F116: a legenda vai como mensagem de TEXTO separada, depois do áudio.
+	//
+	// Até 2026-08-22 o campo era aceite e ficava inerte: o cliente mandava
+	// legenda, recebia 200, e ela não existia em lado nenhum. O protocolo não
+	// tem onde a pôr — `waE2E.AudioMessage` não define caption — então a única
+	// entrega possível é uma segunda mensagem, que é o que um humano faria.
+	//
+	// A ORDEM importa e é deliberada: áudio primeiro, legenda depois. Ao
+	// contrário, o destinatário lê um comentário antes de saber a que se refere.
+	//
+	// NÃO É ATÓMICO, e o resultado diz isso em vez de o esconder. Se a legenda
+	// falhar, o áudio JÁ FOI e não há como o desfazer; devolver erro faria o
+	// cliente reenviar tudo e duplicar o áudio. Por isso o pedido continua
+	// bem-sucedido, com `CaptionStatus` a dizer o que aconteceu de facto.
+	if req.Caption == "" {
+		return result, nil
+	}
+	legenda, cerr := uc.texts.SendText(ctx, txtID, recipient, req.Caption, nil, "")
+	if cerr != nil {
+		uc.logger.Error(ctx, "audio sent but caption failed",
+			"txtID", txtID, "audioMsgID", result.MessageID, "error", cerr)
+		result.CaptionStatus = domain.CaptionFailed
+		return result, nil
+	}
+	result.CaptionMessageID = legenda.ID
+	result.CaptionStatus = domain.CaptionSent
+	uc.logger.Info(ctx, "audio caption sent as separate message",
+		"audioMsgID", result.MessageID, "captionMsgID", result.CaptionMessageID)
 	return result, nil
 }
 

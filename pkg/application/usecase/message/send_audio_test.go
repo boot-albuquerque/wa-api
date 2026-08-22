@@ -52,7 +52,7 @@ func TestSendAudio_MissingRequiredField(t *testing.T) {
 			mf := &contractsfake.MediaFetcher{}
 			logger := &contractsfake.Logger{}
 
-			_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+			_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 				Execute(context.Background(), userID, tc.req)
 
 			if err == nil {
@@ -76,7 +76,7 @@ func TestSendAudio_SessionFailurePropagates(t *testing.T) {
 	mf := &contractsfake.MediaFetcher{}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if !errors.Is(err, errSession) {
@@ -98,7 +98,7 @@ func TestSendAudio_InvalidPhoneNeverFetchesOrSends(t *testing.T) {
 	mf := &contractsfake.MediaFetcher{}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, jr, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, jr, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "lixo", Audio: audioURL})
 
 	if err == nil {
@@ -130,7 +130,7 @@ func TestSendAudio_UnsupportedSource_Rejected(t *testing.T) {
 			mf := &contractsfake.MediaFetcher{}
 			logger := &contractsfake.Logger{}
 
-			_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+			_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 				Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audio})
 
 			if err == nil {
@@ -155,7 +155,7 @@ func TestSendAudio_FetchFailurePropagates(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err == nil {
@@ -175,7 +175,7 @@ func TestSendAudio_EmptyBodyRejected(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err == nil {
@@ -200,7 +200,7 @@ func TestSendAudio_PTT_DefaultTrueWhenAbsent(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err != nil {
@@ -220,7 +220,7 @@ func TestSendAudio_PTT_ExplicitTrue(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL, PTT: boolPtr(true)})
 
 	if err != nil {
@@ -242,7 +242,7 @@ func TestSendAudio_PTT_ExplicitFalse(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL, PTT: boolPtr(false)})
 
 	if err != nil {
@@ -266,7 +266,7 @@ func TestSendAudio_MimeType_Level1_RequestFieldWins(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone: "5511987654321", Audio: audioURL, MimeType: "audio/x-custom",
 		})
@@ -295,7 +295,7 @@ func TestSendAudio_MimeType_Level2_DataURILabelUsed(t *testing.T) {
 	// mente sobre o conteudo — e ainda assim tem de vencer, porque essa e'
 	// a regra historica recuperada (nao uma preferencia nossa).
 	uri := audioDataURI("audio/ogg", oggBytes)
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: uri})
 
 	if err != nil {
@@ -319,7 +319,7 @@ func TestSendAudio_MimeType_Level2_RemoteContentTypeUsedOnlyWhenAudioPrefixed(t 
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err != nil {
@@ -343,7 +343,7 @@ func TestSendAudio_MimeType_Level2_NonAudioRemoteContentTypeIgnored(t *testing.T
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err != nil {
@@ -367,7 +367,7 @@ func TestSendAudio_MimeType_Level3_SniffedWhenRecognized(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err != nil {
@@ -410,7 +410,7 @@ func TestSendAudio_MimeType_Level4_FallbackByPTT_WhenSniffFails(t *testing.T) {
 			}
 			logger := &contractsfake.Logger{}
 
-			_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+			_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 				Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL, PTT: tc.ptt})
 
 			if err != nil {
@@ -434,7 +434,7 @@ func TestSendAudio_Seconds_ForwardedFromRequest(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL, Seconds: 42})
 
 	if err != nil {
@@ -462,7 +462,7 @@ func TestSendAudio_Upload_BytesForwardedIntact(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err != nil {
@@ -500,7 +500,7 @@ func TestSendAudio_CausalSuccess(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone: "5511987654321", Audio: audioURL, Seconds: 7,
 		})
@@ -549,7 +549,7 @@ func TestSendAudio_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone: "5511987654321", Audio: audioURL, ID: "id-do-cliente",
 		})
@@ -576,7 +576,7 @@ func TestSendAudio_DownstreamFailureNeverProducesSent(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err == nil {
@@ -608,7 +608,7 @@ func TestSendAudio_AcquisitionOK_UploadOK_SendFail_NeverSent(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if !uploadThenSendCalled {
@@ -640,7 +640,7 @@ func TestSendAudio_DataURI_CausalSuccess(t *testing.T) {
 	logger := &contractsfake.Logger{}
 
 	uri := audioDataURI("audio/ogg", oggBytes)
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: uri})
 
 	if err != nil {
@@ -665,7 +665,7 @@ func TestSendAudio_DataURI_MalformedBase64_Rejected(t *testing.T) {
 	mf := &contractsfake.MediaFetcher{}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone: "5511987654321", Audio: "data:audio/ogg;base64,%%%nao-e-base64%%%",
 		})
@@ -695,7 +695,7 @@ func TestSendAudio_URLBranch_NotCapturedByDataURIDiscrimination(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err != nil {
@@ -736,7 +736,7 @@ func TestSendAudio_URL_FetchTooLarge_Rejected(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
 
 	if err == nil {
@@ -764,7 +764,7 @@ func TestSendAudio_RealFetchIntegration(t *testing.T) {
 	mf := opengraph.NewURLFetcher(srv.Client())
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: srv.URL})
 
 	if err != nil {
@@ -793,7 +793,7 @@ func TestSendAudio_WaveformFlowsToPayload(t *testing.T) {
 	logger := &contractsfake.Logger{}
 
 	uri := audioDataURI("audio/ogg", oggBytes)
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone: "5511987654321", Audio: uri, Waveform: waveform,
 		})
@@ -817,7 +817,7 @@ func TestSendAudio_SSRF_LoopbackBlocked(t *testing.T) {
 	mf := opengraph.NewURLFetcher(http.DefaultClient)
 	logger := &contractsfake.Logger{}
 
-	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone: "5511987654321", Audio: "http://127.0.0.1:1/nota.ogg",
 		})
@@ -857,7 +857,7 @@ func TestSendAudio_CaptionAcceptedButInert(t *testing.T) {
 	}
 	logger := &contractsfake.Logger{}
 
-	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+	result, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
 		Execute(context.Background(), userID, domain.SendAudioRequest{
 			Phone:   "5511987654321",
 			Audio:   audioURL,
@@ -880,4 +880,107 @@ func TestSendAudio_CaptionAcceptedButInert(t *testing.T) {
 	// AudioPayload e a ligar no use case, este teste continuará verde — o
 	// que mudará é o wire, e a trava de wire (TestSendWireContract_FieldNames)
 	// acusará a nova chave.
+}
+
+// Testes da F116: a legenda do áudio vai como mensagem de TEXTO separada.
+//
+// Até 2026-08-22 o campo `Caption` era aceite e ficava INERTE: o cliente
+// mandava legenda, recebia 200, e ela não existia em lado nenhum. O protocolo
+// não tem onde a pôr — `waE2E.AudioMessage` não define caption — então a
+// entrega possível é uma segunda mensagem, que é o que um humano faria.
+//
+// Isto é comportamento INVENTADO por nós, com autorização explícita, e é por
+// isso que o resultado o descreve em vez de o esconder.
+
+func TestSendAudio_LegendaVaiComoMensagemSeparada(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	tm := &contractsfake.TextMessenger{}
+
+	res, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{},
+		&contractsfake.MediaFetcher{}, tm, &contractsfake.Logger{}).
+		Execute(context.Background(), userID, domain.SendAudioRequest{
+			Phone: "5511987654321", Audio: audioDataURI("audio/ogg", oggBytes), Caption: "ouve isto"})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+
+	if len(tm.SendTextCalls) != 1 {
+		t.Fatalf("SendText chamado %d vez(es), quero 1: a legenda continua inerte (F116)",
+			len(tm.SendTextCalls))
+	}
+	if got := tm.SendTextCalls[0].Text; got != "ouve isto" {
+		t.Errorf("texto da legenda = %q", got)
+	}
+	// A ORDEM importa: áudio primeiro. Ao contrário, o destinatário lê um
+	// comentário antes de saber a que se refere.
+	if len(mm.SendAudioCalls) != 1 {
+		t.Fatalf("o áudio não foi enviado")
+	}
+	if res.CaptionStatus != domain.CaptionSent {
+		t.Errorf("CaptionStatus = %q, quero %q", res.CaptionStatus, domain.CaptionSent)
+	}
+	if res.CaptionMessageID == "" {
+		t.Error("CaptionMessageID vazio: o cliente não consegue referenciar a legenda")
+	}
+	if res.CaptionMessageID == res.MessageID {
+		t.Error("CaptionMessageID igual ao do áudio: são duas mensagens, dois ids")
+	}
+}
+
+// O limite: sem legenda, NENHUMA mensagem extra sai. Sem isto, a correção
+// mandaria uma mensagem vazia a cada áudio.
+func TestSendAudio_SemLegendaNaoEnviaTexto(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	tm := &contractsfake.TextMessenger{}
+
+	res, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{},
+		&contractsfake.MediaFetcher{}, tm, &contractsfake.Logger{}).
+		Execute(context.Background(), userID, domain.SendAudioRequest{
+			Phone: "5511987654321", Audio: audioDataURI("audio/ogg", oggBytes)})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if n := len(tm.SendTextCalls); n != 0 {
+		t.Errorf("SendText chamado %d vez(es) sem legenda: cada áudio mandaria uma "+
+			"mensagem vazia atrás", n)
+	}
+	if res.CaptionStatus != "" || res.CaptionMessageID != "" {
+		t.Errorf("campos de legenda preenchidos sem legenda: %+v", res)
+	}
+}
+
+// O modo de falha que este desenho cria, e que não existia antes: o áudio sai
+// e a legenda falha.
+//
+// O pedido continua bem-sucedido DE PROPÓSITO. Devolver erro faria o cliente
+// reenviar tudo e duplicar o áudio, que já está entregue e não se desfaz. O
+// `CaptionStatus` é o que impede isso de ser uma mentira.
+func TestSendAudio_LegendaFalhaMasAudioJaFoi(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, string) (domain.MessageSendResult, error) {
+			return domain.MessageSendResult{}, errSession
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	res, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{},
+		&contractsfake.MediaFetcher{}, tm, logger).
+		Execute(context.Background(), userID, domain.SendAudioRequest{
+			Phone: "5511987654321", Audio: audioDataURI("audio/ogg", oggBytes), Caption: "ouve isto"})
+
+	if err != nil {
+		t.Fatalf("o pedido falhou por causa da legenda: o áudio JÁ FOI, e reenviar "+
+			"duplicaria-o. err = %v", err)
+	}
+	if res.MessageID == "" {
+		t.Error("o id do áudio sumiu: o cliente perde a referência do que foi entregue")
+	}
+	if res.CaptionStatus != domain.CaptionFailed {
+		t.Errorf("CaptionStatus = %q, quero %q — sem isto o 200 mente sobre a legenda",
+			res.CaptionStatus, domain.CaptionFailed)
+	}
+	if !logger.Logged("audio sent but caption failed") {
+		t.Error("a falha da legenda não foi registada: o operador não consegue diagnosticar")
+	}
 }

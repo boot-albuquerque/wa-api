@@ -26,16 +26,29 @@ import (
 const (
 	caminhoHousekeep = "../../HOUSEKEEP.md"
 
-	// marcaAberto e marcaCorrigido são os dois únicos valores aceites.
-	// Deliberadamente DOIS, e não três: um valor "indeterminado" convidaria a
-	// um limbo permanente, e a regra é que só se fecha com veredito explícito.
+	// Os TRÊS valores aceites.
+	//
+	// Nasceu com dois — `aberto` e `corrigido` — e o comentário dizia que um
+	// terceiro "convidaria a um limbo permanente". A prática mostrou o custo
+	// oposto: com duas gavetas para três coisas, o que foi DECIDIDO e não será
+	// feito não cabe em nenhuma. A F107 ("limitação aceite, não será
+	// implementado") e a F135 ("não corrigido, por desenho") ficavam `aberto` e
+	// inflavam a contagem de trabalho por fazer; e um worker, sem onde as pôr,
+	// empurrou duas outras para `corrigido` — perdendo a distinção entre
+	// "consertei" e "decidi não consertar" no próprio registo criado para a
+	// preservar.
+	//
+	// `nao-se-faz` NÃO é limbo: exige veredito explícito, tal como `corrigido`.
+	// A diferença entre os dois é o que aconteceu ao código, não o grau de
+	// certeza. O que continua a não existir é um valor para "não sei".
 	marcaAberto    = "<!-- f-status: aberto -->"
 	marcaCorrigido = "<!-- f-status: corrigido -->"
+	marcaNaoSeFaz  = "<!-- f-status: nao-se-faz -->"
 )
 
 var (
 	reCabecalho = regexp.MustCompile(`(?m)^## (F\d+)`)
-	reMarca     = regexp.MustCompile(`<!-- f-status: (\w+) -->`)
+	reMarca     = regexp.MustCompile(`<!-- f-status: ([\w-]+) -->`)
 )
 
 // TestHousekeepTemUmaMarcaPorAchado: cada número de achado tem exatamente uma
@@ -79,7 +92,7 @@ func TestHousekeepTemUmaMarcaPorAchado(t *testing.T) {
 			len(comVarias), strings.Join(comVarias, ", "))
 	}
 	if len(valorMau) > 0 {
-		t.Errorf("valor(es) fora de {aberto, corrigido}: %s", strings.Join(valorMau, ", "))
+		t.Errorf("valor(es) fora de {aberto, corrigido, nao-se-faz}: %s", strings.Join(valorMau, ", "))
 	}
 }
 
@@ -108,7 +121,8 @@ func TestHousekeepMarcaFechaOBloco(t *testing.T) {
 		if bloco == "" {
 			continue
 		}
-		if !strings.HasSuffix(bloco, marcaAberto) && !strings.HasSuffix(bloco, marcaCorrigido) {
+		if !strings.HasSuffix(bloco, marcaAberto) && !strings.HasSuffix(bloco, marcaCorrigido) &&
+			!strings.HasSuffix(bloco, marcaNaoSeFaz) {
 			// Só reclama do último bloco de cada número: os anteriores são
 			// histórico e não levam marca.
 			if lim, ok := ultimoBlocoDe(texto, cabecalhos, nome); ok && lim == c[0] {
@@ -138,7 +152,7 @@ func classificaMarcas(texto string, ultimo map[string][2]int) (semMarca, comVari
 		case len(achadas) > 1:
 			comVarias = append(comVarias, nome)
 		default:
-			if v := achadas[0][1]; v != "aberto" && v != "corrigido" {
+			if v := achadas[0][1]; v != "aberto" && v != "corrigido" && v != "nao-se-faz" {
 				valorMau = append(valorMau, nome+"="+v)
 			}
 		}

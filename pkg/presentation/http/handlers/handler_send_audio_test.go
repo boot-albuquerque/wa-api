@@ -48,7 +48,7 @@ func defaultSendAudioFetcher() *contractsfake.MediaFetcher {
 // wiring_routes.go faz — não handler.ServeHTTP direto (ARMADILHA 2 deste
 // repo: defeito de rota só aparece testando pela rota registrada).
 func sendAudioRouter(mm *contractsfake.MediaMessenger, jr *contractsfake.JIDResolver, mf *contractsfake.MediaFetcher) http.Handler {
-	uc := message.NewSendAudioUseCase(mm, jr, mf, silentLogger{})
+	uc := message.NewSendAudioUseCase(mm, jr, mf, &contractsfake.TextMessenger{}, silentLogger{})
 	h := NewSendAudioHandler(uc)
 
 	r := mux.NewRouter()

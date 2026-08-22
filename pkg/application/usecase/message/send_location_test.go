@@ -11,19 +11,22 @@ import (
 	"wa-api/pkg/domain"
 )
 
+// coord devolve ponteiro para um literal. A F121 trocou Latitude/Longitude
+// para *float64 para distinguir "nao informado" de zero.
+func coord(v float64) *float64 { return &v }
+
 // TestSendLocation_MissingRequiredField: Phone, Latitude ou Longitude
 // ausente é recusado antes de qualquer porta ser tocada. Latitude/Longitude
-// "ausente" é indistinguível de "zero" na desserialização de float64 sem
-// ponteiro — ver TestSendLocation_ZeroLatitudeRejected/
-// TestSendLocation_ZeroLongitudeRejected, que documentam a consequência.
+// Desde a F121 os campos são *float64, então "ausente" (nil) e "zero" são
+// distinguíveis — ver TestSendLocation_ZeroEhCoordenadaValida.
 func TestSendLocation_MissingRequiredField(t *testing.T) {
 	cases := []struct {
 		name string
 		req  domain.SendLocationRequest
 	}{
-		{"Phone", domain.SendLocationRequest{Latitude: -23.5505, Longitude: -46.6333}},
-		{"Latitude", domain.SendLocationRequest{Phone: "5511987654321", Longitude: -46.6333}},
-		{"Longitude", domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5505}},
+		{"Phone", domain.SendLocationRequest{Latitude: coord(-23.5505), Longitude: coord(-46.6333)}},
+		{"Latitude", domain.SendLocationRequest{Phone: "5511987654321", Longitude: coord(-46.6333)}},
+		{"Longitude", domain.SendLocationRequest{Phone: "5511987654321", Latitude: coord(-23.5505)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -46,44 +49,40 @@ func TestSendLocation_MissingRequiredField(t *testing.T) {
 	}
 }
 
-// TestSendLocation_ZeroLatitudeRejected documenta o defeito HISTÓRICO
-// (`git show 41bc8e2^:handlers.go`, em torno da linha 1913): a validação
-// `Latitude == 0` confunde "campo ausente" com "valor zero", então
-// qualquer ponto sobre o equador é rejeitado como se Latitude não tivesse
-// sido enviada. Isto NÃO é o comportamento desejado — é o comportamento
-// preservado por decisão explícita (CAP-08A não corrige contrato público
-// sem autorização, ver HOUSEKEEP.md F121). A causa raiz é
-// domain.SendLocationRequest.Latitude ser float64 sem ponteiro: corrigir
-// exigiria *float64, que é mudança de contrato.
-func TestSendLocation_ZeroLatitudeRejected(t *testing.T) {
-	sm := &contractsfake.SimpleMessenger{}
-	logger := &contractsfake.Logger{}
-
-	_, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
-		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: 0, Longitude: -46.6333})
-
-	if err == nil {
-		t.Fatal("Latitude=0 (equador) foi aceita — defeito historico deixou de ser reproduzido")
-	}
-	if n := len(sm.SendLocationCalls); n != 0 {
-		t.Errorf("Latitude=0 rejeitada, mas SendLocation foi chamado %d vez(es)", n)
-	}
-}
-
-// TestSendLocation_ZeroLongitudeRejected é o par de
-// TestSendLocation_ZeroLatitudeRejected para o meridiano de Greenwich.
-func TestSendLocation_ZeroLongitudeRejected(t *testing.T) {
-	sm := &contractsfake.SimpleMessenger{}
-	logger := &contractsfake.Logger{}
-
-	_, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
-		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5505, Longitude: 0})
-
-	if err == nil {
-		t.Fatal("Longitude=0 (meridiano de Greenwich) foi aceita — defeito historico deixou de ser reproduzido")
-	}
-	if n := len(sm.SendLocationCalls); n != 0 {
-		t.Errorf("Longitude=0 rejeitada, mas SendLocation foi chamado %d vez(es)", n)
+// TestSendLocation_ZeroEhCoordenadaValida
+//
+// Este teste dizia o CONTRÁRIO até 2026-08-22. Chamava-se
+// `ZeroLatitudeRejected`/`ZeroLongitudeRejected` e tratava "zero foi aceite"
+// como FALHA — travava o defeito histórico em vez do comportamento correto.
+//
+// Zero é coordenada válida: latitude 0 é o equador, longitude 0 é o meridiano
+// de Greenwich, e os dois a zero são um ponto real no golfo da Guiné. A F121
+// trocou os campos para ponteiro para separar "não informado" de "zero".
+func TestSendLocation_ZeroEhCoordenadaValida(t *testing.T) {
+	for _, c := range []struct {
+		nome     string
+		lat, lon float64
+	}{
+		{"equador", 0, -46.6333},
+		{"meridiano_de_Greenwich", -23.5505, 0},
+		{"golfo_da_Guine", 0, 0},
+	} {
+		t.Run(c.nome, func(t *testing.T) {
+			sm := &contractsfake.SimpleMessenger{}
+			_, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+				Execute(context.Background(), userID, domain.SendLocationRequest{
+					Phone: "5511987654321", Latitude: coord(c.lat), Longitude: coord(c.lon)})
+			if err != nil {
+				t.Fatalf("coordenada valida recusada: %v", err)
+			}
+			if n := len(sm.SendLocationCalls); n != 1 {
+				t.Fatalf("SendLocation chamado %d vez(es), quero 1", n)
+			}
+			got := sm.SendLocationCalls[0].Payload
+			if got.Latitude != c.lat || got.Longitude != c.lon {
+				t.Errorf("payload = (%v, %v), quero (%v, %v)", got.Latitude, got.Longitude, c.lat, c.lon)
+			}
+		})
 	}
 }
 
@@ -94,7 +93,7 @@ func TestSendLocation_SessionFailurePropagates(t *testing.T) {
 	logger := &contractsfake.Logger{}
 
 	_, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
-		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5505, Longitude: -46.6333})
+		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: coord(-23.5505), Longitude: coord(-46.6333)})
 
 	if !errors.Is(err, errSession) {
 		t.Fatalf("erro da porta nao chegou ao chamador: got %#v", err)
@@ -115,7 +114,7 @@ func TestSendLocation_InvalidPhoneNeverReachesSendLocation(t *testing.T) {
 	}
 
 	_, err := message.NewSendLocationUseCase(sm, jr, logger).
-		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "lixo", Latitude: -23.5505, Longitude: -46.6333})
+		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "lixo", Latitude: coord(-23.5505), Longitude: coord(-46.6333)})
 
 	if err == nil {
 		t.Fatal("telefone invalido foi aceito")
@@ -141,7 +140,7 @@ func TestSendLocation_CausalSuccess(t *testing.T) {
 
 	result, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
 		Execute(context.Background(), userID, domain.SendLocationRequest{
-			Phone: "5511987654321", Name: "Praça da Sé", Latitude: -23.5505, Longitude: -46.6333,
+			Phone: "5511987654321", Name: "Praça da Sé", Latitude: coord(-23.5505), Longitude: coord(-46.6333),
 		})
 
 	if err != nil {
@@ -181,7 +180,7 @@ func TestSendLocation_NameOptional_EmptyStringForwarded(t *testing.T) {
 	logger := &contractsfake.Logger{}
 
 	_, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
-		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5505, Longitude: -46.6333})
+		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: coord(-23.5505), Longitude: coord(-46.6333)})
 
 	if err != nil {
 		t.Fatalf("caminho feliz falhou (Name ausente deveria ser aceito): %v", err)
@@ -206,7 +205,7 @@ func TestSendLocation_MessageIDIsTheOneActuallySent(t *testing.T) {
 
 	result, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
 		Execute(context.Background(), userID, domain.SendLocationRequest{
-			Phone: "5511987654321", Latitude: -23.5505, Longitude: -46.6333, ID: "id-pedido-pelo-cliente",
+			Phone: "5511987654321", Latitude: coord(-23.5505), Longitude: coord(-46.6333), ID: "id-pedido-pelo-cliente",
 		})
 
 	if err != nil {
@@ -231,7 +230,7 @@ func TestSendLocation_DownstreamFailureNeverProducesSent(t *testing.T) {
 	logger := &contractsfake.Logger{}
 
 	result, err := message.NewSendLocationUseCase(sm, &contractsfake.JIDResolver{}, logger).
-		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: -23.5505, Longitude: -46.6333})
+		Execute(context.Background(), userID, domain.SendLocationRequest{Phone: "5511987654321", Latitude: coord(-23.5505), Longitude: coord(-46.6333)})
 
 	if err == nil {
 		t.Fatal("falha da porta foi engolida")
