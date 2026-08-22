@@ -230,6 +230,8 @@ const codeSessionOwnedByAnotherReplica = "session_owned_by_another_replica"
 // pelo GET /session/qr, exatamente como na Evolution API.
 const codeSessionStartAlreadyInFlight = "session_start_already_in_flight"
 
+const codeSessionAlreadyConnected = "session_already_connected"
+
 type Option func(*Orchestrator)
 
 // WithOwnershipCheck instala a verificação de posse do ADR-0005 D2.
@@ -330,6 +332,11 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err err
 		)
 	}
 	defer o.inFlight.release(userID)
+
+	if existing, ok := o.registry.Get(userID); ok && existing.IsConnected() {
+		log.Info().Str("userid", userID).Msg("session already connected; nothing to do")
+		return nil
+	}
 
 	// Posse ANTES de materializar qualquer coisa: criar a sessão e só depois
 	// descobrir que ela é de outra réplica deixaria cliente e registries

@@ -1004,6 +1004,62 @@ func TestStartCedeChaveEstagnada(t *testing.T) {
 	}
 }
 
+// --- F78: Start numa sessão já conectada é no-op --------------------------
+
+func TestStart_AlreadyConnected_IsNoop(t *testing.T) {
+	h := newHarness(t)
+
+	existingSess := &contractsfake.Session{
+		Recorder:        h.recorder,
+		IsConnectedFunc: func() bool { return true },
+	}
+	h.registry.Sessions = map[string]port.Session{"u1": existingSess}
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start on connected session should be no-op, got: %v", err)
+	}
+
+	if len(h.provider.NewSessionCalls) != 0 {
+		t.Fatal("NewSession must not be called when session is already connected")
+	}
+	if len(h.registry.RegisterCalls) != 0 {
+		t.Fatal("Register must not be called when session is already connected")
+	}
+}
+
+func TestStart_NotConnected_ProceedsNormally(t *testing.T) {
+	h := newHarness(t)
+
+	existingSess := &contractsfake.Session{
+		Recorder:        h.recorder,
+		IsConnectedFunc: func() bool { return false },
+	}
+	h.registry.Sessions = map[string]port.Session{"u1": existingSess}
+
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start on disconnected session should proceed: %v", err)
+	}
+
+	if len(h.provider.NewSessionCalls) == 0 {
+		t.Fatal("NewSession must be called when existing session is not connected")
+	}
+}
+
+func TestStart_NoExistingSession_ProceedsNormally(t *testing.T) {
+	h := newHarness(t)
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start with no existing session should proceed: %v", err)
+	}
+
+	if len(h.provider.NewSessionCalls) == 0 {
+		t.Fatal("NewSession must be called when no session exists in registry")
+	}
+}
+
 func appErrCodeDe(err error) string {
 	var e *apperr.AppError
 	if errors.As(err, &e) {
