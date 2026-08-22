@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,17 +56,17 @@ func findChrome(t *testing.T) string {
 	return ""
 }
 
-func freePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	defer func() { _ = l.Close() }()
-	_, portStr, _ := net.SplitHostPort(l.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
-}
+// ephemeralPort is ZERO, and the name says what it means: Chromium picks the
+// port and publishes it, with the browser ws path, in <ProfileDir>/DevToolsActivePort
+// (decision 75).
+//
+// It replaced a freePort helper that did bind-:0-then-close. That is TOCTOU —
+// the number is free when read and can be taken before Chromium binds it — and
+// it was not theoretical: it cost a 2m30 boot timeout in core's suite, with the
+// collision visible in the log as an httptest server still holding the port.
+// The helper is kept as a function, rather than inlining 0 everywhere, so this
+// explanation has one home.
+func ephemeralPort(*testing.T) int { return 0 }
 
 // pages imitate the three states, by the markers the classifier keys on.
 //
@@ -135,7 +134,7 @@ func TestBrowserChainLaunchesNavigatesAndClassifies(t *testing.T) {
 
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
 		ProfileDir:    t.TempDir(),
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -213,7 +212,7 @@ func TestBrowserChainReportsAWedgedPageAsUnresponsive(t *testing.T) {
 
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
 		ProfileDir:    t.TempDir(),
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -300,7 +299,7 @@ func TestBrowserChainLivenessSeesAliveAndWedged(t *testing.T) {
 
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
 		ProfileDir:    t.TempDir(),
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -388,7 +387,7 @@ func TestBrowserChainVerifiesTheModuleInventory(t *testing.T) {
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
 		ProfileDir:    t.TempDir(),
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -469,7 +468,7 @@ func TestBrowserChainSeversAndRestoresThePageNetwork(t *testing.T) {
 	runner := engine.NewRunner()
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+		ProfileDir: t.TempDir(), DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -631,7 +630,7 @@ func TestBrowserChainSeversTheWebSocketTransport(t *testing.T) {
 	runner := engine.NewRunner()
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+		ProfileDir: t.TempDir(), DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -908,7 +907,7 @@ func TestBrowserChainDetectsTheQRByEitherSelector(t *testing.T) {
 	runner := engine.NewRunner()
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+		ProfileDir: t.TempDir(), DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)
@@ -1001,7 +1000,7 @@ func TestBrowserChainCarriesNoPageTextWhenTheSelectorIsRenamed(t *testing.T) {
 	runner := engine.NewRunner()
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+		ProfileDir: t.TempDir(), DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)

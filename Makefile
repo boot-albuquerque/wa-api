@@ -32,6 +32,33 @@ ALL_PKGS := $(shell $(GOCMD) list ./...)
 # pacote em subpacotes: `go test -race` passa em toda a árvore, e a exclusão
 # saiu — manter uma trava que não trava é pior que não ter trava.
 TEST_PKGS := $(COVER_PKGS)
+
+# Os pacotes que LANCAM BROWSER correm SERIALIZADOS (decisao 79, F103).
+#
+# O `go test` paraleliza PACOTES ate' ao numero de CPUs, e quatro pacotes desta
+# arvore sobem Chrome. Medido durante uma execucao do gate: 24 processos de
+# browser vivos ao mesmo tempo, 4 binarios de teste, numa maquina de 10 CPUs,
+# com load average em 59,58. Sob essa saturacao um arranque de SPA estoura o
+# prazo de 2m30 — o MESMO teste que, isolado, passa em 2,4s.
+#
+# E o estouro nao fica por ali: o CleanStop sinaliza, o browser recusa fechar
+# (DIRTY_signal_close_refused) e o processo SOBREVIVE a execucao. Foram
+# encontrados 28 orfaos, dois com mais de um dia. Cada um soma-se a carga da
+# proxima corrida, entao o gate fica progressivamente mais fragil sem que nada
+# no repositorio mude.
+#
+# `-p 1` basta, e isso foi MEDIDO em vez de suposto: os quatro pacotes tem ZERO
+# chamadas a t.Parallel(), logo os testes DENTRO de cada um ja sao sequenciais e
+# toda a concorrencia era entre pacotes. Uma trava de arquivo — que o
+# paralelismo entre processos do `go test` exigiria — seria complexidade sem
+# problema a resolver.
+BROWSER_PKGS := \
+	wa-api/internal/wa-headless \
+	wa-api/internal/wa-headless/core \
+	wa-api/internal/wa-headless/engine \
+	wa-api/internal/wa-headless/runtime
+SERIAL_TEST_PKGS := $(filter $(BROWSER_PKGS),$(TEST_PKGS))
+PARALLEL_TEST_PKGS := $(filter-out $(BROWSER_PKGS),$(TEST_PKGS))
 VET_TARGETS := $(ALL_PKGS)
 
 # Lint
@@ -94,8 +121,17 @@ docker: ## Build Docker image
 
 ##@ Test
 
-test: ## Run unit tests with race detection
-	$(GOTEST) -race -count=1 -timeout=20m $(TEST_PKGS)
+# test-split-check falha se a divisao perder ou soltar um pacote.
+#
+# $(filter …) descarta em SILENCIO o que nao casa: um typo em BROWSER_PKGS faria
+# o pacote voltar ao grupo paralelo e a protecao sumiria sem nenhum aviso. Uma
+# trava que pode desaparecer por engano de digitacao nao e' trava.
+test-split-check:
+	@serial=$$(echo $(SERIAL_TEST_PKGS) | wc -w); 	declared=$$(echo $(BROWSER_PKGS) | wc -w); 	if [ "$$serial" -ne "$$declared" ]; then 		echo "test-split: $$serial de $$declared pacotes de browser casaram com TEST_PKGS;" >&2; 		echo "  um nome em BROWSER_PKGS nao existe, e esse pacote correria em PARALELO." >&2; 		exit 1; 	fi; 	total=$$(echo $(TEST_PKGS) | wc -w); 	soma=$$(( $$(echo $(PARALLEL_TEST_PKGS) | wc -w) + serial )); 	if [ "$$total" -ne "$$soma" ]; then 		echo "test-split: $$soma pacotes na divisao contra $$total em TEST_PKGS;" >&2; 		echo "  a divisao perdeu ou duplicou pacote, e um pacote perdido nao e' testado." >&2; 		exit 1; 	fi
+
+test: test-split-check ## Run unit tests with race detection
+	$(GOTEST) -race -count=1 -timeout=20m $(PARALLEL_TEST_PKGS)
+	$(GOTEST) -race -count=1 -timeout=20m -p 1 $(SERIAL_TEST_PKGS)
 
 test-verbose: ## Run unit tests with verbose output
 	$(GOTEST) -race -count=1 -v -timeout=20m $(TEST_PKGS)

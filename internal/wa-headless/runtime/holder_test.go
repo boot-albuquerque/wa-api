@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,17 +42,17 @@ func findChrome(t *testing.T) string {
 	return ""
 }
 
-func freePort(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	defer func() { _ = l.Close() }()
-	_, portStr, _ := net.SplitHostPort(l.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
-}
+// ephemeralPort is ZERO, and the name says what it means: Chromium picks the
+// port and publishes it, with the browser ws path, in <ProfileDir>/DevToolsActivePort
+// (decision 75).
+//
+// It replaced a freePort helper that did bind-:0-then-close. That is TOCTOU —
+// the number is free when read and can be taken before Chromium binds it — and
+// it was not theoretical: it cost a 2m30 boot timeout in core's suite, with the
+// collision visible in the log as an httptest server still holding the port.
+// The helper is kept as a function, rather than inlining 0 everywhere, so this
+// explanation has one home.
+func ephemeralPort(*testing.T) int { return 0 }
 
 // readyPage carries #pane-side, the marker spa.Classify keys on for
 // ClassAppReady. Copied rather than imported because core's fixtures are
@@ -93,7 +91,7 @@ func holderConfig(t *testing.T, profileDir string) core.StartConfig {
 	return core.StartConfig{
 		BinaryPath:      findChrome(t),
 		ProfileDir:      profileDir,
-		DebuggingPort:   freePort(t),
+		DebuggingPort:   ephemeralPort(t),
 		NavigateURL:     pageServer(t, readyPage),
 		RequiredModules: []spa.Module{},
 		Runner:          r,

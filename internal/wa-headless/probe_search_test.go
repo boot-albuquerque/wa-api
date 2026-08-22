@@ -30,7 +30,7 @@ func TestProbeSearchAndLabels(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -122,7 +122,7 @@ func TestProbeSearchCapability(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())

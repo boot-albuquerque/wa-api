@@ -43,7 +43,7 @@ func TestReplayBarrierReal(t *testing.T) {
 	// conta-B is the OBSERVER: it boots, floods, and then receives.
 	runnerB := engine.NewRunner()
 	hB := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: toProfile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: toProfile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runnerB,
 	})
 	defer hB.Stop(context.Background())
@@ -112,7 +112,7 @@ func TestReplayBarrierReal(t *testing.T) {
 	// AND NOW SOMETHING REAL HAPPENS.
 	runnerA := engine.NewRunner()
 	hA := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: fromProfile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: fromProfile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runnerA,
 	})
 	defer hA.Stop(context.Background())

@@ -44,7 +44,7 @@ func TestAddressbookSaveReal(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -167,7 +167,7 @@ func TestAddressbookDeleteIsIdempotentReal(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -221,7 +221,7 @@ func TestLabMutualAddressbookSave(t *testing.T) {
 		t.Helper()
 		runner := engine.NewRunner()
 		h := waruntime.NewHolder(core.StartConfig{
-			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 			UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 		})
 		defer h.Stop(context.Background())

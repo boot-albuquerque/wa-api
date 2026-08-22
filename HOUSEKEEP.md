@@ -3420,6 +3420,33 @@ real de cobertura encontrada e consertada na primeira execução.
 | `TestStartSession_ConcurrentStartOnSameProfileEndToEnd` | 3/3 verdes | falhou |
 | `TestStartSession_NotReadyFailure_PreservesFinalSnapshot` | 3/3 verdes | falhou |
 
+> **ATUALIZAÇÃO 2026-08-22 (decisão 79): a CAUSA foi medida, e não era "a
+> máquina estava ocupada".** Esta entrada tratou a carga como ambiental. Ela é
+> produzida pelo PRÓPRIO gate: o `go test` paraleliza pacotes até ao número de
+> CPUs, e quatro pacotes desta árvore lançam browsers sem coordenação alguma.
+> Medido durante uma execução: **24 browsers vivos ao mesmo tempo, 4 binários de
+> teste, 10 CPUs, load average 59,58.**
+>
+> E havia uma segunda causa, independente da carga: o helper `freePort` era
+> bind-`:0`-e-fecha, um TOCTOU clássico. Com a máquina JÁ serializada e a carga
+> em 9,63, um teste ainda estourou 2m30 porque a porta reservada foi tomada
+> antes de o Chromium se ligar a ela — a colisão ficou visível no log como um
+> `httptest.Server` ainda a segurá-la.
+>
+> **Correção aplicada (F103)**: os quatro pacotes de browser correm com `-p 1`,
+> e os 185 sítios que pediam porta reservada passaram a usar porta efêmera, que
+> não tem alocação para disputar. Resultado medido:
+>
+> | | browsers simultâneos | pico de carga | órfãos após | `runtime` |
+> |---|---|---|---|---|
+> | antes | 24 | 59,58 | 28 | 220 s (com falha) |
+> | depois | 8 | 9,63 | **0** | **30,8 s** |
+>
+> As quatro falhas desta tabela são, portanto, candidatas a ter a MESMA causa —
+> e não "a máquina estava ocupada". Antes de voltar a atribuir uma falha do gate
+> a carga externa, reproduza-a com o teto ativo: se ainda acontecer, é outra
+> coisa, e é essa outra coisa que precisa de ser medida.
+
 **A causa comum**: esses testes sobem CHROME DE VERDADE. Sob carga, o navegador
 não responde no `/json/version` dentro do orçamento de boot de 30 s, e o teste
 reporta honestamente `launch failure` — que não é o estágio que ele queria
@@ -6608,7 +6635,57 @@ recupera — mas a carga voltou a 59,58 durante essa mesma execução, então pa
 perto. O teto do paralelismo é prevenção justificada, não teoria: sem ele, a
 aprovação depende de a máquina estar limpa naquele instante.
 
-**Status**: NÃO corrigido — achado fora do escopo da decisão 77, e mexer no
+**CORRIGIDO EM PARTE, por decisão 79** ("ponha teto agora nos pacotes que lançam
+browser, preferindo serialização explícita no gate, e corrija a F100 para esta
+causa medida").
+
+O que foi feito:
+
+1. **Serialização explícita no gate.** `BROWSER_PKGS` nomeia os quatro pacotes
+   que sobem Chrome, e eles correm num `go test` próprio com `-p 1`. O `-p 1`
+   BASTA, e isso foi medido em vez de suposto: os quatro têm ZERO chamadas a
+   `t.Parallel()`, logo os testes dentro de cada um já eram sequenciais e toda a
+   concorrência era entre pacotes. A trava de arquivo que o paralelismo entre
+   processos exigiria seria complexidade sem problema a resolver.
+
+2. **Guarda contra o modo de falha silencioso** (`test-split-check`). O
+   `$(filter)` do make descarta em SILÊNCIO o que não casa: um typo em
+   `BROWSER_PKGS` devolveria o pacote ao grupo paralelo e a proteção sumiria sem
+   aviso. A guarda falha se algum nome não casar, e também se a soma dos dois
+   grupos não bater com `TEST_PKGS` — um pacote perdido na divisão não é
+   testado. Dois controles negativos executados, ambos com mensagem que diz o
+   que corrigir.
+
+3. **A SEGUNDA causa, que só apareceu depois de serializar.** Com a carga já em
+   9,63, um teste do `core` ainda estourou 2m30. Não era saturação: o helper
+   `freePort` é bind-`:0`-e-fecha, TOCTOU, e a porta reservada foi tomada antes
+   de o Chromium se ligar a ela — a colisão ficou visível no log como um
+   `httptest.Server` ainda a segurá-la. **A serialização não escondeu esse
+   defeito: expô-lo.**
+
+   Os 185 sítios passaram a usar `ephemeralPort`, que devolve 0. O nome antigo
+   mentia — `freePort` devolvia uma porta que podia não estar livre no instante
+   que importava. Porta 0 não tem alocação para disputar, e é o caminho que a
+   produção usa (decisão 75), então a suíte passou a exercitar o MESMO caminho.
+
+**Resultado medido**, mesma máquina, antes e depois:
+
+| | browsers simultâneos | pico de carga | órfãos após | `runtime` |
+| --- | --- | --- | --- | --- |
+| antes | 24 | 59,58 | 28 | 220 s (com falha) |
+| depois | 8 | 9,63 | **0** | **30,8 s** |
+
+E a serialização NÃO custou tempo: o pacote raiz manteve os mesmos ~100 s. O
+gargalo nunca foi paralelismo útil — era contenção.
+
+**F100 atualizada** com esta causa, como a decisão 79 pediu.
+
+**Status**: o que continua PENDENTE é o item 2 da correção sugerida original —
+a escalada no `CleanStop` para browser de perfil temporário. Com as duas causas
+removidas os estouros pararam, e sem estouro não há vazamento; mas a defesa em
+profundidade continua a faltar, e um estouro por outra razão voltaria a deixar
+lixo. Não foi feito aqui porque mexer no `CleanStop` é mexer no caminho de
+desligamento, que tem invariante própria (invariante 3), e mexer no
 `CleanStop` é mexer no caminho de desligamento, que tem invariantes próprias
 (invariante 3: nada de parada por sinal vinda de fora do caminho de shutdown).
 Os 28 órfãos foram terminados nesta sessão para desbloquear o gate, e isso está

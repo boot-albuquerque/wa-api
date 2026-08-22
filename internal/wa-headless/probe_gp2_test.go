@@ -40,7 +40,7 @@ func TestProbeGroupEvents(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -131,7 +131,7 @@ func TestProbeGroupEventClassification(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -242,7 +242,7 @@ func TestProbeVoteSurface(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -326,7 +326,7 @@ func TestProbeVoteEventLive(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -450,7 +450,7 @@ func TestProbePairingSurface(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -527,7 +527,7 @@ func TestProbeSubscribeSurface(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -610,7 +610,7 @@ func TestProbeReactionSource(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -698,7 +698,7 @@ func TestProbeMessageFamilyModules(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -783,7 +783,7 @@ func TestProbeGroupDescriptionSurface(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -875,7 +875,7 @@ func TestProbeQuotedSurface(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -969,7 +969,7 @@ func TestProbeChannelReactionSetting(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -1050,7 +1050,7 @@ func TestProbeRemainingModules(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -1130,7 +1130,7 @@ func TestProbeEnumerateModules(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())

@@ -74,7 +74,7 @@ func openDual(t *testing.T, profileA, profileB string, budget time.Duration) (*d
 	boot := func(profile, side string) (*core.Session, *engine.Runner, func()) {
 		runner := engine.NewRunner()
 		h := waruntime.NewHolder(core.StartConfig{
-			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 			UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 		})
 		sess, err := h.Session(ctx)

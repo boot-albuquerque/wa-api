@@ -38,7 +38,7 @@ func TestProbeAuthenticationFailure(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: t.TempDir(), DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 		SettleBudget: 90 * time.Second,
 	})

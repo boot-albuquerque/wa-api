@@ -203,7 +203,7 @@ func launchObservationProfile(t *testing.T, runner *engine.Runner) (*engine.Brow
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
 		ProfileDir:    profile,
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 		UserAgent:     realSPAUserAgent,
 	})
 	if err != nil {
@@ -456,7 +456,7 @@ func openLabProfileHeadful(t *testing.T, runner *engine.Runner) *engine.Tab {
 	launcher := &engine.Launcher{BinaryPath: binary, Runner: runner}
 	browser, err := launcher.Launch(context.Background(), engine.LaunchConfig{
 		ProfileDir:    profile,
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 		UserAgent:     realSPAUserAgent,
 		Headful:       true,
 	})
@@ -4639,7 +4639,7 @@ func TestRealSPANCycleLifecycle(t *testing.T) {
 
 	for cycle := 1; cycle <= nCycleSampleCount; cycle++ {
 		runner := engine.NewRunner()
-		port := freePort(t)
+		port := ephemeralPort(t)
 
 		ctx, cancel := context.WithTimeout(context.Background(), nCycleReadyDeadline)
 		start := time.Now()
@@ -4807,7 +4807,7 @@ func TestRealSPAHolderAcrossCommands(t *testing.T) {
 	h := waruntime.NewHolder(core.StartConfig{
 		BinaryPath:    binary,
 		ProfileDir:    profile,
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 		UserAgent:     realSPAUserAgent,
 		NavigateURL:   realSPAURL,
 		Runner:        runner,
@@ -4978,7 +4978,7 @@ func TestRealSPAHoldRetention(t *testing.T) {
 	h := waruntime.NewHolder(core.StartConfig{
 		BinaryPath:    binary,
 		ProfileDir:    profile,
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 		UserAgent:     realSPAUserAgent,
 		NavigateURL:   realSPAURL,
 		Runner:        runner,
@@ -5290,7 +5290,7 @@ func TestRealSPALiveQR(t *testing.T) {
 	} else {
 		browser, err := (&engine.Launcher{BinaryPath: findChrome(t), Runner: runner}).Launch(
 			context.Background(), engine.LaunchConfig{
-				ProfileDir: target, DebuggingPort: freePort(t), UserAgent: realSPAUserAgent,
+				ProfileDir: target, DebuggingPort: ephemeralPort(t), UserAgent: realSPAUserAgent,
 			})
 		if err != nil {
 			t.Fatalf("launch into %s: %v", target, err)
@@ -5418,7 +5418,7 @@ func TestRealSPARefreshOwnerAgainstProduction(t *testing.T) {
 	h := waruntime.NewHolder(core.StartConfig{
 		BinaryPath:    binary,
 		ProfileDir:    profile,
-		DebuggingPort: freePort(t),
+		DebuggingPort: ephemeralPort(t),
 		UserAgent:     realSPAUserAgent,
 		NavigateURL:   realSPAURL,
 		Runner:        runner,
@@ -5487,7 +5487,7 @@ func TestRealSPADisplayNameShape(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -5571,7 +5571,7 @@ func TestRealSPAMessageStoreShape(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -5665,7 +5665,7 @@ func TestRealSPAMessageModelShape(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -5782,7 +5782,7 @@ func TestRealSPAMessageMetaInstalls(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -5857,7 +5857,7 @@ func TestRealSPAMessageMetaDelivery(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -5973,7 +5973,7 @@ func TestRealSPAFetchMessagesAgainstProduction(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -6106,7 +6106,7 @@ func TestRealSPABackupRestoresToAWorkingSession(t *testing.T) {
 	// from a directory full of bytes.
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: dst, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: dst, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	stopped := false
@@ -6179,7 +6179,7 @@ func TestRealSPALivenessAgainstProduction(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -6254,7 +6254,7 @@ func TestRealSPAConcurrentCapabilities(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -6518,7 +6518,7 @@ func TestRealSPALongHoldUnderLoad(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: binary, ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: binary, ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	stopped := false
@@ -6748,7 +6748,7 @@ func TestRealSPAConcurrentSessionsScaling(t *testing.T) {
 		browser, err := (&engine.Launcher{BinaryPath: binary, Runner: runner}).Launch(
 			context.Background(), engine.LaunchConfig{
 				ProfileDir:    t.TempDir(),
-				DebuggingPort: freePort(t),
+				DebuggingPort: ephemeralPort(t),
 				UserAgent:     realSPAUserAgent,
 			})
 		if err != nil {
@@ -6876,7 +6876,7 @@ func TestRealSPALinkByPhoneNumber(t *testing.T) {
 	runner := engine.NewRunner()
 	browser, err := (&engine.Launcher{BinaryPath: binary, Runner: runner}).Launch(
 		context.Background(), engine.LaunchConfig{
-			ProfileDir: profile, DebuggingPort: freePort(t), UserAgent: realSPAUserAgent,
+			ProfileDir: profile, DebuggingPort: ephemeralPort(t), UserAgent: realSPAUserAgent,
 		})
 	if err != nil {
 		t.Fatalf("launch: %v", err)
@@ -7062,7 +7062,7 @@ func TestOpenTabPrimingBudgetDoesNotBoundTheTab(t *testing.T) {
 	runner := engine.NewRunner()
 	l := &engine.Launcher{BinaryPath: findChrome(t), Runner: runner}
 	b, err := l.Launch(context.Background(), engine.LaunchConfig{
-		ProfileDir: t.TempDir(), DebuggingPort: freePort(t),
+		ProfileDir: t.TempDir(), DebuggingPort: ephemeralPort(t),
 	})
 	if err != nil {
 		t.Fatalf("Launch: %v", err)

@@ -36,7 +36,7 @@ func TestRealSPAMarksAConversationRead(t *testing.T) {
 
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -65,7 +65,7 @@ func TestRealSPAMarksAConversationRead(t *testing.T) {
 	}
 	sendRunner := engine.NewRunner()
 	hs := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: sender, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: sender, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: sendRunner,
 	})
 	defer hs.Stop(context.Background())

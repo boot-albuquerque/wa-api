@@ -20,12 +20,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -55,18 +53,6 @@ func findChrome(t *testing.T) string {
 	}
 	t.Skip("no Chrome/Chromium found; set WA_HEADLESS_CHROME to run the boot-path chain")
 	return ""
-}
-
-func freePortT(t *testing.T) int {
-	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	defer func() { _ = l.Close() }()
-	_, portStr, _ := net.SplitHostPort(l.Addr().String())
-	port, _ := strconv.Atoi(portStr)
-	return port
 }
 
 // readyPage carries #pane-side, which is all Classify needs to answer
@@ -128,9 +114,16 @@ const negativePathSettleBudget = 3 * time.Second
 func baseConfig(t *testing.T, navigateURL string) StartConfig {
 	t.Helper()
 	return StartConfig{
-		BinaryPath:    findChrome(t),
-		ProfileDir:    t.TempDir(),
-		DebuggingPort: freePortT(t),
+		BinaryPath: findChrome(t),
+		ProfileDir: t.TempDir(),
+		// PORT ZERO, and not a reserved one. freePortT is bind-:0-then-close,
+		// which is TOCTOU: the number is free when we read it and can be taken
+		// before Chromium binds it. That is not theoretical — it cost a
+		// 2m30 boot timeout in this very test file, with the collision visible
+		// as an httptest server still holding the port. Port 0 has no
+		// allocation to race: Chromium picks and publishes it in the profile
+		// (decision 75), which is also the path production uses.
+		DebuggingPort: 0,
 		NavigateURL:   navigateURL,
 		// THE HARNESS BOOT BUDGET, not the product one. See
 		// harnessbudget_test.go: F100 recorded seven gate failures that were
@@ -340,7 +333,7 @@ func TestStartSession_ConcurrentStartOnSameProfileEndToEnd(t *testing.T) {
 				return
 			}
 			successes = append(successes, sess)
-		}(freePortT(t))
+		}(0)
 	}
 	close(start)
 	wg.Wait()
@@ -397,11 +390,11 @@ func TestStartSession_ConcurrentStartOnSameProfileEndToEnd(t *testing.T) {
 // -> READY -> Stop (clean), asserting READY, StopVia.Clean(), and zero
 // SingletonLock after each of the two cycles.
 //
-// A fresh DebuggingPort is used for the second cycle: nothing in this
-// package requires that (the browser process from cycle 1 is fully gone
-// before cycle 2 starts, so the same port is free again), but reusing the
-// same port would leave a TIME_WAIT-vs-reuse question on the table for no
-// reason — freePortT is cheap and this removes the ambiguity outright.
+// Both cycles use port ZERO, which removes the question this comment used to
+// answer. It read: "a fresh DebuggingPort is used for the second cycle …
+// reusing the same port would leave a TIME_WAIT-vs-reuse question on the table".
+// With port 0 there is no port to reuse and no reservation to race — Chromium
+// picks one and publishes it in the profile (decision 75).
 //
 // WHAT THIS DOES NOT PROVE (state this plainly, per the packet): this is two
 // cycles against a local fixture serving a static page, run back-to-back in
@@ -422,7 +415,7 @@ func TestStartSession_CyclesTwice(t *testing.T) {
 		cfg := StartConfig{
 			BinaryPath:    binary,
 			ProfileDir:    profileDir,
-			DebuggingPort: freePortT(t),
+			DebuggingPort: 0,
 			NavigateURL:   url,
 			Runner:        harnessRunner(),
 		}

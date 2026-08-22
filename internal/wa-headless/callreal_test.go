@@ -34,7 +34,7 @@ func TestCallLinkReal(t *testing.T) {
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 	})
 	defer h.Stop(context.Background())
@@ -113,7 +113,7 @@ func TestIncomingCallReal(t *testing.T) {
 	// mistaken for news.
 	runnerB := engine.NewRunner()
 	hB := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: toProfile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: toProfile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runnerB,
 	})
 	defer hB.Stop(context.Background())
@@ -157,7 +157,7 @@ func TestIncomingCallReal(t *testing.T) {
 	// conta-A places the call.
 	runnerA := engine.NewRunner()
 	hA := waruntime.NewHolder(core.StartConfig{
-		BinaryPath: findChrome(t), ProfileDir: fromProfile, DebuggingPort: freePort(t),
+		BinaryPath: findChrome(t), ProfileDir: fromProfile, DebuggingPort: ephemeralPort(t),
 		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runnerA,
 	})
 	defer hA.Stop(context.Background())

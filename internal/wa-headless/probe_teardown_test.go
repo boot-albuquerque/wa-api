@@ -81,7 +81,7 @@ func TestProbeTeardownLeaks(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		runner := engine.NewRunner()
 		h := waruntime.NewHolder(core.StartConfig{
-			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+			BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: ephemeralPort(t),
 			UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
