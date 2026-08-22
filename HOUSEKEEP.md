@@ -4847,3 +4847,59 @@ a que a declarou impossível.* O aviso estava escrito no campo `Verified`, no
 mesmo arquivo, e sobreviveu a uma reclassificação para `BLOCKED` (H140, decisão
 60) sem ninguém cruzar as duas coisas. **Vale reler todo `BLOCKED` cujo veredito
 venha de uma pós-condição que o próprio tipo diz não conseguir observar.**
+
+---
+
+## H163 — a auditoria que a H162 gerou: um ponto cego real, e o resto confirmado
+
+**Data**: 2026-08-22
+**Contexto**: a H162 terminou com uma ação sistemática, não com uma linha
+fechada: *"vale reler todo `BLOCKED` cujo veredito venha de uma pós-condição que
+o próprio tipo diz não conseguir observar"*. Esta entrada é essa auditoria.
+
+**Onde**: `internal/wa-headless/probe_descdual_test.go` (novo), linhas
+`setDescription` (duas) e `description`.
+
+**A varredura dos 47 `BLOCKED`** procurou vereditos que dependem de não-observação
+na mesma sessão. Sobraram três candidatos, e só um era de verdade:
+
+| linha | veredito | resultado |
+|---|---|---|
+| `pin` | "chamada aceita e nada fixado" | **era ponto cego** — H162, agora `PARTIAL` |
+| `setDescription` (×2) | "a página aceita e o servidor nunca armazena" | testado aqui |
+| `mute` | já corrigido na H134 por medição própria | nada a fazer |
+
+**`setDescription` era o candidato mais forte**: as TRÊS medições que o
+bloquearam — canal (H113), grupo (H126) e a minha reprodução (H145) — foram
+todas da sessão que agiu, exatamente o padrão que acabara de enganar o `pin`.
+
+**Medição**, com o observador decidindo e a linha de base lida DELE:
+
+```
+BEFORE (conta-B):  descLen=0  source="none"
+conta-A SetDescription: err="asked for 43 bytes and the server reports 0"
+AFTER  (conta-B, 60s):  descLen=0  source="none"
+```
+
+**conta-B não vê.** O `BLOCKED` sai reforçado, agora do lado que nunca tinha sido
+perguntado — e a não-acionabilidade que a H145 registrou para o leitor
+`description` foi reconfirmada por um caminho independente.
+
+**O erro não encerrou a medição.** A pós-condição do `SetDescription` lê do lado
+que a H162 mostrou ser cego, então parar no erro dela teria repetido o mesmo
+engano com outro nome. O experimento continuou depois da falha, de propósito.
+
+**Um efeito colateral ficou dito em vez de escondido**: o grupo não tinha
+descrição antes, e limpar exigiria a mesma escrita que está sob teste. Como ela
+não armazena nada, nada ficou para trás — mas o `defer` reporta isso em vez de
+supor.
+
+**Status**: não corrigido; as linhas continuam `BLOCKED`, com evidência dos dois
+lados.
+
+**Lição, e é o contrapeso necessário da H162**: *nem todo "o ator não enxerga" é
+ponto cego.* A H162 encontrou um caso real e produziu uma generalização
+poderosa; aplicá-la sem testar teria convertido três linhas `BLOCKED` bem medidas
+em falsos positivos. O mesmo par apareceu hoje com as identidades — H148 achou o
+caso, H149 testou a generalização e a descartou. **A regra é: gere a hipótese
+pela analogia, decida pela medição.**
