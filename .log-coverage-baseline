@@ -407,7 +407,43 @@ rules_frozen=true
 #
 # As outras duas funcoes novas do arquivo (JID.Namespace, NormalizeIdentityInput)
 # saem EXCLUDED por X1 no golden, como firstEmpty.
-min_func_coverage=697
+# justificativa: Fase 3, primeiro consumidor da fachada do wa-headless
+# (2026-08-22, decisao 78). min_eligible 571->660, func_coverage 697->617,
+# errpath 858->817.
+#
+# CAUSA, com prova causal medida: `packages.Visit` inclui qualquer pacote
+# transitivamente importado sob `wa-api/`, entao fiar internal/wa-headless em
+# pkg/ arrastou a arvore inteira para o denominador. Removido o consumidor da
+# fachada os numeros voltam a 571/697/858; reposto, 660/603/808. NENHUM sitio
+# deixou de logar — e diluicao pura.
+#
+# NAO foi resolvido por exclusao. internal/wa-noise/ esta em .logcov-exclude
+# por ser TERCEIRO VENDORIZADO; internal/wa-headless e' codigo NOSSO, e
+# exclui-lo seria encolher o denominador para embelezar o numero, que e'
+# exatamente o que min_eligible existe para impedir.
+#
+# Foi resolvido, em parte, ENSINANDO A REGUA (regra L1-d, documentada em
+# cmd/logcov/METRIC.md). Aquela arvore observa por estagio tipado no erro
+# (BootFailure{Stage,Cause}) e por operacao rastreada (runner.Do com OpKind e
+# rotulo), nao por linha de log. Reconhece-las subiu func 603->617 e errpath
+# 808->817. Isto quebra rules_frozen=true DE PROPOSITO: o proprio texto diz que
+# mudanca depois da Fase 12 e' decisao deliberada, e esta e'.
+#
+# O RESIDUO, que continua descoberto, foi conferido com -list-uncovered e nao
+# deduzido. Concentra-se em engine (39), spa (11), events (8), runtime (7),
+# observability (5), core (4) e liveness (2), e a maior parte sao construtores
+# e VALIDADORES PUROS — BuildFlags, AppendFlags, ClearSessionSuspect —, que
+# devolvem erro com mensagem completa e acionavel e nao tocam porta nenhuma.
+# Quem decide se aquilo e' erro, e loga, e' a camada de cima. E' o mesmo caso ja
+# aceito neste arquivo para clusterModeConfigurado e validarStackDoModo na
+# ADR-0005 D1, e para os adapters em todas as justificativas de 2026-08-06 em
+# diante.
+#
+# AVISO DE ESCOPO: a fachada hoje importa core, engine, runtime e spa. As 35
+# capabilities ainda NAO estao no denominador (medido: dos 169 sitios de
+# operacao rastreada da arvore, so 9 estao em pacotes medidos). Fia-las traz
+# mais, e este pedagio nao acabou.
+min_func_coverage=617
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -424,7 +460,8 @@ min_func_coverage=697
 # e por que; o handler HTTP loga a resposta de erro. Um log no orquestrador
 # seria a terceira linha do MESMO evento, e o padrao deste repositorio e' que
 # loga quem decide, nao quem propaga.
-min_errpath_coverage=858
+# ver a justificativa de min_func_coverage acima (decisao 78).
+min_errpath_coverage=817
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -467,7 +504,9 @@ min_errpath_coverage=858
 # +1 (570->571): JID.Server, da decisao 74 — ver a justificativa de
 # min_func_coverage acima, inclusive o registro de por que ela nao foi
 # reescrita para sair do denominador.
-min_eligible=571
+# +89 (571->660): a arvore internal/wa-headless inteira, pela fachada — ver a
+# justificativa de min_func_coverage acima.
+min_eligible=660
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

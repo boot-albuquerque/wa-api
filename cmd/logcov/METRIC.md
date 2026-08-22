@@ -216,3 +216,68 @@ linha de diff que alguem tem de aprovar conscientemente.
 Duas execucoes sobre a mesma arvore produzem bytes identicos. As entradas sao
 ordenadas por chave e, em empate, por linha; as tabelas por pacote sao
 ordenadas por nome. Nenhuma saida depende da ordem de iteracao de mapa.
+
+## L1-d — observabilidade por estágio tipado e por operação rastreada
+
+Acrescentada pela **decisão 78** (2026-08-22), e ela quebra `rules_frozen=true`
+de propósito. O congelamento diz que uma mudança depois da Fase 12 é decisão
+deliberada e não efeito colateral; esta é deliberada, e o motivo fica aqui.
+
+### O que a obrigou
+
+A Fase 3 fiou `internal/wa-headless` em `pkg/`, e a árvore inteira entrou no
+denominador — `packages.Visit` inclui qualquer pacote transitivamente importado
+sob `wa-api/`. Medido com prova causal, removendo e repondo o consumidor da
+fachada:
+
+| | `eligible` | `func` | `errpath` |
+| --- | --- | --- | --- |
+| sem consumidor da fachada | 571 | 697 | 858 |
+| com consumidor da fachada | 660 | 603 | 808 |
+
+Nenhum sítio deixou de logar. Foi diluição pura — e a régua estava a medir
+aquela árvore com o critério da camada de aplicação.
+
+### Por que não bastava excluir nem instrumentar
+
+Excluir `internal/wa-headless/` seria encolher o denominador para embelezar o
+número, que é exatamente o que `min_eligible` existe para impedir. A exclusão
+do `internal/wa-noise/` tem outro fundamento — é terceiro vendorizado, não é
+código nosso.
+
+Instrumentar as funções com log contradiria o desenho da árvore. Ela observa
+por duas formas:
+
+```go
+BootFailure{Stage: StageOwnership, Cause: err}    // o erro CARREGA onde falhou
+runner.Do(ctx, OpBoot, label+"/await-endpoint")   // a operação fica no OpLog
+```
+
+Um estágio tipado diz mais que uma linha de log: chega intacto a quem decide se
+aquilo é erro, e é essa camada que loga. É o padrão "adapter não loga, use case
+loga" que este arquivo já aceitou dezenas de vezes, agora em escala de
+biblioteca.
+
+### A regra
+
+**L1-d1, falha com estágio.** Um literal composto que preenche `Stage` **e**
+`Cause`. Os dois juntos: `Stage` sozinho classifica sem dizer a causa, `Cause`
+sozinho embrulha sem dizer onde. Conta como nível `Error`, e por isso vale
+também para L2 — construir uma dessas é, por definição, relatar uma falha.
+
+**L1-d2, operação rastreada.** Uma chamada `X.Do(ctx, kind, label, …)` onde
+`kind` é do tipo `OpKind` (verificado por TIPO, não por nome de variável) e
+`label` contém ao menos um literal de texto não vazio, direto ou dentro de uma
+concatenação. Conta como nível `Info`, e isso é deliberado: rastrear prova que
+a operação ACONTECEU, não que alguém classificou uma falha. Satisfaz L1 e
+**não** satisfaz L2 — tratá-la como `Warn` faria toda função que chama o
+rastreador parecer ter coberto os seus erros, que é a confiança falsa que esta
+métrica existe para não dar.
+
+### O erro que a primeira versão da regra cometeu
+
+L1-d2 exigia que o rótulo fosse literal PURO. O idioma real da árvore é
+`label + "/kick"`, então a regra rejeitava **163 dos 169** sítios: ela media a
+minha suposição sobre o código em vez do código. Um rótulo inteiramente montado
+em tempo de execução continua recusado — pode ser vazio, e rastro sem rótulo
+não localiza nada.

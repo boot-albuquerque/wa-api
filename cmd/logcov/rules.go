@@ -251,7 +251,7 @@ func ruleX7PureDelegation(p *pkgCtx, params []string, body *ast.BlockStmt) bool 
 
 // logSite e' uma chamada de log reconhecida.
 type logSite struct {
-	form   string // "port" | "zerolog" | "hlog"
+	form   string // "port" | "zerolog" | "hlog" | "stage" | "op"
 	level  string // Trace|Debug|Info|Warn|Error|Fatal|Panic
 	fields int    // L1-a: len(keyvals); L1-b/c: metodos de campo encadeados
 	odd    bool   // L1-a: keyvals impar

@@ -839,3 +839,75 @@ material de credencial, que não se faz por conta própria.
 não existe. Medi-las agora seria medir a hipótese, não o mecanismo — elas vêm
 depois de o registry existir, e a medição tem de ser a do cenário onde o teto
 COBRA o preço (Regra 2), não a daquele onde ele ajuda.
+
+## Decisão 78 — o pedágio de existir um consumidor, e a régua que não servia
+
+O registry da 76 ficou verde sob `-race` com quatro controles negativos, e
+ainda assim o gate ficou **vermelho** — por um motivo que não era o registry.
+
+`min_eligible` saltou 571 → 660, `func_coverage` caiu 697 → 603, `errpath` caiu
+858 → 808. Provei a causa em vez de a deduzir, removendo e repondo o consumidor
+da fachada:
+
+| | `eligible` | `func` | `errpath` |
+| --- | --- | --- | --- |
+| sem consumidor da fachada | 571 | 697 | 858 |
+| com consumidor da fachada | 660 | 603 | 808 |
+
+O `packages.Visit` do `cmd/logcov` inclui qualquer pacote transitivamente
+importado sob `wa-api/`. **O simples ato de fiar o stack headless em `pkg/`
+arrastou a árvore inteira para o denominador.** Nenhum sítio deixou de logar.
+
+### A régua estava errada, não a árvore
+
+As 85 funções que entraram descobertas não estão sem observabilidade. Esta
+árvore observa por duas formas que a régua da camada de aplicação não via:
+
+```go
+BootFailure{Stage: StageOwnership, Cause: err}    // o erro CARREGA onde falhou
+runner.Do(ctx, OpBoot, label+"/await-endpoint")   // a operação fica no OpLog
+```
+
+Um estágio tipado diz **mais** que uma linha de log: chega intacto a quem decide
+se aquilo é erro, e é essa camada que loga. É o padrão "adapter não loga, use
+case loga" que o `.log-coverage-baseline` já aceitou dezenas de vezes, agora em
+escala de biblioteca.
+
+A orquestração recusou as duas saídas fáceis e escolheu a cara (**78**): ensinar
+a régua, preservando denominador e ratchets. Excluir `internal/wa-headless/`
+seria encolher a base para embelezar o número — o `internal/wa-noise/` está
+excluído por ser terceiro vendorizado, e este é código nosso.
+
+### Três coisas que a implementação ensinou
+
+**A primeira versão da regra rejeitava 163 dos 169 sítios.** Ela exigia rótulo
+literal puro, e o idioma real da árvore é `label + "/kick"`. A regra media a
+minha suposição sobre o código em vez do código.
+
+**Operação rastreada conta como `Info`, não `Warn`**, e é deliberado: rastrear
+prova que a operação ACONTECEU, não que alguém classificou uma falha. Como
+`Warn`, toda função que chama o rastreador pareceria ter coberto os seus erros
+— a confiança falsa que a métrica existe para não dar.
+
+**Dois dos três controles negativos não morderam.** O repositório não tem
+literal com `Stage` sem `Cause`, nem outro `.Do` de três argumentos, então
+afrouxar a regra nesses pontos passava com o golden intacto. Propriedade que
+nenhum teste segura não está travada por o código a expressar — escrevi testes
+unitários para elas. E ao repetir o controle A ele **quebrou o build**
+(`hasCause declared and not used`) em vez de falhar: a armadilha nº 3 do
+`ARMADILHAS.md` em pessoa, e ajustei até compilar E falhar.
+
+### O que continua descoberto, e por quê
+
+Conferido com `-list-uncovered`, não deduzido: engine (39), spa (11), events
+(8), runtime (7), observability (5), core (4), liveness (2). A maior parte são
+construtores e **validadores puros** — `BuildFlags`, `AppendFlags`,
+`ClearSessionSuspect` — que devolvem erro com mensagem completa e acionável, não
+tocam porta nenhuma, e cujo chamador é que decide se aquilo é erro. Mesmo caso
+já aceito para `clusterModeConfigurado` e `validarStackDoModo`.
+
+### Aviso de escopo: o pedágio não acabou
+
+A fachada hoje importa `core`, `engine`, `runtime` e `spa`. **As 35 capabilities
+ainda NÃO estão no denominador** — medido: dos 169 sítios de operação rastreada
+da árvore, só 9 estão em pacotes medidos. Fiá-las traz o resto.

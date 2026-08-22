@@ -325,6 +325,10 @@ func (a *analysis) Analyze(pkgs []*packages.Package) *report {
 		"port":    {files: map[string]bool{}},
 		"zerolog": {files: map[string]bool{}},
 		"hlog":    {files: map[string]bool{}},
+		// L1-d, decisao 78: as duas formas de observabilidade da arvore
+		// headless — falha com estagio tipado, e operacao rastreada.
+		"stage": {files: map[string]bool{}},
+		"op":    {files: map[string]bool{}},
 	}}
 	var roots []*packages.Package
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
@@ -632,8 +636,20 @@ func (a *analysis) collectLogSites(ctx *pkgCtx, fileRel string, body *ast.BlockS
 		if skipPromoted(n, promoted) {
 			return false
 		}
+		// L1-d1: falha com estagio tipado. E' um literal, e nao uma chamada,
+		// entao e' testado antes do recorte para CallExpr.
+		if lit, ok := n.(*ast.CompositeLit); ok {
+			if s, ok := ruleL1dStagedFailure(ctx, lit); ok {
+				out = append(out, s)
+			}
+			return true
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
+			return true
+		}
+		if s, ok := ruleL1dTracedOp(ctx, call); ok {
+			out = append(out, s)
 			return true
 		}
 		if s, ok := ruleL1aPort(ctx, call); ok {

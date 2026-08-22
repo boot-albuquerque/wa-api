@@ -30,7 +30,12 @@
 // its clock in the page, and priming never happens inside a bounded operation.
 package waheadless
 
-import "wa-api/internal/wa-headless/spa"
+import (
+	"wa-api/internal/wa-headless/core"
+	"wa-api/internal/wa-headless/engine"
+	"wa-api/internal/wa-headless/runtime"
+	"wa-api/internal/wa-headless/spa"
+)
 
 // The server suffixes this build files identities under.
 //
@@ -56,3 +61,40 @@ const (
 // single rule, and the adapter needs it to refuse explicitly instead of
 // answering wrongly.
 func IsUnresolvedIdentity(jid string) bool { return spa.IsUnresolvedIdentity(jid) }
+
+// Session lifecycle, for the adapter that has to keep N of them.
+//
+// These are aliases and delegation, which is all this file may hold. The
+// registry in pkg/infra/wa-headless needs to START a session, ASK whether it is
+// still up, and STOP it — and it must do so through here rather than reaching
+// into runtime/ or core/.
+type (
+	// StartConfig is everything a session needs to boot. DebuggingPort zero is
+	// the normal case: Chromium picks an ephemeral port and publishes it in the
+	// profile, which is what ties the endpoint to the browser we launched
+	// (decision 75).
+	StartConfig = core.StartConfig
+	// Session is a live headless session.
+	Session = core.Session
+	// Holder owns exactly ONE session and keeps it alive across commands. One
+	// per WhatsApp profile: invariant 13 is one profile, one active owner.
+	Holder = runtime.Holder
+	// StopVia records HOW a browser went down, so a dirty stop is never
+	// indistinguishable from a clean one.
+	StopVia = engine.StopVia
+)
+
+// Errors a caller has to tell apart, because each one calls for a different
+// reaction and "no session" alone cannot say which.
+var (
+	// ErrHolderStopped means this holder was stopped and will not boot again.
+	ErrHolderStopped = runtime.ErrHolderStopped
+	// ErrSessionDied means the browser process is gone underneath us.
+	ErrSessionDied = runtime.ErrSessionDied
+	// ErrNoSession means nothing has been started yet.
+	ErrNoSession = runtime.ErrNoSession
+)
+
+// NewHolder prepares a Holder for cfg. It does not boot; the first Session
+// call does.
+func NewHolder(cfg StartConfig) *Holder { return runtime.NewHolder(cfg) }
