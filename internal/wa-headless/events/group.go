@@ -33,11 +33,26 @@ const (
 	// GroupAdminChanged is a promotion or a demotion. NEVER OBSERVED.
 	GroupAdminChanged Type = "group.admin_changed"
 	// GroupUpdated is everything else the group announces about itself —
-	// subject, description, approval mode, picture.
+	// subject, description, approval mode, picture. NOT the join requests: see
+	// GroupMembershipRequest.
 	//
 	// IT IS THE ONLY ONE OF THE FOUR MEASURED FIRING: subtype
 	// "membership_approval_mode", 1 of 395 messages.
 	GroupUpdated Type = "group.updated"
+	// GroupMembershipRequest is somebody ASKING to join a group that requires
+	// approval.
+	//
+	// IT IS NOT GroupUpdated, and separating them is the whole content of this
+	// type. A request is a pending decision addressed to an admin; the other
+	// subtypes under group.updated are the group announcing a change already
+	// made. A subscriber that wants to act on requests had to receive every
+	// subject and picture change to find them.
+	//
+	// MEASURED, NOT INFERRED (H169): a real request into a throwaway group
+	// produced exactly one gp2 with subtype "membership_approval_request",
+	// alongside 7 chat.changed for the same conversation — which is why
+	// chat.changed could never be this event.
+	GroupMembershipRequest Type = "group.membership_request"
 )
 
 // groupSubtypes maps the page's subtype to the event it becomes.
@@ -63,13 +78,22 @@ var groupSubtypes = map[string]Type{
 	"demote":  GroupAdminChanged,
 
 	// The update family, listed one by one rather than caught by a default.
-	"subject":                     GroupUpdated,
-	"description":                 GroupUpdated,
-	"picture":                     GroupUpdated,
-	"announce":                    GroupUpdated,
-	"restrict":                    GroupUpdated,
+	"subject":     GroupUpdated,
+	"description": GroupUpdated,
+	"picture":     GroupUpdated,
+	"announce":    GroupUpdated,
+	"restrict":    GroupUpdated,
+	// A MODALIDADE E' UMA MUDANCA DO GRUPO; O PEDIDO NAO E'.
+	// "membership_approval_mode" e' a politica sendo ligada ou desligada, que e'
+	// o grupo anunciando algo ja' decidido. O pedido e' uma decisao PENDENTE
+	// dirigida a um admin, e por isso sai daqui.
 	"membership_approval_mode":    GroupUpdated,
-	"membership_approval_request": GroupUpdated,
+	"membership_approval_request": GroupMembershipRequest,
+	// "created_membership_requests" CONTINUA EM GroupUpdated, e a assimetria e'
+	// deliberada: so' o subtipo acima foi OBSERVADO (H169). Mover este junto
+	// seria inferir pelo nome — que e' plural e provavelmente outra coisa — e
+	// este arquivo ja' diz, sobre o `else` da referencia, que classificar sem ver
+	// e' o que produz um evento em que ninguem pode confiar.
 	"created_membership_requests": GroupUpdated,
 }
 
@@ -80,8 +104,9 @@ func GroupTypeFor(subtype string) (Type, bool) {
 	return t, ok
 }
 
-// GroupTypes is the four, in a fixed order.
-var GroupTypes = []Type{GroupJoined, GroupLeft, GroupAdminChanged, GroupUpdated}
+// GroupTypes is every group event this package classifies, in a fixed order.
+var GroupTypes = []Type{GroupJoined, GroupLeft, GroupAdminChanged, GroupUpdated,
+	GroupMembershipRequest}
 
 // VoteUpdated is somebody selecting or clearing an option on a poll.
 //

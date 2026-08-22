@@ -5219,3 +5219,62 @@ atravessam o caminho passaram a morder.
 controle ruim.* A tentação é ajustar o controle até algo falhar; o certo foi
 perguntar POR QUE nada falhou — e a resposta foi um elo inteiro sem cobertura,
 que agora tem.
+
+---
+
+## H169 — `GROUP_MEMBERSHIP_REQUEST`: o pedido tem palavra própria, e ninguém tinha perguntado qual
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/events/group.go` (`GroupMembershipRequest`, o
+mapa de subtipos), `probe_memreq_test.go` (novo), linha
+`GROUP_MEMBERSHIP_REQUEST`.
+
+**A medição anterior estava certa e parou uma pergunta cedo.** A H89 mediu o que
+CHEGA quando um pedido entra — 9 `chat.changed` mais 1 `message.added`, contra 5
+`chat.changed` de uma saída — e concluiu que `chat.changed` é grosso demais para
+ser o evento. Correto. Mas **nunca perguntou o que o `message.added` diz**.
+
+Ele diz:
+
+```
+group.updated  kind=gp2  subtype=membership_approval_request   x1
+chat.changed                                                    x7
+```
+
+Uma palavra própria, atravessando a fronteira, dentro da maquinaria que a H119 já
+construiu: a página carrega o subtipo, o Go classifica, a invariante 6 intacta.
+
+**Correção aplicada**: `GroupMembershipRequest` como tipo dedicado. Um pedido é
+uma DECISÃO PENDENTE dirigida a um admin; os outros subtipos sob `group.updated`
+são o grupo anunciando algo já decidido. Quem quisesse agir sobre pedidos tinha
+de receber toda mudança de assunto e de foto para achá-los.
+
+**Duas coisas NÃO foram movidas, e as duas asimetrias são deliberadas:**
+
+- `membership_approval_mode` fica em `group.updated`. É a política sendo ligada
+  ou desligada — o grupo anunciando uma mudança feita. Arrastá-la junto diria a um
+  assinante que alguém pediu para entrar quando ninguém pediu.
+- `created_membership_requests` **também fica**, e essa é a assimetria que custa
+  explicar: só o subtipo acima foi OBSERVADO. Mover o irmão seria classificar
+  pelo NOME — e este mesmo arquivo já recusa o `else` catch-all da referência
+  exatamente por isso. Um teste trava a recusa.
+
+**Status**: corrigido, linha para `PROVEN`. Três controles negativos, todos
+compilando e falhando.
+
+Prova em SPA real, num grupo descartável: o pedido chega **1 vez e sozinho**, sem
+`group.updated` junto — asserção que existe porque um assinante dos dois contaria
+o mesmo fato duas vezes.
+
+**Uma escolha de instrumento que valeu**: o barramento só foi ligado DEPOIS de
+todo o preparo (criar, sair, ligar aprovação, pegar convite). Ligá-lo antes teria
+enchido a medição com três atos alheios — que é precisamente o erro que a H150
+cometeu e levou uma rodada para desfazer.
+
+**Lição**: *"este evento é grosso demais" é uma conclusão sobre o evento que
+você olhou, não sobre os que chegaram junto.* A H89 tinha o `message.added` nas
+mãos, contado e registrado, e a pergunta seguinte — *o que ele diz?* — ficou por
+fazer por meses. Toda medição que termina em "não dá para distinguir" merece uma
+última passada pelos campos que ela já coletou.

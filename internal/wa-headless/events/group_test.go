@@ -178,3 +178,49 @@ func TestTheVoteListenerIsRegisteredForRemoval(t *testing.T) {
 			"cannot take them off")
 	}
 }
+
+// A REQUEST IS NOT AN UPDATE, and this is the whole point of the type.
+//
+// A membership request is a PENDING DECISION addressed to an admin; the other
+// subtypes under group.updated are the group announcing a change already made. A
+// subscriber that wanted to act on requests had to receive every subject and
+// picture change to find them.
+func TestAMembershipRequestIsItsOwnEvent(t *testing.T) {
+	got, ok := GroupTypeFor("membership_approval_request")
+	if !ok {
+		t.Fatal("the measured subtype is not classified at all")
+	}
+	if got != GroupMembershipRequest {
+		t.Fatalf("a join request classified as %q; it is a pending decision, not a "+
+			"change the group is announcing", got)
+	}
+}
+
+// THE MODE IS STILL AN UPDATE. Turning approval on or off IS the group
+// announcing a change it already made, and folding it in with the requests would
+// tell a subscriber somebody asked to join when nobody did.
+func TestTheApprovalModeStaysAnUpdate(t *testing.T) {
+	got, ok := GroupTypeFor("membership_approval_mode")
+	if !ok {
+		t.Fatal("the approval-mode subtype is not classified")
+	}
+	if got != GroupUpdated {
+		t.Fatalf("the policy change classified as %q, not an update", got)
+	}
+}
+
+// THE UNOBSERVED SIBLING WAS NOT MOVED, and the asymmetry is deliberate.
+//
+// "created_membership_requests" was never seen firing here. Moving it alongside
+// the measured subtype would be classifying by NAME — which is what this file
+// already refuses to do about the reference's catch-all else.
+func TestTheUnobservedSubtypeWasNotMovedOnAHunch(t *testing.T) {
+	got, ok := GroupTypeFor("created_membership_requests")
+	if !ok {
+		t.Fatal("the sibling subtype vanished from the map")
+	}
+	if got == GroupMembershipRequest {
+		t.Fatal("a subtype nobody has observed was reclassified by its name; only " +
+			"the measured one moved")
+	}
+}

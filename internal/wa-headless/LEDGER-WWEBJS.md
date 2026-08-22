@@ -452,7 +452,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 | `GROUP_JOIN` | events.GroupJoined | `PROVEN` | H135: **provado com SESSÃO DUPLA**. A H86 mediu zero na sessão que AGE; com conta-A observando e conta-B saindo/voltando, o observador recebeu `group.joined:1` (subtipo `invite`). O zero da H86 era do ATOR, não do barramento |
 | `GROUP_LEAVE` | events.GroupLeft | `PROVEN` | H135: idem `GROUP_JOIN` — o observador recebeu `group.left:1` (subtipo `leave`) enquanto conta-B saía |
 | `GROUP_ADMIN_CHANGED` | events.GroupAdminChanged | `PARTIAL` | H135: **NÃO chega ao observador**, e agora isso é medido e não presumido. Com o barramento em conta-B e conta-A promovendo/rebaixando, zero `group.admin_changed` — enquanto sair e entrar chegaram na mesma montagem. A diferença é do SUBTIPO, não do barramento |
-| `GROUP_MEMBERSHIP_REQUEST` | events.ChatChanged | `PARTIAL` | a chegada MOVE o modelo nesta sessão e o barramento a vê — medida isolada: a saída de conta-B sozinha deu 5 `chat.changed`, o pedido sozinho deu **9** mais 1 `message.added` (H89). Não há tipo dedicado, e `chat.changed` é grosso demais para ser um: quem quer o pedido tem de chamar `groupreq.List`. Contraste com a H86, onde a sessão que MUDA participantes vê zero — quem recebe enxerga, quem age não |
+| `GROUP_MEMBERSHIP_REQUEST` | events.GroupMembershipRequest | `PROVEN` | **H169: o pedido TEM palavra própria, e ninguém tinha perguntado qual.** A H89 mediu o que CHEGA (9 `chat.changed` + 1 `message.added`) e concluiu, com razão, que `chat.changed` é grosso demais para ser o evento — sem nunca perguntar o que o `message.added` DIZ. Ele diz: `kind=gp2 subtype=membership_approval_request`, que é exatamente a maquinaria da H119. Tipo dedicado criado e provado ao vivo num grupo descartável: chega **1 e sozinho**, sem `group.updated` junto — quem assinasse os dois contaria duas vezes. `membership_approval_mode` FICA em `group.updated` (é a política, não o pedido) e `created_membership_requests` também, por nunca ter sido observado |
 | `GROUP_UPDATE` | events.GroupUpdated | `PROVEN` | H119: o portador `gp2` É reclassificado neste barramento — assunto do grupo trocado de propósito, `group.updated:1` com subtipo `subject`, e o assunto restaurado |
 | `QR_RECEIVED` | core (pareamento) | `PROVEN` | QR nunca é logado nem versionado |
 | `CODE_RECEIVED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — depende do pareamento por código, cujo fluxo exige socket `UNPAIRED` e portanto um humano com o telefone (H122) |
@@ -468,8 +468,8 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 
 | estado | itens | fração |
 |---|---|---|
-| `PROVEN` | 132 | 60% |
-| `PARTIAL` | 35 | 16% |
+| `PROVEN` | 133 | 60% |
+| `PARTIAL` | 34 | 15% |
 | `BLOCKED` | 47 | 21% |
 | `INTENTIONAL_DIFFERENCE` | 6 | 3% |
 | `MISSING` | 0 | 0% |
