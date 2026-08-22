@@ -2599,15 +2599,81 @@ O que a linha do tempo de campo mostra, e que nenhuma das duas explica:
 ```
 
 A queda vem **13 segundos depois do último lote grande**, e os quatro lotes
-são ~15.700 linhas escritas em SQLite pelo NOSSO processo. A hipótese que fica:
-**a escrita do HistorySync esfomeia as goroutines de broadcast** — não é o
-navegador que não consome, é o servidor que não chega a escrever dentro dos 5s
-porque está ocupado a gravar. O `context deadline exceeded` seria nosso, não
-dele.
+são ~15.700 linhas escritas em SQLite pelo NOSSO processo.
 
-Isto é hipótese, não medição — mas explica o que as outras duas não explicam, e
-é **testável sem QR**: medir a latência da escrita de broadcast com o mesmo
-volume de escrita concorrente em SQLite.
+**Primeira formulação, e estava furada**: escrevi que "a escrita esfomeia as
+goroutines de broadcast, e o `context deadline exceeded` seria nosso". Não
+fecha. O prazo de 5s é criado **imediatamente antes** de `wsjson.Write`
+(`broadcast.go`), não antes de entrar em fila — então atraso a montante da
+escrita adia a entrega sem consumir o prazo. Ler o caminho confirma que há
+toque na base de dados no despacho (`lifecycle_webhook.go:78`, num falho de
+cache do `UserInfoCache`), mas é igualmente a montante.
+
+**Segunda formulação, que fecha**: o esfomeado não é a goroutine, é o
+**CONSUMIDOR**. `modernc.org/sqlite` é Go puro e queima CPU; escrever 15.700
+linhas satura os núcleos da mesma máquina onde o Chrome renderiza. Se o
+navegador perde CPU o suficiente para parar mais de 5s, a janela TCP enche e a
+escrita — essa sim, com o prazo já a correr — estoura. O `deadline exceeded` é
+nosso, mas a **causa** é o nosso próprio trabalho de disco a matar o consumidor.
+
+Repare-se que isto também explica o intervalo de 13 segundos: a queda não
+acontece durante os lotes, acontece logo a seguir ao maior deles.
+
+**Descartado no caminho**: a hipótese de "muitos sockets" não se aplica a esta
+entrada. O campo da F85 tem UM `websocket connected` e um disconnect; os 5–6
+sockets do mesmo utilizador são a [[F74]], que é outro achado.
+
+### Terceira medição (2026-08-21): a esfomeação por escrita TAMBÉM cai
+
+Testado, e não ficou em hipótese. O mesmo instrumento passou a gravar em SQLite
+(`modernc.org/sqlite`, o driver de produção) durante a rajada, na mesma máquina.
+
+```
+sem martelo   15.700 entregues, 10,0s, maior pausa 45,7 ms, sem queda
+com martelo   15.700 entregues, 14,5s, maior pausa 56,9 ms, sem queda
+```
+
+Durante a rajada o martelo gravou **1.314 lotes de 4.000 linhas** — cerca de
+5,2 milhões de linhas, contra as ~15.700 do HistorySync medido em campo. Isto é
+**mais de 300× a carga real**, e serve de LIMITE SUPERIOR: se nem assim o
+consumidor para 5 segundos, a hipótese não sobrevive na escala em que o defeito
+aconteceu.
+
+**O efeito existe e foi medido**: a rajada passou de 10,0s para 14,5s, 45% mais
+lenta. A escrita disputa CPU e atrasa a entrega. Mas atrasar não é parar, e o
+`writeTimeout` só reage a paragens.
+
+**E o instrumento quase mentiu**: os `Exec` do martelo estavam com o erro
+ignorado (`_, _ =`). A primeira leitura deu 270 lotes em 6 segundos, que é
+impossível, e só confirmei que ele gravava mesmo indo **contar as linhas na
+base de dados** (2,8 milhões, ficheiro de 1,4 GB). Se o `CREATE TABLE` tivesse
+falhado, eu teria uma medição de "carga de escrita" sem escrita nenhuma, e o
+resultado seria indistinguível do caso sem martelo — uma refutação falsa com a
+mesma aparência de rigor.
+
+### Estado da F85: três mecanismos EXCLUÍDOS, causa por identificar
+
+| hipótese | veredito | evidência |
+|---|---|---|
+| painel lento por mensagem | **refutada** | 8 ms/msg, 12 rodadas, nenhuma queda |
+| separador em segundo plano | **refutada** | escondido provado, maior pausa 45,7 ms |
+| escrita em SQLite esfomeia | **refutada** | 300× a carga, maior pausa 56,9 ms |
+
+Não consigo reproduzir a queda de campo com nenhum dos mecanismos que
+levantei. O que sobra por testar, e que não é barato: suspensão da máquina
+(a ligação viveu 2m19s antes de cair), e a possibilidade de o evento real ser
+muito maior que os 2.624 bytes que usei.
+
+**A recomendação muda de forma.** Parar de adivinhar mecanismos e **instrumentar
+a produção**: registar a duração de `wsjson.Write` quando passar de, digamos,
+1 segundo, com o tamanho da carga e a contagem de conexões. É barato, não
+converte recurso nenhum em limitado, e faz a PRÓXIMA ocorrência em campo trazer
+a sua própria prova em vez de gerar a quarta hipótese.
+
+Enquanto isso, **as correções 1b, 2 e 3 continuam sem causa que as justifique**.
+Fazer o item 3 agora seria converter recurso ilimitado em limitado contra um
+mecanismo que três medições não encontraram — a F86 outra vez, e desta vez com
+aviso prévio.
 
 **Consequência imediata para o plano**: se se confirmar, nem 1b, nem 2, nem
 sequer o item 3 (backpressure no broadcast) atacam a causa — todos tratam o
