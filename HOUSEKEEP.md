@@ -18162,3 +18162,64 @@ passar em todos os outros testes.
 
 **Status**: **não corrigido** — fora do escopo da F206, que era a taxonomia do
 500. Registado por CLAUDE.md; não corrigido de graça.
+
+## F211 — o próprio HOUSEKEEP deixou de ser consultável: não há forma mecânica de saber o que está aberto
+
+**Data / contexto**: 2026-08-22, ao tentar escolher o próximo achado a atacar
+depois de fechar a [[F206]]. A instrução em vigor é "resolver os achados abertos
+por gravidade", e o primeiro passo — saber quais são — não tem resposta fiável.
+
+**Onde**: `HOUSEKEEP.md`, o ficheiro inteiro. 155 cabeçalhos `## F<n>` para 149
+números distintos, e **181** linhas `**Status**` — mais estados que entradas.
+
+**Problema**: três heurísticas razoáveis dão três respostas incompatíveis.
+
+| como se contou | abertos |
+|---|---|
+| último `**Status**` de cada bloco | **26** |
+| último `**Status**` agrupado por número | **37** |
+| veredito no CABEÇALHO da última entrada | **147** |
+
+Nenhuma está certa, e dá para provar:
+
+- A **F183** tem **quatro** cabeçalhos; só o último diz `CORRIGIDA`. Agrupar por
+  número e ler o último `Status` do bloco falha, porque esse bloco final contém
+  três `Status` sobre subtarefas (`varredura (a)`, `varredura (b)`) e o veredito
+  do achado — na linha 15825 — **não é o último**.
+- A **F206** e a **F209** estão corrigidas e os cabeçalhos delas descrevem o
+  DEFEITO, não o desfecho. Procurar `CORRIGIDA` no cabeçalho dá 2 em 149.
+
+Ou seja: o veredito vive numa linha `**Status**` cuja posição não é previsível,
+e blocos podem ter vários. Não há regra mecânica que acerte.
+
+**Por que isto é um defeito e não uma queixa de formatação**: o ficheiro é a
+fonte de verdade do que falta fazer, e a instrução operacional depende de o
+consultar. Já custou nesta sessão: gastei três tentativas de triagem e cheguei a
+apresentar "26 abertos" e depois "37" — dois números que não sustento. Uma
+sessão futura que confie em qualquer um deles ataca a lista errada.
+
+**Correção sugerida**, barata e verificável:
+
+1. **Uma marca canónica por achado**, uma só, e sempre a última linha da última
+   entrada daquele número. Por exemplo `<!-- f-status: aberto -->` ou
+   `<!-- f-status: corrigido -->`. Comentário HTML não aparece no render e é
+   trivial de ler por máquina.
+2. **Um teste que a exija**: cada número `F<n>` tem exatamente uma marca; a
+   marca é a última coisa do bloco. É o mesmo padrão que já protege o
+   `.logcov-exclude` em `cmd/logcov/rules_test.go` — a lista está fixada num
+   teste precisamente para uma alteração não passar despercebida.
+3. As linhas `**Status**` em prosa **ficam**: são o registo humano, com o
+   porquê. A marca é para a máquina, e as duas não competem — a marca não
+   substitui a prosa, resume-a.
+
+**Não sugerido de propósito**: renumerar ou fundir as entradas repetidas. A
+repetição é histórico legítimo — a F183 foi rediagnosticada três vezes e ver
+isso tem valor. O problema não é haver várias entradas; é não haver um veredito
+único por número.
+
+**Anti-regressão**: o teste do ponto 2, mais um controlo negativo que acrescente
+uma entrada sem marca e confirme que o teste reprova. Sem esse controlo, um
+teste que apenas conte marcas passaria com um ficheiro inteiro sem nenhuma.
+
+**Status**: **não corrigido** — é mudança de convenção do repositório e afeta
+todo o registo histórico; não é decisão minha. Precisa de aprovação.
