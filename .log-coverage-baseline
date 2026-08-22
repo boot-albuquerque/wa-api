@@ -1171,7 +1171,14 @@ rules_frozen=true
 #
 # Fica registado porque um numero que melhora sem merito e' tao suspeito como um
 # que piora sem explicacao.
-min_func_coverage=749
+# F207 (2026-08-22): min_func_coverage 749 -> 748. SAI (1):
+#   auth.NewTokenCache — dead code, only called from tests. Production uses
+#   cache.New() directly in bootstrap/config.go and bootstrap/context.go.
+#   Removing it drops BOTH eligible (-1) and covered (-1): the function had
+#   log.Warn() calls so logcov counted it as covered. The ratio moves from
+#   468/625=74.88% to 467/624=74.84%, rounding 749->748. This is dead code
+#   removal, not dilution — nothing is lost.
+min_func_coverage=748
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1623,7 +1630,9 @@ min_errpath_coverage=870
 #   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
 #     exportado para que o teste de paridade stdio x HTTP verifique que as
 #     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
-min_eligible=625
+# F207 (2026-08-22): min_eligible 625 -> 624 (-1, ratchet-DOWN honesto).
+# SAI (1): auth.NewTokenCache, dead code removed. See min_func_coverage above.
+min_eligible=624
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
