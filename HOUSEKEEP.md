@@ -19982,9 +19982,42 @@ desligar explicitamente), como já se fez em `SendLocationRequest` para
 distinguir "latitude zero" de "latitude não informada" (F121). Alternativa
 pior: um sentinela como `-1`, que exige documentação e é adivinhável errado.
 
-**Status**: não corrigido — fora do escopo. Pergunta pendente ao utilizador.
+**Status**: corrigido (2026-08-22, ramo boot-albuquerque/wa-f218-219).
 
-<!-- f-status: aberto -->
+**Correção aplicada**: `EditUserRequest.History` mudou de `int` para `*int`
+(`pkg/domain/user.go:37`). O use case (`edit_user.go:84`) passou de
+`if req.History != 0` para `if req.History != nil`. Mesmo padrão da F121
+(`SendLocationRequest.Latitude`).
+
+**Testes que travam a correção**:
+
+- `TestEditUser_HistoryZeroChegaAoRepositorio` (`edit_user_test.go`): envia
+  `History: intPtr(0)` e confirma que chega ao repositório como `*0`, e que o
+  pedido NÃO é recusado com `no_fields_to_update`.
+- `TestEditUser_HistoryOmitidoNaoToca` (`edit_user_test.go`): envia um pedido
+  sem `History` e confirma que `upd.History` é nil — a distinção inteira.
+- `TestEditUserRequest_HistoryZeroChegaComoZero` (`user_config_alias_test.go`):
+  desserialização JSON — `{"history":0}` produz `*int` apontando para 0, não nil.
+- `TestEditUserRequest_HistoryAusenteEhNil` (`user_config_alias_test.go`):
+  corpo sem `history` produz nil.
+- `TestEditUserRequest_HistoryPositivoChegaComoValor` (`user_config_alias_test.go`):
+  o caminho normal (`{"history":9999}`).
+
+**Controlo negativo EXECUTADO** — reintroduzi o defeito (`!= nil && *req.History != 0`):
+
+```
+$ go test ./pkg/application/usecase/user/ -run TestEditUser_HistoryZeroChegaAoRepositorio
+--- FAIL: TestEditUser_HistoryZeroChegaAoRepositorio (0.00s)
+    edit_user_test.go:561: History = nil — zero was treated as absent, the F218 bug
+FAIL
+```
+
+**Achado incidental**: `Expiration int` com `omitempty` tem a mesma classe de
+defeito (`edit_user.go:78`: `if req.Expiration != 0`). Zero de expiração
+pode significar "sem expiração" ou "nunca mencionou" — depende do significado de
+negócio. Não alargado: requer decisão do utilizador.
+
+<!-- f-status: corrigido -->
 
 ## F219 — `/session/status` devolveu `history: 0` enquanto o banco tinha 3
 
@@ -20068,10 +20101,49 @@ este.
 **Próximo passo**: reproduzir deliberadamente — PUT num campo, ler
 `/session/status` a seguir, comparar com o banco — antes de propor correção.
 
-**Status**: não corrigido. O diagnóstico deixou de ser hipótese: está
-reproduzido e a causa localizada em ficheiro e linha.
+**Correção aplicada**: já estava feita pela F200/F201. O `EditUserUseCase`
+chama `uc.republisher.RepublishUser(ctx, req.UserID)` em
+`edit_user.go:164`, **depois** da escrita ter sucesso. Isto invalida a
+entrada na `UserInfoCache`, forçando o próximo acesso a reler do banco.
+O diagnóstico original ("não há uma única referência a `UserInfoCache`
+nesse ficheiro") era verdadeiro antes da F200/F201 — a observação em campo
+foi contra um servidor sem essa correção instalada.
 
-<!-- f-status: aberto -->
+**Testes que travam a correção**:
+
+- `TestEditUser_RepublicaAposEscritaBemSucedida` (`edit_user_test.go:356`):
+  confirma que `RepublishUser` é chamado exatamente 1 vez após edição bem-sucedida.
+- `TestEditUser_NaoRepublicaQuandoAEscritaFalha` (`edit_user_test.go:380`):
+  confirma que NÃO republica se a escrita falhar — evita poluir a cache.
+- `TestEditUser_RepublicaDEPOISDaEscritaENaoAntes` (`edit_user_test.go:404`):
+  trava a ORDEM — o republicador só é chamado depois de a escrita ter sucesso,
+  nunca antes. Sem isto, uma escrita falhada despejaria a cache e o próximo
+  acesso releria o valor antigo do banco, parecendo correto.
+
+**Controlo negativo EXECUTADO** — comentei a chamada `uc.republisher.RepublishUser`:
+
+```
+$ go test ./pkg/application/usecase/user/ -run 'TestEditUser_Republica|TestEditUser_NaoRepublica' -v
+=== RUN   TestEditUser_RepublicaAposEscritaBemSucedida
+    edit_user_test.go:370: RepublishUser chamado 0 vez(es), quero 1 — a edição entra no banco e o processo nunca a vê
+--- FAIL: TestEditUser_RepublicaAposEscritaBemSucedida (0.00s)
+=== RUN   TestEditUser_NaoRepublicaQuandoAEscritaFalha
+--- PASS: TestEditUser_NaoRepublicaQuandoAEscritaFalha (0.00s)
+=== RUN   TestEditUser_RepublicaDEPOISDaEscritaENaoAntes
+    edit_user_test.go:418: republicador chamado 0 vez(es)
+--- FAIL: TestEditUser_RepublicaDEPOISDaEscritaENaoAntes (0.00s)
+FAIL
+```
+
+Dois dos três testes falham: o de presença (`Republica...BemSucedida`) e o de
+ordem (`DEPOIS...ENaoAntes`). O de falha (`NaoRepublica...Falha`) passa porque
+a ausência de chamada é exatamente o que ele espera. Os três juntos travam as
+três propriedades: chamada, recusa em falha, e ordem.
+
+**Status**: corrigido (pela F200/F201, confirmado e travado em teste nesta
+sessão).
+
+<!-- f-status: corrigido -->
 
 ## F220 — a cache do golangci-lint faz o gate reportar ficheiros de worktrees APAGADAS
 

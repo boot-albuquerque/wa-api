@@ -81,8 +81,8 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 	if req.Events != "" {
 		upd.Events = &req.Events
 	}
-	if req.History != 0 {
-		upd.History = &req.History
+	if req.History != nil {
+		upd.History = req.History
 	}
 	if req.ProxyConfig != nil {
 		proxyURL := ""

@@ -96,6 +96,51 @@ func TestEditUserRequest_SemConfigContinuaNil(t *testing.T) {
 	}
 }
 
+// --- F218: history=0 na desserialização -----------------------------------------
+
+// TestEditUserRequest_HistoryZeroChegaComoZero is the deserialization half of
+// F218: `{"history":0}` must produce a non-nil *int pointing to 0, not nil.
+// With the old `int`, the zero value was indistinguishable from absent.
+func TestEditUserRequest_HistoryZeroChegaComoZero(t *testing.T) {
+	var req domain.EditUserRequest
+	if err := json.Unmarshal([]byte(`{"history":0}`), &req); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if req.History == nil {
+		t.Fatal("History = nil for {\"history\":0} — zero was treated as absent (F218)")
+	}
+	if *req.History != 0 {
+		t.Errorf("History = %d, want 0", *req.History)
+	}
+}
+
+// TestEditUserRequest_HistoryAusenteEhNil: a request that does NOT mention
+// history must leave it as nil, so the use case knows not to touch it.
+func TestEditUserRequest_HistoryAusenteEhNil(t *testing.T) {
+	var req domain.EditUserRequest
+	if err := json.Unmarshal([]byte(`{"name":"so-o-nome"}`), &req); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if req.History != nil {
+		t.Errorf("History = %d for a body that does not mention it — "+
+			"this would overwrite whatever was in the database", *req.History)
+	}
+}
+
+// TestEditUserRequest_HistoryPositivoChegaComoValor: the normal case.
+func TestEditUserRequest_HistoryPositivoChegaComoValor(t *testing.T) {
+	var req domain.EditUserRequest
+	if err := json.Unmarshal([]byte(`{"history":9999}`), &req); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if req.History == nil {
+		t.Fatal("History = nil for {\"history\":9999}")
+	}
+	if *req.History != 9999 {
+		t.Errorf("History = %d, want 9999", *req.History)
+	}
+}
+
 // TestEditUserRequest_RoundTrip é o formato que a entrada do HOUSEKEEP pedia:
 // ler a forma que a API DEVOLVE e reenviá-la sem lhe tocar.
 //

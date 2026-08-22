@@ -34,7 +34,13 @@ type EditUserRequest struct {
 	Events      string       `json:"events,omitempty"`
 	ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`
 	S3Config    *S3Config    `json:"s3Config,omitempty"`
-	History     int          `json:"history,omitempty"`
+	// POINTER, not int, to separate "not mentioned" from "explicitly zero" (F218).
+	//
+	// With plain int + omitempty, zero was the zero value — indistinguishable
+	// from absent. The API accepted setting history to 3, 30, or 1000, but
+	// could NEVER set it back to 0 (disable). Same pattern as
+	// SendLocationRequest.Latitude (F121): nil = not mentioned, 0 = valid value.
+	History *int `json:"history,omitempty"`
 }
 
 // --- Aliases snake_case na LEITURA (F210, decisão 49=a do canal) ------------

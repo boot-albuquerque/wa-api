@@ -12,6 +12,8 @@ import (
 	"wa-api/pkg/domain/apperr"
 )
 
+func intPtr(v int) *int { return &v }
+
 func TestEditUserUseCase_Execute_Rejections(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +143,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 			name: "todos os campos escalares",
 			req: domain.EditUserRequest{
 				UserID: "u1", Name: "n", Token: "t", Webhook: "http://w",
-				Expiration: 10, Events: "Message", History: 5,
+				Expiration: 10, Events: "Message", History: intPtr(5),
 			},
 			assert: func(t *testing.T, upd domain.UserUpdate) {
 				t.Helper()
@@ -359,7 +361,7 @@ func TestEditUser_RepublicaAposEscritaBemSucedida(t *testing.T) {
 
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
 	if err := uc.Execute(context.Background(), domain.EditUserRequest{
-		UserID: "u1", History: 30,
+		UserID: "u1", History: intPtr(30),
 	}); err != nil {
 		t.Fatalf("Execute = %v", err)
 	}
@@ -385,7 +387,7 @@ func TestEditUser_NaoRepublicaQuandoAEscritaFalha(t *testing.T) {
 	rep := &contractsfake.UserInfoRepublisher{}
 
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: 30}); err == nil {
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: intPtr(30)}); err == nil {
 		t.Fatal("Execute devolveu nil apesar de a escrita ter falhado")
 	}
 
@@ -408,7 +410,7 @@ func TestEditUser_RepublicaDEPOISDaEscritaENaoAntes(t *testing.T) {
 	}
 
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: 30}); err != nil {
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: intPtr(30)}); err != nil {
 		t.Fatalf("Execute = %v", err)
 	}
 
@@ -529,6 +531,62 @@ func TestEditUser_S3ConfigEhPersistido(t *testing.T) {
 	}
 	if !strings.HasPrefix(recebido.S3.SecretKey, contractsfake.FakeS3EnvelopePrefix) {
 		t.Errorf("o segredo não passou pela cifra: %q", recebido.S3.SecretKey)
+	}
+}
+
+// --- F218: history=0 tem de chegar ao repositório como zero ---------------------
+
+// TestEditUser_HistoryZeroChegaAoRepositorio é a F218: com o tipo antigo (int
+// + omitempty), `{"history":0}` era indistinguível de "não mencionou" e o
+// pedido era recusado com no_fields_to_update. Com *int, 0 é valor válido.
+func TestEditUser_HistoryZeroChegaAoRepositorio(t *testing.T) {
+	t.Parallel()
+
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", History: intPtr(0),
+	}); err != nil {
+		t.Fatalf("Execute = %v — history=0 was refused; the old int+omitempty bug is back", err)
+	}
+
+	if len(repo.UpdateUserCalls) != 1 {
+		t.Fatalf("UpdateUser called %d times, want 1", len(repo.UpdateUserCalls))
+	}
+	upd := repo.UpdateUserCalls[0].Update
+	if upd.History == nil {
+		t.Fatal("History = nil — zero was treated as absent, the F218 bug")
+	}
+	if *upd.History != 0 {
+		t.Fatalf("History = %d, want 0", *upd.History)
+	}
+}
+
+// TestEditUser_HistoryOmitidoNaoToca is the other side of F218: a request that
+// does NOT mention history must leave it alone (nil in the update).
+func TestEditUser_HistoryOmitidoNaoToca(t *testing.T) {
+	t.Parallel()
+
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", Name: "only-name",
+	}); err != nil {
+		t.Fatalf("Execute = %v", err)
+	}
+
+	if len(repo.UpdateUserCalls) != 1 {
+		t.Fatalf("UpdateUser called %d times, want 1", len(repo.UpdateUserCalls))
+	}
+	upd := repo.UpdateUserCalls[0].Update
+	if upd.History != nil {
+		t.Errorf("History = %d, want nil — the request did not mention history", *upd.History)
 	}
 }
 
