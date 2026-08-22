@@ -293,7 +293,7 @@ nossa é fresca — não há campo velho para consertar.
 | `getChat` | chats.OfContact | `PROVEN` | sim | sim | sim | H132: é `ByJID` MAIS uma guarda, e a guarda é a diferença — `Contact.getChat` devolve null quando o contato É esta conta (Contact.js:144). Delegar sem ela entregaria a conversa que a página guarda para o self, que existe e não significa nada. Ao vivo: a guarda dispara para as DUAS identidades da conta |
 | `block` | capabilities/block | `PROVEN` | sim | sim | sim | H59: blocklist 0->1->0 |
 | `unblock` | capabilities/block | `PROVEN` | sim | sim | sim | — |
-| `getAbout` | contacts.AboutOf | `PARTIAL` | sim | parcial | sim | H70: o par tem recado VAZIO e em cache; a busca no servidor não foi exercitada |
+| `getAbout` | contacts.AboutOf | `PARTIAL` | sim | parcial | sim | H70: o par tem recado VAZIO e em cache; a busca no servidor não foi exercitada. **H149: a hipótese de identidade foi TESTADA E DESCARTADA** — depois da H148, era natural suspeitar que a leitura tivesse sido feita contra o jid errado. Não foi: os dois jids, resolvido e de telefone, leem `len=0 fetched=false` na mesma sessão. O `fetched=false` nos dois é o dado que importa — o caminho de servidor não é exercitado por nenhuma das identidades, então a nota da H70 está intacta e a causa não é a da H148 |
 | `getCommonGroups` | contacts.CommonGroups | `PROVEN` | sim | sim | sim | H118: delegação literal para `Client.getCommonGroups` (Contact.js:223) |
 | `getBroadcast` | status.ByContact | `PARTIAL` | sim | sim | sim | idem `getBroadcastById` (H100) |
 

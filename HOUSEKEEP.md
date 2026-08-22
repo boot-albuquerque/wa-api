@@ -3978,3 +3978,38 @@ jid cru, não só para este. É decisão de superfície, não conserto pontual.
 dizer com qual foi feita.* A H136 aprendeu isso num envio; esta linha mostra que
 o mesmo erro contamina MEDIÇÕES antigas que ninguém suspeita — e que o custo é
 uma linha parada por meses com diagnóstico errado.
+
+---
+
+## H149 — `getAbout`: a hipótese da H148 foi testada e DESCARTADA
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, aplicando a lição da H148.
+
+**Onde**: `internal/wa-headless/probe_about2_test.go` (novo), linha `getAbout`.
+
+**Hipótese**: depois da H148 — em que uma medição antiga contra o jid de telefone
+tinha produzido um diagnóstico errado por meses — era natural suspeitar do mesmo
+em `getAbout`, cuja nota (H70) diz que o par tem recado vazio e em cache.
+
+**Resultado: negativo, e por isso está aqui.** Os dois jids, na mesma sessão:
+
+```
+resolved:  contacts.About(len=0 fetched=false waited=510ms)
+asked-for: contacts.About(len=0 fetched=false waited=515ms)
+```
+
+Idênticos. A identidade NÃO é a causa aqui, e o dado que importa é o
+`fetched=false` nos **dois**: o caminho de servidor não é exercitado por nenhuma
+das identidades. A nota da H70 está intacta.
+
+**Status**: não corrigido, e a linha continua `PARTIAL` com a mesma causa de
+antes — agora com uma hipótese a menos.
+
+**Lição, e é a razão de gastar uma entrada num resultado negativo**: *uma
+generalização recém-aprendida é exatamente o que vai ser aplicada em excesso.* A
+H148 ensinou "toda medição precisa dizer com qual identidade foi feita", e a
+tentação imediata é reler todo `PARTIAL` como se fosse o mesmo erro. Testar e
+registrar o descarte é o que impede a próxima varredura de pagar de novo pela
+mesma suspeita — do mesmo jeito que a regra do `ARMADILHAS.md` sobre dublês
+permissivos existe porque a lição sem o contra-exemplo vira superstição.
