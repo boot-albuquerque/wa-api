@@ -6003,6 +6003,48 @@ invertida (legenda antes do áudio); e falha da legenda a derrubar o pedido.
 mensagem separada" — o operador não pode ser surpreendido pelo que vê no
 telemóvel.
 
+### DIVERGÊNCIA CONSCIENTE face a Baileys e Evolution API (2026-08-22)
+
+O `CLAUDE.md` manda consultar as duas referências **antes** de projetar. Não o
+fiz — inventei o comportamento e só verifiquei depois, a pedido do humano. Fica
+registado porque a ordem importa: verificar antes teria dado a mesma resposta
+com menos risco.
+
+**O que o protocolo permite**: nada. `waE2E.AudioMessage`
+(`WAWebProtobufsE2E.pb.go:15306-15321`) tem dezasseis campos — URL, Mimetype,
+Seconds, PTT, Waveform, ContextInfo, ViewOnce, AccessibilityLabel… — e
+**nenhum `caption`**. Não é omissão nossa nem da biblioteca: o WhatsApp não tem
+legenda em áudio.
+
+**O que o Baileys faz**: aceita `caption` no tipo `MediaUploadData` e **nunca o
+aplica ao áudio**. A legenda é aplicada por espalhamento (`...uploadData`) nos
+ramos de imagem, vídeo e documento; o ramo de áudio só processa o `waveform`.
+Resultado: descarte silencioso — exatamente o defeito que esta entrada
+descrevia.
+
+**O que a Evolution API faz**: o `POST /message/sendWhatsAppAudio` **não oferece
+o campo**. Aceita `number`, `audio`, `delay`, `quoted`, `encoding`. A `caption`
+existe no `sendMedia`, para imagem e vídeo. A documentação deles diz que, para
+mandar texto junto com áudio, se enviam **duas mensagens**.
+
+| | comportamento |
+|---|---|
+| Baileys | aceita e descarta em silêncio |
+| Evolution API | não oferece o campo |
+| wa-api, antes | aceitava e descartava — igual ao Baileys |
+| **wa-api, agora** | aceita e entrega como mensagem separada |
+
+**Divergimos dos dois, e a razão é esta**: nenhuma das duas resolve o problema
+do cliente, resolvem o problema da biblioteca. O Baileys mente (aceita e
+descarta) e a Evolution empurra o trabalho para quem chama — a documentação
+deles literalmente diz "envie o áudio, depois envie um texto". **Nós
+automatizámos o contorno que a Evolution documenta**, o que é menos "inventar
+comportamento" do que me pareceu quando o escrevi.
+
+O que continua a ser escolha nossa, e não fidelidade: a ORDEM (áudio primeiro),
+o `caption_status` no corpo da resposta, e o pedido continuar bem-sucedido
+quando só a legenda falha. Nada disso tem precedente em nenhuma das duas.
+
 <!-- f-status: corrigido -->
 
 ## F117 — `Waveform` sumiu da superfície pública de áudio, mas o histórico a enviava
@@ -6411,6 +6453,29 @@ Sem ele, a correção teria trocado uma recusa errada por uma aceitação errada
 
 **Controlo negativo**: repor `== nil || *req.Latitude == 0` faz o teste falhar
 com "coordenada valida recusada: missing Latitude in payload".
+
+### Verificação contra as implementações de referência (2026-08-22)
+
+O `CLAUDE.md` manda consultar Baileys e Evolution API antes de projetar. Fi-lo
+DEPOIS, a pedido do humano, e o resultado valida a correção de forma mais forte
+do que o meu raciocínio validava.
+
+**O protobuf do próprio WhatsApp usa PONTEIRO**
+(`waE2E.LocationMessage`, `WAWebProtobufsE2E.pb.go:15862-15863`):
+
+```go
+DegreesLatitude  *float64 `protobuf:"fixed64,1,opt,name=degreesLatitude"`
+DegreesLongitude *float64 `protobuf:"fixed64,2,opt,name=degreesLongitude"`
+```
+
+`opt` — campo opcional, ponteiro, com `nil` a significar "não definido". O
+protocolo **já distinguia** "não informado" de "zero"; o Baileys passa
+`proto.Message.ILocationMessage` adiante sem validação própria.
+
+**Nós éramos o único sítio que colapsava os dois**, ao usar `float64` no DTO.
+Isto NÃO é divergência a registar — é o contrário: a correção **removeu** uma
+divergência que existia e ninguém tinha visto. Trocar para `*float64` foi
+reproduzir a forma que o protocolo sempre teve.
 
 <!-- f-status: corrigido -->
 
