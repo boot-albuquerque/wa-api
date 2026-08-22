@@ -658,3 +658,52 @@ type TemplatePayload struct {
 	Footer  string
 	Buttons []TemplateButton
 }
+
+// CarouselCardType escolhe a APRESENTAÇÃO do carrossel no cliente do
+// WhatsApp. Mapeia InteractiveMessage.CarouselMessage.CarouselCardType do
+// protobuf (`internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.proto`).
+//
+// O tipo é do CARROSSEL, não de cada cartão: um envio é inteiro HSCROLL ou
+// inteiro ÁLBUM, e não há mistura.
+type CarouselCardType string
+
+const (
+	// CarouselHScrollCards é o carrossel clássico: os cartões deslizam na
+	// horizontal, cada um com a sua imagem, texto e botões. É o padrão.
+	CarouselHScrollCards CarouselCardType = "hscroll_cards"
+
+	// CarouselAlbumImage agrupa as imagens dos cartões como álbum.
+	CarouselAlbumImage CarouselCardType = "album_image"
+)
+
+// CarouselCard é UM cartão do carrossel.
+//
+// No wire cada cartão é um InteractiveMessage COMPLETO — com o seu próprio
+// header, corpo, rodapé e botões de fluxo nativo. Por isso os campos aqui
+// espelham os de ButtonsPayload: um cartão é, literalmente, uma mensagem de
+// botões aninhada dentro da moldura do carrossel.
+//
+// Image são os bytes JÁ OBTIDOS (o use case decide entre data URI e URL
+// externa, como em SendImageUseCase e em ButtonsPayload.HeaderImage); vazio
+// significa cartão sem imagem.
+type CarouselCard struct {
+	Title         string
+	Body          string
+	Footer        string
+	Image         []byte
+	ImageMimeType string
+	Buttons       []InteractiveButton
+}
+
+// CarouselPayload é a metadata de protocolo que o use case repassa ao adapter
+// para montar um InteractiveMessage com CarouselMessage.
+//
+// Buttons de cada cartão chegam aqui JÁ NORMALIZADOS pelo use case, com a
+// mesma disciplina de ButtonsPayload: Title resolvido e truncado, ID
+// resolvido, Type em caixa baixa. O adapter só traduz e monta.
+type CarouselPayload struct {
+	Body     string
+	Footer   string
+	CardType CarouselCardType
+	Cards    []CarouselCard
+}

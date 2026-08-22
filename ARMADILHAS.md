@@ -809,3 +809,74 @@ Duas regras que saem daqui:
 Corolário para quem despacha workers: o worker corrige e valida no worktree
 DELE. Implantar no ambiente partilhado é trabalho de quem integra, e tem de
 estar dito no packet ou feito na integração — senão não é feito por ninguém.
+
+## 26. A issue de outro projeto descreve o defeito DELE, não o nosso
+
+O `CLAUDE.md` manda consultar Baileys e Evolution API antes de resolver, e as
+issues fechadas deles são das melhores fontes que temos. Esta armadilha é o
+reverso disso: **a issue pode estar certa sobre o projeto dela e errada sobre o
+nosso**, e a diferença não aparece na leitura — só na medição.
+
+### O caso (2026-08-22)
+
+Ao investigar carrossel, encontrei
+[evolution-go #59](https://github.com/evolution-foundation/evolution-go/issues/59),
+de 13 de maio de 2026, com uma matriz de teste bem feita: WhatsApp pessoal
+(não-Business), Android atual, sete variantes de botão, lista e carrossel.
+
+```
+/send/button    200 OK com ID real, mas chega como "Atualize o WhatsApp…"
+/send/list      200 OK e NAO CHEGA de todo
+/send/carousel  as 4 variantes renderizam
+```
+
+E a frase que a torna convincente: *"a API devolve 200 com um ID real — a
+diferença está inteiramente do lado do cliente WhatsApp"*.
+
+Isso descreve com precisão o sintoma clássico de payload interativo malformado.
+Eu concluí que se aplicava a nós, e cheguei a escrever que o trabalho das F147/
+F149 tinha sido "a polir rotas que talvez não entreguem".
+
+### A medição, que é o que decidiu
+
+Enviei os três para um número de teste real e o humano fotografou o telemóvel:
+
+- **texto** — chegou (controlo)
+- **botões** — **dois botões clicáveis**, e o toque no "Botão A" devolveu a
+  resposta interativa
+- **lista** — chegou, "Abrir" abre a folha com a secção e as duas linhas
+  selecionáveis
+
+**As nossas rotas de botões e de lista funcionam em WhatsApp de consumidor.** A
+issue está desatualizada, ou descreve um defeito de construção do payload que é
+específico daquele projeto.
+
+### Por que isto merece entrada própria
+
+Porque o custo do erro é assimétrico e silencioso. Acreditar na issue faria uma
+sessão futura:
+
+1. **Parar** de trabalhar em botões e listas por as julgar inúteis.
+2. **Reescrever** o que já funciona, à procura de um defeito que não existe.
+3. **Registar como limitação** algo que é capacidade entregue.
+
+Nada disso produz um teste vermelho. O repositório continuaria verde enquanto a
+decisão errada era tomada.
+
+### A regra
+
+Issue de outro projeto é **hipótese sobre o nosso**, nunca facto — exatamente
+como o diagnóstico escrito num HOUSEKEEP. A pergunta a fazer é: *o que, na
+nossa implementação, seria diferente?* Aqui a resposta estava à mão: nós
+montamos o payload a partir do nosso próprio protobuf, e eles montam do deles.
+
+Quando o sintoma descrito for **observável do lado do destinatário**, a medição
+é barata e não tem substituto: envie e olhe para o telemóvel. Um 200 com ID real
+não prova entrega, mas uma captura de ecrã prova.
+
+**Corolário para as referências em geral**: os resultados de busca misturam o
+projeto oficial com forks (`baileys-pro`, `baileys-x`, `vreden/baileys`, …), e
+os forks divergem precisamente nos recursos interativos. Verifique sempre
+contra o repositório oficial — no mesmo dia, uma busca disse que o Baileys
+suporta legenda em áudio, e o código de `WhiskeySockets/Baileys` mostra que ele
+a aceita e nunca a aplica.
