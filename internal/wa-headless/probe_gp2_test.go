@@ -589,3 +589,180 @@ func TestProbeSubscribeSurface(t *testing.T) {
 	out, _ := json.MarshalIndent(pretty, "", "  ")
 	t.Logf("subscribe surface:\n%s", out)
 }
+
+// TestProbeReactionSource re-measures whether reactions have a readable source.
+//
+// H83 measured that they do NOT — the aggregate has no source on this build, and
+// events.MessageReaction says only that reactions MOVED. That was a while ago,
+// and twice today something turned out to be hiding as a MEMBER of
+// WAWebCollections rather than as a module of its own (PollVote, the newsletter
+// collection). Re-measuring costs one probe; assuming an old negative is how a
+// capability stays closed after the world changed.
+func TestProbeReactionSource(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_REACT") == "" {
+		t.Skip("set WA_PROBE_REACT=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__rc = null;
+	const safe = e => String((e && e.message) || e).slice(0, 130);
+	const out = {};
+	try {
+		const C = window.require("WAWebCollections");
+		const msgIds = new Set();
+		for (const m of C.Msg.getModelsArray()) { if (m.id && m.id.id) { msgIds.add(m.id.id); } }
+		out.knownMsgIds = msgIds.size;
+		for (const k of ["Reactions","RecentReactions"]) {
+			const col = C[k];
+			if (!col || typeof col.getModelsArray !== "function") { out[k] = "n/a"; continue; }
+			const arr = col.getModelsArray();
+			const info = {count: arr.length, samples: []};
+			for (const m of arr.slice(0, 3)) {
+				const id = String(m.__x_id || "");
+				const parts = id.split("_");
+				// So FORMA: quantidade de segmentos, comprimentos, e se algum
+				// segmento casa com um id de mensagem que esta sessao carregou.
+				info.samples.push({
+					segs: parts.length,
+					segLens: parts.map(p => p.length),
+					matchesLoadedMsg: parts.some(p => msgIds.has(p)),
+					hasAt: id.indexOf("@") >= 0,
+					reactionLen: (typeof m.__x_reactionText === "string") ? m.__x_reactionText.length : -1,
+					ts: (typeof m.__x_timestamp === "number") ? "number" : typeof m.__x_timestamp,
+				});
+			}
+			out[k] = info;
+		}
+	} catch (e) { out.err = safe(e); }
+	window.__rc = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__rc", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("reaction source:\n%s", out)
+}
+
+// TestProbeMessageFamilyModules measures, in one pass, what the remaining
+// Message rows would need and what data this account has to exercise them with.
+//
+// The two questions are separate and both matter: a module that is absent is a
+// different verdict from a module that exists with nothing to run it against.
+func TestProbeMessageFamilyModules(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_MSGMOD") == "" {
+		t.Skip("set WA_PROBE_MSGMOD=1")
+	}
+	profile := os.Getenv("WA_SEND_FROM_PROFILE")
+	if profile == "" {
+		t.Fatal("WA_SEND_FROM_PROFILE is required")
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: profile, DebuggingPort: freePort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	sess, err := h.Session(ctx)
+	if err != nil {
+		t.Fatalf("boot: %v", err)
+	}
+	eval := sess.Tab().Evaluate
+	script := `(() => {
+	window.__mm2 = null;
+	const out = {modules:{}, funcs:{}, arity:{}, data:{}};
+	const look = (name, fns) => {
+		try {
+			const m = window.require(name);
+			out.modules[name] = !!m;
+			for (const f of (fns||[])) {
+				const v = m && m[f];
+				out.funcs[name+"."+f] = (typeof v === "function");
+				if (typeof v === "function") { out.arity[name+"."+f] = v.length; }
+			}
+		} catch (e) { out.modules[name] = false; }
+	};
+	look("WAWebGroupInviteV4Job", ["sendGroupInviteMessage","acceptGroupV4Invite"]);
+	look("WAWebBizOrderBridge", ["queryOrder"]);
+	look("WAWebScheduledEventEditAction", ["editScheduledEvent"]);
+	look("WAWebScheduledEventCreateAction", []);
+	// Quanto dado a conta tem para exercitar cada um?
+	try {
+		const ms = window.require("WAWebCollections").Msg.getModelsArray();
+		const kinds = {};
+		for (const m of ms) { const k = String(m.type||"?"); kinds[k] = (kinds[k]||0)+1; }
+		out.data.kinds = kinds;
+		out.data.orders = kinds["order"] || 0;
+		out.data.payments = (kinds["payment"] || 0) + (kinds["payment_transaction"] || 0);
+		out.data.events = kinds["event_creation"] || kinds["scheduled_event"] || 0;
+		out.data.groupInvites = kinds["groups_v4_invite"] || 0;
+	} catch (e) { out.data.err = String(e).slice(0,100); }
+	window.__mm2 = JSON.stringify(out);
+	return 'kicked';
+})()
+`
+	var ignored string
+	if err := eval(ctx, script, &ignored); err != nil {
+		t.Fatalf("kick: %v", err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var raw string
+	for {
+		if err := eval(ctx, "window.__mm2", &raw); err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if raw != "" && raw != "null" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never answered")
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	var pretty map[string]any
+	if err := json.Unmarshal([]byte(raw), &pretty); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	out, _ := json.MarshalIndent(pretty, "", "  ")
+	t.Logf("message family modules:\n%s", out)
+}

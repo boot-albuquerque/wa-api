@@ -59,7 +59,7 @@ nem `PARTIAL` sem justificativa explícita.
 | `acceptChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `revokeChannelAdminInvite` | — | `MISSING` | — | — | — | não atacado |
 | `demoteChannelAdmin` | — | `MISSING` | — | — | — | não atacado |
-| `acceptGroupV4Invite` | — | `MISSING` | — | — | — | — |
+| `acceptGroupV4Invite` | — | `BLOCKED` | — | medido | — | H125: bloqueio DUPLO, medido. `WAWebGroupInviteV4Job` existe mas **nenhuma** das duas funções que a referência chama existe nele — décimo desencontro com a lista do wwebjs. E a conta tem zero convites v4 |
 | `setStatus` | capabilities/profile (parcial) | `BLOCKED` | — | — | — | H66: setMyTextStatus tem 5 primitivos e ZERO chamadores no bundle |
 | `setDisplayName` | profile.SetDisplayName | `BLOCKED` | sim | impossível | sim | H66: canSetMyPushname()=false — a conta é Business |
 | `getState` | capabilities/liveness | `PROVEN` | sim | sim | sim | pior latência 1ms em 5 amostras |
@@ -330,7 +330,7 @@ nossa é fresca — não há campo velho para consertar.
 | `getQuotedMessage` | metadados em messagemeta | `PARTIAL` | sim | sim | sim | — |
 | `reply` | send.Reply | `PROVEN` | sim | sim | sim | H54 |
 | `react` | capabilities/react | `PARTIAL` | sim | parcial | sim | H53 |
-| `acceptGroupV4Invite` | — | `MISSING` | — | — | — | não atacado |
+| `acceptGroupV4Invite` | — | `BLOCKED` | — | medido | — | H125: bloqueio DUPLO, medido. `WAWebGroupInviteV4Job` existe mas **nenhuma** das duas funções que a referência chama existe nele — décimo desencontro com a lista do wwebjs. E a conta tem zero convites v4 |
 | `forward` | capabilities/forward | `PROVEN` | sim | sim | sim | H63: cópia identificada por conjunto de ids, não por instante |
 | `downloadMedia` | capabilities/media | `PROVEN` | sim | sim | sim | H67: pós-condição CRIPTOGRÁFICA — SHA-256 do texto claro |
 | `delete` | capabilities/revoke | `PROVEN` | sim | sim | sim | direito consultado na página |
@@ -339,11 +339,11 @@ nossa é fresca — não há campo velho para consertar.
 | `pin` | pin.Message | `MISSING` | sim | falha (H81) | sim | chamada aceita e nada é fixado; vocabulário, duração e forma do modelo medidos |
 | `unpin` | pin.Unpin | `MISSING` | sim | falha (H81) | sim | idem |
 | `getInfo` | capabilities/ack | `PARTIAL` | sim | sim | sim | H71: MsgInfoCollection VAZIA (0 de 368); temos ack, não "quem leu" |
-| `getOrder` | — | `MISSING` | — | — | — | `WAWebBizOrderBridge.queryOrder` existe (2 chaves) e **não foi exercitado**: a conta tem zero pedidos entre as mensagens varridas, então falta o dado, não o código. A aridade declarada é 1 contra os 5 argumentos que a referência passa (H102) |
-| `getPayment` | — | `MISSING` | — | — | — | idem `getOrder`: zero pagamentos na conta, caminho sem exercício (H102) |
-| `getReactions` | — | `MISSING` | — | — | — | — |
+| `getOrder` | — | `BLOCKED` | — | medido | — | H125: `WAWebBizOrderBridge.queryOrder` EXISTE. O bloqueio é de DADO: a conta tem **zero** mensagens de pedido. Exercitar exigiria atividade comercial real, que não é produzível por agente |
+| `getPayment` | — | `BLOCKED` | — | medido | — | H125: idem `getOrder` — módulo presente, **zero** pagamentos na conta |
+| `getReactions` | — | `BLOCKED` | — | medido | — | H124: a H83 tinha concluído que não há fonte para QUAL reação. Remedido com instrumento melhor: `WAWebCollections.Reactions` EXISTE com `on`/`getModelsArray`, e fica em **0 mesmo depois de uma reação que a capacidade verificou**. Não é falta de coleção — a coleção não enche. A `RecentReactions` (1 item) é a lista do seletor de emoji, não reações em mensagens |
 | `edit` | capabilities/edit | `PROVEN` | sim | sim | sim | H60: janela de 1200s |
-| `editScheduledEvent` | — | `MISSING` | — | — | — | — |
+| `editScheduledEvent` | — | `BLOCKED` | — | medido | — | H125: `WAWebScheduledEventEditAction` e `WAWebScheduledEventCreateAction` **não existem** neste build. Não há o que chamar |
 | `getPollVotes` | poll.Votes | `PROVEN` | sim | sim | sim | idem |
 | `vote` | poll.Vote | `PARTIAL` | sim | não | sim | implementado e travado por teste: nomes viram ids locais NA PÁGINA, e um nome que não casa é recusa e não omissão — o envio da página recebe um SET, e um nome perdido produziria um voto por menos coisas do que se pediu, reportado como sucesso. Não provado ao vivo porque a enquete não chega ao par (ver `sendMessage`, H98) |
 
@@ -442,7 +442,7 @@ porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lad
 |---|---|---|
 | `PROVEN` | 88 | 40% |
 | `PARTIAL` | 64 | 29% |
-| `BLOCKED` | 9 | 4% |
+| `BLOCKED` | 15 | 7% |
 | `INTENTIONAL_DIFFERENCE` | 4 | 2% |
-| `MISSING` | 55 | 25% |
+| `MISSING` | 49 | 23% |
 | **total** | **220** | |

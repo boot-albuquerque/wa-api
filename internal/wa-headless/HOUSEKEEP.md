@@ -9822,3 +9822,126 @@ teste de unidade nenhum olha. Controle negativo executado:
 **Status**: parcialmente entregue — `getChannels` provado, assinatura bloqueada
 com evidência, e o código de `Follow`/`Unfollow` fica no lugar porque a
 diferença é da PÁGINA e pode voltar num build futuro.
+
+## H124 — reações: remedi um negativo antigo, errei a leitura, e a H83 continua de pé
+
+**Data**: 2026-08-22. **Contexto**: `Message.getReactions`, atacando a família
+`Message` enquanto a orquestração decide a frente grande.
+
+**Onde**: `internal/wa-headless/probe_reactsource_test.go` (novo),
+`probe_gp2_test.go`.
+
+### Por que remedir
+
+A H83 concluiu que não há fonte para QUAL reação — `events.MessageReaction` diz
+apenas que as reações se moveram. Isso é antigo, e **duas vezes hoje** algo que
+parecia ausente estava escondido como MEMBRO de `WAWebCollections` em vez de
+módulo próprio (`PollVote` na H121, a coleção de newsletters na H113). Remedir
+custa uma sonda; presumir um negativo velho é como uma capacidade fica fechada
+depois que o mundo mudou.
+
+### O erro que cometi no meio, e que preciso registrar
+
+A primeira sonda mostrou uma coleção de reações com `count: 1` e um modelo
+carregando `__x_reactionText`. Eu li isso como *"o negativo da H83 está velho"* e
+**disse isso em voz alta**. Estava errado.
+
+A coleção com 1 item era **`RecentReactions`** — a lista de emojis recentes do
+seletor, cujo `__x_id` é o próprio emoji (comprimento 2, sem casar com nenhum
+dos 395 ids de mensagem carregados). A coleção `Reactions`, a de verdade, tinha
+**0**.
+
+O erro foi de leitura: a sonda emitia as duas coleções no mesmo objeto e eu
+peguei a resposta da errada. A correção veio de medir a FORMA do `__x_id` —
+quantos segmentos, se algum casa com id de mensagem conhecido — em vez de olhar
+para a existência do campo.
+
+### A medição decisiva
+
+Coleção vazia não é resposta: pela regra da H114, um zero precisa de controle
+positivo. Então reagi a uma mensagem própria com a capacidade que já existe e
+olhei de novo:
+
+```
+Reactions collection before: 0
+Reactions collection after:  0
+reaction removed
+```
+
+**A coleção não enche.** Não é falta de coleção — ela existe, aceita ouvinte, e
+permanece vazia depois de uma reação que a própria capacidade verificou como
+aplicada.
+
+`getReactions` passa de `MISSING` a `BLOCKED`, com evidência mais forte do que a
+da H83: antes era "não achamos fonte", agora é "a fonte existe e não é
+alimentada neste build".
+
+### O que fica da regra de remedir
+
+Ela continua certa mesmo tendo dado negativo aqui — duas das três vezes hoje
+pagou. O que muda é o cuidado na leitura: quando a sonda mede várias fontes de
+uma vez, o resultado tem de dizer QUAL fonte respondeu o quê, ou a resposta certa
+da fonte errada vira conclusão.
+
+**Status**: decidido e registrado. `getReactions` bloqueado com medição
+atualizada; nenhum código de produção escrito.
+
+## H125 — a família `Message`: separar bloqueio de MÓDULO de bloqueio de DADO
+
+**Data**: 2026-08-22. **Contexto**: decisão **50=b** da orquestração — atacar
+`Message`, as 9 linhas que a auditoria da H118 classificou como implementação
+própria, sem atalho de fachada.
+
+**Onde**: `internal/wa-headless/probe_gp2_test.go`
+(`TestProbeMessageFamilyModules`), `LEDGER-WWEBJS.md`.
+
+### Uma sonda, duas perguntas
+
+Módulo ausente e módulo presente sem dado para exercitá-lo são vereditos
+DIFERENTES, e a mesma sonda mede os dois: quais funções existem, e quantas
+mensagens de cada tipo a conta tem para rodar contra elas.
+
+```
+WAWebBizOrderBridge.queryOrder                -> função
+WAWebGroupInviteV4Job                         -> módulo existe
+  .acceptGroupV4Invite                        -> NÃO é função
+  .sendGroupInviteMessage                     -> NÃO é função
+WAWebScheduledEventEditAction                 -> NÃO existe
+WAWebScheduledEventCreateAction               -> NÃO existe
+
+dados da conta: orders 0 · payments 0 · groupInvites 0 · scheduled events 0
+```
+
+### As quatro conclusões
+
+**`getOrder` e `getPayment` → `BLOCKED` por DADO.** O módulo está lá e a função
+é chamável. Falta o dado: zero pedidos e zero pagamentos entre as mensagens.
+Exercitar exigiria atividade comercial real na conta, que não é coisa que um
+agente produza.
+
+**`acceptGroupV4Invite` → `BLOCKED` por MÓDULO E por DADO.** O módulo existe e
+**nenhuma** das duas funções que a referência chama existe nele. Décimo
+desencontro com a lista do wwebjs. E a conta não tem convite v4 nenhum para
+aceitar — os dois bloqueios são independentes, e qualquer um bastaria.
+
+**`editScheduledEvent` → `BLOCKED` por MÓDULO.** Nem o de edição nem o de
+criação existem. Não há o que chamar.
+
+### Por que isto não é "desistir"
+
+`MISSING` diz "não atacado", e depois de uma medição isso deixa de ser verdade.
+As quatro linhas ficam abertas do mesmo jeito, mas agora dizem POR QUE, e a
+distinção orienta trabalho futuro: uma bloqueada por DADO abre sozinha quando a
+conta tiver o dado; uma bloqueada por MÓDULO só abre se a Meta trouxer o módulo
+de volta. São prazos diferentes e riscos diferentes.
+
+### Contagem
+
+Décimo desencontro entre a lista de módulos do wwebjs e este build: agora são
+oito nomes/funções ausentes e duas assinaturas divergentes. Copiar a lista da
+referência erra em torno de metade das vezes, e este número está anotado a cada
+ocorrência justamente para não virar impressão.
+
+**Status**: decidido e registrado, sem código novo. Sobram em `Message`:
+`getMentions`/`getGroupMentions` (medidos zero na H106) e `pin`/`unpin`
+(medidos falhando na H81).
