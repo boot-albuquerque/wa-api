@@ -40,6 +40,7 @@ const (
 	reactLabel  = "adapter/send-reaction"
 	editLabel   = "adapter/edit-message"
 	revokeLabel = "adapter/revoke-message"
+	voteLabel   = "adapter/send-poll-vote"
 )
 
 // marker and reactor are the slices of the page capabilities this adapter uses.
@@ -55,6 +56,10 @@ type revoker interface {
 	ForEveryone(ctx context.Context, msgID string, clearMedia bool, label string) (waheadless.RevokeResult, error)
 }
 
+type voter interface {
+	Vote(ctx context.Context, messageID string, options []string, label string) error
+}
+
 type reactor interface {
 	Add(ctx context.Context, msgID, emoji, label string) (waheadless.ReactionResult, error)
 	Remove(ctx context.Context, msgID, label string) (waheadless.ReactionResult, error)
@@ -68,6 +73,7 @@ type Messenger struct {
 	newReactor func(ctx context.Context, txtID string) (reactor, error)
 	newEditor  func(ctx context.Context, txtID string) (editor, error)
 	newRevoker func(ctx context.Context, txtID string) (revoker, error)
+	newVoter   func(ctx context.Context, txtID string) (voter, error)
 }
 
 // NewMessenger builds the adapter.
@@ -241,6 +247,51 @@ func (m *Messenger) revoker(ctx context.Context, txtID string) (revoker, error) 
 		return nil, err
 	}
 	return waheadless.NewRevoker(m.sessions.Runner(), eval), nil
+}
+
+// SendPollVote vota numa enquete que outra pessoa criou.
+//
+// A capability vota pelo ID da mensagem da ENQUETE, e é só disso que ela
+// precisa: a página já sabe de que conversa a mensagem é. Os outros campos do
+// payload — PollChat, PollSender, PollTimestamp — existem porque o transporte
+// de socket tem de RECONSTRUIR a chave do voto a partir deles, e aqui não há
+// chave a reconstruir.
+//
+// Ignorá-los é correto, e é dito em voz alta em vez de silenciado. O que NÃO
+// seria correto é aceitar um payload cujo ID esteja vazio: aí a página
+// procuraria "" e a resposta seria sobre outra coisa.
+//
+// Nota medida, e ela importa: CRIAR enquete pela headless não entrega (ack fica
+// em 0, H98/H101). VOTAR é operação diferente e não herda esse defeito — a
+// enquete já existe, criada por quem quer que seja. Não presumo que funcione
+// por isso; presumo apenas que a medição da criação não se aplica aqui.
+func (m *Messenger) SendPollVote(ctx context.Context, txtID string, _ domain.JID, payload domain.PollVotePayload, _ string) (domain.MessageSendResult, error) {
+	if payload.PollMessageID == "" {
+		return domain.MessageSendResult{}, errNoTarget
+	}
+	if len(payload.OptionNames) == 0 {
+		return domain.MessageSendResult{}, errors.New(
+			"waheadless: voto sem opcao escolhida; um voto vazio RETIRA o voto e tem de ser pedido como tal")
+	}
+	v, err := m.voter(ctx, txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	if err := v.Vote(ctx, payload.PollMessageID, payload.OptionNames, voteLabel); err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{ID: payload.PollMessageID}, nil
+}
+
+func (m *Messenger) voter(ctx context.Context, txtID string) (voter, error) {
+	if m.newVoter != nil {
+		return m.newVoter(ctx, txtID)
+	}
+	eval, err := m.sessions.Evaluator(ctx, txtID)
+	if err != nil {
+		return nil, err
+	}
+	return waheadless.NewPollManager(m.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof that this adapter satisfies the port.

@@ -44,6 +44,7 @@ import (
 	"wa-api/internal/wa-headless/capabilities/groupreq"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/owner"
+	"wa-api/internal/wa-headless/capabilities/poll"
 	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/capabilities/react"
 	"wa-api/internal/wa-headless/capabilities/revoke"
@@ -411,3 +412,14 @@ type (
 
 // NewRevoker builds the revoke capability over a session's page.
 func NewRevoker(runner *Runner, eval Evaluator) *Revoker { return revoke.New(runner, eval) }
+
+// Voting on a poll somebody else created.
+type (
+	// PollManager votes and reads a tally on the page.
+	PollManager = poll.Manager
+	// PollTally is the count per option.
+	PollTally = poll.Tally
+)
+
+// NewPollManager builds the poll capability over a session's page.
+func NewPollManager(runner *Runner, eval Evaluator) *PollManager { return poll.New(runner, eval) }

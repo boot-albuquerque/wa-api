@@ -9,6 +9,7 @@ internal/wa-headless.NewEditor	EXCLUDED	X1
 internal/wa-headless.NewGroupManager	EXCLUDED	X1
 internal/wa-headless.NewGroupRequestManager	EXCLUDED	X1
 internal/wa-headless.NewHolder	EXCLUDED	X1
+internal/wa-headless.NewPollManager	EXCLUDED	X1
 internal/wa-headless.NewPresence	EXCLUDED	X1
 internal/wa-headless.NewReactor	EXCLUDED	X1
 internal/wa-headless.NewResolver	EXCLUDED	X1
@@ -305,6 +306,19 @@ internal/wa-headless/capabilities/owner.Refresh.func1	EXCLUDED	X6
 internal/wa-headless/capabilities/owner.WID.Present	EXCLUDED	X1
 internal/wa-headless/capabilities/owner.WID.String	EXCLUDED	X4
 internal/wa-headless/capabilities/owner.readScript	EXCLUDED	X1
+internal/wa-headless/capabilities/poll.Manager.Vote	ELIGIBLE	uncovered:L2(S-consume,poll.go:180);uncovered:L2(S-ret,poll.go:192)
+internal/wa-headless/capabilities/poll.Manager.Votes	ELIGIBLE	uncovered:L2(S-consume,poll.go:130);uncovered:L2(S-ret,poll.go:144)
+internal/wa-headless/capabilities/poll.Manager.parked	ELIGIBLE	uncovered:L2(S-ret,poll.go:217);uncovered:L2(S-ret,poll.go:225);uncovered:L2(S-ret,poll.go:233);uncovered:L2(S-ret,poll.go:238);uncovered:L2(S-ret,poll.go:242)
+internal/wa-headless/capabilities/poll.Manager.parked.func1	EXCLUDED	X6
+internal/wa-headless/capabilities/poll.Manager.parked.func2	EXCLUDED	X6
+internal/wa-headless/capabilities/poll.Manager.parked.func3	EXCLUDED	X6
+internal/wa-headless/capabilities/poll.New	EXCLUDED	X1
+internal/wa-headless/capabilities/poll.Tally.String	EXCLUDED	X4
+internal/wa-headless/capabilities/poll.classify	ELIGIBLE	uncovered:L1
+internal/wa-headless/capabilities/poll.nextStateKey	EXCLUDED	X1
+internal/wa-headless/capabilities/poll.prelude	EXCLUDED	X1
+internal/wa-headless/capabilities/poll.voteScript	ELIGIBLE	uncovered:L1
+internal/wa-headless/capabilities/poll.votesScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.Announcer.Observe	ELIGIBLE	uncovered:L1
 internal/wa-headless/capabilities/presence.Announcer.Observe.func1	EXCLUDED	X6
 internal/wa-headless/capabilities/presence.Announcer.Set	ELIGIBLE	uncovered:L1
@@ -2238,6 +2252,7 @@ pkg/application/contracts/contractsfake.ChatActivityReader.GetLastActivityByUser
 pkg/application/contracts/contractsfake.ChatMessenger.EditMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.MarkRead	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.RevokeMessage	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ChatMessenger.SendPollVote	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatMessenger.SendReaction	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.ArchiveChat	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RejectCall	EXCLUDED	X5
@@ -2502,6 +2517,7 @@ pkg/application/usecase/message.NewSendListUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendLocationUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendMessageUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendPollUseCase	EXCLUDED	X1
+pkg/application/usecase/message.NewSendPollVoteUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendPresenceUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendStickerUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendTemplateUseCase	EXCLUDED	X1
@@ -2524,6 +2540,7 @@ pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-
 pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_location.go:45);uncovered:L2(S-ret,send_location.go:48);uncovered:L2(S-ret,send_location.go:51)
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
+pkg/application/usecase/message.SendPollVoteUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll_vote.go:29);uncovered:L2(S-ret,send_poll_vote.go:32);uncovered:L2(S-ret,send_poll_vote.go:35);uncovered:L2(S-ret,send_poll_vote.go:38);uncovered:L2(S-ret,send_poll_vote.go:41)
 pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
 pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:60);uncovered:L2(S-ret,send_sticker.go:63)
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:58);uncovered:L2(S-ret,send_template.go:61);uncovered:L2(S-ret,send_template.go:64);uncovered:L2(S-ret,send_template.go:67)
@@ -3294,15 +3311,17 @@ pkg/infra/wa-headless/identity.Resolver.capability	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/identity.Resolver.lookuper	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/identity.Resolver.pair	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/identity.classifyCheck	ELIGIBLE	uncovered:L1
-pkg/infra/wa-headless/messenger.Messenger.EditMessage	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:175);uncovered:L2(S-ret,messenger.go:187)
+pkg/infra/wa-headless/messenger.Messenger.EditMessage	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:181);uncovered:L2(S-ret,messenger.go:193)
 pkg/infra/wa-headless/messenger.Messenger.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/messenger.Messenger.MarkRead	ELIGIBLE	uncovered:L1
-pkg/infra/wa-headless/messenger.Messenger.RevokeMessage	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:229)
+pkg/infra/wa-headless/messenger.Messenger.RevokeMessage	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:235)
+pkg/infra/wa-headless/messenger.Messenger.SendPollVote	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:273)
 pkg/infra/wa-headless/messenger.Messenger.SendReaction	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/messenger.Messenger.editor	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/messenger.Messenger.marker	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/messenger.Messenger.reactor	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/messenger.Messenger.revoker	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/messenger.Messenger.voter	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/messenger.NewMessenger	EXCLUDED	X1
 pkg/infra/wa-headless/newsletter.NewReader	EXCLUDED	X1
 pkg/infra/wa-headless/newsletter.Reader.CreateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,reader.go:112)
@@ -3360,6 +3379,7 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendList	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendLocation	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendPoll	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendPollVote	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate	EXCLUDED	X5
@@ -3520,6 +3540,7 @@ pkg/infra/wa-noise/client/testkit.ErrClient.SendMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildEdit	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildHistorySyncRequest	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildPollCreation	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.BuildPollVote	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildRevoke	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.BuildUnavailableMessageRequest	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.CreateGroup	EXCLUDED	X5
@@ -3799,6 +3820,7 @@ pkg/presentation/http/handlers.NewSendListHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendLocationHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendMessageHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendPollHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewSendPollVoteHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendPresenceHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendStickerHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendTemplateHandler	EXCLUDED	X1
@@ -3832,6 +3854,7 @@ pkg/presentation/http/handlers.SendListHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendLocationHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendMessageHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendPollHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.SendPollVoteHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendPresenceHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendStickerHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendTemplateHandler.ServeHTTP	ELIGIBLE	covered

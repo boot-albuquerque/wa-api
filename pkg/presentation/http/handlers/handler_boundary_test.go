@@ -111,6 +111,11 @@ func (s *spyPort) EditMessage(context.Context, string, domain.JID, string, strin
 	return domain.MessageSendResult{}, s.err
 }
 
+func (s *spyPort) SendPollVote(context.Context, string, domain.JID, domain.PollVotePayload, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
 func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err

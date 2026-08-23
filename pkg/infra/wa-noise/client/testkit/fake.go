@@ -32,6 +32,7 @@ type Fake struct {
 	BuildRevokeFn                    func(chat, sender types.JID, id types.MessageID) *waE2E.Message
 	BuildEditFn                      func(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
 	BuildPollCreationFn              func(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
+	BuildPollVoteFn                  func(ctx context.Context, pollInfo *types.MessageInfo, optionNames []string) (*waE2E.Message, error)
 	UploadFn                         func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
 	DownloadFn                       func(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
@@ -185,6 +186,24 @@ func (f *Fake) BuildPollCreation(name string, optionNames []string, selectableOp
 		return f.BuildPollCreationFn(name, optionNames, selectableOptionCount)
 	}
 	return wamessage.BuildPollCreation(name, optionNames, selectableOptionCount)
+}
+
+// BuildPollVote delegates to the real implementation by default, same
+// discipline as BuildPollCreation. The default produces a message with a
+// PollUpdateMessage carrying the encrypted vote hashes — the same path
+// (*core.Client).BuildPollVote takes in
+// internal/wa-noise/core/msgsecret_poll.go:54, which delegates to
+// internal/wa-noise/capabilities/message/poll.go:53.
+//
+// The fake transport has no Signal session, so the encryption will fail and
+// return an error alongside a non-nil *waE2E.Message with PollUpdateMessage
+// nil — that is the documented behaviour of BuildPollVote. Tests that need
+// the happy path must provide BuildPollVoteFn.
+func (f *Fake) BuildPollVote(ctx context.Context, pollInfo *types.MessageInfo, optionNames []string) (*waE2E.Message, error) {
+	if f.BuildPollVoteFn != nil {
+		return f.BuildPollVoteFn(ctx, pollInfo, optionNames)
+	}
+	return &waE2E.Message{}, nil
 }
 
 func (f *Fake) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {

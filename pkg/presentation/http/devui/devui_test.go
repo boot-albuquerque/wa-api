@@ -279,7 +279,8 @@ func TestPainel_OperacoesDeEnvioEChatNoCard(t *testing.T) {
 	for _, rota := range []string{
 		"/chat/send/text", "/chat/send/image", "/chat/send/video", "/chat/send/audio",
 		"/chat/send/document", "/chat/send/sticker", "/chat/send/location",
-		"/chat/send/contact", "/chat/send/poll", "/chat/send/buttons",
+		"/chat/send/contact", "/chat/send/poll", "/chat/send/pollvote",
+		"/chat/send/buttons",
 		"/chat/send/carousel", "/chat/send/template", "/chat/send/list", "/chat/send/edit",
 		"/chat/list", "/chat/history", "/chat/react", "/chat/markread",
 		"/chat/presence", "/chat/delete/message",

@@ -67,6 +67,15 @@ export const ENVIO = [
                pre: (v) => String(v).split("\n").map((s) => s.trim()).filter(Boolean) },
              replyTo] },
 
+  { id: "pollvote", rotulo: "Voto em Enquete", rota: "/chat/send/pollvote",
+    campos: [telefone,
+             { nome: "Sender", rotulo: "remetente da enquete (JID)", req: true },
+             { nome: "PollMessageId", rotulo: "ID da enquete", req: true },
+             { nome: "PollMessageTimestamp", rotulo: "timestamp da enquete (unix)", req: true,
+               pre: (v) => Number(v) },
+             { nome: "Options", rotulo: "opções escolhidas (uma por linha)", tipo: "textarea", req: true,
+               pre: (v) => String(v).split("\n").map((s) => s.trim()).filter(Boolean) }] },
+
   { id: "buttons", rotulo: "Botões", rota: "/chat/send/buttons",
     campos: [telefone, { nome: "Title", rotulo: "título" },
              { nome: "Body", rotulo: "corpo", req: true },
