@@ -112,8 +112,21 @@ var inventarioFase3 = map[string]portStatus{
 		"hipóteses eliminadas por medição. Recusar uma chamada exige receber o evento " +
 		"dela, e é o evento que não chega — implementar a recusa daria um método que " +
 		"nunca é chamado."},
-	"GroupRequests":  {satisfeito: true},
-	"GroupSettings":  {motivo: "pendente"},
+	"GroupRequests":     {satisfeito: true},
+	"GroupInfoSettings": {satisfeito: true},
+	"GroupParticipants": {satisfeito: true},
+
+	"GroupPhotoSetter": {motivo: "RECUSADO POR CAPACIDADE AUSENTE DO BUILD, medida em " +
+		"H140/decisão 60: `WAWebSetPicture` e `WAWebProfilePicThumbBridge` estão " +
+		"ausentes desta build, e o LEDGER regista `setPicture` e `deletePicture` como " +
+		"BLOCKED. Não é lacuna nossa: é capacidade que a página não expõe aqui."},
+
+	"GroupEphemeralSetter": {motivo: "PENDENTE POR FALTA DE MEDIÇÃO, e isto NÃO é o " +
+		"mesmo que GroupPhotoSetter. `ephemeral`/`disappearing` não aparece em nenhum " +
+		"dos 220 itens do LEDGER e não há capability — o que diz que a referência que " +
+		"dirige a mesma SPA não expõe a operação, e NÃO diz que a página não a tem. " +
+		"Escrever as duas com a mesma palavra faria a próxima sessão desistir da que " +
+		"ainda vale investigar."},
 	"PrivacyManager": {motivo: "pendente"},
 }
 

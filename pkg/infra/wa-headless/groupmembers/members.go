@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
 )
@@ -140,7 +141,12 @@ func (m *Manager) members(ctx context.Context, txtID string) (members, error) {
 	return waheadless.NewGroupManager(m.sessions.Runner(), eval), nil
 }
 
-// Nao ha asserçao de tipo para appport.GroupSettings aqui, e a ausencia e
-// deliberada: este adaptador cobre a METADE de participantes: o port pede
-// tambem nome, topico, foto, anuncio, trava e temporizador. Declarar que o
-// satisfaz seria a mentira que a decisao 80 existe para impedir.
+// Prova em tempo de compilacao de que este adaptador satisfaz o port.
+//
+// Ate a decisao 92 esta linha NAO EXISTIA, e a ausencia estava documentada:
+// appport.GroupSettings pedia tambem nome, topico, foto, anuncio, trava e
+// temporizador, e declarar que este adaptador o satisfazia seria a mentira que
+// a decisao 80 existe para impedir. O comentario que dizia isso descrevia uma
+// costura real no codigo — dois adaptadores, um port, nenhum capaz de provar
+// nada. A decisao 92 cortou o port onde a costura ja estava.
+var _ appport.GroupParticipants = (*Manager)(nil)

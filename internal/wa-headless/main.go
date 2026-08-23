@@ -354,6 +354,14 @@ type (
 	GroupRequestAction = groupreq.ActionResult
 	// GroupPolicy is a group setting the page accepts.
 	GroupPolicy = group.Policy
+	// GroupRename is what renaming a group did. It carries no verification
+	// flag: it names the model FIELD that carried the change, which is the
+	// same evidence in a more useful shape.
+	GroupRename = group.Rename
+	// GroupDescribed is the description READ BACK after the change — the
+	// strongest of the three group confirmations, because it is comparable
+	// with what was asked for.
+	GroupDescribed = group.Described
 	// GroupPolicyChange is what a policy change did, READ BACK. Unlike a
 	// membership change, this one IS verifiable by the acting session — the
 	// difference is measured, not assumed (H85).
@@ -361,7 +369,14 @@ type (
 )
 
 // PolicyJoinNeedsApproval is the policy that turns joins into requests.
-const PolicyJoinNeedsApproval = group.PolicyJoinNeedsApproval
+const (
+	PolicyJoinNeedsApproval = group.PolicyJoinNeedsApproval
+	// PolicyMessagesAdminsOnly is `announcement` — only admins may send.
+	PolicyMessagesAdminsOnly = group.PolicyMessagesAdminsOnly
+	// PolicyInfoAdminsOnly is `restrict` — only admins may edit the group's
+	// own information.
+	PolicyInfoAdminsOnly = group.PolicyInfoAdminsOnly
+)
 
 // NewGroupRequestManager builds the request capability over a session's page.
 func NewGroupRequestManager(runner *Runner, eval Evaluator) *GroupRequestManager {

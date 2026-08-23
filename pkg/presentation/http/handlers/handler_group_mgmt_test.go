@@ -46,7 +46,7 @@ func (f *grpMgmtFakes) failSession(err error) {
 // handlers monta o conjunto real, pelo mesmo construtor que o bootstrap usa.
 func (f *grpMgmtFakes) handlers() *GroupManagementHandlers {
 	return NewGroupManagementHandlers(
-		group.NewGroupManagementUseCase(f.lifecycle, f.settings, f.jids, f.logger))
+		group.NewGroupManagementUseCase(f.lifecycle, f.settings, f.settings, f.settings, f.settings, f.jids, f.logger))
 }
 
 // grpMgmtMissing e' um caso de campo obrigatorio ausente: o corpo que o omite

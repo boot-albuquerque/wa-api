@@ -1736,3 +1736,85 @@ instrumento a inventar o próprio resultado, que é o erro que a F86 já custou.
 por desenho, como os outros quinze. A métrica não distingue *"descartou a
 causa"* de *"não havia causa"*, então recusa nova custa denominador sem
 numerador. O saldo desta razão é negativo, e o ganho da L1-e é da OUTRA.
+
+## GroupSettings partido em quatro — e a costura já estava no código
+
+Decisões 87 e 92. O que esta fatia ensinou não foi como cortar: foi **onde a
+autoridade para cortar mora**.
+
+### A medição contrariou o precedente, e isso foi dito antes de cortar
+
+O precedente é a decisão 82: o `ContactDirectory` foi dividido depois de medir
+nove casos de uso, dos quais **sete precisavam de um método só**. Os dados
+desenharam a divisão.
+
+Aqui medi a mesma coisa e deu o contrário: **um único consumidor**, e cada
+método público dele usa **exatamente um** método do port. Um para um, sem
+exceção. O uso não desenha costura nenhuma — cortar por ali seria cortar pela
+conveniência do adaptador, que é o que a 82 evitou.
+
+Levei isso de volta antes de aplicar a 87. A decisão 92 manteve o corte por
+outro fundamento: **capacidade de transporte**. Ports existem para ser
+satisfeitos por transportes, então essa é costura legítima; só não é a costura
+que a 82 usou, e por isso está escrito.
+
+### O argumento que eu não tinha, e que a medição entregou
+
+O `groupmembers` já implementava *"a metade de participantes de
+`appport.GroupSettings`"* — com um comentário a explicar por que **não podia**
+declarar asserção de tipo. Dois adaptadores para um port, nenhum capaz de provar
+que o satisfazia.
+
+A costura já estava no código. A decisão 92 cortou onde ela estava, e as duas
+linhas que antes não podiam existir passaram a existir:
+
+```go
+var _ appport.GroupInfoSettings = (*Manager)(nil)   // groupset
+var _ appport.GroupParticipants  = (*Manager)(nil)   // groupmembers
+```
+
+### O inventário disparou sozinho, outra vez
+
+Sem eu tocar nele, o dispositivo da 81 achou os quatro ports novos **e** notou
+que `GroupSettings` já não é port de transporte, por ter virado composição pura:
+*"a tabela ficou para trás do código"*. Não foi controle encenado.
+
+### Três confirmações para o que parece uma operação repetida
+
+| escrita | como a página confirma | no-op |
+|---|---|---|
+| nome | `Rename.Field` — *qual* campo do modelo carregou | `AlreadyInState` |
+| descrição | `Described.Text` — o texto **relido do servidor** | — |
+| política | `PolicyChange.Verified` — booleano medido (H85) | `NoOp` |
+
+O port devolve só `error`, então o que sobra de cada uma é a recusa. Aplicar a
+mesma regra às três estaria errado. E a comparação da descrição apara os
+extremos, porque o servidor normaliza espaço — sem isso, o **controle 3**
+mostrou que uma diferença só de espaço vira recusa.
+
+`Described.Text` é **conteúdo do usuário**: a mensagem de recusa fala em
+comprimentos e no nome do campo, nunca no texto.
+
+### Cinco controles negativos, os cinco morderam
+
+Dois deles quebraram o build em vez de falhar, e foram refeitos até compilar
+**e** falhar — controle que não compila não prova nada.
+
+### O que NÃO foi creditado, e o limite que isso revelou
+
+Ligar este adaptador baixa `min_func_coverage` 556→549, e a causa **não** é a
+que a decisão 91 corrigiu. Lá o instrumento cobrava por observabilidade que
+existia e não via. Aqui é limite: os adaptadores chamam a capability por uma
+**interface local**, e qual implementação lá vai parar decide-se no ponto de
+montagem. `group.Manager.SetSubject` rastreia direto e recebe rótulo constante —
+pareceria creditável, e não é, porque `info.Uses` resolve para o método da
+interface.
+
+Controle: afrouxar a L1-e para aceitar alvo de qualquer pacote do módulo **não
+mudou nada** — 458 creditadas antes e depois. O que bloqueia é a interface, não
+a fronteira de pacote. Um limite escreve-se; não se contorna.
+
+### A contagem, pela medição e não por prosa
+
+`go test ./pkg/infra/wa-headless/ -run Total -v` — é ele que diz. Depois da
+H141 não volto a escrever o número à mão ao lado do teste que o imprime.

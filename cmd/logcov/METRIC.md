@@ -329,3 +329,31 @@ ajudante e cobrava do método.
 sem a passagem. As 17 são todas métodos de capability que delegam a um ajudante
 rastreado; nenhum adaptador de `pkg/` foi creditado, porque nenhum delega a
 ajudante rastreado.
+
+### O limite da regra: delegação através de INTERFACE não é creditável
+
+Medido ao ligar o `GroupInfoSettings` (2026-08-23), e o resultado foi negativo
+de propósito registado.
+
+Os adaptadores de `pkg/infra/wa-headless` chamam a capability por uma interface
+local declarada no próprio adaptador (é assim que ficam testáveis sem página).
+`group.Manager.SetSubject` **rastreia direto**, e o adaptador passa-lhe um
+rótulo constante — pelo argumento acima, pareceria creditável.
+
+Não é, e a razão não é de implementação: `info.Uses` resolve `s.SetSubject` para
+o método da INTERFACE, não para o método do tipo concreto. Qual implementação
+vai lá parar decide-se no ponto de montagem, em tempo de execução. **A
+observabilidade de quem chama através de uma interface depende de quem for
+injetado**, e um analisador estático não pode saber isso — creditar ali seria
+creditar uma suposição, que é precisamente o que L1-e existe para não fazer.
+
+Consequência aceita: os adaptadores finos ficam em 0,0% de `func_coverage`, e
+`min_func_coverage` desce quando um adaptador novo entra. Isso é diferente da
+queda que a decisão 91 corrigiu — aquela cobrava por observabilidade que
+EXISTIA e não era vista; esta cobra por observabilidade que o instrumento não
+pode provar. A primeira era defeito; a segunda é limite, e um limite escreve-se
+em vez de se contornar.
+
+Verificação de que isto foi medido e não deduzido: afrouxar a regra para aceitar
+alvo de qualquer pacote do módulo não mudou nada — 458 funções creditadas antes
+e depois. O que bloqueia é a interface, não a fronteira de pacote.

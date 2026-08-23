@@ -26,7 +26,7 @@ func newMgmt() *mgmtFakes {
 		jids: &contractsfake.JIDResolver{},
 		log:  &contractsfake.Logger{},
 	}
-	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 	return f
 }
 
@@ -196,7 +196,7 @@ func TestGroupManagement_JIDInvalidoRecusaComLog(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newMgmt()
 			f.jids = failJID(boom)
-			f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+			f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
 			if err := tt.call(f.uc); err == nil {
 				t.Fatal("esperava erro de JID")
@@ -219,7 +219,7 @@ func TestGroupManagement_ParseJIDsLogaOIndiceQueReprovou(t *testing.T) {
 			return domain.JID(raw), nil
 		},
 	}
-	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
 	if _, err := f.uc.CreateGroup(context.Background(), "u1", "g", []string{"a", "b", "ruim"}); err == nil {
 		t.Fatal("esperava erro")
@@ -610,7 +610,7 @@ func TestGroupManagement_UpdateParticipantsListaInvalida(t *testing.T) {
 			return domain.JID(raw), nil
 		},
 	}
-	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
 	if _, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", "add", []string{"ruim"}); err == nil {
 		t.Fatal("esperava erro")

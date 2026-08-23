@@ -2962,7 +2962,7 @@ pkg/infra/wa-headless/grouplife.Manager.LeaveGroup	ELIGIBLE	uncovered:L1;uncover
 pkg/infra/wa-headless/grouplife.Manager.lifecycle	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/grouplife.NewManager	EXCLUDED	X1
 pkg/infra/wa-headless/groupmembers.Manager.EnsureSession	EXCLUDED	X7
-pkg/infra/wa-headless/groupmembers.Manager.UpdateGroupParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,members.go:75);uncovered:L2(S-ret,members.go:78)
+pkg/infra/wa-headless/groupmembers.Manager.UpdateGroupParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,members.go:76);uncovered:L2(S-ret,members.go:79)
 pkg/infra/wa-headless/groupmembers.Manager.members	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupmembers.NewManager	EXCLUDED	X1
 pkg/infra/wa-headless/groupreq.Manager.EnsureSession	EXCLUDED	X7
@@ -2974,6 +2974,18 @@ pkg/infra/wa-headless/groupreq.Manager.requests	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupreq.NewManager	EXCLUDED	X1
 pkg/infra/wa-headless/groupreq.partialFailure	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:140)
 pkg/infra/wa-headless/groupreq.unverified	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:173)
+pkg/infra/wa-headless/groupset.Manager.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/groupset.Manager.SetGroupAnnounce	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:82)
+pkg/infra/wa-headless/groupset.Manager.SetGroupLocked	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:87)
+pkg/infra/wa-headless/groupset.Manager.SetGroupName	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:64)
+pkg/infra/wa-headless/groupset.Manager.SetGroupTopic	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:77)
+pkg/infra/wa-headless/groupset.Manager.capability	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupset.Manager.policy	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:143)
+pkg/infra/wa-headless/groupset.Manager.prepare	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupset.NewManager	EXCLUDED	X1
+pkg/infra/wa-headless/groupset.describeUnconfirmed	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:122)
+pkg/infra/wa-headless/groupset.policyUnconfirmed	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:131)
+pkg/infra/wa-headless/groupset.renameUnconfirmed	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:107)
 pkg/infra/wa-headless/identity.NewResolver	EXCLUDED	X1
 pkg/infra/wa-headless/identity.Resolver.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/identity.Resolver.GetLIDForPN	ELIGIBLE	uncovered:L1

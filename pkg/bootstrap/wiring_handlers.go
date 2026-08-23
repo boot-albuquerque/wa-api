@@ -300,7 +300,9 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Group Management UseCase + Handlers
-	groupMgmtUC := group.NewGroupManagementUseCase(groupAdapter, groupAdapter, jidResolver, logger)
+	groupMgmtUC := group.NewGroupManagementUseCase(
+		groupAdapter, groupAdapter, groupAdapter, groupAdapter, groupAdapter,
+		jidResolver, logger)
 	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
 
 	// Download Handlers (/chat/download*)
