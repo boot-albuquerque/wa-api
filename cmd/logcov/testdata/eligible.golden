@@ -3477,6 +3477,7 @@ pkg/infra/wa-noise/adapters/user.resolveBlocklistPNJID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.toDomainBlocklist	EXCLUDED	X5
 pkg/infra/wa-noise/client.ClientForGetter	EXCLUDED	X5
 pkg/infra/wa-noise/client.ClientForGetter.func1	EXCLUDED	X6
+pkg/infra/wa-noise/client.RealClient.BuildPollVote	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.CreateGroup	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.CreateNewsletter	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.Download	EXCLUDED	X5

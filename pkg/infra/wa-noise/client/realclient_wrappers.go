@@ -57,6 +57,11 @@ func (r RealClient) MarkRead(ctx context.Context, ids []types.MessageID, timesta
 	return errmap.ClassifyIQ(r.Client.MarkRead(ctx, ids, timestamp, chat, sender, receiptTypeExtra...))
 }
 
+func (r RealClient) BuildPollVote(ctx context.Context, pollInfo *types.MessageInfo, optionNames []string) (*waE2E.Message, error) {
+	v0, err := r.Client.BuildPollVote(ctx, pollInfo, optionNames)
+	return v0, errmap.ClassifyIQ(err)
+}
+
 func (r RealClient) SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
 	v0, err := r.Client.SendMessage(ctx, to, message, extra...)
 	return v0, errmap.ClassifyIQ(err)
