@@ -121,13 +121,21 @@ var inventarioFase3 = map[string]portStatus{
 		"ausentes desta build, e o LEDGER regista `setPicture` e `deletePicture` como " +
 		"BLOCKED. Não é lacuna nossa: é capacidade que a página não expõe aqui."},
 
-	"GroupEphemeralSetter": {motivo: "PENDENTE POR FALTA DE MEDIÇÃO, e isto NÃO é o " +
-		"mesmo que GroupPhotoSetter. `ephemeral`/`disappearing` não aparece em nenhum " +
-		"dos 220 itens do LEDGER e não há capability — o que diz que a referência que " +
-		"dirige a mesma SPA não expõe a operação, e NÃO diz que a página não a tem. " +
-		"Escrever as duas com a mesma palavra faria a próxima sessão desistir da que " +
-		"ainda vale investigar."},
-	"PrivacyManager": {motivo: "pendente"},
+	"GroupEphemeralSetter": {motivo: "PENDENTE, e agora MEDIDO: o build TEM os módulos. " +
+		"A varredura de bundles de 2026-08-23 achou 105 nomes casando com " +
+		"`Ephemeral|Disappear|Expir`, entre eles `WAWebChangeEphemeralDurationChatAction` " +
+		"— exatamente a ação que este port precisaria — e `WAWebEphemeralIsDurationAllowed`. " +
+		"A ausência no LEDGER dizia apenas que a REFERÊNCIA não expõe a operação, e a " +
+		"cautela de não confundir isso com ausência no build valeu: valia investigar. " +
+		"Falta o passo que exige sessão pareada (carregar o módulo e medir a forma), " +
+		"e nome em bundle NÃO é prova de módulo carregável."},
+	"PrivacyManager": {motivo: "PENDENTE, e agora MEDIDO: o build TEM os módulos, o que " +
+		"confirma a decisão 89 ao recusar classificá-lo como recusa. A varredura de " +
+		"bundles de 2026-08-23 achou 124 nomes casando com `Privac`, entre eles " +
+		"`WASmaxBizSettingsGetPrivacySettingRPC`, `WASmaxBizSettingsSetPrivacySettingRPC` " +
+		"e `WASmaxPrivacyGetContactBlacklistRPC` — o par get/set que este port pede. " +
+		"Falta o passo que exige sessão pareada, e nome em bundle NÃO é prova de módulo " +
+		"carregável."},
 }
 
 // portsDeTransporte lê os contratos e devolve os que carregam txtID.

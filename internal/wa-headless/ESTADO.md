@@ -1818,3 +1818,73 @@ a fronteira de pacote. Um limite escreve-se; não se contorna.
 
 `go test ./pkg/infra/wa-headless/ -run Total -v` — é ele que diz. Depois da
 H141 não volto a escrever o número à mão ao lado do teste que o imprime.
+
+## A varredura de bundles — e duas ausências que não eram ausências
+
+Decisões 89, 90 e 93. O resultado contraria o que eu vinha carregando como
+suposição, e é por isso que a decisão 89 estava certa ao recusar a minha recusa.
+
+### O que eu ia registrar, e por quê estava errado
+
+`PrivacyManager` não tem capability nossa, e `privacy` não aparece em nenhum dos
+220 itens do LEDGER. Eu ia classificá-lo como recusa. A orquestração recusou
+(**89**): *ausência na referência não é ausência no build* — e o LEDGER está
+preso ao whatsapp-web.js, que descreve o que **aquele projeto** expõe, não o que
+esta página tem.
+
+### O desenho da medição, e o desfecho que ele não previa
+
+A **90** aprovou medir com controle: procurar primeiro um módulo já PROVADO, e
+só tratar ausência como ausência se ele aparecesse. Ao rodar, apareceu um
+terceiro desfecho: o probe do registro **recusa perfil não pareado**
+(`PAIRING_LOADING`, e depois `OTHER` no perfil de laboratório expirado), porque
+aquele caminho é de restauração. A pergunta não chegava a ser feita.
+
+A **93** autorizou a saída barata: a pergunta é sobre o **build**, não sobre a
+sessão. Um caminho de observação que só lê texto de bundle não precisa de
+prontidão e não age sobre conta nenhuma — e recusar `window.require` mantém o
+afrouxamento do tamanho exato da pergunta (93b). Afrouxar guarda para medir é
+como um instrumento passa a inventar o próprio resultado.
+
+### O instrumento foi controlado dos DOIS lados
+
+Um controle só de presença não bastaria: provaria que o probe acha, não que ele
+discrimina.
+
+```
+^WAWebGroupModifyInfoJob$                    → matched: 1   (medido PROVADO)
+^(WAWebSetPicture|WAWebProfilePicThumbBridge|
+  WAWebSendMsg|WAWebMsgSend|
+  WAWebSendMessage|WAWebComposeMessage)$      → matched: 0   (medidos AUSENTES, H134/H140)
+```
+
+Zero para seis nomes medidos como ausentes, um para o medido como presente, na
+mesma varredura: 20 bundles, 29 MB, 11.331 nomes distintos.
+
+### As duas respostas
+
+| pergunta | nomes | candidatos |
+|---|---|---|
+| `Privac` | **124** | `WASmaxBizSettingsGetPrivacySettingRPC`, `…SetPrivacySettingRPC`, `WASmaxPrivacyGetContactBlacklistRPC` |
+| `Ephemeral\|Disappear\|Expir` | **105** | `WAWebChangeEphemeralDurationChatAction`, `WAWebEphemeralIsDurationAllowed` |
+
+O par get/set que o `PrivacyManager` pede **existe neste build**. E
+`WAWebChangeEphemeralDurationChatAction` é exatamente a ação que o
+`GroupEphemeralSetter` precisaria.
+
+### O que isto NÃO prova
+
+Nome em bundle não é módulo carregável — é o próprio comentário do probe do
+registro que diz. E a página de emparelhar baixou **20** bundles contra os 65 de
+uma sessão pareada, então este conjunto é subconjunto: para PRESENÇA isso só
+reforça (achou apesar de menos), para ausência enfraquece.
+
+O passo seguinte — carregar o módulo e medir a forma — exige sessão pareada, e
+o perfil de laboratório expirou. **Isso é dependência humana de verdade**, e é
+o ponto em que parar é a resposta certa.
+
+### A assimetria com a foto, agora baseada em evidência
+
+`GroupPhotoSetter` continua recusa **medida**: os módulos dele deram zero nesta
+mesma varredura. Os outros dois deram cento e tal. A diferença entre "recusado"
+e "pendente" deixou de ser julgamento e passou a ser número.
