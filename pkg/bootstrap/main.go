@@ -57,6 +57,11 @@ type server struct {
 	// processo, porque servir pelo transporte errado em silencio e' pior que
 	// nao arrancar.
 	Engines EngineSelection
+
+	// Headless e' a configuracao zero quando nenhuma sessao usa esse engine, e
+	// nesse caso nenhum caminho de execucao a consulta. Ver
+	// headlessConfigConfigurada.
+	Headless HeadlessConfig
 }
 
 const version = Version

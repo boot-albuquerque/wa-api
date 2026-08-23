@@ -782,7 +782,26 @@ rules_frozen=true
 #   SessoesEmHeadless       acessor puro
 #   engineValido            }  devolvem erro ao UNICO chamador, que o loga em
 #   engineSelectionConfigurada }  Fatal. Logar dentro duplicaria um fatal.
-min_func_coverage=547
+# justificativa: configuracao do lado headless (2026-08-23), decisao 94.
+# 547 -> 546, e a descida e' de UM decimo porque a funcao que valia cobrir foi
+# COBERTA em vez de reconciliada.
+#
+# nomeDePerfilSeguro nasceu com cinco recusas descobertas, e essas recusas nao
+# sao ruido: um txtID que teria escapado da raiz de perfis e' um pedido para
+# restaurar OUTRA conta, e um perfil e' credencial de sessao. Passou a logar em
+# Warn — com o COMPRIMENTO e o motivo, nunca o valor — e com isso cobriu L1 e as
+# cinco saidas. Medido: func 54,4% -> 54,6% so' com essa mudanca.
+#
+# Ficam descobertas duas, ambas ja' na categoria registada antes:
+#   headlessConfigConfigurada  devolve erro ao UNICO chamador, que o loga em
+#                              Fatal; logar dentro duplicaria um fatal
+#   StartConfigFor             composicao pura; a observabilidade dela vem de
+#                              nomeDePerfilSeguro, mas L1-e nao credita
+#                              delegacao para alvo que loga sem RASTREAR — e' a
+#                              propria restricao que escrevi na decisao 91, e
+#                              afrouxa-la aqui para me servir seria escrever a
+#                              regra ao contrario
+min_func_coverage=546
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -818,7 +837,10 @@ min_func_coverage=547
 # a propagar, e a metrica nao distingue isso de causa descartada.
 # -1 (781->780): selecao de engine (2026-08-23). Mesmo motivo ja registado duas
 # vezes: as recusas de configuracao sao erros ORIGINAIS, sem causa a propagar.
-min_errpath_coverage=780
+# -1 (780->779): configuracao do lado headless. Mesma categoria de sempre: as
+# recusas de configuracao sao erros ORIGINAIS, sem causa a propagar. As cinco
+# recusas de nome de perfil, essas, ficaram COBERTAS pelo Warn.
+min_errpath_coverage=779
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -878,7 +900,10 @@ min_errpath_coverage=780
 # +5 (834->839): pkg/bootstrap ganha a selecao de engine da decisao 94
 # (EngineSelection.EngineFor/Default/SessoesEmHeadless, engineValido,
 # engineSelectionConfigurada, rotaDeEngine, setupEngineSelection).
-min_eligible=839
+# +4 (839->843): pkg/bootstrap ganha a configuracao do lado headless
+# (HeadlessConfig.StartConfigFor, nomeDePerfilSeguro, headlessConfigConfigurada,
+# EngineSelection.UsaHeadless).
+min_eligible=843
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

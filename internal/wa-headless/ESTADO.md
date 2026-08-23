@@ -1957,3 +1957,66 @@ que foi a lição da decisão 82.
 Falta também a instalação do lado headless: construir os adaptadores exige
 caminho do Chrome, raiz de perfis e tamanho de registry, e isso é configuração
 que ainda não existe.
+
+## A configuração que só é exigida quando alguém a usa
+
+Segunda metade da decisão 94: sem isto nenhum adaptador headless pode ser
+construído, porque construir um exige caminho do Chrome, raiz de perfis, teto de
+sessões e user-agent — e nada disso existia.
+
+### A exigência vem da SELEÇÃO, e não de outra chave
+
+Um processo com todas as sessões no socket não tem Chrome nenhum a apontar, e
+exigir configuração dele quebraria toda instalação existente por uma capacidade
+que ninguém pediu. Então `UsaHeadless()` é **derivado** da seleção, e não uma
+segunda variável.
+
+Isso não é economia de configuração: é a eliminação de um estado impossível. Com
+duas chaves independentes existiria *"algo em headless e ninguém pediu o
+Chrome"* — e essa é a combinação que falha na primeira chamada de cliente, que é
+o pior momento possível para descobrir.
+
+A metade oposta é igualmente deliberada: quando headless **pode** ser escolhido
+e a configuração falta, o processo **não arranca**. O binário é conferido no
+arranque, não na primeira sessão.
+
+### O `txtID` vira caminho, e é aí que mora o problema
+
+O perfil de uma sessão é **credencial**. Travessia aqui não seria um bug de
+caminho — seria escolher qual conta restaurar. `../../.lab/conta-A` é um nome de
+sessão perfeitamente digitável.
+
+E a recusa é por **lista de recusas**, nunca por sanitização: substituir
+caracteres faria dois `txtID` diferentes colidirem no mesmo perfil, e duas
+sessões a partilhar credencial viola a invariante 13 sem que nada o diga. Há
+teste para exatamente isso — nomes parecidos nunca vão para o mesmo diretório.
+
+### A recusa loga, e o log não carrega o valor
+
+Um `txtID` que teria escapado da raiz é um pedido para restaurar outra conta, e
+quem opera precisa de o ver mesmo que a camada de cima trate o erro em silêncio.
+Vai **comprimento e motivo**; o valor não vai.
+
+Isto também é o caso em que cobrir código real era a resposta certa, e não
+reconciliar piso: a mudança sozinha levou `func_coverage` de 54,4% a 54,6%, e
+cobriu as cinco saídas de recusa de uma vez.
+
+### Sete controles negativos, os sete morderam
+
+```
+1. sanitiza o txtID em vez de recusar   → ".." foi aceito e viraria caminho
+2. exige a configuração SEMPRE          → quebra quem só usa socket
+3. não confere o binário no arranque    → caminho inexistente passou
+4. aceita teto de sessões zero          → "0" e "-1" aceitos
+5. UsaHeadless ignora a lista           → sessão listada não exigiu Chrome
+6. o log da recusa carrega o txtID      → vazou "../../.lab/conta-A"
+7. a recusa deixa de logar              → "quem opera não veria a tentativa"
+```
+
+### Uma restrição minha que me custou, e que não afrouxei
+
+`StartConfigFor` fica descoberta. A observabilidade dela **existe** — vem de
+`nomeDePerfilSeguro`, que loga — mas a L1-e só credita delegação para alvo que
+**rastreia**, porque é o rótulo repassado que prova qual chamador rodou. Afrouxar
+a regra agora, para me servir, seria escrevê-la ao contrário do que a decisão 91
+mandou. Fica o décimo.

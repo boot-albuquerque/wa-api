@@ -61,6 +61,24 @@ func (s EngineSelection) EngineFor(txtID string) string {
 // Default devolve o engine das sessões não listadas.
 func (s EngineSelection) Default() string { return s.padrao }
 
+// UsaHeadless diz se ALGUM caminho de execução pode escolher headless.
+//
+// É o que decide se a configuração do lado headless é exigida no arranque. Ser
+// derivado da seleção, e não uma segunda variável de ambiente, evita o estado
+// impossível de "configurado para headless mas nada em headless" — e o pior
+// dele, "algo em headless mas ninguém exigiu a configuração".
+func (s EngineSelection) UsaHeadless() bool {
+	if s.padrao == EngineWaHeadless {
+		return true
+	}
+	for _, e := range s.porSessao {
+		if e == EngineWaHeadless {
+			return true
+		}
+	}
+	return false
+}
+
 // SessoesEmHeadless lista, ordenadas, as sessões explicitamente em headless.
 // Existe para o arranque poder DIZER o que vai fazer, em vez de o operador
 // descobrir pelo comportamento.
@@ -139,10 +157,22 @@ func setupEngineSelection(s *server) {
 		log.Fatal().Err(err).Msg("invalid engine selection configuration")
 	}
 	s.Engines = sel
+
+	// A configuração do lado headless é exigida a partir da SELEÇÃO, nunca de
+	// uma segunda chave: assim não existe o estado em que algo está em headless
+	// e ninguém pediu o Chrome.
+	hcfg, err := headlessConfigConfigurada(sel.UsaHeadless())
+	if err != nil {
+		log.Fatal().Err(err).Msg("invalid headless engine configuration")
+	}
+	s.Headless = hcfg
+
 	emHeadless := sel.SessoesEmHeadless()
 	log.Info().
 		Str("default_engine", sel.Default()).
 		Int("sessions_on_headless", len(emHeadless)).
 		Strs("session_ids", emHeadless).
+		Bool("headless_configured", sel.UsaHeadless()).
+		Int("headless_max_sessions", hcfg.MaxSessions).
 		Msg("engine selection")
 }
