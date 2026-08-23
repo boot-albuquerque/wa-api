@@ -107,8 +107,12 @@ var inventarioFase3 = map[string]portStatus{
 		"de uma mensagem que não pôde ser DECIFRADA, e quem dirige a SPA não decifra " +
 		"nada — a página já entrega texto. Não é lacuna, é ausência de sentido."},
 
-	"CallRejecter":   {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
-	"GroupRequests":  {motivo: "pendente"},
+	"CallRejecter": {motivo: "RECUSADO POR CAPACIDADE BLOQUEADA, decisão 88: o LEDGER " +
+		"regista reject como PARTIAL neste build, com INCOMING_CALL BLOCKED e seis " +
+		"hipóteses eliminadas por medição. Recusar uma chamada exige receber o evento " +
+		"dela, e é o evento que não chega — implementar a recusa daria um método que " +
+		"nunca é chamado."},
+	"GroupRequests":  {satisfeito: true},
 	"GroupSettings":  {motivo: "pendente"},
 	"PrivacyManager": {motivo: "pendente"},
 }

@@ -1596,3 +1596,67 @@ entraram no primeiro teste, e não num remendo depois que o `coverage-gate`
 reclamou.
 
 **Estado: 15 de 22 ports satisfeitos, 4 recusados com motivo medido.**
+
+## GroupRequests — e uma correção de contagem que o teste já sabia
+
+`GetRequestParticipants` → `groupreq.List`, `UpdateRequestParticipants` →
+`Approve`/`Reject`, `SetJoinApprovalMode` → `group.SetPolicy`. Duas
+capabilities, porque a página guarda em módulos separados o que o produto junta
+numa feature só.
+
+### O port não tem onde pôr o desfecho parcial
+
+A capability faz **um RPC por participante** e devolve um resultado por
+solicitante — o comentário dela diz, em voz alta, que parcial é normal: *"três
+aprovações onde a segunda falha são três resultados, não um erro"*. O port
+devolve `error`, e só.
+
+Então a tradução não é achatar: é decidir o que o silêncio custaria. Recusa de
+qualquer solicitante vira erro, com a **contagem** e os **códigos** da página —
+e sem os jids, que são identidade. E lista de resultados mais curta que a de
+pedidos **não é concordância, é ausência**: um solicitante sobre o qual a página
+nunca respondeu não foi aprovado.
+
+### Duas verificações, garantias diferentes, no mesmo grupo
+
+`PolicyChange.Verified` é verdadeiro para mudança real — ao contrário de
+`Membership.Verified`, e *"a diferença é medida, não suposta"* (H85). Mudar o
+modo de aprovação, portanto, **é** confirmável pela sessão que agiu, e o que
+sobra disso num port que só devolve `error` é a recusa: mudança sem confirmação
+lida de volta não passa por feita. O no-op é a exceção, porque não há valor novo
+para confirmar.
+
+### Quatro controles negativos, os quatro morderam
+
+```
+1. silencia a recusa parcial      → "uma recusa da página passou por aprovação"
+2. lista curta vira concordância  → "um solicitante sem resposta passou por aprovado"
+3. aceita mudança não verificada  → "passou por feita"
+4. vaza o jid na mensagem de erro → "o erro vazou a identidade do solicitante"
+```
+
+### CORREÇÃO: a prosa vinha um à frente da medição
+
+Este commit anterior — o do `GroupLifecycle` — diz "15 de 22". A tabela media
+**14**. E o desvio é mais antigo: o `GroupDirectory` escreveu 14 com 13 medidos.
+
+O teste `TestOTotalDePortsEOMedidoENaoOAnunciado` existe precisamente para o
+número não ser anunciado, e ainda assim eu o anunciei — em prosa, ao lado dele.
+Um número escrito à mão perto de um número medido não é redundância: é uma
+segunda fonte de verdade, e ela derivou.
+
+**Estado, pela medição: 15 de 22 ports satisfeitos, 5 recusados com motivo
+medido, 2 pendentes** (`GroupSettings`, `PrivacyManager`). 15+5+2=22.
+
+### Decisões aplicadas
+
+- **87** — `GroupSettings` será PARTIDO: 4 dos 6 métodos de configuração têm
+  capability medida; `SetGroupPhoto` é recusa medida (`WAWebSetPicture` e
+  `WAWebProfilePicThumbBridge` ausentes deste build, H140); `SetDisappearingTimer`
+  não tem medição nenhuma e não está em nenhum dos 220 itens do LEDGER — o que
+  não prova que a página não consegue.
+- **88** — `CallRejecter` é recusa classificada: recusar exige receber o evento
+  da chamada, e `INCOMING_CALL` está BLOCKED com seis hipóteses eliminadas.
+- **89** — `PrivacyManager` **não** vira recusa. Ausência na referência não é
+  ausência no build, e o probe de registro de módulos já aceita
+  `WA_PROBE_MODMAP_RE` — medir custa zero código e exige sessão viva.

@@ -6729,3 +6729,40 @@ desligamento, que tem invariante própria (invariante 3), e mexer no
 (invariante 3: nada de parada por sinal vinda de fora do caminho de shutdown).
 Os 28 órfãos foram terminados nesta sessão para desbloquear o gate, e isso está
 registrado aqui para que a limpeza não seja confundida com correção.
+
+## H141 — número escrito à mão ao lado de número medido deriva
+
+**Data**: 2026-08-23. **Contexto**: fase 3, ao fechar o port `GroupRequests`.
+
+**Onde**: `internal/wa-headless/ESTADO.md` (seções de `GroupDirectory` e
+`GroupLifecycle`) e as mensagens dos commits `a7d29fb` e `7294701`, contra
+`pkg/infra/wa-headless/phase3_inventory_test.go:45-51`.
+
+**Problema**: a prosa vinha **+1** sobre a medição, por pelo menos dois commits.
+
+```
+$ git show 7294701:pkg/.../phase3_inventory_test.go | grep -c 'satisfeito: true'
+14          # a prosa do mesmo commit diz "15 de 22"
+$ git show a7d29fb:pkg/.../phase3_inventory_test.go | grep -c 'satisfeito: true'
+13          # a prosa do mesmo commit diz "14 de 22"
+```
+
+O teste `TestOTotalDePortsEOMedidoENaoOAnunciado` foi escrito exatamente para o
+número ser lido do código e não anunciado — e o anúncio voltou a existir do
+lado dele, em texto. **Duas fontes de verdade para o mesmo número derivam;** a
+única pergunta é quando.
+
+**Correção sugerida**: não repetir em prosa nenhum número que um teste imprime.
+Onde o texto precisar do valor, citar o teste que o produz e o comando que o lê
+(`go test ./pkg/infra/wa-headless/ -run Total -v`), em vez do dígito. Aplicável
+a qualquer contagem futura (ports, capabilities, itens do LEDGER).
+
+**Status**: corrigido nesta sessão para o valor corrente (15/5/2, soma 22), com
+a correção registrada na seção do `GroupRequests` do ESTADO.md em vez de
+reescrita silenciosa das seções antigas — commit passado não se reescreve, e
+apagar o erro apagaria a evidência de que a duplicação deriva.
+
+**Sem teste que o trave**, e dito em voz alta: um gate que proibisse dígitos em
+prosa daria falso positivo em toda citação legítima de medição. O que trava
+metade disto já existe — o teste de inventário falha se a tabela ficar atrás do
+código. O que não está travado é a prosa, e a mitigação é a regra acima.

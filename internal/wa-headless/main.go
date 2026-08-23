@@ -40,6 +40,7 @@ import (
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/group"
+	"wa-api/internal/wa-headless/capabilities/groupreq"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	"wa-api/internal/wa-headless/capabilities/presence"
@@ -340,4 +341,29 @@ type (
 // NewGroupManager builds the group capability over a session's page.
 func NewGroupManager(runner *Runner, eval Evaluator) *GroupManager {
 	return group.New(runner, eval)
+}
+
+// Group membership requests, and the policy that produces them.
+type (
+	// GroupRequestManager reads and decides membership requests.
+	GroupRequestManager = groupreq.Manager
+	// GroupRequestList is the pending requests of one group.
+	GroupRequestList = groupreq.List
+	// GroupRequestAction is what a decision did for ONE requester. Code is the
+	// page's own error number when OK is false.
+	GroupRequestAction = groupreq.ActionResult
+	// GroupPolicy is a group setting the page accepts.
+	GroupPolicy = group.Policy
+	// GroupPolicyChange is what a policy change did, READ BACK. Unlike a
+	// membership change, this one IS verifiable by the acting session — the
+	// difference is measured, not assumed (H85).
+	GroupPolicyChange = group.PolicyChange
+)
+
+// PolicyJoinNeedsApproval is the policy that turns joins into requests.
+const PolicyJoinNeedsApproval = group.PolicyJoinNeedsApproval
+
+// NewGroupRequestManager builds the request capability over a session's page.
+func NewGroupRequestManager(runner *Runner, eval Evaluator) *GroupRequestManager {
+	return groupreq.New(runner, eval)
 }
