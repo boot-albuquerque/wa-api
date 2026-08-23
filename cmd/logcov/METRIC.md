@@ -281,3 +281,51 @@ L1-d2 exigia que o rótulo fosse literal PURO. O idioma real da árvore é
 minha suposição sobre o código em vez do código. Um rótulo inteiramente montado
 em tempo de execução continua recusado — pode ser vazio, e rastro sem rótulo
 não localiza nada.
+
+## L1-e — delegação observável (decisão 91, 2026-08-23)
+
+Uma função elegível **sem sítio de log próprio** satisfaz L1 quando delega a
+observabilidade, e a delegação é **comprovada** por duas condições cumulativas:
+
+1. a chamada tem por destino uma função **do mesmo pacote** que satisfaz L1 por
+   **operação rastreada** (L1-d2, forma `op`); e
+2. quem chama passa ao destino um **rótulo com pedaço constante**, na mesma
+   leitura que L1-d2 faz do rótulo de `Do`.
+
+Um salto só. Cadeia mais funda credita cada vez mais longe do sítio observável,
+e o valor da prova cai com a distância.
+
+### Por que a condição (2) é o coração da regra
+
+Sem ela, a regra creditaria qualquer função que chamasse um ajudante rastreado,
+e o rastro diria apenas que o **ajudante** rodou — nunca qual chamador o
+accionou. O rótulo repassado é o que faz a operação de quem chama aparecer no
+rastro, que é exatamente o que L1 promete. No idioma da árvore isto lê-se
+`m.parked(ctx, script, key, label+"/list")`, e o rastro sai como
+`<rótulo-do-chamador>/list/kick`.
+
+### O defeito que a regra corrige, medido
+
+Elegibilidade exige **alcance de produção**: uma capability de
+`internal/wa-headless` só entra no denominador quando `pkg/` a liga. Como as
+capabilities foram escritas antes de serem ligadas, cada port novo acordava de
+uma vez a dívida inteira de uma capability, e `min_func_coverage` — declarado
+ratchet-UP — **desceu nos seis commits anteriores** à decisão 91:
+
+    564 → 560 → 558 → 554 → 551 → 545 → 543
+
+Cada queda tinha justificativa própria e correta; o padrão não tinha ninguém,
+porque cada commit só vê o próprio delta. Com 20 das 35 capabilities ainda por
+ligar, a projeção era terminar a fase perto de 45%.
+
+A decisão 91 recusou tanto continuar a baixar quanto reestruturar produção para
+agradar a métrica: **quem estava errado era o instrumento**, que creditava o
+ajudante e cobrava do método.
+
+### Efeito medido da regra
+
+`func_coverage` 53,5% → **55,6%** (458/824), com **17 funções** creditadas e
+**nenhuma** perdida — enumeradas por comparação A/B de `-list-uncovered` com e
+sem a passagem. As 17 são todas métodos de capability que delegam a um ajudante
+rastreado; nenhum adaptador de `pkg/` foi creditado, porque nenhum delega a
+ajudante rastreado.

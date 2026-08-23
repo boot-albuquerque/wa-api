@@ -1660,3 +1660,79 @@ medido, 2 pendentes** (`GroupSettings`, `PrivacyManager`). 15+5+2=22.
 - **89** — `PrivacyManager` **não** vira recusa. Ausência na referência não é
   ausência no build, e o probe de registro de módulos já aceita
   `WA_PROBE_MODMAP_RE` — medir custa zero código e exige sessão viva.
+
+## L1-e — o gate ratchet-UP que descia há seis commits
+
+Isto não é uma fatia de port: é o conserto de um instrumento, e apareceu porque
+o `GroupRequests` fez o gate reprovar.
+
+### O que a falha imediata escondia
+
+O golden estava desatualizado e `min_eligible` saltou 811→824. A causa não era
+código novo demais — era **alcance de produção**. Elegibilidade no `logcov`
+exige que a função seja alcançável a partir de `pkg/`, e as capabilities de
+`internal/wa-headless` foram todas escritas ANTES de serem ligadas. Cada port
+novo, portanto, acorda de uma vez a dívida de log inteira de uma capability.
+
+`min_func_coverage` é declarado **ratchet-UP** na linha de base. Ele desceu nos
+seis commits anteriores a este:
+
+```
+564 → 560 → 558 → 554 → 551 → 545 → 543
+```
+
+Cada justificativa, isolada, está correta e honesta. **O padrão não tinha
+ninguém**, porque cada commit só vê o próprio delta. E o censo do golden diz até
+onde isso ia: **15 das 35 capabilities ligadas, 20 dormentes**; a ~4 décimos
+cada, a fase terminaria perto de 45%, sem que nenhum commit tivesse feito nada
+errado.
+
+Um gate que só desce, com justificativa a cada passo, não é gate: é registro.
+
+### A decisão 91 recusou as duas saídas fáceis
+
+Nem continuar a baixar, nem reestruturar produção para agradar a métrica. Quem
+estava errado era o **instrumento**: `groupreq.Manager.List` não chama
+`runner.Do` — chama `m.parked(ctx, script, key, label+"/list")`, e é `parked`
+quem rastreia. A operação **é** observável; a métrica é que creditava o ajudante
+e cobrava do método.
+
+### O rótulo repassado é o coração da regra
+
+L1-e credita delegação quando o alvo está no mesmo pacote e satisfaz L1 por
+operação rastreada, **e** quem chama lhe passa um rótulo com pedaço constante.
+
+A segunda condição é a que impede o carimbo. Se o ajudante rastreasse sob nome
+próprio, o rastro diria que o *ajudante* rodou — nunca **qual chamador** o
+accionou. Com o rótulo repassado, o rastro sai como `<rótulo-do-chamador>/list/kick`,
+e é a operação de quem chamou que aparece. Um salto só: cadeia mais funda
+credita cada vez mais longe do sítio observável.
+
+### Efeito medido, por A/B e não por dedução
+
+`func_coverage` 53,5% → **55,6%** (458/824). **17 funções creditadas, zero
+perdidas**, enumeradas comparando `-list-uncovered` com e sem a passagem — todas
+métodos de capability que delegam. **Nenhum adaptador de `pkg/` foi creditado**,
+porque nenhum delega a ajudante rastreado. Verifiquei duas no código em vez de
+confiar na contagem: `contacts.Lister.LabelByID` chama `ListLabels(ctx,
+label+"/by-id")`, que rastreia com `label+"/labels"` — o rastro nomeia o
+chamador.
+
+### O controle negativo que não mordeu era o principal
+
+Tirar a exigência do rótulo passava em todos os testes, porque eu exercitava
+`anyConstantLabel` direto e não o caminho por `collectDelegations`. Refeito
+carregando um módulo com tipos resolvidos; os quatro controles mordem agora.
+
+No caminho, a primeira versão do corpus **não entrou no universo** — `Analyze`
+só aceita pacotes com prefixo `modulePath + "/"`, e o pacote-raiz de um módulo
+não tem barra. Aquilo teria sido lido como *"a regra não creditou"*: o
+instrumento a inventar o próprio resultado, que é o erro que a F86 já custou.
+
+### O que desce, e está escrito como desce
+
+`min_errpath_coverage` 785→783. As recusas novas do `GroupRequests` são erros
+**originais**, e erro original não tem causa a propagar; o adaptador não loga
+por desenho, como os outros quinze. A métrica não distingue *"descartou a
+causa"* de *"não havia causa"*, então recusa nova custa denominador sem
+numerador. O saldo desta razão é negativo, e o ganho da L1-e é da OUTRA.

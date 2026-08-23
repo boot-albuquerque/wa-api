@@ -66,6 +66,11 @@ type entry struct {
 	L3       bool
 	Sites    []logSite
 	Paths    []exitPath
+	// Delegations sao as chamadas a ajudantes do mesmo pacote que levam
+	// rotulo constante. Ficam guardadas porque L1-e so' pode ser decidida
+	// depois de todas as entradas existirem — o alvo pode ser analisado
+	// depois de quem o chama.
+	Delegations []delegation `json:"-"`
 }
 
 func (e entry) covered() bool { return e.L1 && e.L3 }
@@ -347,6 +352,10 @@ func (a *analysis) Analyze(pkgs []*packages.Package) *report {
 		}
 		return rep.Entries[i].Line < rep.Entries[j].Line
 	})
+	// L1-e corre AQUI, entre a analise e a agregacao: precisa de todas as
+	// entradas (o alvo da delegacao pode ter sido analisado depois de quem o
+	// chama) e tem de acontecer antes de os totais serem somados.
+	applyDelegatedL1(rep)
 	rep.aggregate()
 	return rep
 }
@@ -551,6 +560,9 @@ func (a *analysis) analyzeBody(ctx *pkgCtx, pkgRel, fileRel, key string, fd *ast
 	}
 
 	e.L1 = len(sites) > 0
+	if !e.L1 {
+		e.Delegations = a.collectDelegations(ctx, pkgRel, body, promoted)
+	}
 	e.L3 = true
 	for i := range e.Sites {
 		e.Sites[i].valid = ruleL3Structured(e.Sites[i])

@@ -718,7 +718,34 @@ rules_frozen=true
 # o primeiro teste — falha de configuracao, identidade invalida, posse sem boot.
 # As quatro rodadas anteriores mostraram que sao sempre os mesmos, e descobri-los
 # quando o piso reclama custava uma corrida de gate por vez.
-min_func_coverage=543
+# justificativa: decisao 91 (2026-08-23), a regra L1-e — delegacao observavel.
+#
+# Esta linha SOBE pela primeira vez em sete commits, e a razao nao e' codigo
+# novo: e' o instrumento deixar de cobrar o que ja estava observado.
+#
+# O defeito, medido: elegibilidade exige ALCANCE DE PRODUCAO, entao uma
+# capability de internal/wa-headless so' entra no denominador quando pkg/ a
+# liga. Como as capabilities foram escritas antes de serem ligadas, cada port
+# novo acordava de uma vez a divida inteira de uma capability. Resultado: esta
+# trava, declarada ratchet-UP, DESCEU nos seis commits anteriores —
+#   564 -> 560 -> 558 -> 554 -> 551 -> 545 -> 543
+# cada um com justificativa propria e correta. O PADRAO e que nao tinha
+# ninguem, porque cada commit so' ve o proprio delta. Censo do golden: 15 das
+# 35 capabilities ligadas, 20 dormentes; a ~4 decimos cada, a projecao era
+# terminar a fase perto de 45%.
+#
+# A decisao 91 recusou as duas saidas faceis (continuar a baixar; reestruturar
+# producao para agradar a metrica) e mandou corrigir o instrumento. L1-e
+# credita quem delega a um ajudante RASTREADO passando-lhe um ROTULO com pedaco
+# constante — a segunda condicao e' o que impede o carimbo, porque sem rotulo
+# repassado o rastro diz que o ajudante rodou e nao QUAL chamador o accionou.
+# Um salto so'. A definicao normativa esta em cmd/logcov/METRIC.md.
+#
+# Efeito medido por A/B de -list-uncovered com e sem a passagem: 17 funcoes
+# creditadas, ZERO perdidas, todas metodos de capability que delegam. Nenhum
+# adaptador de pkg/ foi creditado, porque nenhum delega a ajudante rastreado.
+# 543 -> 556 (53,5% -> 55,6%, 458/824).
+min_func_coverage=556
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -740,7 +767,16 @@ min_func_coverage=543
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=785
+# -2 (785->783): GroupRequests (2026-08-23). Ao contrario de func_coverage,
+# esta desce, e a razao e' honesta: o adaptador acrescenta caminhos de saida
+# que sao RECUSAS ORIGINAIS — lista de solicitantes vazia, veredito
+# desconhecido, desfecho parcial. Erro original nao tem causa a propagar, e o
+# adaptador nao loga por desenho (os 15 adaptadores headless estao todos em
+# 0,0% de func: sao tradutores finos). A metrica nao distingue "descartou a
+# causa" de "nao havia causa", entao toda recusa nova custa denominador sem
+# numerador. Registado aqui em vez de disfarcado: o saldo desta linha e'
+# negativo, e o ganho de L1-e e' da OUTRA razao, nao desta.
+min_errpath_coverage=783
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -791,7 +827,11 @@ min_errpath_coverage=785
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=811
+# +13 (811->824): os pacotes capabilities/groupreq e pkg/infra/wa-headless/
+# groupreq, pelo 15o port ligado. E' esta soma que expoe o mecanismo descrito
+# na justificativa de min_func_coverage: a capability existia e estava provada
+# desde a H89, mas ligar o port e' que torna as obrigacoes dela reais.
+min_eligible=824
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

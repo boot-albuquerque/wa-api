@@ -6766,3 +6766,39 @@ apagar o erro apagaria a evidência de que a duplicação deriva.
 prosa daria falso positivo em toda citação legítima de medição. O que trava
 metade disto já existe — o teste de inventário falha se a tabela ficar atrás do
 código. O que não está travado é a prosa, e a mitigação é a regra acima.
+
+## H142 — o teste do logcov está a 86% do timeout, e falharia como travamento
+
+**Data**: 2026-08-23. **Contexto**: fase 3, ao diagnosticar um gate lento.
+
+**Onde**: `cmd/logcov` sob `make test`, que corre com `-race -timeout=20m`
+(`Makefile:137` e o alvo paralelo).
+
+**Problema**: a duração do pacote sob `-race` cresceu muito entre execuções da
+mesma sessão, medida nos logs do gate:
+
+```
+/tmp/check98.log :  ok  wa-api/cmd/logcov   357.053s
+/tmp/check102.log:  ok  wa-api/cmd/logcov  1037.425s   <- 86% do timeout de 1200s
+/tmp/check103.log:  FAIL wa-api/cmd/logcov  533.335s   (falhou por golden, nao por tempo)
+```
+
+A dispersão é grande e depende de carga (a máquina esteve com load 12–20). O
+pacote analisa a árvore inteira, então cresce com o repositório: cada capability
+ligada acrescenta pacotes ao universo.
+
+**Por que importa mais do que parece**: se ele estourar, o modo de falha é
+`panic: test timed out`, que se lê como travamento e manda quem investiga
+procurar deadlock — não teste lento. Foi exatamente essa a leitura errada que
+custou tempo nesta sessão quando o gate parou de imprimir por sete minutos: a
+suspeita imediata foi processo morto, e a resposta era `logcov.test` a 218% de
+CPU, trabalhando.
+
+**Correção sugerida**: dar timeout próprio ao pacote (`-timeout` maior só para
+ele, via um alvo separado), ou medir e reduzir o custo de `Analyze` — hoje ele
+recarrega e reanalisa tudo por teste que chame `measure`. A segunda é a boa; a
+primeira compra tempo.
+
+**Status**: não corrigido — está fora do escopo da fatia (o gate reprovou por
+golden, não por tempo) e mexer no timeout durante uma correção de métrica
+misturaria duas mudanças no mesmo diff. Registado para decisão.
