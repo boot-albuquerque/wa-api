@@ -8,6 +8,7 @@ internal/wa-headless.NewHolder	EXCLUDED	X1
 internal/wa-headless.NewPresence	EXCLUDED	X1
 internal/wa-headless.NewResolver	EXCLUDED	X1
 internal/wa-headless.NewRunner	EXCLUDED	X1
+internal/wa-headless.RefreshOwnIdentity	EXCLUDED	X7
 internal/wa-headless/capabilities/avatar.Avatar.String	EXCLUDED	X4
 internal/wa-headless/capabilities/avatar.Fetcher.Fetch	ELIGIBLE	uncovered:L2(S-ret,avatar.go:181);uncovered:L2(S-consume,avatar.go:182);uncovered:L2(S-ret,avatar.go:191);uncovered:L2(S-consume,avatar.go:192)
 internal/wa-headless/capabilities/avatar.Fetcher.Fetch.func1	EXCLUDED	X6
@@ -163,6 +164,14 @@ internal/wa-headless/capabilities/lookup.Resolver.parked.func3	EXCLUDED	X6
 internal/wa-headless/capabilities/lookup.nextStateKey	EXCLUDED	X1
 internal/wa-headless/capabilities/lookup.pairScript	EXCLUDED	X1
 internal/wa-headless/capabilities/lookup.resolveScript	EXCLUDED	X1
+internal/wa-headless/capabilities/owner.Identity.GoString	EXCLUDED	X1
+internal/wa-headless/capabilities/owner.Identity.Present	EXCLUDED	X1
+internal/wa-headless/capabilities/owner.Identity.String	EXCLUDED	X4
+internal/wa-headless/capabilities/owner.Refresh	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,owner.go:166);uncovered:L2(S-ret,owner.go:179)
+internal/wa-headless/capabilities/owner.Refresh.func1	EXCLUDED	X6
+internal/wa-headless/capabilities/owner.WID.Present	EXCLUDED	X1
+internal/wa-headless/capabilities/owner.WID.String	EXCLUDED	X4
+internal/wa-headless/capabilities/owner.readScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.Announcer.Observe	ELIGIBLE	uncovered:L1
 internal/wa-headless/capabilities/presence.Announcer.Observe.func1	EXCLUDED	X6
 internal/wa-headless/capabilities/presence.Announcer.Set	ELIGIBLE	uncovered:L1
@@ -2811,6 +2820,14 @@ pkg/infra/wa-headless/presence.Announcer.SendPresence	ELIGIBLE	uncovered:L1;unco
 pkg/infra/wa-headless/presence.Announcer.announcer	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/presence.Announcer.capability	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/presence.NewAnnouncer	EXCLUDED	X1
+pkg/infra/wa-headless/profile.NewProvider	EXCLUDED	X1
+pkg/infra/wa-headless/profile.Provider.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/profile.Provider.ProfileAccess	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/profile.snapshot.ContactInfo	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/profile.snapshot.DeviceInfo	EXCLUDED	X1
+pkg/infra/wa-headless/profile.snapshot.OwnJID	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/profile.snapshot.ProfilePictureURL	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/profile.snapshot.PushName	EXCLUDED	X1
 pkg/infra/wa-headless/registry.Kind.String	EXCLUDED	X4
 pkg/infra/wa-headless/registry.New	EXCLUDED	X1
 pkg/infra/wa-headless/registry.NewWithQuotas	ELIGIBLE	uncovered:L1

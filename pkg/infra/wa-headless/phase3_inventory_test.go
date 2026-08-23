@@ -41,11 +41,12 @@ var inventarioFase3 = map[string]portStatus{
 	// satisfaziveis por este transporte, sem assimetria: lookup.NumberID e
 	// lookup.LidAndPhone estao PROVEN na H127, avatar.Fetch existe, e o roster
 	// do contacts.Lister foi provado na H129 com as duas linhas fundidas.
-	"IdentityResolver":    {satisfeito: true},
-	"AvatarReader":        {satisfeito: true},
-	"ContactRoster":       {satisfeito: true},
-	"NewsletterReader":    {satisfeito: true},
-	"SessionDisconnector": {satisfeito: true},
+	"IdentityResolver":      {satisfeito: true},
+	"AvatarReader":          {satisfeito: true},
+	"ContactRoster":         {satisfeito: true},
+	"NewsletterReader":      {satisfeito: true},
+	"SessionDisconnector":   {satisfeito: true},
+	"ProfileAccessProvider": {satisfeito: true},
 
 	"SessionLogouter": {motivo: "RECUSADO POR POLÍTICA, e não por incapacidade. A H122 " +
 		"mediu que Socket.logout EXISTE e funciona neste build — mas chamá-lo " +
@@ -67,16 +68,15 @@ var inventarioFase3 = map[string]portStatus{
 		"de uma mensagem que não pôde ser DECIFRADA, e quem dirige a SPA não decifra " +
 		"nada — a página já entrega texto. Não é lacuna, é ausência de sentido."},
 
-	"AppStateSyncer":        {motivo: "pendente"},
-	"CallRejecter":          {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
-	"ChatMessenger":         {motivo: "pendente"},
-	"GroupDirectory":        {motivo: "pendente"},
-	"GroupLifecycle":        {motivo: "pendente"},
-	"GroupRequests":         {motivo: "pendente"},
-	"GroupSettings":         {motivo: "pendente"},
-	"MessageComposer":       {motivo: "pendente"},
-	"PrivacyManager":        {motivo: "pendente"},
-	"ProfileAccessProvider": {motivo: "pendente"},
+	"AppStateSyncer":  {motivo: "pendente"},
+	"CallRejecter":    {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
+	"ChatMessenger":   {motivo: "pendente"},
+	"GroupDirectory":  {motivo: "pendente"},
+	"GroupLifecycle":  {motivo: "pendente"},
+	"GroupRequests":   {motivo: "pendente"},
+	"GroupSettings":   {motivo: "pendente"},
+	"MessageComposer": {motivo: "pendente"},
+	"PrivacyManager":  {motivo: "pendente"},
 }
 
 // portsDeTransporte lê os contratos e devolve os que carregam txtID.

@@ -1332,3 +1332,52 @@ para responder a uma consulta de estado. Relatar posse é a resposta honesta
 disponível; afirmar mais seria inventar.
 
 **Estado: 8 de 18 ports satisfeitos, 3 recusados com motivo medido, 7 restantes.**
+
+## ProfileAccessProvider — metade dos ports, e a armadilha de FORMA outra vez
+
+Nono port satisfeito: metade dos 18.
+
+`ProfileDataAccess` é **síncrona** — `PushName()`, `OwnJID()` e `DeviceInfo()`
+não têm contexto nem erro. Essa forma pressupõe um chamador que **já tem** o
+estado, que é exatamente o que o socket tem em `client.Store`. Um driver de
+página precisa PERGUNTAR, e fazê-lo num método sem contexto seria rede oculta
+num leitor — o que a decisão 66 recusou.
+
+A saída não foi inventar: `ProfileAccess` **tem** contexto, então é ali que a
+pergunta acontece, e o que volta é um **instantâneo**. É o que a referência faz,
+e o próprio port já declarava a convenção: campo ausente vira zero-value, que é
+a resposta honesta para "o store ainda não tem isso".
+
+### Dois campos vazios POR MEDIÇÃO
+
+`PushName` — o getter de display name **existe** neste build (é função, não
+ausente) e devolve `null` contra o perfil pareado real. Dois candidatos no módulo
+vizinho nem existem, e a medição os descartou.
+
+`DeviceInfo` — o socket preenche de um registro de pareamento que um driver de
+página não tem: a página segura uma sessão, não um registro de dispositivos.
+
+E aqui o comentário diz por que **inventar seria pior que vazio**: isto alimenta
+superfície de diagnóstico, e uma plataforma plausível e errada é mais difícil de
+desconfiar que uma em branco. O controle negativo usou `Platform:"web"` — que
+compila e parece certo.
+
+## O padrão que a metade da fase revelou
+
+Em cada fatia, o trabalho difícil **não foi escrever o adaptador**. Foi descobrir
+o que o contrato PRESSUPUNHA, e verificar se este transporte pode honrá-lo:
+
+| port | pressuposição implícita |
+| --- | --- |
+| `JIDResolver` | resolução é pura |
+| `ChatOperations` | o transporte decifra |
+| `PresenceController` | existe vínculo de agenda |
+| `SessionController` | sair é reversível |
+| `ProfileDataAccess` | o estado já está mantido localmente |
+
+Nenhuma estava escrita como requisito. Todas estavam **implícitas na forma da
+interface**, e só apareceram ao tentar satisfazê-la com um transporte diferente
+— que é a razão de a Fase 3 ter produzido cinco categorias de divergência que
+nenhum planejamento de escrivaninha teria antecipado.
+
+**Estado: 9 de 18 ports satisfeitos, 3 recusados com motivo medido, 6 restantes.**

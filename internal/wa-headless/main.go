@@ -31,12 +31,15 @@
 package waheadless
 
 import (
+	"context"
+
 	"wa-api/internal/wa-headless/capabilities/avatar"
 	"wa-api/internal/wa-headless/capabilities/block"
 	"wa-api/internal/wa-headless/capabilities/channel"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/lookup"
+	"wa-api/internal/wa-headless/capabilities/owner"
 	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
@@ -256,4 +259,22 @@ type (
 // NewChannelManager builds the channel capability over a session's page.
 func NewChannelManager(runner *Runner, eval Evaluator) *ChannelManager {
 	return channel.NewManager(runner, eval)
+}
+
+// The account's own identity.
+type (
+	// OwnIdentity is who this session is, in both namespaces.
+	OwnIdentity = owner.Identity
+	// OwnWID is one of the two identifiers.
+	OwnWID = owner.WID
+)
+
+// RefreshOwnIdentity asks the page who this account is.
+//
+// DisplayName comes back EMPTY on this build, and that was measured rather than
+// assumed: the getter exists — it is a function, not absent — and returns null
+// against the real paired profile. Two candidates on the neighbouring module do
+// not exist at all, and the measurement discarded them.
+func RefreshOwnIdentity(ctx context.Context, runner *Runner, eval Evaluator, label string) (OwnIdentity, error) {
+	return owner.Refresh(ctx, runner, eval, label)
 }

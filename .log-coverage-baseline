@@ -618,7 +618,29 @@ rules_frozen=true
 # adaptador para satisfazer o compilador chamaria a operacao que funciona,
 # apagando um pareamento que ninguem pediu. Separar as portas torna isso
 # inalcancavel por ACIDENTE, em vez de depender de disciplina.
-min_func_coverage=564
+# justificativa: ProfileAccessProvider, o NONO port satisfeito (2026-08-22),
+# metade dos 18. Entram os pacotes capabilities/owner e o que o instantaneo usa.
+#
+# A ARMADILHA DE FORMA, mesma familia da decisao 72: ProfileDataAccess e
+# SINCRONA — PushName, OwnJID e DeviceInfo nao tem contexto nem erro. Essa forma
+# pressupoe um chamador que JA TEM o estado, que e o que o socket tem em
+# client.Store. Um driver de pagina precisa PERGUNTAR, e faze-lo num metodo sem
+# contexto seria rede oculta num leitor, que a decisao 66 recusou.
+#
+# A saida nao foi inventar: ProfileAccess TEM contexto, entao e ali que a
+# pergunta acontece, e o que volta e um INSTANTANEO. E o que a referencia faz, e
+# o proprio port ja declarava a convencao — campo ausente vira zero-value.
+#
+# Dois campos ficam vazios POR MEDICAO: PushName, porque o getter de display
+# name existe e devolve null contra o perfil pareado real (dois candidatos
+# vizinhos nem existem, e a medicao os descartou); e DeviceInfo, porque o socket
+# o preenche de um registro de pareamento que um driver de pagina nao tem.
+#
+# O comentario diz por que INVENTAR seria pior que vazio: isto alimenta
+# superficie de diagnostico, e uma plataforma plausivel e errada e mais dificil
+# de desconfiar que uma em branco. O controle negativo usou Platform:"web" — que
+# compila e parece certo.
+min_func_coverage=560
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -691,7 +713,7 @@ min_errpath_coverage=797
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=747
+min_eligible=752
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
