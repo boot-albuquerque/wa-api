@@ -2020,3 +2020,87 @@ cobriu as cinco saídas de recusa de uma vez.
 **rastreia**, porque é o rótulo repassado que prova qual chamador rodou. Afrouxar
 a regra agora, para me servir, seria escrevê-la ao contrário do que a decisão 91
 mandou. Fica o décimo.
+
+## Tipos ricos (botões, lista, carrossel) pela headless — medido, não teorizado
+
+Pergunta: o que o `noise` faz com mensagens interativas, a headless faz?
+
+### Primeiro, uma correção minha
+
+Eu disse que "o `SendButtonsUseCase` não envia nada". Isso está certo **nesta
+worktree** e errado como afirmação sobre o `noise`: eu li a camada de use case e
+falei do módulo. O módulo `internal/wa-noise` tem a capacidade inteira —
+`core.Client.SendMessage(ctx, to, *waE2E.Message)` é **genérico sobre o proto
+E2E**, e `msgattrs` já classifica `ButtonsMessage`, `ListMessage`,
+`InteractiveMessage`. Botões saem montando o proto; não há caminho especial.
+
+O que é stub é o use case **desta branch** (`Status: "validated"`, sem envio). Na
+`feature/macbook-lucas` ele é real e chama `appport.InteractiveMessenger`
+(`SendButtons`, `SendCarousel`), com `SimpleMessenger` cobrindo
+`SendList`/`SendPoll`/`SendContact`/`SendLocation`/`SendTemplate`.
+
+### A diferença estrutural entre os dois transportes
+
+| | noise | headless |
+|---|---|---|
+| despacho | UM genérico sobre `*waE2E.Message` | ações **por tipo** (`sendTextMsgToChat`, `sendPollCreation`) |
+
+Era esta assimetria que fazia parecer que a headless não podia originar tipos
+ricos. **A medição diz o contrário**, e vem do código de envio da própria
+página.
+
+### O que a varredura de bundles achou (20 bundles, 29 MB, 11.331 nomes)
+
+1. **Existe um despacho genérico**: `WAWebSendMsgChatAction.addAndSendMsgToChat(chat, msgData, beforeSend)`.
+2. **Ele trata interativa explicitamente**, no próprio caminho de envio:
+
+   ```js
+   A.type === o("WAWebMsgType").MSG_TYPE.INTERACTIVE
+     ? o("WAWebSendMsgChatAction").addAndSendMsgToChat(i, yield z, W)[1]
+     : o("WAWebSendMsgChatAction").addAndSendMsgToChat(i, z,       W)[1]
+   ```
+
+3. **O pipeline de saída é dirigido por TABELA** `type → generateProtobuf`, e a
+   tabela inclui `interactive`, `interactive_response`, `list`, `list_response`,
+   `hsm`:
+
+   ```js
+   {type:"interactive", generateProtobuf: r("WAWebGenerateInteractiveMessageProto")},
+   {type:"list",        generateProtobuf: r("WAWebGenerateListMessageProto")},
+   ```
+
+4. `MSG_TYPE` carrega `Interactive`, `InteractiveResponse`, `List`,
+   `ListResponse`, `Hsm` como tipos de primeira classe.
+5. Geradores presentes: `WAWebGenerateNativeFlowButtonsMessageProto`,
+   `WAWebGenerateInteractiveMessageProto`, `WAWebGenerateListMessageProto`,
+   `WAWebInteractiveMessageCarousel`, `WAWebGetInteractiveActionsForCarouselCard`,
+   `WAWebInteractiveMessagesNativeFlowName`.
+6. Localização tem ação própria: `WAWebSendLocationChatAction`.
+
+**Isso é código de ORIGINAÇÃO, não de leitura.** As ações
+`WAWebSendButtonsMsgReplyChatAction` e `WAWebSendListMsgReplyChatAction` — que
+sozinhas sugeririam "só dá para responder" — são a via de *resposta*; o envio
+passa pelo genérico.
+
+### O que isto NÃO prova, e a prova em contrário que já temos
+
+**A enquete.** O build tem `WAWebPollsGeneratePollCreationMessageProto` E a ação
+dedicada `WAWebPollsSendPollCreationMsgAction`. O nosso código **já chama a ação
+certa** — verifiquei antes de propor qualquer hipótese, e com isso descartei a
+hipótese óbvia de que estivéssemos despachando pelo caminho errado. Mesmo assim:
+criada localmente, `ack` fica em **0**, o par nunca recebe (H98), e o suspeito
+`pollType` foi perseguido e descartado de dentro da página (H101).
+
+Ou seja: **ter gerador, ter tipo no enum e chamar a ação certa NÃO garante que o
+servidor aceite.** A enquete é a prova medida disso, e é o motivo para não
+prometer botões antes de tentar.
+
+### O passo que falta, e por que ele para aqui
+
+O caminho é: montar `msgData` com `type:"interactive"` (ou `"list"`), deixar a
+tabela gerar o proto e despachar por `addAndSendMsgToChat`. Isso é escrevível.
+O que **não** se pode medir sem sessão pareada é a única pergunta que decide:
+**o `ack` sobe?**
+
+`.lab/test-account-profile` expirou (classifica `OTHER` em 60s). É dependência
+humana, e é a mesma que já bloqueia `PrivacyManager` e `GroupEphemeralSetter`.

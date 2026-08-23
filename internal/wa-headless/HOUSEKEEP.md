@@ -10955,3 +10955,85 @@ Começou o dia em `PROVEN 41 (19%) / MISSING 139 (63%)`.
 
 **Status**: entregue — 17 linhas reclassificadas com evidência, 2 declaradas
 diferença deliberada, 3 mantidas abertas de propósito.
+
+## H144 — a H75 fechou uma busca com base numa inferência errada
+
+**Data**: 2026-08-23. **Contexto**: o usuário redirecionou o foco para envio de
+tipos ricos (botões, lista, enquete, carrossel, template), que o `noise` já
+entrega na `feature/macbook-lucas` em 13 rotas `/chat/send/*`.
+
+**Onde**: `internal/wa-headless/HOUSEKEEP.md` H75 (2026-08-21), e a linha 70 do
+`LEDGER-WWEBJS.md` que a cita ("Localização e vCard MISSING (H75)").
+
+### O que a H75 afirmou e fechou
+
+> Não existe primitivo de envio **exportado e carregável** para tipos de
+> mensagem arbitrários neste build.
+
+E descartou um candidato assim:
+
+> `WAWebSendLocationChatAction` (que exporta apenas `displayName`, ou seja, é um
+> componente React)
+
+### As duas coisas medidas hoje, que a contradizem
+
+**1. O primitivo genérico existe, é exportado e carrega.** Medido com o probe de
+carregabilidade (decisão 95, `require` + `Object.keys`, sem invocar nada):
+
+```
+WAWebSendMsgChatAction → keys: ["addAndSendMsgToChat","resendMsgToChat","addVoipCallLogMsgToChat"]
+```
+
+E o código de envio da própria página chama-o em todo envio que não seja
+newsletter nem status, **com ramo explícito para interativa**:
+
+```js
+A.type === o("WAWebMsgType").MSG_TYPE.INTERACTIVE
+  ? o("WAWebSendMsgChatAction").addAndSendMsgToChat(i, yield z, W)[1]
+  : o("WAWebSendMsgChatAction").addAndSendMsgToChat(i, z,       W)[1]
+```
+
+**Por que a H75 não o viu**: a quarta busca dela procurou **módulos** chamados
+`AddAndSend*`. O que existe é o módulo `WAWebSendMsgChatAction` com a **função**
+`addAndSendMsgToChat`. Busca por nome de módulo nunca acharia — é o mesmo tipo
+de falha que a H98 já registrou (*"uma letra é por que três buscas o perderam"*).
+
+**2. `displayName` não prova componente React.** `Object.keys` de QUALQUER função
+com `displayName` atribuído devolve exatamente `["displayName"]`. Medindo
+`typeof` — reflexão pura, que não invoca nada:
+
+```
+WAWebSendLocationChatAction            kind: "function"   keys: ["displayName"]
+WAWebGenerateLocationMessageProto      kind: "function"   keys: ["displayName"]
+WAWebGenerateInteractiveMessageProto   kind: "function"   keys: ["displayName"]
+WAWebGenerateListMessageProto          kind: "function"   keys: ["displayName"]
+WAWebGenerateNativeFlowButtonsMessageProto kind: "function" keys: ["displayName"]
+```
+
+A evidência que a H75 usou não distinguia as duas hipóteses, e ela escolheu a
+errada. O teste que as separa é uma palavra: `typeof`.
+
+### Correção sugerida
+
+- A H75 deixa de ser "busca fechada" e passa a **reaberta com pista nomeada**:
+  o caminho é `addAndSendMsgToChat` com `msgData` do tipo certo, e o pipeline de
+  saída é dirigido por tabela `type → generateProtobuf` que já inclui
+  `interactive`, `list`, `hsm`, `location`.
+- A "quinta ideia" que a H75 pedia — dirigir a UI da página — **não é
+  necessária**, e teria mudado a natureza do módulo por nada.
+- A linha 70 do LEDGER precisa de nota: `MISSING (H75)` para localização e vCard
+  está apoiada numa inferência derrubada.
+
+### O que isto NÃO prova, e a prova em contrário que temos
+
+Carregável não é entregue. A **enquete** é a prova medida: temos o gerador, temos
+a ação dedicada `WAWebPollsSendPollCreationMsgAction`, o nosso código **chama a
+ação certa** (verificado antes de qualquer hipótese), e mesmo assim `ack` fica em
+**0** e o par nunca recebe (H98/H101).
+
+Então o que hoje ficou provado é **existência e carregabilidade**, não entrega.
+A pergunta que decide — *o ack sobe?* — exige sessão pareada, e
+`.lab/test-account-profile` expirou (classifica `OTHER` em 60s).
+
+**Status**: H75 corrigida quanto ao diagnóstico; envio de tipos ricos continua
+NÃO entregue, agora por falta de sessão para medir, e não por falta de caminho.

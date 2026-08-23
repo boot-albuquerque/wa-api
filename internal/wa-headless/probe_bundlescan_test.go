@@ -87,6 +87,16 @@ func TestProbeBundleScan(t *testing.T) {
 	t.Logf("bundles estabilizados em %d recursos .js", settled)
 
 	kick := strings.Replace(bundleScanScript, "PATTERN_PLACEHOLDER", strconv.Quote(pattern), 1)
+	// GREP: o texto AO REDOR de um literal. Nomes de módulo dizem "o que
+	// existe"; isto diz "como se chama", que é a outra metade e que nenhuma
+	// lista de nomes dá. Continua a ser leitura de bundle — decisão 93b intacta.
+	kick = strings.Replace(kick, "GREP_PLACEHOLDER", strconv.Quote(os.Getenv("WA_PROBE_BUNDLESCAN_GREP")), 1)
+	// CARREGABILIDADE (decisão 95): window.require + Object.keys, e NADA mais.
+	// Nenhum export é INVOCADO. Distingue "existe no bundle" de "existe e
+	// carrega", que é a distinção que a H75 usou para fechar uma busca — e é
+	// prova de carregabilidade, nunca de envio.
+	kick = strings.Replace(kick, "LOADABLE_PLACEHOLDER",
+		strconv.FormatBool(os.Getenv("WA_PROBE_BUNDLESCAN_LOAD") != ""), 1)
 	var raw string
 	if err := runner.Do(ctx, engine.OpStateProbe, "probe/bundlescan/kick", func(c context.Context) error {
 		return tab.Evaluate(c, kick, &raw)
@@ -161,6 +171,10 @@ func waitForBundles(t *testing.T, r *engine.Runner, tab *engine.Tab) int {
 const bundleScanScript = `(() => {
 	window.__waBundleScan = { stage: 'pending' };
 	const pattern = new RegExp(PATTERN_PLACEHOLDER);
+	const GREP = GREP_PLACEHOLDER;
+	const LOAD = LOADABLE_PLACEHOLDER;
+	const hits = [];
+	const loaded = [];
 	(async () => {
 		try {
 			const urls = performance.getEntriesByType('resource')
@@ -175,14 +189,37 @@ const bundleScanScript = `(() => {
 					bytes += txt.length; fetched++;
 					const m = txt.match(/\bWA[A-Z][A-Za-z0-9_]{3,60}\b/g);
 					if (m) { for (const n of m) seen.add(n); }
+					if (GREP) {
+						let at = -1;
+						while ((at = txt.indexOf(GREP, at + 1)) !== -1 && hits.length < 6) {
+							hits.push(txt.slice(Math.max(0, at - 320), at + 320));
+						}
+					}
 				} catch (e) { failed++; }
 			}
 			const all = Array.from(seen).sort();
 			const matched = all.filter(n => pattern.test(n));
+			if (LOAD) {
+				for (const n of matched.slice(0, 12)) {
+					let keys = null, why = null, kind = null;
+					try {
+						const mod = window.require(n);
+						// Object.keys apenas. Nenhum export e' chamado.
+						keys = mod ? Object.keys(mod).slice(0, 20) : [];
+						// typeof e' reflexao pura: nao invoca nada, e distingue
+						// "componente React" de "funcao exportada". A H75
+						// descartou um modulo por ter so' displayName, que e'
+						// exatamente o que Object.keys de uma FUNCAO mostra.
+						kind = typeof mod;
+					} catch (e) { why = String((e && e.message) || e).slice(0, 80); }
+					loaded.push({ name: n, kind: kind, keys: keys, why: why });
+				}
+			}
 			window.__waBundleScan = {
 				stage: 'done', urls: urls.length, fetched: fetched, failed: failed,
 				bytes: bytes, distinct: all.length,
-				matched: matched.length, names: matched.slice(0, 40)
+				matched: matched.length, names: matched.slice(0, 40),
+				grepHits: hits, loaded: loaded
 			};
 		} catch (e) {
 			window.__waBundleScan = { stage: 'error', why: String((e && e.message) || e) };
