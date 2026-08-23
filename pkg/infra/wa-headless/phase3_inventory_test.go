@@ -43,8 +43,7 @@ var inventarioFase3 = map[string]portStatus{
 	// do contacts.Lister foi provado na H129 com as duas linhas fundidas.
 	"IdentityResolver": {satisfeito: true},
 	"AvatarReader":     {satisfeito: true},
-	"ContactRoster": {motivo: "pendente; o roster esta PROVEN na H129 (as duas " +
-		"linhas, PN e LID, fundidas), entao e trabalho e nao bloqueio"},
+	"ContactRoster":    {satisfeito: true},
 
 	"PresenceSubscriber": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA, medida na H144: " +
 		"com as duas contas acordadas ao mesmo tempo, a assinatura nunca chega a " +

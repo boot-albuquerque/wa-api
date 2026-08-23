@@ -561,7 +561,21 @@ rules_frozen=true
 #
 # Todas essas sao regras onde o codigo COMPILA IGUAL estando certo ou errado. Era
 # isso que a cobertura baixa estava a sinalizar.
-min_func_coverage=584
+# justificativa: ContactRoster, o SEXTO port de transporte satisfeito
+# (2026-08-22). min_eligible 707->732, func 584->572, errpath 812->808.
+#
+# O pacote capabilities/contacts e o maior fiado ate agora (+25 elegiveis), e o
+# pedagio e o mesmo de sempre: fiar um port arrasta o pacote da capability.
+# Anunciado na justificativa da 78 e cobrado a cada port desde a 80.
+#
+# As descobertas seguem o padrao ja registrado: metodos que correm atraves do
+# rastreador (regra L1-d2 — presenca reconhecida, cobertura de caminho de saida
+# deliberadamente NAO), mais construtores e acessores puros por X1/X4.
+#
+# Do lado do adaptador vale a justificativa da 77: adapter nao loga, quem tem o
+# contexto do pedido loga. A duvida registrada la aplica-se agora a seis
+# adaptadores.
+min_func_coverage=572
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -583,7 +597,7 @@ min_func_coverage=584
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=812
+min_errpath_coverage=808
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -634,7 +648,7 @@ min_errpath_coverage=812
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=707
+min_eligible=732
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

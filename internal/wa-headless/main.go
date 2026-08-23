@@ -34,6 +34,7 @@ import (
 	"wa-api/internal/wa-headless/capabilities/avatar"
 	"wa-api/internal/wa-headless/capabilities/block"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
+	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/core"
@@ -225,4 +226,20 @@ type (
 // NewAvatarFetcher builds the avatar capability over a session's page.
 func NewAvatarFetcher(runner *Runner, eval Evaluator) *AvatarFetcher {
 	return avatar.New(runner, eval)
+}
+
+// The roster: who this account knows.
+type (
+	// ContactLister reads the contact collection.
+	ContactLister = contacts.Lister
+	// ContactRoster is the merged listing. Rows > len(Contacts) is the normal
+	// state: the same person arrives as two rows, one per identity.
+	ContactRoster = contacts.Roster
+	// RosterContact is one person, already merged across their two identities.
+	RosterContact = contacts.Contact
+)
+
+// NewContactLister builds the roster capability over a session's page.
+func NewContactLister(runner *Runner, eval Evaluator) *ContactLister {
+	return contacts.New(runner, eval)
 }

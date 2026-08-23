@@ -1162,3 +1162,41 @@ a regra para função pura**, para que um teste pudesse alcançá-la. Regra que
 nenhum teste consegue alcançar não está travada, mesmo estando certa.
 
 **Estado: 5 de 18 ports satisfeitos, 2 recusados com motivo medido, 11 restantes.**
+
+## ContactRoster — a identidade dupla vira duas regras
+
+Sexto port satisfeito. Duas regras que só existem porque este build tem
+identidade dupla, e ambas produzem números plausíveis quando erradas:
+
+**A contagem é de PESSOAS, não de linhas.** A coleção da página carrega uma
+linha por identidade — 944 linhas dobradas em 390 pessoas na H129. Devolver
+`Rows` reportaria cerca do DOBRO dos contatos que alguém tem, e ninguém
+estranharia o número.
+
+**Quem chega fundido é indexado pelas DUAS identidades.** O chamador não escolhe
+qual metade recebeu: o histórico fala telefone, a coleção de mensagens fala LID.
+Indexar só por uma faria metade das buscas falhar com resposta bem-formada.
+
+### O que NÃO era assimetria de dado
+
+`FullName` e `FirstName` ficam vazios, e a tentação era classificar isso como a
+quarta ocorrência de "dado ausente". A medição diz outra coisa: `getName`
+responde **1 de 944** porque lê a AGENDA, e o perfil de laboratório quase não tem
+nada salvo. É propriedade do PERFIL, não do build.
+
+E o domínio já tinha previsto: `ContactName.Melhor()` declara a ordem de
+degradação e cai para `PushName`. O teste prova que a ordem funciona — em vez de
+deixar o vazio parecer defeito e alguém "consertar" o que está certo.
+
+### O preço, agora quantificado
+
+`capabilities/contacts` é o maior pacote fiado até aqui: **+25 elegíveis** de uma
+vez, contra 6–15 dos anteriores. A cobertura de linha fechou em **843 contra piso
+843** — passou raspando, mesmo com o adaptador a nascer com 74,4%.
+
+Isso confirma o aviso registrado desde a decisão 80: a fase fica mais cara à
+medida que avança. Os ports restantes tocam as capabilities maiores da árvore
+(`ChatMessenger`, `MessageComposer`, os quatro de grupo), e cada um trará o seu
+pacote inteiro.
+
+**Estado: 6 de 18 ports satisfeitos, 2 recusados com motivo medido, 10 restantes.**
