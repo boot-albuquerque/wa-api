@@ -2938,6 +2938,12 @@ pkg/infra/wa-headless/groupdir.Directory.grupos	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupdir.Directory.inviter	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupdir.Directory.lister	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupdir.NewDirectory	EXCLUDED	X1
+pkg/infra/wa-headless/grouplife.Manager.CreateGroup	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lifecycle.go:51)
+pkg/infra/wa-headless/grouplife.Manager.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/grouplife.Manager.JoinGroup	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lifecycle.go:76)
+pkg/infra/wa-headless/grouplife.Manager.LeaveGroup	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,lifecycle.go:95)
+pkg/infra/wa-headless/grouplife.Manager.lifecycle	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/grouplife.NewManager	EXCLUDED	X1
 pkg/infra/wa-headless/groupmembers.Manager.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/groupmembers.Manager.UpdateGroupParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,members.go:75);uncovered:L2(S-ret,members.go:78)
 pkg/infra/wa-headless/groupmembers.Manager.members	ELIGIBLE	uncovered:L1

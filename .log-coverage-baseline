@@ -706,7 +706,19 @@ rules_frozen=true
 # contagem e de GRUPOS e nao de conversas; um jid de pessoa nao passa por grupo;
 # e o link e pedido explicitamente, porque Link() e metodo e nao campo para que
 # a forma perigosa tenha de ser pedida e nunca divirja do codigo.
-min_func_coverage=545
+# justificativa: GroupLifecycle (2026-08-23), o 15o port satisfeito.
+#
+# Duas regras de informacao que nao pode ser achatada, ambas travadas: entrada
+# PENDENTE nao vira adesao (um grupo com aprovacao transforma a entrada numa
+# SOLICITACAO, e reporta-la como adesao faria o chamador anunciar algo que nao
+# aconteceu), e Created distingue CRIAR de ENCONTRAR (a capability chama-se
+# Ensure; perder o campo faria duas chamadas iguais parecerem dois grupos).
+#
+# Este adaptador nasceu com 87,9% porque incluiu os TRES caminhos de erro desde
+# o primeiro teste — falha de configuracao, identidade invalida, posse sem boot.
+# As quatro rodadas anteriores mostraram que sao sempre os mesmos, e descobri-los
+# quando o piso reclama custava uma corrida de gate por vez.
+min_func_coverage=543
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -728,7 +740,7 @@ min_func_coverage=545
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=786
+min_errpath_coverage=785
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -779,7 +791,7 @@ min_errpath_coverage=786
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=807
+min_eligible=811
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

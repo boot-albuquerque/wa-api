@@ -1564,3 +1564,35 @@ misturava identidade, avatar e roster.
 divergência de forma que encontro é isso a aparecer.
 
 **Estado: 14 de 22 ports satisfeitos, 4 recusados com motivo medido.**
+
+## GroupLifecycle — a distinção entre entrar e pedir para entrar
+
+`CreateGroup` → `group.Ensure`, `JoinGroup` → `group.JoinByInvite`,
+`LeaveGroup` → `group.Leave`. Três métodos, uma capability: a fatia mais
+simples desde a `ChatArchiver`. O que a torna interessante não é o mapeamento,
+são duas coisas que a tradução tinha de NÃO fazer.
+
+**`Joined.Pending` não pode ser achatado.** Num grupo com aprovação, entrar por
+link não produz adesão: produz uma *solicitação*. Reportar isso como adesão faria
+o chamador anunciar algo que não aconteceu — e o chamador não tem como
+descobrir sozinho, porque a resposta bem-sucedida é indistinguível.
+
+**`Created` distingue criar de encontrar.** A capability chama-se `Ensure`, e o
+nome é honesto: duas chamadas iguais devolvem o mesmo grupo. Quem pediu para
+criar precisa saber se criou.
+
+### Controles negativos executados
+
+```
+CONTROLE 1: achata o Pending (solicitacao vira adesao)
+    lifecycle_test.go:68: o Pending sumiu no caminho
+CONTROLE 2: repassa o jid do socket sem converter
+    lifecycle_test.go:102: a capability recebeu a grafia do SOCKET
+```
+
+Os dois morderam. O adaptador nasceu em 87,9% porque as três trilhas de erro
+recorrentes — falha de configuração, identidade inválida, posse sem boot —
+entraram no primeiro teste, e não num remendo depois que o `coverage-gate`
+reclamou.
+
+**Estado: 15 de 22 ports satisfeitos, 4 recusados com motivo medido.**

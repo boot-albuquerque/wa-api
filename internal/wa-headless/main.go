@@ -306,6 +306,11 @@ type (
 	Chat = chats.Chat
 	// GroupInvite is what a group invite link resolves to.
 	GroupInvite = group.InviteInfo
+	// GroupCreated is a group this session made or found already there.
+	GroupCreated = group.Group
+	// GroupJoined is the outcome of following an invite. Pending says the group
+	// asks for approval and this became a REQUEST rather than a membership.
+	GroupJoined = group.Joined
 	// GroupInviteCode is a group's invite credential. Code is never rendered,
 	// and Link() is a method so the dangerous form has to be asked for.
 	GroupInviteCode = group.Invite
