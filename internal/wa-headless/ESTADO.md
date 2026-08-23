@@ -1888,3 +1888,72 @@ o ponto em que parar é a resposta certa.
 `GroupPhotoSetter` continua recusa **medida**: os módulos dele deram zero nesta
 mesma varredura. Os outros dois deram cento e tal. A diferença entre "recusado"
 e "pendente" deixou de ser julgamento e passou a ser número.
+
+## Seleção de engine — a fase 3 estava meio cumprida, e a medição disse
+
+Decisão 94. Fui verificar o estado real contra o enunciado da 71 — *"tornar o
+stack headless alcançável a partir de `pkg/` pela fachada"* — e o resultado foi
+desconfortável:
+
+```
+grep de "wa-headless" em pkg/bootstrap/   → ZERO
+pacotes de adaptador headless escritos    → 18
+```
+
+Os adaptadores satisfazem os ports em tempo de **compilação** — as asserções
+`var _ appport.X = (*Manager)(nil)` provam isso — mas **nada os constrói**. São
+alcançáveis no sistema de tipos, não no programa em execução. É exatamente a
+crítica que eu tinha acabado de fazer às capabilities dormentes, aplicada a mim.
+
+A 94 respondeu que a fase **inclui montar**, e pôs a condição que dá forma a
+esta fatia: *seleção explícita por sessão, **sem fallback silencioso por port***.
+
+### Por que a queda silenciosa seria pior que a falha
+
+Os dois transportes não servem o mesmo conjunto: medido, o headless satisfaz 17
+dos 25 ports. Uma sessão em headless que chame um port não servido, se caísse no
+socket, receberia **uma resposta correta para uma pergunta que ninguém fez** — e
+ninguém saberia que o engine escolhido não foi o usado.
+
+Então `rotaDeEngine` tem três desfechos e não dois: usar headless, usar socket,
+ou **recusar**. `nil` significa *"este engine não serve isto"*, nunca *"use o
+outro"*.
+
+### O idioma da casa, reusado de propósito
+
+Ausente vira o padrão seguro (`wanoise`, que é o comportamento de antes desta
+decisão); **valor desconhecido é erro e não cai no padrão**. É a mesma regra do
+`clusterModeConfigurado`, e pela mesma razão: um typo em
+`WA_API_ENGINE=headles` não pode virar em silêncio um processo que serve tudo
+pelo socket enquanto o operador acredita ter mudado de transporte.
+
+Lista mal formada também recusa — vírgula sobrando é engano de edição, e sessão
+repetida esconderia qual entrada venceu.
+
+### Quatro controles negativos, os quatro morderam
+
+```
+1. headless sem implementação CAI no socket  → "queria recusar=true"
+2. typo cai no padrão                        → "foi aceito e cairia em silêncio"
+3. sessão repetida é aceita                  → "ninguém saberia qual venceu"
+4. recusa vira erro genérico                 → "não diz H140" / "não diz por que não caiu"
+```
+
+### E não repeti o erro que acabara de apontar
+
+`setupEngineSelection` é chamado no arranque, ao lado de `setupSessionOwnership`
+e com a mesma severidade: falha é fatal, porque não saber por qual transporte se
+serve cada sessão é a falha mais difícil de diagnosticar depois. O arranque
+**diz** o que vai fazer — engine padrão, quantas sessões em headless e quais —
+para o operador confirmar antes da primeira chamada.
+
+### O que esta fatia NÃO faz, dito em voz alta
+
+Nenhum port está roteado ainda. Isto é o vocabulário e a regra, travados, antes
+de qualquer roteador existir — porque uma regra que nasce dentro do primeiro
+roteador vira vinte e cinco cópias com vinte e cinco oportunidades de divergir,
+que foi a lição da decisão 82.
+
+Falta também a instalação do lado headless: construir os adaptadores exige
+caminho do Chrome, raiz de perfis e tamanho de registry, e isso é configuração
+que ainda não existe.

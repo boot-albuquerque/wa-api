@@ -6802,3 +6802,34 @@ primeira compra tempo.
 **Status**: não corrigido — está fora do escopo da fatia (o gate reprovou por
 golden, não por tempo) e mexer no timeout durante uma correção de métrica
 misturaria duas mudanças no mesmo diff. Registado para decisão.
+
+## H143 — `pkg/bootstrap/config.go` está fora do gofmt
+
+**Data**: 2026-08-23. **Contexto**: ao formatar arquivos novos da decisão 94,
+`gofmt -l pkg/bootstrap/` acusou um arquivo que eu não tinha tocado.
+
+**Onde**: `pkg/bootstrap/config.go:39-40`.
+
+**Problema**: um comentário inserido no meio do bloco `var` quebrou o grupo de
+alinhamento, e o gofmt quer reencostar as duas declarações acima dele:
+
+```
+-	webhookRetryEnabled      = flag.Bool("webhookretry", true, ...)
+-	webhookRetryCount        = flag.Int("retrycount", 5, ...)
++	webhookRetryEnabled = flag.Bool("webhookretry", true, ...)
++	webhookRetryCount   = flag.Int("retrycount", 5, ...)
+```
+
+`git status` confirma o arquivo intocado nesta sessão, então é anterior.
+
+**Por que passou**: o `make check` roda `lint` como INFORMATIVO, e nenhum alvo
+roda `gofmt -l` como trava. Um repositório que passasse a exigir formatação
+falharia no primeiro dia por um arquivo que ninguém mexeu.
+
+**Correção sugerida**: `gofmt -w pkg/bootstrap/config.go`, e — a parte que vale
+mais — acrescentar `gofmt -l` ao gate, falhando se a saída não for vazia. Sem
+isso o próximo desalinhamento entra do mesmo jeito.
+
+**Status**: NÃO corrigido. É cosmético e fora do escopo da fatia, e a regra
+deste repositório é registrar em vez de consertar de graça. Pergunta ao usuário
+em aberto: conserto agora junto com a trava, ou fica pendente?

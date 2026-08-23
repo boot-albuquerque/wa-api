@@ -764,7 +764,25 @@ rules_frozen=true
 # Controle: afrouxar L1-e para aceitar alvo de QUALQUER pacote do modulo nao
 # mudou nada — 458 creditadas antes e depois. O que bloqueia e' a interface, nao
 # a fronteira de pacote. Registado em cmd/logcov/METRIC.md como limite.
-min_func_coverage=549
+# justificativa: selecao de engine (2026-08-23), decisao 94. 549 -> 547.
+#
+# Terceira descida seguida (556 -> 549 -> 547), e as tres tem causas DIFERENTES.
+# Registo isso aqui para nao se repetir o erro que a 91 corrigiu: la', o padrao
+# nao tinha ninguem porque cada commit so' via o proprio delta.
+#   556->549: LIMITE do instrumento — adaptador chama capability por INTERFACE,
+#             e qual implementacao la' vai parar decide-se na montagem.
+#   549->547: quatro funcoes PURAS ou de parsing no bootstrap.
+#
+# Conferido com -list-uncovered, nao deduzido. Das cinco funcoes novas, a que
+# AGE — setupEngineSelection — nasce COBERTA: loga o engine padrao, quantas
+# sessoes em headless e quais, e mata o processo com log.Fatal quando a
+# configuracao e' invalida. As quatro descobertas sao:
+#   rotaDeEngine            decisao pura, sem porta e sem caminho de erro —
+#                           mesma categoria ja justificada para atrasoDaTentativa
+#   SessoesEmHeadless       acessor puro
+#   engineValido            }  devolvem erro ao UNICO chamador, que o loga em
+#   engineSelectionConfigurada }  Fatal. Logar dentro duplicaria um fatal.
+min_func_coverage=547
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -798,7 +816,9 @@ min_func_coverage=549
 # -2 (783->781): GroupInfoSettings (2026-08-23), pelo mesmo motivo ja registado
 # no GroupRequests: as recusas novas do adaptador sao erros ORIGINAIS, sem causa
 # a propagar, e a metrica nao distingue isso de causa descartada.
-min_errpath_coverage=781
+# -1 (781->780): selecao de engine (2026-08-23). Mesmo motivo ja registado duas
+# vezes: as recusas de configuracao sao erros ORIGINAIS, sem causa a propagar.
+min_errpath_coverage=780
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -855,7 +875,10 @@ min_errpath_coverage=781
 # desde a H89, mas ligar o port e' que torna as obrigacoes dela reais.
 # +10 (824->834): o pacote pkg/infra/wa-headless/groupset, pela divisao do
 # GroupSettings em quatro portas (decisoes 87 e 92).
-min_eligible=834
+# +5 (834->839): pkg/bootstrap ganha a selecao de engine da decisao 94
+# (EngineSelection.EngineFor/Default/SessoesEmHeadless, engineValido,
+# engineSelectionConfigurada, rotaDeEngine, setupEngineSelection).
+min_eligible=839
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
