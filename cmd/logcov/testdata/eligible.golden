@@ -2785,6 +2785,10 @@ pkg/infra/wa-headless.Sessions.Release	EXCLUDED	X7
 pkg/infra/wa-headless.Sessions.Runner	EXCLUDED	X1
 pkg/infra/wa-headless.ToPageJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid.go:28);uncovered:L2(S-ret,jid.go:44);uncovered:L2(S-ret,jid.go:50)
 pkg/infra/wa-headless.user	EXCLUDED	X1
+pkg/infra/wa-headless/appstate.NewSyncer	EXCLUDED	X1
+pkg/infra/wa-headless/appstate.Syncer.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/appstate.Syncer.SyncContactRoster	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,syncer.go:68)
+pkg/infra/wa-headless/appstate.Syncer.primer	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/avatar.NewReader	EXCLUDED	X1
 pkg/infra/wa-headless/avatar.Reader.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/avatar.Reader.GetProfilePicture	ELIGIBLE	uncovered:L1

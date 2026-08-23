@@ -129,7 +129,10 @@ docker: ## Build Docker image
 test-split-check:
 	@serial=$$(echo $(SERIAL_TEST_PKGS) | wc -w); 	declared=$$(echo $(BROWSER_PKGS) | wc -w); 	if [ "$$serial" -ne "$$declared" ]; then 		echo "test-split: $$serial de $$declared pacotes de browser casaram com TEST_PKGS;" >&2; 		echo "  um nome em BROWSER_PKGS nao existe, e esse pacote correria em PARALELO." >&2; 		exit 1; 	fi; 	total=$$(echo $(TEST_PKGS) | wc -w); 	soma=$$(( $$(echo $(PARALLEL_TEST_PKGS) | wc -w) + serial )); 	if [ "$$total" -ne "$$soma" ]; then 		echo "test-split: $$soma pacotes na divisao contra $$total em TEST_PKGS;" >&2; 		echo "  a divisao perdeu ou duplicou pacote, e um pacote perdido nao e' testado." >&2; 		exit 1; 	fi
 
-test: test-split-check ## Run unit tests with race detection
+orphan-browser-check: ## Falha se browsers de TESTE sobreviveram a execucoes anteriores
+	@./scripts/orphan-browser-check.sh
+
+test: test-split-check orphan-browser-check ## Run unit tests with race detection
 	$(GOTEST) -race -count=1 -timeout=20m $(PARALLEL_TEST_PKGS)
 	$(GOTEST) -race -count=1 -timeout=20m -p 1 $(SERIAL_TEST_PKGS)
 

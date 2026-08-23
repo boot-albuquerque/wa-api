@@ -1381,3 +1381,62 @@ interface**, e só apareceram ao tentar satisfazê-la com um transporte diferent
 nenhum planejamento de escrivaninha teria antecipado.
 
 **Estado: 9 de 18 ports satisfeitos, 3 recusados com motivo medido, 6 restantes.**
+
+## AppStateSyncer — a SEXTA forma: divergência de VOCABULÁRIO
+
+Décimo port satisfeito. O port pede três modos — `if_unsynced`, `incremental`,
+`full` — que descrevem semântica de PATCH de app-state: busca barata,
+re-snapshot completo, pular se já sincronizado. É conceito de PROTOCOLO, e o
+socket implementa-o.
+
+A página tem UM comportamento: pedir refresh e relatar o que mudou. Não há
+re-snapshot a requisitar nem versão a preservar, porque não existe fluxo de
+patch em que se possa estar atrasado.
+
+Os três correm a mesma operação, e o adaptador DIZ isso em vez de fingir que a
+distinção sobrevive. Mas não aceita modo desconhecido: um typo virar no-op
+silencioso faria o chamador acreditar que pediu algo que não pediu.
+
+É diferente das cinco anteriores porque **nada está em falta**: a operação
+acontece, o resultado é correto, e o que não sobrevive é a DISTINÇÃO pedida.
+
+## O erro de diagnóstico que quase virou código (84 → 85)
+
+O gate falhou num arranque de 30 s. Fui medir, achei "dez órfãos com mais de uma
+hora" do teste `TestHolder_SecondHolderOnTheSameProfileIsRefused`, e concluí que
+o vazamento da F103 continuava depois da serialização. Levei isso à orquestração,
+que decidiu (**84**) escalar o `CleanStop` para `SIGKILL`.
+
+**Estava errado.** Fui verificar o processo em vez de confiar na contagem: era
+`Google Chrome for Testing` de `~/.agent-browser/browsers/` — o browser da
+FERRAMENTA MCP do agente, cujo servidor se desconectou a meio da sessão. Os dez
+eram UMA instância dela mais nove auxiliares.
+
+Como o erro se montou: um comando contou tudo com `user-data-dir` sob
+`/var/folders`, que apanha as duas coisas; outro procurou `T/Test` e achou um
+`TestHolder_…` que era um browser LEGÍTIMO em voo, da fase serial do gate a
+correr naquele instante. Juntei os dois e li como um conjunto só.
+
+Corrigi antes de escrever código, e a decisão MUDOU (**85**): fica só a
+varredura; **sem reproduzir vazamento real, não se mexe no caminho de
+desligamento**, que tem invariante própria.
+
+### A varredura FALHA em vez de limpar
+
+Limpar em silêncio esconderia o vazamento — que foi exatamente o erro de ler a
+serialização da 79 como se tivesse removido o problema. Recorte estrito
+(`/T/Test*`): por construção não apanha o agent-browser nem um perfil PAREADO, e
+o segundo importa porque `SIGKILL` contra perfil pareado arrisca corrompê-lo.
+
+Controle negativo executado: com órfão vivo, `exit=2`; sem, `exit=0`. A primeira
+medição do controle deu `exit=0` enganosamente porque canalizei por `head` — a
+armadilha "gate dentro de pipe não é gate", também catalogada.
+
+### Três armadilhas catalogadas morderam nesta rodada
+
+Diagnóstico invertido, `zsh` sem word-split, e gate dentro de pipe. Nos três, o
+que limitou o custo NÃO foi ter a armadilha escrita — ela estava. Foi
+**verificar imediatamente**: em cada caso o passo seguinte contradisse o anterior
+em segundos.
+
+**Estado: 10 de 18 ports satisfeitos, 3 recusados com motivo medido, 5 restantes.**

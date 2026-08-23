@@ -6601,6 +6601,29 @@ causa da saturação, é **consequência** dela. A cadeia é:
 4. o `CleanStop` sinaliza, o browser recusa fechar, e o processo VAZA;
 5. o vazado soma-se à carga da próxima execução — e aí sim, auto-amplifica.
 
+> **CORREÇÃO 2026-08-22, e o erro de diagnóstico é meu (decisões 84 e 85).**
+>
+> Depois da serialização da 79 eu voltei a encontrar "dez órfãos com mais de uma
+> hora" e concluí que o vazamento continuava. **Estava errado.** Fui verificar o
+> processo em vez de confiar na contagem, e ele era `Google Chrome for Testing`
+> de `~/.agent-browser/browsers/`, com `--user-data-dir=…/T/agent-browser-chrome-<uuid>`
+> — o browser da FERRAMENTA MCP do agente, cujo servidor se desconectou a meio da
+> sessão. Os dez eram UMA instância dela mais os nove auxiliares.
+>
+> Como o erro aconteceu: um comando contou tudo com `user-data-dir` sob
+> `/var/folders`, que apanha as duas coisas; outro procurou `T/Test` e achou um
+> `TestHolder_…` que era um browser LEGÍTIMO em voo, da fase serial do gate a
+> correr naquele instante. Juntei os dois resultados e li como um conjunto só.
+>
+> Medido com o recorte certo: **zero** browsers de teste do wa-api sobreviventes.
+>
+> O que fica de pé: o achado ORIGINAL desta entrada continua válido — os 28
+> órfãos daquela ocasião tinham caminhos `T/TestHolder_` e `T/TestLifecycle_`
+> explícitos. O que NÃO está provado é que o vazamento persista depois da 79.
+>
+> Por isso a decisão 85 recusou a escalada do `CleanStop`: **sem reproduzir
+> vazamento real, não se mexe no caminho de desligamento**. Ficou só a varredura.
+
 **Relação com a F100** (o gate é sensível à CARGA da máquina, quatro falsas
 falhas num dia): é quase certamente a MESMA causa. A F100 atribuiu as falhas a
 carga externa; o gate produz a sua própria carga, e depois deixa parte dela para
@@ -6680,8 +6703,24 @@ gargalo nunca foi paralelismo útil — era contenção.
 
 **F100 atualizada** com esta causa, como a decisão 79 pediu.
 
+**Varredura acrescentada (decisão 84/85)**: `scripts/orphan-browser-check.sh`,
+ligada ao alvo `test` do Makefile. Ela **FALHA** em vez de limpar, e isso é a
+decisão: limpar em silêncio esconderia o vazamento — que foi exatamente o erro
+cometido ao ler a serialização da 79 como se tivesse removido o problema.
+
+O recorte é estrito: só `--user-data-dir` sob `/var/folders/*/T/Test*`. Por
+construção não apanha o browser do agent-browser nem um perfil PAREADO — e o
+segundo importa, porque `SIGKILL` contra perfil pareado arrisca corrompê-lo e
+reparear exige um humano com o telefone.
+
+Controle negativo EXECUTADO: com um órfão de teste vivo, `make orphan-browser-check`
+sai com **2**; depois de terminado, **0**. A primeira medição do controle deu
+`exit=0` enganosamente porque eu tinha canalizado a saída por `head` — a
+armadilha "gate dentro de pipe não é gate", que também está catalogada.
+
 **Status**: o que continua PENDENTE é o item 2 da correção sugerida original —
-a escalada no `CleanStop` para browser de perfil temporário. Com as duas causas
+a escalada no `CleanStop` para browser de perfil temporário, agora RECUSADA por
+falta de evidência (decisão 85) e não por falta de tempo. Com as duas causas
 removidas os estouros pararam, e sem estouro não há vazamento; mas a defesa em
 profundidade continua a faltar, e um estouro por outra razão voltaria a deixar
 lixo. Não foi feito aqui porque mexer no `CleanStop` é mexer no caminho de

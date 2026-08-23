@@ -278,3 +278,11 @@ type (
 func RefreshOwnIdentity(ctx context.Context, runner *Runner, eval Evaluator, label string) (OwnIdentity, error) {
 	return owner.Refresh(ctx, runner, eval, label)
 }
+
+// Priming the roster: asking the page to refresh what it knows about contacts.
+type (
+	// RosterPrimeResult reports what moved. "Nothing changed" is a SUCCESS with
+	// Changed() false — on a roster that is already current that is the correct
+	// answer, and the measured ordinary case.
+	RosterPrimeResult = contacts.PrimeResult
+)

@@ -47,6 +47,7 @@ var inventarioFase3 = map[string]portStatus{
 	"NewsletterReader":      {satisfeito: true},
 	"SessionDisconnector":   {satisfeito: true},
 	"ProfileAccessProvider": {satisfeito: true},
+	"AppStateSyncer":        {satisfeito: true},
 
 	"SessionLogouter": {motivo: "RECUSADO POR POLÍTICA, e não por incapacidade. A H122 " +
 		"mediu que Socket.logout EXISTE e funciona neste build — mas chamá-lo " +
@@ -68,7 +69,6 @@ var inventarioFase3 = map[string]portStatus{
 		"de uma mensagem que não pôde ser DECIFRADA, e quem dirige a SPA não decifra " +
 		"nada — a página já entrega texto. Não é lacuna, é ausência de sentido."},
 
-	"AppStateSyncer":  {motivo: "pendente"},
 	"CallRejecter":    {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
 	"ChatMessenger":   {motivo: "pendente"},
 	"GroupDirectory":  {motivo: "pendente"},

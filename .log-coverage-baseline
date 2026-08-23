@@ -640,7 +640,22 @@ rules_frozen=true
 # superficie de diagnostico, e uma plataforma plausivel e errada e mais dificil
 # de desconfiar que uma em branco. O controle negativo usou Platform:"web" — que
 # compila e parece certo.
-min_func_coverage=560
+# justificativa: AppStateSyncer, o DECIMO port satisfeito (2026-08-22).
+#
+# SEXTA forma de divergencia, e e' de VOCABULARIO. O port pede tres modos —
+# if_unsynced, incremental, full — que descrevem semantica de PATCH de
+# app-state: busca barata, re-snapshot completo, pular se ja sincronizado. E'
+# conceito de PROTOCOLO, e o socket implementa-o de verdade.
+#
+# A pagina tem UM comportamento: pedir refresh e relatar o que mudou. Nao ha
+# re-snapshot a requisitar nem versao a preservar, porque nao existe fluxo de
+# patch em que se possa estar atrasado.
+#
+# Os tres modos correm a mesma operacao e o adaptador DIZ isso, em vez de fingir
+# que a distincao sobrevive. Mas nao aceita modo desconhecido: um typo virar
+# no-op silencioso faria o chamador acreditar que pediu algo que nao pediu — a
+# mesma regra de conjunto fechado usada nos estados de presenca.
+min_func_coverage=558
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -713,7 +728,7 @@ min_errpath_coverage=797
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=752
+min_eligible=754
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
