@@ -140,6 +140,11 @@ type Client interface {
 	TryFetchPrivacySettings(ctx context.Context, ignoreCache bool) (*types.PrivacySettings, error)
 	SetPrivacySetting(ctx context.Context, name types.PrivacySettingType, value types.PrivacySetting) (types.PrivacySettings, error)
 
+	// SetDefaultDisappearingTimer sets the account-wide default
+	// disappearing message timer. CAP-50 adds this to the interface
+	// alongside the per-chat SetDisappearingTimer that was already present.
+	SetDefaultDisappearingTimer(ctx context.Context, timer time.Duration) error
+
 	// Família de chamadas
 	RejectCall(ctx context.Context, callFrom types.JID, callID string) error
 

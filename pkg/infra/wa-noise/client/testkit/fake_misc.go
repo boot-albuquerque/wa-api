@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"context"
+	"time"
 
 	wanoise "wa-api/internal/wa-noise"
 	"wa-api/internal/wa-noise/persistence/store"
@@ -43,6 +44,13 @@ func (f *Fake) SendPeerMessage(ctx context.Context, message *waE2E.Message) (wan
 		return f.SendPeerMessageFn(ctx, message)
 	}
 	return wanoise.SendResponse{}, nil
+}
+
+func (f *Fake) SetDefaultDisappearingTimer(ctx context.Context, timer time.Duration) error {
+	if f.SetDefaultDisappearingTimerFn != nil {
+		return f.SetDefaultDisappearingTimerFn(ctx, timer)
+	}
+	return nil
 }
 
 func (f *Fake) SetStatusMessage(ctx context.Context, msg string) error {

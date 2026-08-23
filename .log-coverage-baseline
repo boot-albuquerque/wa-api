@@ -1198,7 +1198,7 @@ rules_frozen=true
 #   handlers.SendForwardHandler.ServeHTTP (coberta por hlog). covered SOBE
 #   474->476 (+2). eligible SOBE 633->635 (+2). Ambas elegiveis nascem
 #   cobertas; func_coverage sobe porque covered/eligible aumenta.
-min_func_coverage=750
+min_func_coverage=751
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1428,7 +1428,7 @@ min_func_coverage=750
 # estruturado e o handler loga a rejeicao via hlog. Nao e' regressao de
 # cobertura: nenhum caminho existente perdeu log; os 5 novos caminhos seguem
 # a convencao do projeto, e o handler os cobre.
-min_errpath_coverage=868
+min_errpath_coverage=869
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1677,7 +1677,7 @@ min_errpath_coverage=868
 #   handlers.SendForwardHandler.ServeHTTP — ambas elegiveis de verdade
 #   (multiplos statements e caminhos de saida de tipo error). O adapter
 #   SendText ja existia; nenhuma funcao nova nele.
-min_eligible=635
+min_eligible=639
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
@@ -1741,3 +1741,41 @@ max_exempt_annotations=2
 # gate parou, e a subida ficou deliberada em vez de silenciosa. Quem quiser
 # remover esta isencao responde a mesma pergunta que a primeira: o que e' que
 # este log diria que o operador pudesse USAR?
+# CAP-50 (2026-08-23): POST /chat/ephemeral e POST /chat/ephemeral/default —
+# mensagens temporarias por conversa e padrao de conta.
+#
+# Numeros MEDIDOS: `go run ./cmd/logcov ./pkg`
+#   ANTES: eligible=635, covered=480, func_coverage=75.0% (750), errpath=86.8% (868)
+#   DEPOIS: eligible=639, covered=480, func_coverage=75.1% (751), errpath=86.9% (869)
+#
+# min_eligible 635->639 (+4, ratchet-UP honesto). ENTRAM (4):
+#   pkg/application/usecase/chat.SetDisappearingTimerUseCase.Execute     (COBERTA)
+#   pkg/application/usecase/chat.SetDefaultDisappearingTimerUseCase.Execute (COBERTA)
+#   pkg/presentation/http/handlers.SetDisappearingTimerHandler.ServeHTTP (COBERTA)
+#   pkg/presentation/http/handlers.SetDefaultDisappearingTimerHandler.ServeHTTP (COBERTA)
+#
+# As quatro ja nascem COBERTAS: os dois use cases logam em Warn/Error nos
+# caminhos de falha (no session, invalid duration, sdk error), e os dois
+# handlers logam em Warn a recusa de fronteira (decode, missing chat/duration)
+# e em Error a falha do use case. func_coverage SOBE 750->751 e errpath SOBE
+# 868->869 — ratchet-UP honesto por codigo novo que nasce instrumentado.
+#
+# Funcoes que NAO entram no denominador (EXCLUDED):
+#   parseDisappearingDuration — X1, <=2 statements + switch sem erro.
+#   NewSetDisappearingTimerUseCase, NewSetDefaultDisappearingTimerUseCase,
+#   NewSetDisappearingTimerHandler, NewSetDefaultDisappearingTimerHandler — X1,
+#   construtores triviais.
+#
+# Wrappers de errmap.ClassifyIQ no RealClient (EXCLUDED X1):
+#   RealClient.SetDefaultDisappearingTimer — CAP-50 (esta tarefa).
+#   RealClient.BuildPollVote — gap de CAP-48 detectado por
+#     TestTodoMetodoComErroTemWrapper e corrigido nesta sessao.
+#
+# Fakes de contractsfake (EXCLUDED X5):
+#   ChatOperations.SetDisappearingTimer, DefaultDisappearingTimerSetter.
+#   SetDefaultDisappearingTimer, testkit.Fake.SetDefaultDisappearingTimer.
+#
+# Adapter delegates (EXCLUDED):
+#   MiscAdapter.SetDisappearingTimer, MiscAdapter.SetDefaultDisappearingTimer.
+#
+# max_exempt_annotations NAO muda (2).

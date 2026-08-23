@@ -62,6 +62,11 @@ func (r RealClient) SendMessage(ctx context.Context, to types.JID, message *waE2
 	return v0, errmap.ClassifyIQ(err)
 }
 
+func (r RealClient) BuildPollVote(ctx context.Context, pollInfo *types.MessageInfo, optionNames []string) (*waE2E.Message, error) {
+	v0, err := r.Client.BuildPollVote(ctx, pollInfo, optionNames)
+	return v0, errmap.ClassifyIQ(err)
+}
+
 func (r RealClient) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
 	v0, err := r.Client.Upload(ctx, plaintext, appInfo)
 	return v0, errmap.ClassifyIQ(err)
@@ -129,6 +134,10 @@ func (r RealClient) SetGroupLocked(ctx context.Context, jid types.JID, locked bo
 
 func (r RealClient) SetDisappearingTimer(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error {
 	return errmap.ClassifyIQ(r.Client.SetDisappearingTimer(ctx, chat, timer, settingTS))
+}
+
+func (r RealClient) SetDefaultDisappearingTimer(ctx context.Context, timer time.Duration) error {
+	return errmap.ClassifyIQ(r.Client.SetDefaultDisappearingTimer(ctx, timer))
 }
 
 func (r RealClient) UpdateGroupParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {

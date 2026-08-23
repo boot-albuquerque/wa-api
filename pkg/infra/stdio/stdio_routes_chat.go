@@ -32,6 +32,8 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.presence":                    {httpMethod: "POST", httpPath: "/chat/presence"},
 	"chat.markread":                    {httpMethod: "POST", httpPath: "/chat/markread"},
 	"chat.request-unavailable-message": {httpMethod: "POST", httpPath: "/chat/request-unavailable-message"},
+	"chat.ephemeral":                   {httpMethod: "POST", httpPath: "/chat/ephemeral"},
+	"chat.ephemeral.default":           {httpMethod: "POST", httpPath: "/chat/ephemeral/default"},
 
 	"chat.download.image":    {httpMethod: "POST", httpPath: "/chat/downloadimage"},
 	"chat.download.video":    {httpMethod: "POST", httpPath: "/chat/downloadvideo"},

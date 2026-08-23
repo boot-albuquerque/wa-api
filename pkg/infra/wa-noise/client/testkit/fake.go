@@ -48,6 +48,7 @@ type Fake struct {
 	SetGroupAnnounceFn               func(ctx context.Context, jid types.JID, announce bool) error
 	SetGroupLockedFn                 func(ctx context.Context, jid types.JID, locked bool) error
 	SetDisappearingTimerFn           func(ctx context.Context, chat types.JID, timer time.Duration, settingTS time.Time) error
+	SetDefaultDisappearingTimerFn    func(ctx context.Context, timer time.Duration) error
 	UpdateGroupParticipantsFn        func(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error)
 	GetGroupRequestParticipantsFn    func(ctx context.Context, jid types.JID) ([]types.GroupParticipantRequest, error)
 	UpdateGroupRequestParticipantsFn func(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error)

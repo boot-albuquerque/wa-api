@@ -290,6 +290,8 @@ func initCustomHandlers(s *server) {
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
 	requestUnavailableMessageUC := chat.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
 	archiveChatUC := chat.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
+	setDisappearingTimerUC := chat.NewSetDisappearingTimerUseCase(miscAdapter, jidResolver, logger)
+	setDefaultDisappearingTimerUC := chat.NewSetDefaultDisappearingTimerUseCase(miscAdapter, logger)
 
 	// Group Handlers
 	groupHandlers := &handlers.GroupHandlers{
@@ -304,14 +306,16 @@ func initCustomHandlers(s *server) {
 
 	// Misc Handlers
 	miscHandlers := &handlers.MiscHandlers{
-		Health:                    handlers.NewGetHealthHandler(getHealthUC),
-		ListNewsletter:            handlers.NewListNewsletterHandler(listNewsletterUC),
-		DeleteUserComplete:        handlers.NewDeleteUserCompleteHandler(deleteUserCompleteUC),
-		RejectCall:                handlers.NewRejectCallHandler(rejectCallUC),
-		GetPrivacySettings:        handlers.NewGetPrivacySettingsHandler(getPrivacySettingsUC),
-		SetPrivacySetting:         handlers.NewSetPrivacySettingHandler(setPrivacySettingUC),
-		RequestUnavailableMessage: handlers.NewRequestUnavailableMessageHandler(requestUnavailableMessageUC),
-		ArchiveChat:               handlers.NewArchiveChatHandler(archiveChatUC),
+		Health:                      handlers.NewGetHealthHandler(getHealthUC),
+		ListNewsletter:              handlers.NewListNewsletterHandler(listNewsletterUC),
+		DeleteUserComplete:          handlers.NewDeleteUserCompleteHandler(deleteUserCompleteUC),
+		RejectCall:                  handlers.NewRejectCallHandler(rejectCallUC),
+		GetPrivacySettings:          handlers.NewGetPrivacySettingsHandler(getPrivacySettingsUC),
+		SetPrivacySetting:           handlers.NewSetPrivacySettingHandler(setPrivacySettingUC),
+		RequestUnavailableMessage:   handlers.NewRequestUnavailableMessageHandler(requestUnavailableMessageUC),
+		ArchiveChat:                 handlers.NewArchiveChatHandler(archiveChatUC),
+		SetDisappearingTimer:        handlers.NewSetDisappearingTimerHandler(setDisappearingTimerUC),
+		SetDefaultDisappearingTimer: handlers.NewSetDefaultDisappearingTimerHandler(setDefaultDisappearingTimerUC),
 	}
 
 	// Storage UseCases

@@ -17,14 +17,16 @@ import (
 
 // MiscHandlers agrupa os handlers de miscelânea (health, newsletter, privacy, calls, archive)
 type MiscHandlers struct {
-	Health                    *GetHealthHandler
-	ListNewsletter            *ListNewsletterHandler
-	DeleteUserComplete        *DeleteUserCompleteHandler
-	RejectCall                *RejectCallHandler
-	GetPrivacySettings        *GetPrivacySettingsHandler
-	SetPrivacySetting         *SetPrivacySettingHandler
-	RequestUnavailableMessage *RequestUnavailableMessageHandler
-	ArchiveChat               *ArchiveChatHandler
+	Health                      *GetHealthHandler
+	ListNewsletter              *ListNewsletterHandler
+	DeleteUserComplete          *DeleteUserCompleteHandler
+	RejectCall                  *RejectCallHandler
+	GetPrivacySettings          *GetPrivacySettingsHandler
+	SetPrivacySetting           *SetPrivacySettingHandler
+	RequestUnavailableMessage   *RequestUnavailableMessageHandler
+	ArchiveChat                 *ArchiveChatHandler
+	SetDisappearingTimer        *SetDisappearingTimerHandler
+	SetDefaultDisappearingTimer *SetDefaultDisappearingTimerHandler
 }
 
 // GetHealthHandler handles GET /health

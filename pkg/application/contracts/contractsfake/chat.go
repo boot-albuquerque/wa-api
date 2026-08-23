@@ -319,6 +319,15 @@ type ChatOperationsRequestUnavailableMessageCall struct {
 	MessageID string
 }
 
+// ChatOperationsSetDisappearingTimerCall é uma chamada a SetDisappearingTimer.
+type ChatOperationsSetDisappearingTimerCall struct {
+	Ctx      context.Context
+	TxtID    string
+	Chat     domain.JID
+	Duration time.Duration
+	At       time.Time
+}
+
 // ChatOperations é o fake de port.ChatOperations.
 type ChatOperations struct {
 	SessionGuard
@@ -331,6 +340,9 @@ type ChatOperations struct {
 
 	RequestUnavailableMessageFunc  func(ctx context.Context, txtID string, chat, sender domain.JID, messageID string) (domain.UnavailableMessageAck, error)
 	RequestUnavailableMessageCalls []ChatOperationsRequestUnavailableMessageCall
+
+	SetDisappearingTimerFunc  func(ctx context.Context, txtID string, chat domain.JID, d time.Duration, at time.Time) error
+	SetDisappearingTimerCalls []ChatOperationsSetDisappearingTimerCall
 }
 
 var _ port.ChatOperations = (*ChatOperations)(nil)
@@ -360,6 +372,46 @@ func (f *ChatOperations) RequestUnavailableMessage(ctx context.Context, txtID st
 		return f.RequestUnavailableMessageFunc(ctx, txtID, chat, sender, messageID)
 	}
 	return domain.UnavailableMessageAck{}, nil
+}
+
+// SetDisappearingTimer implementa port.ChatOperations.
+func (f *ChatOperations) SetDisappearingTimer(ctx context.Context, txtID string, chat domain.JID, d time.Duration, at time.Time) error {
+	f.SetDisappearingTimerCalls = append(f.SetDisappearingTimerCalls, ChatOperationsSetDisappearingTimerCall{Ctx: ctx, TxtID: txtID, Chat: chat, Duration: d, At: at})
+	if f.SetDisappearingTimerFunc != nil {
+		return f.SetDisappearingTimerFunc(ctx, txtID, chat, d, at)
+	}
+	return nil
+}
+
+// --- DefaultDisappearingTimerSetter ------------------------------------
+
+// DefaultDisappearingTimerSetterCall é uma chamada a
+// SetDefaultDisappearingTimer.
+type DefaultDisappearingTimerSetterCall struct {
+	Ctx      context.Context
+	TxtID    string
+	Duration time.Duration
+}
+
+// DefaultDisappearingTimerSetter é o fake de
+// port.DefaultDisappearingTimerSetter.
+type DefaultDisappearingTimerSetter struct {
+	SessionGuard
+
+	SetDefaultDisappearingTimerFunc  func(ctx context.Context, txtID string, d time.Duration) error
+	SetDefaultDisappearingTimerCalls []DefaultDisappearingTimerSetterCall
+}
+
+var _ port.DefaultDisappearingTimerSetter = (*DefaultDisappearingTimerSetter)(nil)
+
+// SetDefaultDisappearingTimer implementa
+// port.DefaultDisappearingTimerSetter.
+func (f *DefaultDisappearingTimerSetter) SetDefaultDisappearingTimer(ctx context.Context, txtID string, d time.Duration) error {
+	f.SetDefaultDisappearingTimerCalls = append(f.SetDefaultDisappearingTimerCalls, DefaultDisappearingTimerSetterCall{Ctx: ctx, TxtID: txtID, Duration: d})
+	if f.SetDefaultDisappearingTimerFunc != nil {
+		return f.SetDefaultDisappearingTimerFunc(ctx, txtID, d)
+	}
+	return nil
 }
 
 // --- NewsletterReader --------------------------------------------------

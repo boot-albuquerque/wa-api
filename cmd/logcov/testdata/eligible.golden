@@ -1716,6 +1716,7 @@ pkg/application/contracts/contractsfake.ChatMessenger.SendReaction	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.ArchiveChat	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RejectCall	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ChatOperations.RequestUnavailableMessage	EXCLUDED	X5
+pkg/application/contracts/contractsfake.ChatOperations.SetDisappearingTimer	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ClearedS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.ContactNames	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetAllContacts	EXCLUDED	X5
@@ -1725,6 +1726,7 @@ pkg/application/contracts/contractsfake.ContactDirectory.GetPNForLID	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetProfilePicture	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.GetUserInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.ContactDirectory.IsOnWhatsApp	EXCLUDED	X5
+pkg/application/contracts/contractsfake.DefaultDisappearingTimerSetter.SetDefaultDisappearingTimer	EXCLUDED	X5
 pkg/application/contracts/contractsfake.DeleteUserProvider.CheckUserExists	EXCLUDED	X5
 pkg/application/contracts/contractsfake.DeleteUserProvider.DeleteLocalUserFiles	EXCLUDED	X5
 pkg/application/contracts/contractsfake.DeleteUserProvider.DeleteUserFromDB	EXCLUDED	X5
@@ -1919,8 +1921,13 @@ pkg/application/usecase/chat.NewArchiveChatUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewGetChatHistoryUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRejectCallUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewRequestUnavailableMessageUseCase	EXCLUDED	X1
+pkg/application/usecase/chat.NewSetDefaultDisappearingTimerUseCase	EXCLUDED	X1
+pkg/application/usecase/chat.NewSetDisappearingTimerUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.RejectCallUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,reject_call.go:32);uncovered:L2(S-ret,reject_call.go:36);uncovered:L2(S-consume,reject_call.go:40);uncovered:L2(S-ret,reject_call.go:41)
 pkg/application/usecase/chat.RequestUnavailableMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,request_unavailable_message.go:32);uncovered:L2(S-ret,request_unavailable_message.go:36);uncovered:L2(S-ret,request_unavailable_message.go:40);uncovered:L2(S-consume,request_unavailable_message.go:44);uncovered:L2(S-ret,request_unavailable_message.go:45);uncovered:L2(S-consume,request_unavailable_message.go:49);uncovered:L2(S-ret,request_unavailable_message.go:50)
+pkg/application/usecase/chat.SetDefaultDisappearingTimerUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/chat.SetDisappearingTimerUseCase.Execute	ELIGIBLE	covered
+pkg/application/usecase/chat.parseDisappearingDuration	EXCLUDED	X1
 pkg/application/usecase/group.GetGroupInfoUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/group.GetGroupInviteInfoUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/group.GetGroupInviteLinkUseCase.Execute	ELIGIBLE	covered
@@ -2736,6 +2743,8 @@ pkg/infra/wa-noise/adapters/misc.MiscAdapter.RejectCall	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.RequestHistorySync	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.RequestUnavailableMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.SendNewsletterReaction	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/misc.MiscAdapter.SetDefaultDisappearingTimer	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/misc.MiscAdapter.SetDisappearingTimer	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.SetStatusMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.SubscribeNewsletterLiveUpdates	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.SyncContactRoster	EXCLUDED	X5
@@ -2781,6 +2790,7 @@ pkg/infra/wa-noise/adapters/user.resolveBlocklistPNJID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.toDomainBlocklist	EXCLUDED	X5
 pkg/infra/wa-noise/client.ClientForGetter	EXCLUDED	X5
 pkg/infra/wa-noise/client.ClientForGetter.func1	EXCLUDED	X6
+pkg/infra/wa-noise/client.RealClient.BuildPollVote	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.CreateGroup	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.CreateNewsletter	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.Download	EXCLUDED	X5
@@ -2815,6 +2825,7 @@ pkg/infra/wa-noise/client.RealClient.SendChatPresence	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.SendMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.SendPeerMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.SendPresence	EXCLUDED	X5
+pkg/infra/wa-noise/client.RealClient.SetDefaultDisappearingTimer	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.SetDisappearingTimer	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.SetGroupAnnounce	EXCLUDED	X5
 pkg/infra/wa-noise/client.RealClient.SetGroupJoinApprovalMode	EXCLUDED	X5
@@ -2885,6 +2896,7 @@ pkg/infra/wa-noise/client/testkit.Fake.SendChatPresence	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SendMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SendPeerMessage	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SendPresence	EXCLUDED	X5
+pkg/infra/wa-noise/client/testkit.Fake.SetDefaultDisappearingTimer	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SetDisappearingTimer	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SetGroupAnnounce	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.Fake.SetGroupJoinApprovalMode	EXCLUDED	X5
@@ -3130,6 +3142,8 @@ pkg/presentation/http/handlers.NewSendPresenceHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendStickerHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendTemplateHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendVideoHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewSetDefaultDisappearingTimerHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewSetDisappearingTimerHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSetGroupJoinApprovalModeHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSetHistoryHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSetPrivacySettingHandler	EXCLUDED	X1
@@ -3165,6 +3179,8 @@ pkg/presentation/http/handlers.SendPresenceHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendStickerHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendTemplateHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendVideoHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.SetDefaultDisappearingTimerHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.SetDisappearingTimerHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SetGroupJoinApprovalModeHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SetHistoryHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SetPrivacySettingHandler.ServeHTTP	ELIGIBLE	covered

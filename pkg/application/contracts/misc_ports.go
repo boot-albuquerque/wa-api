@@ -21,6 +21,23 @@ type ChatOperations interface {
 	// RequestUnavailableMessage pede ao par o reenvio de uma mensagem que
 	// não pôde ser decifrada.
 	RequestUnavailableMessage(ctx context.Context, txtID string, chat, sender domain.JID, messageID string) (domain.UnavailableMessageAck, error)
+
+	// SetDisappearingTimer sets the disappearing message timer for a
+	// specific chat (private or group). CAP-50 adds this alongside the
+	// group-only path that already existed in GroupSettings: the SDK
+	// method supports both, but the API only exposed the group variant.
+	SetDisappearingTimer(ctx context.Context, txtID string, chat domain.JID, d time.Duration, at time.Time) error
+}
+
+// DefaultDisappearingTimerSetter sets the account-wide default timer for
+// new conversations. Separate from ChatOperations because the target is
+// the account, not a chat — no JID involved.
+type DefaultDisappearingTimerSetter interface {
+	SessionGuard
+
+	// SetDefaultDisappearingTimer changes the default disappearing
+	// message timer for all new conversations.
+	SetDefaultDisappearingTimer(ctx context.Context, txtID string, d time.Duration) error
 }
 
 // ProfileAccessProvider entrega o ProfileDataAccess da sessão.

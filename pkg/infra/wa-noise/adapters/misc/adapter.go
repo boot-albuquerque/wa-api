@@ -151,12 +151,33 @@ func (a *MiscAdapter) SyncContactRoster(ctx context.Context, txtID string, mode 
 	}
 }
 
+// SetDisappearingTimer sets the disappearing message timer for a specific
+// chat (private or group). The SDK method handles both — the switch on
+// chat server is inside the SDK, not here.
+func (a *MiscAdapter) SetDisappearingTimer(ctx context.Context, txtID string, chat domain.JID, d time.Duration, at time.Time) error {
+	client, parsed, err := a.clientAndJID(txtID, chat)
+	if err != nil {
+		return err
+	}
+	return client.SetDisappearingTimer(ctx, parsed, d, at)
+}
+
+// SetDefaultDisappearingTimer sets the account-wide default timer.
+func (a *MiscAdapter) SetDefaultDisappearingTimer(ctx context.Context, txtID string, d time.Duration) error {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return err
+	}
+	return client.SetDefaultDisappearingTimer(ctx, d)
+}
+
 // Verificações em tempo de compilação de que o adapter implementa as portas.
 var (
-	_ appport.ChatOperations        = (*MiscAdapter)(nil)
-	_ appport.ProfileAccessProvider = (*MiscAdapter)(nil)
-	_ appport.NewsletterReader      = (*MiscAdapter)(nil)
-	_ appport.AppStateSyncer        = (*MiscAdapter)(nil)
+	_ appport.ChatOperations                 = (*MiscAdapter)(nil)
+	_ appport.ProfileAccessProvider          = (*MiscAdapter)(nil)
+	_ appport.NewsletterReader               = (*MiscAdapter)(nil)
+	_ appport.AppStateSyncer                 = (*MiscAdapter)(nil)
+	_ appport.DefaultDisappearingTimerSetter = (*MiscAdapter)(nil)
 )
 
 // --- Newsletters -------------------------------------------------------------
