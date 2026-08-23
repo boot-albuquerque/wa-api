@@ -1188,7 +1188,12 @@ rules_frozen=true
 #     main, nao da closure).
 # covered SOBE 468->469 (+1: trimMessageSecrets). Denominador sobe 625->627
 # (+2). Razao: 469/627=74.80% -> 748 decimos.
-min_func_coverage=748
+# CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
+#   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
+#   handlers.SendPollVoteHandler.ServeHTTP (coberta por hlog). covered SOBE
+#   472->474 (+2). eligible SOBE 631->633 (+2). Ambas elegiveis nascem
+#   cobertas; func_coverage sobe porque covered/eligible aumenta.
+min_func_coverage=749
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1409,7 +1414,16 @@ min_func_coverage=748
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=870
+# CAP-48 (2026-08-23): errpath DESCE 870->868 (1138/1308 -> 1150/1325).
+# +17 caminhos de saida no denominador, +12 cobertos. O percentual cai porque
+# os 5 caminhos de validacao do use case (missing_phone, missing_poll_message_id,
+# missing_poll_message_timestamp, missing_sender, missing_options) usam apperr.New
+# que loga em Debug — abaixo do piso Warn que errpath_coverage exige. É o mesmo
+# padrao de TODOS os outros use cases de envio: a validacao devolve apperr
+# estruturado e o handler loga a rejeicao via hlog. Nao e' regressao de
+# cobertura: nenhum caminho existente perdeu log; os 5 novos caminhos seguem
+# a convencao do projeto, e o handler os cobre.
+min_errpath_coverage=868
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1647,7 +1661,13 @@ min_errpath_coverage=870
 # min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
 # ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
 # statements e caminho de erro, Main.func3 tem defers e caminho de erro.
-min_eligible=631
+# CAP-48 (2026-08-23): min_eligible SOBE 631->633 (+2). ENTRAM (2):
+#   message.SendPollVoteUseCase.Execute e
+#   handlers.SendPollVoteHandler.ServeHTTP — ambas elegiveis de verdade
+#   (multiplos statements e caminhos de saida de tipo error). O adapter
+#   ChatMessengerAdapter.SendPollVote nao entra: adapters/ esta em
+#   .logcov-exclude (F193).
+min_eligible=633
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.

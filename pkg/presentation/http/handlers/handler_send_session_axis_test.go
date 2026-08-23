@@ -9,7 +9,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 )
 
-// CAP-16 — O EIXO DO txtID nas NOVE capabilities de envio que ficaram sem ele.
+// CAP-16 — O EIXO DO txtID nas DEZ capabilities de envio que ficaram sem ele.
 //
 // O txtID e' a identidade da SESSAO. Se o handler entregar a' porta um valor
 // que nao seja o do contexto autenticado, a mensagem sai pela CONTA ERRADA —
@@ -22,10 +22,10 @@ import (
 // ja' tinham o eixo pela tabela de handler_message_test.go — e quando cada um
 // saiu dessa tabela (send/buttons no CAP-21, send/list no CAP-22), o eixo foi
 // junto: TestSendButtons_AuthenticatedSessionReachesPort e
-// TestSendList_AuthenticatedSessionReachesPort. As NOVE que sobravam sao as
+// TestSendList_AuthenticatedSessionReachesPort. As DEZ que sobravam sao as
 // deste arquivo:
 //
-//	text, image, audio, video, document, sticker, location, contact, poll
+//	text, image, audio, video, document, sticker, location, contact, poll, pollvote
 //
 // DOIS pontos por capability, nao um: a guarda de sessao (EnsureSession) e o
 // metodo de envio (SendText, SendImage, ...) sao chamadas DISTINTAS da porta e
@@ -209,6 +209,22 @@ func sessionAxisCases() []sessionAxisCase {
 				return rec, sessionAxisEnsureTxtIDs(sm.SessionGuard), send
 			},
 		},
+		{
+			nome:      "pollvote",
+			rota:      "POST /chat/send/pollvote",
+			sessionID: "send-pollvote-session-c4a829",
+			serve: func(t *testing.T, sessionID string) (*httptest.ResponseRecorder, []string, []string) {
+				cm := &contractsfake.ChatMessenger{}
+				rec := sessionAxisPost(t, sendPollVoteRouter(cm, &contractsfake.JIDResolver{}),
+					"/chat/send/pollvote",
+					`{"Phone":"120363313346913103@g.us","Sender":"5511999999999@s.whatsapp.net","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`, sessionID)
+				send := make([]string, 0, len(cm.SendPollVoteCalls))
+				for _, c := range cm.SendPollVoteCalls {
+					send = append(send, c.TxtID)
+				}
+				return rec, sessionAxisEnsureTxtIDs(cm.SessionGuard), send
+			},
+		},
 	}
 }
 
@@ -224,14 +240,14 @@ func sessionAxisPost(t *testing.T, h http.Handler, target, body, sessionID strin
 	return rec
 }
 
-// TestSendCapabilities_AuthenticatedSessionReachesPort trava, nas NOVE
+// TestSendCapabilities_AuthenticatedSessionReachesPort trava, nas DEZ
 // capabilities, que o txtID entregue a' porta e' o do contexto autenticado —
 // nos DOIS pontos.
 func TestSendCapabilities_AuthenticatedSessionReachesPort(t *testing.T) {
 	casos := sessionAxisCases()
-	if len(casos) != 9 {
-		t.Fatalf("a tabela cobre %d capabilities, quero as 9 do CAP-16 "+
-			"(text, image, audio, video, document, sticker, location, contact, poll)", len(casos))
+	if len(casos) != 10 {
+		t.Fatalf("a tabela cobre %d capabilities, quero as 10 do CAP-16 + CAP-48 "+
+			"(text, image, audio, video, document, sticker, location, contact, poll, pollvote)", len(casos))
 	}
 
 	// Sentinela repetido entre casos passaria por coincidencia num handler que

@@ -215,6 +215,15 @@ type ChatMessengerEditMessageCall struct {
 	CtxInfo   *domain.EditContextInfo
 }
 
+// ChatMessengerSendPollVoteCall é uma chamada a SendPollVote.
+type ChatMessengerSendPollVoteCall struct {
+	Ctx     context.Context
+	TxtID   string
+	Target  domain.JID
+	Payload domain.PollVotePayload
+	ID      string
+}
+
 // ChatMessenger é o fake de port.ChatMessenger.
 type ChatMessenger struct {
 	SessionGuard
@@ -230,6 +239,9 @@ type ChatMessenger struct {
 
 	EditMessageFunc  func(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error)
 	EditMessageCalls []ChatMessengerEditMessageCall
+
+	SendPollVoteFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.PollVotePayload, id string) (domain.MessageSendResult, error)
+	SendPollVoteCalls []ChatMessengerSendPollVoteCall
 }
 
 var _ port.ChatMessenger = (*ChatMessenger)(nil)
@@ -266,6 +278,15 @@ func (f *ChatMessenger) EditMessage(ctx context.Context, txtID string, target do
 	f.EditMessageCalls = append(f.EditMessageCalls, ChatMessengerEditMessageCall{Ctx: ctx, TxtID: txtID, Target: target, MessageID: messageID, NewText: newText, CtxInfo: ctxInfo})
 	if f.EditMessageFunc != nil {
 		return f.EditMessageFunc(ctx, txtID, target, messageID, newText, ctxInfo)
+	}
+	return domain.MessageSendResult{}, nil
+}
+
+// SendPollVote implementa port.ChatMessenger.
+func (f *ChatMessenger) SendPollVote(ctx context.Context, txtID string, target domain.JID, payload domain.PollVotePayload, id string) (domain.MessageSendResult, error) {
+	f.SendPollVoteCalls = append(f.SendPollVoteCalls, ChatMessengerSendPollVoteCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+	if f.SendPollVoteFunc != nil {
+		return f.SendPollVoteFunc(ctx, txtID, target, payload, id)
 	}
 	return domain.MessageSendResult{}, nil
 }

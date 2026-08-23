@@ -566,6 +566,47 @@ type PollPayload struct {
 	Options []string
 }
 
+// SendPollVoteRequest represents the HTTP payload for POST /chat/send/pollvote.
+//
+// The caller provides the four fields that identify the original poll message:
+// Phone (the chat), Sender (who created the poll), PollMessageId (the poll's
+// message ID), and PollMessageTimestamp (the poll's Unix timestamp). These are
+// needed because the vote is encrypted with a secret derived from the original
+// poll message — BuildPollVote requires a *types.MessageInfo, not just an ID.
+//
+// Design choice (a): stateless, explicit. The alternative (b) — looking up the
+// poll from message_history — creates a dependency on retention, and fails
+// silently when the history was pruned. With (a), the caller always knows
+// exactly what it passed, and the error is always about what it passed.
+type SendPollVoteRequest struct {
+	Phone                string   `json:"Phone"`
+	Sender               string   `json:"Sender"`
+	PollMessageID        string   `json:"PollMessageId"`
+	PollMessageTimestamp int64    `json:"PollMessageTimestamp"`
+	Options              []string `json:"Options"`
+	ID                   string   `json:"Id,omitempty"`
+}
+
+// SendPollVoteResult represents the response for POST /chat/send/pollvote.
+// Same shape as every other send capability: {message_id, timestamp, status}.
+type SendPollVoteResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}
+
+// PollVotePayload is the protocol-pure metadata that
+// port.ChatMessenger.SendPollVote passes to the adapter. It carries the four
+// fields needed to reconstruct types.MessageInfo for the original poll, plus
+// the option names the caller is voting for.
+type PollVotePayload struct {
+	PollChat      JID
+	PollSender    JID
+	PollMessageID string
+	PollTimestamp int64
+	OptionNames   []string
+}
+
 // DeleteMessageRequest representa o payload de exclusão de mensagem.
 type DeleteMessageRequest struct {
 	Phone string `json:"Phone"`

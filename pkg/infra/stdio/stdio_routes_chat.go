@@ -19,6 +19,7 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.send.location": {httpMethod: "POST", httpPath: "/chat/send/location"},
 	"chat.send.contact":  {httpMethod: "POST", httpPath: "/chat/send/contact"},
 	"chat.send.poll":     {httpMethod: "POST", httpPath: "/chat/send/poll"},
+	"chat.send.pollvote": {httpMethod: "POST", httpPath: "/chat/send/pollvote"},
 	"chat.send.buttons":  {httpMethod: "POST", httpPath: "/chat/send/buttons"},
 	"chat.send.carousel": {httpMethod: "POST", httpPath: "/chat/send/carousel"},
 	"chat.send.list":     {httpMethod: "POST", httpPath: "/chat/send/list"},

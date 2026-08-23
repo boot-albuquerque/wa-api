@@ -67,6 +67,18 @@ type Client interface {
 	// e' o seam local de wa-api.
 	BuildPollCreation(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
 
+	// BuildPollVote monta a mensagem de voto de enquete, cifrada com o
+	// segredo derivado da mensagem de enquete original. CAP-48 acrescenta
+	// este metodo a interface estreita (ADR-001) porque /chat/send/pollvote
+	// precisa de construir e enviar o voto de verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto BuildPollVote, definido em
+	// internal/wa-noise/core/msgsecret_poll.go:54). O que se alarga aqui
+	// e' o seam local de wa-api.
+	BuildPollVote(ctx context.Context, pollInfo *types.MessageInfo, optionNames []string) (*waE2E.Message, error)
+
 	// Upload sobe um anexo (imagem, video, audio, documento) aos
 	// servidores do WhatsApp. CAP-02 acrescenta este metodo a interface
 	// estreita (ADR-001) porque o envio de midia real, ao contrario do

@@ -627,6 +627,63 @@ func (a *ChatMessengerAdapter) SendPoll(ctx context.Context, txtID string, targe
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
+// SendPollVote builds an encrypted poll vote message and sends it to the chat
+// where the original poll lives (CAP-48). The vote is encrypted with a secret
+// derived from the original poll message — that is why the caller must provide
+// the full poll identity (chat, sender, id, timestamp) in the payload.
+//
+// The adapter reconstructs types.MessageInfo from the payload fields, calls
+// client.BuildPollVote to encrypt the vote, and then sends the resulting
+// PollUpdateMessage via client.SendMessage. The target of SendMessage is the
+// CHAT of the original poll, not the sender — the protocol delivers the vote
+// to the chat, not to the poll creator.
+func (a *ChatMessengerAdapter) SendPollVote(ctx context.Context, txtID string, target domain.JID, payload domain.PollVotePayload, id string) (domain.MessageSendResult, error) {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	recipient, err := wajid.ToJID(target)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	pollChatJID, err := wajid.ToJID(payload.PollChat)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	pollSenderJID, err := wajid.ToJID(payload.PollSender)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	pollInfo := &types.MessageInfo{
+		MessageSource: types.MessageSource{
+			Chat:    pollChatJID,
+			Sender:  pollSenderJID,
+			IsGroup: pollChatJID.Server == types.GroupServer,
+		},
+		ID:        types.MessageID(payload.PollMessageID),
+		Timestamp: time.Unix(payload.PollTimestamp, 0),
+	}
+
+	msg, err := client.BuildPollVote(ctx, pollInfo, payload.OptionNames)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+
+	var extra []wanoise.SendRequestExtra
+	if id != "" {
+		extra = append(extra, wanoise.SendRequestExtra{ID: types.MessageID(id)})
+	}
+
+	resp, err := client.SendMessage(ctx, recipient, msg, extra...)
+	if err != nil {
+		return domain.MessageSendResult{}, err
+	}
+	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
 // hydratedTemplateID é o TemplateId de HydratedFourRowTemplate. O histórico
 // o escrevia como o literal "1" (`git show 41bc8e2^:handlers.go`, linha
 // 3230) e nunca o expôs no payload público, então ele vive aqui — junto da

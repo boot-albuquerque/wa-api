@@ -86,4 +86,12 @@ type ChatMessenger interface {
 	// (FutureProofMessage/ProtocolMessage MESSAGE_EDIT) é responsabilidade
 	// do adapter.
 	EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error)
+
+	// SendPollVote votes on an existing poll. The vote is encrypted with a
+	// secret derived from the original poll message, so the caller must
+	// provide the full poll identity (chat, sender, id, timestamp) via
+	// payload. CAP-48 adds this to the same port as MarkRead, SendReaction,
+	// RevokeMessage and EditMessage: voting is an OPERATION on an existing
+	// message, not creation of a new one.
+	SendPollVote(ctx context.Context, txtID string, target domain.JID, payload domain.PollVotePayload, id string) (domain.MessageSendResult, error)
 }
