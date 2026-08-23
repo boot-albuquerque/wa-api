@@ -8,6 +8,7 @@ import (
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
@@ -29,7 +30,7 @@ func (l listerDuplo) List(context.Context, string) (waheadless.ContactRoster, er
 }
 
 func comLister(l lister) *Roster {
-	r := NewRoster(registry.New(1), cfgFor)
+	r := NewRoster(adapter.NewSessions(registry.New(1), cfgFor))
 	r.newLister = func(context.Context, string) (lister, error) { return l, nil }
 	return r
 }
@@ -46,7 +47,7 @@ func rosterDeProva() waheadless.ContactRoster {
 }
 
 func TestSatisfazOPortDeRoster(t *testing.T) {
-	var r any = NewRoster(registry.New(1), cfgFor)
+	var r any = NewRoster(adapter.NewSessions(registry.New(1), cfgFor))
 	if _, ok := r.(appport.ContactRoster); !ok {
 		t.Fatal("não satisfaz ContactRoster")
 	}
@@ -138,9 +139,9 @@ func TestFalhaDaCapabilityPropaga(t *testing.T) {
 }
 
 func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
-	r := NewRoster(registry.New(1), func(string) (waheadless.StartConfig, error) {
+	r := NewRoster(adapter.NewSessions(registry.New(1), func(string) (waheadless.StartConfig, error) {
 		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
-	})
+	}))
 	if _, err := r.ContactNames(context.Background(), "s1"); err == nil {
 		t.Fatal("falha de configuração virou roster vazio")
 	}

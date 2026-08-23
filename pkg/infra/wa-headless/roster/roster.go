@@ -8,12 +8,11 @@ package roster
 
 import (
 	"context"
-	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/wa-headless/registry"
+	adapter "wa-api/pkg/infra/wa-headless"
 )
 
 const listLabel = "adapter/contact-roster"
@@ -26,24 +25,19 @@ type lister interface {
 
 // Roster implements appport.ContactRoster over a headless session.
 type Roster struct {
-	sessions  *registry.Registry
-	configFor func(txtID string) (waheadless.StartConfig, error)
-	runner    *waheadless.Runner
+	sessions *adapter.Sessions
 	// newLister is overridable in tests. Nil uses the real page capability.
 	newLister func(ctx context.Context, txtID string) (lister, error)
 }
 
 // NewRoster builds the adapter.
-func NewRoster(sessions *registry.Registry, configFor func(string) (waheadless.StartConfig, error)) *Roster {
-	return &Roster{sessions: sessions, configFor: configFor, runner: waheadless.NewRunner()}
+func NewRoster(sessions *adapter.Sessions) *Roster {
+	return &Roster{sessions: sessions}
 }
 
 // EnsureSession reports whether this process can serve txtID, without booting.
-func (r *Roster) EnsureSession(_ context.Context, txtID string) error {
-	if !r.sessions.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
-	}
-	return nil
+func (r *Roster) EnsureSession(ctx context.Context, txtID string) error {
+	return r.sessions.EnsureSession(ctx, txtID)
 }
 
 // GetAllContacts returns the roster and how many people it holds.
@@ -121,19 +115,11 @@ func (r *Roster) lister(ctx context.Context, txtID string) (lister, error) {
 	if r.newLister != nil {
 		return r.newLister(ctx, txtID)
 	}
-	cfg, err := r.configFor(txtID)
-	if err != nil {
-		return nil, fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := r.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	eval, err := r.sessions.Evaluator(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return waheadless.NewContactLister(r.runner, sess.Tab().Evaluate), nil
+	return waheadless.NewContactLister(r.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof that this adapter satisfies the port.

@@ -9,6 +9,7 @@ import (
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
@@ -25,7 +26,7 @@ func cfgFor(string) (waheadless.StartConfig, error) {
 // acrescentar os métodos que faltam só para "completar" o adaptador, ele passa
 // a satisfazer a composição e o teste morde.
 func TestOAdaptadorNaoFingeSuportarOQueNaoTem(t *testing.T) {
-	var a any = NewArchiver(registry.New(1), cfgFor)
+	var a any = NewArchiver(adapter.NewSessions(registry.New(1), cfgFor))
 
 	if _, ok := a.(appport.ChatArchiver); !ok {
 		t.Fatal("o adaptador não satisfaz ChatArchiver, que é o que ele existe para fazer")
@@ -46,7 +47,7 @@ func TestOAdaptadorNaoFingeSuportarOQueNaoTem(t *testing.T) {
 // barata num minuto de trabalho.
 func TestEnsureSessionRespondePosseSemBootar(t *testing.T) {
 	reg := registry.New(2)
-	a := NewArchiver(reg, cfgFor)
+	a := NewArchiver(adapter.NewSessions(reg, cfgFor))
 
 	if err := a.EnsureSession(context.Background(), "desconhecida"); !errors.Is(err, registry.ErrUnknownSession) {
 		t.Fatalf("got %v, want ErrUnknownSession", err)
@@ -66,7 +67,7 @@ func TestEnsureSessionRespondePosseSemBootar(t *testing.T) {
 // nunca poderia funcionar.
 func TestIdentidadeInvalidaERecusadaAntesDeTocarNoRegistry(t *testing.T) {
 	reg := registry.New(1)
-	a := NewArchiver(reg, cfgFor)
+	a := NewArchiver(adapter.NewSessions(reg, cfgFor))
 
 	err := a.ArchiveChat(context.Background(), "s1", domain.JID("status@broadcast"), true)
 	if err == nil {
@@ -94,7 +95,7 @@ func (s *setterDuplo) SetArchived(_ context.Context, jid string, archived bool, 
 }
 
 func comSetter(s setter) *Archiver {
-	a := NewArchiver(registry.New(1), cfgFor)
+	a := NewArchiver(adapter.NewSessions(registry.New(1), cfgFor))
 	a.newSetter = func(context.Context, string) (setter, error) { return s, nil }
 	return a
 }
@@ -145,9 +146,9 @@ func TestFalhaDaCapabilityPropaga(t *testing.T) {
 
 // A falha ao resolver a CONFIGURAÇÃO propaga, em vez de virar sucesso mudo.
 func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
-	a := NewArchiver(registry.New(1), func(string) (waheadless.StartConfig, error) {
+	a := NewArchiver(adapter.NewSessions(registry.New(1), func(string) (waheadless.StartConfig, error) {
 		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
-	})
+	}))
 	if err := a.ArchiveChat(context.Background(), "s1", domain.JID("5511999999999@c.us"), true); err == nil {
 		t.Fatal("falha de configuração virou sucesso")
 	}

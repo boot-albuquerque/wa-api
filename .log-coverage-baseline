@@ -575,7 +575,26 @@ rules_frozen=true
 # Do lado do adaptador vale a justificativa da 77: adapter nao loga, quem tem o
 # contexto do pedido loga. A duvida registrada la aplica-se agora a seis
 # adaptadores.
-min_func_coverage=572
+# justificativa: decisao 83 (2026-08-22), seam de resolucao de sessao.
+# min_eligible 732->728 (CAI, e a queda e' consolidacao), func 572->576 (SOBE),
+# errpath 808->806.
+#
+# min_eligible cai porque seis copias do mesmo bloco de resolucao de sessao
+# viraram UMA. Nao e encolhimento do escopo — e' remocao de duplicacao: os seis
+# adaptadores tinham cada um o seu capability(), com os mesmos quatro passos, e
+# nenhum deles podia ser testado porque um passo no meio sobe browser.
+#
+# func_coverage SOBE 572->576 pelo mesmo motivo: a seam concentra as duas regras
+# que DAO para testar (falha de configuracao propaga; recusa por capacidade
+# chega ao chamador) e o repositorio passa a ter UMA linha nao coberta no lugar
+# de seis.
+#
+# O Holder continua NAO injetavel, como a decisao 83 exigiu: ele detem a
+# invariante de posse (um perfil, um dono ativo), e um dublê que satisfizesse a
+# interface dele seria uma segunda resposta, mais permissiva, a mesma pergunta.
+# A cobertura do browser fica na suite de integracao, que e o unico lugar que
+# pode cobri-la honestamente.
+min_func_coverage=576
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -597,7 +616,7 @@ min_func_coverage=572
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=808
+min_errpath_coverage=806
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -648,7 +667,7 @@ min_errpath_coverage=808
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=732
+min_eligible=728
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

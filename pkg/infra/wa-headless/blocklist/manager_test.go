@@ -9,6 +9,7 @@ import (
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
@@ -20,7 +21,7 @@ func cfgFor(string) (waheadless.StartConfig, error) {
 // (block e unblock na H59, a leitura na H146). Não há assimetria de capacidade
 // aqui, e o teste diz isso em vez de o deixar implícito.
 func TestSatisfazOPortInteiro(t *testing.T) {
-	var m any = NewManager(registry.New(1), cfgFor)
+	var m any = NewManager(adapter.NewSessions(registry.New(1), cfgFor))
 	if _, ok := m.(appport.BlocklistManager); !ok {
 		t.Fatal("não satisfaz BlocklistManager")
 	}
@@ -30,7 +31,7 @@ func TestSatisfazOPortInteiro(t *testing.T) {
 // recusa acontece na conversão de identidade — antes de qualquer sessão.
 func TestGrupoERecusadoAntesDeGastarSlot(t *testing.T) {
 	reg := registry.New(1)
-	m := NewManager(reg, cfgFor)
+	m := NewManager(adapter.NewSessions(reg, cfgFor))
 
 	_, err := m.UpdateBlocklist(context.Background(), "s1", domain.JID("status@broadcast"), true)
 	if err == nil {
@@ -64,7 +65,7 @@ func TestDHashEVazioEIssoEDeliberado(t *testing.T) {
 // capacidade limitada.
 func TestIdentidadeInvalidaNaoChegaAoRegistry(t *testing.T) {
 	reg := registry.New(1)
-	m := NewManager(reg, cfgFor)
+	m := NewManager(adapter.NewSessions(reg, cfgFor))
 
 	_, err := m.UpdateBlocklist(context.Background(), "s1", domain.JID(""), true)
 	if err == nil {
@@ -102,7 +103,7 @@ func (b *blockerDuplo) List(context.Context, string) ([]string, error) {
 }
 
 func comBlocker(b blocker) *Manager {
-	m := NewManager(registry.New(1), cfgFor)
+	m := NewManager(adapter.NewSessions(registry.New(1), cfgFor))
 	m.newBlocker = func(context.Context, string) (blocker, error) { return b, nil }
 	return m
 }
@@ -159,9 +160,9 @@ func TestGetBlocklistDevolveALista(t *testing.T) {
 
 // A falha ao resolver a CONFIGURAÇÃO propaga, em vez de virar lista vazia.
 func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
-	m := NewManager(registry.New(1), func(string) (waheadless.StartConfig, error) {
+	m := NewManager(adapter.NewSessions(registry.New(1), func(string) (waheadless.StartConfig, error) {
 		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
-	})
+	}))
 	if _, err := m.GetBlocklist(context.Background(), "s1"); err == nil {
 		t.Fatal("falha de configuração virou blocklist vazia")
 	}

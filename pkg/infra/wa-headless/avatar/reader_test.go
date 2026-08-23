@@ -9,6 +9,7 @@ import (
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
@@ -17,7 +18,7 @@ func cfgFor(string) (waheadless.StartConfig, error) {
 }
 
 func TestSatisfazOPortDeAvatar(t *testing.T) {
-	var r any = NewReader(registry.New(1), cfgFor)
+	var r any = NewReader(adapter.NewSessions(registry.New(1), cfgFor))
 	if _, ok := r.(appport.AvatarReader); !ok {
 		t.Fatal("não satisfaz AvatarReader")
 	}
@@ -28,7 +29,7 @@ func TestSatisfazOPortDeAvatar(t *testing.T) {
 
 func TestIdentidadeInvalidaNaoGastaSlot(t *testing.T) {
 	reg := registry.New(1)
-	r := NewReader(reg, cfgFor)
+	r := NewReader(adapter.NewSessions(reg, cfgFor))
 
 	if _, err := r.GetProfilePicture(context.Background(), "s1", domain.JID(""), false); err == nil {
 		t.Fatal("JID vazio foi aceito")
@@ -51,7 +52,7 @@ func (f fetcherDuplo) Fetch(context.Context, string, string) (waheadless.AvatarP
 }
 
 func comFetcher(f fetcher) *Reader {
-	r := NewReader(registry.New(1), cfgFor)
+	r := NewReader(adapter.NewSessions(registry.New(1), cfgFor))
 	r.newFetcher = func(context.Context, string) (fetcher, error) { return f, nil }
 	return r
 }
@@ -120,9 +121,9 @@ func TestPreviewEscolheAMiniatura(t *testing.T) {
 // É um caminho de erro real — um txtID sem perfil configurado — e engoli-lo
 // faria o chamador ver "sem foto" quando o problema é que a sessão nem existe.
 func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
-	r := NewReader(registry.New(1), func(string) (waheadless.StartConfig, error) {
+	r := NewReader(adapter.NewSessions(registry.New(1), func(string) (waheadless.StartConfig, error) {
 		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
-	})
+	}))
 	_, err := r.GetProfilePicture(context.Background(), "s1", domain.JID("5511999999999@c.us"), false)
 	if err == nil {
 		t.Fatal("falha de configuração virou 'esta pessoa não tem foto'")

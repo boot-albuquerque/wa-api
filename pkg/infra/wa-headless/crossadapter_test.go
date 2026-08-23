@@ -23,7 +23,7 @@ import (
 // sem saber qual está atrás.
 func TestOsDoisAdaptadoresSatisfazemAMesmaPortaDeArquivar(t *testing.T) {
 	var doSocket appport.ChatArchiver = noisemisc.NewMiscAdapter(nil)
-	var daPagina appport.ChatArchiver = headlesschat.NewArchiver(registry.New(1), nil)
+	var daPagina appport.ChatArchiver = headlesschat.NewArchiver(adapter.NewSessions(registry.New(1), nil))
 
 	if doSocket == nil || daPagina == nil {
 		t.Fatal("um dos adaptadores não satisfaz ChatArchiver")
@@ -39,7 +39,7 @@ func TestOsDoisAdaptadoresSatisfazemAMesmaPortaDeArquivar(t *testing.T) {
 // erro em tempo de execução.
 func TestOSocketSatisfazAComposicaoEAPaginaNAO(t *testing.T) {
 	var doSocket any = noisemisc.NewMiscAdapter(nil)
-	var daPagina any = headlesschat.NewArchiver(registry.New(1), nil)
+	var daPagina any = headlesschat.NewArchiver(adapter.NewSessions(registry.New(1), nil))
 
 	if _, ok := doSocket.(appport.ChatOperations); !ok {
 		t.Error("o adaptador do socket deixou de satisfazer ChatOperations; a " +

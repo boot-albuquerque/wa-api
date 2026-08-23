@@ -12,13 +12,11 @@ package identity
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
-	"wa-api/pkg/infra/wa-headless/registry"
 )
 
 const (
@@ -34,24 +32,19 @@ type lookuper interface {
 
 // Resolver implements appport.IdentityResolver over a headless session.
 type Resolver struct {
-	sessions  *registry.Registry
-	configFor func(txtID string) (waheadless.StartConfig, error)
-	runner    *waheadless.Runner
+	sessions *adapter.Sessions
 	// newLookuper is overridable in tests. Nil uses the real page capability.
 	newLookuper func(ctx context.Context, txtID string) (lookuper, error)
 }
 
 // NewResolver builds the adapter.
-func NewResolver(sessions *registry.Registry, configFor func(string) (waheadless.StartConfig, error)) *Resolver {
-	return &Resolver{sessions: sessions, configFor: configFor, runner: waheadless.NewRunner()}
+func NewResolver(sessions *adapter.Sessions) *Resolver {
+	return &Resolver{sessions: sessions}
 }
 
 // EnsureSession reports whether this process can serve txtID, without booting.
-func (r *Resolver) EnsureSession(_ context.Context, txtID string) error {
-	if !r.sessions.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
-	}
-	return nil
+func (r *Resolver) EnsureSession(ctx context.Context, txtID string) error {
+	return r.sessions.EnsureSession(ctx, txtID)
 }
 
 // IsOnWhatsApp reports which of the phones have an account.
@@ -173,19 +166,11 @@ func (r *Resolver) lookuper(ctx context.Context, txtID string) (lookuper, error)
 }
 
 func (r *Resolver) capability(ctx context.Context, txtID string) (*waheadless.Resolver, error) {
-	cfg, err := r.configFor(txtID)
-	if err != nil {
-		return nil, fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := r.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	eval, err := r.sessions.Evaluator(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return waheadless.NewResolver(r.runner, sess.Tab().Evaluate), nil
+	return waheadless.NewResolver(r.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof that this adapter satisfies the port.

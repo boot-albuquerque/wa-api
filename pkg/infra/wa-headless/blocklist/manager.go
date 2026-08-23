@@ -13,13 +13,11 @@ package blocklist
 
 import (
 	"context"
-	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
-	"wa-api/pkg/infra/wa-headless/registry"
 )
 
 const (
@@ -49,24 +47,19 @@ type blocker interface {
 
 // Manager implements appport.BlocklistManager over a headless session.
 type Manager struct {
-	sessions  *registry.Registry
-	configFor func(txtID string) (waheadless.StartConfig, error)
-	runner    *waheadless.Runner
+	sessions *adapter.Sessions
 	// newBlocker is overridable in tests. Nil uses the real page capability.
 	newBlocker func(ctx context.Context, txtID string) (blocker, error)
 }
 
 // NewManager builds the adapter.
-func NewManager(sessions *registry.Registry, configFor func(string) (waheadless.StartConfig, error)) *Manager {
-	return &Manager{sessions: sessions, configFor: configFor, runner: waheadless.NewRunner()}
+func NewManager(sessions *adapter.Sessions) *Manager {
+	return &Manager{sessions: sessions}
 }
 
 // EnsureSession reports whether this process can serve txtID, without booting.
-func (m *Manager) EnsureSession(_ context.Context, txtID string) error {
-	if !m.sessions.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
-	}
-	return nil
+func (m *Manager) EnsureSession(ctx context.Context, txtID string) error {
+	return m.sessions.EnsureSession(ctx, txtID)
 }
 
 // GetBlocklist returns who this account refuses to hear from.
@@ -133,19 +126,11 @@ func (m *Manager) blocker(ctx context.Context, txtID string) (blocker, error) {
 }
 
 func (m *Manager) capability(ctx context.Context, txtID string) (*waheadless.Blocker, error) {
-	cfg, err := m.configFor(txtID)
-	if err != nil {
-		return nil, fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := m.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	eval, err := m.sessions.Evaluator(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return waheadless.NewBlocker(m.runner, sess.Tab().Evaluate), nil
+	return waheadless.NewBlocker(m.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof that this adapter satisfies the port.

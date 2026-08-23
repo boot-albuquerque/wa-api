@@ -11,13 +11,11 @@ package chat
 
 import (
 	"context"
-	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
-	"wa-api/pkg/infra/wa-headless/registry"
 )
 
 // archiveLabel names the operation in the run's operation log. It is a constant
@@ -32,19 +30,14 @@ type setter interface {
 
 // Archiver implements appport.ChatArchiver over a headless session.
 type Archiver struct {
-	sessions *registry.Registry
-	// configFor answers "where does this session live", which is the one thing
-	// the registry cannot know. It mirrors the socket adapter taking a client
-	// getter: the lookup is injected, not invented here.
-	configFor func(txtID string) (waheadless.StartConfig, error)
-	runner    *waheadless.Runner
+	sessions *adapter.Sessions
 	// newSetter is overridable in tests. Nil uses the real page capability.
 	newSetter func(ctx context.Context, txtID string) (setter, error)
 }
 
 // NewArchiver builds the adapter.
-func NewArchiver(sessions *registry.Registry, configFor func(string) (waheadless.StartConfig, error)) *Archiver {
-	return &Archiver{sessions: sessions, configFor: configFor, runner: waheadless.NewRunner()}
+func NewArchiver(sessions *adapter.Sessions) *Archiver {
+	return &Archiver{sessions: sessions}
 }
 
 // EnsureSession reports whether this process can serve txtID.
@@ -52,11 +45,8 @@ func NewArchiver(sessions *registry.Registry, configFor func(string) (waheadless
 // It does NOT boot: ADR-0005 D6 makes ownership and readiness two questions,
 // and a guard that booted a browser to answer the first would turn a cheap
 // check into a minute of work.
-func (a *Archiver) EnsureSession(_ context.Context, txtID string) error {
-	if !a.sessions.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
-	}
-	return nil
+func (a *Archiver) EnsureSession(ctx context.Context, txtID string) error {
+	return a.sessions.EnsureSession(ctx, txtID)
 }
 
 // ArchiveChat archives or unarchives a conversation.
@@ -87,19 +77,11 @@ func (a *Archiver) setter(ctx context.Context, txtID string) (setter, error) {
 	if a.newSetter != nil {
 		return a.newSetter(ctx, txtID)
 	}
-	cfg, err := a.configFor(txtID)
-	if err != nil {
-		return nil, fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := a.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	eval, err := a.sessions.Evaluator(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return waheadless.NewChatState(a.runner, sess.Tab().Evaluate), nil
+	return waheadless.NewChatState(a.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof that this adapter satisfies the narrow port — and only it.

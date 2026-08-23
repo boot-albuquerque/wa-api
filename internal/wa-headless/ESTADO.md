@@ -1200,3 +1200,49 @@ medida que avança. Os ports restantes tocam as capabilities maiores da árvore
 pacote inteiro.
 
 **Estado: 6 de 18 ports satisfeitos, 2 recusados com motivo medido, 10 restantes.**
+
+## Decisão 83 — a seam de sessão, e por que o piso não foi afrouxado
+
+A cobertura tinha fechado em **843 contra piso 843**: margem zero, com dez ports
+ainda por fiar, cada um trazendo o seu pacote. O próximo derrubaria o gate.
+
+Levei as três saídas à orquestração e ela recusou a fácil (**83**): *não afrouxe
+o piso; crie uma seam estreita de resolução de sessão no adapter, sem tornar
+Holder injetável, e cubra o browser só em integração.*
+
+### O que estava realmente sem cobertura
+
+Não era "o adaptador". Eram **seis cópias do mesmo bloco** — buscar a
+configuração, adquirir o slot, bootar, devolver o avaliador — e nenhuma delas
+podia ser testada, porque o terceiro passo sobe um browser.
+
+Consolidadas em `Sessions`, sobra **uma** linha não coberta no repositório
+inteiro, e ela está identificada no comentário como a que só a suíte de
+integração pode cobrir honestamente.
+
+| pacote | antes | depois |
+| --- | --- | --- |
+| avatar | 68,8% | **91,7%** |
+| chat | 70,8% | **93,8%** |
+| roster | 74,4% | **91,4%** |
+| presence | 86,1% | **92,9%** |
+| blocklist | 64,1% | **80,6%** |
+
+Cobertura global: **843 → 845**, com o piso intacto.
+
+### O Holder continua NÃO injetável, e isso é a parte importante
+
+Ele detém a invariante de posse — um perfil, um dono ativo. Um dublê que
+satisfizesse a interface dele seria uma **segunda resposta, mais permissiva**, à
+mesma pergunta: a armadilha nº 1 do `ARMADILHAS.md`, agora numa invariante que
+protege um perfil pareado.
+
+### `min_eligible` CAIU, e a queda é legítima
+
+732 → 728, e `func_coverage` SUBIU 572 → 576. Nas seis vezes anteriores o
+elegível só subiu e eu justifiquei cada subida como pedágio; esta é a primeira
+queda, e o arquivo manda desconfiar de exatamente isso.
+
+A queda não é encolhimento de escopo: é remoção de duplicação. E a cobertura
+subir ao mesmo tempo é a **confirmação** — se eu tivesse tirado código do
+denominador sem o cobrir, o percentual subiria com `covered` parado.

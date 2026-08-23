@@ -9,6 +9,7 @@ import (
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
@@ -16,7 +17,7 @@ func cfgFor(string) (waheadless.StartConfig, error) {
 	return waheadless.StartConfig{BinaryPath: "/nonexistent", ProfileDir: "/tmp/nao-usado"}, nil
 }
 
-func novo() *Announcer { return NewAnnouncer(registry.New(1), cfgFor) }
+func novo() *Announcer { return NewAnnouncer(adapter.NewSessions(registry.New(1), cfgFor)) }
 
 // TestAnunciaMasNaoAssina trava a recusa por DEPENDÊNCIA HUMANA.
 //
@@ -88,7 +89,7 @@ func TestPresencaGlobalDesconhecidaERecusada(t *testing.T) {
 // funcionar não pode gastar capacidade limitada.
 func TestValidacaoAconteceAntesDeGastarSlot(t *testing.T) {
 	reg := registry.New(1)
-	a := NewAnnouncer(reg, cfgFor)
+	a := NewAnnouncer(adapter.NewSessions(reg, cfgFor))
 
 	_ = a.SendPresence(context.Background(), "s1", domain.PresenceType("talvez"))
 	_ = a.SendChatPresence(context.Background(), "s1", domain.JID("status@broadcast"), "composing", "")
@@ -116,7 +117,7 @@ func (a *announcerDuplo) SetOnline(_ context.Context, available bool, _ string) 
 }
 
 func comAnnouncer(d announcer) *Announcer {
-	a := NewAnnouncer(registry.New(1), cfgFor)
+	a := NewAnnouncer(adapter.NewSessions(registry.New(1), cfgFor))
 	a.newAnnouncer = func(context.Context, string) (announcer, error) { return d, nil }
 	return a
 }
@@ -154,9 +155,9 @@ func TestPresencaGlobalNaoEInvertida(t *testing.T) {
 
 // A falha ao resolver a CONFIGURAÇÃO propaga.
 func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
-	a := NewAnnouncer(registry.New(1), func(string) (waheadless.StartConfig, error) {
+	a := NewAnnouncer(adapter.NewSessions(registry.New(1), func(string) (waheadless.StartConfig, error) {
 		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
-	})
+	}))
 	if err := a.SendPresence(context.Background(), "s1", domain.PresenceAvailable); err == nil {
 		t.Fatal("falha de configuração virou anúncio bem-sucedido")
 	}

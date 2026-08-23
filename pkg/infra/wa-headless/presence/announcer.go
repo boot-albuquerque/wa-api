@@ -21,7 +21,6 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
-	"wa-api/pkg/infra/wa-headless/registry"
 )
 
 // Labels name the operations in the run's operation log. Constants, because a
@@ -57,24 +56,19 @@ type announcer interface {
 
 // Announcer implements appport.PresenceAnnouncer over a headless session.
 type Announcer struct {
-	sessions  *registry.Registry
-	configFor func(txtID string) (waheadless.StartConfig, error)
-	runner    *waheadless.Runner
+	sessions *adapter.Sessions
 	// newAnnouncer is overridable in tests. Nil uses the real page capability.
 	newAnnouncer func(ctx context.Context, txtID string) (announcer, error)
 }
 
 // NewAnnouncer builds the adapter.
-func NewAnnouncer(sessions *registry.Registry, configFor func(string) (waheadless.StartConfig, error)) *Announcer {
-	return &Announcer{sessions: sessions, configFor: configFor, runner: waheadless.NewRunner()}
+func NewAnnouncer(sessions *adapter.Sessions) *Announcer {
+	return &Announcer{sessions: sessions}
 }
 
 // EnsureSession reports whether this process can serve txtID, without booting.
-func (a *Announcer) EnsureSession(_ context.Context, txtID string) error {
-	if !a.sessions.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
-	}
-	return nil
+func (a *Announcer) EnsureSession(ctx context.Context, txtID string) error {
+	return a.sessions.EnsureSession(ctx, txtID)
 }
 
 // SendPresence sets the session's global availability.
@@ -124,19 +118,11 @@ func (a *Announcer) announcer(ctx context.Context, txtID string) (announcer, err
 }
 
 func (a *Announcer) capability(ctx context.Context, txtID string) (*waheadless.PresenceAnnouncer, error) {
-	cfg, err := a.configFor(txtID)
-	if err != nil {
-		return nil, fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := a.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	eval, err := a.sessions.Evaluator(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return waheadless.NewPresence(a.runner, sess.Tab().Evaluate), nil
+	return waheadless.NewPresence(a.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof: this adapter satisfies the announcing half, and only it.

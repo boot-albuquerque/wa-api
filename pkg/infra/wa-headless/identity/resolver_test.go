@@ -9,6 +9,7 @@ import (
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
@@ -17,7 +18,7 @@ func cfgFor(string) (waheadless.StartConfig, error) {
 }
 
 func TestSatisfazOPortDeIdentidade(t *testing.T) {
-	var r any = NewResolver(registry.New(1), cfgFor)
+	var r any = NewResolver(adapter.NewSessions(registry.New(1), cfgFor))
 	if _, ok := r.(appport.IdentityResolver); !ok {
 		t.Fatal("não satisfaz IdentityResolver")
 	}
@@ -32,7 +33,7 @@ func TestSatisfazOPortDeIdentidade(t *testing.T) {
 // adaptadores: um pedido impossível não gasta capacidade limitada.
 func TestIdentidadeInvalidaNaoGastaSlot(t *testing.T) {
 	reg := registry.New(1)
-	r := NewResolver(reg, cfgFor)
+	r := NewResolver(adapter.NewSessions(reg, cfgFor))
 
 	if _, err := r.GetLIDForPN(context.Background(), "s1", domain.JID("status@broadcast")); err == nil {
 		t.Fatal("um broadcast foi aceito como identidade de pessoa")
@@ -47,7 +48,7 @@ func TestIdentidadeInvalidaNaoGastaSlot(t *testing.T) {
 // Chrome inteiro.
 func TestListaVaziaNaoAbreSessao(t *testing.T) {
 	reg := registry.New(1)
-	r := NewResolver(reg, cfgFor)
+	r := NewResolver(adapter.NewSessions(reg, cfgFor))
 
 	got, err := r.GetManyLIDsForPNs(context.Background(), "s1", nil)
 	if err == nil && len(got) != 0 {
@@ -102,7 +103,7 @@ func (l lookuperDuplo) LidAndPhone(_ context.Context, jid, _ string) (waheadless
 }
 
 func comLookuper(l lookuper) *Resolver {
-	r := NewResolver(registry.New(1), cfgFor)
+	r := NewResolver(adapter.NewSessions(registry.New(1), cfgFor))
 	r.newLookuper = func(context.Context, string) (lookuper, error) { return l, nil }
 	return r
 }
@@ -164,9 +165,9 @@ func TestLoteIgnoraOQueNaoResolveEmVezDeFalhar(t *testing.T) {
 // A falha ao resolver a CONFIGURAÇÃO propaga, em vez de virar "não está no
 // WhatsApp" — que seria de novo o palpite com forma de fato.
 func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
-	r := NewResolver(registry.New(1), func(string) (waheadless.StartConfig, error) {
+	r := NewResolver(adapter.NewSessions(registry.New(1), func(string) (waheadless.StartConfig, error) {
 		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
-	})
+	}))
 	if _, err := r.IsOnWhatsApp(context.Background(), "s1", []string{"5511999999999"}); err == nil {
 		t.Fatal("falha de configuração virou 'não está no WhatsApp'")
 	}

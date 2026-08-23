@@ -4,13 +4,11 @@ package avatar
 
 import (
 	"context"
-	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
-	"wa-api/pkg/infra/wa-headless/registry"
 )
 
 const fetchLabel = "adapter/get-profile-picture"
@@ -26,24 +24,19 @@ type fetcher interface {
 
 // Reader implements appport.AvatarReader over a headless session.
 type Reader struct {
-	sessions  *registry.Registry
-	configFor func(txtID string) (waheadless.StartConfig, error)
-	runner    *waheadless.Runner
+	sessions *adapter.Sessions
 	// newFetcher is overridable in tests. Nil uses the real page capability.
 	newFetcher func(ctx context.Context, txtID string) (fetcher, error)
 }
 
 // NewReader builds the adapter.
-func NewReader(sessions *registry.Registry, configFor func(string) (waheadless.StartConfig, error)) *Reader {
-	return &Reader{sessions: sessions, configFor: configFor, runner: waheadless.NewRunner()}
+func NewReader(sessions *adapter.Sessions) *Reader {
+	return &Reader{sessions: sessions}
 }
 
 // EnsureSession reports whether this process can serve txtID, without booting.
-func (r *Reader) EnsureSession(_ context.Context, txtID string) error {
-	if !r.sessions.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
-	}
-	return nil
+func (r *Reader) EnsureSession(ctx context.Context, txtID string) error {
+	return r.sessions.EnsureSession(ctx, txtID)
 }
 
 // GetProfilePicture returns the picture, or nil when the person has none.
@@ -88,19 +81,11 @@ func (r *Reader) fetcher(ctx context.Context, txtID string) (fetcher, error) {
 }
 
 func (r *Reader) capability(ctx context.Context, txtID string) (*waheadless.AvatarFetcher, error) {
-	cfg, err := r.configFor(txtID)
-	if err != nil {
-		return nil, fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := r.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	eval, err := r.sessions.Evaluator(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return waheadless.NewAvatarFetcher(r.runner, sess.Tab().Evaluate), nil
+	return waheadless.NewAvatarFetcher(r.sessions.Runner(), eval), nil
 }
 
 // Compile-time proof that this adapter satisfies the port.
