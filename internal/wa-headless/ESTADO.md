@@ -1085,3 +1085,34 @@ também o vocabulário do socket (`typing`, `stopped`, `audio`), para que um
 chamador escrito contra o outro transporte não quebre ao trocar.
 
 **Estado: 2 de 18 ports satisfeitos, 2 recusados com motivo medido, 14 restantes.**
+
+## BlocklistManager — e a TERCEIRA categoria: assimetria de DADO
+
+Terceiro port satisfeito, e o primeiro **por inteiro** — os três verbos estão
+`PROVEN` no LEDGER (block e unblock na H59, a leitura na H146). Nenhuma
+assimetria de capacidade.
+
+Mas apareceu outra coisa, que não é capacidade e sim **dado**:
+
+O socket versiona a blocklist com um `DHash` que o servidor manda. A página não
+expõe equivalente — entrega a coleção, não a versão dela. Preencher com um valor
+inventado seria dado bem-formado e FALSO, e um chamador que comparasse dois deles
+concluiria "não mudou" a partir de duas listas diferentes.
+
+Vazio é a resposta honesta. O problema é que vazio **parece esquecimento**, então
+virou constante nomeada com o motivo E um teste — sem ele, alguém lê o `""` como
+lacuna e "corrige". A mensagem do teste encaminha: *se a página passou a expor uma
+versão, isso é mudança de capacidade e precisa de medição, não de um valor novo
+aqui*.
+
+### As três categorias de divergência, agora nomeadas
+
+| categoria | exemplo | o que fazer |
+| --- | --- | --- |
+| **capacidade sem sentido** | `UnavailableMessageRequester` | recusar o port; nunca vai existir |
+| **capacidade bloqueada por humano** | `PresenceSubscriber` (H144) | recusar o port com a medição; volta quando alguém agir no telefone |
+| **dado ausente** | `DHash` da blocklist | valor honesto (vazio), constante nomeada, teste que impede o preenchimento |
+
+A terceira é a mais fácil de errar, porque o compilador aceita qualquer valor.
+
+**Estado: 3 de 18 ports satisfeitos, 2 recusados com motivo medido, 13 restantes.**

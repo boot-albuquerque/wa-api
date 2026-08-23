@@ -35,6 +35,7 @@ type portStatus struct {
 var inventarioFase3 = map[string]portStatus{
 	"ChatArchiver":      {satisfeito: true},
 	"PresenceAnnouncer": {satisfeito: true},
+	"BlocklistManager":  {satisfeito: true},
 
 	"PresenceSubscriber": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA, medida na H144: " +
 		"com as duas contas acordadas ao mesmo tempo, a assinatura nunca chega a " +
@@ -50,7 +51,6 @@ var inventarioFase3 = map[string]portStatus{
 		"nada — a página já entrega texto. Não é lacuna, é ausência de sentido."},
 
 	"AppStateSyncer":        {motivo: "pendente"},
-	"BlocklistManager":      {motivo: "pendente"},
 	"CallRejecter":          {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
 	"ChatMessenger":         {motivo: "pendente"},
 	"ContactDirectory":      {motivo: "pendente"},

@@ -506,7 +506,22 @@ rules_frozen=true
 # Do lado do adaptador (pkg/infra/wa-headless/presence), vale a justificativa da
 # decisao 77: adapter nao loga, quem tem o contexto do pedido loga. A duvida
 # registrada la' continua valida.
-min_func_coverage=602
+# justificativa: BlocklistManager, o TERCEIRO port de transporte satisfeito
+# (2026-08-22). min_eligible 679->687, func 602->598, errpath fica em 814.
+#
+# Mesmo pedagio, terceira vez: fiar um port arrasta o pacote da capability.
+# Anunciado na justificativa da decisao 78, cobrado na 80 com chatstate, na
+# presenca, e agora com block. Repete-se por cada um dos 15 restantes, e continua
+# a ser visibilidade e nao regressao.
+#
+# As entradas foram conferidas no golden. Blocker.Block, Unblock e List correm
+# atraves do rastreador (regra L1-d2, presenca reconhecida, cobertura de caminho
+# de saida deliberadamente NAO), pelo mesmo motivo ja registrado para
+# chatstate.Setter.set e para os metodos do Announcer.
+#
+# errpath NAO cai desta vez: os caminhos novos de List ja vinham com a causa
+# nomeada, entao numerador e denominador subiram juntos.
+min_func_coverage=598
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -576,7 +591,8 @@ min_errpath_coverage=814
 # +6 (665->671): o pacote capabilities/chatstate, pela primeira capability
 # fiada — ver a justificativa acima.
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
-min_eligible=679
+# +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
+min_eligible=687
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -31,6 +31,7 @@
 package waheadless
 
 import (
+	"wa-api/internal/wa-headless/capabilities/block"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/core"
@@ -159,3 +160,30 @@ var ErrUnknownPresenceState = presence.ErrUnknownState
 func NewPresence(runner *Runner, eval Evaluator) *PresenceAnnouncer {
 	return presence.New(runner, eval)
 }
+
+// Blocking: who this account refuses to hear from.
+type (
+	// Blocker blocks, unblocks and lists.
+	Blocker = block.Blocker
+	// BlockResult is what a block or unblock actually did, read back —
+	// invariant 14. It carries blocklist SIZES and never the entries.
+	BlockResult = block.Result
+)
+
+// The refusals this capability distinguishes. They are separate values because
+// each one calls for a different answer at the HTTP boundary, and a single
+// "block failed" would make them indistinguishable.
+var (
+	// ErrBlockNoContact means the contact is not in the loaded roster.
+	ErrBlockNoContact = block.ErrNoContact
+	// ErrBlockGroup means a group was passed; a group cannot be blocked.
+	ErrBlockGroup = block.ErrGroup
+	// ErrBlockNotOnWhatsApp means the identity does not resolve on this build.
+	ErrBlockNotOnWhatsApp = block.ErrNotOnWhatsApp
+	// ErrBlockNoChat means this build refuses to block a phone contact with no
+	// existing conversation.
+	ErrBlockNoChat = block.ErrNoChatToBlockFrom
+)
+
+// NewBlocker builds the blocking capability over a session's page.
+func NewBlocker(runner *Runner, eval Evaluator) *Blocker { return block.New(runner, eval) }
