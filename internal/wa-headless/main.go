@@ -33,6 +33,7 @@ package waheadless
 import (
 	"wa-api/internal/wa-headless/capabilities/avatar"
 	"wa-api/internal/wa-headless/capabilities/block"
+	"wa-api/internal/wa-headless/capabilities/channel"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/lookup"
@@ -242,4 +243,17 @@ type (
 // NewContactLister builds the roster capability over a session's page.
 func NewContactLister(runner *Runner, eval Evaluator) *ContactLister {
 	return contacts.New(runner, eval)
+}
+
+// Channels, which the protocol calls newsletters.
+type (
+	// ChannelManager reads and administers channels.
+	ChannelManager = channel.Manager
+	// ChannelEntry is one channel in a listing.
+	ChannelEntry = channel.DirectoryEntry
+)
+
+// NewChannelManager builds the channel capability over a session's page.
+func NewChannelManager(runner *Runner, eval Evaluator) *ChannelManager {
+	return channel.NewManager(runner, eval)
 }

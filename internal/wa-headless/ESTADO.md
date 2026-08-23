@@ -1246,3 +1246,46 @@ queda, e o arquivo manda desconfiar de exatamente isso.
 A queda não é encolhimento de escopo: é remoção de duplicação. E a cobertura
 subir ao mesmo tempo é a **confirmação** — se eu tivesse tirado código do
 denominador sem o cobrir, o percentual subiria com `covered` parado.
+
+## NewsletterReader — a QUARTA categoria: frescor não garantido
+
+Sétimo port satisfeito, e ele completou o vocabulário de divergência entre os
+dois transportes:
+
+| categoria | exemplo | natureza |
+| --- | --- | --- |
+| capacidade sem sentido | `UnavailableMessageRequester` | nunca vai existir |
+| capacidade bloqueada por humano | `PresenceSubscriber` (H144) | volta quando alguém agir no telefone |
+| dado ausente | `DHash` da blocklist | o campo não existe |
+| **frescor não garantido** | `Followed` (H139) | a resposta é COMPLETA e pode estar VELHA |
+
+A H139 mediu que `Followed` reflete o **cache do cliente**: seis canais apagados
+por outra conta continuavam no modelo local com `serverAlive:false`.
+
+A tentação óbvia é filtrá-los no adaptador. **Recusei**, porque o
+`DirectoryEntry` não carrega vivacidade — filtrar seria inventar um julgamento a
+partir de dado que não existe. Devolver o cache COMO cache é honesto; devolver
+uma lista filtrada reivindicaria um frescor que este transporte não entrega.
+
+O teste trava a recusa: se alguém acrescentar um filtro, ele falha dizendo que o
+critério não está no dado.
+
+### A seam provou-se
+
+`capabilities/channel` entrou inteiro — elegíveis 728 → 746, o maior salto desde
+`contacts` — e a cobertura fechou em **845 contra piso 843**, com folga. Antes da
+decisão 83 a margem era zero e este port teria derrubado o gate.
+
+### Uma armadilha documentada voltou a morder
+
+`set -- $m` em `zsh` não faz word-split: os três números foram como um argumento
+só e escreveram lixo no baseline. Está na memória do projeto, e ainda assim
+aconteceu.
+
+O que limitou o custo não foi ter a armadilha escrita — foi **verificar
+imediatamente**: o teste da métrica falhou no mesmo comando, e um
+`git checkout` do arquivo desfez antes de qualquer coisa se acumular. É o mesmo
+padrão do controle negativo que quebra o build: a armadilha documentada reduz o
+tempo de reconhecimento, a verificação imediata é que evita o estrago.
+
+**Estado: 7 de 18 ports satisfeitos, 2 recusados com motivo medido, 9 restantes.**

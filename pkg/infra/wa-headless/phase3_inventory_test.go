@@ -44,6 +44,7 @@ var inventarioFase3 = map[string]portStatus{
 	"IdentityResolver": {satisfeito: true},
 	"AvatarReader":     {satisfeito: true},
 	"ContactRoster":    {satisfeito: true},
+	"NewsletterReader": {satisfeito: true},
 
 	"PresenceSubscriber": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA, medida na H144: " +
 		"com as duas contas acordadas ao mesmo tempo, a assinatura nunca chega a " +
@@ -66,7 +67,6 @@ var inventarioFase3 = map[string]portStatus{
 	"GroupRequests":         {motivo: "pendente"},
 	"GroupSettings":         {motivo: "pendente"},
 	"MessageComposer":       {motivo: "pendente"},
-	"NewsletterReader":      {motivo: "pendente"},
 	"PrivacyManager":        {motivo: "pendente"},
 	"ProfileAccessProvider": {motivo: "pendente"},
 	"SessionController":     {motivo: "pendente"},
