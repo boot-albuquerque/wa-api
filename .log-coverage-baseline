@@ -487,7 +487,26 @@ rules_frozen=true
 # Do lado do adaptador (pkg/infra/wa-headless/chat), vale a mesma justificativa
 # da decisao 77: adapter nao loga, quem tem o contexto do pedido loga. A duvida
 # registrada la' continua valida e aplica-se aqui tambem.
-min_func_coverage=608
+# justificativa: PresenceAnnouncer, o SEGUNDO port de transporte satisfeito
+# (2026-08-22, padrao da decisao 80 aplicado sob a 81). min_eligible 671->679,
+# func 608->602, errpath 815->814.
+#
+# E' o mesmo pedagio ja justificado na decisao 80, cobrado outra vez: fiar um
+# port arrasta o pacote da capability. Aconteceu com chatstate, acontece agora
+# com presence, e vai acontecer com cada um dos 15 restantes. Esta' anunciado
+# desde a justificativa da 78 e continua a ser visibilidade, nao regressao.
+#
+# As entradas foram conferidas no golden. Announcer.Set, SetOnline e Observe
+# ficam elegiveis e descobertas pelo MESMO motivo ja registrado para
+# chatstate.Setter.set: correm atraves do rastreador, que a regra L1-d2
+# reconhece como presenca (L1) e deliberadamente NAO como cobertura de caminho
+# de saida (L2), porque rastrear prova que a operacao aconteceu e nao que
+# alguem classificou uma falha.
+#
+# Do lado do adaptador (pkg/infra/wa-headless/presence), vale a justificativa da
+# decisao 77: adapter nao loga, quem tem o contexto do pedido loga. A duvida
+# registrada la' continua valida.
+min_func_coverage=602
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -507,7 +526,8 @@ min_func_coverage=608
 # ver a justificativa de min_func_coverage acima (decisao 78).
 # +1 (817->818): ver a justificativa da decisao 77 acima.
 # 818->815: ver a justificativa da decisao 80 acima.
-min_errpath_coverage=815
+# 815->814: ver a justificativa do PresenceAnnouncer acima.
+min_errpath_coverage=814
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -555,7 +575,8 @@ min_errpath_coverage=815
 # +5 (660->665): decisao 77 — ver a justificativa acima.
 # +6 (665->671): o pacote capabilities/chatstate, pela primeira capability
 # fiada — ver a justificativa acima.
-min_eligible=671
+# +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
+min_eligible=679
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

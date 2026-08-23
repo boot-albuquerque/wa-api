@@ -1051,3 +1051,37 @@ Ele trava três coisas:
 `ChatArchiver` satisfeito. `SessionGuard` embutido. `UnavailableMessageRequester`
 recusado por natureza, com motivo no inventário. **Restam 15**, cada um agora
 com uma linha que falha até ser resolvida.
+
+## PresenceAnnouncer — e a SEGUNDA categoria de recusa
+
+Segundo port de transporte satisfeito, e sem precisar de decisão nova: o padrão
+da 80 já cobria o caso, e a evidência veio do LEDGER em vez de discussão.
+
+`PresenceController` quebrou em `PresenceAnnouncer` (anunciar o que ESTA sessão
+faz) e `PresenceSubscriber` (pedir as atualizações de OUTRA pessoa). Os três
+casos de uso passaram a pedir a metade que usam.
+
+### As duas recusas não são a mesma coisa, e a distinção é informação
+
+| port | recusa | o que significa |
+| --- | --- | --- |
+| `UnavailableMessageRequester` | **ausência de sentido** | pede reenvio de mensagem que não pôde ser DECIFRADA; quem dirige a página não decifra nada. Nunca vai ser implementado. |
+| `PresenceSubscriber` | **dependência humana MEDIDA** | a H144 pôs as duas contas acordadas e a assinatura nunca chegou a `subscribed` em 45 s, com `isMyContact:false isAddressBookContact:false`. O vínculo de agenda cria-se NO TELEFONE. Passa a funcionar no dia em que um humano salvar o contato. |
+
+Tratá-las como "pendente" perderia essa diferença — e convidaria alguém a gastar
+uma sessão a tentar contornar a segunda, que é exatamente o que o LEDGER existe
+para impedir.
+
+O teste que trava a segunda faz mais do que falhar: ele **encaminha**. A mensagem
+diz que, se a assinatura passou a funcionar, *a H144 precisa de ser revista
+primeiro* — em vez de deixar alguém apagar o teste por o achar desatualizado.
+
+### Detalhe do adaptador que vale a regra
+
+O port aceita `state` como string LIVRE, porque o upstream nunca a validou.
+Repassá-la transformaria um typo do chamador numa chamada a função de página que
+não existe, então o adaptador mapeia contra um conjunto FECHADO — e aceita
+também o vocabulário do socket (`typing`, `stopped`, `audio`), para que um
+chamador escrito contra o outro transporte não quebre ao trocar.
+
+**Estado: 2 de 18 ports satisfeitos, 2 recusados com motivo medido, 14 restantes.**

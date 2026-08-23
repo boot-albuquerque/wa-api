@@ -10,13 +10,13 @@ import (
 
 // ChatPresenceUseCase sets chat presence (typing/recording)
 type ChatPresenceUseCase struct {
-	presence appport.PresenceController
+	presence appport.PresenceAnnouncer
 	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewChatPresenceUseCase creates a new instance
-func NewChatPresenceUseCase(pc appport.PresenceController, jr appport.JIDResolver, logger appport.Logger) *ChatPresenceUseCase {
+func NewChatPresenceUseCase(pc appport.PresenceAnnouncer, jr appport.JIDResolver, logger appport.Logger) *ChatPresenceUseCase {
 	return &ChatPresenceUseCase{presence: pc, jids: jr, logger: logger}
 }
 

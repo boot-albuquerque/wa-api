@@ -33,7 +33,15 @@ type portStatus struct {
 }
 
 var inventarioFase3 = map[string]portStatus{
-	"ChatArchiver": {satisfeito: true},
+	"ChatArchiver":      {satisfeito: true},
+	"PresenceAnnouncer": {satisfeito: true},
+
+	"PresenceSubscriber": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA, medida na H144: " +
+		"com as duas contas acordadas ao mesmo tempo, a assinatura nunca chega a " +
+		"`subscribed` em 45s, e os sinalizadores da agenda leem `isMyContact:false " +
+		"isAddressBookContact:false`. A assinatura de presença exige o vínculo de " +
+		"agenda, que se cria NO TELEFONE. Não é código por fazer — chamar isto de " +
+		"pendente convidaria alguém a gastar uma sessão a tentar contorná-lo."},
 	"SessionGuard": {satisfeito: true,
 		motivo: "embutido em todos os demais; o adaptador de chat o satisfaz"},
 
@@ -52,7 +60,6 @@ var inventarioFase3 = map[string]portStatus{
 	"GroupSettings":         {motivo: "pendente"},
 	"MessageComposer":       {motivo: "pendente"},
 	"NewsletterReader":      {motivo: "pendente"},
-	"PresenceController":    {motivo: "pendente"},
 	"PrivacyManager":        {motivo: "pendente"},
 	"ProfileAccessProvider": {motivo: "pendente"},
 	"SessionController":     {motivo: "pendente"},

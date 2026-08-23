@@ -32,6 +32,7 @@ package waheadless
 
 import (
 	"wa-api/internal/wa-headless/capabilities/chatstate"
+	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/runtime"
@@ -132,4 +133,29 @@ type (
 // NewChatState builds the chat-state capability over a session's page.
 func NewChatState(runner *Runner, eval Evaluator) *ChatStateSetter {
 	return chatstate.New(runner, eval)
+}
+
+// Presence: what this account announces it is doing.
+type (
+	// PresenceAnnouncer announces availability and per-chat state.
+	PresenceAnnouncer = presence.Announcer
+	// PresenceState is a per-chat announcement: composing, paused, recording.
+	PresenceState = presence.State
+)
+
+// The per-chat states, re-exported so an adapter maps into a CLOSED set instead
+// of forwarding a caller's string to a page function that may not exist.
+const (
+	PresenceComposing = presence.StateComposing
+	PresencePaused    = presence.StatePaused
+	PresenceRecording = presence.StateRecording
+)
+
+// ErrUnknownPresenceState refuses a state this stack does not know, rather than
+// defaulting: "we sent nothing" and "we sent paused" look identical afterwards.
+var ErrUnknownPresenceState = presence.ErrUnknownState
+
+// NewPresence builds the presence capability over a session's page.
+func NewPresence(runner *Runner, eval Evaluator) *PresenceAnnouncer {
+	return presence.New(runner, eval)
 }

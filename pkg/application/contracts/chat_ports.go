@@ -28,9 +28,21 @@ type JIDResolver interface {
 	ResolveQualifiedJID(ctx context.Context, raw string) (domain.JID, error)
 }
 
-// PresenceController expõe as operações de presença — o que a sessão sinaliza
-// sobre estar online, digitando ou observando o estado de um contato.
-type PresenceController interface {
+// A presença tem DUAS capacidades, e elas se separam por quem depende de quem
+// (decisão 80, aplicada aqui).
+//
+// Anunciar é uma ação desta sessão: ela diz o que está a fazer. Assinar é pedir
+// que o servidor mande as atualizações de OUTRA pessoa, e no transporte de
+// página isso está bloqueado por dependência HUMANA medida — a H144 mediu
+// `isMyContact:false isAddressBookContact:false` e a assinatura nunca chega,
+// porque o vínculo de agenda cria-se no TELEFONE. Não é código por fazer.
+//
+// Com uma interface única, o adaptador de página teria de implementar as três
+// para compilar. Separadas, ele satisfaz o que faz e recusa o que depende de um
+// humano com o aparelho na mão.
+
+// PresenceAnnouncer anuncia o que ESTA sessão está a fazer.
+type PresenceAnnouncer interface {
 	SessionGuard
 
 	// SendPresence define a presença global da sessão.
@@ -40,9 +52,21 @@ type PresenceController interface {
 	// gravando, pausado). state e media são repassados como vieram: o
 	// upstream nunca os validou, e esta fase não muda comportamento.
 	SendChatPresence(ctx context.Context, txtID string, chat domain.JID, state, media string) error
+}
+
+// PresenceSubscriber pede as atualizações de presença de OUTRA pessoa.
+type PresenceSubscriber interface {
+	SessionGuard
 
 	// SubscribePresence assina as atualizações de presença de um contato.
 	SubscribePresence(ctx context.Context, txtID string, target domain.JID) error
+}
+
+// PresenceController é a composição das duas, para o adaptador que satisfaz
+// ambas declarar isso numa linha. Um caso de uso deve pedir a metade que usa.
+type PresenceController interface {
+	PresenceAnnouncer
+	PresenceSubscriber
 }
 
 // ChatMessenger expõe as operações sobre mensagens já existentes numa

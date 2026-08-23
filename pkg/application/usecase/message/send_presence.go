@@ -10,12 +10,12 @@ import (
 
 // SendPresenceUseCase sets global presence status
 type SendPresenceUseCase struct {
-	presence appport.PresenceController
+	presence appport.PresenceAnnouncer
 	logger   appport.Logger
 }
 
 // NewSendPresenceUseCase creates a new instance
-func NewSendPresenceUseCase(pc appport.PresenceController, logger appport.Logger) *SendPresenceUseCase {
+func NewSendPresenceUseCase(pc appport.PresenceAnnouncer, logger appport.Logger) *SendPresenceUseCase {
 	return &SendPresenceUseCase{presence: pc, logger: logger}
 }
 
