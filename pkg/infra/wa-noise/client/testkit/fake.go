@@ -5,6 +5,8 @@ import (
 	"time"
 
 	wanoise "wa-api/internal/wa-noise"
+	wamessage "wa-api/internal/wa-noise/capabilities/message"
+	wapairing "wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
@@ -27,6 +29,11 @@ type Fake struct {
 	SendMessageFn                    func(ctx context.Context, to types.JID, message *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error)
 	GenerateMessageIDFn              func() types.MessageID
 	BuildUnavailableMessageFn        func(chat, sender types.JID, id string) *waE2E.Message
+	BuildRevokeFn                    func(chat, sender types.JID, id types.MessageID) *waE2E.Message
+	BuildEditFn                      func(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
+	BuildPollCreationFn              func(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
+	UploadFn                         func(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
+	DownloadFn                       func(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
 	GetGroupInfoFn                   func(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLinkFn           func(ctx context.Context, code string) (*types.GroupInfo, error)
 	GetGroupInviteLinkFn             func(ctx context.Context, jid types.JID, reset bool) (string, error)
@@ -54,7 +61,23 @@ type Fake struct {
 	RejectCallFn                     func(ctx context.Context, callFrom types.JID, callID string) error
 	SendAppStateFn                   func(ctx context.Context, patch appstate.PatchInfo) error
 	FetchAppStateFn                  func(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error
+	SetStatusMessageFn               func(ctx context.Context, msg string) error
+	BuildHistorySyncRequestFn        func(info *types.MessageInfo, count int) *waE2E.Message
+	SendPeerMessageFn                func(ctx context.Context, message *waE2E.Message) (wanoise.SendResponse, error)
 	GetSubscribedNewslettersFn       func(ctx context.Context) ([]*types.NewsletterMetadata, error)
+
+	CreateNewsletterFn               func(ctx context.Context, params wanoise.CreateNewsletterParams) (*types.NewsletterMetadata, error)
+	GetNewsletterInfoFn              func(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error)
+	GetNewsletterInfoWithInviteFn    func(ctx context.Context, key string) (*types.NewsletterMetadata, error)
+	FollowNewsletterFn               func(ctx context.Context, jid types.JID) error
+	UnfollowNewsletterFn             func(ctx context.Context, jid types.JID) error
+	NewsletterToggleMuteFn           func(ctx context.Context, jid types.JID, mute bool) error
+	GetNewsletterMessagesFn          func(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error)
+	GetNewsletterMessageUpdatesFn    func(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error)
+	NewsletterMarkViewedFn           func(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error
+	NewsletterSendReactionFn         func(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error
+	NewsletterSubscribeLiveUpdatesFn func(ctx context.Context, jid types.JID) (time.Duration, error)
+	PairPhoneFn                      func(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
 	IsConnectedFn                    func() bool
 	IsLoggedInFn                     func() bool
 	LogoutFn                         func(ctx context.Context) error
@@ -109,4 +132,75 @@ func (f *Fake) BuildUnavailableMessageRequest(chat, sender types.JID, id string)
 		return f.BuildUnavailableMessageFn(chat, sender, id)
 	}
 	return &waE2E.Message{}
+}
+
+// BuildRevoke monta a MESMA mensagem que o cliente real monta.
+//
+// ARMADILHA 1 deste repo: dublê mais permissivo que a produção esconde o
+// defeito. Este método imita uma REGRA — a de que sender vazio marca a
+// revogação como sendo de mensagem PRÓPRIA (FromMe=true, sem Participant)
+// e sender de terceiro a marca como de outro — então delega para a regra
+// REAL, em internal/wa-noise/capabilities/message/builders.go:39
+// (BuildRevoke) e :23 (BuildKey), que é exatamente para onde
+// (*core.Client).BuildRevoke delega em
+// internal/wa-noise/core/message_builders.go:34.
+//
+// ownID/ownLID entram vazios porque o fake não tem sessão pareada; o eixo
+// que os testes medem é o sender, e com ownID vazio a discriminação de
+// BuildKey continua valendo: sender vazio -> FromMe=true; sender não vazio
+// e diferente de ownID -> FromMe=false.
+func (f *Fake) BuildRevoke(chat, sender types.JID, id types.MessageID) *waE2E.Message {
+	if f.BuildRevokeFn != nil {
+		return f.BuildRevokeFn(chat, sender, id)
+	}
+	return wamessage.BuildRevoke(types.EmptyJID, types.EmptyJID, chat, sender, id)
+}
+
+// BuildEdit monta a MESMA mensagem que o cliente real monta, delegando para
+// internal/wa-noise/capabilities/message/builders.go:101 — para onde
+// (*core.Client).BuildEdit delega em
+// internal/wa-noise/core/message_builders.go:75. Mesma disciplina de
+// BuildRevoke quanto a não inventar uma montagem própria.
+func (f *Fake) BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message {
+	if f.BuildEditFn != nil {
+		return f.BuildEditFn(chat, id, newContent)
+	}
+	return wamessage.BuildEdit(chat, id, newContent)
+}
+
+// BuildPollCreation monta a MESMA mensagem que o cliente real monta,
+// delegando para internal/wa-noise/capabilities/message/poll.go:65 — para
+// onde (*core.Client).BuildPollCreation delega em
+// internal/wa-noise/core/msgsecret_poll.go:65. Mesma disciplina de
+// BuildRevoke e BuildEdit quanto a nao inventar uma montagem propria.
+//
+// ARMADILHA 1 deste repo: duble mais permissivo que a producao esconde o
+// defeito. Este metodo imita duas REGRAS que so' a implementacao real tem —
+// (a) selectableOptionCount fora de [0, len(optionNames)] e' zerado, e (b)
+// MessageContextInfo.MessageSecret e' preenchido com bytes aleatorios, sem o
+// qual o voto nao e' decifravel. Uma montagem inventada aqui deixaria os dois
+// eixos sem medicao.
+func (f *Fake) BuildPollCreation(name string, optionNames []string, selectableOptionCount int) *waE2E.Message {
+	if f.BuildPollCreationFn != nil {
+		return f.BuildPollCreationFn(name, optionNames, selectableOptionCount)
+	}
+	return wamessage.BuildPollCreation(name, optionNames, selectableOptionCount)
+}
+
+func (f *Fake) Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error) {
+	if f.UploadFn != nil {
+		return f.UploadFn(ctx, plaintext, appInfo)
+	}
+	return wanoise.UploadResponse{}, nil
+}
+
+// Download devolve o que DownloadFn devolver. O default e' (nil, nil) —
+// deliberadamente NAO um sucesso com bytes: o caso "sem override" nao deve
+// parecer um download bem-sucedido, ou um teste que esquecesse de configurar o
+// fake passaria por engano.
+func (f *Fake) Download(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error) {
+	if f.DownloadFn != nil {
+		return f.DownloadFn(ctx, msg)
+	}
+	return nil, nil
 }

@@ -3,6 +3,7 @@ package group
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -29,14 +30,14 @@ func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req do
 	// Validar GroupJID
 	if req.GroupJID == "" {
 		uc.logger.Warn(ctx, "missing groupJID in request", "txtID", txtID)
-		return nil, fmt.Errorf("missing groupJID parameter")
+		return nil, apperr.New("missing_group_jid", apperr.CategoryValidation, "missing groupJID parameter", false, nil)
 	}
 
 	// Parse GroupJID
 	group, err := uc.jids.ResolveJID(ctx, req.GroupJID)
 	if err != nil {
 		uc.logger.Warn(ctx, "could not parse group JID", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("could not parse Group JID")
+		return nil, apperr.New("invalid_group_jid", apperr.CategoryValidation, "could not parse Group JID", false, nil)
 	}
 
 	// Garantir que há sessão

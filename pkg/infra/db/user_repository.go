@@ -11,6 +11,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
+
+	"wa-api/pkg/domain/apperr"
 )
 
 // UserRepository implementa appport.UserRepository sobre *sqlx.DB.
@@ -59,7 +61,16 @@ func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) 
 		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 		 ON CONFLICT DO NOTHING`,
-		rec.ID, rec.Name, rec.Token, domain.HashToken(rec.Token), rec.Webhook, rec.Expiration, rec.Events, "", "",
+		// A coluna `token` recebe VAZIO: o texto claro deixa de ser gravado
+		// (F97 etapa 1). Ela continua existindo porque e NOT NULL e porque as
+		// linhas antigas ainda dependem dela para autenticar — dropa-la e a
+		// etapa 2, que quebra cliente e precisa de janela (ADR-0006).
+		//
+		// Isto so e seguro depois da F100: enquanto o UserInfoCache era
+		// chaveado por token, gravar vazio fazia o webhook do usuario nascer
+		// inerte, e a consulta de autenticacao casava `token = ''` com uma
+		// requisicao SEM token nenhum.
+		rec.ID, rec.Name, "", domain.HashToken(rec.Token), rec.Webhook, rec.Expiration, rec.Events, "", "",
 		rec.ProxyURL, rec.WebhookUseProxy,
 		rec.S3.Enabled, rec.S3.Endpoint, rec.S3.Region, rec.S3.Bucket,
 		rec.S3.AccessKey, rec.S3.SecretKey, rec.S3.PathStyle, rec.S3.PublicURL,
@@ -118,7 +129,8 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 		addField("name", *upd.Name)
 	}
 	if upd.Token != nil {
-		addField("token", *upd.Token)
+		// Mesmo motivo do INSERT: so o hash e persistido.
+		addField("token", "")
 		addField("token_hash", domain.HashToken(*upd.Token))
 	}
 	if upd.Webhook != nil {
@@ -193,7 +205,14 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 
 	rows, err := r.db.QueryxContext(ctx, query, args...)
 	if err != nil {
-		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+		// Cliente desistiu da requisição não é falha nossa (F90): o polling do
+		// painel cancela ao trocar de aba, e quinze `error` seguidos dizendo
+		// "database error" já fizeram um F5 parecer banco fora do ar.
+		evento := log.Error()
+		if apperr.IsClientGaveUp(err) {
+			evento = log.Info()
+		}
+		evento.Err(err).Str("table", "users").Str("user_id", id).
 			Str("query", "list_users").Msg("failed to list users")
 		return nil, err
 	}
@@ -231,6 +250,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			HasProxyURL:     row.ProxyURL.Valid && row.ProxyURL.String != "",
 			WebhookUseProxy: row.WebhookUseProxy,
 			Events:          row.Events,
+			History:         int(row.History.Int64),
 		}
 
 		// A configuração de S3 vem numa segunda consulta, como antes. Falha

@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -28,16 +29,16 @@ func (uc *RejectCallUseCase) Execute(ctx context.Context, userID string, req dom
 	}
 
 	if req.CallFrom == "" {
-		return nil, fmt.Errorf("missing call_from in Payload")
+		return nil, apperr.New("missing_call_from", apperr.CategoryValidation, "missing call_from in Payload", false, nil)
 	}
 
 	if req.CallID == "" {
-		return nil, fmt.Errorf("missing call_id in Payload")
+		return nil, apperr.New("missing_call_id", apperr.CategoryValidation, "missing call_id in Payload", false, nil)
 	}
 
 	callFrom, err := uc.jids.ResolveQualifiedJID(ctx, req.CallFrom)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse call_from")
+		return nil, apperr.New("invalid_call_from", apperr.CategoryValidation, "could not parse call_from", false, nil)
 	}
 
 	if err := uc.chats.RejectCall(ctx, userID, callFrom, req.CallID); err != nil {

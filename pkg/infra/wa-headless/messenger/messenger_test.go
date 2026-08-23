@@ -62,11 +62,20 @@ func TestSatisfazOPortDeMensageria(t *testing.T) {
 	if _, ok := m.(appport.ChatMessenger); !ok {
 		t.Fatal("não satisfaz ChatMessenger")
 	}
-	// E NÃO satisfaz MessageComposer, que este transporte recusa: a página cunha
-	// o id ao enviar, e um id fornecido pelo chamador não tem para onde ir.
-	if _, ok := m.(appport.MessageComposer); ok {
-		t.Fatal("passou a satisfazer MessageComposer: alguém implementou " +
-			"NewMessageID num transporte onde a chave da referência LANÇA (H98)")
+	// E NÃO cunha id: a página gera a chave ao enviar, e um id fornecido pelo
+	// chamador não tem para onde ir.
+	//
+	// A asserção é feita contra uma interface ANÔNIMA, e não contra um port com
+	// nome: appport.MessageComposer existia quando isto foi escrito e sumiu na
+	// fusão de feature/wa-noise, que partiu a mensageria em portas menores.
+	// A propriedade medida sobreviveu ao nome — amarrá-la de novo a um nome
+	// faria o próximo rename apagar o guarda em silêncio.
+	type cunhaID interface {
+		NewMessageID(ctx context.Context, txtID string) (string, error)
+	}
+	if _, ok := m.(cunhaID); ok {
+		t.Fatal("passou a cunhar id: alguém implementou NewMessageID num " +
+			"transporte onde a chave da referência LANÇA (H98)")
 	}
 }
 

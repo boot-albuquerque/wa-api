@@ -70,7 +70,17 @@ type PresenceController interface {
 }
 
 // ChatMessenger expõe as operações sobre mensagens já existentes numa
-// conversa: confirmá-las como lidas e reagir a elas.
+// conversa: confirmá-las como lidas, reagir a elas, revogá-las e editá-las.
+//
+// RevokeMessage e EditMessage entram AQUI, e não numa porta nova (CAP-10):
+// a fronteira que separou TextMessenger de ChatMessenger no CAP-01 foi
+// "cria uma mensagem" contra "opera sobre uma mensagem QUE JÁ EXISTE".
+// Revogar e editar são o segundo caso — como MarkRead e SendReaction, são
+// identificadas por {conversa, ID da mensagem alvo} e não têm sentido sem
+// uma mensagem anterior. Uma porta própria dividiria esse mesmo conceito em
+// duas sem nenhuma diferença de forma para justificá-la, ao contrário do
+// que aconteceu com SimpleMessenger (que não tem etapa de upload nem de
+// fetch e por isso não cabia em MediaMessenger).
 type ChatMessenger interface {
 	SessionGuard
 
@@ -81,4 +91,23 @@ type ChatMessenger interface {
 	// SendReaction envia uma reação. A montagem da mensagem no formato do
 	// SDK é responsabilidade do adapter.
 	SendReaction(ctx context.Context, txtID string, target domain.JID, reaction domain.Reaction) (domain.MessageSendResult, error)
+
+	// RevokeMessage revoga ("apaga para todos") a mensagem messageID na
+	// conversa target. Só revoga mensagem PRÓPRIA: o remetente é sempre o
+	// JID vazio, como no histórico (`git show 41bc8e2^:handlers.go`, linha
+	// 2825). Revogar mensagem de terceiro como admin de grupo existe no
+	// SDK mas NUNCA esteve exposto nesta API, e acrescentá-lo seria
+	// mudança de contrato público.
+	//
+	// O resultado devolvido traz o Timestamp que a sessão REALMENTE usou;
+	// o ID que vem nele é o da mensagem de revogação, não o da mensagem
+	// revogada — quem chama decide qual dos dois publicar.
+	RevokeMessage(ctx context.Context, txtID string, target domain.JID, messageID string) (domain.MessageSendResult, error)
+
+	// EditMessage substitui o texto da mensagem messageID na conversa
+	// target por newText. ctxInfo, quando não nil, monta ContextInfo no
+	// ExtendedTextMessage (citação e menções — F134). A montagem
+	// (FutureProofMessage/ProtocolMessage MESSAGE_EDIT) é responsabilidade
+	// do adapter.
+	EditMessage(ctx context.Context, txtID string, target domain.JID, messageID, newText string, ctxInfo *domain.EditContextInfo) (domain.MessageSendResult, error)
 }

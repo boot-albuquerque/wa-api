@@ -13,7 +13,7 @@ import (
 // feliz. Um pool que nunca enfileira e uma fila que nunca segura passariam em
 // qualquer teste de "a função rodou".
 
-// esperarPor espera uma condição virar verdadeira, ou falha com a mensagem.
+// esperarPor waitFull uma condição virar verdadeira, ou falha com a mensagem.
 // Sondar é preciso porque as entregas rodam noutras goroutines; dormir um
 // tempo fixo esconderia lentidão atrás de folga.
 func esperarPor(t *testing.T, prazo time.Duration, cond func() bool, formato string, args ...any) {
@@ -32,9 +32,9 @@ func esperarPor(t *testing.T, prazo time.Duration, cond func() bool, formato str
 	}
 }
 
-// esperarGrupo espera um WaitGroup COM PRAZO, reportando o progresso quando
-// estoura. `sync.WaitGroup` só oferece espera infinita, e num teste que
-// persegue "o mecanismo travou" a espera infinita é o próprio defeito
+// esperarGrupo waitFull um WaitGroup COM PRAZO, reportando o progresso quando
+// estoura. `sync.WaitGroup` só oferece waitFull infinita, e num teste que
+// persegue "o mecanismo travou" a waitFull infinita é o próprio defeito
 // silenciando o teste.
 func esperarGrupo(t *testing.T, wg *sync.WaitGroup, prazo time.Duration, formato string, progresso *atomic.Int64, total int64) {
 	t.Helper()
@@ -50,7 +50,7 @@ func esperarGrupo(t *testing.T, wg *sync.WaitGroup, prazo time.Duration, formato
 // TestPool_RajadaMenorQueOPoolNaoEspera trava o PRIMEIRO degrau: enquanto a
 // rajada cabe no pool, o mecanismo tem de ser indistinguível de não existir.
 //
-// É o degrau que a produção desta instalação vive 100% do tempo (pico medido:
+// É o degrau que a produção desta instalação vive 100% do tempo (peak medido:
 // 23 eventos em 100ms, contra pool de 256). Se ele custar, o mecanismo cobra
 // de todo mundo por um problema que quase ninguém tem.
 func TestPool_RajadaMenorQueOPoolNaoEspera(t *testing.T) {
@@ -68,14 +68,14 @@ func TestPool_RajadaMenorQueOPoolNaoEspera(t *testing.T) {
 
 	// Todos têm de estar EM VOO ao mesmo tempo — nada enfileirado esperando.
 	esperarPor(t, 5*time.Second, func() bool {
-		emVoo, _, _, _ := p.Metricas()
-		return emVoo == trabalhos
+		inFlight, _, _, _ := p.Metrics()
+		return inFlight == trabalhos
 	}, "nem todos entraram em voo com rajada menor que o pool: o pool esta serializando")
 
 	close(liberar)
 	wg.Wait()
 
-	if _, _, esperas, _ := p.Metricas(); esperas != 0 {
+	if _, _, esperas, _ := p.Metrics(); esperas != 0 {
 		t.Errorf("esperas = %d com rajada (%d) menor que o pool (%d): o handler foi segurado sem necessidade",
 			esperas, trabalhos, workers)
 	}
@@ -96,7 +96,7 @@ func TestPool_RespeitaOOrcamentoDeBytes(t *testing.T) {
 	// número de workers. Com pool pequeno o teste passaria pelo motivo errado.
 	p := newDispatchPool(128, orcamento)
 
-	var bytesEmVoo, picoBytes atomic.Int64
+	var bytesEmVoo, peakBytes atomic.Int64
 	var wg sync.WaitGroup
 	wg.Add(trabalhos)
 
@@ -106,8 +106,8 @@ func TestPool_RespeitaOOrcamentoDeBytes(t *testing.T) {
 				defer wg.Done()
 				n := bytesEmVoo.Add(tamanho)
 				for {
-					pico := picoBytes.Load()
-					if n <= pico || picoBytes.CompareAndSwap(pico, n) {
+					peak := peakBytes.Load()
+					if n <= peak || peakBytes.CompareAndSwap(peak, n) {
 						break
 					}
 				}
@@ -118,11 +118,11 @@ func TestPool_RespeitaOOrcamentoDeBytes(t *testing.T) {
 	}()
 	wg.Wait()
 
-	if p := picoBytes.Load(); p > orcamento {
+	if p := peakBytes.Load(); p > orcamento {
 		t.Fatalf("bytes em voo chegaram a %d com orcamento %d", p, orcamento)
 	}
-	if p := picoBytes.Load(); p < 2*tamanho {
-		t.Fatalf("pico de bytes = %d: o teste nao chegou a ter concorrencia, entao nao mede o orcamento", p)
+	if p := peakBytes.Load(); p < 2*tamanho {
+		t.Fatalf("peak de bytes = %d: o teste nao chegou a ter concorrencia, entao nao mede o orcamento", p)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestPool_NuncaDescarta(t *testing.T) {
 	if n := executados.Load(); n != trabalhos {
 		t.Errorf("executados = %d, quero %d: houve descarte", n, trabalhos)
 	}
-	if _, _, esperas, _ := p.Metricas(); esperas == 0 {
+	if _, _, esperas, _ := p.Metrics(); esperas == 0 {
 		t.Error("esperas = 0 com orcamento de 1 item e 500 trabalhos: o teste nao saturou, entao nao prova que nao descarta sob saturacao")
 	}
 }
@@ -189,7 +189,7 @@ func TestPool_PanicoNaoMataOWorker(t *testing.T) {
 	}
 	// COM PRAZO. Um `panicos.Wait()` nu parece mais simples e é pior: sob o
 	// defeito que este teste persegue, os workers morrem, os pânicos restantes
-	// nunca rodam e a espera fica para sempre. Foi o que aconteceu ao rodar o
+	// nunca rodam e a waitFull fica para sempre. Foi o que aconteceu ao rodar o
 	// controle negativo — o teste pendurou por 300s em vez de acusar. Teste
 	// que trava não avisa ninguém; teste que falha, sim.
 	esperarGrupo(t, &panicos, 10*time.Second,
@@ -216,9 +216,9 @@ func TestPool_PanicoNaoMataOWorker(t *testing.T) {
 	// E o orçamento tem de ter sido devolvido: o defer que solta os bytes roda
 	// ANTES do recover, senão um pânico vazaria orçamento para sempre.
 	esperarPor(t, 5*time.Second, func() bool {
-		emVoo, _, _, _ := p.Metricas()
-		return emVoo == 0
-	}, "emVoo != 0 apos os panicos: o orcamento vazou")
+		inFlight, _, _, _ := p.Metrics()
+		return inFlight == 0
+	}, "inFlight != 0 apos os panicos: o orcamento vazou")
 }
 
 // TestPool_ItemMaiorQueOOrcamentoPassa: sem esta guarda, o mecanismo de
@@ -246,7 +246,7 @@ func TestPool_DesligadoDelegaDireto(t *testing.T) {
 	p := newDispatchPool(0, 32*1024*1024)
 
 	const trabalhos = 200
-	var emVoo, pico atomic.Int64
+	var inFlight, peak atomic.Int64
 	liberar := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(trabalhos)
@@ -254,21 +254,21 @@ func TestPool_DesligadoDelegaDireto(t *testing.T) {
 	for i := 0; i < trabalhos; i++ {
 		p.Go("teste", 1024, func() {
 			defer wg.Done()
-			n := emVoo.Add(1)
+			n := inFlight.Add(1)
 			for {
-				pi := pico.Load()
-				if n <= pi || pico.CompareAndSwap(pi, n) {
+				pi := peak.Load()
+				if n <= pi || peak.CompareAndSwap(pi, n) {
 					break
 				}
 			}
 			<-liberar
-			emVoo.Add(-1)
+			inFlight.Add(-1)
 		})
 	}
 
 	// Sem pool, todos entram em voo ao mesmo tempo. Com pool, isto travaria.
-	esperarPor(t, 5*time.Second, func() bool { return pico.Load() >= trabalhos },
-		"so' %d de %d entraram em voo: o mecanismo nao foi desligado", pico.Load(), trabalhos)
+	esperarPor(t, 5*time.Second, func() bool { return peak.Load() >= trabalhos },
+		"so' %d de %d entraram em voo: o mecanismo nao foi desligado", peak.Load(), trabalhos)
 
 	close(liberar)
 	wg.Wait()
@@ -281,11 +281,11 @@ func TestConfig_InvalidoCaiNoPadrao(t *testing.T) {
 	for _, valor := range []string{"abc", "-1", "1e3", " ", "256MB"} {
 		t.Run("valor="+valor, func(t *testing.T) {
 			t.Setenv(envDispatchWorkers, valor)
-			if got := dispatchWorkersConfigurados(); got != dispatchDefaultWorkers {
+			if got := configuredDispatchWorkers(); got != dispatchDefaultWorkers {
 				t.Errorf("workers = %d para %q, quero o padrao %d", got, valor, dispatchDefaultWorkers)
 			}
 			t.Setenv(envDispatchQueueBytes, valor)
-			if got := dispatchQueueBytesConfigurado(); got != dispatchDefaultQueueBytes {
+			if got := configuredDispatchQueueBytes(); got != dispatchDefaultQueueBytes {
 				t.Errorf("orcamento = %d para %q, quero o padrao %d", got, valor, int64(dispatchDefaultQueueBytes))
 			}
 		})
@@ -294,18 +294,18 @@ func TestConfig_InvalidoCaiNoPadrao(t *testing.T) {
 
 func TestConfig_LidoDoAmbiente(t *testing.T) {
 	t.Setenv(envDispatchWorkers, "7")
-	if got := dispatchWorkersConfigurados(); got != 7 {
+	if got := configuredDispatchWorkers(); got != 7 {
 		t.Errorf("workers = %d, quero 7", got)
 	}
 	// Zero e' VALIDO e significa "desligado" — distinto de invalido, que cai
 	// no padrao. E' o rollback, entao nao pode ser tratado como erro.
 	t.Setenv(envDispatchWorkers, "0")
-	if got := dispatchWorkersConfigurados(); got != 0 {
+	if got := configuredDispatchWorkers(); got != 0 {
 		t.Errorf("workers = %d para \"0\", quero 0 (desligado)", got)
 	}
 
 	t.Setenv(envDispatchQueueBytes, "1048576")
-	if got := dispatchQueueBytesConfigurado(); got != 1048576 {
+	if got := configuredDispatchQueueBytes(); got != 1048576 {
 		t.Errorf("orcamento = %d, quero 1048576", got)
 	}
 }
@@ -322,15 +322,15 @@ func TestPool_PadroesCobremARajadaMedida(t *testing.T) {
 	const entregasNoPico = picoEventos * entregasPorEvento
 
 	if dispatchDefaultWorkers < entregasNoPico {
-		t.Errorf("pool padrao %d < %d entregas do pico de pareamento medido: o degrau 1 nao cobre a producao",
+		t.Errorf("pool padrao %d < %d entregas do peak de pareamento medido: o degrau 1 nao cobre a producao",
 			dispatchDefaultWorkers, entregasNoPico)
 	}
-	// Payload maximo medido: 120.302B. O orcamento tem de comportar o pico
+	// Payload maximo medido: 120.302B. O orcamento tem de comportar o peak
 	// inteiro no pior caso de tamanho, senao o handler e' segurado na rajada
 	// que a medicao diz ser rotineira.
 	const payloadMax = 120302
 	if int64(dispatchDefaultQueueBytes) < entregasNoPico*payloadMax {
-		t.Errorf("orcamento padrao %d < %d bytes (pico x payload maximo medido)",
+		t.Errorf("orcamento padrao %d < %d bytes (peak x payload maximo medido)",
 			int64(dispatchDefaultQueueBytes), int64(entregasNoPico*payloadMax))
 	}
 }

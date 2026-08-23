@@ -39,7 +39,7 @@ func TestAddUserUseCase_Execute_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err == nil {
@@ -80,7 +80,7 @@ func TestAddUserUseCase_Execute_DuplicateToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{CreateUserFunc: tt.fn}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 			if !errors.Is(err, user.ErrDuplicateToken) {
@@ -98,7 +98,7 @@ func TestAddUserUseCase_Execute_RepositoryError(t *testing.T) {
 		CreateUserFunc: func(context.Context, domain.UserRecord) (bool, error) { return false, boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, logger)
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, logger)
 
 	_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
 	if !errors.Is(err, boom) {
@@ -171,7 +171,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err != nil {
@@ -206,9 +206,202 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 			if got := resp.ProxyConfig["webhookUseProxy"]; got != tt.wantProxy {
 				t.Errorf("proxy webhookUseProxy = %v, queria %v", got, tt.wantProxy)
 			}
-			if tt.wantHmacConfig && len(rec.HmacKey) == 0 {
-				t.Error("HmacKey gravada vazia")
+			// A asserção é da PROPRIEDADE, não de "gravou algo": a versão
+			// anterior só exigia len != 0, e por isso não viu a chave sendo
+			// gravada em CLARO (F158). A prova de ida e volta contra o
+			// AES-GCM real está em pkg/bootstrap/add_user_hmac_route_test.go.
+			// S3 secret key must be enveloped, not plaintext (F163).
+			if tt.wantS3Enabled && tt.req.S3Config != nil && tt.req.S3Config.SecretKey != "" {
+				stored := rec.S3.SecretKey
+				if stored == tt.req.S3Config.SecretKey {
+					t.Errorf("S3 SecretKey stored as PLAINTEXT — got %q", stored)
+				}
+				want := contractsfake.FakeS3EnvelopePrefix + tt.req.S3Config.SecretKey
+				if stored != want {
+					t.Errorf("S3 SecretKey = %q, want %q (fake cipher output)", stored, want)
+				}
+			}
+			if tt.wantHmacConfig {
+				if len(rec.HmacKey) == 0 {
+					t.Error("HmacKey gravada vazia")
+				}
+				if string(rec.HmacKey) == tt.req.HmacKey {
+					t.Errorf("HmacKey gravada = texto plano do request, queria cifrada")
+				}
+				if want := contractsfake.FakeCipherPrefix + tt.req.HmacKey; string(rec.HmacKey) != want {
+					t.Errorf("HmacKey gravada = %q, queria %q (a saída do cifrador)", rec.HmacKey, want)
+				}
 			}
 		})
+	}
+}
+
+func TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("encryption key not configured")
+	repo := &contractsfake.UserRepository{}
+	encryptor := &contractsfake.HmacKeyEncryptor{
+		EncryptHmacKeyFunc: func(string) ([]byte, error) { return nil, boom },
+	}
+	logger := &contractsfake.Logger{}
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, logger)
+
+	resp, err := uc.Execute(context.Background(),
+		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, queria embrulhar boom", err)
+	}
+	if resp != nil {
+		t.Errorf("resposta = %+v, queria nil", resp)
+	}
+	// Falha FECHADA: a ORDEM é o contrato. Se CreateUser fosse chamado, o
+	// usuário nasceria sem chave nenhuma e com 200 no lugar do erro.
+	if len(repo.CreateUserCalls) != 0 {
+		t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
+	}
+	// A chave em claro não entra no log do erro: só o tamanho.
+	for _, rec := range logger.Records() {
+		for _, kv := range rec.Keyvals {
+			if v, ok := kv.(string); ok && v == hmacKey32 {
+				t.Errorf("a chave em claro apareceu no log: %v", rec.Keyvals)
+			}
+		}
+	}
+}
+
+func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
+	t.Parallel()
+
+	repo := &contractsfake.UserRepository{}
+	encryptor := &contractsfake.HmacKeyEncryptor{}
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(),
+		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1]})
+	if err == nil {
+		t.Fatal("esperava recusa por chave curta")
+	}
+	// Validar ANTES de cifrar: uma chave curta nunca chega ao cifrador.
+	if len(encryptor.EncryptHmacKeyCalls) != 0 {
+		t.Errorf("EncryptHmacKey chamado %d vezes, queria 0", len(encryptor.EncryptHmacKeyCalls))
+	}
+	if len(repo.CreateUserCalls) != 0 {
+		t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
+	}
+}
+
+// TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio trava a
+// ORDEM da recusa da F159: validar ANTES de gravar.
+//
+// O eixo de fronteira (status 400 e mensagem do envelope) fica em
+// pkg/bootstrap/add_user_events_route_test.go, pela rota registrada. Aqui a
+// asserção é a que só o dublê enxerga: CreateUser não é chamado NENHUMA vez.
+// A lista mista é o caso que separa RECUSAR de FILTRAR — um filtro
+// silencioso chamaria CreateUser com o evento válido remanescente.
+func TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		events string
+	}{
+		{name: "evento com typo", events: "Mesage"},
+		{name: "lista mista, um válido e um inválido", events: "Message,Mesage"},
+		{name: "lista mista, o inválido primeiro", events: "Mesage,Message"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{}
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+
+			resp, err := uc.Execute(context.Background(),
+				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
+			if err == nil {
+				t.Fatal("esperava recusa por tipo de evento desconhecido")
+			}
+			if resp != nil {
+				t.Errorf("resposta = %+v, queria nil", resp)
+			}
+			if len(repo.CreateUserCalls) != 0 {
+				t.Errorf("CreateUser chamado %d vezes, queria 0", len(repo.CreateUserCalls))
+			}
+		})
+	}
+}
+
+// TestAddUserUseCase_Execute_EventosValidosChegamIntactos assegura o caminho
+// de SUCESSO: o campo gravado é o do request, sem reescrita. A validação faz
+// TrimSpace só para decidir, e não normaliza o valor.
+func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		events string
+	}{
+		{name: "um evento válido", events: "Message"},
+		{name: "vários eventos válidos", events: "Message,ReadReceipt,Presence"},
+		{name: "All", events: "All"},
+		{name: "espaços em volta", events: "  Message  "},
+		{name: "events vazio", events: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{}
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+
+			resp, err := uc.Execute(context.Background(),
+				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
+			if err != nil {
+				t.Fatalf("erro inesperado: %v", err)
+			}
+			if len(repo.CreateUserCalls) != 1 {
+				t.Fatalf("CreateUser chamado %d vezes, queria 1", len(repo.CreateUserCalls))
+			}
+			if got := repo.CreateUserCalls[0].Rec.Events; got != tt.events {
+				t.Errorf("Events gravado = %q, queria %q", got, tt.events)
+			}
+			if resp.Events != tt.events {
+				t.Errorf("resp.Events = %q, queria %q", resp.Events, tt.events)
+			}
+		})
+	}
+}
+
+// TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario locks the ORDER
+// contract for the S3 secret key (F163): encrypt BEFORE write; a cipher
+// failure must not create the user row.
+func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("s3 encryption key not configured")
+	repo := &contractsfake.UserRepository{}
+	s3Cipher := &contractsfake.S3SecretCipher{
+		EncryptS3SecretFunc: func(string) (string, error) { return "", boom },
+	}
+	logger := &contractsfake.Logger{}
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, s3Cipher, logger)
+
+	resp, err := uc.Execute(context.Background(),
+		domain.AddUserRequest{
+			Name:  "alice",
+			Token: "tok",
+			S3Config: &domain.S3Config{
+				Enabled: true, SecretKey: "my-s3-secret",
+			},
+		})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want to wrap boom", err)
+	}
+	if resp != nil {
+		t.Errorf("resp = %+v, want nil", resp)
+	}
+	if len(repo.CreateUserCalls) != 0 {
+		t.Errorf("CreateUser called %d times, want 0", len(repo.CreateUserCalls))
 	}
 }

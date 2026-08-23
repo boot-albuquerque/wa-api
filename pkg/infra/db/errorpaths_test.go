@@ -241,33 +241,36 @@ func TestSaveMessageToHistory_ReportsErrorWhenTableIsMissing(t *testing.T) {
 	}
 }
 
-func TestTrimMessageHistory_ReportsSecretsFailureFirst(t *testing.T) {
-	db := newHistoryDB(t)
-	mustExec(t, db, "DROP TABLE wanoise_message_secrets")
-
-	err := TrimMessageHistory(db, "u1", "c", 5)
-	if err == nil {
-		t.Fatal("TrimMessageHistory succeeded without wanoise_message_secrets")
+func TestTrimMessageHistory_SecretsFailureIsNonFatal(t *testing.T) {
+	appDB := newHistoryDB(t)
+	if err := SaveMessageToHistory(appDB, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
+		t.Fatalf("seed: %v", err)
 	}
-	if !strings.Contains(err.Error(), "failed to trim message secrets") {
-		t.Errorf("error = %v, want the secrets failure", err)
+
+	brokenStore, serr := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "broken.db")+SQLitePragmas)
+	if serr != nil {
+		t.Fatalf("open broken store: %v", serr)
+	}
+	t.Cleanup(func() { brokenStore.Close() })
+
+	err := TrimMessageHistory(appDB, brokenStore, "u1", "c", 0)
+	if err != nil {
+		t.Fatalf("TrimMessageHistory failed — secrets failure must be non-fatal: %v", err)
+	}
+	if n := countHistory(t, appDB, "u1", "c"); n != 0 {
+		t.Fatalf("history not trimmed: %d left", n)
 	}
 }
 
 func TestTrimMessageHistory_ReportsHistoryFailure(t *testing.T) {
-	db := newHistoryDB(t)
-	// message_history precisa existir — o DELETE dos segredos faz um subselect
-	// nela, então derrubá-la faria a falha cair no primeiro passo. O trigger
-	// deixa a leitura passar e aborta só o DELETE, que é o ramo sob teste.
-	mustExec(t, db, `CREATE TRIGGER block_history_delete BEFORE DELETE ON message_history
+	appDB := newHistoryDB(t)
+	mustExec(t, appDB, `CREATE TRIGGER block_history_delete BEFORE DELETE ON message_history
 		BEGIN SELECT RAISE(ABORT, 'deletes are blocked'); END`)
-	if err := SaveMessageToHistory(db, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
+	if err := SaveMessageToHistory(appDB, "u1", "c", "s", "M1", "text", "hi", "", "", "{}", ""); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
-	// limit 0 faz a linha semeada entrar no subselect, então o DELETE de fato
-	// tenta remover algo e o trigger dispara.
-	err := TrimMessageHistory(db, "u1", "c", 0)
+	err := TrimMessageHistory(appDB, nil, "u1", "c", 0)
 	if err == nil {
 		t.Fatal("TrimMessageHistory succeeded against an aborting delete trigger")
 	}
@@ -276,11 +279,11 @@ func TestTrimMessageHistory_ReportsHistoryFailure(t *testing.T) {
 	}
 }
 
-// TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver cobre o ramo
-// postgres da seleção de SQL sem servidor: sqlx.NewDb aceita um nome de driver
-// arbitrário, então DriverName() reporta "postgres" enquanto o backend real
-// continua sendo o SQLite. O SQL do ramo postgres usa OFFSET sem LIMIT, que o
-// SQLite recusa — e é exatamente essa recusa que prova qual ramo rodou.
+// TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver covers the
+// postgres branch of the SQL selection: sqlx.NewDb accepts an arbitrary driver
+// name, so DriverName() reports "postgres" while the real backend remains
+// SQLite. The postgres SQL uses OFFSET without LIMIT, which SQLite rejects —
+// and that rejection proves which branch ran.
 func TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver(t *testing.T) {
 	raw := newHistoryDB(t)
 	pg := sqlx.NewDb(raw.DB, "postgres")
@@ -288,12 +291,12 @@ func TestTrimMessageHistory_BuildsPostgresQueriesForPostgresDriver(t *testing.T)
 	if got := pg.DriverName(); got != "postgres" {
 		t.Fatalf("DriverName = %q, want postgres", got)
 	}
-	err := TrimMessageHistory(pg, "u1", "c", 5)
+	err := TrimMessageHistory(pg, nil, "u1", "c", 5)
 	if err == nil {
 		t.Fatal("postgres-shaped query ran on sqlite; the driver branch was not taken")
 	}
-	if !strings.Contains(err.Error(), "failed to trim message secrets") {
-		t.Errorf("error = %v, want the secrets step to fail first", err)
+	if !strings.Contains(err.Error(), "failed to select message ids for trim") {
+		t.Errorf("error = %v, want the select step to fail with postgres syntax", err)
 	}
 }
 
@@ -528,7 +531,8 @@ func TestApplyMigration_PostgresBranchExecutesUpSQL(t *testing.T) {
 		// rejection this loop uses as evidence never happens. Skipping it here
 		// would silently drop coverage of its branch, so it gets its own
 		// assertion below: TestApplyMigration_PortableDDLBranchStillRuns.
-		if m.ID == migrationIDSessionLeases {
+		if m.ID == migrationIDSessionLeases || m.ID == migrationIDWebhookOutbox ||
+			m.ID == migrationIDLabels {
 			continue
 		}
 		err := applyMigration(pg, m)
@@ -1134,8 +1138,14 @@ func TestUserRepositoryUpdateUser_AppliesEveryField(t *testing.T) {
 		"SELECT name, token, token_hash, s3_bucket, history FROM users WHERE id = ?", "u1"); err != nil {
 		t.Fatalf("read back: %v", err)
 	}
-	if got.Name != "renamed" || got.Token != "new-token" || got.Bucket != "b" || got.History != 25 {
+	if got.Name != "renamed" || got.Bucket != "b" || got.History != 25 {
 		t.Errorf("row = %+v, want every field applied", got)
+	}
+	// A coluna `token` fica VAZIA desde a F97 etapa 1: so o hash e persistido.
+	// Afirmar isto explicitamente e o que impede o texto claro de voltar por
+	// descuido num refactor do UPDATE.
+	if got.Token != "" {
+		t.Errorf("token = %q, want vazio: o texto claro voltou a ser gravado", got.Token)
 	}
 	if want := domain.HashToken("new-token"); got.TokenHash != want {
 		t.Errorf("token_hash = %q, want %q", got.TokenHash, want)
@@ -1274,30 +1284,51 @@ func TestUserRepositoryDeleteUser_PropagatesQueryFailure(t *testing.T) {
 // "the branch never ran". This test uses the EFFECT as evidence instead: the
 // table has to exist afterwards.
 func TestApplyMigration_PortableDDLBranchStillRuns(t *testing.T) {
-	raw := openTestDB(t)
-	if err := createMigrationsTable(raw); err != nil {
-		t.Fatalf("create migrations table: %v", err)
-	}
-	pg := sqlx.NewDb(raw.DB, "postgres")
+	// Tabela, e não um caso por migração: toda migração de DDL portátil que
+	// entrar depois precisa ser pulada no laço acima E provada aqui, e uma
+	// tabela torna esse par visível num lugar só. Migration 15 (outbox) entrou
+	// exatamente por este caminho.
+	for _, tc := range []struct {
+		id    int
+		table string
+	}{
+		{migrationIDSessionLeases, "session_leases"},
+		{migrationIDWebhookOutbox, "webhook_outbox"},
+		// F191: as três tabelas de etiqueta. Uma por linha porque o teste
+		// prova a EXISTÊNCIA de cada uma — provar só a primeira deixaria as
+		// outras duas por conta da esperança.
+		{migrationIDLabels, "wa_labels"},
+		{migrationIDLabels, "wa_label_chats"},
+		{migrationIDLabels, "wa_label_messages"},
+	} {
+		t.Run(tc.table, func(t *testing.T) {
+			raw := openTestDB(t)
+			if err := createMigrationsTable(raw); err != nil {
+				t.Fatalf("create migrations table: %v", err)
+			}
+			pg := sqlx.NewDb(raw.DB, "postgres")
 
-	var leaseMigration Migration
-	for _, m := range migrations {
-		if m.ID == migrationIDSessionLeases {
-			leaseMigration = m
-			break
-		}
-	}
-	if leaseMigration.ID == 0 {
-		t.Fatalf("migration %d not found in the list", migrationIDSessionLeases)
-	}
+			var found Migration
+			for _, m := range migrations {
+				if m.ID == tc.id {
+					found = m
+					break
+				}
+			}
+			if found.ID == 0 {
+				t.Fatalf("migration %d not found in the list", tc.id)
+			}
 
-	if err := applyMigration(pg, leaseMigration); err != nil {
-		t.Fatalf("applying migration %d on the postgres branch: %v", migrationIDSessionLeases, err)
-	}
+			if err := applyMigration(pg, found); err != nil {
+				t.Fatalf("applying migration %d on the postgres branch: %v", tc.id, err)
+			}
 
-	var name string
-	err := raw.Get(&name, "SELECT name FROM sqlite_master WHERE type='table' AND name='session_leases'")
-	if err != nil {
-		t.Fatalf("the postgres branch ran but session_leases does not exist: %v", err)
+			var name string
+			err := raw.Get(&name,
+				"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tc.table)
+			if err != nil {
+				t.Fatalf("the postgres branch ran but %s does not exist: %v", tc.table, err)
+			}
+		})
 	}
 }

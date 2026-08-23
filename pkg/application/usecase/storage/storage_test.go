@@ -2,7 +2,8 @@
 //
 // Os três eixos que valem asserção aqui, e nenhum outro:
 //
-//  1. a guarda de sessão. Todos os 10 abrem com EnsureSession, e desde a
+//  1. a guarda de sessão. NOVE dos 10 abrem com EnsureSession — SetProxy é a
+//     exceção, e o comentário em guardCases diz por quê —, e desde a
 //     migração da F11 propagam a causa (return err), não mais um
 //     fmt.Errorf de texto fixo que apagava o erro tipado da porta. O teste
 //     assere errors.Is contra a sentinela injetada — se alguém reintroduzir
@@ -19,6 +20,7 @@ import (
 	"errors"
 	"testing"
 
+	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/domain"
@@ -34,8 +36,8 @@ const txtID = "user-1"
 // comum: (ok, err). ok reporta se o ponteiro de resultado veio não-nil.
 type execFn func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (ok bool, err error)
 
-// guardCases enumera os 10 use cases pelo que têm em comum — a guarda de
-// sessão — com os argumentos do caminho feliz de cada um.
+// guardCases enumera os nove use cases que têm a guarda de sessão em comum,
+// com os argumentos do caminho feliz de cada um.
 func guardCases() []struct {
 	name string
 	run  execFn
@@ -45,45 +47,46 @@ func guardCases() []struct {
 		run  execFn
 	}{
 		{"ConfigureHmac", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewConfigureHmacUseCase(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{Enabled: true})
+			r, err := newConfigureHmac(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{HmacKey: validHmacKey})
 			return r != nil, err
 		}},
 		{"ConfigureS3", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewConfigureS3UseCase(sg, log).Execute(ctx, txtID, domain.S3ConfigRequest{Enabled: true})
+			r, err := newConfigureS3(sg, log).Execute(ctx, txtID, domain.S3ConfigRequest{Enabled: true})
 			return r != nil, err
 		}},
 		{"DeleteHmacConfig", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewDeleteHmacConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewDeleteHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.UserInfoHmacCache{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"DeleteS3Config", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewDeleteS3ConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := newDeleteS3Config(sg, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"GetHistory", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewGetHistoryUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewGetHistoryUseCase(sg, &contractsfake.HistoryConfigStore{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"GetHmacConfig", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewGetHmacConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewGetHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"GetS3Config", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewGetS3ConfigUseCase(sg, log).Execute(ctx, txtID)
+			r, err := storage.NewGetS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, log).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 		{"SetHistory", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewSetHistoryUseCase(sg, log).Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 10})
+			r, err := newSetHistory(sg, log, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}).
+				Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 10})
 			return r != nil, err
 		}},
-		{"SetProxy", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewSetProxyUseCase(sg, log).Execute(ctx, txtID, domain.ProxyConfigRequest{})
-			return r != nil, err
-		}},
+		// SetProxy NAO entra nesta tabela, e a ausencia e' contrato e nao
+		// esquecimento: ele e' o unico dos dez que NAO abre com EnsureSession.
+		// A guarda dele e' a oposta — recusa a sessao CONECTADA
+		// (`41bc8e2^:handlers.go:6099`) —, e quem nao tem sessao nenhuma tem de
+		// conseguir configurar o proxy, que e' exatamente o estado de quem vai
+		// conectar atraves dele. Os eixos dele estao em session_config_test.go.
 		{"TestS3Connection", func(ctx context.Context, sg *contractsfake.SessionGuard, log *contractsfake.Logger) (bool, error) {
-			r, err := storage.NewTestS3ConnectionUseCase(sg, log).Execute(ctx, txtID, domain.S3TestRequest{
-				Endpoint: "https://s3.example", Region: "us-east-1", Bucket: "b", AccessKey: "ak", SecretKey: "sk",
-			})
+			r, err := newTestS3Connection(sg, log, enabledS3Store(txtID)).Execute(ctx, txtID)
 			return r != nil, err
 		}},
 	}
@@ -161,23 +164,24 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	sg := &contractsfake.SessionGuard{}
 	log := &contractsfake.Logger{}
 
-	t.Run("ConfigureHmac espelha Enabled", func(t *testing.T) {
-		for _, enabled := range []bool{true, false} {
-			r, err := storage.NewConfigureHmacUseCase(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{Enabled: enabled})
-			if err != nil {
-				t.Fatalf("erro inesperado: %v", err)
-			}
-			if r.Enabled != enabled {
-				t.Errorf("Enabled = %v, quero %v", r.Enabled, enabled)
-			}
-			if r.Details == "" {
-				t.Error("Details vazio")
-			}
+	// Enabled deixou de espelhar o pedido: ele reporta o ESTADO depois da
+	// operacao. Gravar uma chave habilita; revogar desabilita. O request nao
+	// tem mais campo `enabled` — nunca existiu no fio (41bc8e2^:handlers.go:6767).
+	t.Run("ConfigureHmac habilita apos gravar", func(t *testing.T) {
+		r, err := newConfigureHmac(sg, log).Execute(ctx, txtID, domain.HmacConfigRequest{HmacKey: validHmacKey})
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !r.Enabled {
+			t.Error("Enabled = false apos gravar a chave, quero true")
+		}
+		if r.Details == "" {
+			t.Error("Details vazio")
 		}
 	})
 
 	t.Run("DeleteHmacConfig zera Enabled", func(t *testing.T) {
-		r, err := storage.NewDeleteHmacConfigUseCase(sg, log).Execute(ctx, txtID)
+		r, err := storage.NewDeleteHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.UserInfoHmacCache{}, log).Execute(ctx, txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -187,7 +191,7 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	})
 
 	t.Run("DeleteS3Config zera Enabled", func(t *testing.T) {
-		r, err := storage.NewDeleteS3ConfigUseCase(sg, log).Execute(ctx, txtID)
+		r, err := newDeleteS3Config(sg, log).Execute(ctx, txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -197,7 +201,8 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 	})
 
 	t.Run("SetHistory espelha History", func(t *testing.T) {
-		r, err := storage.NewSetHistoryUseCase(sg, log).Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 42})
+		r, err := newSetHistory(sg, log, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}).
+			Execute(ctx, txtID, domain.WebhookHistoryRequest{History: 42})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -206,20 +211,8 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 		}
 	})
 
-	t.Run("SetProxy marca Set", func(t *testing.T) {
-		r, err := storage.NewSetProxyUseCase(sg, log).Execute(ctx, txtID, domain.ProxyConfigRequest{})
-		if err != nil {
-			t.Fatalf("erro inesperado: %v", err)
-		}
-		if !r.Set {
-			t.Error("Set = false, quero true")
-		}
-	})
-
 	t.Run("TestS3Connection marca Connected", func(t *testing.T) {
-		r, err := storage.NewTestS3ConnectionUseCase(sg, log).Execute(ctx, txtID, domain.S3TestRequest{
-			Endpoint: "https://s3.example", Region: "us-east-1", Bucket: "b", AccessKey: "ak", SecretKey: "sk",
-		})
+		r, err := newTestS3Connection(sg, log, enabledS3Store(txtID)).Execute(ctx, txtID)
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -228,15 +221,28 @@ func TestResultadosDoCaminhoFeliz(t *testing.T) {
 		}
 	})
 
-	t.Run("leituras devolvem Details", func(t *testing.T) {
-		if r, err := storage.NewGetHmacConfigUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
-			t.Errorf("GetHmacConfig = %+v, %v", r, err)
+	// GetHmacConfig ficou de fora: ele devolve HmacConfigView (`hmac_key`
+	// mascarado), nao HmacConfigResult. O contrato dele esta' em
+	// hmac_config_test.go.
+	// GetHistory nao entra na lista de "devolvem Details": desde o CAP-32 ele
+	// nao devolve Details nenhum. O `Details` que ele respondia
+	// ("History configuration retrieved") era ficcao do stub da migracao, e
+	// nao contrato historico — `41bc8e2^:handlers.go:6497` lia historico de
+	// MENSAGENS (HOUSEKEEP F166). O que a leitura devolve agora e' o limite
+	// gravado, e e' isso que este subteste assere.
+	t.Run("GetHistory devolve o limite gravado", func(t *testing.T) {
+		const gravado = 50
+		store := &contractsfake.HistoryConfigStore{Stored: map[string]int{txtID: gravado}}
+
+		r, err := storage.NewGetHistoryUseCase(sg, store, log).Execute(ctx, txtID)
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
 		}
-		if r, err := storage.NewGetS3ConfigUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
-			t.Errorf("GetS3Config = %+v, %v", r, err)
+		if r.History != gravado {
+			t.Errorf("History = %d, quero %d", r.History, gravado)
 		}
-		if r, err := storage.NewGetHistoryUseCase(sg, log).Execute(ctx, txtID); err != nil || r.Details == "" {
-			t.Errorf("GetHistory = %+v, %v", r, err)
+		if r.Details != "" {
+			t.Errorf("Details = %q, quero vazio — a leitura nao fabrica texto", r.Details)
 		}
 	})
 }
@@ -262,7 +268,7 @@ func TestConfigureS3_MediaDelivery(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			log := &contractsfake.Logger{}
-			r, err := storage.NewConfigureS3UseCase(&contractsfake.SessionGuard{}, log).
+			r, err := newConfigureS3(&contractsfake.SessionGuard{}, log).
 				Execute(context.Background(), txtID, domain.S3ConfigRequest{Enabled: true, MediaDelivery: tc.delivery})
 
 			if tc.wantErr {
@@ -301,7 +307,7 @@ func TestConfigureS3_Endpoint(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r, err := storage.NewConfigureS3UseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
+			r, err := newConfigureS3(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
 				Execute(context.Background(), txtID, domain.S3ConfigRequest{Enabled: true, Endpoint: tc.endpoint})
 
 			if tc.wantErr {
@@ -320,41 +326,10 @@ func TestConfigureS3_Endpoint(t *testing.T) {
 	}
 }
 
-func TestSetProxy_URL(t *testing.T) {
-	cases := []struct {
-		name    string
-		req     domain.ProxyConfigRequest
-		wantErr bool
-	}{
-		{name: "desabilitado ignora a URL invalida", req: domain.ProxyConfigRequest{Enabled: false, URL: "nao-e-uma-url"}},
-		{name: "habilitado sem URL e' recusado", req: domain.ProxyConfigRequest{Enabled: true}, wantErr: true},
-		{name: "habilitado com loopback e' recusado", req: domain.ProxyConfigRequest{Enabled: true, URL: "http://127.0.0.1:8080"}, wantErr: true},
-		{name: "habilitado com malformado e' recusado", req: domain.ProxyConfigRequest{Enabled: true, URL: "://x"}, wantErr: true},
-		{name: "habilitado com IP publico passa", req: domain.ProxyConfigRequest{Enabled: true, URL: "http://93.184.216.34:8080"}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			r, err := storage.NewSetProxyUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
-				Execute(context.Background(), txtID, tc.req)
-
-			if tc.wantErr {
-				if err == nil {
-					t.Fatal("proxy invalido devia ser recusado")
-				}
-				if r != nil {
-					t.Error("resultado devia ser nil na recusa")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("proxy valido recusado: %v", err)
-			}
-			if !r.Set {
-				t.Error("Set = false, quero true")
-			}
-		})
-	}
-}
+// TestSetProxy_URL saiu daqui para session_config_test.go, junto com os
+// outros eixos de SetProxy: a validacao de URL deixou de ser
+// egress.ValidateOutboundURL e passou a ser a historica (so' `http` e
+// `socks5`), o que muda cada um dos cinco casos que existiam aqui.
 
 func TestSetHistory_ValorNegativo(t *testing.T) {
 	cases := []struct {
@@ -368,7 +343,8 @@ func TestSetHistory_ValorNegativo(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r, err := storage.NewSetHistoryUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{}).
+			r, err := newSetHistory(&contractsfake.SessionGuard{}, &contractsfake.Logger{},
+				&contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}).
 				Execute(context.Background(), txtID, domain.WebhookHistoryRequest{History: tc.history})
 
 			if tc.wantErr {
@@ -390,31 +366,27 @@ func TestSetHistory_ValorNegativo(t *testing.T) {
 	}
 }
 
-func TestTestS3Connection_CamposObrigatorios(t *testing.T) {
-	completo := domain.S3TestRequest{
-		Endpoint: "https://s3.example", Region: "us-east-1", Bucket: "b", AccessKey: "ak", SecretKey: "sk",
-	}
+// TestTestS3Connection_SemConfiguracaoHabilitada — o use case deixou de ler o
+// corpo (ele testa a configuracao GRAVADA, `41bc8e2^:handlers.go:6383`), entao
+// a recusa que existe e' a do estado: sem linha, ou com S3 desabilitado.
+func TestTestS3Connection_SemConfiguracaoHabilitada(t *testing.T) {
 	cases := []struct {
 		name  string
-		mutar func(r *domain.S3TestRequest)
+		store *contractsfake.S3ConfigStore
 	}{
-		{"sem endpoint", func(r *domain.S3TestRequest) { r.Endpoint = "" }},
-		{"sem region", func(r *domain.S3TestRequest) { r.Region = "" }},
-		{"sem bucket", func(r *domain.S3TestRequest) { r.Bucket = "" }},
-		{"sem access_key", func(r *domain.S3TestRequest) { r.AccessKey = "" }},
-		{"sem secret_key", func(r *domain.S3TestRequest) { r.SecretKey = "" }},
+		{"nunca configurado", &contractsfake.S3ConfigStore{}},
+		{"configurado e desabilitado", &contractsfake.S3ConfigStore{Stored: map[string]port.S3ConfigRecord{
+			txtID: {Enabled: false, Bucket: "b", Region: "us-east-1"},
+		}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := completo
-			tc.mutar(&req)
-
 			log := &contractsfake.Logger{}
-			r, err := storage.NewTestS3ConnectionUseCase(&contractsfake.SessionGuard{}, log).
-				Execute(context.Background(), txtID, req)
+			r, err := newTestS3Connection(&contractsfake.SessionGuard{}, log, tc.store).
+				Execute(context.Background(), txtID)
 
 			if err == nil {
-				t.Fatal("campo obrigatorio ausente devia ser recusado")
+				t.Fatal("S3 desabilitado devia ser recusado")
 			}
 			if r != nil {
 				t.Error("resultado devia ser nil na recusa")
@@ -424,4 +396,42 @@ func TestTestS3Connection_CamposObrigatorios(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- construtores dos quatro use cases de S3 ------------------------------
+//
+// Os dubles das quatro portas novas vem de contractsfake, que imita as regras
+// REAIS dos adapters de producao (pkg/infra/db/s3_config_repository.go,
+// pkg/infra/auth/s3_secret.go, pkg/infra/storage/s3.go).
+
+func newConfigureS3(sg port.SessionGuard, log port.Logger) *storage.ConfigureS3UseCase {
+	return storage.NewConfigureS3UseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3SecretCipher{},
+		&contractsfake.S3ClientManager{}, &contractsfake.UserInfoS3Cache{}, log)
+}
+
+func newDeleteS3Config(sg port.SessionGuard, log port.Logger) *storage.DeleteS3ConfigUseCase {
+	return storage.NewDeleteS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3ClientManager{},
+		&contractsfake.UserInfoS3Cache{}, log)
+}
+
+func newTestS3Connection(sg port.SessionGuard, log port.Logger, store *contractsfake.S3ConfigStore) *storage.TestS3ConnectionUseCase {
+	return storage.NewTestS3ConnectionUseCase(sg, store, &contractsfake.S3SecretCipher{},
+		&contractsfake.S3ClientManager{}, log)
+}
+
+// enabledS3Store e' o store de quem TEM S3 habilitado, com o segredo no
+// envelope do dublê — a forma que o cifrador real produziria (ADR-0009). Um
+// store vazio transformaria o caminho de sucesso na recusa 400 sem que o teste
+// percebesse.
+func enabledS3Store(userID string) *contractsfake.S3ConfigStore {
+	return &contractsfake.S3ConfigStore{Stored: map[string]port.S3ConfigRecord{
+		userID: {
+			Enabled:       true,
+			Region:        "us-east-1",
+			Bucket:        "b",
+			AccessKey:     "ak",
+			SecretKey:     contractsfake.FakeS3EnvelopePrefix + "sk",
+			MediaDelivery: domain.MediaDeliveryBase64,
+		},
+	}}
 }

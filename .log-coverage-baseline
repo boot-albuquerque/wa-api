@@ -59,6 +59,54 @@
 # conscientemente. Toda reducao de qualquer valor abaixo exige uma linha
 # `# justificativa: <texto>` adjacente.
 
+
+# --- F193 (2026-08-21): o extrato de adaptadores saiu do denominador ---
+#
+# `.logcov-exclude` passou a excluir `pkg/infra/wa-noise/adapters/` por DECISÃO
+# DE ARQUITETURA (a razão de layering está escrita lá, não aqui). As quatro
+# travas mudaram todas na mesma passagem, porque a exclusão move o denominador
+# das duas métricas ao mesmo tempo:
+#
+#   min_eligible          676 -> 609   (-85 métodos de adaptador; -18 que a
+#                                        newsletter tinha acrescentado lá)
+#   min_func_coverage     667 -> 744   (SOBE: os 85 mediam 0,0% e diluíam)
+#   min_errpath_coverage  867 -> 868
+#
+# A subida de min_func_coverage é o ponto: a exclusão APERTA o gate sobre o
+# código que a métrica se propõe a medir, em vez de o afrouxar para passar.
+# Ver F193 no HOUSEKEEP.md para os números completos e as duas saídas recusadas.
+#
+# F192 (2026-08-21, integrada de wa-qr-regen): min_eligible 609 -> 611 e
+# min_func_coverage 744 -> 741. ENTRAM (2), em pkg/application/session:
+#   startInFlight.acquire   ELIGIBLE (tem return; nenhuma regra X a tira)
+#   startInFlight.release   ELIGIBLE (3 statements; X1 exige <=2)
+# São as primitivas do lock que serializa Start por utilizador e impedem um
+# SEGUNDO fluxo de pareamento. Não logam de propósito: a decisão que
+# implementam já é registada pelo chamador, em Start, com userid e nível Warn.
+# Logar dentro delas duplicaria a linha e poria E/S de log debaixo do mutex.
+#
+# A queda de 3 décimos é o PREÇO de uma correção de correção, e fica visível
+# aqui em vez de ser mascarada — a alternativa era gastar a segunda anotação
+# //log:exempt, e isso é orçamento de política. Ver F192/F193/F197.
+#
+# F200 (2026-08-21): min_eligible 611 -> 612 e min_func_coverage 741 -> 742.
+# ENTRA (1): userInfoRepublisher.RepublishUser, o adaptador que invalida a
+# cache de user-info depois de uma edicao. Ele LOGA (o descarte de entradas de
+# token e o recarregamento), portanto entra coberto e o percentual SOBE.
+#
+# F73 + F194 (2026-08-21): min_eligible 612 -> 614, min_func_coverage 742 -> 743.
+# ENTRAM (2): handlePushName e handleBusinessName, os dois handlers que fazem
+# PushName/BusinessName virarem webhook. Ambos LOGAM, portanto entram cobertos
+# e o percentual sobe.
+#
+# F191 (2026-08-21): min_eligible 614 -> 624, min_func_coverage 743 -> 747,
+# min_errpath 868 -> 869. ENTRAM (10): os tres handlers de etiqueta, os cinco
+# metodos do LabelRepository e os dois handlers HTTP de leitura.
+#
+# O percentual SOBE porque todos logam. Os do repositorio seguem a convencao
+# que user_repository.go e message_history.go ja' usavam — falha de escrita
+# regista a TABELA, que e' o que o operador procura no log. Escrever esta
+# camada sem log teria BAIXADO o gate; segui-la subiu-o.
 stage=ratchet
 
 # rules_frozen=true (ADR-008, a partir da Fase 12): as regras X1-X8/L1-L3 de
@@ -389,419 +437,778 @@ rules_frozen=true
 # Main para baixar a complexidade maxima de 57 para 56 (o gate de lint trava o
 # TETO, nao a contagem — decompor sobe a contagem e melhora o repo). Ela nasce
 # coberta: loga o Fatal da configuracao invalida de posse.
-# justificativa: decisao 74 (2026-08-22), vocabulario de namespace de JID
-# compartilhado entre os dois transportes (pkg/domain/jid_namespace.go).
-# func_coverage cai 698->697 por UMA funcao: JID.Server, elegivel e sem log.
-#
-# Ela e' um acessor PURO de string — acha o ultimo "@" e devolve o que vem
-# depois. Nao toca porta nenhuma, nao tem caminho de erro, e um log ali sairia
-# a cada classificacao de JID. E' o mesmo caso de atrasoDaTentativa (F88) e de
-# ownedSessions/forget (ADR-0005 D2), ja aceitos acima.
-#
-# REGISTRO DELIBERADO: ela escapa de X1 por UM statement — o corpo tem tres
-# (atribuicao, if, return) e X1 exige <=2. Reescreve-la sem a variavel
-# intermediaria a excluiria do denominador e manteria o numero em 698. NAO foi
-# feito: moldar o codigo a metrica e' exatamente o que o topo deste arquivo
-# proibe ao explicar por que min_eligible existe. A queda de um decimo fica
-# registrada em vez de escondida.
-#
-# As outras duas funcoes novas do arquivo (JID.Namespace, NormalizeIdentityInput)
-# saem EXCLUDED por X1 no golden, como firstEmpty.
-# justificativa: Fase 3, primeiro consumidor da fachada do wa-headless
-# (2026-08-22, decisao 78). min_eligible 571->660, func_coverage 697->617,
-# errpath 858->817.
-#
-# CAUSA, com prova causal medida: `packages.Visit` inclui qualquer pacote
-# transitivamente importado sob `wa-api/`, entao fiar internal/wa-headless em
-# pkg/ arrastou a arvore inteira para o denominador. Removido o consumidor da
-# fachada os numeros voltam a 571/697/858; reposto, 660/603/808. NENHUM sitio
-# deixou de logar — e diluicao pura.
-#
-# NAO foi resolvido por exclusao. internal/wa-noise/ esta em .logcov-exclude
-# por ser TERCEIRO VENDORIZADO; internal/wa-headless e' codigo NOSSO, e
-# exclui-lo seria encolher o denominador para embelezar o numero, que e'
-# exatamente o que min_eligible existe para impedir.
-#
-# Foi resolvido, em parte, ENSINANDO A REGUA (regra L1-d, documentada em
-# cmd/logcov/METRIC.md). Aquela arvore observa por estagio tipado no erro
-# (BootFailure{Stage,Cause}) e por operacao rastreada (runner.Do com OpKind e
-# rotulo), nao por linha de log. Reconhece-las subiu func 603->617 e errpath
-# 808->817. Isto quebra rules_frozen=true DE PROPOSITO: o proprio texto diz que
-# mudanca depois da Fase 12 e' decisao deliberada, e esta e'.
-#
-# O RESIDUO, que continua descoberto, foi conferido com -list-uncovered e nao
-# deduzido. Concentra-se em engine (39), spa (11), events (8), runtime (7),
-# observability (5), core (4) e liveness (2), e a maior parte sao construtores
-# e VALIDADORES PUROS — BuildFlags, AppendFlags, ClearSessionSuspect —, que
-# devolvem erro com mensagem completa e acionavel e nao tocam porta nenhuma.
-# Quem decide se aquilo e' erro, e loga, e' a camada de cima. E' o mesmo caso ja
-# aceito neste arquivo para clusterModeConfigurado e validarStackDoModo na
-# ADR-0005 D1, e para os adapters em todas as justificativas de 2026-08-06 em
-# diante.
-#
-# AVISO DE ESCOPO: a fachada hoje importa core, engine, runtime e spa. As 35
-# capabilities ainda NAO estao no denominador (medido: dos 169 sitios de
-# operacao rastreada da arvore, so 9 estao em pacotes medidos). Fia-las traz
-# mais, e este pedagio nao acabou.
-# justificativa: decisao 77 (2026-08-22), pareamento em quota propria com prazo.
-# min_eligible 660->665 (+5 elegiveis: NewWithQuotas, Registry.Acquire ja
-# existia, Registry.Promote, Registry.Expired, Registry.LenKind e
-# Registry.countLocked; Kind.String sai EXCLUDED por X4).
-#
-# errpath_coverage SOBE 817->818, ratchet-UP honesto: os caminhos de saida
-# novos de Promote e Acquire devolvem erro com a causa nomeada e distinta
-# (ErrAtCapacity vs ErrPairingAtCapacity), sem descartar contexto.
-#
-# func_coverage cai 617->612, e as seis foram conferidas com -list-uncovered,
-# nao deduzidas. O registry e' um ADAPTER e nao loga: quem transforma a recusa
-# em resposta HTTP e' o chamador, e e' ele que tem o contexto do pedido para
-# dizer QUAL sessao foi negada e a quem. E' o mesmo padrao aceito neste arquivo
-# desde 2026-08-06 ("adapter nao loga, use case loga").
-#
-# Registro a duvida em vez de a esconder: a recusa por capacidade E' uma
-# decisao, e a regra deste repo e' que loga quem decide. Se o consumidor do
-# registry vier a nao logar a recusa, isto passa a ser lacuna de verdade e nao
-# padrao — e a hora de a fechar e' quando o consumidor existir, nao agora, com
-# um logger injetado num tipo que ainda nao tem chamador.
-# justificativa: decisao 80 (2026-08-22), a PRIMEIRA capability atravessando a
-# fronteira — chat-state, pelo adaptador ChatArchiver. min_eligible 665->671,
-# func 612->608, errpath 818->815.
-#
-# E' o pedagio anunciado na justificativa da decisao 78, agora cobrado: fiar UMA
-# capability arrasta o pacote dela inteiro para o denominador. As 34 restantes
-# farao o mesmo, uma de cada vez, e isso e' visibilidade e nao regressao.
-#
-# As entradas novas foram conferidas no golden, nao deduzidas. A maior parte sai
-# EXCLUDED por X1/X4 (construtores e acessores puros). Ficam elegiveis e
-# descobertas Setter.SetArchived, Setter.SetPinned e Setter.set.
-#
-# Setter.set NAO esta sem observabilidade: ela corre atraves do rastreador
-# (runner.Do com OpKind e rotulo), que a regra L1-d2 reconhece. O que ela nao
-# satisfaz e' L2, e isso e' POR DESENHO — a L1-d2 conta como Info, porque
-# rastrear prova que a operacao ACONTECEU e nao que alguem classificou uma
-# falha. Contar o rastro como Warn faria toda funcao que chama o rastreador
-# parecer ter coberto os seus caminhos de erro, que e' a confianca falsa que
-# esta metrica existe para nao dar. A queda de errpath e' portanto o preco
-# honesto da regra, e nao uma lacuna nova.
-#
-# Do lado do adaptador (pkg/infra/wa-headless/chat), vale a mesma justificativa
-# da decisao 77: adapter nao loga, quem tem o contexto do pedido loga. A duvida
-# registrada la' continua valida e aplica-se aqui tambem.
-# justificativa: PresenceAnnouncer, o SEGUNDO port de transporte satisfeito
-# (2026-08-22, padrao da decisao 80 aplicado sob a 81). min_eligible 671->679,
-# func 608->602, errpath 815->814.
-#
-# E' o mesmo pedagio ja justificado na decisao 80, cobrado outra vez: fiar um
-# port arrasta o pacote da capability. Aconteceu com chatstate, acontece agora
-# com presence, e vai acontecer com cada um dos 15 restantes. Esta' anunciado
-# desde a justificativa da 78 e continua a ser visibilidade, nao regressao.
-#
-# As entradas foram conferidas no golden. Announcer.Set, SetOnline e Observe
-# ficam elegiveis e descobertas pelo MESMO motivo ja registrado para
-# chatstate.Setter.set: correm atraves do rastreador, que a regra L1-d2
-# reconhece como presenca (L1) e deliberadamente NAO como cobertura de caminho
-# de saida (L2), porque rastrear prova que a operacao aconteceu e nao que
-# alguem classificou uma falha.
-#
-# Do lado do adaptador (pkg/infra/wa-headless/presence), vale a justificativa da
-# decisao 77: adapter nao loga, quem tem o contexto do pedido loga. A duvida
-# registrada la' continua valida.
-# justificativa: BlocklistManager, o TERCEIRO port de transporte satisfeito
-# (2026-08-22). min_eligible 679->687, func 602->598, errpath fica em 814.
-#
-# Mesmo pedagio, terceira vez: fiar um port arrasta o pacote da capability.
-# Anunciado na justificativa da decisao 78, cobrado na 80 com chatstate, na
-# presenca, e agora com block. Repete-se por cada um dos 15 restantes, e continua
-# a ser visibilidade e nao regressao.
-#
-# As entradas foram conferidas no golden. Blocker.Block, Unblock e List correm
-# atraves do rastreador (regra L1-d2, presenca reconhecida, cobertura de caminho
-# de saida deliberadamente NAO), pelo mesmo motivo ja registrado para
-# chatstate.Setter.set e para os metodos do Announcer.
-#
-# errpath NAO cai desta vez: os caminhos novos de List ja vinham com a causa
-# nomeada, entao numerador e denominador subiram juntos.
-# justificativa: decisao 82 (2026-08-22), ContactDirectory dividido em
-# IdentityResolver / AvatarReader / ContactRoster, e os dois primeiros
-# satisfeitos. min_eligible 687->702, func 598->588, errpath 814->811.
-#
-# Quarto e quinto ports fiados, mesmo pedagio de sempre: entram os pacotes
-# capabilities/lookup e capabilities/avatar. Anunciado na justificativa da 78,
-# cobrado na 80, 81 e agora aqui. Restam capabilities por fiar, e cada uma
-# repete isto.
-#
-# As descobertas foram conferidas no golden e seguem o padrao ja registrado:
-# metodos que correm atraves do rastreador (regra L1-d2, presenca reconhecida,
-# cobertura de caminho de saida deliberadamente NAO), mais construtores e
-# acessores puros excluidos por X1/X4.
-#
-# Do lado dos adaptadores novos vale a justificativa da decisao 77 — adapter nao
-# loga, quem tem o contexto do pedido loga. A duvida registrada la continua
-# valida e agora aplica-se a cinco adaptadores em vez de um: quando o consumidor
-# existir e NAO logar a recusa, isto vira lacuna de verdade.
-# justificativa: capability INJETAVEL nos cinco adaptadores headless
-# (2026-08-22). min_eligible 702->707 e errpath 811->812 (ratchet-UP).
-#
-# func_coverage cai 588->584: as cinco funcoes novas entram no denominador e
-# nao no numerador, pelo motivo abaixo.
-#
-# As cinco funcoes novas sao os resolvedores de capability (fetcher, blocker,
-# setter, lookuper, announcer), que escolhem entre o dublê do teste e a
-# capability real. Nao logam: sao dois returns e nenhuma decisao de negocio.
-#
-# O MOTIVO da refatoracao ficou registrado porque e o mais util daqui: o
-# coverage-gate acusou a cobertura de LINHA a cair de 845 para 838, abaixo do
-# piso 843. Os adaptadores tinham 11-39% porque a resolucao de sessao exige
-# browser. A resposta NAO foi baixar o piso — foi tornar a capability injetavel,
-# o que subiu os cinco para 51-81% e destravou regras que estavam escritas e nao
-# testadas: ausencia de avatar contra falha de leitura (a distincao da F83),
-# block contra unblock (assinaturas identicas, trocar compila), JID convertido
-# contra repassado, ausencia de mapeamento como resposta e nao falha, e o
-# booleano de disponibilidade nao invertido.
-#
-# Todas essas sao regras onde o codigo COMPILA IGUAL estando certo ou errado. Era
-# isso que a cobertura baixa estava a sinalizar.
-# justificativa: ContactRoster, o SEXTO port de transporte satisfeito
-# (2026-08-22). min_eligible 707->732, func 584->572, errpath 812->808.
-#
-# O pacote capabilities/contacts e o maior fiado ate agora (+25 elegiveis), e o
-# pedagio e o mesmo de sempre: fiar um port arrasta o pacote da capability.
-# Anunciado na justificativa da 78 e cobrado a cada port desde a 80.
-#
-# As descobertas seguem o padrao ja registrado: metodos que correm atraves do
-# rastreador (regra L1-d2 — presenca reconhecida, cobertura de caminho de saida
-# deliberadamente NAO), mais construtores e acessores puros por X1/X4.
-#
-# Do lado do adaptador vale a justificativa da 77: adapter nao loga, quem tem o
-# contexto do pedido loga. A duvida registrada la aplica-se agora a seis
-# adaptadores.
-# justificativa: decisao 83 (2026-08-22), seam de resolucao de sessao.
-# min_eligible 732->728 (CAI, e a queda e' consolidacao), func 572->576 (SOBE),
-# errpath 808->806.
-#
-# min_eligible cai porque seis copias do mesmo bloco de resolucao de sessao
-# viraram UMA. Nao e encolhimento do escopo — e' remocao de duplicacao: os seis
-# adaptadores tinham cada um o seu capability(), com os mesmos quatro passos, e
-# nenhum deles podia ser testado porque um passo no meio sobe browser.
-#
-# func_coverage SOBE 572->576 pelo mesmo motivo: a seam concentra as duas regras
-# que DAO para testar (falha de configuracao propaga; recusa por capacidade
-# chega ao chamador) e o repositorio passa a ter UMA linha nao coberta no lugar
-# de seis.
-#
-# O Holder continua NAO injetavel, como a decisao 83 exigiu: ele detem a
-# invariante de posse (um perfil, um dono ativo), e um dublê que satisfizesse a
-# interface dele seria uma segunda resposta, mais permissiva, a mesma pergunta.
-# A cobertura do browser fica na suite de integracao, que e o unico lugar que
-# pode cobri-la honestamente.
-# justificativa: NewsletterReader, o SETIMO port de transporte satisfeito
-# (2026-08-22). Entra o pacote capabilities/channel, mesmo pedagio de sempre.
-#
-# A DECISAO desta fatia esta no adaptador e nao na metrica: a H139 mediu que
-# Followed reflete o CACHE do cliente, com seis canais apagados por outra conta
-# a sobreviver no modelo local. O adaptador NAO os filtra, porque o
-# DirectoryEntry nao carrega vivacidade — filtrar seria inventar julgamento a
-# partir de dado que nao existe. Devolver o cache COMO cache e honesto.
-#
-# E uma quarta categoria de divergencia, depois de "sem sentido", "dependencia
-# humana" e "dado ausente": a resposta e COMPLETA e o FRESCOR nao e garantido.
-# justificativa: SessionDisconnector, o OITAVO port de transporte satisfeito
-# (2026-08-22), com SessionLogouter RECUSADO POR POLITICA.
-#
-# A H122 mediu que Socket.logout EXISTE e funciona neste build. Chama-lo
-# desempareia a conta, e restaurar exige um humano com o telefone. E a QUINTA
-# categoria de divergencia, e a mais perigosa das cinco: as outras quatro sao
-# limites (nao pode existir, nao consegue hoje, nao sabe, pode estar velho) e
-# esta e' "consegue, e nao deve".
-#
-# E' perigosa porque a implementacao obvia FUNCIONA: quem "completasse" o
-# adaptador para satisfazer o compilador chamaria a operacao que funciona,
-# apagando um pareamento que ninguem pediu. Separar as portas torna isso
-# inalcancavel por ACIDENTE, em vez de depender de disciplina.
-# justificativa: ProfileAccessProvider, o NONO port satisfeito (2026-08-22),
-# metade dos 18. Entram os pacotes capabilities/owner e o que o instantaneo usa.
-#
-# A ARMADILHA DE FORMA, mesma familia da decisao 72: ProfileDataAccess e
-# SINCRONA — PushName, OwnJID e DeviceInfo nao tem contexto nem erro. Essa forma
-# pressupoe um chamador que JA TEM o estado, que e o que o socket tem em
-# client.Store. Um driver de pagina precisa PERGUNTAR, e faze-lo num metodo sem
-# contexto seria rede oculta num leitor, que a decisao 66 recusou.
-#
-# A saida nao foi inventar: ProfileAccess TEM contexto, entao e ali que a
-# pergunta acontece, e o que volta e um INSTANTANEO. E o que a referencia faz, e
-# o proprio port ja declarava a convencao — campo ausente vira zero-value.
-#
-# Dois campos ficam vazios POR MEDICAO: PushName, porque o getter de display
-# name existe e devolve null contra o perfil pareado real (dois candidatos
-# vizinhos nem existem, e a medicao os descartou); e DeviceInfo, porque o socket
-# o preenche de um registro de pareamento que um driver de pagina nao tem.
-#
-# O comentario diz por que INVENTAR seria pior que vazio: isto alimenta
-# superficie de diagnostico, e uma plataforma plausivel e errada e mais dificil
-# de desconfiar que uma em branco. O controle negativo usou Platform:"web" — que
-# compila e parece certo.
-# justificativa: AppStateSyncer, o DECIMO port satisfeito (2026-08-22).
-#
-# SEXTA forma de divergencia, e e' de VOCABULARIO. O port pede tres modos —
-# if_unsynced, incremental, full — que descrevem semantica de PATCH de
-# app-state: busca barata, re-snapshot completo, pular se ja sincronizado. E'
-# conceito de PROTOCOLO, e o socket implementa-o de verdade.
-#
-# A pagina tem UM comportamento: pedir refresh e relatar o que mudou. Nao ha
-# re-snapshot a requisitar nem versao a preservar, porque nao existe fluxo de
-# patch em que se possa estar atrasado.
-#
-# Os tres modos correm a mesma operacao e o adaptador DIZ isso, em vez de fingir
-# que a distincao sobrevive. Mas nao aceita modo desconhecido: um typo virar
-# no-op silencioso faria o chamador acreditar que pediu algo que nao pediu — a
-# mesma regra de conjunto fechado usada nos estados de presenca.
-# justificativa: ChatMessenger satisfeito e MessageComposer RECUSADO
-# (2026-08-23). Entram os pacotes capabilities/chats e capabilities/react.
-#
-# DUAS HONESTIDADES que o codigo carrega porque a assinatura nao tem onde:
-#
-# MarkRead funciona PELA METADE, e o port nao distingue. A H160 mediu as duas:
-# o reconhecimento LOCAL funciona (unreadCount 1->0, provado nas duas contas) e o
-# RECIBO AO REMETENTE nao chega (ack do outro lado fica em 2 por 60s, e a
-# hipotese do markAvailable foi testada e REFUTADA). Quem limpa o proprio badge e
-# servido; quem espera os tiques do remetente NAO e, e isso esta medido.
-#
-# ids e timestamp sao IGNORADOS de proposito: a pagina marca a CONVERSA, nao uma
-# lista de mensagens. Aceita-los em silencio e marcar o chat inteiro seria efeito
-# MAIS LARGO que o pedido, disfarcado do estreito.
-#
-# MessageComposer recusado por AUSENCIA DE SENTIDO: NewMessageID gera id ANTES de
-# enviar, que e o modelo do socket. A pagina CUNHA o id ao enviar, e a chave da
-# referencia (MsgKey.fromString) LANCA neste build (H98).
-# justificativa: decisao 86 (2026-08-23), o contrato do port passa a carregar a
-# CONFIRMACAO. Entra o pacote capabilities/group.
-#
-# A invariante 14 proibe SUCESSO SILENCIOSO, nao incerteza. As operacoes de
-# participante sao o unico lugar onde a leitura de volta e IMPOSSIVEL para quem
-# age, e isso foi medido (H58 para adicionar/remover, H65 para promover/rebaixar):
-# a mudanca chega ao servidor e a sessao que agiu nao a ve.
-#
-# Havia tres saidas e duas eram ruins. Devolver sucesso sem pos-condicao abriria
-# excecao a invariante. Ler de volta assim mesmo reportaria FALHA para uma
-# mudanca bem-sucedida. A terceira: o "nao confirmavel" vira DESFECHO RELATADO.
-#
-# NUMEROS, e corrijo aqui um erro factual que escrevi na primeira versao desta
-# justificativa: eu disse que errpath SUBIA, e ele DESCE (797->785).
-#
-# O use case ganhou de facto um Warn com o motivo quando o transporte nao
-# confirma — e' onde a incerteza chega a quem opera, ja que o cliente HTTP recebe
-# 200 porque a operacao FOI enviada. Mas esse ganho e' de uma unidade, e o pacote
-# capabilities/group entra com muitos caminhos de saida descobertos: min_eligible
-# salta 752->799, o maior de toda a fase. O saldo e negativo, e escrever o
-# contrario seria justificar uma queda com um ganho que nao a cobre.
-# justificativa: GroupDirectory (2026-08-23), o 14o port satisfeito e a PRIMEIRA
-# fatia a atravessar DUAS capabilities.
-#
-# A razao e medida: a pagina NAO tem colecao de grupos. Um grupo e uma CONVERSA
-# cujo jid termina em @g.us, entao listar grupos e filtrar a lista de conversas.
-# O titulo vem de formattedTitle e nao de getName, porque getName responde para
-# 1 de 384 conversas — num aparelho companheiro a agenda esta quase vazia.
-#
-# Tres regras com numeros plausiveis quando erradas, e as tres travadas: a
-# contagem e de GRUPOS e nao de conversas; um jid de pessoa nao passa por grupo;
-# e o link e pedido explicitamente, porque Link() e metodo e nao campo para que
-# a forma perigosa tenha de ser pedida e nunca divirja do codigo.
-# justificativa: GroupLifecycle (2026-08-23), o 15o port satisfeito.
-#
-# Duas regras de informacao que nao pode ser achatada, ambas travadas: entrada
-# PENDENTE nao vira adesao (um grupo com aprovacao transforma a entrada numa
-# SOLICITACAO, e reporta-la como adesao faria o chamador anunciar algo que nao
-# aconteceu), e Created distingue CRIAR de ENCONTRAR (a capability chama-se
-# Ensure; perder o campo faria duas chamadas iguais parecerem dois grupos).
-#
-# Este adaptador nasceu com 87,9% porque incluiu os TRES caminhos de erro desde
-# o primeiro teste — falha de configuracao, identidade invalida, posse sem boot.
-# As quatro rodadas anteriores mostraram que sao sempre os mesmos, e descobri-los
-# quando o piso reclama custava uma corrida de gate por vez.
-# justificativa: decisao 91 (2026-08-23), a regra L1-e — delegacao observavel.
-#
-# Esta linha SOBE pela primeira vez em sete commits, e a razao nao e' codigo
-# novo: e' o instrumento deixar de cobrar o que ja estava observado.
-#
-# O defeito, medido: elegibilidade exige ALCANCE DE PRODUCAO, entao uma
-# capability de internal/wa-headless so' entra no denominador quando pkg/ a
-# liga. Como as capabilities foram escritas antes de serem ligadas, cada port
-# novo acordava de uma vez a divida inteira de uma capability. Resultado: esta
-# trava, declarada ratchet-UP, DESCEU nos seis commits anteriores —
-#   564 -> 560 -> 558 -> 554 -> 551 -> 545 -> 543
-# cada um com justificativa propria e correta. O PADRAO e que nao tinha
-# ninguem, porque cada commit so' ve o proprio delta. Censo do golden: 15 das
-# 35 capabilities ligadas, 20 dormentes; a ~4 decimos cada, a projecao era
-# terminar a fase perto de 45%.
-#
-# A decisao 91 recusou as duas saidas faceis (continuar a baixar; reestruturar
-# producao para agradar a metrica) e mandou corrigir o instrumento. L1-e
-# credita quem delega a um ajudante RASTREADO passando-lhe um ROTULO com pedaco
-# constante — a segunda condicao e' o que impede o carimbo, porque sem rotulo
-# repassado o rastro diz que o ajudante rodou e nao QUAL chamador o accionou.
-# Um salto so'. A definicao normativa esta em cmd/logcov/METRIC.md.
-#
-# Efeito medido por A/B de -list-uncovered com e sem a passagem: 17 funcoes
-# creditadas, ZERO perdidas, todas metodos de capability que delegam. Nenhum
-# adaptador de pkg/ foi creditado, porque nenhum delega a ajudante rastreado.
-# 543 -> 556 (53,5% -> 55,6%, 458/824).
-# justificativa: GroupInfoSettings (2026-08-23), a divisao do GroupSettings
-# pelas decisoes 87 e 92. 556 -> 549, e a queda esta escrita como queda.
-#
-# A causa NAO e' a mesma que a decisao 91 corrigiu, e confundi-las seria o erro:
-# la, o instrumento cobrava por observabilidade que EXISTIA e nao via (o metodo
-# chamava um ajudante rastreado do mesmo pacote). Aqui sao as 10 funcoes do
-# adaptador groupset, e elas nao sao creditaveis por LIMITE do instrumento, nao
-# por defeito dele.
-#
-# Medido: os adaptadores chamam a capability por uma INTERFACE local declarada
-# no proprio adaptador (e' assim que ficam testaveis sem pagina).
-# group.Manager.SetSubject rastreia direto e recebe rotulo constante — pareceria
-# creditavel. Nao e': info.Uses resolve para o metodo da INTERFACE, e qual
-# implementacao la' vai parar decide-se no ponto de montagem. Creditar seria
-# creditar uma suposicao.
-#
-# Controle: afrouxar L1-e para aceitar alvo de QUALQUER pacote do modulo nao
-# mudou nada — 458 creditadas antes e depois. O que bloqueia e' a interface, nao
-# a fronteira de pacote. Registado em cmd/logcov/METRIC.md como limite.
-# justificativa: selecao de engine (2026-08-23), decisao 94. 549 -> 547.
-#
-# Terceira descida seguida (556 -> 549 -> 547), e as tres tem causas DIFERENTES.
-# Registo isso aqui para nao se repetir o erro que a 91 corrigiu: la', o padrao
-# nao tinha ninguem porque cada commit so' via o proprio delta.
-#   556->549: LIMITE do instrumento — adaptador chama capability por INTERFACE,
-#             e qual implementacao la' vai parar decide-se na montagem.
-#   549->547: quatro funcoes PURAS ou de parsing no bootstrap.
-#
-# Conferido com -list-uncovered, nao deduzido. Das cinco funcoes novas, a que
-# AGE — setupEngineSelection — nasce COBERTA: loga o engine padrao, quantas
-# sessoes em headless e quais, e mata o processo com log.Fatal quando a
-# configuracao e' invalida. As quatro descobertas sao:
-#   rotaDeEngine            decisao pura, sem porta e sem caminho de erro —
-#                           mesma categoria ja justificada para atrasoDaTentativa
-#   SessoesEmHeadless       acessor puro
-#   engineValido            }  devolvem erro ao UNICO chamador, que o loga em
-#   engineSelectionConfigurada }  Fatal. Logar dentro duplicaria um fatal.
-# justificativa: configuracao do lado headless (2026-08-23), decisao 94.
-# 547 -> 546, e a descida e' de UM decimo porque a funcao que valia cobrir foi
-# COBERTA em vez de reconciliada.
-#
-# nomeDePerfilSeguro nasceu com cinco recusas descobertas, e essas recusas nao
-# sao ruido: um txtID que teria escapado da raiz de perfis e' um pedido para
-# restaurar OUTRA conta, e um perfil e' credencial de sessao. Passou a logar em
-# Warn — com o COMPRIMENTO e o motivo, nunca o valor — e com isso cobriu L1 e as
-# cinco saidas. Medido: func 54,4% -> 54,6% so' com essa mudanca.
-#
-# Ficam descobertas duas, ambas ja' na categoria registada antes:
-#   headlessConfigConfigurada  devolve erro ao UNICO chamador, que o loga em
-#                              Fatal; logar dentro duplicaria um fatal
-#   StartConfigFor             composicao pura; a observabilidade dela vem de
-#                              nomeDePerfilSeguro, mas L1-e nao credita
-#                              delegacao para alvo que loga sem RASTREAR — e' a
-#                              propria restricao que escrevi na decisao 91, e
-#                              afrouxa-la aqui para me servir seria escrever a
-#                              regra ao contrario
-min_func_coverage=546
+# justificativa: F90, F91 e F95 (2026-08-08). min_eligible 572->574 (+2) e
+# func_coverage 698->695. As DUAS funcoes novas sao PREDICADOS/HELPERS PUROS, e
+# logar dentro delas seria pior que nao logar:
+#
+#   unhandledEventFields (eventhandler.go)
+#       Reflexao pura: recebe um evento e devolve os NOMES dos campos. Sem
+#       porta, sem caminho de erro, sem efeito. Quem loga e' o `default` do
+#       handleEvent, que a chama — e ele loga UMA linha com tipo e campos. Um
+#       log aqui dentro dispararia a cada evento nao tratado, duplicando
+#       exatamente a linha do chamador.
+#
+#   isClientCausedSessionError (handler_session.go)
+#       Predicado: responde "este erro e' culpa do cliente?". Quem age sobre a
+#       resposta e' o handler, que ja' loga em Warn ou Error conforme ela.
+#       Logar dentro de um predicado emitiria linha toda vez que alguem faz uma
+#       PERGUNTA, nao quando algo acontece.
+#
+# errpath fica em 858. Nenhum site que logava deixou de logar — ao contrario, a
+# F91 e a F90 melhoraram o que JA' saia: o `default` parou de despejar valores
+# (codigos de pareamento, CallID) e o cancelamento do cliente parou de sair em
+# `error` como se fosse banco fora do ar.
+# ratchet-UP: F98 (2026-08-08), a posse deixa de ser renovada para uma sessao
+# que nao existe mais. min_eligible 574->575 (+1) e func_coverage 695->696.
+#
+# As DUAS medidas SOBEM, e a razao e' o proprio conserto: leaseManager.
+# RunHeartbeat passou de `uncovered:L1` para `covered`. Ela era o caso
+# justificado acima como "e' o laco, todo log de decisao esta' em renewOne" —
+# e deixou de ser, porque agora ela TOMA uma decisao propria (largar o lease de
+# uma sessao inexistente) e a registra em Warn com userid e owner. Quem decide
+# loga, que e' a regra deste repositorio; ela virou decisora.
+#
+# As duas funcoes novas, conferidas com `logcov -list-uncovered` e nao
+# deduzidas:
+#
+#   leaseManager.abandoned    ELIGIBLE, uncovered:L1. Predicado puro: responde
+#                             "este lease e' de uma sessao que sumiu?". Quem
+#                             age sobre a resposta e' RunHeartbeat, que ja'
+#                             loga. Logar dentro de um predicado emitiria linha
+#                             a cada PERGUNTA — a cada heartbeat, por sessao —
+#                             e o mesmo argumento ja' foi aceito acima para
+#                             isClientCausedSessionError (F90).
+#
+#   hasLiveSessionLocally     EXCLUDED (X1). Uma linha: consulta o registro de
+#                             clientes e devolve bool.
+#
+# errpath fica em 857: nenhum caminho de saida novo — `abandoned` tem um
+# retorno por ramo e nenhum erro a propagar.
+# justificativa: F99 + F100 (2026-08-09). min_eligible 575->577 (+2, ratchet-UP
+# honesto) e func_coverage CAI 696->693. A queda é diluição por duas funções
+# que não têm o que logar, conferidas com `logcov -list-uncovered` e não
+# deduzidas:
+#
+#   bootstrap.registerAdminRoutes    Tabela de rotas: seis chamadas a
+#                                    adminRoutes.Handle(...).Methods(...). Sem
+#                                    porta, sem erro, sem decisão. Estava
+#                                    inline em buildRouter (que é coberta) e
+#                                    virou função própria para que o teste de
+#                                    consistência com o stdio monte as MESMAS
+#                                    rotas sem banco nem token — replicá-las no
+#                                    teste criaria uma terceira tabela para
+#                                    divergir, que é o defeito da F99.
+#
+#   stdio.StaticRouteTargets         Copia um mapa para um tipo exportado. Um
+#                                    log aqui sairia a cada leitura da tabela.
+#
+# Nenhum sítio que logava deixou de logar. Ao contrário: a guarda de token
+# vazio da F100 ACRESCENTOU um Warn em AuthAlice ("request carries no token"),
+# que hoje distingue "token errado" de "token ausente" no log — mas AuthAlice
+# já era coberta, então o numerador não muda e o ganho não aparece na razão.
+#
+# errpath fica em 857.
+# ratchet-UP parcial: ADR-0005 D6 (2026-08-09), separacao de sondas.
+# min_eligible 577->579 (+2 liquido) e func_coverage 693->694 (SOBE).
+#
+# O ganho veio de um defeito que o proprio gate apontou: buildRouter estava em
+# `uncovered:L1` — funcao elegivel SEM log reconhecido — e o aviso novo que eu
+# escrevi ("nenhuma sonda de readiness ligada") nasceu em `uncovered:L3`, sem
+# campo estruturado. Acrescentar Str("endpoint", ...) levou a funcao a
+# `covered`. Consertado em vez de justificado: a metrica estava certa, e um
+# aviso sem estrutura nao diz ao operador QUAL sonda esta degradada.
+#
+# Contabilidade das funcoes novas, conferida com `logcov -list-uncovered`:
+#
+#   ELIGIBLE, cobertas:
+#     readinessHandler.func1        loga a falha de escrita do corpo
+#
+#   ELIGIBLE, descobertas (+2 no denominador):
+#     leaseManager.HeartbeatStalled predicado puro: responde "o heartbeat
+#                                   parou?". Quem age sobre a resposta e a
+#                                   sonda, que ja loga em Error. Mesmo
+#                                   argumento de isClientCausedSessionError
+#                                   (F90) e de leaseManager.abandoned (F98):
+#                                   log dentro de predicado sai a cada
+#                                   PERGUNTA, nao quando algo acontece.
+#     livenessHandler.func1         escreve {"status":"ok"} e retorna. E a
+#                                   sonda mais barata do processo, batida a
+#                                   cada tick de HEALTHCHECK; um log ali seria
+#                                   uma linha por segundo, para sempre.
+#
+#   EXCLUDED (nao entram no denominador): ReadinessReport.Ready,
+#     buildReadinessProbe, buildReadinessProbe.func1, livenessHandler,
+#     readinessHandler.
+#
+#   Saiu do denominador: buildRouter.func2, a closure inline do /livez que
+#     virou livenessHandler(). Deduplicacao, nao perda de instrumentacao.
+#
+# errpath fica em 857.
+# justificativa: ADR-0005 D3 (2026-08-09), outbox de entrega de webhook.
+# min_eligible 579->586 (+7, ratchet-UP honesto), errpath_coverage SOBE 857->859
+# e func_coverage cai 694->686.
+#
+# As sete funcoes novas sao um REPOSITORIO, e seguem o padrao ja aceito neste
+# repositorio e justificado varias vezes acima: adapter nao loga, quem decide se
+# aquilo e erro loga. Conferidas com `logcov -list-uncovered`, nao deduzidas:
+#
+#   WebhookOutboxRepository.Enqueue / Reschedule / Delete / ClaimDue /
+#   PendingCount, mais os dois auxiliares scanOutboxRows e pushDueAt.
+#
+# Todas envelopam o erro do banco com contexto ("webhook outbox: reagendar %s")
+# e propagam SEM logar. Logar aqui produziria DUAS linhas por falha de entrega —
+# uma do repositorio e outra de quem decidiu o que fazer com a falha — e a
+# segunda e a que carrega a decisao, que e o que importa para operar.
+#
+# O mesmo argumento vale com forca extra neste caso: o outbox e chamado no
+# caminho de TODA entrega de webhook. Um log por chamada seria uma linha por
+# evento entregue, para sempre.
+#
+# errpath SOBE porque cada uma dessas funcoes propaga a causa com %w em vez de
+# descartar — o analisador conta propagacao sem descarte como caminho coberto.
+#
+# NewWebhookOutboxRepository e as duas closures de defer ficam EXCLUDED (X1).
+# ratchet-UP: ADR-0005 D3, fiacao (2026-08-09). As TRES medidas SOBEM:
+# min_eligible 586->595 (+9), func_coverage 686->689, errpath 859->860.
+#
+# A fiacao nasce instrumentada porque cada decisao dela e observavel, e sao
+# decisoes que um operador precisa distinguir: enfileirou ou nao, reagendou no
+# outbox ou caiu para a memoria, liquidou a linha ou nao conseguiu, descartou a
+# entrega por falta de chave. Sete das nove funcoes novas ja entram `covered`.
+#
+# Uma so ficou descoberta, conferida com `logcov -list-uncovered`:
+#
+#   runOutboxSweeper   E o laco. Todo log de decisao esta em sweepOutboxOnce,
+#                      que ele chama e que JA e coberta. Mesmo argumento aceito
+#                      para leaseManager.RunHeartbeat quando ela tambem so
+#                      tiquetaqueava — e, ao contrario dela, esta nao tomou
+#                      decisao propria depois.
+#
+# outboxDisponivel e a closure de reentregar ficam EXCLUDED (X1/X6).
+#
+# Um defeito proprio corrigido em vez de justificado: setupWebhookOutbox nasceu
+# em `uncovered:L3` — o aviso de "sem banco para o outbox" nao tinha campo
+# nenhum. Um aviso sem estrutura nao diz ao operador o que passou a valer;
+# agora carrega fallback e survives_restart, que e exatamente a pergunta que
+# alguem faz ao ler aquela linha.
+# justificativa: F87 opcao A (2026-08-09), fila serial de eventos por sessao.
+# min_eligible 595->600 (+5, ratchet-UP honesto) e func_coverage 689->687.
+#
+# Duas das cinco ja entram cobertas — sessionEventQueue.executar (avisa evento
+# lento, com userid, duracao e profundidade da fila) e stopSessionEventQueue
+# (avisa quantos eventos foram descartados no desmonte). Sao justamente as duas
+# que um operador precisa ver.
+#
+# As tres descobertas, conferidas com `logcov -list-uncovered`:
+#
+#   enqueueSessionEvent      Escolhe entre enfileirar, executar em linha e
+#                            descartar. NAO loga de proposito: roda por EVENTO,
+#                            em toda mensagem recebida, e um log ali seria uma
+#                            linha por evento para sempre. Quem avisa e o
+#                            worker, quando o custo aparece.
+#   startSessionEventQueue   Cria canal e sobe worker. Sem porta e sem erro.
+#   sessionQueueDepth        Acessor sobre um mapa protegido por mutex.
+#
+# O `Attach.func3` (o handler que enfileira) entra COBERTO: ele e a fronteira
+# nova e carrega o userid.
+#
+# errpath fica em 860.
+# justificativa: F75 (2026-08-09), token por query string restrito ao
+# WebSocket e redigido no log. min_eligible 600->601 (+1) e func_coverage
+# 687->686.
+#
+# A funcao nova e `redactURL`: transformacao PURA de URL para string, sem
+# porta, sem erro e sem decisao. Ela roda uma vez por requisicao REGISTRADA —
+# um log ali dobraria o volume do registro de fronteira para nao dizer nada
+# que a propria linha redigida ja nao diga.
+#
+# `queryTokenAllowed` (o predicado da rota) fica em pkg/presentation e nao
+# entra nesta contagem; quem loga a decisao e extractRequestToken, que ja e
+# coberta e que agora distingue recusa (Warn) de excecao aceita (Debug).
+#
+# errpath fica em 860.
+# ratchet-UP: F68 (2026-08-09), payload de QR unificado. 686->687.
+#
+# `buildQRPayload` nasce coberta: ela loga a falha de codificacao da imagem em
+# Error e SEGUE, despachando so o codigo. Antes esse caminho fazia
+# `onPairingQR` RETORNAR sem despachar nada — o cliente ficava sem o codigo
+# cru, que ele consegue renderizar sozinho. Um caminho de saida a menos e um
+# log a mais.
+#
+# min_eligible nao muda: `buildQRPayload` entra e o corpo inline de
+# `onPairingQR` sai, e `qrPayload` continua existindo como adaptador do port.
+# ratchet-UP: F97 etapa 2 (2026-08-09), migracao 16. 687->688 e min_eligible
+# 601->602 (+1: applyBlankPlaintextTokenMigration).
+#
+# Ela nasce COBERTA, e nao por acaso: e uma migracao IRREVERSIVEL sobre
+# credencial. Loga a falha de leitura, a de preenchimento, a de verificacao, a
+# recusa por linha sem hash, a falha do apagamento, e o numero de linhas cujo
+# texto claro saiu do disco — que e o unico registro de que a operacao
+# aconteceu, porque depois dela nao ha como distinguir "apagou" de "nunca teve".
+# justificativa: CAP-01 (2026-08-18), POST /chat/send/text passou a enviar de
+# verdade pelo wa-noise. min_eligible 605->606 (+1: ChatMessengerAdapter.SendText,
+# em pkg/infra/wa-noise/adapters/chat/messenger.go). `covered` fica em 419 —
+# SendText nasce DESCOBERTA, no mesmo padrao ja aceito de SendReaction (a
+# funcao irma que ela imita, molde da task): adapter nao loga, quem loga e o
+# usecase (SendMessageUseCase.Execute ja loga "no wanoise session",
+# "invalid phone in send text payload" e "failed to send text message"), e
+# ambas retornam so' o que o client.SendMessage(ctx, ...) devolveu. func_coverage
+# cai 693->691 so' pela aritmetica do denominador (419/606), sem nenhuma
+# funcao ja' coberta ter regredido.
+# justificativa: CAP-01.1 (2026-08-18), domain.SendMessageRequest.LinkPreview
+# deixa de ser ignorado em silencio. min_eligible 606->607 (+1:
+# pkg/infra/media/opengraph.Fetcher.FetchLinkPreview, o adapter que resolve a
+# metadata de Open Graph). `covered` continua em 419 — FetchLinkPreview nasce
+# DESCOBERTA pelo MESMO padrao ja aceito para ChatMessengerAdapter.SendText
+# acima: adapter nao loga, quem loga e o usecase (SendMessageUseCase.Execute,
+# inalterado nos logs que ja tinha). func_coverage cai 691->690 so' pela
+# aritmetica do denominador (419/607 = 69.03% vs 419/606 = 69.14%), sem
+# nenhuma funcao ja' coberta ter regredido — confirmado via
+# `go run ./cmd/logcov -golden`, que so' acrescentou linhas novas (nenhuma
+# ELIGIBLE virou EXCLUDED nem uma funcao coberta virou uncovered).
+# justificativa: CAP-02 (2026-08-18), POST /chat/send/image passou a buscar a
+# URL, subir o anexo e enviar de verdade pelo wa-noise (ramo URL; data URI
+# fica para CAP-03). min_eligible 607->610 (+3, todas nascem DESCOBERTAS pelo
+# MESMO padrao ja aceito acima — "adapter/helper puro nao loga, quem loga e o
+# usecase"):
+#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage — o
+#     adapter que sobe o anexo (client.Upload) e envia (client.SendMessage);
+#     nenhum dos dois falha logado no adapter, igual a SendText/SendReaction.
+#   - pkg/infra/media/opengraph.URLFetcher.FetchBytes — delega inteiro para
+#     FetchURLBytes (ja' coberto), sem logging proprio; mesmo padrao de
+#     Fetcher.FetchLinkPreview acima.
+#   - pkg/application/usecase/message.isHTTPImageURL — helper puro de
+#     validacao de scheme (http/https + host), sem porta de log; simetrico as
+#     validacoes de campo obrigatorio (missing_phone/missing_image) que os
+#     outros 12 use cases send_* ja deixam sem log.
+# `covered` continua em 419 — nenhuma funcao ja' coberta regrediu (confirmado
+# via `go run ./cmd/logcov -golden`, diff so' acrescenta linhas novas e troca
+# a lista de S-ret de SendImageUseCase.Execute pelos pontos de retorno novos,
+# nenhum ELIGIBLE virou EXCLUDED nem uma funcao coberta virou uncovered).
+# func_coverage cai 690->687 so' pela aritmetica do denominador
+# (419/610 = 68.69% vs 419/607 = 69.03%).
+# justificativa: CAP-04 (2026-08-18), POST /chat/send/document passou a
+# buscar a URL ou decodificar a data URI, subir o anexo e enviar de verdade
+# pelo wa-noise (os dois transportes, no mesmo slice — data URI generica
+# "data:", nao so' "data:image" como em Image). min_eligible 611->615 (+4):
+#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument — o
+#     adapter que sobe o anexo (client.Upload, wanoise.MediaDocument) e envia
+#     (client.SendMessage); nasce DESCOBERTA pelo MESMO padrao ja' aceito de
+#     SendImage/SendText/SendReaction acima ("adapter nao loga, quem loga e'
+#     o usecase").
+#   - pkg/application/usecase/message.isHTTPDocumentURL — helper puro de
+#     validacao de scheme (http/https + host), simetrico a isHTTPImageURL;
+#     nasce DESCOBERTA pelo mesmo motivo.
+#   - pkg/application/usecase/message.decodeDataURIWithLimit — a logica de
+#     fronteira PURA (sem logger, sem *SendDocumentUseCase) extraida de
+#     decodeDataURIDocument especificamente para o teste de boundary poder
+#     injetar um limite sintetico pequeno em vez de alocar payloads de 100MB
+#     so' para uma comparacao (ver CLAUDE.md, "Teste de boundary sem
+#     desperdicar RAM"). Nasce DESCOBERTA: quem loga e' a funcao que a
+#     envolve (decodeDataURIDocument, abaixo), e logar dentro da funcao pura
+#     duplicaria a mesma linha de log no wrapper.
+#   - pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument
+#     — nova funcao elegivel, ja' nasce COBERTA (Warn tanto no caminho de
+#     tamanho excedido quanto no de base64 invalido, delegando a
+#     decodeDataURIWithLimit acima a decisao pura). E' o `covered` que sobe
+#     420->421, unico ganho liquido desta mudanca.
+# func_coverage cai 687->685 so' pela aritmetica do denominador
+# (421/615 = 68.46% vs 420/611 = 68.74%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` (as 3
+# funcoes novas descobertas sao exatamente as citadas acima, nenhuma outra
+# saiu da lista de cobertas).
+# justificativa: CAP-05 (2026-08-18), POST /chat/send/audio passou a
+# buscar a URL ou decodificar a data URI ("data:audio/", discriminacao
+# ESTREITA como Image — nao "data:" generico como Document), resolver PTT
+# (default TRUE quando ausente) e MIME (precedencia de 4 niveis, exclusiva
+# de Audio) e enviar de verdade pelo wa-noise. min_eligible 615->620 (+5):
+#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio — o
+#     adapter que sobe o anexo (client.Upload, wanoise.MediaAudio) e envia
+#     (client.SendMessage); nasce DESCOBERTA pelo MESMO padrao ja' aceito de
+#     SendDocument/SendImage acima ("adapter nao loga, quem loga e' o
+#     usecase").
+#   - pkg/application/usecase/message.isHTTPAudioURL — helper puro de
+#     validacao de scheme (http/https + host), simetrico a
+#     isHTTPDocumentURL/isHTTPImageURL; nasce DESCOBERTA pelo mesmo motivo.
+#   - pkg/application/usecase/message.decodeAudioDataURIWithLimit — a logica
+#     de fronteira PURA (sem logger) extraida de decodeDataURIAudio
+#     especificamente para o teste de boundary poder injetar um limite
+#     sintetico pequeno em vez de alocar payloads de 16MB (mesmo racional de
+#     decodeDataURIWithLimit em CAP-04). Nasce DESCOBERTA: quem loga e' a
+#     funcao que a envolve (decodeDataURIAudio, abaixo).
+#   - pkg/application/usecase/message.resolveAudioMimeType — DIFERENTE do
+#     precedente de CAP-04/CAP-03 (resolveMimeType, de Image/Document, e'
+#     isento por X1: <=2 statements). resolveAudioMimeType tem 4 niveis de
+#     precedencia (req.MimeType / detectedMime / sniffing / fallback por
+#     PTT) — nao cabe em <=2 statements sem distorcer a logica, entao NASCE
+#     ELEGIVEL de verdade (nao so' "descoberta pelo padrao"). E' funcao pura
+#     (sem logger, sem *SendAudioUseCase); a decisao de nao logar dentro
+#     dela segue o mesmo racional das outras funcoes puras desta lista: quem
+#     loga e' o Execute que a chama.
+#   - pkg/application/usecase/message.SendAudioUseCase.decodeDataURIAudio —
+#     nova funcao elegivel, ja' nasce COBERTA (Warn tanto no caminho de
+#     tamanho excedido quanto no de base64 invalido, delegando a
+#     decodeAudioDataURIWithLimit acima a decisao pura). E' o `covered` que
+#     sobe 421->422, unico ganho liquido desta mudanca.
+# func_coverage cai 685->681 so' pela aritmetica do denominador
+# (422/620 = 68.06% vs 421/615 = 68.46%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado em
+# HEAD (bc7ba91, worktree limpo) vs no estado final: diff mostra APENAS as
+# 4 linhas novas citadas acima sendo ACRESCENTADAS, nenhuma linha removida.
+# justificativa: CAP-06 (2026-08-18) — POST /chat/send/video passou a
+# buscar/decodificar, resolver MIME (2 niveis, reaproveitando resolveMimeType
+# de send_image.go) e enviar de verdade. Tres funcoes novas ELEGIVEIS, mesmo
+# padrao "adapter/funcao pura nao loga" ja' aceito para Image/Document/Audio:
+# ChatMessengerAdapter.SendVideo, message.isHTTPVideoURL e
+# message.decodeVideoDataURIWithLimit (todas uncovered, por design — quem
+# loga e' SendVideoUseCase.Execute/decodeDataVideo que as chamam). A quarta
+# funcao elegivel, SendVideoUseCase.decodeDataVideo, NASCE COBERTA (Warn nos
+# dois caminhos de erro — tamanho excedido e base64 invalido — delegando a
+# decodeVideoDataURIWithLimit a decisao pura, mesmo padrao de
+# decodeDataURIAudio). E' o `covered` que sobe 422->423, unico ganho liquido.
+# func_coverage cai 681->678 so' pela aritmetica do denominador
+# (423/624 = 67.79% vs 422/620 = 68.06%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado em
+# HEAD (643c65b, worktree temporario via `git worktree add`) vs no estado
+# final: diff mostra APENAS as 3 linhas novas (SendVideo, isHTTPVideoURL,
+# decodeVideoDataURIWithLimit) sendo ACRESCENTADAS, nenhuma linha removida.
+#
+# FIX-07 (2026-08-18): REQUIRED_FIX da avaliacao adversarial independente de
+# CAP-07. O `min_func_coverage=678` acima so' era alcancavel porque
+# ChatMessengerAdapter.SendSticker (pkg/infra/wa-noise/adapters/chat/
+# messenger.go) tinha um `log.Warn` plantado no ramo de upload-fail —
+# medido pelo avaliador como matematica e suficiente para o piso: remover
+# essa UNICA linha derruba func_coverage de 678 para 676, e reintroduzi-la
+# devolve 678 (controle negativo executado nesta sessao, os dois numeros
+# abaixo). O log era inconsistente com os cinco irmaos do mesmo arquivo —
+# SendText, SendImage, SendDocument, SendAudio, SendVideo — nenhum dos
+# quais loga: neste repo quem loga e' o USE CASE (SendStickerUseCase.
+# Execute via appport.Logger), o adapter delegador so' propaga o erro. O
+# log foi removido, tornando SendSticker consistente com os irmaos.
+# medicao ANTES da remocao: func_coverage = 67.8% (425/627).
+# medicao DEPOIS da remocao: func_coverage = 67.6% (424/627).
+# controle negativo (log reintroduzido temporariamente): func_coverage
+#   volta a 67.8% (425/627), confirmando que o log era o que sustentava o
+#   piso anterior; log removido de novo antes de fechar a sessao.
+# nenhuma funcao ja' coberta regrediu — a unica mudanca e' a perda desta
+# UNICA cobertura artificial; min_eligible NAO muda (627), so' `covered`
+# cai 425->424.
+# (a linha `min_func_coverage=676` que ficava AQUI foi removida pelo FIX-GATE
+#  de 2026-08-18: ela era uma SEGUNDA atribuicao da mesma chave, e o gate le
+#  este arquivo com `grep -oE '^min_func_coverage=[0-9]+'`, que devolve as DUAS
+#  linhas. O `[ "$func_cov" -lt "$min_func" ]` seguinte abortava com
+#  `integer expression expected` e o `if` tratava o erro como FALSO — o piso de
+#  func_coverage ficou DESATIVADO de 6fa6270 ate' o FIX-GATE. A justificativa
+#  FIX-07 acima continua valendo como historico; a chave ativa e' unica e vive
+#  no fim deste bloco. Ver HOUSEKEEP.md F129.)
+# CAP-08A/CAP-08B (2026-08-18): POST /chat/send/location e
+# POST /chat/send/contact passaram a montar o protobuf e enviar de verdade,
+# via nova porta port.SimpleMessenger implementada em ChatMessengerAdapter.
+# Duas funcoes novas ELEGIVEIS, mesmo padrao "adapter nao loga" ja' aceito
+# para Image/Document/Audio/Video/Sticker (ver FIX-07 acima — quem loga e' o
+# USE CASE via appport.Logger, o adapter so' monta e propaga):
+# ChatMessengerAdapter.SendLocation e ChatMessengerAdapter.SendContact
+# (pkg/infra/wa-noise/adapters/chat/messenger.go), ambas uncovered por
+# design. `covered` NAO muda (424->424); so' o denominador cresce
+# (627->629). func_coverage cai 676->674 so' pela aritmetica
+# (424/629 = 67.41% vs 424/627 = 67.62%) — nenhuma funcao ja' coberta
+# regrediu, confirmado por `go run ./cmd/logcov -list-uncovered` rodado no
+# worktree de baseline (HEAD 67fe1c6, `git worktree add /tmp/cap08-baseline
+# 67fe1c6`) vs no estado final: diff mostra APENAS as duas linhas novas
+# (SendLocation, SendContact) sendo ACRESCENTADAS, nenhuma linha removida.
+# errpath sobe 853->854 (1122/1315=85.32% -> 1132/1325=85.43%): os dois use
+# cases (SendLocationUseCase.Execute/SendContactUseCase.Execute) migraram de
+# stub "validated" para envio real, e os caminhos de saida novos (invalid
+# JID, downstream failure) nascem cobertos por Warn/Error existentes.
+# FIX-GATE (2026-08-18): a chave ativa passa a ser UNICA, e o valor e' o
+# MEDIDO no estado atual da arvore (CAP-09A historico de conversa + CAP-09B
+# download de midia unificado): `go run ./cmd/logcov -json ./pkg` devolve
+# eligible=632, covered=425, func_coverage=67.2468% (672 decimos).
+# Os quatro numeros, medidos e comparados no MESMO commit-base:
+#   HEAD 6fa6270 (arvore limpa, extraida com `git archive HEAD | tar -x`):
+#     eligible=629, covered=424, func_coverage=67.4086% (674 decimos)
+#   estado atual: eligible=632, covered=425, func_coverage=67.2468% (672)
+# A razao CAI 674->672 por DENOMINADOR, nao por regressao: `covered` SOBE
+# 424->425. O conjunto de elegiveis nao cresceu em bloco — ele teve 8
+# entradas e 5 saidas (net +3), enumeradas aqui pela invariante ENUMERATE
+# THE SET (diff de `logcov -golden` HEAD vs atual, coluna ELIGIBLE):
+#   ENTRAM (8):
+#     pkg/application/usecase/chat.GetChatHistoryUseCase.Execute      (coberta)
+#     pkg/application/usecase/message.mediaDownloadFlow.execute       (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ChatIndexByUser              (coberta)
+#     pkg/infra/db.ChatHistoryRepository.HistoryLimit                 (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ListChatMessages             (coberta)
+#     pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP  (coberta)
+#     pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download (UNCOVERED)
+#     pkg/infra/wa-noise/adapters/chat.downloadableFor                 (UNCOVERED)
+#   SAEM (5), todas COBERTAS, colapsadas no mediaDownloadFlow.execute:
+#     pkg/application/usecase/message.DownloadAudioUseCase.Execute
+#     pkg/application/usecase/message.DownloadDocumentUseCase.Execute
+#     pkg/application/usecase/message.DownloadImageUseCase.Execute
+#     pkg/application/usecase/message.DownloadStickerUseCase.Execute
+#     pkg/application/usecase/message.DownloadVideoUseCase.Execute
+#   6 entradas cobertas - 5 saidas cobertas = +1 => covered 424->425. Confere.
+# As duas UNCOVERED sao o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07 e CAP-08A/08B acima). Confirmado por medicao, nao por
+# opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os dez irmaos do
+# mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
+# SendAudio, SendVideo, SendSticker, SendLocation, SendContact) tambem constam
+# como uncovered:L1 em `logcov -list-uncovered`. NAO foi plantado log para
+# inflar a metrica: fazer isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta
+# mesma sessao (FIX-07 / HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha coberta sem substituto, e `covered` SOBE.
+# CAP-10 (2026-08-19): delete + edit de mensagem passam a MUTAR de verdade.
+# Numeros MEDIDOS, comparados no mesmo commit-base e na mesma maquina:
+#   HEAD 325c8d7 (arvore limpa, extraida com `git archive HEAD | tar -x`):
+#     eligible=632, covered=425, func_coverage=67.2468% (672 decimos)
+#   estado atual: eligible=634, covered=425, func_coverage=67.0347% (670)
+# A razao CAI 672->670 por DENOMINADOR, nao por regressao: `covered` NAO cai
+# (425 nos dois). O conjunto de elegiveis teve 2 entradas e NENHUMA saida,
+# enumeradas aqui pela invariante ENUMERATE THE SET (diff de `logcov -golden`
+# HEAD vs atual, coluna ELIGIBLE):
+#   ENTRAM (2), as duas UNCOVERED:
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
+# (O diff do golden traz mais 4 linhas, todas EXCLUDED X5 e portanto FORA do
+# denominador: contractsfake.ChatMessenger.RevokeMessage/EditMessage e
+# testkit.Fake.BuildRevoke/BuildEdit — dubles de teste.)
+# As duas UNCOVERED sao o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07 e CAP-08A/08B/CAP-09 acima). Confirmado por medicao,
+# nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os DOZE irmaos do
+# mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
+# SendAudio, SendVideo, SendSticker, SendLocation, SendContact, e agora
+# RevokeMessage e EditMessage) constam todos como uncovered:L1 em
+# `logcov -list-uncovered`. NAO foi plantado log para inflar a metrica: fazer
+# isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta mesma sessao (FIX-07 /
+# HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+# CAP-14 (2026-08-19): /chat/send/poll passa a CRIAR enquete de verdade.
+# Numeros MEDIDOS, comparados no mesmo commit-base e na mesma maquina:
+#   HEAD 7f0a727 (arvore limpa, extraida com `git archive HEAD | tar -x`):
+#     eligible=634, covered=425, func_coverage=67.0347% (670 decimos)
+#   estado atual: eligible=635, covered=425, func_coverage=66.9291% (669)
+# A razao CAI 670->669 por DENOMINADOR, nao por regressao: `covered` NAO cai
+# (425 nos dois). O conjunto de elegiveis teve 1 entrada e NENHUMA saida,
+# enumeradas aqui pela invariante ENUMERATE THE SET (diff de `logcov -golden`
+# HEAD vs atual, coluna ELIGIBLE):
+#   ENTRAM (1), UNCOVERED:
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendPoll
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
+# (O diff do golden traz mais 3 linhas, todas FORA do denominador:
+# contractsfake.SimpleMessenger.SendPoll e testkit.Fake.BuildPollCreation, as
+# duas EXCLUDED X5 por serem dubles de teste; e
+# ChatMessengerAdapter.WithPollOptions, EXCLUDED X1. Mais duas linhas que so'
+# mudam de NUMERO DE LINHA sem mudar de estado: SendPollUseCase.Execute
+# (send_poll.go:28/31/34 -> :52/55/58) e ChatMessengerAdapter.MarkRead
+# (messenger.go:45 -> :80).)
+# A UNCOVERED e' o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07, CAP-08A/08B, CAP-09 e CAP-10 acima). Confirmado por
+# medicao, nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os TREZE irmaos do
+# mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
+# SendAudio, SendVideo, SendSticker, SendLocation, SendContact, RevokeMessage,
+# EditMessage e agora SendPoll) constam todos como uncovered:L1 em
+# `logcov -list-uncovered`. NAO foi plantado log para inflar a metrica: fazer
+# isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta mesma sessao (FIX-07 /
+# HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+# CAP-15 (2026-08-19): func_coverage CAI 669->667 (425/635=66.93% ->
+# 425/637=66.70%), e a queda e' inteiramente de DENOMINADOR — mesmo mecanismo
+# ja' registrado no CAP-10 e no CAP-14. Enumerado a partir do diff do golden,
+# linha por linha:
+#   ENTRAM no denominador (2), as duas uncovered:L1:
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate
+#     pkg/infra/wa-noise/adapters/chat.templateButtons
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
+# (O diff do golden traz mais 1 linha FORA do denominador:
+# contractsfake.SimpleMessenger.SendTemplate, EXCLUDED X5 por ser duble de
+# teste. Mais duas linhas que so' mudam de NUMERO DE LINHA sem mudar de
+# estado: SendTemplateUseCase.Execute (send_template.go:28/31/34 ->
+# :58/61/64/67, com uma quarta saida — a validacao de Buttons) e
+# ChatMessengerAdapter.MarkRead (messenger.go:80 -> :81). Golden 2977 -> 2980
+# linhas, que sao exatamente estas 3 entradas novas.)
+# A UNCOVERED e' o padrao "adapter delegante nao loga", ja' aceito neste
+# repositorio (ver FIX-07, CAP-08A/08B, CAP-09, CAP-10 e CAP-14 acima).
+# Confirmado por medicao, nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
+# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os QUATORZE
+# irmaos do mesmo arquivo (MarkRead, SendReaction, SendText, SendImage,
+# SendDocument, SendAudio, SendVideo, SendSticker, SendLocation, SendContact,
+# SendPoll, RevokeMessage, EditMessage e agora SendTemplate) constam todos como
+# uncovered:L1 em `logcov -list-uncovered`. NAO foi plantado log para inflar a
+# metrica: fazer isso e' violacao COV-4 e ja' foi REQUIRED_FIX nesta sessao
+# (FIX-07 / HOUSEKEEP F119).
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+# justificativa: queda de DENOMINADOR, nao de cobertura. O numerador nao se
+# moveu (425 antes, 425 depois) e nenhuma linha saiu do golden.
+# CAP-21 (2026-08-19): func_coverage CAI 667->665 (425/637=66.70% ->
+# 426/641=66.46%), e a queda e' de DENOMINADOR — mesmo mecanismo do CAP-10,
+# CAP-14 e CAP-15. O numerador SOBE em 1. Enumerado a partir do diff do
+# golden, linha por linha:
+#   ENTRAM no denominador (4):
+#     COBERTA (1):
+#       pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes
+#     UNCOVERED:L1 (3):
+#       pkg/application/usecase/message.normalizeInteractiveButtons
+#       pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendButtons
+#       pkg/infra/wa-noise/adapters/chat.nativeFlowButtons
+#   SAEM (0).
+#   1 entrada coberta - 0 saidas cobertas = +1 => covered 425->426. Confere
+#   com a medicao: `go run ./cmd/logcov` imprime 66.5% (426/641 elegiveis).
+# (O diff do golden traz mais 2 linhas FORA do denominador:
+# contractsfake.InteractiveMessenger.SendButtons, EXCLUDED X5 por ser duble de
+# teste, e chat.bizNativeFlowNodes, EXCLUDED X1 por ser trivial e sem caminho
+# de saida. Mais uma linha que so' muda de NUMERO DE LINHA sem mudar de
+# estado: SendButtonsUseCase.Execute (send_buttons.go:28/31 -> :95/101, as
+# mesmas DUAS recusas de validacao). Golden 2980 -> 2986 linhas: as 4 entradas
+# elegiveis + as 2 EXCLUDED.)
+# As TRES uncovered, uma a uma, e por que nao levam log:
+#   - ChatMessengerAdapter.SendButtons e nativeFlowButtons sao o padrao
+#     "adapter delegante nao loga", ja' aceito neste repositorio (ver FIX-07,
+#     CAP-08A/08B, CAP-09, CAP-10, CAP-14 e CAP-15 acima). Confirmado por
+#     medicao: `grep -cE 'log\.|hlog\.|logger|Logger'
+#     pkg/infra/wa-noise/adapters/chat/messenger_buttons.go` devolve 0, igual
+#     ao messenger.go, onde os QUINZE irmaos (MarkRead, SendReaction,
+#     SendText, SendImage, SendDocument, SendAudio, SendVideo, SendSticker,
+#     SendLocation, SendContact, SendPoll, SendTemplate, templateButtons,
+#     RevokeMessage e EditMessage) tambem constam uncovered:L1.
+#   - normalizeInteractiveButtons e' funcao PURA de pacote (sem receptor, sem
+#     logger em escopo): recebe []domain.InteractiveButton e devolve
+#     []domain.InteractiveButton. Injetar um logger nela existiria SO' para
+#     mover a metrica, que e' violacao COV-4 e ja' foi REQUIRED_FIX nesta
+#     mesma sessao (FIX-07 / HOUSEKEEP F119). O descarte que ela faz e'
+#     silencioso POR DECISAO registrada (HOUSEKEEP F148) e esta' travado por
+#     teste nos dois niveis, nao por log.
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+# CAP-22 (2026-08-19): func_coverage CAI 665->659 (426/641=66.46% ->
+# 426/646=65.94%), e a queda e' de DENOMINADOR — mesmo mecanismo do CAP-21. O
+# numerador NAO se move (426 antes, 426 depois). Enumerado a partir do diff
+# do golden, linha por linha:
+#   ENTRAM no denominador (5), TODAS UNCOVERED:L1:
+#     pkg/application/usecase/message.normalizeListSections
+#     pkg/application/usecase/message.normalizeRows
+#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendList
+#     pkg/infra/wa-noise/adapters/chat.listRows
+#     pkg/infra/wa-noise/adapters/chat.listSections
+#   SAEM (0).
+#   0 entradas cobertas - 0 saidas cobertas = 0 => covered 426->426. Confere
+#   com a medicao: `go run ./cmd/logcov` imprime 65.9% (426/646 elegiveis).
+# (O diff do golden traz mais 3 linhas FORA do denominador:
+# contractsfake.SimpleMessenger.SendList, EXCLUDED X5 por ser duble de teste;
+# chat.listBizNodes e message.resolveRowID, EXCLUDED X1 por serem triviais e
+# sem caminho de saida. Mais uma linha que so' muda de NUMERO DE LINHA sem
+# mudar de estado: SendListUseCase.Execute (send_list.go:28/31 ->
+# :81/84/87/92 — agora QUATRO recusas de validacao em vez de duas, mesma
+# disciplina "adapter delegante nao loga"/"funcao pura sem logger" abaixo).
+# Golden 2986 -> 2994 linhas: as 5 entradas elegiveis + as 3 EXCLUDED + a
+# renumeracao.)
+# As CINCO uncovered, uma a uma, e por que nao levam log:
+#   - ChatMessengerAdapter.SendList e' o padrao "adapter delegante nao loga",
+#     ja' aceito neste repositorio (mesmo grupo de SendButtons, SendTemplate,
+#     SendPoll e os quinze irmaos de messenger.go — nenhum deles loga).
+#   - listRows e listSections sao funcoes PURAS de pacote (sem receptor, sem
+#     logger em escopo): traduzem []domain.ListRow/[]domain.ListSection para
+#     o wire, sem caminho de erro proprio. Mesma disciplina de
+#     templateButtons e nativeFlowButtons, ja' aceitos.
+#   - normalizeListSections e normalizeRows sao funcoes PURAS de pacote
+#     (sem receptor, sem logger em escopo): implementam os TRES descartes
+#     silenciosos do contrato historico (HOUSEKEEP F149), decisao registrada
+#     e travada por teste nos tres niveis, nao por log — mesma disciplina de
+#     normalizeInteractiveButtons (F148) acima.
+# nenhuma funcao ja' coberta regrediu: o diff de ELIGIBLE acima nao remove
+# nenhuma linha, coberta ou nao.
+# CAP-23 (2026-08-19): 659->660 (426/646=65.9% -> 426/645=66.0%). Andaime
+# orfao removido apos o CAP-22 migrar o ultimo consumidor de
+# port.MessageComposer: a interface, o MessageComposerAdapter.NewMessageID
+# (infra/wa-noise/adapters/chat) e o dublê contractsfake.MessageComposer.
+# covered fica em 426 — a unica funcao elegivel removida
+# (MessageComposerAdapter.NewMessageID) ja' estava descoberta
+# (golden: "uncovered:L1"), entao numerador nao muda, so' o denominador cai.
+# CAP-26 (2026-08-19): 660->658 (426/645=66.0% -> 426/647=65.8%). Duas
+# funcoes ELIGIBLE novas e DESCOBERTAS entram no denominador:
+# PhonePairerAdapter.IsPaired e PhonePairerAdapter.RequestPairingCode
+# (pkg/infra/wa-noise/adapters/pairing). Nenhum adapter deste repo loga —
+# nenhum recebe port.Logger —, entao acrescentar capability de adapter baixa
+# a razao por construcao; foi o que o CAP-21 (667->665) e o CAP-22 (665->659)
+# ja' fizeram. covered fica em 426: nenhuma funcao coberta regrediu, e o diff
+# do golden so' ACRESCENTA linhas.
+# CAP-27 (2026-08-19): 658->661 (426/647=65.8% -> 430/651=66.1%). SOBE porque
+# as QUATRO funcoes ELIGIBLE novas nascem TODAS cobertas — ao contrario dos
+# adapters delegantes dos CAP-21/22/26, estas logam:
+#   - db.HmacConfigRepository.SaveHmacKey / LoadHmacKey / DeleteHmacKey
+#     (Error estruturado com table/user_id/query na falha; Load ainda tem um
+#     Debug no ramo "linha ausente", que e' resultado valido e nao erro).
+#   - bootstrap.userInfoHmacCache.SetHmacKey (Debug no no-op de cache miss,
+#     Error no tipo inesperado, Info na publicacao).
+# Nenhuma funcao ja' coberta regrediu: o diff do golden so' ACRESCENTA linhas
+# (11: as 4 ELIGIBLE acima e 7 EXCLUDED — NewHmacConfigRepository,
+# bootstrap.hmacKeyEncryptor.EncryptHmacKey e os 5 metodos dos dubles de
+# contractsfake). Nenhuma linha existente muda de estado.
+# CAP-30 (2026-08-19): 662 -> 665 (438/662 = 66.2% -> 446/671 = 66.5%). O
+# NUMERADOR SOBE de 438 para 446: das NOVE funcoes elegiveis novas, OITO
+# nascem cobertas —
+#   - db.SessionConfigRepository.{SaveHistoryLimit,SaveProxyConfig,
+#     LoadWebhookUseProxy} (Error na falha, Debug na linha ausente);
+#   - bootstrap.userInfoSessionCache.{publishByUserID,publishByToken}
+#     (Debug no no-op de cache miss, Error no tipo inesperado, Info na
+#     publicacao);
+#   - storage.SetProxyUseCase.{enable,disable,resolveWebhookUseProxy}
+#     (Warn nas recusas, Error na falha de gravacao, Info no sucesso).
+# A NONA e' bootstrap.withField, uma copia de mapa sem caminho de erro e sem
+# nada a registrar. Ela NAO ganhou log: plantar registro para inflar metrica e'
+# COV-4, ja' foi REQUIRED_FIX nesta sessao (F119/FIX-07). A razao sobe assim
+# mesmo.
+# Nenhuma funcao ja' coberta regrediu: o diff do golden so' ACRESCENTA linhas
+# (19), e nenhuma linha existente muda de estado.
+# CAP-32 (2026-08-19): 665 -> 666. UMA funcao elegivel nova, e ela nasce
+# COBERTA: db.SessionConfigRepository.LoadHistoryLimit, a leitura de
+# users.history de GET /webhook/history (Error na falha do driver, Debug no
+# ramo "linha ausente", que e' resultado valido e nao erro — a mesma forma que
+# LoadWebhookUseProxy ja' tinha). A outra entrada do golden e' EXCLUDED
+# (contractsfake.HistoryConfigStore.LoadHistoryLimit, duble). Nenhuma funcao
+# ja' coberta regrediu: o diff do golden so' ACRESCENTA duas linhas, e nenhuma
+# linha existente muda de estado.
+# CAP-34 (2026-08-19): 666 -> 667. DUAS funcoes elegiveis novas, da extracao
+# do bloco da chave HMAC global de Main() para pkg/bootstrap/global_hmac_key.go
+# (F156), e AS DUAS nascem COBERTAS:
+#   - bootstrap.resolveGlobalHMACKey — Info nos dois caminhos configurados
+#     (flag, ambiente) e Warn no caminho gerado. Nenhuma delas carrega o valor
+#     da chave: e' exatamente o defeito que a F156 fechou.
+#   - bootstrap.generateGlobalHMACKey — Error no unico caminho de saida por
+#     falha (fonte de entropia), com a causa propagada ao chamador.
+# A terceira entrada nova do golden e' EXCLUDED (bootstrap.hmacKeySource.String,
+# X4 — metodo String() de tipo). Nenhuma funcao ja' coberta regrediu: o diff do
+# golden ACRESCENTA tres linhas e nenhuma linha existente muda de ESTADO; as
+# quatro linhas restantes do diff sao deslocamento de numero de linha em
+# main.go, mais os DOIS sitios L3 que a extracao levou embora de
+# bootstrap.Main (main.go:273 e main.go:286, as duas linhas de log do bloco
+# HMAC que saiu de la').
+#
+# CAP-35 (2026-08-19): 667 -> 669. A F169 extraiu de bootstrap.Main os DOIS
+# blocos irmaos do da F156 (token de administracao e chave de encriptacao
+# global) para pkg/bootstrap/startup_secrets.go. QUATRO entradas novas
+# elegiveis, e as QUATRO nascem COBERTAS:
+#   - bootstrap.resolveGlobalEncryptionKey — Info nos dois caminhos
+#     configurados (flag, ambiente); o terceiro caminho deixou de existir,
+#     porque a chave nao e' mais gerada e a ausencia derruba o arranque.
+#   - bootstrap.resolveAdminToken — Info nos dois caminhos configurados e Warn
+#     no gerado. Nenhuma das tres carrega o valor: o Warn traz o CAMINHO do
+#     arquivo 0600 onde o token foi gravado, que descreve onde o segredo esta'
+#     sem revela-lo.
+#   - bootstrap.generateSecret — Error no unico caminho de saida por falha
+#     (fonte de entropia), com a causa propagada.
+#   - bootstrap.writeAdminTokenFile — Error em cada um dos quatro caminhos de
+#     falha (remover o arquivo anterior, criar, escrever, fechar), sempre com
+#     o CAMINHO e nunca com o token.
+# As outras DUAS entradas novas do golden sao EXCLUDED (X4, metodo String() de
+# tipo): bootstrap.adminTokenSource.String e bootstrap.encryptionKeySource.String.
+# Nenhuma funcao ja' coberta regrediu — o diff do golden so' ACRESCENTA, e
+# errpath_coverage ficou identico em 868.
+#
+# F173 parte 1 (2026-08-20): 669->668. Denominador subiu 1 (DynamicRouteTargets,
+# acessor puro sem log — nao ha' caminho de erro a cobrir), numerador inalterado.
+# F127 (2026-08-20): remocao de pkg/infra/media/media_utils.go, codigo MORTO.
+# Este e' o primeiro ratchet-DOWN por DELECAO LEGITIMA, e e' exatamente o custo
+# que a decisao da F171 aceitou por escrito: "remocao legitima de codigo bem
+# coberto passa a exigir ajuste deste arquivo no mesmo PR".
+#
+# SAEM 7 elegiveis (e 5 EXCLUDED, fora do denominador), enumeradas pelo proprio
+# gate — a mensagem do TestGoldenBate nomeou cada uma, efeito direto da F154:
+#   media.ExtractFirstURL              ELIGIBLE
+#   media.FetchURLBytes                ELIGIBLE
+#   media.FetchURLBytes.func1          ELIGIBLE
+#   media.GetOpenGraphData             ELIGIBLE
+#   media.encodeJPEGThumbnail          ELIGIBLE
+#   media.fetchOpenGraphDataInternal   ELIGIBLE
+#   media.fetchOpenGraphImage          ELIGIBLE
+# ENTRAM: nenhuma (conferido por diff independente do golden).
+#
+# func_coverage CAI 668->665 e errpath_coverage 868->866 porque o codigo
+# deletado era MELHOR coberto que a media do repo — o que e' esperado: era
+# codigo antigo, migrado, com suite madura. A queda NAO e' perda de teste; e'
+# perda de denominador bem coberto. Zero testes de comportamento vivo foram
+# removidos: 21 tinham equivalente em pkg/infra/media/opengraph, 2 ja' estavam
+# migrados para pkg/infra/media/sticker, e 6 exercitavam o codigo morto que sai.
+# F181 (2026-08-20): func 665 -> 666, eligible 675 -> 676.
+#
+# Ratchet-UP, e vale registar COMO se chegou aqui, porque o gate mudou o desenho
+# em vez de so' o bloquear.
+#
+# preencherTelefones nasceu a registar apenas a PRIMEIRA falha e a continuar o
+# laco. O gate recusou: a regra S-consume ancora o caminho no CORPO do
+# `if err != nil`, e o meu aviso estava aninhado num `if falhas == 1` — o
+# caminho de erro em si continuava mudo, e errpath_coverage caiu para 866.
+#
+# As saidas obvias eram piores. Registar por conversa produz uma linha por item
+# de pagina sempre que a sessao esta' fora (F180). Baixar o piso teria sido
+# tratar o gate como obstaculo.
+#
+# A recusa levou a uma estrutura melhor: PARAR na primeira falha. Nao e' economia
+# de log, e' o que a falha significa — GetPNForLID so' falha quando a sessao nao
+# esta' registada, e isso nao muda entre uma conversa e a seguinte da mesma
+# pagina. Continuar produzia N chamadas condenadas. Agora ha' uma linha, com a
+# causa, e zero trabalho desperdicado a seguir.
+# devui (2026-08-20): func 666 -> 667. Ratchet-UP, e a razao NAO e' teste novo.
+#
+# deLoopback nasceu com um `if err != nil { host = remoteAddr }` — erro engolido
+# sem registo — e o gate acusou. A resposta obvia seria por' um log, mas
+# "endereco sem porta" e' formato NORMAL e nao falha: o aviso seria ruido.
+#
+# Reescrita para testar as duas formas do endereco em vez de tratar o erro, a
+# funcao deixou de ter caminho de erro nenhum e as duas metades passaram a
+# triviais (X1). O denominador de funcoes elegiveis encolheu, e a percentagem
+# subiu por isso.
+#
+# Fica registado porque um numero que melhora sem merito e' tao suspeito como um
+# que piora sem explicacao.
+# F207 (2026-08-22): min_func_coverage 749 -> 748. SAI (1):
+#   auth.NewTokenCache — dead code, only called from tests. Production uses
+#   cache.New() directly in bootstrap/config.go and bootstrap/context.go.
+#   Removing it drops BOTH eligible (-1) and covered (-1): the function had
+#   log.Warn() calls so logcov counted it as covered. The ratio moves from
+#   468/625=74.88% to 467/624=74.84%, rounding 749->748. This is dead code
+#   removal, not dilution — nothing is lost.
+# F212 (2026-08-22): min_func_coverage 747 -> 748 (ratchet-UP honesto).
+# ENTRAM (2):
+#   pkg/infra/db.trimMessageSecrets        COBERTA (loga em Error a falha de
+#     purga de secrets, com tabela, userid e chatjid — o operador precisa
+#     saber que a purga falhou, mesmo que seja non-fatal).
+#   pkg/bootstrap.Main.func3               UNCOVERED (closure que abre o segundo
+#     handle *sqlx.DB para o storeDB em SQLite; o log de falha e' o Fatal do
+#     main, nao da closure).
+# covered SOBE 468->469 (+1: trimMessageSecrets). Denominador sobe 625->627
+# (+2). Razao: 469/627=74.80% -> 748 decimos.
+# --- FUSAO feature/wa-noise <- feature/wa-headless-foundation (2026-08-23) ---
+#
+# Os tres numeros abaixo caem, e a causa e' DILUICAO, nao regressao: nenhum sitio
+# que logava deixou de logar. A fusao trouxe a arvore headless inteira para
+# dentro do denominador — eligible 631 -> 921, +290.
+#
+# O que dilui, medido e ja' documentado em cmd/logcov/METRIC.md: os adaptadores
+# de pkg/infra/wa-headless sao tradutores finos que chamam a capability por uma
+# INTERFACE local, e L1-e nao credita delegacao atraves de interface porque qual
+# implementacao la' vai parar decide-se no ponto de montagem. Nao e' defeito do
+# instrumento; e' limite dele, e um limite escreve-se em vez de se contornar.
+#
+# O CONSERTO melhor existe e tem precedente NESTE arquivo: a fachada
+# pkg/infra/wa-noise/client saiu do denominador pela F204 com a mesma razao —
+# "nao e' ponto de instrumentacao, e' delegacao". Aplicar isso aos adaptadores
+# headless e' decisao de arquitetura, nao de merge, e fazer as duas coisas no
+# mesmo diff impediria a revisao de separar uma da outra.
+#
+# Entao: reconciliado para a medicao da arvore fundida, com o conserto nomeado.
+
+min_func_coverage=585
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -818,29 +1225,211 @@ min_func_coverage=546
 # e por que; o handler HTTP loga a resposta de erro. Um log no orquestrador
 # seria a terceira linha do MESMO evento, e o padrao deste repositorio e' que
 # loga quem decide, nao quem propaga.
-# ver a justificativa de min_func_coverage acima (decisao 78).
-# +1 (817->818): ver a justificativa da decisao 77 acima.
-# 818->815: ver a justificativa da decisao 80 acima.
-# 815->814: ver a justificativa do PresenceAnnouncer acima.
-# 814->811: ver a justificativa da decisao 82 acima.
-# -2 (785->783): GroupRequests (2026-08-23). Ao contrario de func_coverage,
-# esta desce, e a razao e' honesta: o adaptador acrescenta caminhos de saida
-# que sao RECUSAS ORIGINAIS — lista de solicitantes vazia, veredito
-# desconhecido, desfecho parcial. Erro original nao tem causa a propagar, e o
-# adaptador nao loga por desenho (os 15 adaptadores headless estao todos em
-# 0,0% de func: sao tradutores finos). A metrica nao distingue "descartou a
-# causa" de "nao havia causa", entao toda recusa nova custa denominador sem
-# numerador. Registado aqui em vez de disfarcado: o saldo desta linha e'
-# negativo, e o ganho de L1-e e' da OUTRA razao, nao desta.
-# -2 (783->781): GroupInfoSettings (2026-08-23), pelo mesmo motivo ja registado
-# no GroupRequests: as recusas novas do adaptador sao erros ORIGINAIS, sem causa
-# a propagar, e a metrica nao distingue isso de causa descartada.
-# -1 (781->780): selecao de engine (2026-08-23). Mesmo motivo ja registado duas
-# vezes: as recusas de configuracao sao erros ORIGINAIS, sem causa a propagar.
-# -1 (780->779): configuracao do lado headless. Mesma categoria de sempre: as
-# recusas de configuracao sao erros ORIGINAIS, sem causa a propagar. As cinco
-# recusas de nome de perfil, essas, ficaram COBERTAS pelo Warn.
-min_errpath_coverage=779
+# justificativa: F93 (2026-08-08), logout de sessao sem transporte vivo. errpath
+# cai 858->857: UM caminho de saida novo, a recusa em
+# SessionGuardAdapter.Logout, sem log proprio.
+#
+# Adapter nao loga — padrao ja' aceito neste repositorio e justificado varias
+# vezes acima. E aqui quem loga JA' loga: LogoutUseCase registra "logout failed"
+# em Warn com o txtID e a causa, e o handler HTTP registra a resposta. Um log no
+# guard seria a terceira linha do mesmo evento.
+#
+# min_eligible e func_coverage nao mudam: a guarda vive dentro de funcao ja'
+# elegivel e ja' coberta.
+# ratchet-UP: 857->859, D3 — ver a justificativa de min_func_coverage acima.
+# ratchet-UP: 859->860, D3 fiacao — idem.
+# ratchet-UP: CAP-01 (2026-08-18), 860->861 — ver a justificativa de
+# min_func_coverage acima. O novo `return` de "invalid_phone" em
+# SendMessageUseCase.Execute (JID que nao resolve) e' coberto por
+# uc.logger.Warn antes de devolver; os S-ret sem log que SendText introduz no
+# adapter empatam com a mesma logica de "adapter nao loga" e nao derrubam o
+# numero — o ganho liquido vem do caminho novo do usecase.
+# ratchet-DOWN explicado: CAP-02 (2026-08-18), 861->859. SendImageUseCase.Execute
+# ganha tres pontos de retorno sem log (unsupported_image_source,
+# empty_image_body, invalid_image_mime_type) pelo MESMO motivo que
+# missing_phone/missing_image ja' eram sem log nos 12 use cases send_*
+# irmãos: sao recusas de validacao de payload, nao falhas de infraestrutura —
+# o padrao deste repo loga sessao/rede/protocolo, nao "cliente mandou campo
+# invalido". Os caminhos de infraestrutura novos (EnsureSession, ResolveJID,
+# MediaFetcher.FetchBytes, MediaMessenger.SendImage) SAO logados — ver
+# send_image.go — e contam como cobertos, exatamente como em
+# SendMessageUseCase.Execute. ChatMessengerAdapter.SendImage soma 4 S-ret sem
+# log (Client, ToJID, Upload, SendMessage) pelo padrao "adapter nao loga" já
+# aceito acima; URLFetcher.FetchBytes soma 1. Nenhum errpath JA' COBERTO
+# regrediu — confirmado pelo mesmo diff do golden citado em min_func_coverage.
+# justificativa: CAP-04 (2026-08-18) — ver a justificativa de
+# min_func_coverage acima para a lista nominal. errpaths sobe 1258->1273
+# (+15) e errpaths_covered sobe 1081->1091 (+10): os pontos de retorno de
+# erro novos em SendDocumentUseCase.Execute e decodeDataURIDocument
+# (missing_filename, unsupported_document_source, document_fetch_failed,
+# empty_document_body, document_too_large, invalid_data_uri) SAO logados —
+# mesmo padrao de EnsureSession/ResolveJID/FetchBytes/SendDocument ja'
+# aceito para SendImage; os S-ret sem log de ChatMessengerAdapter.SendDocument
+# (Client, ToJID, Upload, SendMessage) e de isHTTPDocumentURL/
+# decodeDataURIWithLimit somam os 5 restantes, pelo padrao "adapter/funcao
+# pura nao loga" ja' aceito acima. Nenhum errpath JA' COBERTO regrediu.
+# justificativa: CAP-05 (2026-08-18) — ver a justificativa de
+# min_func_coverage acima para a lista nominal. errpaths sobe 1273->1288
+# (+15) e errpaths_covered sobe 1091->1101 (+10): os pontos de retorno de
+# erro novos em SendAudioUseCase.Execute (missing_audio,
+# unsupported_audio_source, audio_fetch_failed, empty_audio_body) e
+# decodeDataURIAudio (audio_too_large, invalid_data_uri) SAO logados —
+# mesmo padrao ja' aceito para SendDocument/SendImage; os S-ret/S-consume
+# sem log de ChatMessengerAdapter.SendAudio (Client, ToJID, Upload,
+# SendMessage) e de isHTTPAudioURL/decodeAudioDataURIWithLimit somam os 5
+# restantes, pelo padrao "adapter/funcao pura nao loga" ja' aceito acima.
+# Nenhum errpath JA' COBERTO regrediu — confirmado pelo mesmo diff de
+# `logcov -list-uncovered` (HEAD bc7ba91 vs estado final) citado em
+# min_func_coverage: so' ACRESCIMO, nenhuma remocao.
+# justificativa: CAP-06 (2026-08-18) — ver a justificativa de
+# min_func_coverage acima para o detalhe nominal. errpaths sobe 1288->1303
+# (+15) e errpaths_covered sobe 1101->1111 (+10): os pontos de retorno de
+# erro novos em SendVideoUseCase.Execute (missing_video,
+# unsupported_video_source, video_fetch_failed, empty_video_body) e
+# decodeDataVideo (video_too_large, invalid_data_uri) SAO logados — mesmo
+# padrao ja' aceito para SendDocument/SendImage/SendAudio; os S-ret/S-consume
+# sem log de ChatMessengerAdapter.SendVideo (Client, ToJID, Upload,
+# SendMessage) e de isHTTPVideoURL/decodeVideoDataURIWithLimit somam os 5
+# restantes, pelo padrao "adapter/funcao pura nao loga" ja' aceito acima.
+# Nenhum errpath JA' COBERTO regrediu — confirmado pelo mesmo diff de
+# `logcov -list-uncovered` (HEAD 643c65b vs estado final) citado em
+# min_func_coverage: so' ACRESCIMO, nenhuma remocao.
+# CAP-08A/CAP-08B (2026-08-18): errpaths sobe 1315->1325 (+10) e
+# errpaths_covered sobe 1122->1132 (+10) — ganho liquido igual ao
+# acrescimo, entao a razao SOBE (853->854). Os caminhos de saida novos vem
+# de SendLocationUseCase.Execute/SendContactUseCase.Execute migrando de
+# stub "validated" para envio real: missing_phone/missing_latitude/
+# missing_longitude/missing_name/missing_vcard (ja existiam, preservados),
+# mais invalid_phone e a propagacao de erro de SendLocation/SendContact —
+# todos cobertos por Warn/Error existentes no use case, mesmo padrao ja'
+# aceito para os demais send_*. Nenhum errpath ja' coberto regrediu —
+# mesmo diff de `logcov -list-uncovered` citado em min_func_coverage.
+# CAP-09A/CAP-09B (2026-08-18): ratchet-UP 854 -> 858. Esta subida e' das DUAS
+# CAPABILITIES, nao do FIX-GATE — o FIX-GATE (F129) mexeu em
+# min_func_coverage e nos LEITORES de baseline (Makefile e
+# cmd/logcov/main_test.go), em chave nenhuma alem daquela.
+#
+# Medido, nao estimado: `go run ./cmd/logcov -json ./pkg` em HEAD 6fa6270
+# (arvore limpa extraida com `git archive HEAD | tar -x`) contra o estado
+# atual. errpaths 1325 -> 1337 (+12), errpaths_covered 1132 -> 1147 (+15),
+# razao 1147/1337 = 85.7891% = 858 decimos.
+#
+# O +15 coberto ser MAIOR que o +12 total nao e' erro de conta: o CAP-09B
+# REMOVEU 10 caminhos (5 cobertos, 5 descobertos) ao colapsar os cinco
+# Download*UseCase.Execute, e a troca liquida e' favoravel. Os cinco pacotes
+# que mudaram, um por linha (diff de `by_package` do JSON, HEAD vs atual):
+#
+#   pkg/application/usecase/chat        20 -> 25 (+5), cobertos  6 ->  11 (+5)
+#   pkg/application/usecase/message    161 -> 155 (-6), cobertos 83 ->  81 (-2)
+#   pkg/infra/db                        88 ->  91 (+3), cobertos 83 ->  86 (+3)
+#   pkg/infra/wa-noise/adapters/chat    37 ->  41 (+4), cobertos 36 ->  39 (+3)
+#   pkg/presentation/http/handlers     385 -> 391 (+6), cobertos 382 -> 388 (+6)
+#   soma: +5 -6 +3 +4 +6 = +12 ; cobertos +5 -2 +3 +3 +6 = +15. Fecha.
+#
+# ENTRAM, caminho por caminho, com o porque de cada um NASCER coberto:
+#
+# CAP-09A, chat.GetChatHistoryUseCase.Execute (get_chat_history.go) — 5
+# caminhos S-ret, TODOS cobertos por (a), Warn/Error no proprio bloco:
+#   1. HistoryLimit falhou (:73)  — Error "failed to revalidate history setting"
+#   2. history revalidado em 0 (:78) — Warn "message history is disabled"
+#   3. chat_jid vazio (:86)       — Warn "chat_jid is required"
+#   4. ChatIndexByUser falhou (:94) — Error "failed to read chat index"
+#   5. ListChatMessages falhou (:111) — Error "failed to read chat history"
+#
+# CAP-09A, db.ChatHistoryRepository (chat_history_repository.go) — 3 caminhos
+# S-ret, cobertos por (a) E por (b) ao mesmo tempo (log.Error + `%w`):
+#   6. ListChatMessages, query falhou (:71/:73)
+#   7. ChatIndexByUser, query falhou (:120/:122)
+#   8. HistoryLimit, leitura falhou (:165/:167)
+#
+# CAP-09A, handlers.GetChatHistoryHandler.ServeHTTP (handler_chat_history.go)
+# — 6 caminhos: 4 S-http (RespondJSON com 401, 400, 400 e 500) e 2 S-consume
+# (os dois blocos `if err != nil` que NAO propagam o err: o do limit invalido,
+# que constroi apperr novo, e o do Execute, que responde em vez de retornar).
+# Todos cobertos por (a): cada bloco abre com hlog Warn (:42, :49, :68, :81).
+#   9. 401 sem userinfo | 10. 400 sem session id | 11. 400 limit invalido
+#   12. 500 do Execute  | 13. S-consume do limit | 14. S-consume do Execute
+#
+# CAP-09B, adapters/chat (downloader.go) — 4 caminhos, 3 cobertos:
+#   15. Download, Client(txtID) falhou (:38) — `return nil, err`, coberto
+#       por (b): propaga a causa inalterada.
+#   16. Download, downloadableFor falhou (:43) — idem, coberto por (b).
+#   17. Download, `return client.Download(ctx, msg)` (:46) — tupla do callee
+#       verbatim, coberto por (b).
+#   18. downloadableFor, kind desconhecido (:123) — DESCOBERTO, e de proposito:
+#       `apperr.New(..., nil)` constroi erro novo DESCARTANDO causa, o que a
+#       regra (b) nunca aceita, e o adapter nao loga (F129 / FIX-07). E' o
+#       unico errpath novo descoberto, e o unico `>` do diff de
+#       `logcov -list-uncovered` HEAD vs atual.
+#
+# SAEM (CAP-09B), 10 caminhos, 5 cobertos e 5 descobertos: os cinco
+# Download{Image,Video,Audio,Document,Sticker}UseCase.Execute viraram
+# delegacao de uma linha para mediaDownloadFlow.execute e cairam do
+# denominador por X1 (trivial). Cada um levava exatamente 2 caminhos:
+# `missing_url` (apperr.New sem causa e sem Warn — DESCOBERTO) e a falha de
+# EnsureSession (Warn + `return err` — coberto).
+# ENTRA no lugar mediaDownloadFlow.execute (download_media.go), 4 caminhos,
+# 3 cobertos: missing_url (:40) segue descoberto pelo mesmo motivo de sempre,
+# no wanoise session (:44/:45) coberto por (a) e (b), download falhou
+# (:50/:51) coberto por (a) e (b), e empty_media (:70/:71) coberto por (a).
+# Ou seja: 4 descobertos a MENOS no pacote message, que e' de onde vem o ganho.
+#
+# Nenhum errpath ja' coberto regrediu: no diff de `logcov -list-uncovered`
+# HEAD vs atual as UNICAS linhas sao duas ADICOES, ambas em adapters/chat
+# (MediaDownloaderAdapter.Download uncovered:L1 e downloadableFor
+# uncovered:L1;uncovered:L2(S-ret,downloader.go:123)). Nenhuma remocao de
+# linha coberta, nenhuma funcao coberta virando descoberta.
+# CAP-10 (2026-08-19): errpath SOBE 858->859 (1147/1337=85.79% ->
+# 1159/1349=85.92%). Os dois use cases migraram de stub "validated" para
+# mutacao real, e os caminhos de saida novos (invalid JID, falha do envio)
+# nascem cobertos pelos Warn/Error que os proprios use cases ja' emitem.
+# CAP-14 (2026-08-19): errpath SOBE 859->860 (1159/1349=85.92% ->
+# 1165/1355=85.98%). SendPollUseCase.Execute migrou de stub "validated" para
+# envio real, e os caminhos de saida novos (invalid group, falha do envio)
+# nascem cobertos pelos Warn/Error que o proprio use case emite.
+# CAP-15 (2026-08-19): errpath fica em 860 (1165/1355=85.98% ->
+# 1170/1361=85.97%): +6 caminhos de saida no denominador e +5 cobertos.
+# SendTemplateUseCase.Execute migrou de stub "validated" para envio real, e as
+# saidas novas dele (invalid phone, falha do envio) nascem cobertas pelos
+# Warn/Error que o proprio use case emite; as do adapter nao, pelo mesmo
+# padrao "adapter delegante nao loga" registrado em min_func_coverage acima.
+# CAP-23 (2026-08-19): 860 (tenths inalterado; 1183/1376=85.97% ->
+# 1182/1375=85.96%, ambos arredondam para 86.0%). MessageComposerAdapter.
+# NewMessageID tinha um `if err != nil { return "", err }` que CONTAVA como
+# caminho de saida COBERTO (propagacao de causa sem descarte, nao por log) —
+# removido junto com a funcao: -1 no denominador E -1 no numerador de
+# errpath_coverage, cancelando no arredondamento de uma casa decimal.
+# CAP-27 (2026-08-19): errpath SOBE 860->861 (1188/1381=86.0% ->
+# 1196/1389=86.1%). +8 caminhos de saida no denominador e +8 cobertos: os tres
+# metodos do HmacConfigRepository e o SetHmacKey do cache, todos com Error ou
+# Debug no menor bloco que contem a saida.
+# CAP-30 (2026-08-19): errpath SOBE 864->866 (1219/1411=86.4% ->
+# 1232/1422=86.6%). +11 caminhos de saida no denominador e +13 cobertos. O
+# numerador sobe MAIS que o denominador porque set_proxy.go e set_history.go
+# ja' tinham caminhos de saida que nao registravam nada, e agora registram; a
+# medicao do ANTES (662/438, 1411/1219) foi feita em HEAD f3cf5c6 com
+# `git archive HEAD | tar -x` em diretorio temporario, no mesmo instante e na
+# mesma maquina que a do DEPOIS.
+# CAP-34 (2026-08-19): 867 -> 868. O caminho de falha de
+# bootstrap.generateGlobalHMACKey (leitura de crypto/rand) nasce coberto por
+# Error com a causa propagada; nenhum caminho existente mudou de estado.
+# F183 (2026-08-20): errpath 866 -> 867, eligible 674 -> 675.
+#
+# Ratchet-UP por ordem do proprio alvo. A funcao nova elegivel e'
+# mergeAlternateKey, que nasce com os DOIS caminhos de falha registados: o
+# resolvedor que falha (sessao offline) e a leitura da chave alternativa que
+# falha. Nenhum dos dois derruba a leitura — devolvem o que ja' se devolvia —
+# mas ambos deixam rasto, porque o chamador acabou de receber MENOS linhas do
+# que existem e isso e' o que ele precisaria de saber.
+#
+# Registo tambem o que NAO entrou: a fusao das duas chaves ficou DENTRO de
+# mergeAlternateKey em vez de ser funcao propria. Como funcao separada era
+# elegivel e nao tinha nada que valesse registar — aritmetica pura, sem modo de
+# falha — e func_coverage caia um decimo. As tres saidas eram inventar um log
+# para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
+# operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
+# gate como obstaculo em vez de o ouvir.
+min_errpath_coverage=785
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -870,41 +1459,235 @@ min_errpath_coverage=779
 # -list-uncovered` e nao deduzida: atrasoDaTentativa (dispatch_retry.go:63),
 # que e' aritmetica pura — calcula o backoff com jitter e nao tem caminho de
 # erro nem porta a consultar. Um log ali sairia a cada tentativa agendada.
-# justificativa: F101 (2026-08-22), o panic de ParseJID("") e a validacao de
-# ELEMENTO vazio nas duas rotas de lista de grupo. min_eligible 569->570 (+1:
-# rejectEmptyElement). A outra funcao nova, firstEmpty, sai como EXCLUDED por
-# X1 no golden — e' aritmetica pura sobre um slice, sem porta e sem caminho de
-# erro, exatamente o caso ja justificado para atrasoDaTentativa acima.
+# +3 (569->572): correcao da F96 — a posse reivindicada antes de materializar
+# a sessao agora e' DEVOLVIDA quando Start nao completa. Entram
+# leaseManager.Release, releaseSessionOwnership e a closure do defer em
+# Orchestrator.Start.
 #
 # As DUAS razoes ficam INALTERADAS (func 698, errpath 858) e `covered` sobe
-# 397->398: rejectEmptyElement nasce coberta, logando em Warn a recusa com o
-# INDICE da entrada reprovada antes de responder 400. Numerador e denominador
-# sobem juntos. Nenhum site que logava deixou de logar.
-# +1 (570->571): JID.Server, da decisao 74 — ver a justificativa de
-# min_func_coverage acima, inclusive o registro de por que ela nao foi
-# reescrita para sair do denominador.
-# +89 (571->660): a arvore internal/wa-headless inteira, pela fachada — ver a
+# 397->399: das tres, duas ja' nascem cobertas (Release loga a falha de
+# devolucao; releaseSessionOwnership loga qual sessao esta' sendo devolvida e
+# por que). A terceira e' a closure do defer, que nao loga de proposito — ela
+# so' chama releaseSessionOwnership, que JA' loga. Um log ali seria a segunda
+# linha do mesmo evento.
+# +1 (574->575): F98, leaseManager.abandoned — ver a justificativa de
+# min_func_coverage acima.
+# +2 (575->577): F99, bootstrap.registerAdminRoutes e stdio.StaticRouteTargets —
+# ver a justificativa de min_func_coverage acima.
+# +2 (577->579): D6, leaseManager.HeartbeatStalled e livenessHandler.func1 —
+# ver a justificativa de min_func_coverage acima.
+# +7 (579->586): D3, o repositorio do outbox — ver a justificativa de
+# min_func_coverage acima para a lista nominal.
+# +9 (586->595): D3, a fiacao (outboxEnqueue/Settle/Defer, reagendar,
+# reentregar, resolverChaveHMAC, runOutboxSweeper, sweepOutboxOnce,
+# setupWebhookOutbox) — ver a justificativa de min_func_coverage acima.
+# +5 (595->600): F87 opcao A, a fila serial por sessao — ver a justificativa de
+# min_func_coverage acima para a lista nominal.
+# +1 (600->601): F75, bootstrap.redactURL — ver a justificativa de
+# min_func_coverage acima.
+# +1 (601->602): F97 etapa 2, db.applyBlankPlaintextTokenMigration — ver a
 # justificativa de min_func_coverage acima.
-# +5 (660->665): decisao 77 — ver a justificativa acima.
-# +6 (665->671): o pacote capabilities/chatstate, pela primeira capability
-# fiada — ver a justificativa acima.
-# +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
-# +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
-# +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-# +13 (811->824): os pacotes capabilities/groupreq e pkg/infra/wa-headless/
-# groupreq, pelo 15o port ligado. E' esta soma que expoe o mecanismo descrito
-# na justificativa de min_func_coverage: a capability existia e estava provada
-# desde a H89, mas ligar o port e' que torna as obrigacoes dela reais.
-# +10 (824->834): o pacote pkg/infra/wa-headless/groupset, pela divisao do
-# GroupSettings em quatro portas (decisoes 87 e 92).
-# +5 (834->839): pkg/bootstrap ganha a selecao de engine da decisao 94
-# (EngineSelection.EngineFor/Default/SessoesEmHeadless, engineValido,
-# engineSelectionConfigurada, rotaDeEngine, setupEngineSelection).
-# +4 (839->843): pkg/bootstrap ganha a configuracao do lado headless
-# (HeadlessConfig.StartConfigFor, nomeDePerfilSeguro, headlessConfigConfigurada,
-# EngineSelection.UsaHeadless).
-min_eligible=843
-max_exempt_annotations=0
+# +1 (605->606): CAP-01, ChatMessengerAdapter.SendText — ver a justificativa
+# de min_func_coverage acima.
+# +1 (606->607): CAP-01.1, opengraph.Fetcher.FetchLinkPreview — ver a
+# justificativa de min_func_coverage acima.
+# +3 (607->610): CAP-02, ChatMessengerAdapter.SendImage,
+# opengraph.URLFetcher.FetchBytes, message.isHTTPImageURL — ver a
+# justificativa de min_func_coverage acima.
+# +1 (610->611): CAP-03, message.SendImageUseCase.decodeDataURIImage — nova
+# funcao elegivel, ja' nasce coberta (Warn nos dois caminhos S-ret de
+# image_too_large e no de invalid_data_uri). message.isDataURIImage e
+# message.decodedBase64Len NAO entram no denominador (X1: corpo <=2
+# statements e nenhum caminho de saida de tipo error).
+# +4 (611->615): CAP-04, ChatMessengerAdapter.SendDocument,
+# message.isHTTPDocumentURL, message.decodeDataURIWithLimit e
+# message.SendDocumentUseCase.decodeDataURIDocument — ver a justificativa de
+# min_func_coverage acima para o detalhe nominal de cada uma.
+# message.isDataURI NAO entra no denominador (X1, mesmo motivo de
+# isDataURIImage acima).
+# +5 (615->620): CAP-05, ChatMessengerAdapter.SendAudio,
+# message.isHTTPAudioURL, message.decodeAudioDataURIWithLimit,
+# message.resolveAudioMimeType e message.SendAudioUseCase.decodeDataURIAudio
+# — ver a justificativa de min_func_coverage acima para o detalhe nominal de
+# cada uma, inclusive por que resolveAudioMimeType (diferente de
+# resolveMimeType em Image/Document) nasce elegivel de verdade e nao so'
+# "descoberta pelo padrao". message.isDataURIAudio NAO entra no denominador
+# (X1, mesmo motivo de isDataURI/isDataURIImage acima).
+# +4 (620->624): CAP-06, ChatMessengerAdapter.SendVideo, message.isHTTPVideoURL,
+# message.decodeVideoDataURIWithLimit e message.SendVideoUseCase.decodeDataVideo
+# — ver a justificativa de min_func_coverage acima para o detalhe nominal de
+# cada uma. Ao contrario de Audio, Video REAPROVEITA resolveMimeType
+# (send_image.go) em vez de ganhar uma funcao de precedencia propria — a
+# precedencia historica de Video e' identica a de Image (2 niveis, sem
+# Content-Type remoto), entao nao ha' funcao nova equivalente a
+# resolveAudioMimeType aqui. message.isDataVideo NAO entra no denominador
+# (X1, mesmo motivo de isDataURI/isDataURIImage/isDataURIAudio acima).
+# (linha ativa min_eligible movida para baixo pelo CAP-07 — ver comentario)
+
+# CAP-07 (envio de sticker de verdade, 2026-08-18): min_eligible 624 -> 627.
+# +4 elegiveis novos: SendStickerUseCase.Execute, checkStickerDataURISize
+# (application/usecase/message), Processor.ProcessSticker
+# (infra/media/sticker), ChatMessengerAdapter.SendSticker
+# (infra/wa-noise/adapters/chat). classifyStickerProcessError e
+# isHTTPStickerURL foram cogitados como funcoes proprias e descartados
+# antes do commit: o mapeamento de erro foi embutido em Execute (nao havia
+# reuso a proteger) e a checagem de URL reaproveita isHTTPImageURL
+# (send_image.go) em vez de duplicar — a regra e' identica, sem nada
+# especifico de sticker, mesmo racional de resolveMimeType reaproveitada
+# por Video. func_coverage ficou EXATAMENTE no piso (678) na medicao
+# original: checkStickerDataURISize (funcao pura, sem logger, mesma
+# categoria de decodeVideoDataURIWithLimit/isHTTPVideoURL/
+# resolveAudioMimeType — layer restrita a L1-a, sem porta de logger
+# disponivel numa funcao livre) e ChatMessengerAdapter.SendSticker eram os
+# dois elegiveis novos SEM log, mas o segundo tinha um `log.Warn` plantado
+# so' para bater o piso — CORRIGIDO por FIX-07 (ver justificativa completa
+# e as duas medicoes do controle negativo na entrada de min_func_coverage
+# acima). Pos-fix: SendSticker segue SEM log, consistente com os cinco
+# irmaos delegadores do mesmo arquivo (SendText/Image/Document/Audio/
+# Video); Processor.ProcessSticker (infra/media/sticker) manteve o log
+# estruturado via zerolog — permitido fora da camada de aplicacao, mesmo
+# racional que libera zerolog em outros adapters de infra — e
+# SendStickerUseCase.Execute manteve o log via appport.Logger, como os
+# demais Execute de send_*.
+# CAP-08A/CAP-08B (2026-08-18): +2 elegiveis novos — ChatMessengerAdapter.
+# SendLocation e ChatMessengerAdapter.SendContact (627->629). Ver
+# justificativa completa em min_func_coverage acima.
+# CAP-09A/CAP-09B (2026-08-18): ratchet-UP 629 -> 632. Tambem esta subida e'
+# das duas capabilities, nao do FIX-GATE (F129), que so' tocou
+# min_func_coverage e os leitores do baseline.
+#
+# O net +3 NAO e' "tres funcoes novas": o conjunto teve 8 ENTRADAS e 5 SAIDAS.
+# Medido com o diff da coluna ELIGIBLE de `go run ./cmd/logcov -golden ./pkg`,
+# HEAD 6fa6270 (arvore limpa via `git archive HEAD | tar -x`) contra o estado
+# atual; 629 + 8 - 5 = 632. ENUMERATE THE SET, nome por nome:
+#
+# ENTRAM (8):
+#   CAP-09A (6)
+#     pkg/application/usecase/chat.GetChatHistoryUseCase.Execute      (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ListChatMessages             (coberta)
+#     pkg/infra/db.ChatHistoryRepository.ChatIndexByUser              (coberta)
+#     pkg/infra/db.ChatHistoryRepository.HistoryLimit                 (coberta)
+#     pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP  (coberta)
+#   CAP-09B (2 + 1)
+#     pkg/application/usecase/message.mediaDownloadFlow.execute        (coberta)
+#     pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download (DESCOBERTA)
+#     pkg/infra/wa-noise/adapters/chat.downloadableFor                 (DESCOBERTA)
+#   (5 do CAP-09A + 3 do CAP-09B = 8; as duas DESCOBERTAS sao a convencao
+#   "adapter delegante nao loga", ver a justificativa de min_func_coverage.)
+#
+# SAEM (5), todas COBERTAS, todas do CAP-09B — viraram delegacao de uma linha
+# para mediaDownloadFlow.execute e passaram a ser EXCLUDED por X1 (trivial):
+#     pkg/application/usecase/message.DownloadImageUseCase.Execute
+#     pkg/application/usecase/message.DownloadVideoUseCase.Execute
+#     pkg/application/usecase/message.DownloadAudioUseCase.Execute
+#     pkg/application/usecase/message.DownloadDocumentUseCase.Execute
+#     pkg/application/usecase/message.DownloadStickerUseCase.Execute
+#
+# NAO entram no denominador, conferido no golden e registrado aqui para nao
+# ser reperguntado — sao funcoes novas das mesmas duas capabilities, mas
+# EXCLUDED:
+#   X1 (trivial, <=2 statements e sem caminho de saida):
+#     pkg/infra/db.NewChatHistoryRepository
+#     pkg/application/usecase/chat.NewGetChatHistoryUseCase
+#     pkg/presentation/http/handlers.NewGetChatHistoryHandler
+#     pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter
+#     pkg/domain.DownloadRequest.Descriptor
+#   X5 (pacote em .logcov-exclude, dublê de teste):
+#     pkg/infra/wa-noise/client/testkit.Fake.Download
+#     pkg/application/contracts/contractsfake.MediaDownloader.Download
+#
+# 6 entradas cobertas - 5 saidas cobertas = +1 => covered 424 -> 425, que e'
+# exatamente o que a justificativa de min_func_coverage acima registra.
+# CAP-10 (2026-08-19): 632 -> 634, as duas entradas enumeradas no bloco de
+# min_func_coverage acima (RevokeMessage e EditMessage no adapter).
+# CAP-14 (2026-08-19): 634->635. A entrada e' UMA e esta' enumerada acima,
+# junto de min_func_coverage: ChatMessengerAdapter.SendPoll. Nenhuma saida.
+# CAP-15 (2026-08-19): 635->637. As entradas sao DUAS e estao enumeradas
+# acima, junto de min_func_coverage: ChatMessengerAdapter.SendTemplate e
+# templateButtons. Nenhuma saida.
+# CAP-21 (2026-08-19): 637->641. As entradas sao QUATRO e estao enumeradas
+# acima, junto de min_func_coverage: SendButtonsUseCase.headerImageBytes
+# (coberta), normalizeInteractiveButtons, ChatMessengerAdapter.SendButtons e
+# nativeFlowButtons. Nenhuma saida.
+# CAP-22 (2026-08-19): 641->646. As entradas sao CINCO e estao enumeradas
+# acima, junto de min_func_coverage: normalizeListSections, normalizeRows,
+# ChatMessengerAdapter.SendList, listRows e listSections. Nenhuma coberta,
+# nenhuma saida.
+# CAP-23 (2026-08-19): 646->645. UMA saida — nao entrada: com send/list
+# migrado no CAP-22, port.MessageComposer perdeu o ultimo consumidor.
+# MessageComposerAdapter.NewMessageID (a unica ELIGIBLE das tres funcoes
+# removidas; NewMessageComposerAdapter e contractsfake.MessageComposer.
+# NewMessageID ja' eram EXCLUDED) sai do golden. Ver min_func_coverage e
+# min_errpath_coverage acima para o efeito nas outras duas travas.
+# CAP-26 (2026-08-19): 645 -> 647. As duas funcoes do PhonePairerAdapter
+# (IsPaired, RequestPairingCode) entram como ELIGIBLE; NewPhonePairerAdapter,
+# testkit.Fake.PairPhone e as duas de contractsfake.PhonePairer entram como
+# EXCLUDED. Denominador CRESCE — nao ha' remocao neste PR.
+# CAP-27 (2026-08-19): 647 -> 651. As QUATRO entradas estao enumeradas acima,
+# junto de min_func_coverage: os tres metodos de db.HmacConfigRepository e
+# bootstrap.userInfoHmacCache.SetHmacKey. Denominador CRESCE — nao ha'
+# remocao neste PR.
+# CAP-30 (2026-08-19): 662 -> 671. As NOVE entradas estao enumeradas acima,
+# junto de min_func_coverage: as tres de db.SessionConfigRepository, as duas de
+# bootstrap.userInfoSessionCache, bootstrap.withField e as tres de
+# storage.SetProxyUseCase. Denominador CRESCE — nao ha' remocao neste PR.
+# CAP-32 (2026-08-19): 672 -> 673. UMA entrada, enumerada acima junto de
+# min_func_coverage: db.SessionConfigRepository.LoadHistoryLimit. Denominador
+# CRESCE — nao ha' remocao neste PR.
+# CAP-34 (2026-08-19): 673 -> 675. DUAS entradas, enumeradas acima junto de
+# min_func_coverage: bootstrap.resolveGlobalHMACKey e
+# bootstrap.generateGlobalHMACKey. Denominador CRESCE — nao ha' remocao neste PR.
+# CAP-35 (2026-08-19): 675 -> 679. QUATRO entradas, enumeradas acima junto de
+# min_func_coverage: bootstrap.resolveGlobalEncryptionKey,
+# bootstrap.resolveAdminToken, bootstrap.generateSecret e
+# bootstrap.writeAdminTokenFile. Denominador CRESCE — nao ha' remocao neste PR.
+# CAP-38 (2026-08-19): 679 -> 680. Ponto unico de publicacao de userinfo (F164).
+# ENTRAM (3):
+#   bootstrap.publishUserInfo              ELIGIBLE covered
+#   bootstrap.resolveTokenCacheTTL         ELIGIBLE uncovered:L1
+#   bootstrap.userInfoSessionCache.publish ELIGIBLE covered (era EXCLUDED X1)
+# SAEM (2):
+#   bootstrap.userInfoSessionCache.publishByToken  ELIGIBLE covered
+#   bootstrap.userInfoSessionCache.publishByUserID ELIGIBLE covered
+# EXCLUDED novos (fora do denominador):
+#   bootstrap.initCustomHandlers.func1             EXCLUDED X6
+#   handlers.WebhookHandlerContext.publishValues   EXCLUDED X1
+# Net: +3 -2 = +1 elegivel. covered: +2 -2 = 0 (455 antes, 455 depois).
+# func_coverage nao muda (669). Denominador CRESCE — nao ha' remocao neste PR.
+#
+# F173 parte 1 (2026-08-20): min_eligible 680->681 (+1, ratchet-UP honesto).
+# ENTRA (1):
+#   stdio.DynamicRouteTargets  ELIGIBLE (acessor de leitura da tabela dinamica,
+#     exportado para que o teste de paridade stdio x HTTP verifique que as
+#     excecoes estruturais que citam rotas dinamicas nao ficaram orfas).
+# F207 (2026-08-22): min_eligible 625 -> 624 (-1, ratchet-DOWN honesto).
+# SAI (1): auth.NewTokenCache, dead code removed. See min_func_coverage above.
+# F212 (2026-08-22): min_eligible 629 -> 631 (+2, ratchet-UP honesto).
+# As duas funcoes novas sao as mesmas enumeradas na justificativa de
+# min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
+# ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
+# statements e caminho de erro, Main.func3 tem defers e caminho de erro.
+min_eligible=921
+# F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
+# a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
+# era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
+#
+# A PRIMEIRA isencao do repositorio, e vale registar por que a valvula existe.
+#
+# classifyMessage (pkg/bootstrap/message_classify.go) e' a cadeia de
+# classificacao unificada dos dois caminhos de ingestao. Nao tem modo de falha —
+# nao devolve erro, nao chama nada que possa falhar, so' olha para um struct e
+# devolve outro — e corre no caminho de CADA mensagem recebida. Um log ali nao
+# teria nada de util a dizer e apareceria milhares de vezes por dia, que e' a
+# F180 na sua pior forma.
+#
+# As alternativas eram piores: inventar um log destroi o proprio log; baixar o
+# piso de func_coverage desliga a protecao para TODAS as outras funcoes.
+#
+# Nota: esta anotacao so' e' contabilizada corretamente porque a F189 foi
+# corrigida hoje. Antes, o contador fazia strings.Count sobre o ficheiro inteiro
+# e teria contado tambem as mencoes ao token no comentario que a justifica.
+max_exempt_annotations=2
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
 #   min_eligible 509 -> 507: os tres helpers privados client() identicos de
@@ -914,3 +1697,37 @@ max_exempt_annotations=0
 #     entao os fakes promovidos de _test.go a pacote nao entram no denominador.
 #   min_func_coverage 707 -> 710 e min_errpath_coverage 856 -> 862: efeito
 #     aritmetico da mesma consolidacao — os helpers removidos nao logavam.
+
+# --- 2026-08-22, onda de workers sobre os achados abertos ---
+#
+# min_eligible 625 -> 624 -> 626, e min_func_coverage 749 -> 748 -> 746, em dois
+# passos de causas OPOSTAS:
+#
+#   -1 elegivel   F207 removeu `auth.NewTokenCache`, codigo morto. Denominador
+#                 que encolhe porque o CODIGO encolheu nao e' afrouxamento.
+#   +2 elegiveis  F113 acrescentou `Fetcher.cacheGet` e `Fetcher.cachePut` ao
+#                 cache do link preview.
+#
+# Os dois acessores novos DILUEM func_coverage em 0,2pp e nao devem registar:
+# sao quatro e tres statements sob mutex, sem caminho de erro. Uma linha de log
+# por acesso a cache seria ruido, e o chamador ja' regista o que interessa.
+# Nada que registava deixou de registar — e' diluicao, nao regressao.
+#
+# COMO ISTO FOI DESCOBERTO, e vale mais que o numero: QUATRO workers em
+# worktrees isolados reportaram que o TestGoldenBate falhava por "problema
+# pre-existente de infraestrutura, timeout de 20m". Corrido isolado, ele falha
+# em 11 SEGUNDOS — e falha por causa das mudancas DELES (as duas funcoes novas
+# e a removida). Cada um descartou como alheia uma falha que era sua.
+
+# max_exempt_annotations 1 -> 2 (2026-08-22, F187/F188, decisao 53=a).
+#
+# A segunda isencao e' `unwrapFutureProof` (pkg/bootstrap/message_classify.go),
+# irma da que ja' existia em `classifyMessage`: desembrulho PURO, sem modo de
+# falha, no caminho de CADA mensagem sincronizada. Registar ali seria uma linha
+# por mensagem durante a rajada de HistorySync — o pior ruido possivel, no pior
+# momento possivel.
+#
+# O orcamento fez o que existe para fazer: a anotacao nao passou despercebida, o
+# gate parou, e a subida ficou deliberada em vez de silenciosa. Quem quiser
+# remover esta isencao responde a mesma pergunta que a primeira: o que e' que
+# este log diria que o operador pudesse USAR?

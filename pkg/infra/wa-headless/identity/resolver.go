@@ -175,3 +175,8 @@ func (r *Resolver) capability(ctx context.Context, txtID string) (*waheadless.Re
 
 // Compile-time proof that this adapter satisfies the port.
 var _ appport.IdentityResolver = (*Resolver)(nil)
+
+// E tambem a vista de UM metodo que a feature/wa-noise trouxe. A assercao e'
+// gratuita — GetPNForLID ja' existia — e vale a linha: sem ela, alguem que
+// estreitasse o Resolver descobriria a quebra no ponto de montagem, e nao aqui.
+var _ appport.LIDResolver = (*Resolver)(nil)

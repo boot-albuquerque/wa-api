@@ -119,8 +119,10 @@ func sessionCases() []sessionCase {
 			path:   "/session/disconnect",
 		},
 		{
-			name:   "Logout",
-			build:  func(e error) http.Handler { return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), &contractsfake.SessionDetacher{}, log)) },
+			name: "Logout",
+			build: func(e error) http.Handler {
+				return NewLogoutHandler(session.NewLogoutUseCase(ctl(e), &contractsfake.SessionDetacher{}, log))
+			},
 			method: http.MethodPost,
 			path:   "/session/logout",
 		},
@@ -135,7 +137,17 @@ func sessionCases() []sessionCase {
 		{
 			name: "GetStatus",
 			build: func(e error) http.Handler {
-				return NewGetStatusHandler(session.NewGetStatusUseCase(guard(e), &contractsfake.SessionStatusReader{}, users(), log))
+				// F196: GetStatus não consulta o SessionGuard. O `e` deste
+				// caso passa a ser injetado onde ele AINDA pode falhar — a
+				// leitura do registo — para que os testes de falha interna
+				// continuem a exercitar um caminho real em vez de nenhum.
+				u := users()
+				if e != nil {
+					u.ListUsersFunc = func(context.Context, string) ([]domain.UserListEntry, error) {
+						return nil, e
+					}
+				}
+				return NewGetStatusHandler(session.NewGetStatusUseCase(&contractsfake.SessionStatusReader{}, u, log))
 			},
 			method: http.MethodGet,
 			path:   "/session/status",
@@ -143,10 +155,14 @@ func sessionCases() []sessionCase {
 		{
 			name: "RequestHistorySync",
 			build: func(e error) http.Handler {
-				return NewRequestHistorySyncHandler(session.NewRequestHistorySyncUseCase(guard(e), log))
+				return NewRequestHistorySyncHandler(session.NewRequestHistorySyncUseCase(&contractsfake.HistorySyncRequester{SessionGuard: *guard(e)}, log))
 			},
 			method: http.MethodPost,
 			path:   "/session/historysync",
+			// F198: a rota deixou de aceitar corpo vazio. Antes respondia 200
+			// sem pedir nada; agora a âncora é obrigatória, porque o protocolo
+			// pede "as N mensagens ANTES desta" e sem ela não há pedido.
+			body: `{"chat_jid":"5511999999999@s.whatsapp.net","oldest_msg_id":"MSG1","count":10}`,
 		},
 		{
 			name: "SyncContactRoster",
@@ -162,7 +178,12 @@ func sessionCases() []sessionCase {
 		{
 			name: "PairPhone",
 			build: func(e error) http.Handler {
-				return NewPairPhoneHandler(session.NewPairPhoneUseCase(guard(e), log))
+				// PairPhone consome PhonePairer desde o CAP-26: precisa PEDIR
+				// o código, não só verificar a sessão. Aqui só importa a
+				// recusa da guarda propagar, então o pairer nasce com a mesma
+				// FailSession.
+				return NewPairPhoneHandler(session.NewPairPhoneUseCase(
+					&contractsfake.PhonePairer{SessionGuard: contractsfake.FailSession(e)}, log))
 			},
 			method:    http.MethodPost,
 			path:      "/session/pairphone",
@@ -172,7 +193,7 @@ func sessionCases() []sessionCase {
 		{
 			name: "SetStatusMessage",
 			build: func(e error) http.Handler {
-				return NewSetStatusMessageHandler(session.NewSetStatusMessageUseCase(guard(e), log))
+				return NewSetStatusMessageHandler(session.NewSetStatusMessageUseCase(&contractsfake.StatusMessageSetter{SessionGuard: *guard(e)}, log))
 			},
 			method:    http.MethodPost,
 			path:      "/session/statusmessage",
@@ -232,6 +253,14 @@ func TestSessionHandlers_NoSessionAppErrReachesClient(t *testing.T) {
 	for _, tc := range sessionCases() {
 		if tc.name == "Connect" {
 			continue // Connect nao consulta SessionGuard
+		}
+		if tc.name == "GetStatus" {
+			// F196: GetStatus deixou de consultar o SessionGuard de propósito.
+			// Perguntar o estado de uma sessão desconectada devolvia 400 "no
+			// session" — a resposta mais inútil possível no único momento em
+			// que alguém pergunta. Agora devolve 200 com connected:false, e
+			// isso é asserido em TestGetStatus_DesconectadaDevolve200.
+			continue
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			rec, recs := serveSession(t, tc.build(noSessionErr()), tc.method, tc.path, tc.body, "user-1", true)
@@ -312,7 +341,10 @@ func TestSessionHandlers_MalformedBody_400_LogsCause(t *testing.T) {
 // ausente hoje vira fmt.Errorf sem taxonomia, e por isso sai 500. O teste
 // trava o comportamento OBSERVADO — se um dia esses sitios migrarem para
 // apperr de validacao, este teste e' o que avisa que o status mudou.
-func TestSessionHandlers_MissingRequiredField_500_LogsError(t *testing.T) {
+// 400 desde a F66: campo obrigatorio ausente ou valor invalido no payload e
+// erro do CLIENTE. Estes testes exigiam 500 — dois com "_500" no proprio
+// nome —, fixando o defeito que a F66 corrige.
+func TestSessionHandlers_MissingRequiredField_400_LogsError(t *testing.T) {
 	tests := []struct {
 		name    string
 		handler http.Handler
@@ -321,13 +353,19 @@ func TestSessionHandlers_MissingRequiredField_500_LogsError(t *testing.T) {
 	}{
 		{
 			name:    "PairPhone sem Phone",
-			handler: NewPairPhoneHandler(session.NewPairPhoneUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{})),
+			handler: NewPairPhoneHandler(session.NewPairPhoneUseCase(&contractsfake.PhonePairer{}, &contractsfake.Logger{})),
 			path:    "/session/pairphone",
 			want:    "missing Phone",
 		},
 		{
+			name:    "RequestHistorySync sem âncora",
+			handler: NewRequestHistorySyncHandler(session.NewRequestHistorySyncUseCase(&contractsfake.HistorySyncRequester{}, &contractsfake.Logger{})),
+			path:    "/session/historysync",
+			want:    "chat_jid é obrigatório",
+		},
+		{
 			name:    "SetStatusMessage sem Body",
-			handler: NewSetStatusMessageHandler(session.NewSetStatusMessageUseCase(&contractsfake.SessionGuard{}, &contractsfake.Logger{})),
+			handler: NewSetStatusMessageHandler(session.NewSetStatusMessageUseCase(&contractsfake.StatusMessageSetter{}, &contractsfake.Logger{})),
 			path:    "/session/statusmessage",
 			want:    "missing Body",
 		},
@@ -337,8 +375,8 @@ func TestSessionHandlers_MissingRequiredField_500_LogsError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rec, recs := serveSession(t, tt.handler, http.MethodPost, tt.path, `{}`, "user-1", true)
 
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status %d, quero 500 (corpo %s)", rec.Code, rec.Body.String())
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())
 			}
 			logassert.OutcomeLogged(t, recs, tt.want)
 		})
@@ -424,7 +462,7 @@ func TestGetStatus_ReportsLiveSessionState(t *testing.T) {
 			return []domain.UserListEntry{{ID: "user-1", JID: "5511@s.whatsapp.net"}}, nil
 		},
 	}
-	h := NewGetStatusHandler(session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, status, users, &contractsfake.Logger{}))
+	h := NewGetStatusHandler(session.NewGetStatusUseCase(status, users, &contractsfake.Logger{}))
 
 	rec, recs := serveSession(t, h, http.MethodGet, "/session/status", "", "user-1", true)
 
@@ -458,7 +496,7 @@ func TestGetQRAndStatus_NoUserRecord_400_NoSession(t *testing.T) {
 		},
 		{
 			name:    "GetStatus",
-			handler: NewGetStatusHandler(session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, &contractsfake.SessionStatusReader{}, empty, log)),
+			handler: NewGetStatusHandler(session.NewGetStatusUseCase(&contractsfake.SessionStatusReader{}, empty, log)),
 			path:    "/session/status",
 		},
 	}
@@ -505,7 +543,7 @@ func TestGetQRAndStatus_RepositoryFailure_500_LogsError(t *testing.T) {
 		},
 		{
 			name:    "GetStatus",
-			handler: NewGetStatusHandler(session.NewGetStatusUseCase(&contractsfake.SessionGuard{}, &contractsfake.SessionStatusReader{}, broken, log)),
+			handler: NewGetStatusHandler(session.NewGetStatusUseCase(&contractsfake.SessionStatusReader{}, broken, log)),
 			path:    "/session/status",
 		},
 	}

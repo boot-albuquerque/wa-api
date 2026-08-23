@@ -7,6 +7,8 @@ import (
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	"wa-api/pkg/infra/wa-noise/client/testkit"
 
+	"net/http"
+	"strings"
 	"wa-api/pkg/domain/apperr"
 )
 
@@ -105,6 +107,10 @@ func TestSessionGuardAdapter_Logout_NoClient(t *testing.T) {
 func TestSessionGuardAdapter_Logout_Success(t *testing.T) {
 	called := false
 	fake := &testkit.Fake{
+		// Conectado: desde a F93 o Logout exige transporte vivo, porque sem ele
+		// o IQ `remove-companion-device` nao tem para onde ir. Antes o dublê
+		// nao precisava dizer isso, e o teste passava por omissao.
+		IsConnectedFn: func() bool { return true },
 		LogoutFn: func(ctx context.Context) error {
 			called = true
 			return nil
@@ -122,7 +128,10 @@ func TestSessionGuardAdapter_Logout_Success(t *testing.T) {
 // TestSessionGuardAdapter_Logout_PropagatesError propaga o erro do SDK.
 func TestSessionGuardAdapter_Logout_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("not logged in")
-	fake := &testkit.Fake{LogoutFn: func(ctx context.Context) error { return sdkErr }}
+	fake := &testkit.Fake{
+		IsConnectedFn: func() bool { return true },
+		LogoutFn:      func(ctx context.Context) error { return sdkErr },
+	}
 	a := NewSessionGuardAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
 	err := a.Logout(context.Background(), "u1")
 	if err == nil {
@@ -186,5 +195,49 @@ func TestErrNoSession_NilCause(t *testing.T) {
 	e := ErrNoSession("u1", nil)
 	if e == nil {
 		t.Fatal("ErrNoSession(nil cause) returned nil")
+	}
+}
+
+// TestSessionGuardAdapter_Logout_SemTransporteRecusa cobre a F93.
+//
+// O logout FALA com o WhatsApp: manda um IQ `remove-companion-device` antes de
+// qualquer coisa. Sem transporte vivo o SDK devolvia erro CRU, que a fronteira
+// HTTP transformava em 500 opaco — indistinguivel de defeito do servidor.
+//
+// A checagem e' de ESTADO (IsConnected) e nao do TEXTO do erro do SDK: casar a
+// mensagem quebraria em silencio no dia em que ele mudasse a frase.
+func TestSessionGuardAdapter_Logout_SemTransporteRecusa(t *testing.T) {
+	chamou := false
+	fake := &testkit.Fake{
+		IsConnectedFn: func() bool { return false },
+		LogoutFn: func(ctx context.Context) error {
+			chamou = true
+			return nil
+		},
+	}
+	a := NewSessionGuardAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	err := a.Logout(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("Logout aceitou sessao sem transporte")
+	}
+	if chamou {
+		t.Error("chamou o Logout do SDK sem transporte: e' a chamada que falha e produz o erro cru")
+	}
+	if got := appErrCode(err); got != apperr.CodeSessionNotConnected {
+		t.Errorf("code = %q, quero %q", got, apperr.CodeSessionNotConnected)
+	}
+	var appErr *apperr.AppError
+	if errors.As(err, &appErr) {
+		// 409, nao 500: a requisicao esta' correta, so' nao pode ser atendida
+		// NESTE estado.
+		if status := appErr.Category.HTTPStatus(); status != http.StatusConflict {
+			t.Errorf("status = %d, quero %d", status, http.StatusConflict)
+		}
+		// A mensagem tem de dizer a SAIDA. A anterior nao dizia, e o remedio
+		// (reconectar antes) era conhecimento de implementacao.
+		if !strings.Contains(appErr.Message, "/session/connect") {
+			t.Errorf("mensagem nao diz como sair do estado: %q", appErr.Message)
+		}
 	}
 }

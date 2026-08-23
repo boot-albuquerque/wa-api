@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -13,19 +14,29 @@ import (
 
 // EditUserUseCase edita um usuário existente
 type EditUserUseCase struct {
-	users  appport.UserRepository
-	logger appport.Logger
+	users       appport.UserRepository
+	s3Cipher    appport.S3SecretCipher
+	republisher appport.UserInfoRepublisher
+	logger      appport.Logger
 }
 
-// NewEditUserUseCase cria uma nova instância
-func NewEditUserUseCase(users appport.UserRepository, logger appport.Logger) *EditUserUseCase {
-	return &EditUserUseCase{users: users, logger: logger}
+// NewEditUserUseCase cria uma nova instância.
+//
+// s3Cipher encrypts the S3 secret key before it reaches the database,
+// following the same pattern AddUserUseCase uses for the HMAC key (F158)
+// and for the S3 key (F163). The port is S3-specific because the stored
+// type is a TEXT envelope (ADR-0009), not BYTEA.
+// republisher drops this user's cached info after a successful write. See
+// appport.UserInfoRepublisher and HOUSEKEEP F200/F201: without it the edit
+// reached the database and NOTHING else in the process ever saw it.
+func NewEditUserUseCase(users appport.UserRepository, s3Cipher appport.S3SecretCipher, republisher appport.UserInfoRepublisher, logger appport.Logger) *EditUserUseCase {
+	return &EditUserUseCase{users: users, s3Cipher: s3Cipher, republisher: republisher, logger: logger}
 }
 
 // Execute edita um usuário
 func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserRequest) error {
 	if req.UserID == "" {
-		return fmt.Errorf("user ID is required")
+		return apperr.New("missing_user_id", apperr.CategoryValidation, "user ID is required", false, nil)
 	}
 
 	// Check if user exists
@@ -34,7 +45,7 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		return fmt.Errorf("database error: %w", err)
 	}
 	if !exists {
-		return fmt.Errorf("user not found")
+		return apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
 	}
 
 	// Validate events if provided
@@ -46,7 +57,8 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 				continue
 			}
 			if !isValidEvent(event) {
-				return fmt.Errorf("invalid event type: %s", event)
+				return apperr.New(invalidEventTypeCode, apperr.CategoryValidation,
+					fmt.Sprintf(invalidEventTypeMsgFmt, event), false, nil)
 			}
 		}
 	}
@@ -69,8 +81,8 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 	if req.Events != "" {
 		upd.Events = &req.Events
 	}
-	if req.History != 0 {
-		upd.History = &req.History
+	if req.History != nil {
+		upd.History = req.History
 	}
 	if req.ProxyConfig != nil {
 		proxyURL := ""
@@ -81,15 +93,44 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		upd.WebhookUseProxy = req.ProxyConfig.WebhookUseProxy
 	}
 	if req.S3Config != nil {
-		upd.S3 = req.S3Config
+		// Encrypt the S3 secret before it reaches the database (F163,
+		// ADR-0009). The ORDER is the contract: encrypt, then write.
+		// A failure returns BEFORE UpdateUser.
+		s3Copy := *req.S3Config
+		if s3Copy.SecretKey != "" {
+			envelope, err := uc.s3Cipher.EncryptS3Secret(s3Copy.SecretKey)
+			if err != nil {
+				uc.logger.Error(ctx, s3SecretEncryptFailedMsg, "userID", req.UserID, "error", err)
+				return fmt.Errorf("%s: %w", s3SecretEncryptFailedMsg, err)
+			}
+			s3Copy.SecretKey = envelope
+		}
+		upd.S3 = &s3Copy
 	}
 
+	// A ORDEM é o contrato, e está travada em teste: republicar ANTES de a
+	// escrita ter sucesso publicaria na cache um valor que o banco não tem —
+	// e como a entrada por user id não expira, esse valor errado ficaria lá
+	// para sempre.
 	if err := uc.users.UpdateUser(ctx, req.UserID, upd); err != nil {
 		if errors.Is(err, ErrDuplicateToken) {
 			return ErrDuplicateToken
 		}
 		if errors.Is(err, domain.ErrNoFieldsToUpdate) {
-			return err
+			// F206, decisão 48=a do canal: `token:""` significa CAMPO NÃO
+			// INFORMADO, e um pedido sem nenhum campo útil é inválido — não
+			// avaria nossa.
+			//
+			// Medido em campo a 2026-08-22: `{"token":""}` e `{}` devolviam
+			// ambos 500 "internal server error" para algo determinístico, que
+			// nunca muda de resposta por mais que o cliente repita. Mesma
+			// família da F182 e da F204.
+			//
+			// Sem taxonomia o erro subia cru e o `RespondJSON` caía no ramo
+			// genérico; com ela, o status vem da categoria e o cliente recebe
+			// um código legível por máquina em vez de "internal server error".
+			return apperr.New(noFieldsToUpdateCode, apperr.CategoryValidation,
+				"request has no field to update", false, err)
 		}
 		uc.logger.Error(ctx, "Failed to update user", "error", err)
 		return fmt.Errorf("database error: %w", err)
@@ -115,6 +156,12 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 			storage.GetS3Manager().RemoveClient(req.UserID)
 		}
 	}
+
+	// Depois da escrita, e só depois dela: o processo lê estes valores da
+	// cache, não do banco. Sem isto, a edição entra no banco e fica invisível
+	// até o processo reiniciar (F200), e o token substituído continua a
+	// autenticar (F201).
+	uc.republisher.RepublishUser(ctx, req.UserID)
 
 	return nil
 }

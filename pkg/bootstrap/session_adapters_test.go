@@ -1,14 +1,10 @@
 package bootstrap
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"testing"
 	wanoise "wa-api/internal/wa-noise"
-
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 // TestSessionEventDispatcher_SemUserEventHandler: o dispatcher resolve userID ->
@@ -19,10 +15,7 @@ import (
 func TestSessionEventDispatcher_SemUserEventHandler(t *testing.T) {
 	clientManager.DeleteUserClient("user-sem-handle")
 
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	defer func() { log.Logger = orig }()
+	buf := captureLogInto(t)
 
 	err := NewSessionEventDispatcher().Dispatch(context.Background(), "user-sem-handle", "QR", map[string]any{"event": "code"})
 	if err != nil {
@@ -47,10 +40,7 @@ func TestSessionEventDispatcher_HandleDeOutroTipo(t *testing.T) {
 	clientManager.SetUserClient("user-tipo-errado", handleForaDoTipo{})
 	defer clientManager.DeleteUserClient("user-tipo-errado")
 
-	var buf bytes.Buffer
-	orig := log.Logger
-	log.Logger = zerolog.New(&buf)
-	defer func() { log.Logger = orig }()
+	buf := captureLogInto(t)
 
 	err := NewSessionEventDispatcher().Dispatch(context.Background(), "user-tipo-errado", "QR", nil)
 	if err != nil {

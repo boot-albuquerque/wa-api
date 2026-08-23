@@ -14,6 +14,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite"
+
+	"wa-api/pkg/infra/auth"
+	dbpkg "wa-api/pkg/infra/db"
 )
 
 // fakeS3 is an in-process stand-in for an S3-compatible endpoint. The AWS SDK
@@ -536,7 +539,7 @@ func TestGetPublicURL_PresignFailsOnBadCredentials(t *testing.T) {
 
 func openStorageTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "storage.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "storage.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -564,12 +567,33 @@ func openStorageTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
+// lazyInitEncryptionKey has 32 bytes because AES-256 requires exactly that —
+// aes.NewCipher rejects any other length (pkg/infra/auth/hmac.go:46).
+const lazyInitEncryptionKey = "0123456789abcdef0123456789abcdef"
+
+// lazyInitPlainSecret is the plaintext credential behind the stored envelope.
+const lazyInitPlainSecret = "sk"
+
+// envelopedSecret returns the value users.s3_secret_key actually holds:
+// the `enc:v1:` envelope of ADR-0009, produced by the REAL cipher and not by a
+// stand-in. A row seeded with plaintext would make the lazy-init tests pass
+// against a manager that reads the column as a credential — the very defect
+// the envelope exists to make impossible.
+func envelopedSecret(t *testing.T) string {
+	t.Helper()
+	envelope, err := auth.EncryptS3Secret(lazyInitPlainSecret, lazyInitEncryptionKey)
+	if err != nil {
+		t.Fatalf("EncryptS3Secret: %v", err)
+	}
+	return envelope
+}
+
 func insertUser(t *testing.T, db *sqlx.DB, id string, enabled bool) {
 	t.Helper()
 	_, err := db.Exec(
 		`INSERT INTO users (id, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_public_url, media_delivery, s3_retention_days)
-		 VALUES (?, ?, 'https://s3.example.invalid', 'us-east-1', 'user-bucket', 'ak', 'sk', 1, '', NULL, NULL)`,
-		id, enabled)
+		 VALUES (?, ?, 'https://s3.example.invalid', 'us-east-1', 'user-bucket', 'ak', ?, 1, '', NULL, NULL)`,
+		id, enabled, envelopedSecret(t))
 	if err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
@@ -625,6 +649,7 @@ func TestEnsureClientFromDB_InitializesFromRow(t *testing.T) {
 
 	m := newManager()
 	m.SetDB(db)
+	m.SetEncryptionKey(lazyInitEncryptionKey)
 
 	if !m.EnsureClientFromDB("user1") {
 		t.Fatal("expected the client to be lazily initialized from the users row")
@@ -646,6 +671,61 @@ func TestEnsureClientFromDB_InitializesFromRow(t *testing.T) {
 	if cfg.RetentionDays != 30 {
 		t.Errorf("RetentionDays = %d, want 30 (COALESCE default)", cfg.RetentionDays)
 	}
+	// The credential handed to the AWS SDK is the PLAINTEXT behind the
+	// envelope, not the stored string: signing with the envelope would fail
+	// every request, and storing the plaintext would defeat ADR-0009.
+	if cfg.SecretKey != lazyInitPlainSecret {
+		t.Errorf("SecretKey = %q, want the decrypted %q", cfg.SecretKey, lazyInitPlainSecret)
+	}
+}
+
+// TestEnsureClientFromDB_LegacyPlaintextSecretIsRefused is the ADR-0009
+// control on the READ side.
+//
+// A row written by the historical binary holds the credential in the clear
+// (`41bc8e2^:handlers.go:6243`). Lazy init must refuse it and leave no client
+// behind: using the stored value directly would be the silent plaintext
+// fallback the ADR forbids, and it would keep the exposed credential working
+// forever instead of forcing the reconfiguration.
+func TestEnsureClientFromDB_LegacyPlaintextSecretIsRefused(t *testing.T) {
+	db := openStorageTestDB(t)
+	_, err := db.Exec(
+		`INSERT INTO users (id, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_public_url, media_delivery, s3_retention_days)
+		 VALUES ('legacy-user', 1, 'https://s3.example.invalid', 'us-east-1', 'user-bucket', 'ak', ?, 1, '', NULL, NULL)`,
+		lazyInitPlainSecret)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	m := newManager()
+	m.SetDB(db)
+	m.SetEncryptionKey(lazyInitEncryptionKey)
+
+	if m.EnsureClientFromDB("legacy-user") {
+		t.Fatal("a plaintext s3_secret_key was ACCEPTED: the legacy row is being used as a credential")
+	}
+	if _, _, ok := m.GetClient("legacy-user"); ok {
+		t.Fatal("a client was registered from a non-enveloped secret")
+	}
+}
+
+// TestEnsureClientFromDB_NoEncryptionKeyFailsClosed — without the key there is
+// no way to unwrap the envelope, and the answer is refusal, not the envelope
+// used as-is.
+func TestEnsureClientFromDB_NoEncryptionKeyFailsClosed(t *testing.T) {
+	db := openStorageTestDB(t)
+	insertUser(t, db, "user1", true)
+
+	m := newManager()
+	m.SetDB(db)
+	// SetEncryptionKey deliberately not called.
+
+	if m.EnsureClientFromDB("user1") {
+		t.Fatal("lazy init succeeded with no encryption key configured")
+	}
+	if _, _, ok := m.GetClient("user1"); ok {
+		t.Fatal("a client was registered without unwrapping the secret")
+	}
 }
 
 // TestUploadToS3_LazyInitFromDB proves the reconnect-after-restart path:
@@ -659,13 +739,14 @@ func TestUploadToS3_LazyInitFromDB(t *testing.T) {
 	db := openStorageTestDB(t)
 	_, err := db.Exec(
 		`INSERT INTO users (id, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key, s3_path_style, s3_public_url, media_delivery, s3_retention_days)
-		 VALUES ('user1', 1, ?, 'us-east-1', 'mybucket', 'ak', 'sk', 1, '', 's3', 5)`, srv.URL)
+		 VALUES ('user1', 1, ?, 'us-east-1', 'mybucket', 'ak', ?, 1, '', 's3', 5)`, srv.URL, envelopedSecret(t))
 	if err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
 
 	m := newManager()
 	m.SetDB(db)
+	m.SetEncryptionKey(lazyInitEncryptionKey)
 
 	if err := m.UploadToS3(context.Background(), "user1", "k", []byte("x"), "image/png"); err != nil {
 		t.Fatalf("UploadToS3 with lazy init: %v", err)
@@ -683,10 +764,12 @@ func TestEnsureS3ClientForUser(t *testing.T) {
 	prev := GetS3Manager()
 	prev.mu.Lock()
 	prevDB := prev.db
+	prevKey := prev.encryptionKey
 	prev.mu.Unlock()
 	t.Cleanup(func() {
 		prev.mu.Lock()
 		prev.db = prevDB
+		prev.encryptionKey = prevKey
 		prev.mu.Unlock()
 		prev.RemoveClient("global-user")
 	})
@@ -694,6 +777,7 @@ func TestEnsureS3ClientForUser(t *testing.T) {
 	db := openStorageTestDB(t)
 	insertUser(t, db, "global-user", true)
 	prev.SetDB(db)
+	prev.SetEncryptionKey(lazyInitEncryptionKey)
 
 	EnsureS3ClientForUser("global-user")
 

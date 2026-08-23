@@ -150,59 +150,58 @@ func GetLastActivityByUser(db *sqlx.DB, userID string) (map[string]time.Time, er
 	return out, nil
 }
 
-// TrimMessageHistory removes the oldest messages beyond the given limit for
-// a (user_id, chat_jid) pair. Handles both PostgreSQL and SQLite drivers.
+// TrimMessageHistory removes the oldest messages beyond the given limit for a
+// (user_id, chat_jid) pair, pruning the corresponding secrets from storeDB
+// (the wa-noise database where wanoise_message_secrets lives).
 //
-// Moved from db_methods.go as part of Clean Architecture migration.
-func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
-	var queryHistory, querySecrets string
-
+// The three steps are ordered so that a failure in the secrets purge (step 2)
+// never blocks the history purge (step 3). The previous version ran both
+// against the same handle, which always failed because the two tables live in
+// different databases — and then returned on the error, leaving history
+// untrimmed forever (F212).
+func TrimMessageHistory(db *sqlx.DB, storeDB *sqlx.DB, userID, chatJID string, limit int) error {
+	// Step 1: collect the message_ids that will be trimmed.
+	var selectIDs string
 	if db.DriverName() == "postgres" {
-		queryHistory = `
-	            DELETE FROM message_history
-	            WHERE id IN (
-	                SELECT id FROM message_history
-	                WHERE user_id = $1 AND chat_jid = $2
-	                ORDER BY timestamp DESC
-	                OFFSET $3
-	            )`
-
-		querySecrets = `
-	            DELETE FROM wanoise_message_secrets
-	            WHERE message_id IN (
-	                SELECT message_id FROM message_history
-	                WHERE user_id = $1 AND chat_jid = $2
-	                ORDER BY timestamp DESC
-	                OFFSET $3
-	            )`
-	} else { // sqlite
-		queryHistory = `
-	            DELETE FROM message_history
-	            WHERE id IN (
-	                SELECT id FROM message_history
-	                WHERE user_id = ? AND chat_jid = ?
-	                ORDER BY timestamp DESC
-	                LIMIT -1 OFFSET ?
-	            )`
-
-		querySecrets = `
-	            DELETE FROM wanoise_message_secrets
-	            WHERE message_id IN (
-	                SELECT message_id FROM message_history
-	                WHERE user_id = ? AND chat_jid = ?
-	                ORDER BY timestamp DESC
-	                LIMIT -1 OFFSET ?
-	            )`
+		selectIDs = `SELECT message_id FROM message_history
+		             WHERE user_id = $1 AND chat_jid = $2
+		             ORDER BY timestamp DESC OFFSET $3`
+	} else {
+		selectIDs = `SELECT message_id FROM message_history
+		             WHERE user_id = ? AND chat_jid = ?
+		             ORDER BY timestamp DESC LIMIT -1 OFFSET ?`
 	}
 
-	if _, err := db.Exec(querySecrets, userID, chatJID, limit); err != nil {
-		log.Error().Err(err).Str("table", "wanoise_message_secrets").Str("user_id", userID).
+	var ids []string
+	if err := db.Select(&ids, selectIDs, userID, chatJID, limit); err != nil {
+		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).
 			Str("chat_jid", chatJID).Int("limit", limit).
-			Msg("failed to trim message secrets")
-		return fmt.Errorf("failed to trim message secrets: %w", err)
+			Msg("failed to select message ids for trim")
+		return fmt.Errorf("failed to select message ids for trim: %w", err)
+	}
+	if len(ids) == 0 {
+		return nil
 	}
 
-	if _, err := db.Exec(queryHistory, userID, chatJID, limit); err != nil {
+	// Step 2: purge secrets from the store database.
+	// Failure here is logged but MUST NOT prevent the history purge.
+	if storeDB != nil {
+		trimMessageSecrets(storeDB, ids, userID, chatJID)
+	}
+
+	// Step 3: purge history rows from the application database.
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	deleteHistory := `DELETE FROM message_history
+	                   WHERE user_id = ? AND chat_jid = ? AND message_id IN (` +
+		strings.Join(placeholders, ",") + `)`
+	args = append([]interface{}{userID, chatJID}, args...)
+
+	if _, err := db.Exec(db.Rebind(deleteHistory), args...); err != nil {
 		log.Error().Err(err).Str("table", "message_history").Str("user_id", userID).
 			Str("chat_jid", chatJID).Int("limit", limit).
 			Msg("failed to trim message history")
@@ -210,6 +209,23 @@ func TrimMessageHistory(db *sqlx.DB, userID, chatJID string, limit int) error {
 	}
 
 	return nil
+}
+
+func trimMessageSecrets(storeDB *sqlx.DB, ids []string, userID, chatJID string) {
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := `DELETE FROM wanoise_message_secrets WHERE message_id IN (` +
+		strings.Join(placeholders, ",") + `)`
+
+	if _, err := storeDB.Exec(storeDB.Rebind(q), args...); err != nil {
+		log.Error().Err(err).Str("table", "wanoise_message_secrets").
+			Str("user_id", userID).Str("chat_jid", chatJID).
+			Msg("failed to trim message secrets (non-fatal, history trim continues)")
+	}
 }
 
 // GetChatPushNamesByUser devolve, por chat_jid, o pushName mais RECENTE que

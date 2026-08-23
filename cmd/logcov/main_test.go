@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -42,11 +43,8 @@ func TestGoldenBate(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got != string(want) {
-		gotLines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-		wantLines := strings.Split(strings.TrimRight(string(want), "\n"), "\n")
-		t.Fatalf("golden divergiu: %d linhas geradas, %d versionadas; regenere com\n"+
-			"  go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden",
-			len(gotLines), len(wantLines))
+		diagnosis := diagnoseGoldenDivergence(string(want), got)
+		t.Fatal(diagnosis)
 	}
 }
 
@@ -146,7 +144,11 @@ func readBaselineForTest(t *testing.T, path string) map[string]int {
 		t.Fatal(err)
 	}
 	out := map[string]int{}
-	for _, line := range strings.Split(string(data), "\n") {
+	// A duplicata de uma chave e' ERRO, nao "vale a ultima". Antes do F129
+	// este parser sobrescrevia em silencio, e por isso nao viu as duas linhas
+	// min_func_coverage= que desativaram o piso do gate em 6fa6270.
+	seen := map[string]int{}
+	for i, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		switch line {
 		case "stage=advisory":
@@ -161,6 +163,10 @@ func readBaselineForTest(t *testing.T, path string) map[string]int {
 			continue
 		}
 		if n, err := strconv.Atoi(strings.Fields(v)[0]); err == nil {
+			if prev, dup := seen[k]; dup {
+				t.Fatalf("chave %q duplicada em %s (linhas %d e %d): chave ambigua desativa o gate em silencio (F129)", k, path, prev, i+1)
+			}
+			seen[k] = i + 1
 			out[k] = n
 		}
 	}
@@ -425,5 +431,210 @@ func TestBlockLineMalformada(t *testing.T) {
 	}
 	if got := blockLine("f.go:12.1,15.2"); got != 12 {
 		t.Errorf("blockLine = %d, quero 12", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Golden set comparison (F154)
+// ---------------------------------------------------------------------------
+
+const (
+	goldenFieldSep  = "\t"
+	goldenRegenCmd  = "go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden"
+	diagPositionFmt = "golden diverged: set is IDENTICAL (same %d entries with same status) " +
+		"but line positions changed; regeneration is safe:\n  %s"
+	diagSetChangedHeader = "golden diverged: the eligible SET changed"
+)
+
+type goldenEntry struct {
+	name   string
+	status string
+}
+
+func parseGoldenIdentities(raw string) map[goldenEntry]struct{} {
+	set := map[goldenEntry]struct{}{}
+	for _, line := range strings.Split(strings.TrimRight(raw, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, goldenFieldSep, 3)
+		if len(parts) < 2 {
+			continue
+		}
+		set[goldenEntry{name: parts[0], status: parts[1]}] = struct{}{}
+	}
+	return set
+}
+
+func diagnoseGoldenDivergence(versioned, generated string) string {
+	wantSet := parseGoldenIdentities(versioned)
+	gotSet := parseGoldenIdentities(generated)
+
+	var added, removed []string
+	var statusChanged []string
+
+	wantByName := map[string]string{}
+	for e := range wantSet {
+		wantByName[e.name] = e.status
+	}
+	gotByName := map[string]string{}
+	for e := range gotSet {
+		gotByName[e.name] = e.status
+	}
+
+	for e := range gotSet {
+		if _, ok := wantSet[e]; !ok {
+			if oldStatus, existed := wantByName[e.name]; existed {
+				statusChanged = append(statusChanged, e.name+": "+oldStatus+" -> "+e.status)
+			} else {
+				added = append(added, e.name+" ("+e.status+")")
+			}
+		}
+	}
+	for e := range wantSet {
+		if _, ok := gotSet[e]; !ok {
+			if _, stillExists := gotByName[e.name]; !stillExists {
+				removed = append(removed, e.name+" ("+e.status+")")
+			}
+		}
+	}
+
+	sort.Strings(added)
+	sort.Strings(removed)
+	sort.Strings(statusChanged)
+
+	if len(added) == 0 && len(removed) == 0 && len(statusChanged) == 0 {
+		return fmt.Sprintf(diagPositionFmt, len(wantSet), goldenRegenCmd)
+	}
+
+	var b strings.Builder
+	b.WriteString(diagSetChangedHeader)
+	if len(added) > 0 {
+		b.WriteString("\n\nADDED:\n")
+		for _, a := range added {
+			b.WriteString("  + ")
+			b.WriteString(a)
+			b.WriteByte('\n')
+		}
+	}
+	if len(removed) > 0 {
+		b.WriteString("\nREMOVED:\n")
+		for _, r := range removed {
+			b.WriteString("  - ")
+			b.WriteString(r)
+			b.WriteByte('\n')
+		}
+	}
+	if len(statusChanged) > 0 {
+		b.WriteString("\nSTATUS CHANGED:\n")
+		for _, s := range statusChanged {
+			b.WriteString("  ~ ")
+			b.WriteString(s)
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteString("\nregenerate ONLY after verifying these changes are intentional:\n  ")
+	b.WriteString(goldenRegenCmd)
+	return b.String()
+}
+
+func TestDiagnoseGoldenPositionOnly(t *testing.T) {
+	versioned := "foo.Bar\tELIGIBLE\tuncovered:L42\nfoo.Baz\tEXCLUDED\tX5\n"
+	generated := "foo.Bar\tELIGIBLE\tuncovered:L99\nfoo.Baz\tEXCLUDED\tX5\n"
+
+	diag := diagnoseGoldenDivergence(versioned, generated)
+	if !strings.Contains(diag, "IDENTICAL") {
+		t.Fatalf("expected position-only diagnosis, got:\n%s", diag)
+	}
+	if !strings.Contains(diag, goldenRegenCmd) {
+		t.Fatalf("missing regen command in diagnosis:\n%s", diag)
+	}
+	for i := 0; i < 5; i++ {
+		d := diagnoseGoldenDivergence(versioned, generated)
+		if d != diag {
+			t.Fatalf("non-deterministic output on iteration %d", i)
+		}
+	}
+}
+
+func TestDiagnoseGoldenEntryAdded(t *testing.T) {
+	versioned := "foo.Bar\tELIGIBLE\tuncovered:L42\n"
+	generated := "foo.Bar\tELIGIBLE\tuncovered:L42\nfoo.New\tELIGIBLE\tuncovered:L10\n"
+
+	diag := diagnoseGoldenDivergence(versioned, generated)
+	if !strings.Contains(diag, diagSetChangedHeader) {
+		t.Fatalf("expected set-changed diagnosis, got:\n%s", diag)
+	}
+	if !strings.Contains(diag, "foo.New") {
+		t.Fatalf("added entry not named in diagnosis:\n%s", diag)
+	}
+	if !strings.Contains(diag, "ADDED") {
+		t.Fatalf("missing ADDED section:\n%s", diag)
+	}
+	for i := 0; i < 5; i++ {
+		d := diagnoseGoldenDivergence(versioned, generated)
+		if d != diag {
+			t.Fatalf("non-deterministic output on iteration %d", i)
+		}
+	}
+}
+
+func TestDiagnoseGoldenEntryRemoved(t *testing.T) {
+	versioned := "foo.Bar\tELIGIBLE\tuncovered:L42\nfoo.Old\tEXCLUDED\tX5\n"
+	generated := "foo.Bar\tELIGIBLE\tuncovered:L42\n"
+
+	diag := diagnoseGoldenDivergence(versioned, generated)
+	if !strings.Contains(diag, diagSetChangedHeader) {
+		t.Fatalf("expected set-changed diagnosis, got:\n%s", diag)
+	}
+	if !strings.Contains(diag, "foo.Old") {
+		t.Fatalf("removed entry not named in diagnosis:\n%s", diag)
+	}
+	if !strings.Contains(diag, "REMOVED") {
+		t.Fatalf("missing REMOVED section:\n%s", diag)
+	}
+	for i := 0; i < 5; i++ {
+		d := diagnoseGoldenDivergence(versioned, generated)
+		if d != diag {
+			t.Fatalf("non-deterministic output on iteration %d", i)
+		}
+	}
+}
+
+func TestDiagnoseGoldenStatusChanged(t *testing.T) {
+	versioned := "foo.Bar\tELIGIBLE\tuncovered:L42\n"
+	generated := "foo.Bar\tEXCLUDED\tX5\n"
+
+	diag := diagnoseGoldenDivergence(versioned, generated)
+	if !strings.Contains(diag, diagSetChangedHeader) {
+		t.Fatalf("expected set-changed diagnosis, got:\n%s", diag)
+	}
+	if !strings.Contains(diag, "STATUS CHANGED") {
+		t.Fatalf("missing STATUS CHANGED section:\n%s", diag)
+	}
+	if !strings.Contains(diag, "ELIGIBLE -> EXCLUDED") {
+		t.Fatalf("status transition not shown:\n%s", diag)
+	}
+}
+
+func TestDiagnoseGoldenMixedChanges(t *testing.T) {
+	versioned := "a.A\tELIGIBLE\tL1\nb.B\tEXCLUDED\tX1\nc.C\tELIGIBLE\tL3\n"
+	generated := "a.A\tELIGIBLE\tL1\nc.C\tEXCLUDED\tX9\nd.D\tELIGIBLE\tL5\n"
+
+	diag := diagnoseGoldenDivergence(versioned, generated)
+	if !strings.Contains(diag, "ADDED") || !strings.Contains(diag, "d.D") {
+		t.Fatalf("missing ADDED d.D:\n%s", diag)
+	}
+	if !strings.Contains(diag, "REMOVED") || !strings.Contains(diag, "b.B") {
+		t.Fatalf("missing REMOVED b.B:\n%s", diag)
+	}
+	if !strings.Contains(diag, "STATUS CHANGED") || !strings.Contains(diag, "c.C") {
+		t.Fatalf("missing STATUS CHANGED c.C:\n%s", diag)
+	}
+	for i := 0; i < 10; i++ {
+		d := diagnoseGoldenDivergence(versioned, generated)
+		if d != diag {
+			t.Fatalf("non-deterministic output on iteration %d", i)
+		}
 	}
 }

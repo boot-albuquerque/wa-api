@@ -19,6 +19,23 @@ import (
 // dependência de sete capacidades que não toca, e obrigava qualquer transporte
 // novo a implementar as oito para satisfazer qualquer uma.
 
+// LIDResolver e' a visao de UM metodo da traducao LID->telefone, para quem
+// precisa SO' disso. Veio da feature/wa-noise, e sobrevive a divisao da decisao
+// 82 sem atrito: qualquer IdentityResolver a satisfaz, entao nenhum adaptador
+// muda.
+//
+// Os dois ramos fizeram o MESMO movimento — estreitar a dependencia — por
+// caminhos diferentes: aqui a interface gorda foi PARTIDA por medicao de uso;
+// la' foi acrescentada uma vista estreita ao lado dela. Guardar as duas custa
+// quatro linhas e nao obriga ninguem a migrar.
+type LIDResolver interface {
+	// GetPNForLID resolves the phone JID of a @lid. An unknown mapping is an
+	// empty JID with a NIL error — absence is an answer, not a failure — so a
+	// caller that only checks err would silently treat "unknown" as "resolved
+	// to the empty string".
+	GetPNForLID(ctx context.Context, txtID string, lid domain.JID) (domain.JID, error)
+}
+
 // IdentityResolver responde QUEM é alguém, nas duas direções da identidade dupla.
 type IdentityResolver interface {
 	SessionGuard

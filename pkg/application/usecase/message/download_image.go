@@ -2,37 +2,28 @@ package message
 
 import (
 	"context"
-	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
-// DownloadImageUseCase encapsula a validação de download de imagem.
+// DownloadImageUseCase baixa a imagem de verdade: monta o descritor com os sete
+// campos do payload, chama a porta appport.MediaDownloader (que embrulha
+// `Client.Download` com a sub-mensagem ImageMessage) e devolve os bytes
+// já codificados em Data URL. Antes de CAP-09B este use case validava a
+// requisição e devolvia um domain.DownloadResult VAZIO sem nunca baixar nada.
 type DownloadImageUseCase struct {
-	sessions appport.SessionGuard
-	logger   appport.Logger
+	flow mediaDownloadFlow
 }
 
 // NewDownloadImageUseCase cria uma nova instância do usecase.
-func NewDownloadImageUseCase(sg appport.SessionGuard, l appport.Logger) *DownloadImageUseCase {
+func NewDownloadImageUseCase(md appport.MediaDownloader, l appport.Logger) *DownloadImageUseCase {
 	return &DownloadImageUseCase{
-		sessions: sg,
-		logger:   l,
+		flow: mediaDownloadFlow{downloader: md, logger: l, kind: domain.MediaKindImage},
 	}
 }
 
-// Execute valida os campos obrigatórios e verifica se o cliente está disponível.
+// Execute valida os campos obrigatórios, garante a sessão e baixa a imagem.
 func (uc *DownloadImageUseCase) Execute(ctx context.Context, txtID string, req domain.DownloadRequest) (*domain.DownloadResult, error) {
-	if req.URL == "" {
-		return nil, fmt.Errorf("missing Url in payload")
-	}
-
-	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
-		return nil, err
-	}
-
-	uc.logger.Info(ctx, "download image validated", "txtID", txtID)
-	return &domain.DownloadResult{}, nil
+	return uc.flow.execute(ctx, txtID, req)
 }

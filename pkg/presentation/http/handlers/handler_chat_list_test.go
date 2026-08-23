@@ -31,7 +31,7 @@ func rotaLista(t *testing.T, quantos int) http.Handler {
 			return atividade, nil
 		},
 	}
-	uc := user.NewListChatsUseCase(ar, &contractsfake.ContactDirectory{}, &contractsfake.ContactDirectory{}, &contractsfake.GroupDirectory{}, &contractsfake.Logger{})
+	uc := user.NewListChatsUseCase(ar, &contractsfake.ContactDirectory{}, &contractsfake.GroupDirectory{}, &contractsfake.Logger{})
 	h := NewUserHandlers(nil, nil, nil, nil, nil, nil, nil, nil, uc, nil, nil)
 
 	r := mux.NewRouter()

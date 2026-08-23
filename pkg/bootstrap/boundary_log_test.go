@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,9 +41,6 @@ func (noSessionGuard) EnsureSession(context.Context, string) error {
 	return wasession.ErrNoSession("boundary-test-user", nil)
 }
 
-// SessionStatus and ListUsers exist only to satisfy the wider
-// SessionStatusReader/UserRepository params GetStatusUseCase now takes —
-// EnsureSession always fails first, so neither is ever actually called.
 func (noSessionGuard) SessionStatus(context.Context, string) (bool, bool) { return false, false }
 
 func (noSessionGuard) CreateUser(context.Context, domain.UserRecord) (bool, error) {
@@ -52,8 +50,19 @@ func (noSessionGuard) UserExists(context.Context, string) (bool, error) { return
 func (noSessionGuard) UpdateUser(context.Context, string, domain.UserUpdate) error {
 	return nil
 }
+
+// ListUsers é onde a falha VIVE desde a F196.
+//
+// Até então este dublê falhava em EnsureSession e um comentário aqui dizia que
+// SessionStatus e ListUsers "never actually called". GetStatus deixou de
+// consultar o SessionGuard (F196), e o teste de fronteira passou a exercitar
+// um caminho de sucesso — deixando de medir o que se propunha a medir.
+//
+// A falha mudou-se para a porta que GetStatus REALMENTE chama. O teste de
+// fronteira não se importa com QUAL erro é: importa-se com o req_id que
+// correlaciona o registo do use case com o da fronteira.
 func (noSessionGuard) ListUsers(context.Context, string) ([]domain.UserListEntry, error) {
-	return nil, nil
+	return nil, wasession.ErrNoSession("boundary-test-user", nil)
 }
 func (noSessionGuard) DeleteUser(context.Context, string) (bool, error) { return false, nil }
 
@@ -65,6 +74,13 @@ type panicSessionGuard struct{ noSessionGuard }
 const boundaryTestPanicMsg = "boundary-test-induced panic"
 
 func (panicSessionGuard) EnsureSession(context.Context, string) error {
+	panic(boundaryTestPanicMsg)
+}
+
+// ListUsers entra em pânico pela mesma razão da F196: é por aqui que GetStatus
+// passa. Sem isto, o "panic de dentro de um handler real" deixava de acontecer
+// e o teste passava a observar uma resposta normal.
+func (panicSessionGuard) ListUsers(context.Context, string) ([]domain.UserListEntry, error) {
 	panic(boundaryTestPanicMsg)
 }
 
@@ -86,7 +102,6 @@ func boundaryDeps(t *testing.T, buf *bytes.Buffer) Deps {
 		session.NewGetStatusUseCase(
 			noSessionGuard{},
 			noSessionGuard{},
-			noSessionGuard{},
 			applog.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
 		),
 	)
@@ -102,7 +117,6 @@ func boundaryPanicDeps(t *testing.T, buf *bytes.Buffer) Deps {
 	d := boundaryDeps(t, buf)
 	d.CustomHandlers.Session.GetStatus = handlers.NewGetStatusHandler(
 		session.NewGetStatusUseCase(
-			panicSessionGuard{},
 			panicSessionGuard{},
 			panicSessionGuard{},
 			applog.NewZerologAdapter(zerolog.New(buf).With().Timestamp().Logger()),
@@ -130,7 +144,10 @@ func (r logRecord) str(key string) string {
 }
 
 // decodeRecords parses the buffer as newline-delimited JSON.
-func decodeRecords(t *testing.T, buf *bytes.Buffer) []logRecord {
+//
+// It takes a fmt.Stringer rather than a *bytes.Buffer so it also accepts
+// *logCapture, whose String() reads under the lock that F132 requires.
+func decodeRecords(t *testing.T, buf fmt.Stringer) []logRecord {
 	t.Helper()
 	var out []logRecord
 	for _, line := range strings.Split(buf.String(), "\n") {
@@ -147,7 +164,7 @@ func decodeRecords(t *testing.T, buf *bytes.Buffer) []logRecord {
 	return out
 }
 
-func boundaryRecords(t *testing.T, buf *bytes.Buffer) []logRecord {
+func boundaryRecords(t *testing.T, buf fmt.Stringer) []logRecord {
 	t.Helper()
 	var out []logRecord
 	for _, rec := range decodeRecords(t, buf) {
@@ -252,7 +269,12 @@ func boundaryLogReqIDCorrelates(t *testing.T) {
 		switch rec.str("message") {
 		case boundaryLogMsg:
 			boundaryID = rec.str("req_id")
-		case "no wanoise session": // emitted by session.GetStatusUseCase
+		// F196: GetStatus deixou de consultar o SessionGuard, portanto já não
+		// emite "no wanoise session". A falha injetada agora vem de ListUsers,
+		// e é esta a linha que ela produz. O teste é sobre o req_id, não sobre
+		// qual erro — mas procurar uma mensagem que ninguém emite fá-lo passar
+		// a medir a ausência de log em vez da correlação.
+		case "failed to read session record": // emitted by session.GetStatusUseCase
 			usecaseID = rec.str("req_id")
 		}
 	}

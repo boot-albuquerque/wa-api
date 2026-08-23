@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	waclient "wa-api/pkg/infra/wa-noise/client"
+	"wa-api/pkg/infra/wa-noise/errmap"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
 
 	"wa-api/pkg/domain"
@@ -24,7 +25,8 @@ func (a *UserAdapter) GetBlocklist(ctx context.Context, txtID string) (domain.Bl
 
 	blocklist, err := client.GetBlocklist(ctxWithTimeout)
 	if err != nil {
-		return domain.Blocklist{}, err
+		// F204: a recusa do servidor do WhatsApp chegava ao cliente como 500.
+		return domain.Blocklist{}, errmap.ClassifyIQ(err)
 	}
 	return toDomainBlocklist(blocklist), nil
 }
@@ -48,12 +50,16 @@ func (a *UserAdapter) UpdateBlocklist(ctx context.Context, txtID string, target 
 
 	resolved, err := resolveBlocklistPNJID(ctx, client, requested)
 	if err != nil {
-		return domain.BlocklistUpdate{}, err
+		// A resolução também faz info query: era por aqui que o 400 do
+		// /user/block medido subia (F204).
+		return domain.BlocklistUpdate{}, errmap.ClassifyIQ(err)
 	}
 
 	blocklist, err := client.UpdateBlocklist(ctx, resolved, action)
 	if err != nil {
-		return domain.BlocklistUpdate{}, err
+		// F204: medido em POST /user/block com número sem conta — o servidor
+		// respondia 400 bad-request e nós devolvíamos 500.
+		return domain.BlocklistUpdate{}, errmap.ClassifyIQ(err)
 	}
 
 	list := toDomainBlocklist(blocklist)

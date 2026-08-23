@@ -98,7 +98,7 @@ func blockCases(boom error) []blockCase {
 		{
 			name:    "sem sessão",
 			session: errNoSession,
-			phone:   "5511",
+			phone:   "5511@s.whatsapp.net",
 			wantErr: true,
 			wantIs:  errNoSession,
 		},
@@ -114,7 +114,7 @@ func blockCases(boom error) []blockCase {
 		},
 		{
 			name:  "falha do adapter",
-			phone: "5511",
+			phone: "5511@s.whatsapp.net",
 			updateFunc: func(context.Context, string, domain.JID, bool) (domain.BlocklistUpdate, error) {
 				return domain.BlocklistUpdate{}, boom
 			},
@@ -124,7 +124,7 @@ func blockCases(boom error) []blockCase {
 		{
 			name:  "JID tem precedência sobre Phone",
 			jid:   "  5599@s.whatsapp.net  ",
-			phone: "5511",
+			phone: "5511@s.whatsapp.net",
 			updateFunc: func(_ context.Context, _ string, target domain.JID, _ bool) (domain.BlocklistUpdate, error) {
 				return domain.BlocklistUpdate{ResolvedJID: target, RequestedJID: target, DHash: "h"}, nil
 			},
@@ -133,7 +133,7 @@ func blockCases(boom error) []blockCase {
 		},
 		{
 			name:  "resolvido difere do pedido e aparece na resposta",
-			phone: "5511",
+			phone: "5511@s.whatsapp.net",
 			updateFunc: func(context.Context, string, domain.JID, bool) (domain.BlocklistUpdate, error) {
 				return domain.BlocklistUpdate{
 					ResolvedJID:  "5511@s.whatsapp.net",
@@ -144,7 +144,7 @@ func blockCases(boom error) []blockCase {
 			},
 			wantJID:     "5511@s.whatsapp.net",
 			wantReqJID:  "777@lid",
-			wantTargetJ: "5511",
+			wantTargetJ: "5511@s.whatsapp.net",
 		},
 	}
 }
@@ -162,7 +162,11 @@ func TestBlockUserUseCase_Execute(t *testing.T) {
 			}
 			jr := &contractsfake.JIDResolver{}
 			if tt.resolveErr != nil {
-				jr.ResolveQualifiedJIDFunc = func(context.Context, string) (domain.JID, error) {
+				// F203: block/unblock passaram a usar a resolução LENIENTE, portanto é
+				// nela que a falha tem de ser injetada. Deixá-la em
+				// ResolveQualifiedJIDFunc faria o caso "alvo que não parseia"
+				// exercitar um stub que ninguém chama.
+				jr.ResolveJIDFunc = func(context.Context, string) (domain.JID, error) {
 					return "", tt.resolveErr
 				}
 			}
@@ -218,7 +222,11 @@ func TestUnblockUserUseCase_Execute(t *testing.T) {
 			}
 			jr := &contractsfake.JIDResolver{}
 			if tt.resolveErr != nil {
-				jr.ResolveQualifiedJIDFunc = func(context.Context, string) (domain.JID, error) {
+				// F203: block/unblock passaram a usar a resolução LENIENTE, portanto é
+				// nela que a falha tem de ser injetada. Deixá-la em
+				// ResolveQualifiedJIDFunc faria o caso "alvo que não parseia"
+				// exercitar um stub que ninguém chama.
+				jr.ResolveJIDFunc = func(context.Context, string) (domain.JID, error) {
 					return "", tt.resolveErr
 				}
 			}

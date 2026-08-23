@@ -89,13 +89,15 @@ cli.groupCacheLock.Unlock()` — foram os únicos que quebraram nas extrações 
 Fase F/G. Chamada de método sobrevive a uma extração; acesso direto a campo, não.
 Ver `DEPENDENCIES.md` §2.
 
-**A única exceção existente**, e ela não deve ser imitada: `messageSendLock` é
-campo de `core.Client` e é emprestado por ponteiro para `capabilities/send` via
-`SendLock() *sync.Mutex` (`core/send_adapter.go:68` ↔ `send/transport.go:141`).
-Está documentada em `LOCKS.md`, registrada em `HOUSEKEEP.md` **F58** com correção
-sugerida, e foi deliberadamente **não corrigida** na Fase H — corrigir é mudança
-de design, não de diretório. Não a use como precedente para abrir a segunda
-exceção.
+**A exceção que existiu e foi fechada**: até a Fase H, `messageSendLock` era
+campo de `core.Client`, emprestado por ponteiro para `capabilities/send` via
+`SendLock() *sync.Mutex`. Registrada em `HOUSEKEEP.md` **F58**, foi
+deliberadamente **não corrigida** na Fase H (corrigir era mudança de design,
+não de diretório) e **corrigida depois**, em commit próprio (`ef5c599`):
+`capabilities/send/state.go` passou a possuir o mutex privadamente
+(`sendLock`), exposto por `State.SendLock()`, como `retry`/`prekeys`/`tctoken`
+já faziam. `core.Client` não tem mais o campo. Ver `LOCKS.md` e `HOUSEKEEP.md`
+F58 para a evidência completa. Não há mais exceção viva à regra 6.
 
 Corolário: quando a struct dona precisa expor o lock (porque o chamador já o
 segura), exporte um `Lock()` explícito e **documente o porquê no ponto de

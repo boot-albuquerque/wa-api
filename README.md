@@ -136,6 +136,9 @@ WA_API_ADMIN_TOKEN=seu_admin_token_aqui
 
 #### Configurações de Segurança
 
+`WA_API_GLOBAL_ENCRYPTION_KEY` é **obrigatória**: sem ela o processo recusa
+subir. Ver "Credenciais" abaixo para o porquê.
+
 ```
 WA_API_GLOBAL_ENCRYPTION_KEY=sua_chave_32_bytes_aqui
 WA_API_GLOBAL_HMAC_KEY=sua_chave_hmac_global_aqui
@@ -157,12 +160,22 @@ WEBHOOK_ERROR_QUEUE_NAME=disparazapi_dead_letter_webhooks
 
 ### Notas Importantes
 
-#### Credenciais Auto-Geradas
-Se as seguintes configurações não forem fornecidas, serão auto-geradas:
-* `WA_API_ADMIN_TOKEN`: Token aleatório de 32 caracteres
-* `WA_API_GLOBAL_ENCRYPTION_KEY`: Chave aleatória de 32 bytes para criptografia AES-256
+#### Credenciais: o que é obrigatório e o que é gerado
 
-**Importante**: Salve as credenciais auto-geradas no seu arquivo `.env` ou você perderá acesso aos dados criptografados e funções de admin ao reiniciar!
+* `WA_API_GLOBAL_ENCRYPTION_KEY` — **obrigatória. Sem ela o processo NÃO SOBE**,
+  e nunca é gerada automaticamente (F169). Uma chave gerada no arranque é uma
+  chave DIFERENTE no arranque seguinte, e toda chave HMAC e todo segredo de S3
+  já gravados parariam de decifrar — o ADR-0009 trata segredo que não decifra
+  como inválido e exige reconfiguração. Ou seja, gerar aqui não é conveniência:
+  é perda de dado silenciosa a cada `restart`. Defina-a com um valor que você
+  guarda (16, 24 ou 32 **bytes** — o AES não aceita outro tamanho).
+* `WA_API_ADMIN_TOKEN` — opcional. Quando ausente, um token aleatório de 32
+  caracteres é gerado com `crypto/rand` e gravado no arquivo `admin_token`
+  dentro do diretório de dados, com permissão `0600`. O **valor não vai para o
+  log**; o log traz apenas o CAMINHO do arquivo. Um token gerado muda a cada
+  reinício — se você quer um estável, defina a variável. Perder o token gerado
+  custa um reinício, e nada gravado se torna ilegível: é por isso que ele
+  continua sendo gerado e a chave de encriptação não.
 
 #### Segurança de Webhooks
 * `WA_API_GLOBAL_HMAC_KEY`: Chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)

@@ -39,16 +39,3 @@ type Webhook struct {
 	Secret string   `json:"secret"`
 	Events []string `json:"events"`
 }
-
-// HistoryMessage representa uma mensagem no histórico.
-type HistoryMessage struct {
-	ID        string `json:"id"`
-	UserID    string `json:"user_id"`
-	JID       JID    `json:"jid"`
-	From      JID    `json:"from"`
-	Body      string `json:"body"`
-	Timestamp int64  `json:"timestamp"`
-	Direction string `json:"direction"`
-	MediaURL  string `json:"media_url,omitempty"`
-	Status    string `json:"status"`
-}

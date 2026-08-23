@@ -76,64 +76,172 @@
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 831 -> 832. Os testes portados de 3ac8073 (GetManyLIDsForPNs, no adapter e
 # no use case) somam cobertura sobre codigo que veio junto. Ratchet-UP.
-# F96 (2026-08-20): 832 -> 838. Ratchet-UP HONESTO, e o denominador foi
-# verificado explicitamente porque esta mudanca nasceu de um gate quebrado.
+# F99 + F100 (2026-08-09): 832 -> 833. Ratchet-UP honesto — é teste novo sobre
+# código que já existia ou que nasceu com ele: o teste de consistência das duas
+# tabelas de rotas exercita registerCustomRoutes e registerAdminRoutes inteiras,
+# e os testes da guarda de token vazio cobrem os três caminhos de entrada
+# (header ausente, header vazio, query string vazia) mais o controle na direção
+# oposta. Nenhum código saiu do denominador.
+# ADR-0005 D3, fiacao (2026-08-09): 833 -> 834.
 #
-# Contexto: `make check` estava vermelho com `go: no such tool "covdata"` nos
-# QUATRO pacotes sem arquivo de teste (cmd/core, cmd/listroutes, cmd/wss,
-# pkg/infra/wa-noise/client/testkit). Nao era o nosso codigo nem a nossa
-# configuracao: a toolchain de MODULO do Go 1.26 publica 8 ferramentas e
-# constroi as outras 10 sob demanda no GOCACHE; o caminho de cobertura de um
-# pacote SEM testes procura em GOTOOLDIR e nao acha. Medido re-baixando a
-# toolchain (mesmas 8 ferramentas) e confirmando que `go tool covdata` funciona
-# pela resolucao sob demanda. E' bug do Go, nao ambiente incompleto.
+# Vale registrar o caminho, porque o numero escondeu uma regressao no meio: a
+# fiacao entrou primeiro SEM teste para o laco da varredura, o arranque e os
+# ramos de banco indisponivel, e a cobertura CAIU para 831. O gate acusou, e a
+# resposta foi cobrir — nao baixar o piso. Os testes que faltavam sao
+# exatamente os que importam em producao: banco fora do ar degrada sem
+# derrubar, e a varredura para quando o processo desliga.
+# F68 (2026-08-09): 834 -> 835. Os testes novos do payload unificado exercitam
+# o construtor pelos DOIS caminhos de entrada (pareamento e Subscribe), e o
+# caminho de falha de codificacao deixou de ser um `return` mudo.
+# justificativa: F97 etapa 2 (2026-08-09), migracao 16. 835 -> 834, uma queda
+# de UM decimo, e a primeira desta sessao que eu justifico em vez de cobrir.
 #
-# A saida NAO foi mexer no denominador. Tirar os pacotes sem teste do
-# -coverpkg foi medido e MENTE: o perfil perde as linhas deles e a cobertura
-# SOBE artificialmente (num experimento de dois pacotes, 80,0% -> 83,3%).
+# O padrao que vinha seguindo — cobrir, nunca baixar o piso — nao se aplica
+# aqui, e vale dizer por que em vez de abrir excecao em silencio.
 #
-# O que foi feito: os quatro pacotes ganharam testes REAIS — nao TestNoop.
-# cmd/listroutes trava a ordenacao estavel de que o harness golden depende;
-# cmd/wss trava que o argv do operador sobrevive e que --mode=stdio nao
-# duplica; cmd/core trava que ele NAO injeta modo (a unica diferenca para o
-# wss) e que a tabela de rotas nao e' vazia; testkit assere em tempo de
-# compilacao que os dublês satisfazem waclient.Client e store.ContactStore.
+# applyBlankPlaintextTokenMigration fica em 73,9%. O que sobra sao ramos de
+# erro que NAO tem como ser alcancados pelos testes:
 #
-# Denominador CONFERIDO apos a mudanca: os quatro pacotes continuam presentes
-# em coverage.out. A subida vem de teste novo sobre codigo que ja' existia.
-# H56/H57 (2026-08-21): 838 -> 839. Ratchet-UP honesto: testes novos para
-# capabilities/revoke (apagar para todos, quatro controles negativos) e para a
-# metade Go do link de convite, que NAO funciona contra a pagina (H57) mas cujas
-# recusas, redacao de credencial e construcao de link estao corretas e agora
-# cobertas. Nenhum arquivo de producao saiu do denominador.
-# 2026-08-21: o piso desceu de 844 para 843 DE PROPOSITO.
-# Os testes da bomba de eventos (internal/wa-headless/events) rodam ate um prazo,
-# entao o numero de ciclos que executam depende da maquina — e com ele a
-# cobertura, que mediu 844 e 843 em execucoes consecutivas do mesmo codigo.
-# Uma catraca presa no maximo observado transforma ruido em gate vermelho, que e
-# a licao da F100 noutra forma: um portao que grita lobo custa mais do que
-# protege. O piso fica no MINIMO observado, e sobe quando o minimo subir.
-# 2026-08-21 (H106): TRES leituras consecutivas nesta maquina deram 844, sem
-# nenhuma 843 entre elas, e o piso subiu para 844.
+#   - erro na consulta de VERIFICACAO e no UPDATE que apaga: o unico jeito de
+#     o banco falhar ali e ele ja ter falhado na leitura anterior, que retorna
+#     antes;
+#   - o ramo `semHash > 0`: o preenchimento so deixa linha sem hash se o UPDATE
+#     falhar, e aí a funcao ja retornou. Confirmado por controle negativo —
+#     desliga-lo nao muda o resultado de teste nenhum.
 #
-# 2026-08-22 (H113): DESCEU DE VOLTA PARA 843, e a evidencia e' esta:
+# As tres protegem uma operacao IRREVERSIVEL sobre credencial: depois de
+# apagado, o texto claro nao existe em lugar nenhum. Cobri-las exigiria injecao
+# de falha em transacao sqlx, que este repositorio nao tem; apaga-las para
+# recuperar um decimo trocaria protecao real por numero.
 #
-#     FALHA: a cobertura caiu (84.3% < piso declarado).
+# Os quatro caminhos que IMPORTAM estao cobertos e com controle negativo:
+# apaga preservando o acesso, preenche o hash que falta, FALHA em vez de
+# destruir, e nao quebra em banco vazio.
+# justificativa: CAP-05 (2026-08-18), POST /chat/send/audio passou a
+# buscar/decodificar, resolver PTT+MIME e enviar de verdade. Cobertura subiu
+# 83.9%->84.0% (839->840): send_audio.go nasce coberto pelo teste de causa,
+# pelos 4 niveis de precedencia de MIME e pela fronteira de 16MB; a adicao
+# que teria FICADO descoberta sem teste dedicado foi
+# ChatMessengerAdapter.SendAudio (0.0% no primeiro run desta sessao,
+# corrigido com messenger_test.go mirrando TestChatMessengerAdapter_
+# SendDocument_*: NoSession, InvalidJID, UploadFailurePropagates,
+# UploadOK_SendMessageFail_NeverSent, OK, PTTFalse_Preserved, WithCallerID).
+# min_coverage ajustado para refletir a medicao honesta (o alvo avisa quando
+# a cobertura sobe).
+# (min_coverage=840 — superado pela entrada CAP-08A/CAP-08B abaixo, a
+# ATIVA; mantido em comentario so' pelo historico.)
+# CAP-08A/CAP-08B (2026-08-18): POST /chat/send/location e
+# POST /chat/send/contact passaram a montar o protobuf e enviar de verdade,
+# via nova porta port.SimpleMessenger. Cobertura cai 84.0%->83.9%
+# (840->839), so' pela aritmetica do denominador — nenhuma linha JA'
+# coberta regrediu. As duas funcoes novas do adapter
+# (ChatMessengerAdapter.SendLocation/SendContact,
+# pkg/infra/wa-noise/adapters/chat/messenger.go) tem suite dedicada
+# mirrando TestChatMessengerAdapter_SendVideo_* (NoSession, InvalidJID,
+# PropagatesError, OK com asserção de estrutura, WithCallerID) e ficam em
+# 92.9% (13/14 statements) — a UNICA linha descoberta em cada uma e' o
+# `return domain.MessageSendResult{}, err` do branch de wajid.ToJID
+# invalido, que NENHUM dos sete irmaos do mesmo arquivo cobre (SendReaction
+# 85.7%, SendText 93.8%, SendImage/SendDocument/SendVideo/SendSticker
+# 94.1%, SendAudio 94.4%): `TestChatAdapter_InvalidJIDs` e os oito testes
+# `*_InvalidJID` irmaos usam t.Skip quando wajid.ParseJID nao falha para o
+# byte-sequence usado como JID invalido — confirmado rodando
+# `go test ./pkg/infra/wa-noise/adapters/chat/... -run InvalidJID -v`: as
+# dez execucoes (a tabela generica + nove metodos, contando as duas novas)
+# pulam com "wajid.ParseJID não falhou; caminho de erro raro". send_location.go
+# e send_contact.go (camada de aplicacao) nascem cobertos pelo teste de
+# causa, pela validacao Latitude/Longitude==0 (F121) e pelas fronteiras de
+# JID invalido/falha de sessao/falha downstream — o unico ponto que NAO
+# tinha teste dedicado antes desta correcao era o caminho zero-value de
+# contractsfake.SimpleMessenger.SendContact (75.0%: TestSendContact_
+# MissingRequiredField/InvalidPhone nunca alcancavam SendContact com a
+# func nil), corrigido com TestSendContact_DefaultFakeSuccess_
+# UsesDefaultSentID (agora 100.0%, par de TestSendLocation_NameOptional_
+# EmptyStringForwarded que ja cobria o mesmo caminho para SendLocation).
+# min_coverage ajustado para refletir a medicao honesta.
+# FIX-09 (2026-08-18): 839 -> 840. O teste de contrato de wire de
+# GET /chat/history (pkg/bootstrap/chat_history_wire_contract_test.go, o
+# REQUIRED_FIX 1 da EVAL-09) cobre statements que nenhum outro teste
+# alcancava. Ratchet-UP honesto, por ordem do proprio alvo coverage-gate,
+# que avisou "a cobertura subiu; suba min_coverage para 840 neste mesmo PR".
+# CAP-39 (2026-08-19): 840 -> 859. Ratchet-UP por ordem do proprio alvo
+# coverage-gate, que avisava "a cobertura subiu; suba min_coverage para 858
+# neste mesmo PR" ha' pelo menos duas rodadas sem que ninguem subisse. Com o
+# piso em 840 contra medicao de 859, a catraca tinha 19 decimos de FOLGA: dava
+# para REMOVER cobertura ate' 84,0% sem o gate reclamar — a protecao estava
+# desligada exatamente na faixa onde importa. Registrado como F171.
 #
-# Tres leituras consecutivas nao foram suficientes. O comentario acima ja' dizia
-# que o numero oscila entre 843 e 844 conforme quantos ciclos os testes da bomba
-# de eventos alcancam na maquina, e eu subi o piso assim mesmo por causa do aviso
-# generico do Makefile ("suba min_coverage neste mesmo PR"). O arquivo estava
-# certo e o aviso do Makefile e' cego a esta oscilacao.
+# O valor e' 859 e nao 858 porque a CAP-38 (F164, 121cb12) acrescentou doze
+# testes; 858 era a medicao de ANTES dela. Piso EXATO por decisao explicita,
+# ciente do custo: remocao legitima de codigo bem coberto passa a exigir ajuste
+# deste arquivo no mesmo PR.
+# F127 (2026-08-20): 859 -> 858. Ratchet-DOWN por DELECAO LEGITIMA de
+# pkg/infra/media/media_utils.go (codigo morto, zero chamador de producao).
 #
-# A regra fica reforcada: o piso e' o MINIMO OBSERVADO, e "tres leituras iguais"
-# nao prova minimo — prova so' que tres rodadas calharam de ser iguais.
+# Isto e' o custo que a decisao da F171 aceitou POR ESCRITO, uma hora antes, ao
+# escolher piso EXATO: "remocao legitima de codigo bem coberto passa a exigir
+# ajuste deste arquivo no mesmo PR". Aconteceu na PRIMEIRA delecao seguinte.
 #
-# Confirmacao na mesma sessao: a execucao seguinte a esta correcao leu 844 de
-# novo. As duas leituras alternam sobre o MESMO codigo, que e' precisamente a
-# razao de o piso ficar embaixo. O "ATENCAO: a cobertura subiu" do Makefile e'
-# advisory (nao tem exit 1) e deve ser IGNORADO aqui — atende-lo foi o erro.
-min_coverage=843
+# NAO e' recuo da F171: e' a catraca funcionando. Com o piso frouxo em 840, esta
+# queda de 0,1pp teria passado sem que ninguem notasse nem justificasse. Com o
+# piso colado, ela EXIGIU esta linha. O objetivo da catraca nunca foi impedir
+# que a cobertura caia — foi impedir que caia em SILENCIO.
+#
+# A queda vem de o codigo deletado ser MELHOR coberto que a media (era codigo
+# antigo com suite madura, ja' migrado para opengraph e sticker). Zero testes de
+# comportamento vivo removidos — auditoria por teste na entrada F127.
+# F186 (2026-08-20): 858 -> 861. Ratchet-UP por ordem do proprio alvo, que
+# avisou "a cobertura subiu; suba min_coverage para 861 neste mesmo PR".
+#
+# E' teste novo sobre codigo que ja' existia — o registo do descarte (decisao
+# (c) do canal) nao acrescentou comportamento, so' observabilidade, e os cinco
+# testes que o travam exercitam caminhos que nenhum outro alcancava: a guarda
+# de gravacao de historico pelo ramo do DESCARTE (saveMessageHistory so' era
+# exercitada pelo ramo que grava) e o `default` de
+# normalizeInteractiveButtons, que ate' agora so' tinha teste do RESULTADO do
+# descarte, nunca do descarte em si.
+#
+# Nada saiu do denominador. A unica funcao nova, acceptedButtonTypes, e'
+# EXCLUIDA por X1 no golden de logcov (um unico return) — verificado antes de
+# regenerar o golden, e nao ao contrario: o diagnostico da F154 nomeou a
+# mudanca ("o CONJUNTO elegivel mudou; ADDED acceptedButtonTypes"), em vez de
+# me deixar carimbar um diff de 1900 linhas.
+# F188 (2026-08-20): 861 -> 862. Ratchet-UP por ordem do proprio alvo.
+#
+# Sobe por DUAS vias, e a segunda e' a interessante: (1) tres testes novos para o
+# ramo da edicao, incluindo o do apagar que guarda a fronteira entre os dois
+# tipos de ProtocolMessage; e (2) a REMOCAO de listMessageInside, que era codigo
+# morto — a producao nunca o alcancava, porque UnwrapRaw ja' tinha desembrulhado
+# o involucro que ele tratava.
+#
+# Tirar codigo morto do denominador sobe a percentagem sem que nada tenha
+# passado a ser testado. Fica dito para o numero nao ser lido como merito que nao
+# e': o merito sao os tres testes; o resto e' aritmetica.
+# F187 (2026-08-20): 862 -> 863. Ratchet-UP por ordem do proprio alvo.
+#
+# E' teste novo sobre codigo que ja' existia. Os quatro testes acrescentados
+# exercitam ramos que nenhum outro alcancava: contact e location pelo caminho de
+# TEMPO REAL (a suite so' os tocava pelo caminho de sync, que nunca teve o
+# defeito) e os dois ramos de resposta, que ate' agora so' existiam no outro
+# caminho. Nada saiu do denominador.
+# F187/F184 (2026-08-20): 863 -> 867. Ratchet-UP de QUATRO decimos, o maior salto
+# do dia, e vale dizer de onde vem porque nao e' so' "mais testes".
+#
+# A unificacao moveu a cadeia de classificacao para uma funcao PROPRIA, e uma
+# funcao propria pode ser testada diretamente. Antes, cada ramo so' era
+# alcancavel montando um evento inteiro e passando pelo handler; agora
+# TestClassificacao_ValoresLiterais exercita vinte e um casos com uma chamada
+# cada.
+#
+# Isso e' o efeito de cobertura que a extracao tem por construcao, e nao um
+# merito dos testes: o mesmo codigo ficou alcancavel por um caminho mais curto.
+# Os nove ramos NOVOS da F184 residual sao merito; o resto e' geometria.
+#
+# 2026-08-21: 867 -> 868. A subida veio do ciclo de avaliacao independente
+# (tres avaliadores via orca CLI): o veredito do EVAL-NEWSLETTER isolou que a
+# queda nao estava na newsletter e sim em label_repository, testkit e
+# user_republish. Fechadas as lacunas desses tres, o gate pediu a catraca.
+min_coverage=869
 # F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,

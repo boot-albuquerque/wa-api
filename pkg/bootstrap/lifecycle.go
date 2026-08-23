@@ -11,17 +11,16 @@ import (
 	wanoise "wa-api/internal/wa-noise"
 
 	"github.com/jmoiron/sqlx"
-	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"
 )
 
-// db field declaration as *sqlx.DB
 type UserEventHandler struct {
 	WAClient       *wanoise.Client
 	EventHandlerID uint32
 	UserID         string
 	Token          string
 	DB             *sqlx.DB
+	StoreDB        *sqlx.DB
 	NotifyFn       func(method string, params map[string]interface{})
 	mode           ServerMode
 }
@@ -97,21 +96,21 @@ func (s *server) connectOnStartup() {
 				hmacKeyEncrypted = base64.StdEncoding.EncodeToString(hmac_key)
 			}
 
-			log.Info().Str("token", token).Msg("Connect to Whatsapp on startup")
+			log.Info().Str("userid", txtid).Msg("Connect to Whatsapp on startup")
 			v := Values{M: map[string]string{
-				"Id":               txtid,
-				"Name":             name,
-				"Jid":              jid,
-				"Webhook":          webhook,
-				"Token":            token,
-				"Proxy":            proxy_url,
-				"Events":           events,
-				"S3Enabled":        s3_enabled,
-				"MediaDelivery":    media_delivery,
-				"History":          fmt.Sprintf("%d", history),
-				"HmacKeyEncrypted": hmacKeyEncrypted,
+				"Id":                 txtid,
+				"Name":               name,
+				"Jid":                jid,
+				"Webhook":            webhook,
+				"Token":              token,
+				"Proxy":              proxy_url,
+				"Events":             events,
+				"S3Enabled":          s3_enabled,
+				"MediaDelivery":      media_delivery,
+				"History":            fmt.Sprintf("%d", history),
+				userInfoHmacKeyField: hmacKeyEncrypted,
 			}}
-			appCtx.UserInfoCache.Set(token, v, cache.NoExpiration)
+			publishUserInfo(txtid, token, v)
 			// Gets and set subscription to webhook events
 			eventarray := strings.Split(events, ",")
 

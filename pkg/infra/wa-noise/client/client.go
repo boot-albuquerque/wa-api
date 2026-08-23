@@ -5,6 +5,7 @@ import (
 	"time"
 
 	wanoise "wa-api/internal/wa-noise"
+	wapairing "wa-api/internal/wa-noise/capabilities/pairing"
 	"wa-api/internal/wa-noise/persistence/store"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
@@ -37,6 +38,55 @@ type Client interface {
 	GenerateMessageID() types.MessageID
 	BuildUnavailableMessageRequest(chat, sender types.JID, id string) *waE2E.Message
 
+	// BuildRevoke monta a mensagem de revogacao ("apagar para todos") da
+	// mensagem id na conversa chat. sender vazio significa mensagem
+	// PROPRIA. BuildEdit monta a substituicao do conteudo da mensagem id
+	// por newContent.
+	//
+	// CAP-10 acrescenta os dois a interface estreita (ADR-001) porque
+	// /chat/delete, /chat/delete/message e /chat/send/edit deixaram de so'
+	// validar e passaram a mutar de verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto BuildRevoke e BuildEdit). O que se alarga aqui e' o seam
+	// local de wa-api.
+	BuildRevoke(chat, sender types.JID, id types.MessageID) *waE2E.Message
+	BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message
+
+	// BuildPollCreation monta a mensagem de criacao de enquete: o
+	// cabecalho, as opcoes em claro e quantas delas podem ser escolhidas.
+	// CAP-14 acrescenta este metodo a interface estreita (ADR-001) porque
+	// /chat/send/poll deixou de so' validar e passou a criar enquete de
+	// verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto BuildPollCreation, definido em
+	// internal/wa-noise/core/msgsecret_poll.go:65). O que se alarga aqui
+	// e' o seam local de wa-api.
+	BuildPollCreation(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
+
+	// Upload sobe um anexo (imagem, video, audio, documento) aos
+	// servidores do WhatsApp. CAP-02 acrescenta este metodo a interface
+	// estreita (ADR-001) porque o envio de midia real, ao contrario do
+	// stub que so' validava, precisa da resposta de upload para montar o
+	// protobuf da mensagem.
+	Upload(ctx context.Context, plaintext []byte, appInfo wanoise.MediaType) (wanoise.UploadResponse, error)
+
+	// Download baixa e decifra o anexo descrito por uma sub-mensagem
+	// protobuf (ImageMessage, VideoMessage, AudioMessage, DocumentMessage
+	// ou StickerMessage). CAP-09B acrescenta este metodo a interface
+	// estreita (ADR-001) porque as cinco rotas /chat/download* deixaram de
+	// so' validar e passaram a baixar de verdade.
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto Download) e `DownloadableMessage = core.DownloadableMessage`.
+	// O que se alarga aqui e' o seam local de wa-api — a mesma superficie
+	// que pkg/infra/media/media.go:73 ja' consumia pelo tipo concreto.
+	Download(ctx context.Context, msg wanoise.DownloadableMessage) ([]byte, error)
+
 	// Família de grupos
 	GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 	GetGroupInfoFromLink(ctx context.Context, code string) (*types.GroupInfo, error)
@@ -67,6 +117,14 @@ type Client interface {
 	UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
 
 	// Família de privacidade
+	SetStatusMessage(ctx context.Context, msg string) error
+
+	// BuildHistorySyncRequest e SendPeerMessage entram em PAR e por isso
+	// ficam juntos: a própria docstring da biblioteca diz que a mensagem
+	// montada pelo primeiro "can be sent using Client.SendPeerMessage".
+	// Expor só um dos dois deixaria a capacidade montável e não enviável.
+	BuildHistorySyncRequest(lastKnownMessageInfo *types.MessageInfo, count int) *waE2E.Message
+	SendPeerMessage(ctx context.Context, message *waE2E.Message) (wanoise.SendResponse, error)
 	TryFetchPrivacySettings(ctx context.Context, ignoreCache bool) (*types.PrivacySettings, error)
 	SetPrivacySetting(ctx context.Context, name types.PrivacySettingType, value types.PrivacySetting) (types.PrivacySettings, error)
 
@@ -78,9 +136,49 @@ type Client interface {
 	FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error
 
 	// Família de newsletter
+	//
+	// A interface é ESTREITA por desenho (ADR-001): cada método entra aqui
+	// explicitamente, e é essa a razão de a lista crescer capability a
+	// capability em vez de embutir o Client inteiro.
+	//
+	// As onze abaixo entraram de uma vez no levantamento de paridade de
+	// 2026-08-20, e essa exceção à regra do "um de cada vez" é deliberada:
+	// medimos que a biblioteca expunha doze e nós expúnhamos UMA, e acrescentar
+	// uma por sessão faria a distância demorar doze sessões a fechar.
 	GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error)
+	CreateNewsletter(ctx context.Context, params wanoise.CreateNewsletterParams) (*types.NewsletterMetadata, error)
+	GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error)
+	GetNewsletterInfoWithInvite(ctx context.Context, key string) (*types.NewsletterMetadata, error)
+	FollowNewsletter(ctx context.Context, jid types.JID) error
+	UnfollowNewsletter(ctx context.Context, jid types.JID) error
+	NewsletterToggleMute(ctx context.Context, jid types.JID, mute bool) error
+	GetNewsletterMessages(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error)
+	GetNewsletterMessageUpdates(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error)
+	NewsletterMarkViewed(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error
+	NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error
+	NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID) (time.Duration, error)
 
 	// Família de sessão (controle)
+
+	// PairPhone pede ao servidor do WhatsApp o codigo de pareamento por
+	// telefone — a alternativa ao QR. Devolve o codigo que o usuario digita
+	// no aparelho. CAP-26 acrescenta este metodo a interface estreita
+	// (ADR-001) porque POST /session/pairphone deixou de so' validar e
+	// passou a devolver codigo de verdade (F152).
+	//
+	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
+	// portanto PairPhone, definido em
+	// internal/wa-noise/core/pair-code.go:50). O que se alarga aqui e' o
+	// seam local de wa-api.
+	//
+	// O tipo do clientType e' wapairing.ClientType, e nao um nome da
+	// fachada: `PairClientType` da raiz e' um APELIDO de tipo para
+	// pairing.ClientType (internal/wa-noise/core/pair-code.go:15), logo os
+	// dois sao o MESMO tipo e *wanoise.Client satisfaz esta assinatura sem
+	// que main.go precise reexportar nada.
+	PairPhone(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
+
 	IsConnected() bool
 	IsLoggedIn() bool
 	Logout(ctx context.Context) error

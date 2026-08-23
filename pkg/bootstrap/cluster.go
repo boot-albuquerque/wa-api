@@ -10,151 +10,161 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Modo de cluster (ADR-0005, D1).
+// Cluster mode (ADR-0005, D1).
 //
-// O alvo é rodar em N pods, mas o núcleo — manter sessões e entregar eventos —
-// nunca exige mais que SQLite e um processo. Os dois extremos são modos
-// suportados, e o que os separa é uma decisão EXPLÍCITA, nunca inferida.
+// The target is running on N pods, but the core — keeping sessions alive and
+// delivering events — never needs more than SQLite and one process. Both ends
+// are supported modes, and what separates them is an EXPLICIT decision, never
+// an inference.
 //
-// Isto existe por causa de dois modos de falha SILENCIOSOS medidos na F89:
+// This exists because of two SILENT failure modes measured in F89:
 //
-//  1. A instalação de produção roda em SQLite sem que ninguém tenha pedido: as
-//     variáveis de Postgres estavam PARCIALMENTE definidas e o processo
-//     degradou com um `warn`. Em N pods isso seria cada réplica com um banco
-//     próprio, todas se achando donas de tudo.
-//  2. Duas réplicas na mesma sessão não brigam em laço, como se supunha. O
-//     WhatsApp manda UM `StreamReplaced`, o perdedor fica com a sessão morta e
-//     NUNCA tenta reconectar — processo vivo, HTTP respondendo, liveness
-//     verde, sessão morta. E o banco continua dizendo `connected=1`.
+//  1. The production install runs on SQLite without anyone asking for it: the
+//     Postgres variables were PARTIALLY set and the process degraded with a
+//     warning. Across N pods that would be every replica on its own database,
+//     each believing it owns everything.
+//  2. Two replicas on the same session do not fight in a loop, as assumed.
+//     WhatsApp sends ONE `StreamReplaced`, the loser's session dies and never
+//     reconnects — process alive, HTTP answering, liveness green, session dead.
+//     And the database still reports `connected=1`.
 //
-// Nos dois casos o sistema seguiu de pé mentindo sobre o próprio estado. A
-// resposta aqui é recusar o arranque em vez de degradar.
+// In both cases the system stayed up while lying about its own state. The
+// answer here is to refuse to start rather than degrade.
 
 const (
 	envClusterMode = "WA_API_CLUSTER_MODE"
 
-	// clusterModeSingle é o padrão, e é o modo do cenário catastrófico:
-	// SQLite, um processo, sem coordenação. Continua funcional porque o núcleo
-	// não precisa de mais que isso — ver o princípio do ADR-0005.
+	// clusterModeSingle is the default, and it is the catastrophic-scenario
+	// mode: SQLite, one process, no coordination. It stays functional because
+	// the core needs nothing more — see the principle in ADR-0005.
 	clusterModeSingle = "single"
 
-	// clusterModeMulti admite N processos e, por isso, EXIGE um banco que
-	// coordene. É onde o lease da D2 passa a valer.
+	// clusterModeMulti allows N processes and therefore REQUIRES a database
+	// that can coordinate. It is where the D2 lease applies.
 	clusterModeMulti = "multi"
 
-	// arquivoTravaInstancia fica no diretório de dados porque é ele que
-	// identifica a instalação: dois processos com data dirs diferentes são
-	// instalações diferentes e não conflitam.
-	arquivoTravaInstancia = ".wa-api-instance.lock"
+	// databaseTypePostgres is the value GetDatabaseConfig reports for Postgres.
+	// Named because three places compare against it — this validation, the
+	// store wiring in main.go, and the tests — and a repeated literal is a
+	// divergence waiting to happen.
+	databaseTypePostgres = "postgres"
+
+	// instanceLockFile lives in the data directory because that is what
+	// identifies an installation: two processes with different data dirs are
+	// different installations and do not conflict.
+	instanceLockFile = ".wa-api-instance.lock"
 )
 
-// clusterModeConfigurado lê o modo do ambiente.
+// clusterModeFromEnv reads the mode from the environment.
 //
-// Valor ausente é `single` — o padrão seguro, alinhado a "por padrão sempre
-// SQLite". Valor DESCONHECIDO é erro, e não cai no padrão: um typo em
-// `WA_API_CLUSTER_MODE=mutli` num manifesto de k8s não pode virar
-// silenciosamente um processo que se acha dono de tudo.
-func clusterModeConfigurado() (string, error) {
-	bruto := strings.ToLower(strings.TrimSpace(os.Getenv(envClusterMode)))
-	switch bruto {
+// An absent value means `single` — the safe default, aligned with "SQLite by
+// default". An UNKNOWN value is an error, and does not fall back: a typo in
+// `WA_API_CLUSTER_MODE=mutli` inside a k8s manifest must not silently become a
+// process that believes it owns everything.
+func clusterModeFromEnv() (string, error) {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(envClusterMode)))
+	switch raw {
 	case "":
 		return clusterModeSingle, nil
 	case clusterModeSingle, clusterModeMulti:
-		return bruto, nil
+		return raw, nil
 	default:
-		return "", fmt.Errorf("%s=%q invalido: use %q ou %q", envClusterMode, bruto, clusterModeSingle, clusterModeMulti)
+		return "", fmt.Errorf("%s=%q is invalid: use %q or %q", envClusterMode, raw, clusterModeSingle, clusterModeMulti)
 	}
 }
 
-// validarStackDoModo recusa combinações que não podem funcionar.
+// validateStackForMode refuses combinations that cannot work.
 //
-// Em `multi`, SQLite não é degradação aceitável: é corrupção esperando. Cada
-// réplica teria o próprio arquivo, o próprio conjunto de sessões e nenhuma
-// forma de saber da outra. O erro sobe para o chamador matar o processo.
-func validarStackDoModo(modo, tipoBanco string) error {
-	if modo == clusterModeMulti && tipoBanco != "postgres" {
+// In `multi`, SQLite is not acceptable degradation: it is corruption waiting to
+// happen. Each replica would have its own file, its own set of sessions, and no
+// way to know about the others. The error propagates so the caller can kill the
+// process.
+func validateStackForMode(mode, databaseType string) error {
+	if mode == clusterModeMulti && databaseType != databaseTypePostgres {
 		return fmt.Errorf(
-			"%s=%s exige Postgres, mas o banco resolvido foi %q: defina DB_USER, DB_PASSWORD, DB_NAME, DB_HOST e DB_PORT (todas, nao um subconjunto)",
-			envClusterMode, clusterModeMulti, tipoBanco)
+			"%s=%s requires Postgres, but the resolved database was %q: set DB_USER, DB_PASSWORD, DB_NAME, DB_HOST and DB_PORT (all of them, not a subset)",
+			envClusterMode, clusterModeMulti, databaseType)
 	}
 	return nil
 }
 
-// travarInstanciaUnica garante que só um processo use este diretório de dados.
+// lockSingleInstance guarantees only one process uses this data directory.
 //
-// `flock` e não arquivo-com-PID: a trava do sistema operacional é liberada
-// AUTOMATICAMENTE quando o processo morre, inclusive num `kill -9`. Um arquivo
-// com PID exigiria detectar trava obsoleta, que é onde esse tipo de mecanismo
-// costuma falhar — e falhar liberando quando não devia.
+// `flock` rather than a PID file: the OS releases the lock AUTOMATICALLY when
+// the process dies, including on `kill -9`. A PID file would require detecting
+// a stale lock, which is exactly where this kind of mechanism tends to fail —
+// and it fails by releasing when it should not.
 //
-// LIMITAÇÃO, e ela é importante: isto protege contra um segundo processo NA
-// MESMA MÁQUINA. Duas máquinas apontando para o mesmo Postgres em modo
-// `single` não são detectadas aqui — é para isso que existe o modo `multi`
-// com lease (D2 do ADR-0005). O caso que esta trava cobre é o que de fato
-// acontece: alguém sobe um segundo processo sem perceber.
-func travarInstanciaUnica(dirDados string) (func(), error) {
-	if err := os.MkdirAll(dirDados, 0o755); err != nil {
-		return nil, fmt.Errorf("criando diretorio de dados %s: %w", dirDados, err)
+// LIMITATION, and it matters: this protects against a second process ON THE
+// SAME MACHINE. Two machines pointing at the same Postgres in `single` mode are
+// not detected — that is what `multi` mode with a lease is for (ADR-0005 D2).
+// The case this lock covers is the one that actually happens: someone starts a
+// second process without noticing.
+func lockSingleInstance(dataDir string) (func(), error) {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating data directory %s: %w", dataDir, err)
 	}
-	caminho := filepath.Join(dirDados, arquivoTravaInstancia)
+	path := filepath.Join(dataDir, instanceLockFile)
 
-	f, err := os.OpenFile(caminho, os.O_CREATE|os.O_RDWR, 0o644)
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("abrindo trava de instancia %s: %w", caminho, err)
+		return nil, fmt.Errorf("opening the instance lock %s: %w", path, err)
 	}
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = file.Close()
 		return nil, fmt.Errorf(
-			"outro processo ja' usa o diretorio de dados %s: em %s=%s so' um processo pode rodar por instalacao (use %s=%s com Postgres para N replicas)",
-			dirDados, envClusterMode, clusterModeSingle, envClusterMode, clusterModeMulti)
+			"another process is already using the data directory %s: with %s=%s only one process may run per installation (use %s=%s with Postgres for N replicas)",
+			dataDir, envClusterMode, clusterModeSingle, envClusterMode, clusterModeMulti)
 	}
 
-	// Registrar o PID é diagnóstico, não controle: quem decide é o flock.
-	if err := f.Truncate(0); err == nil {
-		if _, err := f.WriteAt([]byte(fmt.Sprintf("%d\n", os.Getpid())), 0); err != nil {
-			log.Warn().Err(err).Str("arquivo", caminho).Msg("nao consegui registrar o PID na trava de instancia")
+	// Recording the PID is diagnostics, not control: the flock is what decides.
+	if err := file.Truncate(0); err == nil {
+		if _, err := file.WriteAt([]byte(fmt.Sprintf("%d\n", os.Getpid())), 0); err != nil {
+			log.Warn().Err(err).Str("file", path).Msg("could not record the PID in the instance lock")
 		}
 	}
 
 	return func() {
-		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
-			log.Warn().Err(err).Str("arquivo", caminho).Msg("falha ao liberar a trava de instancia")
+		if err := syscall.Flock(int(file.Fd()), syscall.LOCK_UN); err != nil {
+			log.Warn().Err(err).Str("file", path).Msg("failed to release the instance lock")
 		}
-		if err := f.Close(); err != nil {
-			log.Warn().Err(err).Str("arquivo", caminho).Msg("falha ao fechar a trava de instancia")
+		if err := file.Close(); err != nil {
+			log.Warn().Err(err).Str("file", path).Msg("failed to close the instance lock")
 		}
 	}, nil
 }
 
-// prepararCluster resolve o modo, valida a stack e trava a instância quando o
-// modo for `single`. Devolve a função de liberação.
+// prepareCluster resolves the mode, validates the stack, and locks the instance
+// when the mode is `single`. It returns the release function.
 //
-// Chamado ANTES de abrir o banco: uma configuração impossível tem de morrer
-// sem ter tocado em estado nenhum.
-func prepararCluster(dirDados, tipoBanco string) (func(), error) {
-	modo, err := clusterModeConfigurado()
+// Called BEFORE opening the database: an impossible configuration must die
+// without having touched any state.
+// It returns the RESOLVED mode, not just the release func: this is the only
+// place the mode is decided, and the capability report (D7) needs the same
+// value. Resolving it a second time in the caller would let the two drift —
+// and a report that disagrees with the running configuration is worse than no
+// report, because it is believed.
+func prepareCluster(dataDir, databaseType string) (string, func(), error) {
+	mode, err := clusterModeFromEnv()
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	if err := validarStackDoModo(modo, tipoBanco); err != nil {
-		return nil, err
+	if err := validateStackForMode(mode, databaseType); err != nil {
+		return "", nil, err
 	}
 
-	if modo == clusterModeMulti {
-		// Em `multi` quem garante exclusividade é o lease por sessão (D2), que
-		// ainda não existe. Enquanto não existir, este modo NÃO deve ser usado
-		// com mais de uma réplica — e o aviso é a única barreira honesta.
-		log.Warn().
-			Str("modo", modo).
-			Msg("modo multi: a posse de sessao por lease (ADR-0005 D2) ainda nao esta' implementada; nao suba mais de uma replica")
-		return func() {}, nil
+	if mode == clusterModeMulti {
+		// In `multi`, exclusivity comes from the per-session lease (D2), not
+		// from an installation-wide lock — locking here would stop the second
+		// replica from starting, which is the whole point of the mode.
+		return mode, func() {}, nil
 	}
 
-	liberar, err := travarInstanciaUnica(dirDados)
+	release, err := lockSingleInstance(dataDir)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	log.Info().Str("modo", modo).Str("dir_dados", dirDados).Msg("instancia unica travada")
-	return liberar, nil
+	log.Info().Str("mode", mode).Str("data_dir", dataDir).Msg("single instance locked")
+	return mode, release, nil
 }

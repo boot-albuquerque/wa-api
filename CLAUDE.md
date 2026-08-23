@@ -137,6 +137,11 @@ Acrescente, conforme o achado exigir:
   implementação real esconde defeito em vez de revelá-lo. Quando o dublê
   imita uma regra (parsing, normalização, resolução), ele tem de imitar a
   regra REAL, e o comentário do dublê deve dizer de onde ela vem.
+- **Fronteira medida contra a produção**: dublê DIVERGENTE da implementação
+  real esconde defeito em vez de revelá-lo — ou, quando é mais SIMPLES que ela,
+  abençoa código morto. Quando o dublê imita uma regra (parsing, normalização,
+  resolução), ele tem de imitar a regra REAL, e o comentário do dublê deve
+  dizer de onde ela vem.
 - **Contrato de resposta**: envelope, status e forma do corpo quando o
   achado for de fronteira HTTP.
 - **Determinismo**: quando houver ordenação, mapa ou concorrência, rode a
@@ -236,6 +241,15 @@ As quatro que mais custaram, resumidas aqui porque valem para toda tarefa:
    dublê imita uma REGRA (parsing, normalização, resolução), ele tem de
    imitar a regra REAL e citar de onde ela vem, com caminho de arquivo. Se o
    dublê e a produção nunca divergem, o teste não está medindo a regra.
+1. **Dublê DIVERGENTE da produção.** Quando um dublê imita uma REGRA
+   (parsing, normalização, resolução), ele tem de imitar a regra REAL e citar
+   de onde ela vem, com caminho de arquivo. Se o dublê e a produção nunca
+   divergem, o teste não está medindo a regra.
+   **Divergir não é só ser mais permissivo**: um dublê mais SIMPLES que a
+   produção não esconde defeito — ele ABENÇOA CÓDIGO MORTO, e passa por teste,
+   controlo negativo, `make check` e verificação em campo. Quando o objeto
+   atravessa uma transformação no caminho real (desembrulho, normalização,
+   hidratação), o dublê tem de atravessá-la também.
 
 2. **Teste o caminho de SUCESSO, não só a recusa.** Três defeitos deste repo
    viviam atrás de suítes que só exercitavam a guarda. E teste rota pela

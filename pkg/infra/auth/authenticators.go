@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -69,15 +70,32 @@ type UserRecord struct {
 	MediaDelivery string
 }
 
+// ErrEmptyToken recusa a busca por token vazio ANTES de consultar o banco.
+//
+// A consulta abaixo casa por `token = $1`, e uma requisição sem token nenhum
+// produz $1 = "". Se qualquer linha da tabela tiver `token` vazio, essa
+// requisição anônima autentica como aquele usuário — medido na F100, onde a
+// resposta caiu de 401 para 400 no instante em que a coluna foi branqueada.
+//
+// Hoje nenhuma linha tem token vazio (o POST /admin/users recusa), então esta
+// guarda não muda comportamento observável. Ela existe para que a etapa 1 da
+// F97 — que vai justamente branquear a coluna — não transforme uma melhoria de
+// segurança num acesso sem credencial.
+var ErrEmptyToken = errors.New("empty token")
+
 // LookupUser busca informações do usuário no banco de dados pelo token.
 func LookupUser(db *sql.DB, token string) (*UserRecord, error) {
+	if token == "" {
+		return nil, ErrEmptyToken
+	}
+
 	query := `SELECT id, name, webhook, jid, events, proxy_url, qrcode, history,
 		hmac_key IS NOT NULL AND length(hmac_key) > 0,
 		CASE WHEN s3_enabled THEN 'true' ELSE 'false' END,
 		COALESCE(media_delivery, 'base64')
-		FROM users WHERE token = $1 OR token_hash = $2 LIMIT 1`
+		FROM users WHERE token_hash = $1 LIMIT 1`
 
-	rows, err := db.Query(query, token, domain.HashToken(token))
+	rows, err := db.Query(query, domain.HashToken(token))
 	if err != nil {
 		return nil, fmt.Errorf("db query: %w", err)
 	}

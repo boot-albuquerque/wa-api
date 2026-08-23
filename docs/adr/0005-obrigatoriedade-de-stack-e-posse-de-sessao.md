@@ -1,6 +1,9 @@
 # ADR-0005: obrigatoriedade de stack, posse de sessão e degradação por capacidade
 
 - **Status**: proposed
+- **Status**: **accepted, parcialmente implementado (2026-08-10)** — D1, D2, D3
+  e D6 entraram e estão em uso; D5 (roteamento por dono) e D7 (relatório de
+  capacidades) não. Ver "Fechamento" no fim deste documento.
 - **Data**: 2026-08-08
 - **Relacionado**: F86, F87, F88, F89 em `HOUSEKEEP.md`. **Amenda** a decisão
   registrada na F88 de que retry durável exigiria RabbitMQ — ver D3.
@@ -41,6 +44,24 @@ Três consequências que o desenho tem de absorver:
    dispara quando as variáveis de Postgres estão PARCIALMENTE definidas. Ela
    registra um `warn` e segue. Em multi-pod isso seria cada réplica com um
    banco próprio, todas se achando donas de tudo.
+3. ~~**Degradação silenciosa já mordeu.** A instância de produção roda em
+   SQLite por causa do fallback automático de `pkg/infra/db/connection.go:81`,
+   que dispara quando as variáveis de Postgres estão PARCIALMENTE definidas.~~
+
+   **CORRIGIDO em 2026-08-10, e o erro era meu.** O `.env` e o `compose.yaml`
+   de produção **não definem nenhuma variável `DB_*`** — o único anchor de
+   ambiente carrega apenas `TZ`. O fallback por configuração parcial **nunca
+   dispara lá**. Produção roda SQLite por PADRÃO declarado, não por degradação
+   silenciosa.
+
+   O `warn` de `incomplete_postgres_env` que originou esta afirmação veio de um
+   pod de bancada, cuja máquina tem variáveis de Postgres parcialmente
+   definidas no shell. Li o log da bancada e atribuí à produção.
+
+   **O que continua verdadeiro, e é o ponto**: em multi-pod isso seria cada
+   réplica com um banco próprio. Só que o gatilho não é configuração parcial —
+   é escalar réplicas sem declarar `WA_API_CLUSTER_MODE=multi`, que é o caminho
+   que o D1 NÃO cobre. Ver F104 em `HOUSEKEEP.md`.
 
 ## Decisão
 
@@ -113,6 +134,65 @@ memória. Vale para SQLite e para Postgres igualmente, e exige política de
 retenção — a linha some quando entrega ou quando esgota, e o esgotamento
 continua indo para o caminho terminal.
 
+**Estado em 2026-08-09: metade implementada, e a metade que falta está
+desenhada aqui para não se perder.**
+
+PRONTO e testado (`pkg/infra/db/webhook_outbox.go`, migração 15):
+
+- tabela nos dois dialetos — em SQLite ela NÃO é inerte, ao contrário da de
+  posse: o cenário catastrófico é justamente onde durabilidade de entrega
+  precisa funcionar;
+- `Enqueue` / `Reschedule` / `Delete` / `ClaimDue` / `PendingCount`;
+- reivindicação por EMPURRÃO de `due_at`, na mesma transação da leitura. Não há
+  estado "em processamento" separado, de propósito: um estado assim fica PRESO
+  quando o processo morre entre marcar e entregar, e exigiria um varredor para
+  destravá-lo. Empurrar o prazo faz ele vencer sozinho.
+- a chave HMAC **não** é persistida: já vive em `users.hmac_key` e é relida por
+  `user_id`. Duplicar segredo em outra tabela multiplica a superfície de
+  vazamento sem comprar nada.
+
+**FIAÇÃO PRONTA e validada em bancada (2026-08-09)**, com `kill -9` — queda, não
+desligamento gracioso:
+
+```
+processo vivo, varredura de pe
+kill -9                                  <- queda abrupta
+insere 2 entregas pendentes (com o processo FORA)
+   pendentes com o processo morto: 2
+sobe de novo
+   t=+2s  pendentes=0
+   log: "retomando entregas pendentes do outbox" entregas=2
+```
+
+Antes desta mudança, as duas teriam sumido com o processo, sem log e sem
+contagem. Migração 15 aplicada e conferida nos DOIS dialetos (Postgres em 15 com
+`to_regclass` não-nulo; SQLite em 15 com a tabela presente).
+
+O que a bancada NÃO cobriu, e fica explícito: a entrega HTTP em si. O cliente
+HTTP é provisionado junto com a sessão, então uma entrega retomada para usuário
+sem sessão para em "HTTP client is nil" e a linha é liquidada — que é o
+comportamento correto, mas significa que o laço completo até um destino real
+exige um dispositivo pareado. Os testes unitários cobrem o resto.
+
+O desenho, para quem for ler o código:
+
+1. `callHookWithHmac` grava a intenção ANTES da primeira tentativa e tenta na
+   hora — a primeira entrega não ganha latência de varredura.
+2. Sucesso e caminho terminal apagam a linha.
+3. Falha com orçamento restante faz `Reschedule`, e **quem executa a
+   retentativa passa a ser a varredura**, não o `time.AfterFunc` da F88.
+
+O item 3 é a decisão de projeto que importa: **o outbox vira o ÚNICO
+agendador.** Manter os dois (timer em memória + varredura) criaria corrida
+entre eles — os dois disparariam perto de `due_at` e o cliente receberia em
+duplicata. Uma fonte de verdade, e o custo é latência de até um intervalo de
+varredura numa retentativa que já espera 30s ou mais.
+
+Efeito colateral bem-vindo: o orçamento de bytes pendentes da F88
+(`retryBytesPendentes`) deixa de ser necessário para o retry. Ele existia porque
+os payloads pendentes viviam em MEMÓRIA; com o outbox eles vivem em disco, e o
+teto passa a ser o disco, que é observável e não derruba o processo.
+
 ### D4 — RabbitMQ é distribuição, não durabilidade
 
 Com o outbox, o broker deixa de ser necessário para não perder entrega. O que
@@ -157,6 +237,58 @@ O Exp 1 mostrou processo saudável com sessão morta e o banco dizendo
 
 Sem essa separação, qualquer readiness probe mente, e o k8s manda tráfego para
 um pod que não serve aquela sessão.
+
+**Implementado em 2026-08-09** (`pkg/bootstrap/health.go`), com uma divergência
+deliberada do parágrafo acima, registrada aqui porque quem ler o código depois
+vai notar a diferença:
+
+- `/health/live` responde pelo processo. `/livez` continua valendo como alias —
+  é para onde o `HEALTHCHECK` do Dockerfile aponta hoje, e renomear uma sonda
+  por baixo de um deployment em execução deixa todo contêiner insalubre no
+  mesmo instante.
+- `/health/ready` reprova quando o pod **não consegue servir nada**: banco sem
+  resposta, ou heartbeat de posse parado (este só existe em `multi`; em
+  `single` a checagem some do relatório em vez de aparecer como "ok", porque
+  checagem que sempre passa ensina a ser ignorada).
+
+O que **não** entrou: reprovar readiness porque UMA sessão morreu. Lido ao pé
+da letra, "servindo as sessões que ele diz possuir" derrubaria o pod inteiro
+por causa de uma sessão — cortando as outras noventa e nove que ele serve bem.
+A pergunta original é por SESSÃO e a sonda é por POD: ela não tem como dizer
+"mande o usuário A para outro lugar e continue me mandando o B". Isso é
+roteamento por dono (D5), não readiness.
+
+Enquanto o D5 não existe, a divisão honesta é: readiness reprova o que impede o
+pod de servir; divergência por sessão é **reportada**, não fatal. A F98 já
+removeu a fonte principal dessa divergência — lease de sessão que não existe
+mais volta a ser devolvido em vez de renovado para sempre.
+
+Validado em bancada, com o Postgres derrubado por `docker stop`:
+
+```
+live   {"status":"ok"}                                                    HTTP 200
+ready  {"status":"not_ready","checks":{"database":"unreachable",
+                                       "session_ownership":"ok"}}         HTTP 503
+```
+
+As duas sondas discordando ao mesmo tempo é a prova do D6 — uma sonda só, ou
+duas que sempre concordam, é o defeito que o Exp 1 mediu. Recuperou em ~3s
+depois de o banco voltar.
+
+A bancada também pegou o que os dez testes unitários não pegaram: `s.routes()`
+monta o roteador (e a sonda) QUATRO LINHAS antes de `setupSessionOwnership`
+instalar o `leaseManager`. Recebendo o manager por valor, a sonda capturava
+`nil` para sempre e a checagem de posse simplesmente não aparecia em `multi` —
+com um relatório idêntico ao de um `single` saudável, que é o pior formato
+possível para um defeito assumir. Corrigido lendo por getter, e travado por um
+teste que exercita a janela (ARMADILHAS 24).
+
+O corpo da sonda leva código de motivo, nunca o erro do driver: ela é
+não-autenticada (o kubelet não carrega token) e erro de conexão carrega host,
+porta e usuário. O detalhe vai para o log, que é autenticado. Resposta é **503**
+e não 500 — o pod está temporariamente incapaz de servir, e 5xx-como-bug seria
+lido como "reinicie este processo" quando a causa costuma ser dependência que
+volta.
 
 ### D7 — Degradação é sempre alta, nunca silenciosa
 
@@ -219,3 +351,125 @@ política de retenção do outbox.
   (`SIGSTOP`) por mais que o TTL.
 - Com dois pods e roteamento por dono, o WS reconecta sozinho quando a sessão
   troca de dono?
+
+## Fechamento (2026-08-10)
+
+### O que entrou
+
+| decisão | estado | commits |
+|---|---|---|
+| D1 — modo explícito, SQLite fatal em `multi`, trava local em `single` | **entrou** | `2cbd736` |
+| D2 — posse por lease com TTL e regra de cerca | **entrou** | `b780b12`, `05a08de`, `8f1ef68`, `74c137e`, `2e30467` |
+| D3 — outbox de webhook | **entrou** | `149a649`, `daa0c79` |
+| D4 — RabbitMQ é distribuição, não durabilidade | **decisão, sem código** | emenda à F88, absorvida pelo D3 |
+| D5 — Redis por padrão não; roteamento por dono | **NÃO entrou** | — |
+| D6 — `/health/live` separado de `/health/ready` | **entrou** | `3906ac3` |
+| D7 — relatório de capacidades no arranque | **NÃO entrou** | — |
+
+### A consequência de D5 não ter entrado
+
+**O modo `multi` não está operacional de ponta a ponta.** O lease (D2) impede
+duas réplicas de disputarem a mesma sessão, que era o modo de falha medido na
+F89. Mas sem roteamento por dono, um cliente que abra WebSocket no pod errado
+não alcança a sessão — e a tabela de obrigatoriedade acima promete
+"WS com cliente em pod diferente: **sim** (rota por dono)".
+
+Enquanto D5 não entrar, essa linha da tabela é uma promessa, não um fato.
+Subir em N pods hoje é seguro quanto à disputa e incompleto quanto à entrega.
+
+### A ordem executada não foi a sugerida
+
+A sequência proposta era D1 → D6 → D3 → D2. A executada foi D1 → D2 → D6 → D3.
+D2 subiu antes de D6, e o preço apareceu: a posse foi ligada sem a saúde
+separada para observá-la, e os dois defeitos que vieram depois (F96 e F98,
+lease renovado para sempre numa sessão que nunca subiu) foram encontrados **em
+bancada**, não por sinal de saúde. A sequência original estava certa; ignorá-la
+custou dois achados que a ordem correta teria exposto sozinha.
+
+### As perguntas em aberto, respondidas e não respondidas
+
+**Respondida, por acidente e negativamente:** *"Com dois pods e roteamento por
+dono, o WS reconecta sozinho quando a sessão troca de dono?"*
+
+A F85, reproduzida em bancada em 2026-08-10, mostrou que **o painel não
+reconecta de jeito nenhum** — nem por troca de dono, nem por rajada, nem por
+queda de rede. Depois que a conexão cai por prazo de escrita estourado, ele
+fica em `0 conectados` até alguém recarregar a página, exibindo a sessão como
+conectada (isso vem do REST) com o fluxo de eventos morto.
+
+Ou seja: a pergunta pressupunha um cliente que tenta reconectar. Ele não
+existe. Reconexão automática é **pré-requisito** do D5, não consequência dele.
+
+**Não respondidas, e continuam abertas:**
+
+- ~~Quanto tempo o Postgres leva para liberar um lease de um pod morto por
+  `kill -9`, sob TTL de 15s.~~ **RESPONDIDA em 2026-08-10** (medição M1 da Fase
+  1 do ADR-0007), e a resposta desmonta a pergunta.
+
+  **O número**: a posse fica retida por `TTL − tempo desde a última renovação
+  confirmada`, não pelo TTL cheio. Com TTL 15s e heartbeat 5s, a faixa é **10 a
+  15 segundos**; medido 12,53s / 12,54s / 12,57s em três repetições, e 10,59s
+  no piso (kill logo antes do próximo heartbeat). Controle negativo com TTL 5s
+  / hb 2s: 4,47s / 4,51s / 4,64s — o TTL manda no número, então o que foi
+  medido é expiração de lease e não outra coisa. A tomada em si é instantânea
+  (0,03–0,05s).
+
+  **Mas a pergunta estava mal formulada**, e é o achado que importa: a
+  expiração PERMITE o failover, ela não o dispara. Não há varredura de leases
+  expirados — as únicas duas coisas que reivindicam posse são o arranque do
+  processo e uma requisição HTTP para aquele usuário. Medido: com o lease
+  expirado e o pod B rodando, o `owner_id` continuou sendo o do pod A morto por
+  **~119 segundos**, até chegar um `GET /session/connect`.
+
+  **O TTL é o piso do downtime, não o downtime.** Ver F107 em `HOUSEKEEP.md`.
+- ~~Sob que pausa acontece o despejo falso (`SIGSTOP` por mais que o TTL).~~
+  **RESPONDIDA em 2026-08-10** (medição M2 da Fase 1 do ADR-0007), e aqui
+  também a resposta corrige a pergunta.
+
+  **O limiar NÃO é o TTL.** É a folga restante no instante da pausa, que vale
+  `expires_at − now() ∈ (TTL − heartbeat, TTL]` — com os padrões, **(10s,
+  15s]** — porque a renovação recarrega para 15s a cada 5s. Abaixo de 10s de
+  pausa nunca há despejo; acima de 15s sempre há; **entre 10s e 15s o resultado
+  depende da fase do ciclo de heartbeat**. Medido: duas pausas de 13s deram
+  resultados OPOSTOS, e foi preciso forçar a fase para reproduzir a segunda.
+
+  **A regra de cerca funciona.** Ao acordar, o pod despejado detecta e solta em
+  **0,032s / 0,076s / 0,103s** (do `CONT` até a primeira linha), com o par:
+  `session ownership taken by another replica; releasing` seguido de
+  `releasing session locally after losing ownership`. Acompanhado por 40s: o
+  pod acordado **não** retomou a posse.
+
+  **Janela de exposição: ~100–340ms**, não do tamanho do TTL. A cerca só
+  dispara no tick do heartbeat, então entre o `CONT` e o tick seguinte o pod
+  acordado ainda responde como dono.
+
+  **Controle negativo**: pausa de 8s (abaixo do limiar) com competidor tentando
+  ativamente — competidor recusado e o fato logado do lado dele; pausado com log
+  vazio, posse inalterada, e comprovadamente vivo (`/session/status` 200,
+  `ready=200`). As duas faixas produzem observações DISTINTAS, então o canal
+  discrimina.
+
+  **O QUE ESTA MEDIÇÃO NÃO COBRE, e é grande**: as sessões de teste nunca foram
+  pareadas (`jid` vazio nas duas). Mediu-se que o PROCESSO solta a sessão. **A
+  interação com o `StreamReplaced` do WhatsApp — o desastre da F89, que é a
+  razão de a cerca existir — não foi exercitada de forma alguma.** Fechar isso
+  exige aparelho pareado de verdade.
+
+  Ver também F109 em `HOUSEKEEP.md`: retomada de lease expirado não deixa
+  rastro.
+- A política de retenção do outbox.
+
+### O que a bancada mudou no plano original
+
+**A durabilidade do outbox foi validada com queda abrupta**: duas entregas
+pendentes sobreviveram e foram retomadas ~1s depois de o processo voltar. O que
+**não** foi validado é a entrega HTTP em si até um destino real — o usuário da
+bancada de 2026-08-10 tinha webhook vazio, e o log registrou `No webhook set
+for user` em vez de exercitar o laço completo.
+
+**O fallback silencioso de banco continua acontecendo em `single`**, por
+desenho: o log de 2026-08-10 traz
+`falling back to sqlite: DB_USER/DB_PASSWORD/DB_NAME/DB_HOST/DB_PORT partially
+set` em nível `warn`. Em `multi` isso é fatal (D1), que era o objetivo. Mas em
+`single` a degradação segue sendo um `warn` no meio de centenas — que é
+exatamente o que o D7 existiria para resolver, e o D7 não entrou.

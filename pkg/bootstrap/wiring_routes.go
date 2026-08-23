@@ -38,7 +38,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	//
 	// Os headers de segurança CONTINUAM valendo: só a autenticação sai.
 	if devui.Enabled() {
-		devChain := alice.New(securityHeadersMiddleware).Then(devui.Handler())
+		devChain := alice.New(securityHeadersMiddleware).Then(devui.Handler(ch.AdminToken))
 		registry.Register(devui.BasePath+"{rest:.*}", devChain, "GET")
 		registry.Register(strings.TrimSuffix(devui.BasePath, "/"), devChain, "GET")
 	}
@@ -72,6 +72,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/chat/send/contact", customChain.Then(ch.Message.SendContact), "POST")
 	registry.Register("/chat/send/location", customChain.Then(ch.Message.SendLocation), "POST")
 	registry.Register("/chat/send/buttons", customChain.Then(ch.Message.SendButtons), "POST")
+	registry.Register("/chat/send/carousel", customChain.Then(ch.Message.SendCarousel), "POST")
 	registry.Register("/chat/send/list", customChain.Then(ch.Message.SendList), "POST")
 	registry.Register("/chat/send/poll", customChain.Then(ch.Message.SendPoll), "POST")
 	registry.Register("/chat/delete/message", customChain.Then(ch.Message.DeleteMessage), "POST")
@@ -155,6 +156,27 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 
 	// Misc routes (newsletter, privacy, call, archive)
 	registry.Register("/newsletter/list", customChain.Then(ch.Misc.ListNewsletter), "GET")
+
+	// Newsletter operation routes. The parity survey of 2026-08-20 found the
+	// library exposing twelve capabilities against the one route we had
+	// (/newsletter/list); these are the other eleven.
+	// Etiquetas (F191). Só LEITURA: a biblioteca não sabe criá-las (LIB-01),
+	// e uma rota de escrita responderia 200 sem fazer nada — o defeito da
+	// F198, que não se acrescenta de propósito.
+	registry.Register("/labels", customChain.Then(ch.Label.ListLabels), "GET")
+	registry.Register("/labels/{id}/chats", customChain.Then(ch.Label.ListLabelChat), "GET")
+
+	registry.Register("/newsletter/create", customChain.Then(ch.Newsletter.Create), "POST")
+	registry.Register("/newsletter/info", customChain.Then(ch.Newsletter.Info), "POST")
+	registry.Register("/newsletter/info-invite", customChain.Then(ch.Newsletter.InfoInvite), "POST")
+	registry.Register("/newsletter/follow", customChain.Then(ch.Newsletter.Follow), "POST")
+	registry.Register("/newsletter/unfollow", customChain.Then(ch.Newsletter.Unfollow), "POST")
+	registry.Register("/newsletter/mute", customChain.Then(ch.Newsletter.Mute), "POST")
+	registry.Register("/newsletter/messages", customChain.Then(ch.Newsletter.Messages), "POST")
+	registry.Register("/newsletter/updates", customChain.Then(ch.Newsletter.Updates), "POST")
+	registry.Register("/newsletter/mark-viewed", customChain.Then(ch.Newsletter.MarkViewed), "POST")
+	registry.Register("/newsletter/react", customChain.Then(ch.Newsletter.React), "POST")
+	registry.Register("/newsletter/subscribe", customChain.Then(ch.Newsletter.Subscribe), "POST")
 	registry.Register("/call/reject", customChain.Then(ch.Misc.RejectCall), "POST")
 	registry.Register("/chat/archive", customChain.Then(ch.Misc.ArchiveChat), "POST")
 	registry.Register("/chat/request-unavailable-message", customChain.Then(ch.Misc.RequestUnavailableMessage), "POST")
@@ -194,10 +216,36 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 			ch.Storage.DeleteHmacConfig.ServeHTTP(w, r)
 		}
 	})), "POST", "GET", "DELETE")
-	registry.Register("/chat/history", customChain.Then(ch.Storage.GetHistory), "GET")
+	// /chat/history reads the local MESSAGE history and answers messages;
+	// /webhook/history above answers the webhook history configuration. They
+	// are separate handlers, and TestChatHistoryAndWebhookHistoryAreDistinctHandlers
+	// exists to keep them separate: pointing both at Storage.GetHistory is the
+	// exact defect of HOUSEKEEP F124, and no assertion about a response body
+	// would have caught it.
+	registry.Register("/chat/history", customChain.Then(ch.ChatHistory.GetChatHistory), "GET")
 	registry.Register("/chat/delete", customChain.Then(ch.Message.DeleteMessage), "POST")
 	registry.Register("/status/set/text", customChain.Then(ch.Session.SetStatusMessage), "POST")
 	// Static files — keep in routes.go only, not reregistered here
 
 	registry.Apply(router)
+}
+
+// registerAdminRoutes declara a tabela de rotas de /admin.
+//
+// Separada de buildRouter (router.go), onde vivia inline, por dois motivos. O
+// primeiro é que o teste de consistência com a tabela do stdio precisa montar
+// as MESMAS rotas sem precisar de banco, token ou middleware de auditoria —
+// e replicá-las no teste criaria uma terceira tabela para divergir (F99). O
+// segundo é o teto de complexidade do lint, que trava a PIOR função: tirar
+// um bloco de buildRouter melhora o teto.
+//
+// Recebe o subrouter já com PathPrefix("/admin") e os middlewares aplicados;
+// aqui só entram caminho, método e handler.
+func registerAdminRoutes(adminRoutes *mux.Router, ch *customHandlers) {
+	adminRoutes.Handle("/users", ch.User.ListUsers()).Methods("GET")
+	adminRoutes.Handle("/users/{id}", ch.User.ListUsers()).Methods("GET")
+	adminRoutes.Handle("/users", ch.User.AddUser()).Methods("POST")
+	adminRoutes.Handle("/users/{id}", ch.User.EditUser()).Methods("PUT")
+	adminRoutes.Handle("/users/{id}", ch.User.DeleteUser()).Methods("DELETE")
+	adminRoutes.Handle("/users/{id}/full", ch.Misc.DeleteUserComplete).Methods("DELETE")
 }

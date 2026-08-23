@@ -58,4 +58,12 @@ type UserListEntry struct {
 	WebhookUseProxy bool
 	Events          string
 	S3              S3Config
+
+	// History is the per-session message-history limit, in rows per chat.
+	// Zero means the limit is off.
+	//
+	// The column was ALREADY selected and scanned by ListUsers; it just never
+	// reached this struct, so GetStatus answered with a hardcoded "0" for
+	// everyone (F219). Reading it here is what makes the API tell the truth.
+	History int
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -12,22 +13,50 @@ import (
 	"wa-api/pkg/infra/storage"
 )
 
+// Error codes and messages of this use case, as named constants: the tests
+// that lock the contract assert the SAME strings production returns
+// (ADR-0004).
+const (
+	hmacKeyTooShortCode  = "hmac_key_too_short"
+	hmacKeyTooShortMsg   = "HMAC key must be at least 32 characters long"
+	hmacEncryptFailedMsg = "failed to encrypt HMAC key"
+
+	s3SecretEncryptFailedMsg = "failed to encrypt S3 secret key"
+
+	invalidEventTypeCode   = "invalid_event_type"
+	invalidEventTypeMsgFmt = "invalid event type: %s"
+
+	// noFieldsToUpdateCode identifica um PUT que não traz campo algum a mudar.
+	// Constante nomeada, e não literal repetido, porque o teste de contrato o
+	// afirma e o cliente o lê (ADR-0004).
+	noFieldsToUpdateCode = "no_fields_to_update"
+)
+
 // AddUserUseCase adiciona um novo usuário
 type AddUserUseCase struct {
-	users  appport.UserRepository
-	logger appport.Logger
+	users     appport.UserRepository
+	encryptor appport.HmacKeyEncryptor
+	s3Cipher  appport.S3SecretCipher
+	logger    appport.Logger
 }
 
-// NewAddUserUseCase cria uma nova instância
-func NewAddUserUseCase(users appport.UserRepository, logger appport.Logger) *AddUserUseCase {
-	return &AddUserUseCase{users: users, logger: logger}
+// NewAddUserUseCase cria uma nova instância.
+//
+// The encryptor and s3Cipher are dependencies and not package-level helpers
+// because the AES key lives in the process configuration
+// (appCtx.GlobalEncryptionKey), which the application layer must not reach
+// for. Each port matches a column writer: encryptor → users.hmac_key
+// (F158), s3Cipher → users.s3_secret_key (F163). Separate ports because
+// the two columns have different stored types (BYTEA vs TEXT envelope).
+func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, s3Cipher appport.S3SecretCipher, logger appport.Logger) *AddUserUseCase {
+	return &AddUserUseCase{users: users, encryptor: encryptor, s3Cipher: s3Cipher, logger: logger}
 }
 
 // Execute adiciona um novo usuário
 func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest) (*domain.UserResponse, error) {
 	// Validate required fields
 	if req.Name == "" || req.Token == "" {
-		return nil, fmt.Errorf("name and token are required")
+		return nil, apperr.New("missing_name_or_token", apperr.CategoryValidation, "name and token are required", false, nil)
 	}
 
 	// Set defaults
@@ -43,20 +72,42 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		webhookUseProxy = *req.ProxyConfig.WebhookUseProxy
 	}
 
-	// Encrypt HMAC key if provided
+	// Encrypt the HMAC key if provided.
+	//
+	// The ORDER is the contract: validate, then encrypt, then write. A failure
+	// to encrypt returns BEFORE CreateUser, so the user is not created with an
+	// empty key nor with the key in plaintext — the column is read back
+	// through auth.DecryptHMACKey to sign every per-user webhook, and
+	// plaintext there is not valid AES-GCM.
 	var encryptedHmacKey []byte
 	if req.HmacKey != "" {
-		if len(req.HmacKey) < 32 {
-			return nil, fmt.Errorf("HMAC key must be at least 32 characters long")
+		if len(req.HmacKey) < domain.MinHmacKeyLength {
+			return nil, apperr.New(hmacKeyTooShortCode, apperr.CategoryValidation, hmacKeyTooShortMsg, false, nil)
 		}
-		// Note: encryptHMACKey is defined in handlers.go - you'll need to refactor this
-		// For now, we'll create a simple approach
-		encrypted, err := encryptHMACKeyFunc(req.HmacKey)
+		// The plaintext key never reaches a log or an error: only its length does.
+		encrypted, err := uc.encryptor.EncryptHmacKey(req.HmacKey)
 		if err != nil {
-			uc.logger.Error(ctx, "Failed to encrypt HMAC key", "error", err)
-			return nil, fmt.Errorf("failed to encrypt HMAC key: %w", err)
+			uc.logger.Error(ctx, hmacEncryptFailedMsg, "keyLength", len(req.HmacKey), "error", err)
+			return nil, fmt.Errorf("%s: %w", hmacEncryptFailedMsg, err)
 		}
 		encryptedHmacKey = encrypted
+	}
+
+	// Encrypt the S3 secret key if provided (F163, ADR-0009).
+	//
+	// Same ORDER contract as the HMAC key above: encrypt before write. A
+	// failure returns BEFORE CreateUser, so the column never holds plaintext.
+	// The in-memory S3 client (below) receives the PLAINTEXT — the AWS SDK
+	// signs with it, and the envelope would produce a client that fails every
+	// request.
+	var s3SecretEnvelope string
+	if req.S3Config != nil && req.S3Config.SecretKey != "" {
+		envelope, err := uc.s3Cipher.EncryptS3Secret(req.S3Config.SecretKey)
+		if err != nil {
+			uc.logger.Error(ctx, s3SecretEncryptFailedMsg, "error", err)
+			return nil, fmt.Errorf("%s: %w", s3SecretEncryptFailedMsg, err)
+		}
+		s3SecretEnvelope = envelope
 	}
 
 	// Validate events
@@ -68,7 +119,8 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 				continue
 			}
 			if !isValidEvent(event) {
-				return nil, fmt.Errorf("invalid event type: %s", event)
+				return nil, apperr.New(invalidEventTypeCode, apperr.CategoryValidation,
+					fmt.Sprintf(invalidEventTypeMsgFmt, event), false, nil)
 			}
 		}
 	}
@@ -80,6 +132,10 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
+	s3ForRecord := *req.S3Config
+	if s3SecretEnvelope != "" {
+		s3ForRecord.SecretKey = s3SecretEnvelope
+	}
 	created, err := uc.users.CreateUser(ctx, domain.UserRecord{
 		ID:              id,
 		Name:            req.Name,
@@ -89,7 +145,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		Events:          req.Events,
 		ProxyURL:        req.ProxyConfig.ProxyURL,
 		WebhookUseProxy: webhookUseProxy,
-		S3:              *req.S3Config,
+		S3:              s3ForRecord,
 		HmacKey:         encryptedHmacKey,
 		History:         req.History,
 	})
@@ -153,13 +209,26 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	}, nil
 }
 
-// Placeholder functions - these will be injected or refactored
-func encryptHMACKeyFunc(key string) ([]byte, error) {
-	// This will be replaced with the actual encryption from handlers.go
-	return []byte(key), nil
-}
-
+// isValidEvent reports whether the event name is one of
+// domain.SupportedEventTypes.
+//
+// Rejecting an unknown event is a NEW public contract, decided deliberately
+// (HOUSEKEEP F159) — it is not the recovery of an older behaviour. There is
+// no older behaviour to recover: this function used to return true for every
+// input, so the 400 above was dead code, and the pre-migration handler did
+// not validate events at all. Callers that today send a misspelled event and
+// get 200 will start getting 400.
+//
+// The alternative — dropping the unknown entry and carrying on, which the
+// sibling UpdateWebhook route does — was rejected: a rejection is visible to
+// the integrator at the moment of the call and is fixable there, while a
+// silent drop only surfaces later, to the operator, as an event that never
+// arrives.
+//
+// The validator is domain.IsValidEventType and not the identical list in
+// pkg/infra/constants (HOUSEKEEP F168) because this is the application layer:
+// importing infra from here would invert the dependency direction, and
+// pkg/domain depends on nobody.
 func isValidEvent(event string) bool {
-	// This will check against domain.SupportedEventTypes
-	return true
+	return domain.IsValidEventType(event)
 }

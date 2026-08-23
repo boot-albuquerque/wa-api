@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 
@@ -30,6 +31,15 @@ type messageS3Config struct {
 }
 
 func (evh *UserEventHandler) handleMessage(evt *events.Message, st *eventState) {
+	// F103. A saída é AQUI, antes de qualquer outra coisa, e o lugar importa:
+	// `st.dowebhook` nasce 0 e é este método que o liga. Sair no topo já
+	// impede o despacho (`eventhandler.go:183`) sem que o chamador precise
+	// saber de nada — e impede também o download da mídia, que era o segundo
+	// custo da reentrega.
+	if mensagemJaProcessada(evh.UserID, evt) {
+		return
+	}
+
 	appCtx.LastMessageCache.Set(evh.UserID, &evt.Info, cache.DefaultExpiration)
 
 	s3Config := evh.resolveMessageS3Config(st.txtid)
@@ -60,7 +70,7 @@ func (evh *UserEventHandler) handleMessage(evt *events.Message, st *eventState) 
 func (evh *UserEventHandler) resolveMessageS3Config(txtid string) messageS3Config {
 	var s3Config messageS3Config
 
-	myuserinfo, found := appCtx.UserInfoCache.Get(evh.Token)
+	myuserinfo, found := appCtx.UserInfoCache.Get(evh.UserID)
 	if !found {
 		err := evh.DB.Get(&s3Config, "SELECT CASE WHEN s3_enabled = 1 THEN 'true' ELSE 'false' END AS s3_enabled, media_delivery FROM users WHERE id = $1", txtid)
 		if err != nil {
@@ -162,6 +172,11 @@ func (evh *UserEventHandler) decryptSecretEncryptedMessage(evt *events.Message) 
 	}
 }
 
+// messageWireTypeMedia é o valor que o servidor do WhatsApp põe em
+// MessageInfo.Type quando a mensagem carrega mídia. É constante e não literal
+// porque decide se um aviso é ruído ou diagnóstico (F180).
+const messageWireTypeMedia = "media"
+
 func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config messageS3Config, st *eventState) {
 	isIncoming := !evt.Info.IsFromMe
 	chatJID := evt.Info.Sender.String()
@@ -175,16 +190,28 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 	// original.
 	s3cfg := mediaS3Config(s3Config)
 
+	// F102. Antes disto, uma mensagem classificada como mídia que não casasse
+	// com NENHUM dos tipos abaixo não produzia nada: nem download, nem aviso,
+	// nem erro. O operador via `Message Received ... type: media` e mais nada,
+	// e esse silêncio é indistinguível de um download que falhou calado.
+	//
+	// Numa investigação de "o cliente mandou foto e não chegou webhook", não
+	// havia como separar "não havia mídia para baixar" de "a mídia sumiu no
+	// caminho" — e as duas exigem ações opostas.
+	tratou := false
+
 	if img := evt.Message.GetImageMessage(); img != nil {
 		evh.processMedia(img, img.GetMimetype(), ".jpg",
 			downloadTimeoutImage, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if audio := evt.Message.GetAudioMessage(); audio != nil {
 		evh.processMedia(audio, audio.GetMimetype(), ".ogg",
 			downloadTimeoutAudio, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if doc := evt.Message.GetDocumentMessage(); doc != nil {
@@ -195,12 +222,14 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 		evh.processMedia(doc, doc.GetMimetype(), ext,
 			downloadTimeoutDocument, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if video := evt.Message.GetVideoMessage(); video != nil {
 		evh.processMedia(video, video.GetMimetype(), ".mp4",
 			downloadTimeoutVideo, isIncoming, chatJID,
 			evt.Info.ID, s3cfg, st.postmap, nil)
+		tratou = true
 	}
 
 	if sticker := evt.Message.GetStickerMessage(); sticker != nil {
@@ -210,13 +239,47 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 				"isSticker":       true,
 				"stickerAnimated": sticker.GetIsAnimated(),
 			})
+		tratou = true
+	}
+
+	// Cabeçalho de álbum: tipo CONHECIDO que legitimamente não tem o que
+	// baixar. Reconhecê-lo aqui não é tratá-lo — é impedir que o aviso abaixo
+	// dispare em todo álbum enviado, o que transformaria um diagnóstico útil em
+	// ruído de rotina. Foi o caso medido: 4 fotos em álbum chegam como
+	// cabeçalho + 4 imagens, e nenhuma mídia se perdeu.
+	//
+	// Se o cabeçalho deve virar evento próprio no webhook (ele carrega a
+	// contagem esperada) é decisão de contrato, ainda em aberto na F102.
+	if album := evt.Message.GetAlbumMessage(); album != nil {
+		tratou = true
+	}
+
+	// F180: o aviso só faz sentido quando o SERVIDOR disse que havia mídia.
+	//
+	// processMessageMedia corre para TODA mensagem recebida, não só as de
+	// mídia (:58-59, sem condição). Antes desta guarda, uma mensagem de texto
+	// — que legitimamente não tem imagem, vídeo, áudio, documento, sticker
+	// nem álbum — caía aqui e produzia um Warn. Medido em campo: 25 de 30
+	// ocorrências eram `type=text` com `media_type` vazio.
+	//
+	// Um aviso que dispara no caso NORMAL não avisa de nada: treina quem lê o
+	// log a ignorá-lo, e aí ele deixa de servir para o caso em que morde de
+	// verdade — mídia que o servidor anunciou e nós não soubemos tratar, que
+	// é a F102 e continua a valer.
+	if !tratou && evt.Info.Type == messageWireTypeMedia {
+		log.Warn().
+			Str("userid", evh.UserID).
+			Str("message_id", evt.Info.ID).
+			Str("type", evt.Info.Type).
+			Str("media_type", evt.Info.MediaType).
+			Msg("mensagem de midia de tipo nao tratado; nada foi baixado e nada sera' entregue para ela")
 	}
 }
 
 func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventState) {
 	// Get user's history setting from cache
 	var historyLimit int
-	userinfo, found := appCtx.UserInfoCache.Get(evh.Token)
+	userinfo, found := appCtx.UserInfoCache.Get(evh.UserID)
 	if found {
 		historyStr := userinfo.(Values).Get("History")
 		historyLimit, _ = strconv.Atoi(historyStr)
@@ -229,70 +292,22 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 		return
 	}
 
-	messageType := "text"
-	textContent := ""
+	// A classificação vive em message_classify.go, PARTILHADA com o caminho de
+	// sincronização (F187). Havia duas cadeias aqui e lá, e elas divergiram —
+	// primeiro o tempo real reconhecia menos tipos e descartava o texto que
+	// extraía, depois, corrigido, passou a reconhecer SEIS a mais que o outro.
+	// Duas fontes de verdade divergem nas duas direções; a única saída é não
+	// haver duas.
+	classificacao := classifyMessage(evt.Message)
+	messageType := classificacao.Type
+	textContent := classificacao.Text
+	replyToMessageID := classificacao.QuotedID
 	mediaLink := ""
-	caption := ""
-	replyToMessageID := ""
 
-	// Check for delete messages first
-	if protocolMsg := evt.Message.GetProtocolMessage(); protocolMsg != nil && protocolMsg.GetType() == 0 {
-		messageType = "delete"
-		if protocolMsg.GetKey() != nil {
-			textContent = protocolMsg.GetKey().GetID() // Store the deleted message ID
-		}
-		log.Info().Str("deletedMessageID", textContent).Str("messageID", evt.Info.ID).Msg("Delete message detected")
-		// Check for reactions
-	} else if reaction := evt.Message.GetReactionMessage(); reaction != nil {
-		messageType = "reaction"
-		replyToMessageID = reaction.GetKey().GetID()
-		textContent = reaction.GetText() // This will be the emoji
-	} else if img := evt.Message.GetImageMessage(); img != nil {
-		messageType = "image"
-		caption = img.GetCaption()
-	} else if video := evt.Message.GetVideoMessage(); video != nil {
-		messageType = "video"
-		caption = video.GetCaption()
-	} else if audio := evt.Message.GetAudioMessage(); audio != nil {
-		messageType = "audio"
-	} else if doc := evt.Message.GetDocumentMessage(); doc != nil {
-		messageType = "document"
-		caption = doc.GetCaption()
-	} else if sticker := evt.Message.GetStickerMessage(); sticker != nil {
-		messageType = "sticker"
-	} else if contact := evt.Message.GetContactMessage(); contact != nil {
-		messageType = "contact"
-		textContent = contact.GetDisplayName()
-	} else if location := evt.Message.GetLocationMessage(); location != nil {
-		messageType = "location"
-		textContent = location.GetName()
+	if classificacao.DeletedID != "" {
+		log.Info().Str("deletedMessageID", classificacao.DeletedID).
+			Str("messageID", evt.Info.ID).Msg("Delete message detected")
 	}
-
-	// Extract text content for non-reaction and non-delete messages
-	if messageType != "reaction" && messageType != "delete" {
-		if conv := evt.Message.GetConversation(); conv != "" {
-			textContent = conv
-		} else if ext := evt.Message.GetExtendedTextMessage(); ext != nil {
-			textContent = ext.GetText()
-			// Check if this is a reply to another message
-			if contextInfo := ext.GetContextInfo(); contextInfo != nil && contextInfo.GetStanzaID() != "" {
-				replyToMessageID = contextInfo.GetStanzaID()
-			}
-		} else {
-			textContent = caption
-		}
-
-		// Set default text content for media messages without captions
-		if textContent == "" {
-			textContent = defaultHistoryTextFor(messageType, textContent)
-		}
-	}
-
-	// Check for replies in regular conversation messages too.
-	// For regular text messages, reply detection currently relies on
-	// ExtendedTextMessage handled above; plain Conversation messages
-	// carry no reply context in the WhatsApp message structure, so
-	// there is nothing further to do here.
 
 	// Try to get media link from S3 data if available
 	if s3Data, ok := st.postmap["s3"].(map[string]interface{}); ok {
@@ -329,13 +344,44 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to save message to history")
 		} else {
-			err = trimMessageHistory(evh.DB, evh.UserID, evt.Info.Chat.String(), historyLimit)
+			err = trimMessageHistory(evh.DB, evh.StoreDB, evh.UserID, evt.Info.Chat.String(), historyLimit)
 			if err != nil {
 				log.Error().Err(err).Msg("Failed to trim message history")
 			}
 		}
 	} else {
-		log.Debug().Str("messageType", messageType).Str("messageID", evt.Info.ID).Msg("Skipping empty message from history")
+		// DISCARD RECORD (HOUSEKEEP F184). The message arrived, was logged as
+		// received, and is about to be dropped: it never reaches the history
+		// table and no client can ever see it again.
+		//
+		// This used to be a Debug saying "Skipping empty message", and both
+		// halves of that were wrong enough to hide a defect for a whole
+		// release. Debug is invisible at the production level, and "empty"
+		// is a misdiagnosis: a poll and a buttons message carry plenty of
+		// content — what is empty is OUR classification of them, because the
+		// chain above has no branch for their type. The operator reading
+		// "empty message" would look for a sender sending blanks, not for a
+		// missing case in a switch.
+		//
+		// wire_type is the field that names the defect out loud: it reads
+		// "poll" while message_type reads "text", and that gap IS the bug.
+		// Logging only our own classification would have kept the defect
+		// invisible, since our classification is precisely what is broken.
+		//
+		// Level is Warn, not Debug, because losing a received message is not
+		// routine. Measured on the live sessions of 2026-08-20: 5 discards in
+		// 17 received over a 15-minute window, and 3 of those 5 were the
+		// synthetic poll/buttons of the F184 measurement — the steady-state
+		// rate is closer to 2 in 14, mostly status broadcasts. That is signal,
+		// not the F180 kind of noise; if status broadcasts later prove to
+		// dominate, the fix is to recognise them, not to silence this again.
+		log.Warn().
+			Str("userid", evh.UserID).
+			Str("message_id", evt.Info.ID).
+			Str("wire_type", evt.Info.Type).
+			Str("message_type", messageType).
+			Str("reason", discardReasonUnclassified).
+			Msg("received message dropped from history: no content extracted for its type")
 	}
 }
 
@@ -344,6 +390,118 @@ func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventSt
 // (contact e location) foram mantidos literalmente: o switch inteiro já só
 // roda com textContent vazio, então eles são sempre verdadeiros, mas removê-los
 // seria alterar o código e não movê-lo.
+// messageTypePoll and messageTypeButtons are the history message_type values
+// for the two kinds the classification chain gained in the F184 (b) step.
+//
+// They are constants while their eight older siblings ("image", "video", …)
+// are still literals, and that is deliberate rather than inconsistent: each of
+// these appears in TWO places — the classification branch and
+// defaultHistoryTextFor — and a value repeated twice is the same bug waiting to
+// diverge (ADR-0004). Converting the older eight would mix a rename into a
+// behaviour change in one diff, which is exactly the shape of change where a
+// defect goes unnoticed; CLAUDE.md says to convert what you touched, not the
+// whole file.
+const (
+	messageTypePoll     = "poll"
+	messageTypeButtons  = "buttons"
+	messageTypeTemplate = "template"
+	messageTypeList     = "list"
+	messageTypeEdit     = "edit"
+
+	// messageTypeButtonsResponse e messageTypeListResponse repetem, à letra, os
+	// valores que eventhandler_history.go já grava. São constantes porque agora
+	// existem em DOIS caminhos, e um valor duplicado em dois sítios é o mesmo
+	// bug à espera de divergir — que é literalmente o que a F187 é.
+	messageTypeButtonsResponse = "buttons_response"
+	messageTypeListResponse    = "list_response"
+
+	// Os oito tipos mais antigos eram literais espalhados pela cadeia. Passam a
+	// constantes agora porque a classificação foi extraída para
+	// message_classify.go e cada valor passou a existir em DOIS sítios — o
+	// ramo e o marcador —, que é o limiar do ADR-0004.
+	//
+	// Não é conversão em massa por estética: são exatamente os valores que a
+	// extração tocou.
+	messageTypeText     = "text"
+	messageTypeDelete   = "delete"
+	messageTypeReaction = "reaction"
+	messageTypeImage    = "image"
+	messageTypeVideo    = "video"
+	messageTypeAudio    = "audio"
+	messageTypeDocument = "document"
+	messageTypeSticker  = "sticker"
+	messageTypeContact  = "contact"
+	messageTypeLocation = "location"
+
+	// F184 residual: os nove tipos que chegavam e eram descartados.
+	messageTypePollUpdate          = "poll_update"
+	messageTypeInteractiveResponse = "interactive_response"
+	messageTypeEvent               = "event"
+	messageTypeLiveLocation        = "live_location"
+	messageTypePtv                 = "ptv"
+	messageTypeGroupInvite         = "group_invite"
+	messageTypeOrder               = "order"
+	messageTypeProduct             = "product"
+	messageTypeContactsArray       = "contacts_array"
+)
+
+// editedText is the new text of an edit, taken from the edited message the
+// protocol part carries.
+//
+// It reads Conversation first and ExtendedText second because those are the two
+// shapes a plain text message takes, and an edit of anything else (a caption,
+// say) falls through to the placeholder — enough for the row to exist, which is
+// the whole point.
+func editedText(pm *waE2E.ProtocolMessage) string {
+	if c := pm.GetEditedMessage().GetConversation(); c != "" {
+		return c
+	}
+	return pm.GetEditedMessage().GetExtendedTextMessage().GetText()
+}
+
+// listText picks the caption for a list: the title when it has one, the
+// description otherwise. Both can be empty, and then defaultHistoryTextFor
+// supplies the placeholder — the point is that the row exists at all.
+func listText(list *waE2E.ListMessage) string {
+	if t := list.GetTitle(); t != "" {
+		return t
+	}
+	return list.GetDescription()
+}
+
+// templateText picks the caption for a hydrated template, title first.
+//
+// The repeated GetHydratedTemplate() is deliberate. Hoisting it into a local
+// would read better and add a third statement, which puts the function over the
+// two-statement line of logcov's X1 rule — it would stop being trivial, become
+// log-ELIGIBLE, and drop func_coverage by a decilo for a pure text picker that
+// has nothing worth logging. That is exactly what happened on the first
+// attempt, and the gate caught it. Answering with a meaningless log call, or
+// with the log-coverage exemption annotation, would both be worse than writing
+// the getter twice: this way listText and templateText have the same shape and
+// are excluded for the same honest reason.
+//
+// The annotation is named in prose here rather than spelled out, and that is
+// not squeamishness: logcov budgets exemptions with a raw text count over the
+// whole file (analyzer.go:210), so WRITING the token — even inside a sentence
+// explaining why it was not used — trips the budget. It tripped it here, on the
+// first attempt. Recorded as HOUSEKEEP F189.
+func templateText(tpl *waE2E.TemplateMessage) string {
+	if t := tpl.GetHydratedTemplate().GetHydratedTitleText(); t != "" {
+		return t
+	}
+	return tpl.GetHydratedTemplate().GetHydratedContentText()
+}
+
+// discardReasonUnclassified is the reason recorded when saveMessageHistory
+// drops a received message: the classification chain produced no type, no text
+// and no media link for it, so the save guard has nothing to write.
+//
+// It is a named constant rather than a literal because it is the string an
+// operator greps for, and a reason that only exists as a literal at one call
+// site is a reason that silently changes wording on the next edit (ADR-0004).
+const discardReasonUnclassified = "unclassified_no_content"
+
 func defaultHistoryTextFor(messageType, textContent string) string {
 	switch messageType {
 	case "image":
@@ -356,6 +514,38 @@ func defaultHistoryTextFor(messageType, textContent string) string {
 		return ":document:"
 	case "sticker":
 		return ":sticker:"
+	case messageTypePoll:
+		return ":poll:"
+	case messageTypeButtons:
+		return ":buttons:"
+	case messageTypeTemplate:
+		return ":template:"
+	case messageTypeList:
+		return ":list:"
+	case messageTypeEdit:
+		return ":edit:"
+	case messageTypeButtonsResponse:
+		return ":buttons_response:"
+	case messageTypeListResponse:
+		return ":list_response:"
+	case messageTypePollUpdate:
+		return ":poll_update:"
+	case messageTypeInteractiveResponse:
+		return ":interactive_response:"
+	case messageTypeEvent:
+		return ":event:"
+	case messageTypeLiveLocation:
+		return ":live_location:"
+	case messageTypePtv:
+		return ":ptv:"
+	case messageTypeGroupInvite:
+		return ":group_invite:"
+	case messageTypeOrder:
+		return ":order:"
+	case messageTypeProduct:
+		return ":product:"
+	case messageTypeContactsArray:
+		return ":contacts_array:"
 	case "contact":
 		if textContent == "" {
 			return ":contact:"

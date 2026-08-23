@@ -115,8 +115,8 @@ func InitRabbitMQ() {
 	messaging.SetupDependencies(appCtx.UserInfoCache, webhookErrorQueueName)
 	messaging.InitRabbitMQ()
 }
-func sendToGlobalRabbit(jsonData []byte, token, userID string, queueName ...string) {
-	messaging.SendToGlobalRabbit(jsonData, token, userID, queueName...)
+func sendToGlobalRabbit(jsonData []byte, userID string, queueName ...string) {
+	messaging.SendToGlobalRabbit(jsonData, userID, queueName...)
 }
 
 // ── Stdio ──

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	"github.com/rs/zerolog/log"
 )
@@ -67,7 +68,8 @@ func ValidatePrivacySetting(name, value string) error {
 	if !ok {
 		log.Warn().Str("setting", name).Str("reason", "unknown_setting").
 			Msg("privacy setting rejected")
-		return fmt.Errorf("invalid privacy setting name %q", name)
+		return apperr.New("invalid_privacy_setting", apperr.CategoryValidation,
+			fmt.Sprintf("invalid privacy setting name %q", name), false, nil)
 	}
 	for _, v := range allowed {
 		if value == v {
@@ -77,5 +79,6 @@ func ValidatePrivacySetting(name, value string) error {
 	log.Warn().Str("setting", name).Str("value", value).
 		Str("reason", "value_not_allowed").Strs("allowed", allowed).
 		Msg("privacy setting rejected")
-	return fmt.Errorf("invalid value %q for privacy setting %q", value, name)
+	return apperr.New("invalid_privacy_value", apperr.CategoryValidation,
+		fmt.Sprintf("invalid value %q for privacy setting %q", value, name), false, nil)
 }

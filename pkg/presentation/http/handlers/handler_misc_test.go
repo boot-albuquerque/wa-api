@@ -10,6 +10,8 @@ import (
 	"github.com/gorilla/mux"
 	_ "modernc.org/sqlite"
 
+	dbpkg "wa-api/pkg/infra/db"
+
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
@@ -30,7 +32,7 @@ import (
 // `users`, e' o banco que faz o caminho de erro morder.
 func ipmSQLite(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "wa.db"))
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "wa.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}
@@ -48,7 +50,7 @@ func TestGetHealthHandler_Success(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 // TestGetHealthHandler_CounterFailure: /health e' a rota que o operador usa
@@ -86,7 +88,7 @@ func TestListNewsletterHandler_Success(t *testing.T) {
 	if len(nr.ListSubscribedCalls) != 1 {
 		t.Fatalf("ListSubscribed chamado %d vez(es), quero 1", len(nr.ListSubscribedCalls))
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 func TestListNewsletterHandler_Unauthorized(t *testing.T) {
@@ -168,7 +170,7 @@ func TestDeleteUserCompleteHandler_Success(t *testing.T) {
 	if remaining != 0 {
 		t.Fatalf("usuario sobreviveu a exclusao completa (%d linhas)", remaining)
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 func TestDeleteUserCompleteHandler_DatabaseFailure(t *testing.T) {
@@ -208,7 +210,7 @@ func miscBodyCases() []miscBodyCase {
 			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
 				return NewRejectCallHandler(chat.NewRejectCallUseCase(ops, jids, log))
 			},
-			validBody:    `{"call_from":"5511999999999","call_id":"CALL1"}`,
+			validBody:    `{"call_from":"5511999999999@s.whatsapp.net","call_id":"CALL1"}`,
 			emptyBodyErr: "missing call_from in Payload",
 			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
 				ops.RejectCallFunc = func(context.Context, string, domain.JID, string) error { return err }
@@ -234,7 +236,7 @@ func miscBodyCases() []miscBodyCase {
 			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
 				return NewRequestUnavailableMessageHandler(chat.NewRequestUnavailableMessageUseCase(ops, jids, log))
 			},
-			validBody:    `{"chat":"5511999999999","sender":"5511888888888","id":"MSG1"}`,
+			validBody:    `{"chat":"5511999999999@s.whatsapp.net","sender":"5511888888888@s.whatsapp.net","id":"MSG1"}`,
 			emptyBodyErr: "missing Chat in Payload",
 			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
 				ops.RequestUnavailableMessageFunc = func(context.Context, string, domain.JID, domain.JID, string) (domain.UnavailableMessageAck, error) {
@@ -249,7 +251,7 @@ func miscBodyCases() []miscBodyCase {
 			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
 				return NewArchiveChatHandler(chat.NewArchiveChatUseCase(ops, jids, log))
 			},
-			validBody:    `{"jid":"5511999999999","archive":true}`,
+			validBody:    `{"jid":"5511999999999@s.whatsapp.net","archive":true}`,
 			emptyBodyErr: "missing jid in Payload",
 			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
 				ops.ArchiveChatFunc = func(context.Context, string, domain.JID, bool) error { return err }
@@ -277,7 +279,7 @@ func TestMiscBodyHandlers_Success(t *testing.T) {
 			if env := decodeEnvelope(t, rec); !env.Success {
 				t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 			}
-			ipmAssertNoOutcomeLog(t, recs)
+			assertNoOutcomeLog(t, recs)
 		})
 	}
 }
@@ -332,6 +334,9 @@ func TestMiscBodyHandlers_MalformedBody(t *testing.T) {
 	}
 }
 
+// 400 desde a F66: campo obrigatorio ausente ou valor invalido no payload e
+// erro do CLIENTE. Estes testes exigiam 500 — dois com "_500" no proprio
+// nome —, fixando o defeito que a F66 corrige.
 func TestMiscBodyHandlers_IncompletePayload(t *testing.T) {
 	for _, tc := range miscBodyCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -340,7 +345,7 @@ func TestMiscBodyHandlers_IncompletePayload(t *testing.T) {
 			rec, recs := ipmServe(t, tc.build(ops, pm, jids), http.MethodPost, tc.path, `{}`,
 				func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.emptyBodyErr)
 		})
 	}
@@ -395,7 +400,7 @@ func TestGetPrivacySettingsHandler_Success(t *testing.T) {
 	if len(pm.GetPrivacySettingsCalls) != 1 {
 		t.Fatalf("GetPrivacySettings chamado %d vez(es), quero 1", len(pm.GetPrivacySettingsCalls))
 	}
-	ipmAssertNoOutcomeLog(t, recs)
+	assertNoOutcomeLog(t, recs)
 }
 
 func TestGetPrivacySettingsHandler_Unauthorized(t *testing.T) {

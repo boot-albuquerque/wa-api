@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -29,12 +30,12 @@ func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req doma
 	}
 
 	if len(req.Phone) < 1 {
-		return nil, fmt.Errorf("missing Phone in Payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in Payload", false, nil)
 	}
 
 	jid, err := uc.jids.ResolveJID(ctx, req.Phone)
 	if err != nil {
-		return nil, fmt.Errorf("could not parse Phone")
+		return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
 	}
 
 	pic, err := uc.contacts.GetProfilePicture(ctx, userID, jid, req.Preview)

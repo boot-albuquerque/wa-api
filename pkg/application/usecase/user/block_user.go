@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -43,13 +44,20 @@ func (uc *BlockUserUseCase) Execute(ctx context.Context, userID string, req doma
 		target = strings.TrimSpace(req.Phone)
 	}
 	if target == "" {
-		return nil, fmt.Errorf("missing Phone or JID")
+		return nil, apperr.New("missing_phone_or_jid", apperr.CategoryValidation, "missing Phone or JID", false, nil)
 	}
 
-	jid, err := uc.jids.ResolveQualifiedJID(ctx, target)
+	// F203, decisão 35=a do canal: resolução LENIENTE, que aplica o servidor
+	// por omissão. Antes disto o campo chamava-se `Phone` e recusava um
+	// telefone — medido em campo, {"Phone":"5511000000001"} devolvia 400
+	// invalid_phone_or_jid, enquanto /chat/send/text aceitava o mesmo formato.
+	// Um campo com esse nome que exige @s.whatsapp.net é contrato
+	// surpreendente, e a mensagem de erro nem dizia o que faltava.
+	jid, err := uc.jids.ResolveJID(ctx, target)
 	if err != nil {
 		uc.logger.Warn(ctx, "Failed to parse JID", "error", err, "target", target)
-		return nil, fmt.Errorf("could not parse Phone or JID: %w", err)
+		return nil, apperr.New("invalid_phone_or_jid", apperr.CategoryValidation,
+			"could not parse Phone or JID", false, err)
 	}
 
 	// A normalização do JID e a tradução de LID para número são do adapter:

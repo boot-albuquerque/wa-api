@@ -32,3 +32,53 @@ internal/wa-noise/
 # nao codigo de producao a instrumentar; contar seus ~45 metodos triviais no
 # denominador so diluiria o percentual.
 pkg/infra/wa-noise/client/testkit/
+
+# pkg/infra/wa-noise/adapters/ — DECISÃO DE ARQUITETURA (2026-08-21, F193),
+# não conveniência de métrica. A camada de adaptador NÃO é ponto de
+# instrumentação neste projeto: ela resolve sessão, converte tipos e delega à
+# fachada, e quem regista a falha é o USE CASE, que tem o nome da operação e o
+# utilizador em mãos. Logar nos dois lados criaria as duas fontes de verdade
+# que o CLAUDE.md proíbe — a mesma razão que fez a F187 custar um dia.
+#
+# Por que a exclusão MELHORA a métrica em vez de a afrouxar, medido em
+# 2026-08-21:
+#
+#   com adaptadores    453/694 = 65,3%   dos quais 0/85 = 0,0% são adaptadores
+#   sem adaptadores    453/609 = 74,4%
+#
+# Os 85 métodos eram 12,2% do denominador e mediam ZERO. Ao diluir, mascaravam
+# regressão no código que realmente loga: o piso passa de 667 para 744 sobre a
+# superfície que a métrica se propõe a medir. E a projeção mostrava que a
+# paridade que falta (comunidades, business, misc) empurraria para 63,3% — o
+# gate estava a punir trabalho correto.
+#
+# DIFERENÇA face aos quatro extratos acima, que não deve ser varrida: aqueles
+# são dublês de teste e código de terceiros vendorizado, que não PODEM logar.
+# Este é código de produção nosso que ESCOLHEMOS não instrumentar. Se essa
+# escolha de layering mudar, esta linha sai e o piso é recalculado.
+pkg/infra/wa-noise/adapters/
+
+# pkg/infra/wa-noise/client/ — MESMA DECISÃO DE ARQUITETURA que a dos
+# adaptadores acima (2026-08-21, F204), e pela mesma razão: a fachada não é
+# ponto de instrumentação. Ela delega ao SDK e traduz a recusa; quem regista a
+# falha é o use case, que tem o nome da operação e o utilizador.
+#
+# O que entrou aqui e forçou a linha: a decisão 46=a do canal mandou cobrir os
+# ~66 pontos de info query com wrappers explícitos no `RealClient`, porque a
+# promoção de métodos não tem onde se intercalar. São 50 métodos de delegação
+# pura — `return errmap.ClassifyIQ(r.Client.X(...))` — gerados a partir da
+# interface. Medido antes de decidir:
+#
+#   com os wrappers    eligible 675, func_coverage 69,2%   (era 74,7%)
+#   sem os wrappers    eligible 625, func_coverage 74,7%
+#
+# 50 funções que não logam e não DEVEM logar custavam 5,5 pontos percentuais.
+# Isso é diluição, não regressão: nenhum código que registava deixou de o
+# fazer. Mantê-las no denominador faria o gate punir a correção da F204.
+#
+# O QUE NÃO É EXCLUÍDO, e é o ponto: `ClassifyIQ` mudou-se para
+# `pkg/infra/wa-noise/errmap/` justamente para CONTINUAR medida. Ela tem lógica
+# — decide categoria e regista a decisão — e é o oposto de delegação. A
+# exclusão por pacote não distingue ficheiros, então a separação teve de ser
+# feita no layout. Se um dia entrar lógica em `client/`, esta linha sai.
+pkg/infra/wa-noise/client/

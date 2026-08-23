@@ -39,12 +39,14 @@ import (
 	"wa-api/internal/wa-headless/capabilities/chats"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/contacts"
+	"wa-api/internal/wa-headless/capabilities/edit"
 	"wa-api/internal/wa-headless/capabilities/group"
 	"wa-api/internal/wa-headless/capabilities/groupreq"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/capabilities/react"
+	"wa-api/internal/wa-headless/capabilities/revoke"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/runtime"
@@ -256,6 +258,8 @@ func NewContactLister(runner *Runner, eval Evaluator) *ContactLister {
 type (
 	// ChannelManager reads and administers channels.
 	ChannelManager = channel.Manager
+	// ChannelCreated is a channel that was just created.
+	ChannelCreated = channel.Created
 	// ChannelEntry is one channel in a listing.
 	ChannelEntry = channel.DirectoryEntry
 )
@@ -382,3 +386,28 @@ const (
 func NewGroupRequestManager(runner *Runner, eval Evaluator) *GroupRequestManager {
 	return groupreq.New(runner, eval)
 }
+
+// Editing a message already sent.
+type (
+	// Editor edits one's own message on the page.
+	Editor = edit.Editor
+	// EditResult is what the edit did, READ BACK — the page is asked whether
+	// the body actually moved, because an edit that did not land looks exactly
+	// like one that did from the caller's side.
+	EditResult = edit.Result
+)
+
+// NewEditor builds the editing capability over a session's page.
+func NewEditor(runner *Runner, eval Evaluator) *Editor { return edit.New(runner, eval) }
+
+// Revoking a message already sent.
+type (
+	// Revoker deletes a message on the page.
+	Revoker = revoke.Revoker
+	// RevokeResult says WHICH entitlement the page used — the account's own
+	// message, or an admin removing somebody else's. They are different acts.
+	RevokeResult = revoke.Result
+)
+
+// NewRevoker builds the revoke capability over a session's page.
+func NewRevoker(runner *Runner, eval Evaluator) *Revoker { return revoke.New(runner, eval) }

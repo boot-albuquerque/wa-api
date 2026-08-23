@@ -32,7 +32,7 @@ const leaseReleaseTimeout = 3 * time.Second
 // periodic writes to the database and buy nothing the flock does not already
 // provide.
 func buildLeaseManager(s *server) (*leaseManager, error) {
-	mode, err := clusterModeConfigurado()
+	mode, err := clusterModeFromEnv()
 	if err != nil {
 		return nil, err
 	}
@@ -47,13 +47,34 @@ func buildLeaseManager(s *server) (*leaseManager, error) {
 
 	store := db.NewSessionLeaseRepository(s.DB)
 	ownerID := buildOwnerID()
+	ownerAddr := buildOwnerAddr()
 	log.Info().
 		Str("owner_id", ownerID).
 		Dur("ttl", ttl).
 		Dur("heartbeat", heartbeat).
 		Msg("session ownership enabled")
 
-	return newLeaseManager(store, ownerID, ttl, heartbeat, releaseSessionLocally), nil
+	manager := newLeaseManager(store, ownerID, ownerAddr, ttl, heartbeat, releaseSessionLocally)
+	manager.hasLiveSession = hasLiveSessionLocally
+	return manager, nil
+}
+
+// hasLiveSessionLocally reports whether this process still has a session for a
+// user.
+//
+// The wa-noise client is the right thing to ask. It is registered while the
+// session is being created — so it is already there DURING a QR pairing, and
+// holding the lease through the pairing is correct, not a leak — and the
+// kill-channel path removes it when the session dies, from the QR timing out to
+// a logout.
+//
+// Assigned here, outside the constructor, so the thirteen existing call sites
+// of newLeaseManager keep compiling and keep testing what they were written to
+// test. A sixth positional parameter would have forced a mechanical edit on all
+// of them, and mechanical edits across tests are how a test quietly stops
+// asserting what its name claims.
+func hasLiveSessionLocally(userID string) bool {
+	return clientManager.GetWaNoiseClient(userID) != nil
 }
 
 // setupSessionOwnership builds the manager and installs it on the server, or
@@ -123,6 +144,18 @@ func claimSessionOwnership(manager *leaseManager, userID string) bool {
 			Msg("session owned by another replica; skipping")
 	}
 	return owned
+}
+
+// releaseSessionOwnership hands a lease back when a session failed to start.
+//
+// No-op with no manager: `single` mode never claimed anything.
+func releaseSessionOwnership(manager *leaseManager, userID string) {
+	if manager == nil {
+		return
+	}
+	log.Warn().Str("userid", userID).
+		Msg("session did not start; handing its ownership back so another replica can take it")
+	manager.Release(context.Background(), userID)
 }
 
 // startLeaseHeartbeat runs the renewal loop when there is a manager.

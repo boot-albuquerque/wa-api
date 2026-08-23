@@ -50,12 +50,12 @@ func exigirModoMedicao(t *testing.T) {
 // Medido: handler 26× mais lento (3,165s contra 121ms), p95 de 51ms de atraso
 // por evento. E o dreno IDÊNTICO ao do pool de mesmo tamanho (3,232s contra
 // 3,234s), provando que o custo de entrega é o mesmo e a única diferença entre
-// as duas formas é quem espera.
+// as duas formas é quem waitFull.
 type limitadorBloqueante struct {
-	slots      chan struct{}
-	emVoo      atomic.Int64
-	pico       atomic.Int64
-	saturacoes atomic.Int64
+	slots       chan struct{}
+	inFlight    atomic.Int64
+	peak        atomic.Int64
+	saturations atomic.Int64
 }
 
 func novoLimitadorBloqueante(capacidade int) *limitadorBloqueante {
@@ -73,27 +73,27 @@ func (l *limitadorBloqueante) Go(nome string, fn func()) {
 	select {
 	case l.slots <- struct{}{}:
 	default:
-		l.saturacoes.Add(1)
+		l.saturations.Add(1)
 		l.slots <- struct{}{} // bloqueia o CHAMADOR: e' o ponto todo
 	}
-	atual := l.emVoo.Add(1)
+	atual := l.inFlight.Add(1)
 	for {
-		pico := l.pico.Load()
-		if atual <= pico || l.pico.CompareAndSwap(pico, atual) {
+		peak := l.peak.Load()
+		if atual <= peak || l.peak.CompareAndSwap(peak, atual) {
 			break
 		}
 	}
 	safeGo(nome, func() {
-		defer func() { l.emVoo.Add(-1); <-l.slots }()
+		defer func() { l.inFlight.Add(-1); <-l.slots }()
 		fn()
 	})
 }
 
-func (l *limitadorBloqueante) Metricas() (emVoo, pico, saturacoes int64) {
+func (l *limitadorBloqueante) Metrics() (inFlight, peak, saturations int64) {
 	if l == nil {
 		return 0, 0, 0
 	}
-	return l.emVoo.Load(), l.pico.Load(), l.saturacoes.Load()
+	return l.inFlight.Load(), l.peak.Load(), l.saturations.Load()
 }
 
 // Medição A/B do teto de despacho (F86).
@@ -126,14 +126,14 @@ type medida struct {
 	picoGoroutines int
 	duracao        time.Duration
 	picoHeapMB     float64
-	saturacoes     int64
+	saturations    int64
 }
 
 // medirRajada dispara `eventos × porEvento` entregas pelo limitador e observa
-// pico de goroutines, tempo e heap.
+// peak de goroutines, tempo e heap.
 //
-// O pico é amostrado por uma goroutine própria a cada 1ms: `NumGoroutine` no
-// fim mediria o repouso, não o pico, que é justamente o dano da rajada.
+// O peak é amostrado por uma goroutine própria a cada 1ms: `NumGoroutine` no
+// fim mediria o repouso, não o peak, que é justamente o dano da rajada.
 func medirRajada(t *testing.T, teto int, c cenarioCarga) medida {
 	t.Helper()
 
@@ -184,12 +184,12 @@ func medirRajada(t *testing.T, teto int, c cenarioCarga) medida {
 	close(pararAmostra)
 	amostrador.Wait()
 
-	_, _, sat := l.Metricas()
+	_, _, sat := l.Metrics()
 	return medida{
 		picoGoroutines: int(picoGo.Load()),
 		duracao:        duracao,
 		picoHeapMB:     float64(picoHeap.Load()) / (1024 * 1024),
-		saturacoes:     sat,
+		saturations:    sat,
 	}
 }
 
@@ -197,7 +197,7 @@ func medirRajada(t *testing.T, teto int, c cenarioCarga) medida {
 //
 // Não falha por número: são medidas, e fixar limiar aqui viraria teste
 // instável. A única asserção é a que não depende de máquina — sem teto, o
-// pico tem de ser MAIOR que com teto. Se isso deixar de valer, o limitador
+// peak tem de ser MAIOR que com teto. Se isso deixar de valer, o limitador
 // parou de limitar, e aí é defeito e não variação.
 func TestMedicaoCargaDespacho(t *testing.T) {
 	exigirModoMedicao(t)
@@ -222,14 +222,14 @@ func TestMedicaoCargaDespacho(t *testing.T) {
 				if teto == 0 {
 					rotulo = "SEM TETO"
 				}
-				t.Logf("%-10s pico_goroutines=%-6d duracao=%-10s heap_pico=%.1fMB saturacoes=%d",
-					rotulo, m.picoGoroutines, m.duracao.Round(time.Millisecond), m.picoHeapMB, m.saturacoes)
+				t.Logf("%-10s pico_goroutines=%-6d duracao=%-10s heap_pico=%.1fMB saturations=%d",
+					rotulo, m.picoGoroutines, m.duracao.Round(time.Millisecond), m.picoHeapMB, m.saturations)
 			}
 
 			semTeto := resultados[0]
 			comTeto := resultados[16]
 			if comTeto.picoGoroutines >= semTeto.picoGoroutines {
-				t.Errorf("pico com teto=16 (%d) nao ficou abaixo do pico sem teto (%d): o limitador nao limitou",
+				t.Errorf("peak com teto=16 (%d) nao ficou abaixo do peak sem teto (%d): o limitador nao limitou",
 					comTeto.picoGoroutines, semTeto.picoGoroutines)
 			}
 		})
@@ -307,7 +307,7 @@ func TestMedicaoCargaDespachoHTTPReal(t *testing.T) {
 		d := time.Since(inicio)
 		close(parar)
 		am.Wait()
-		_, _, sat := l.Metricas()
+		_, _, sat := l.Metrics()
 		return medida{int(picoGo.Load()), d, float64(picoHeap.Load()) / (1024 * 1024), sat}
 	}
 
@@ -319,7 +319,7 @@ func TestMedicaoCargaDespachoHTTPReal(t *testing.T) {
 		if teto == 0 {
 			rotulo = "SEM TETO"
 		}
-		t.Logf("%-10s pico_goroutines=%-6d duracao=%-10s heap_pico=%.1fMB saturacoes=%d",
-			rotulo, m.picoGoroutines, m.duracao.Round(time.Millisecond), m.picoHeapMB, m.saturacoes)
+		t.Logf("%-10s pico_goroutines=%-6d duracao=%-10s heap_pico=%.1fMB saturations=%d",
+			rotulo, m.picoGoroutines, m.duracao.Round(time.Millisecond), m.picoHeapMB, m.saturations)
 	}
 }

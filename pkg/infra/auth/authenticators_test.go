@@ -27,7 +27,7 @@ import (
 // consulta — e é justamente a consulta que decide quem entra.
 func newAuthTestDB(t *testing.T) *sql.DB {
 	t.Helper()
-	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db"))
+	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -79,9 +79,17 @@ func TestLookupUser_FindsUserByTokenHash(t *testing.T) {
 	}
 }
 
-func TestLookupUser_FindsUserByLegacyPlaintextToken(t *testing.T) {
-	// A coluna legada `token` continua aceita nesta release. Se o OR sumir da
-	// query, usuários não migrados perdem acesso — este teste é o que avisa.
+// TestLookupUser_RecusaTokenLegadoSoEmTextoClaro fecha a janela de transição.
+//
+// Este teste dizia o contrário — "a coluna legada continua aceita nesta
+// release; se o OR sumir, usuários não migrados perdem acesso" — e estava
+// certo NA ÉPOCA. A janela fechou na F97 etapa 2.
+//
+// Quem garante que ninguém perde acesso não é a cláusula `OR`, é a migração 16:
+// ela preenche o hash que faltar e ABORTA se sobrar linha sem ele. A cláusula
+// dava o mesmo resultado e, de quebra, casava `token = ”` com requisição SEM
+// token nenhum (F100).
+func TestLookupUser_RecusaTokenLegadoSoEmTextoClaro(t *testing.T) {
 	db := newAuthTestDB(t)
 	_, err := db.Exec(
 		`INSERT INTO users (id, name, token, webhook, jid, events, proxy_url, qrcode)
@@ -94,11 +102,8 @@ func TestLookupUser_FindsUserByLegacyPlaintextToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LookupUser: %v", err)
 	}
-	if rec == nil {
-		t.Fatal("token legado em claro deixou de autenticar")
-	}
-	if rec.ID != "u2" {
-		t.Fatalf("id: got %q, want %q", rec.ID, "u2")
+	if rec != nil {
+		t.Fatalf("o texto claro ainda autentica (usuario %q); a F97 etapa 2 nao valeu", rec.ID)
 	}
 }
 
@@ -111,7 +116,6 @@ func TestLookupUser_RejectsUnknownTokens(t *testing.T) {
 
 	rejected := map[string]string{
 		"token inexistente":       "nao-existe",
-		"token vazio":             "",
 		"prefixo do token valido": "alice",
 		"sufixo do token valido":  "token",
 		"wildcard SQL":            "%",
@@ -159,7 +163,7 @@ func TestLookupUser_ReportsErrorOnBrokenSchema(t *testing.T) {
 	// Banco aberto sem schema: a query falha. O contrato é (nil, err), nunca
 	// (nil, nil) — porque (nil, nil) significa "não autenticado" e um erro de
 	// infraestrutura sendo lido como "não autenticado" mascara indisponibilidade.
-	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "empty.db"))
+	x, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "empty.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -427,5 +431,35 @@ func TestWithUserInfo_UsesTypedKey(t *testing.T) {
 	//nolint:staticcheck // a string crua é exatamente o que NÃO pode funcionar
 	if got := ctx.Value("userinfo"); got != nil {
 		t.Fatalf("a string crua \"userinfo\" recuperou o valor (%v) — a chave voltou a ser untyped", got)
+	}
+}
+
+// TestLookupUser_EmptyTokenIsRefusedBeforeTheQuery separa o token vazio dos
+// demais candidatos de bypass porque ele agora é recusado de forma DIFERENTE, e
+// mais forte.
+//
+// Os outros candidatos são consultados e não casam com linha nenhuma —
+// (nil, nil), "não encontrado". O vazio nem chega ao banco: devolve
+// ErrEmptyToken.
+//
+// A distinção não é cosmética. A cláusula é `token = $1 OR token_hash = $2`, e
+// uma requisição sem token nenhum produz $1 = "". Enquanto TODA linha tiver
+// token preenchido, "não encontrado" basta; no instante em que a etapa 1 da
+// F97 branquear a coluna, "não encontrado" vira "autenticado" (F100, medido:
+// 401 virou 200 no controle negativo). A recusa antes da consulta é o que
+// mantém a garantia independente do conteúdo da tabela.
+func TestLookupUser_EmptyTokenIsRefusedBeforeTheQuery(t *testing.T) {
+	db := newAuthTestDB(t)
+	// A linha com token vazio é o cenário que a F97 vai criar. Sem ela o teste
+	// passaria mesmo sem a guarda, porque não haveria com o que casar.
+	insertUser(t, db, "u-blank", "blank", "", true)
+
+	rec, err := auth.LookupUser(db, "")
+
+	if !errors.Is(err, auth.ErrEmptyToken) {
+		t.Fatalf("err = %v, want ErrEmptyToken: a consulta foi feita com token vazio", err)
+	}
+	if rec != nil {
+		t.Fatalf("BYPASS: token vazio autenticou como usuario %q", rec.ID)
 	}
 }

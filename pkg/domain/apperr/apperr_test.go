@@ -1,7 +1,9 @@
 package apperr
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 )
@@ -132,6 +134,19 @@ func TestCategory_HTTPStatus(t *testing.T) {
 	}{
 		{"validation", CategoryValidation, http.StatusBadRequest},
 		{"unauthorized", CategoryUnauthorized, http.StatusUnauthorized},
+		// F95: 409, e nao 400. A requisicao esta' correta — so' nao pode ser
+		// atendida NESTE estado ou por ESTA instancia. Com 400 o cliente le
+		// "corrija o payload", que e' enganoso quando nao ha o que corrigir.
+		{"conflict", CategoryConflict, http.StatusConflict},
+		// F101: 404, e nao 500 nem 400. O recurso nao esta la — o payload
+		// esta' bem formado (400 diria "corrija o payload") e nada quebrou do
+		// nosso lado (500 diria "tente de novo"). Com 500 o cliente nao
+		// distinguia "o banco caiu" de "esse id nao existe": um retenta, o
+		// outro nunca vai funcionar.
+		{"not found", CategoryNotFound, http.StatusNotFound},
+		// CAP-09A: 501 e' o contrato publico de GET /chat/history para
+		// "o usuario desligou o historico de mensagens" (commit 3dafae0).
+		{"not implemented", CategoryNotImplemented, http.StatusNotImplemented},
 		{"internal", CategoryInternal, http.StatusInternalServerError},
 		{"unknown category defaults to internal", Category("something_new"), http.StatusInternalServerError},
 	}
@@ -154,5 +169,34 @@ func TestRetryable(t *testing.T) {
 	transientErr := New("upstream_timeout", CategoryInternal, "upstream timed out", true, nil)
 	if !transientErr.Retryable {
 		t.Error("transient internal error should be retryable")
+	}
+}
+
+// F90: cancelamento do CLIENTE nao pode ser logado como erro do servidor.
+//
+// Quinze linhas seguidas de "database error: context canceled" no log de
+// producao eram o navegador cancelando o polling do painel — processo saudavel
+// o tempo todo. Em nivel `error`, uma troca de aba fica indistinguivel de banco
+// fora do ar.
+func TestIsClientGaveUp(t *testing.T) {
+	casos := []struct {
+		nome string
+		err  error
+		quer bool
+	}{
+		{"cancelamento do cliente", context.Canceled, true},
+		{"embrulhado", fmt.Errorf("database error: %w", context.Canceled), true},
+		// A distincao que importa: DeadlineExceeded e' NOSSO timeout —
+		// prometemos resposta num prazo e nao entregamos. Continua sendo erro.
+		{"nosso timeout", context.DeadlineExceeded, false},
+		{"erro comum", errors.New("qualquer outra coisa"), false},
+		{"nil", nil, false},
+	}
+	for _, c := range casos {
+		t.Run(c.nome, func(t *testing.T) {
+			if got := IsClientGaveUp(c.err); got != c.quer {
+				t.Errorf("IsClientGaveUp(%v) = %v, quero %v", c.err, got, c.quer)
+			}
+		})
 	}
 }

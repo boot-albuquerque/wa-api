@@ -45,6 +45,14 @@ type Deps struct {
 	// route enumeration only walks the mux tree and never calls a
 	// handler's ServeHTTP.
 	CustomHandlers *customHandlers
+
+	// Ready backs /health/ready (ADR-0005 D6). Injected as a function so the
+	// router does not have to know about the database driver or the lease
+	// manager — and so the probe can be tested without either.
+	//
+	// Optional: nil answers ready with no checks, which is what a process
+	// with nothing to check should say.
+	Ready func(context.Context) ReadinessReport
 }
 
 // RouteInfo is one registered route, as returned by Routes.
@@ -120,19 +128,26 @@ func Routes(d Deps) []RouteInfo {
 // ServeHTTP on them.
 func emptyCustomHandlers() *customHandlers {
 	return &customHandlers{
-		Message:   &MessageHandlers{},
-		Session:   &SessionHandlers{},
-		Webhook:   &WebhookHandlers{},
-		User:      &handlers.UserHandlers{},
-		Group:     &handlers.GroupHandlers{},
-		Storage:   &handlers.StorageHandlers{},
-		Misc:      &handlers.MiscHandlers{},
-		Blocklist: &handlers.BlocklistHandlers{},
-		Download:  &handlers.DownloadHandlers{},
-		Presence:  &handlers.PresenceHandlers{},
-		Reaction:  &handlers.ReactionHandlers{},
-		Contact:   &handlers.ContactHandlers{},
-		GroupMgmt: &handlers.GroupManagementHandlers{},
+		Message:    &MessageHandlers{},
+		Session:    &SessionHandlers{},
+		Webhook:    &WebhookHandlers{},
+		User:       &handlers.UserHandlers{},
+		Group:      &handlers.GroupHandlers{},
+		Storage:    &handlers.StorageHandlers{},
+		Misc:       &handlers.MiscHandlers{},
+		Blocklist:  &handlers.BlocklistHandlers{},
+		Download:   &handlers.DownloadHandlers{},
+		Presence:   &handlers.PresenceHandlers{},
+		Reaction:   &handlers.ReactionHandlers{},
+		Contact:    &handlers.ContactHandlers{},
+		GroupMgmt:  &handlers.GroupManagementHandlers{},
+		Newsletter: &handlers.NewsletterHandlers{},
+		Label:      &handlers.LabelHandlers{},
+		// ChatHistory é um grupo próprio, e não um campo a mais em Storage:
+		// /chat/history e /webhook/history precisam de handlers DISTINTOS
+		// (HOUSEKEEP F124). Ausente daqui, registerCustomRoutes desreferencia
+		// nil ao registrar a rota.
+		ChatHistory: &handlers.ChatHistoryHandlers{},
 	}
 }
 
@@ -196,7 +211,7 @@ func reportPanic(w http.ResponseWriter, r *http.Request, rec any, ev *zerolog.Ev
 	ev.
 		Interface("panic", rec).
 		Str("method", r.Method).
-		Stringer("url", r.URL).
+		Str("url", redactURL(r.URL)).
 		Msg("recovered from panic in HTTP handler")
 	customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("panic: %v", rec))
 }
@@ -222,7 +237,7 @@ func boundaryLogMiddlewares(l zerolog.Logger) []alice.Constructor {
 func writeBoundaryRecord(r *http.Request, status, size int, duration time.Duration) {
 	hlog.FromRequest(r).Info().
 		Str("method", r.Method).
-		Stringer("url", r.URL).
+		Str("url", redactURL(r.URL)).
 		Str("route", accessLogRoute(r)).
 		Int("status", status).
 		Int("size", size).
@@ -270,12 +285,7 @@ func buildRouter(d Deps) *mux.Router {
 		adminRoutes.Use(mux.MiddlewareFunc(mw))
 	}
 	adminRoutes.Use(authAdmin(d.AdminToken))
-	adminRoutes.Handle("/users", d.CustomHandlers.User.ListUsers()).Methods("GET")
-	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.ListUsers()).Methods("GET")
-	adminRoutes.Handle("/users", d.CustomHandlers.User.AddUser()).Methods("POST")
-	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.EditUser()).Methods("PUT")
-	adminRoutes.Handle("/users/{id}", d.CustomHandlers.User.DeleteUser()).Methods("DELETE")
-	adminRoutes.Handle("/users/{id}/full", d.CustomHandlers.Misc.DeleteUserComplete).Methods("DELETE")
+	registerAdminRoutes(adminRoutes, d.CustomHandlers)
 
 	// Chain order matters, and alice.Chain.Then applies constructors so the
 	// FIRST appended one is OUTERMOST (verified against alice/chain.go:45-55).
@@ -297,18 +307,38 @@ func buildRouter(d Deps) *mux.Router {
 	c = c.Append(authAlice(d.DB.DB, d.UserCache))
 	c = c.Append(recordUserIDHandler)
 
-	// /livez is the container-level liveness probe: no auth, no DB query,
-	// no runtime.ReadMemStats — cheap enough to hit unauthenticated on
-	// every HEALTHCHECK tick without becoming a DoS amplifier. /health
-	// stays behind auth (registered below via registerCustomRoutes): it
-	// fans out to a DB COUNT(*) and ReadMemStats and returns sizing/version
-	// data that must not be public.
-	router.Handle("/livez", alice.New().Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	}))).Methods("GET")
+	// Probes (ADR-0005 D6 — see health.go for the split and for what readiness
+	// deliberately does not check). Both are unauthenticated because a kubelet
+	// cannot carry a token, and both are cheap: no ReadMemStats, no COUNT(*),
+	// and readiness never returns sizing or version data. /health stays behind
+	// auth (registered below via registerCustomRoutes) precisely because it
+	// does return those.
+	//
+	// /livez is kept as an alias of /health/live: it is what the Dockerfile
+	// HEALTHCHECK and any deployed manifest point at today, and renaming a
+	// probe out from under a running deployment turns every container
+	// unhealthy at the same moment.
+	live := alice.New().Then(livenessHandler())
+	router.Handle("/livez", live).Methods("GET")
+	router.Handle("/health/live", live).Methods("GET")
 
+	ready := d.Ready
+	if ready == nil {
+		// No probe wired: answer ready with no checks rather than crash. The
+		// alternative — nil-deref on the first kubelet poll — would take down
+		// a process that is, by every other measure, serving fine.
+		log.Warn().
+			Str("endpoint", "/health/ready").
+			Msg("no readiness probe wired; this endpoint will answer ready without checking anything")
+		ready = func(context.Context) ReadinessReport {
+			return ReadinessReport{Status: statusReady, Checks: map[string]string{}}
+		}
+	}
+	router.Handle("/health/ready", alice.New().Then(readinessHandler(ready))).Methods("GET")
+
+	// O devui precisa do token de admin para o entregar ao painel; ver
+	// devui.Handler para a consequência de segurança disso.
+	d.CustomHandlers.AdminToken = d.AdminToken
 	registerCustomRoutes(router, c, d.CustomHandlers)
 
 	if d.StaticDir != "" {

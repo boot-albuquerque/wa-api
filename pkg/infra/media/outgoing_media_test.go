@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	dbpkg "wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/storage"
 
 	"github.com/jmoiron/sqlx"
@@ -18,7 +19,7 @@ import (
 // diferente) com apenas as colunas que ProcessOutgoingMedia consulta.
 func openUsersDB(t *testing.T, createTable bool) *sqlx.DB {
 	t.Helper()
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "test.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "test.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}

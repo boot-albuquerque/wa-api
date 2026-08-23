@@ -2,6 +2,7 @@ package session
 
 import (
 	"testing"
+	"time"
 
 	port "wa-api/pkg/application/contracts"
 )
@@ -42,12 +43,10 @@ func TestTranslateStatusEvent_TodosOsKinds(t *testing.T) {
 			wantType:  "PairSuccess",
 			wantEvent: "pair_success",
 		},
-		{
-			nome:      "qr",
-			evt:       port.SessionEvent{Kind: port.SessionEventKindQR},
-			wantType:  "QR",
-			wantEvent: "qr",
-		},
+		// O QR saiu desta tabela com a F194: deixou de ser despachado por este
+		// caminho, para haver um único escritor do evento. A ausência dele
+		// aqui é asserida por TestTranslate_QRNaoEhDespachadoPorEsteCaminho —
+		// não basta removê-lo da lista, senão ninguém nota se ele voltar.
 		{
 			nome:      "stream_replaced",
 			evt:       port.SessionEvent{Kind: port.SessionEventKindStreamReplaced},
@@ -110,8 +109,11 @@ func TestPayloads_ComDetalhe(t *testing.T) {
 		}
 	})
 
+	// F194: não há mais `qrPayload`. O QR deixou de ser traduzido por este
+	// caminho — passou a ter um único escritor, o canal de pareamento — e o
+	// construtor que sobrou é o buildQRPayload, partilhado.
 	t.Run("qr", func(t *testing.T) {
-		p := qrPayload(&port.SessionQREvent{Code: "2@abc"})
+		p := buildQRPayload("2@abc", 0)
 		if p["code"] != "2@abc" {
 			t.Fatalf("code = %v", p["code"])
 		}
@@ -130,7 +132,10 @@ func TestPayloads_SemDetalhe(t *testing.T) {
 	if p := pairSuccessPayload(nil); p["event"] != "pair_success" || len(p) != 1 {
 		t.Fatalf("pair_success = %v", p)
 	}
-	if p := qrPayload(nil); p["event"] != "qr" || len(p) != 1 {
+	// O QR é a exceção desta lista: desde a F68 ele carrega SEMPRE `code`
+	// além do `event`, mesmo sem detalhe nenhum. Os outros continuam sendo só
+	// o `event` — e é isso que a lista prova.
+	if p := buildQRPayload("", 0); p["event"] != qrEventName || p["code"] != "" {
 		t.Fatalf("qr = %v", p)
 	}
 }
@@ -182,5 +187,83 @@ func TestOptions_S3EWebhookProxy(t *testing.T) {
 	}
 	if !o.defaultWebhookUseProxy {
 		t.Fatal("WithDefaultWebhookUseProxy(true) não aplicou")
+	}
+}
+
+// TestQRPayload_OsDoisFluxosProduzemOMesmoSchema é o teste da F68.
+//
+// O mesmo `type: "QR"` era despachado com DOIS payloads incompatíveis: o fluxo
+// de pareamento mandava `{event:"code", qrCodeBase64, expiresAt}` e o de
+// Subscribe mandava `{event:"qr", code}`. Nada no tipo permitia distinguir — o
+// consumidor tinha de testar a presença dos campos, e quem tratasse só um
+// schema ignorava o outro em silêncio.
+//
+// O teste compara os CONJUNTOS DE CHAVES, não valores: valores diferem
+// legitimamente (códigos diferentes, validades diferentes), e é o schema que
+// precisa ser o mesmo.
+func TestQRPayload_OsDoisFluxosProduzemOMesmoSchema(t *testing.T) {
+	// F194: já NÃO há dois fluxos, e é essa a correção. O que este teste
+	// guardava — dois payloads de QR com schemas divergentes (F68) — deixou
+	// de ser possível porque o segundo DESPACHO desapareceu.
+	//
+	// O teste sobrevive com a premissa nova: o schema do único construtor tem
+	// de continuar a trazer as três coisas que um cliente usa. A parte que
+	// comparava dois conjuntos de chaves foi para
+	// TestTranslate_QRNaoEhDespachadoPorEsteCaminho, que trava a UNICIDADE.
+	const code = "2@abc"
+	const validade = 20 * time.Second
+
+	payload := buildQRPayload(code, validade)
+
+	// O código cru (renderizável por conta própria), a imagem pronta e a
+	// validade.
+	for _, campo := range []string{"code", "qrCodeBase64", "expiresAt"} {
+		if _, ok := payload[campo]; !ok {
+			t.Errorf("campo %q ausente do payload unificado", campo)
+		}
+	}
+	if payload["code"] != code {
+		t.Errorf("code = %v, quero %q", payload["code"], code)
+	}
+}
+
+// TestTranslate_QRNaoEhDespachadoPorEsteCaminho trava a F194: um único
+// escritor do evento QR.
+//
+// Medido em campo antes da correção — o PRIMEIRO código chegava duplicado ao
+// cliente em todos os ciclos, a 6ms de intervalo, payload idêntico:
+//
+//	03:24:40.583 MSG type=QR qrlen=1830
+//	03:24:40.589 MSG type=QR qrlen=1830   <- duplicado
+//	03:25:00.585 MSG type=QR qrlen=1846   <- dai em diante, um de cada vez
+//
+// A cópia que saía DAQUI vinha sem Timeout, logo sem `expiresAt`: quem se
+// guiasse por ela ficava sem validade e sem barra de progresso. Por isso o
+// escritor que fica é o do canal de pareamento, não este.
+func TestTranslate_QRNaoEhDespachadoPorEsteCaminho(t *testing.T) {
+	tipo, payload := translateStatusEvent(port.SessionEvent{
+		Kind: port.SessionEventKindQR,
+		QR:   &port.SessionQREvent{Code: "2@abc", Timeout: 20 * time.Second},
+	})
+
+	if tipo != "" {
+		t.Fatalf("translateStatusEvent despachou %q para o QR: há dois escritores outra vez (F194)", tipo)
+	}
+	if payload != nil {
+		t.Fatalf("payload = %v, quero nil", payload)
+	}
+}
+
+// TestQRPayload_SemValidadeOmiteExpiresAt: um `expiresAt` inventado é pior que
+// ausente — o cliente desenharia uma barra de progresso que não corresponde a
+// nada.
+func TestQRPayload_SemValidadeOmiteExpiresAt(t *testing.T) {
+	p := buildQRPayload("2@abc", 0)
+
+	if _, presente := p["expiresAt"]; presente {
+		t.Errorf("expiresAt presente sem validade conhecida: %v", p["expiresAt"])
+	}
+	if p["code"] != "2@abc" {
+		t.Errorf("o code sumiu junto: %v", p["code"])
 	}
 }

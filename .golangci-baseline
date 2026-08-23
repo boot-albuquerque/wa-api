@@ -9,7 +9,41 @@
 #   202 em cinco funções de 40 reduz a complexidade real em todo lugar e
 #   *aumenta* a contagem de 1 para 5. Travar na contagem é premiar quem deixa
 #   o monolito de pé. (Achado da revisão de arquitetura da Fase 7.)
-max_complexity=56
+# F172 (2026-08-20): 56 -> 51. Ratchet-DOWN por ordem do proprio alvo lint, que
+# avisava "a complexidade maxima caiu (51 < 56). Baixe max_complexity para 51
+# neste mesmo PR" ha' pelo menos quatro rodadas (logs da CAP-36 a CAP-40) sem
+# que ninguem baixasse. Com o teto em 56 contra medicao de 51, havia CINCO
+# pontos de folga em que a complexidade podia voltar a subir sem o gate
+# reclamar — a trava desligada exatamente na faixa que ela existe para proteger.
+#
+# Teto EXATO, por decisao explicita, e o numero foi MEDIDO na hora de aplicar
+# (nao copiado de relatorio anterior — foi assim que a F171 quase commitou a
+# catraca de cobertura ja' com folga).
+#
+# O custo, aceito e declarado: uma funcao NOVA de complexidade 52 passa a
+# reprovar o gate, mesmo sendo legitima. Isto NAO e' simetrico ao piso de
+# cobertura da F171 — cobertura que cai e' quase sempre defeito, enquanto
+# complexidade que sobe pode ser consequencia honesta de uma feature. Quem
+# esbarrar aqui tem duas saidas legitimas: decompor a funcao, ou subir o teto
+# NESTE arquivo com justificativa escrita. Subir o teto nao e' derrota; subir
+# em silencio e' que seria.
+# F187 (2026-08-20): max_complexity 51 -> 50, count 263 -> 341.
+#
+# A COMPLEXIDADE MAXIMA CAIU, e isso e' contra-intuitivo o suficiente para
+# merecer explicacao: eu acabara de criar classifyMessage, que tem complexidade
+# 30 — um switch com vinte e tal ramos, inerente ao que a funcao E'.
+#
+# Mas essa cadeia estava ANTES dentro de saveMessageHistory, somada a tudo o
+# resto que o handler faz. Extrai-la reduziu o pico do repositorio mais do que a
+# funcao nova acrescentou. Dividir classifyMessage para baixar os 30 seria
+# recriar o problema de "a mesma regra em varios sitios" que a F187 acabou de
+# fechar.
+#
+# A contagem de 263 -> 341 e' INFORMATIVA por desenho (ver o cabecalho deste
+# ficheiro) e e' acumulada do dia inteiro, sobretudo de testes novos. Medida por
+# diretorio: internal/wa-noise/core 52, pkg/bootstrap 27,
+# pkg/presentation/http/handlers 24. O ficheiro novo contribui com UM.
+max_complexity=50
 # vendor-wa-noise-native-fork (2026-08-06): 105->87. golangci-lint fmt
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
 # troca mecânica de import path pra internal/wa-noise/ — não é código
@@ -23,33 +57,24 @@ max_complexity=56
 # Merge de feature/vendor-whatsmeow em feature/macbook-lucas (2026-08-07):
 # 261 -> 262. Uma issue nova, do metodo GetManyLIDsForPNs portado de
 # 3ac8073. max_complexity inalterado (56).
-count=267
-
-# tooling: golangci-lint v2.5.0 -> v2.12.2 (2026-08-11): 263 -> 267.
 #
-# +4 e' EFEITO DA FERRAMENTA, nao de codigo. Medido, nao deduzido: a v2.12.2
-# foi rodada em 4d2532e — o HEAD anterior a branch do wa-headless, ainda em
-# Go 1.25 e sem nenhuma linha de internal/wa-headless/ — e reportou 267.
+# 2026-08-21: 341 -> 346. Informativo, nao trava. As cinco issues novas sao dos
+# ficheiros acrescentados no ciclo de etiquetas/newsletter. A trava real e' a
+# complexidade maxima, que continua em 50.
 #
-#   4d2532e + v2.5.0   263 issues   max_complexity 56
-#   4d2532e + v2.12.2  267 issues   max_complexity 56
-#
-# Os 4 novos sao de codigo PRE-EXISTENTE que a versao antiga nao reportava:
-# 2 de `gofmt` (pkg/bootstrap/config.go, pkg/presentation/http/handlers/
-# handler_session_test.go) — a v2.12 roda formatters que a v2.5 nao rodava —
-# e 2 de staticcheck. Ficam registrados aqui e nao foram corrigidos: sao
-# anteriores a esta branch, conforme a politica do repo.
-#
-# max_complexity INALTERADO (56) nas duas versoes. A trava real nao se moveu,
-# e e' por isso que a atualizacao nao afrouxa nada: a contagem e' informativa
-# por desenho (ver o cabecalho deste arquivo).
-#
-# Por que a v2.12.2: a v2.5.0 nao consegue mais carregar este modulo. Ela
-# embute o go/types do Go com que foi compilada (1.25.1) e recusa pacotes que
-# declarem um Go mais novo; o modulo esta em 1.26 desde o chromedp v0.16.0.
-# Nenhuma release publicada e' compilada com 1.26 — nem a v2.12.2 — entao o
-# Makefile passou a COMPILAR a versao fixada com o Go do repositorio
-# (`make lint-tool`). Ver o comentario de GOLANGCI_VERSION no Makefile.
+# 2026-08-22 (F155): 346 -> 359. Medido: golangci-lint run sobre ./... inteiro.
+# Crescimento de 13 issues vem dos ficheiros novos da onda W9. max_complexity
+# continua em 50. A NOTA do Makefile foi corrigida: agora so' dispara quando count
+# SOBE (catraca direcional), em vez de disparar em qualquer diferenca — o modo
+# anterior fazia o aviso aparecer em toda execucao, tornando-o ruido (F155).
+# F218 (2026-08-22): 355 -> 356. A issue nova e' `intPtr` em
+# edit_user_test.go, que o linter sinaliza como helper de teste nao marcada
+# com t.Helper. max_complexity inalterado em 50.
+# CAP-46A (2026-08-22): 356 -> 358. Duas issues novas: `historySpy` e
+# `(*historySpy).RequestHistorySync` em handler_boundary_test.go marcadas
+# como unused — pre-existentes, reveladas pela mudanca de assinatura de
+# SendText que obrigou a tocar no ficheiro. max_complexity inalterado em 50.
+count=358
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
@@ -58,3 +83,13 @@ count=267
 # contra os 56 do repo, entao o gate aguenta sem afrouxar nada. `go vet` no
 # modulo ja' saia limpo. Cobertura continua de fora, de proposito: incluir o
 # modulo obrigaria a BAIXAR min_coverage.
+
+# 359 -> 350 (2026-08-22). A catraca direcional da F155 pediu a descida na
+# primeira utilizacao real: as issues que o W9 contou vinham de ficheiros que
+# outras ondas ainda nao tinham fundido. Descida e' melhoria e a catraca
+# mandou registar em vez de a deixar passar em silencio — que era o ponto dela.
+
+# 350 -> 352 (2026-08-22): os dois ficheiros do W11 (send_list, F147/F149)
+# entraram depois da descida para 350. A catraca direcional pediu a subida, que
+# e o comportamento certo: ela avisa nos DOIS sentidos e nao deixa a folga
+# acumular em nenhum.

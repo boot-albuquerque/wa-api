@@ -43,7 +43,7 @@ func failJID(err error) *contractsfake.JIDResolver {
 func TestGroupManagement_SemSessaoRecusaAntesDeEscrever(t *testing.T) {
 	ops := map[string]func(*group.GroupManagementUseCase) error{
 		"CreateGroup": func(uc *group.GroupManagementUseCase) error {
-			_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"1"})
+			_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"})
 			return err
 		},
 		"JoinGroup": func(uc *group.GroupManagementUseCase) error {
@@ -75,7 +75,7 @@ func TestGroupManagement_SemSessaoRecusaAntesDeEscrever(t *testing.T) {
 			return uc.SetDisappearingTimer(context.Background(), "u1", "g@g.us", "24h")
 		},
 		"UpdateGroupParticipants": func(uc *group.GroupManagementUseCase) error {
-			_, err := uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", "add", []string{"1"})
+			_, err := uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", "add", []string{"5511987654321"})
 			return err
 		},
 	}
@@ -185,7 +185,7 @@ func TestGroupManagement_JIDInvalidoRecusaComLog(t *testing.T) {
 		{
 			name: "UpdateGroupParticipants recusa o groupJID",
 			call: func(uc *group.GroupManagementUseCase) error {
-				_, err := uc.UpdateGroupParticipants(context.Background(), "u1", "@@", "add", []string{"1"})
+				_, err := uc.UpdateGroupParticipants(context.Background(), "u1", "@@", "add", []string{"5511987654321"})
 				return err
 			},
 			wantMsg: "could not parse JID",
@@ -257,7 +257,7 @@ func TestGroupManagement_FalhaDaPortaLogaEPropaga(t *testing.T) {
 				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID) (any, error) { return nil, boom }
 			},
 			call: func(uc *group.GroupManagementUseCase) error {
-				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"1"})
+				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"})
 				return err
 			},
 			wantMsg: "failed to create group",
@@ -373,7 +373,7 @@ func TestGroupManagement_FalhaDaPortaLogaEPropaga(t *testing.T) {
 				}
 			},
 			call: func(uc *group.GroupManagementUseCase) error {
-				_, err := uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", "add", []string{"1"})
+				_, err := uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", "add", []string{"5511987654321"})
 				return err
 			},
 			wantMsg: "failed to update group participants",
@@ -404,7 +404,7 @@ func TestGroupManagement_CaminhoFeliz(t *testing.T) {
 		f := newMgmt()
 		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID) (any, error) { return "created", nil }
 
-		res, err := f.uc.CreateGroup(ctx, "u1", "meu grupo", []string{"55A", "55B"})
+		res, err := f.uc.CreateGroup(ctx, "u1", "meu grupo", []string{"5511987654321", "5522987654321"})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -413,7 +413,7 @@ func TestGroupManagement_CaminhoFeliz(t *testing.T) {
 		}
 		call := f.life.CreateGroupCalls[0]
 		if call.Name != "meu grupo" || len(call.Participants) != 2 ||
-			call.Participants[0] != domain.JID("55A") || call.Participants[1] != domain.JID("55B") {
+			call.Participants[0] != domain.JID("5511987654321@s.whatsapp.net") || call.Participants[1] != domain.JID("5522987654321@s.whatsapp.net") {
 			t.Errorf("chamada = %+v", call)
 		}
 		assertNoLevel(t, f.log, contractsfake.LevelError)
@@ -568,7 +568,7 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 				return domain.ParticipantsUpdate{Result: "ok", Confirmed: true}, nil
 			}
 
-			res, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", tt.action, []string{"55A", "55B"})
+			res, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", tt.action, []string{"5511987654321", "5522987654321"})
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}

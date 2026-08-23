@@ -24,7 +24,7 @@
 //
 // # adapters/ — traduzem porta da aplicação em operação WhatsApp
 //
-//	chat/          ChatMessenger e MessageComposer
+//	chat/          ChatMessenger e MediaDownloader
 //	group/         GroupDirectory, GroupLifecycle, GroupSettings, GroupRequests
 //	presence/      PresenceController
 //	profile/       ProfileDataAccess sobre o Store do cliente

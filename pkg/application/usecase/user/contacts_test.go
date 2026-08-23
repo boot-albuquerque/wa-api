@@ -9,6 +9,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // errNoSession é o erro que o guarda de sessão devolve nos testes; o contrato
@@ -77,8 +78,8 @@ func TestCheckUserUseCase_Execute(t *testing.T) {
 			name: "dois telefones",
 			checkFunc: func(context.Context, string, []string) ([]domain.WhatsAppCheck, error) {
 				return []domain.WhatsAppCheck{
-					{Query: "5511", IsIn: true, JID: "5511@s.whatsapp.net", VerifiedName: "Alice"},
-					{Query: "5522", IsIn: false},
+					{Query: "5511987654321", IsIn: true, JID: "5511@s.whatsapp.net", VerifiedName: "Alice"},
+					{Query: "5522987654321", IsIn: false},
 				}, nil
 			},
 			wantLen: 2,
@@ -95,7 +96,7 @@ func TestCheckUserUseCase_Execute(t *testing.T) {
 			logger := &contractsfake.Logger{}
 			uc := user.NewCheckUserUseCase(cd, logger)
 
-			got, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511", "5522"}})
+			got, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321", "5522987654321"}})
 			if tt.wantIs != nil {
 				if !errors.Is(err, tt.wantIs) {
 					t.Fatalf("err = %v, queria %v", err, tt.wantIs)
@@ -112,7 +113,7 @@ func TestCheckUserUseCase_Execute(t *testing.T) {
 				t.Fatalf("len = %d, queria %d", len(got), tt.wantLen)
 			}
 			if tt.wantLen > 0 {
-				if got[0].Query != "5511" || !got[0].IsInWhatsapp || got[0].VerifiedName != "Alice" {
+				if got[0].Query != "5511987654321" || !got[0].IsInWhatsapp || got[0].VerifiedName != "Alice" {
 					t.Errorf("primeiro resultado = %+v", got[0])
 				}
 				if got[1].IsInWhatsapp {
@@ -203,7 +204,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		{
 			name:    "sem sessão",
 			session: errNoSession,
-			req:     domain.GetAvatarRequest{Phone: "5511"},
+			req:     domain.GetAvatarRequest{Phone: "5511987654321"},
 			wantErr: true,
 			wantIs:  errNoSession,
 		},
@@ -220,7 +221,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		},
 		{
 			name: "falha ao buscar a foto",
-			req:  domain.GetAvatarRequest{Phone: "5511"},
+			req:  domain.GetAvatarRequest{Phone: "5511987654321"},
 			picFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 				return nil, boom
 			},
@@ -228,7 +229,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		},
 		{
 			name: "contato sem foto",
-			req:  domain.GetAvatarRequest{Phone: "5511"},
+			req:  domain.GetAvatarRequest{Phone: "5511987654321"},
 			picFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 				return nil, nil
 			},
@@ -236,7 +237,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 		},
 		{
 			name: "foto encontrada",
-			req:  domain.GetAvatarRequest{Phone: "5511", Preview: true},
+			req:  domain.GetAvatarRequest{Phone: "5511987654321", Preview: true},
 			picFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 				return &domain.AvatarInfo{ID: "pic-1", URL: "https://img/1.jpg"}, nil
 			},
@@ -307,10 +308,10 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		t.Parallel()
 		cd := &contractsfake.ContactDirectory{
 			GetUserInfoFunc: func(_ context.Context, _ string, jids []domain.JID) (any, error) {
-				if len(jids) != 1 || jids[0] != domain.JID("5511") {
+				if len(jids) != 1 || jids[0] != domain.JID("5511987654321") {
 					t.Errorf("jids = %v, queria só o telefone válido", jids)
 				}
-				return map[string]string{"5511": "Alice"}, nil
+				return map[string]string{"5511987654321": "Alice"}, nil
 			},
 		}
 		jr := &contractsfake.JIDResolver{
@@ -324,7 +325,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetUserUseCase(cd, jr, logger)
 
-		data, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511", "quebrado"}})
+		data, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321", "quebrado"}})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -332,7 +333,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		if err := json.Unmarshal(data, &payload); err != nil {
 			t.Fatalf("resposta não é JSON: %v", err)
 		}
-		if payload["users"]["5511"] != "Alice" {
+		if payload["users"]["5511987654321"] != "Alice" {
 			t.Errorf("payload = %v", payload)
 		}
 		if !logger.Logged("Failed to parse JID") {
@@ -348,7 +349,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetUserUseCase(cd, &contractsfake.JIDResolver{}, logger)
 
-		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511"}})
+		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321"}})
 		if !errors.Is(err, boom) {
 			t.Fatalf("err = %v, queria boom", err)
 		}
@@ -370,7 +371,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		uc := user.NewGetUserUseCase(cd, &contractsfake.JIDResolver{}, logger)
 
 		var unsupported *json.UnsupportedTypeError
-		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511"}})
+		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321"}})
 		if !errors.As(err, &unsupported) {
 			t.Fatalf("err = %v, queria json.UnsupportedTypeError", err)
 		}
@@ -458,5 +459,74 @@ func TestGetUserLIDUseCase_Execute(t *testing.T) {
 				t.Errorf("resultado = %+v", got)
 			}
 		})
+	}
+}
+
+// --- F182: tipo de JID errado é 400, não 500 --------------------------------
+
+// TestGetUserLID_LIDRecusadoCom400 trava a CAUSA da F182: passar um LID a uma
+// rota que resolve "o LID DE um telefone" é erro do CLIENTE, determinístico —
+// repetir não adianta. Antes disto o pedido chegava ao store, que recusava, e
+// o cliente recebia 500 com "internal server error": a mensagem útil ficava no
+// log do servidor e ele não tinha como descobrir que passou o tipo errado.
+func TestGetUserLID_LIDRecusadoCom400(t *testing.T) {
+	t.Parallel()
+
+	chamou := false
+	cd := &contractsfake.ContactDirectory{
+		GetLIDForPNFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			chamou = true
+			return "", nil
+		},
+	}
+	uc := user.NewGetUserLIDUseCase(cd, &contractsfake.JIDResolver{}, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1",
+		domain.GetUserLIDRequest{JID: "182699419517150@lid"})
+	if err == nil {
+		t.Fatal("LID devia ser recusado por esta rota")
+	}
+
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("erro não é apperr: %v", err)
+	}
+	// A CATEGORIA é o que decide o status HTTP (response.go:52). Asserir só a
+	// existência do erro deixaria o 500 passar.
+	if appErr.Category != apperr.CategoryValidation {
+		t.Fatalf("categoria = %q, quero %q — categoria errada devolve 500 para um erro do cliente",
+			appErr.Category, apperr.CategoryValidation)
+	}
+	// E a porta NÃO pode ser tocada: gastar uma consulta ao store por um
+	// pedido que nunca poderia ter sucesso é o defeito com mais passos.
+	if chamou {
+		t.Fatal("o store foi consultado com um JID que a rota não aceita")
+	}
+}
+
+// TestGetUserLID_FalhaDoStoreContinua500 é o outro lado, e é o que impede a
+// correção de virar excesso: o comentário do código defende o 500 para falha
+// de infraestrutura, porque o cliente não pode concluir "não existe" de uma
+// falha transitória. Essa parte não muda.
+func TestGetUserLID_FalhaDoStoreContinua500(t *testing.T) {
+	t.Parallel()
+
+	boom := errors.New("store fora do ar")
+	cd := &contractsfake.ContactDirectory{
+		GetLIDForPNFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			return "", boom
+		},
+	}
+	uc := user.NewGetUserLIDUseCase(cd, &contractsfake.JIDResolver{}, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1",
+		domain.GetUserLIDRequest{JID: "5511999999999@s.whatsapp.net"})
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, quero envolver %v", err, boom)
+	}
+
+	var appErr *apperr.AppError
+	if errors.As(err, &appErr) && appErr.Category == apperr.CategoryValidation {
+		t.Fatal("falha de store virou validação: o cliente concluiria que o número não tem LID")
 	}
 }

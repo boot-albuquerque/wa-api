@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -56,7 +57,8 @@ func (uc *GroupManagementUseCase) parseJID(ctx context.Context, s string) (domai
 	jid, err := uc.jids.ResolveJID(ctx, s)
 	if err != nil {
 		uc.logger.Error(ctx, "could not parse JID", "jid", s, "error", err)
-		return "", fmt.Errorf("could not parse JID %q: %w", s, err)
+		return "", apperr.New("invalid_jid", apperr.CategoryValidation,
+			fmt.Sprintf("could not parse JID %q", s), false, err)
 	}
 	return jid, nil
 }

@@ -3,7 +3,9 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +38,10 @@ const (
 	// read. Losing the hostname must not stop the process from claiming
 	// ownership; it only makes the owner harder to trace.
 	ownerIDUnknownHost = "unknown-host"
+
+	// envAdvertiseAddr permite declarar explicitamente o endereco alcancavel
+	// deste processo (ADR-0007, decisao 1).
+	envAdvertiseAddr = "WA_API_ADVERTISE_ADDR"
 )
 
 // leaseStore is what the manager needs from the repository. It is an interface
@@ -43,14 +49,18 @@ const (
 // lives in pkg/infra/db/session_lease.go: Claim returns (false, nil) when
 // another owner holds a valid lease, and an error only when the DATABASE fails.
 type leaseStore interface {
-	Claim(ctx context.Context, userID, ownerID string, ttl time.Duration) (bool, error)
+	Claim(ctx context.Context, userID, ownerID, ownerAddr string, ttl time.Duration) (bool, error)
 	Release(ctx context.Context, userID, ownerID string) error
 }
 
 // leaseManager keeps ownership of this process's sessions alive.
 type leaseManager struct {
-	store     leaseStore
-	ownerID   string
+	store   leaseStore
+	ownerID string
+	// ownerAddr e' onde ESTE processo pode ser alcancado por outro pod
+	// (ADR-0007, decisao 1). Viaja gravado junto com a posse para que quem
+	// roteia leia dono e endereco da mesma linha.
+	ownerAddr string
 	ttl       time.Duration
 	heartbeat time.Duration
 
@@ -59,23 +69,52 @@ type leaseManager struct {
 	// enough, the former owner must let go by itself.
 	onOwnershipLost func(userID string)
 
+	// hasLiveSession answers whether this process still holds a session for a
+	// user. It is the safety net F98 asked for: releasing at the exact point a
+	// pairing dies covers the case that was MEASURED, and this covers the
+	// class — any asynchronous death of a session, whether or not someone
+	// remembered to hand the lease back there.
+	//
+	// Nil means "assume there is one", which keeps every caller that does not
+	// wire it (including every existing test) on the old behaviour.
+	hasLiveSession func(userID string) bool
+
 	mu sync.Mutex
 	// lastRenewal records WHEN each session was last successfully renewed.
 	// This is not diagnostics: it is what lets the manager decide ownership
 	// without being able to reach the database — see renewOne.
 	lastRenewal map[string]time.Time
 
+	// claimedAt records when each lease was FIRST taken, and exists only to
+	// make the abandonment check safe. Ownership is claimed BEFORE the session
+	// is materialized, so for a brief window a perfectly healthy startup has a
+	// lease and no session yet. Without this the heartbeat would release the
+	// lease of a session that is still coming up.
+	claimedAt map[string]time.Time
+
+	// lastTick records when the heartbeat loop last completed a pass. It is
+	// the ONLY way to tell a live renewal loop from a dead one: with no owned
+	// sessions the loop still ticks, so an empty lastRenewal map says nothing
+	// about whether the goroutine survived. Readiness (D6) reads it.
+	lastTick time.Time
+
 	now func() time.Time // injectable so tests do not depend on the wall clock
 }
 
-func newLeaseManager(store leaseStore, ownerID string, ttl, heartbeat time.Duration, onOwnershipLost func(string)) *leaseManager {
+// ownerAddr entra pelo CONSTRUTOR, e não por atribuição posterior, porque é
+// identidade — não gancho opcional. Uma posse gravada com endereço vazio é
+// posse que ninguém consegue rotear, e o modo de falha seria alguém esquecer de
+// atribuir e só descobrir quando o roteamento não achasse o dono.
+func newLeaseManager(store leaseStore, ownerID, ownerAddr string, ttl, heartbeat time.Duration, onOwnershipLost func(string)) *leaseManager {
 	return &leaseManager{
 		store:           store,
 		ownerID:         ownerID,
+		ownerAddr:       ownerAddr,
 		ttl:             ttl,
 		heartbeat:       heartbeat,
 		onOwnershipLost: onOwnershipLost,
 		lastRenewal:     map[string]time.Time{},
+		claimedAt:       map[string]time.Time{},
 		now:             time.Now,
 	}
 }
@@ -99,18 +138,74 @@ func buildOwnerID() string {
 	return fmt.Sprintf("%s-%d", host, os.Getpid())
 }
 
+// buildOwnerAddr resolve onde ESTE processo pode ser alcancado por outro pod.
+//
+// A variavel de ambiente vem primeiro porque so' o operador sabe o que e'
+// alcancavel do lado de fora: em k8s costuma ser o POD_IP pela downward API,
+// em compose o nome do servico. Adivinhar isso do lado de dentro do processo
+// e' o tipo de heuristica que funciona na maquina de quem escreveu.
+//
+// Sem a variavel, o hostname mais a porta e' o palpite honesto: em StatefulSet
+// o hostname e' o nome do pod e resolve por DNS; em compose e' o nome do
+// container. Nos dois casos e' o que o `owner_id` ja usa, entao dono e endereco
+// contam a mesma historia.
+//
+// Devolve vazio quando nem isso da' certo. Vazio significa NAO ROTEAVEL, que e'
+// leitura util para quem for encaminhar — melhor que um endereco inventado que
+// so' falha na hora de conectar.
+func buildOwnerAddr() string {
+	if addr := strings.TrimSpace(os.Getenv(envAdvertiseAddr)); addr != "" {
+		return addr
+	}
+
+	host, err := os.Hostname()
+	if err != nil || host == "" {
+		log.Warn().Err(err).Str("env", envAdvertiseAddr).
+			Msg("could not resolve an address to advertise for session ownership; this pod records itself as unroutable and no replica will be able to forward to it")
+		return ""
+	}
+	return net.JoinHostPort(host, *port)
+}
+
 // Claim attempts to take ownership of a session. Only the winner may connect.
 func (m *leaseManager) Claim(ctx context.Context, userID string) (bool, error) {
-	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ttl)
+	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ownerAddr, m.ttl)
 	if err != nil {
 		return false, err
 	}
 	if owned {
 		m.mu.Lock()
 		m.lastRenewal[userID] = m.now()
+		// Only on the FIRST claim. Re-stamping here would keep pushing the
+		// abandonment grace period forward on every re-claim, and a lease that
+		// is never old enough to be checked is a check that never runs.
+		if _, seen := m.claimedAt[userID]; !seen {
+			m.claimedAt[userID] = m.now()
+		}
 		m.mu.Unlock()
 	}
 	return owned, nil
+}
+
+// abandoned reports whether this lease belongs to a session that no longer
+// exists in this process.
+//
+// The grace period is the whole difficulty. Ownership is claimed before the
+// session is materialized, so "no session yet" is the NORMAL state of a healthy
+// startup for a short while. Releasing on the first sight of it would break
+// exactly the case the lease exists to protect.
+//
+// The TTL is reused as that grace period on purpose: it is already this
+// mechanism's unit of "how long we tolerate not knowing", and a second knob
+// would be one more thing to get wrong in production.
+func (m *leaseManager) abandoned(userID string) bool {
+	if m.hasLiveSession == nil || m.hasLiveSession(userID) {
+		return false
+	}
+	m.mu.Lock()
+	claimed := m.claimedAt[userID]
+	m.mu.Unlock()
+	return m.now().Sub(claimed) >= m.ttl
 }
 
 // renewOne renews one session's lease and reports whether it is STILL ours.
@@ -130,13 +225,43 @@ func (m *leaseManager) Claim(ctx context.Context, userID string) (bool, error) {
 // So the decision is not "did the database answer?" but "how long since the
 // last CONFIRMED renewal?".
 func (m *leaseManager) renewOne(ctx context.Context, userID string) bool {
-	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ttl)
+	owned, err := m.store.Claim(ctx, userID, m.ownerID, m.ownerAddr, m.ttl)
 
 	switch {
 	case err == nil && owned:
+		agora := m.now()
+
 		m.mu.Lock()
-		m.lastRenewal[userID] = m.now()
+		anterior := m.lastRenewal[userID]
+		m.lastRenewal[userID] = agora
 		m.mu.Unlock()
+
+		// F109. Este ramo trata dois eventos MUITO diferentes como o mesmo:
+		// renovei um lease que eu ainda tinha, e retomei um lease que ja tinha
+		// EXPIRADO. O segundo e' permitido por session_lease.go:68
+		// (`WHERE session_leases.expires_at < now()`), e so' acontece depois de
+		// uma janela em que qualquer replica podia legitimamente ter assumido.
+		//
+		// Nao e' inseguro por si so' — se a reivindicacao venceu, ninguem mais
+		// tinha a sessao. O que era inaceitavel e' o SILENCIO: o pod serviu
+		// durante uma janela em que nao era dono legitimo, e nao ficava rastro
+		// nenhum disso. Numa investigacao de mensagem duplicada ou de ordem
+		// trocada, essa janela e' a primeira hipotese a considerar, e ela era
+		// invisivel.
+		//
+		// Medido em bancada: com o processo congelado por 20s (TTL 15s) e sem
+		// competidor, o lease expirou e o pod retomou servindo com ZERO linhas
+		// de log.
+		//
+		// `anterior` zerado nao e' lacuna: e' a primeira renovacao depois do
+		// Claim inicial, e avisar ali seria falso positivo em todo arranque.
+		if !anterior.IsZero() {
+			if lacuna := agora.Sub(anterior); lacuna > m.ttl {
+				log.Warn().Str("userid", userID).Str("owner", m.ownerID).
+					Dur("gap", lacuna).Dur("ttl", m.ttl).
+					Msg("lease RETOMADO apos expirar, nao renovado; este processo serviu esta sessao durante uma janela em que outra replica podia te-la assumido")
+			}
+		}
 		return true
 
 	case err == nil && !owned:
@@ -176,7 +301,23 @@ func (m *leaseManager) RunHeartbeat(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			m.mu.Lock()
+			m.lastTick = m.now()
+			m.mu.Unlock()
+
 			for _, userID := range m.ownedSessions() {
+				// Checked BEFORE renewing: renewing first would hand this
+				// lease another full TTL of life before we drop it anyway.
+				if m.abandoned(userID) {
+					log.Warn().Str("userid", userID).Str("owner", m.ownerID).
+						Msg("lease held for a session that no longer exists in this process; handing it back so another replica can take the user")
+					// onOwnershipLost is deliberately NOT called: there is
+					// nothing left to tear down, and its message ("the new
+					// owner takes it from here") would describe a handover
+					// that is not what happened.
+					m.Release(ctx, userID)
+					continue
+				}
 				if m.renewOne(ctx, userID) {
 					continue
 				}
@@ -202,7 +343,25 @@ func (m *leaseManager) ownedSessions() []string {
 func (m *leaseManager) forget(userID string) {
 	m.mu.Lock()
 	delete(m.lastRenewal, userID)
+	delete(m.claimedAt, userID)
 	m.mu.Unlock()
+}
+
+// Release hands back a single lease.
+//
+// Used when a session was claimed but never came up: the claim happens BEFORE
+// the session is materialized (so a denial leaves no dirty state), which means
+// a failure afterwards would otherwise keep the lease alive forever — the
+// heartbeat renewing ownership of a session that does not exist, and no other
+// replica ever able to take that user (F96, measured).
+func (m *leaseManager) Release(ctx context.Context, userID string) {
+	if err := m.store.Release(ctx, userID, m.ownerID); err != nil {
+		// Not fatal: the TTL expires this lease on its own. Worth a warning
+		// because until then the session is unreachable to every replica.
+		log.Warn().Err(err).Str("userid", userID).
+			Msg("failed to release lease for a session that did not start; the TTL will clear it")
+	}
+	m.forget(userID)
 }
 
 // ReleaseAll drops every lease on graceful shutdown so failover does not wait
@@ -240,4 +399,31 @@ func leaseSettings() (ttl, heartbeat time.Duration, err error) {
 			envLeaseHeartbeat, heartbeatSeconds, envLeaseTTL, ttlSeconds)
 	}
 	return time.Duration(ttlSeconds) * time.Second, time.Duration(heartbeatSeconds) * time.Second, nil
+}
+
+// HeartbeatStalled reports whether the renewal loop has stopped ticking.
+//
+// A dead heartbeat goroutine is the worst failure this mechanism has, and the
+// quietest: leases stop being renewed, every session this pod owns silently
+// expires from the other replicas' point of view, and they take over sessions
+// this pod is still serving — the two live owners of F89, which WhatsApp
+// settles by killing one for good.
+//
+// The tolerance is three heartbeats, not one: a single late tick under load is
+// normal, and the TTL already requires the interval to be at most half of it,
+// so three intervals still land inside a window where the fencing rule in
+// renewOne would act on its own.
+//
+// A manager that has never ticked (lastTick zero) is NOT stalled: RunHeartbeat
+// may simply not have had its first tick yet, and reporting a fresh process as
+// unhealthy would fail every deploy for one interval.
+func (m *leaseManager) HeartbeatStalled() bool {
+	m.mu.Lock()
+	last := m.lastTick
+	m.mu.Unlock()
+
+	if last.IsZero() {
+		return false
+	}
+	return m.now().Sub(last) > 3*m.heartbeat
 }

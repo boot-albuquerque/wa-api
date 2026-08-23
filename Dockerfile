@@ -43,6 +43,12 @@ ENV TZ="America/Sao_Paulo"
 # WA_API_PORT e' a mesma env var que pkg/bootstrap/main.go:72 le para escolher a porta.
 # Sobrescrever com `docker run -e WA_API_PORT=...` mantem EXPOSE/HEALTHCHECK em sincronia.
 ENV WA_API_PORT=8080
+# WA_API_GLOBAL_ENCRYPTION_KEY is REQUIRED at runtime and is deliberately NOT
+# given a default here: baking a key into the image would put the same key in
+# every deployment that pulls it, which is worse than the startup failure it
+# would avoid. Pass it per deployment (`docker run -e
+# WA_API_GLOBAL_ENCRYPTION_KEY=...`); without it the container exits at
+# startup with an error naming the variable (F169).
 WORKDIR /app
 
 COPY --from=builder /app/wa-api /app/

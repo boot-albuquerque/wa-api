@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -46,13 +47,65 @@ type storageCase struct {
 	readsBody bool
 }
 
+// testHmacKey tem os 32 caracteres que domain.MinHmacKeyLength exige — abaixo
+// disso o use case recusa com 400, e o caso de sucesso da tabela viraria uma
+// recusa sem que ninguem percebesse.
+const testHmacKey = "0123456789abcdef0123456789abcdef"
+
+// newTestConfigureHmacUC monta o use case de escrita com os dubles das tres
+// portas novas. O store e' o de contractsfake, que imita a regra REAL do
+// adapter de producao (pkg/infra/db/hmac_config_repository.go).
+func newTestConfigureHmacUC(sg appport.SessionGuard, log appport.Logger) *storage.ConfigureHmacUseCase {
+	return storage.NewConfigureHmacUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.HmacKeyEncryptor{}, &contractsfake.UserInfoHmacCache{}, log)
+}
+
+// Os quatro use cases de S3 com os dubles das quatro portas novas. O store e'
+// o de contractsfake, que imita a regra REAL do adapter de producao
+// (pkg/infra/db/s3_config_repository.go).
+func newTestConfigureS3UC(sg appport.SessionGuard, log appport.Logger) *storage.ConfigureS3UseCase {
+	return storage.NewConfigureS3UseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3SecretCipher{},
+		&contractsfake.S3ClientManager{}, &contractsfake.UserInfoS3Cache{}, log)
+}
+
+func newTestGetS3ConfigUC(sg appport.SessionGuard, log appport.Logger) *storage.GetS3ConfigUseCase {
+	return storage.NewGetS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, log)
+}
+
+func newTestDeleteS3ConfigUC(sg appport.SessionGuard, log appport.Logger) *storage.DeleteS3ConfigUseCase {
+	return storage.NewDeleteS3ConfigUseCase(sg, &contractsfake.S3ConfigStore{}, &contractsfake.S3ClientManager{},
+		&contractsfake.UserInfoS3Cache{}, log)
+}
+
+// newTestTestS3ConnectionUC recebe o store ja' semeado: o caminho de sucesso
+// deste use case exige uma configuracao HABILITADA no banco, e um store vazio
+// o transformaria silenciosamente na recusa 400.
+func newTestTestS3ConnectionUC(sg appport.SessionGuard, log appport.Logger, store *contractsfake.S3ConfigStore) *storage.TestS3ConnectionUseCase {
+	return storage.NewTestS3ConnectionUseCase(sg, store, &contractsfake.S3SecretCipher{}, &contractsfake.S3ClientManager{}, log)
+}
+
+// enabledS3Store devolve um store com S3 habilitado para o usuario "42" da
+// tabela, com o segredo no envelope do dublê — a forma que o cifrador real
+// produziria (ADR-0009).
+func enabledS3Store() *contractsfake.S3ConfigStore {
+	return &contractsfake.S3ConfigStore{Stored: map[string]appport.S3ConfigRecord{
+		"42": {
+			Enabled:       true,
+			Region:        "us-east-1",
+			Bucket:        "b",
+			AccessKey:     "ak",
+			SecretKey:     contractsfake.FakeS3EnvelopePrefix + "sk",
+			MediaDelivery: "base64",
+		},
+	}}
+}
+
 func storageCases() []storageCase {
 	log := silentLogger{}
 	return []storageCase{
 		{
 			name: "ConfigureS3",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureS3Handler(storage.NewConfigureS3UseCase(sg, log))
+				return NewConfigureS3Handler(newTestConfigureS3UC(sg, log))
 			},
 			method:    http.MethodPost,
 			path:      "/storage/s3/configure",
@@ -62,7 +115,7 @@ func storageCases() []storageCase {
 		{
 			name: "GetS3Config",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewGetS3ConfigHandler(storage.NewGetS3ConfigUseCase(sg, log))
+				return NewGetS3ConfigHandler(newTestGetS3ConfigUC(sg, log))
 			},
 			method: http.MethodGet,
 			path:   "/storage/s3/config",
@@ -70,17 +123,17 @@ func storageCases() []storageCase {
 		{
 			name: "TestS3Connection",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewTestS3ConnectionHandler(storage.NewTestS3ConnectionUseCase(sg, log))
+				return NewTestS3ConnectionHandler(newTestTestS3ConnectionUC(sg, log, enabledS3Store()))
 			},
-			method:    http.MethodPost,
-			path:      "/storage/s3/test",
-			body:      `{"endpoint":"e","region":"r","bucket":"b","access_key":"ak","secret_key":"sk"}`,
-			readsBody: true,
+			method: http.MethodPost,
+			path:   "/storage/s3/test",
+			// Sem `readsBody`: o teste de conexao NAO decodifica corpo — ele
+			// testa a configuracao GRAVADA (`41bc8e2^:handlers.go:6372`).
 		},
 		{
 			name: "DeleteS3Config",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewDeleteS3ConfigHandler(storage.NewDeleteS3ConfigUseCase(sg, log))
+				return NewDeleteS3ConfigHandler(newTestDeleteS3ConfigUC(sg, log))
 			},
 			method: http.MethodDelete,
 			path:   "/storage/s3/config",
@@ -88,17 +141,17 @@ func storageCases() []storageCase {
 		{
 			name: "ConfigureHmac",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureHmacHandler(storage.NewConfigureHmacUseCase(sg, log))
+				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
 			},
 			method:    http.MethodPost,
 			path:      "/storage/hmac/configure",
-			body:      `{"enabled":true,"key":"k","secret":"s"}`,
+			body:      `{"hmac_key":"` + testHmacKey + `"}`,
 			readsBody: true,
 		},
 		{
 			name: "GetHmacConfig",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewGetHmacConfigHandler(storage.NewGetHmacConfigUseCase(sg, log))
+				return NewGetHmacConfigHandler(storage.NewGetHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, log))
 			},
 			method: http.MethodGet,
 			path:   "/storage/hmac/config",
@@ -106,25 +159,21 @@ func storageCases() []storageCase {
 		{
 			name: "DeleteHmacConfig",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewDeleteHmacConfigHandler(storage.NewDeleteHmacConfigUseCase(sg, log))
+				return NewDeleteHmacConfigHandler(storage.NewDeleteHmacConfigUseCase(sg, &contractsfake.HmacKeyStore{}, &contractsfake.UserInfoHmacCache{}, log))
 			},
 			method: http.MethodDelete,
 			path:   "/storage/hmac/config",
 		},
-		{
-			name: "SetProxy",
-			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetProxyHandler(storage.NewSetProxyUseCase(sg, log))
-			},
-			method:    http.MethodPost,
-			path:      "/storage/proxy",
-			body:      `{"enabled":false}`,
-			readsBody: true,
-		},
+		// SetProxy NAO entra nesta tabela: ele e' o unico dos dez que nao
+		// abre com EnsureSession — a guarda dele e' a oposta, recusa a sessao
+		// CONECTADA (`41bc8e2^:handlers.go:6099`). Os mesmos quatro eixos
+		// (401, 400 sem Id, 400 com corpo malformado, 200) estao em
+		// TestSetProxyHandler_Eixos, abaixo.
 		{
 			name: "SetHistory",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(sg, log))
+				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(
+					sg, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}, log))
 			},
 			method:    http.MethodPost,
 			path:      "/storage/history",
@@ -134,7 +183,7 @@ func storageCases() []storageCase {
 		{
 			name: "GetHistory",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewGetHistoryHandler(storage.NewGetHistoryUseCase(sg, log))
+				return NewGetHistoryHandler(storage.NewGetHistoryUseCase(sg, &contractsfake.HistoryConfigStore{}, log))
 			},
 			method: http.MethodGet,
 			path:   "/storage/history",
@@ -297,7 +346,10 @@ func TestStorageHandlers_SessionFailure_500(t *testing.T) {
 // TestStorageHandlers_UseCaseRejection_500: a sessao existe, mas o use case
 // recusa o conteudo. E' o unico caminho em que a causa nasce no dominio, e
 // nao na fronteira — e o handler tem de leva-la ao log do mesmo jeito.
-func TestStorageHandlers_UseCaseRejection_500(t *testing.T) {
+// 400 desde a F66: campo obrigatorio ausente ou valor invalido no payload e
+// erro do CLIENTE. Estes testes exigiam 500 — dois com "_500" no proprio
+// nome —, fixando o defeito que a F66 corrige.
+func TestStorageHandlers_UseCaseRejection_400(t *testing.T) {
 	log := silentLogger{}
 	cases := []struct {
 		name    string
@@ -310,7 +362,7 @@ func TestStorageHandlers_UseCaseRejection_500(t *testing.T) {
 		{
 			name: "ConfigureS3/media_delivery invalido",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureS3Handler(storage.NewConfigureS3UseCase(sg, log))
+				return NewConfigureS3Handler(newTestConfigureS3UC(sg, log))
 			},
 			method:  http.MethodPost,
 			path:    "/storage/s3/configure",
@@ -318,34 +370,39 @@ func TestStorageHandlers_UseCaseRejection_500(t *testing.T) {
 			wantErr: "media_delivery",
 		},
 		{
-			name: "TestS3Connection/campos obrigatorios ausentes",
+			// A recusa deste use case deixou de ser "campo obrigatorio
+			// ausente no corpo" e passou a ser "nao ha' configuracao
+			// habilitada gravada" — porque ele deixou de ler o corpo. O
+			// store VAZIO e' o estado de quem nunca configurou.
+			name: "TestS3Connection/S3 nao habilitado",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewTestS3ConnectionHandler(storage.NewTestS3ConnectionUseCase(sg, log))
+				return NewTestS3ConnectionHandler(newTestTestS3ConnectionUC(sg, log, &contractsfake.S3ConfigStore{}))
 			},
 			method:  http.MethodPost,
 			path:    "/storage/s3/test",
-			body:    `{"endpoint":"e"}`,
-			wantErr: "missing required S3 configuration fields",
+			body:    ``,
+			wantErr: "S3 is not enabled for this user",
 		},
 		{
-			name: "SetProxy/habilitado sem URL",
+			name: "ConfigureHmac/chave curta",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetProxyHandler(storage.NewSetProxyUseCase(sg, log))
+				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
 			},
 			method:  http.MethodPost,
-			path:    "/storage/proxy",
-			body:    `{"enabled":true}`,
-			wantErr: "proxy URL is required",
+			path:    "/storage/hmac/configure",
+			body:    `{"hmac_key":"curta"}`,
+			wantErr: "HMAC key must be at least 32 characters long",
 		},
 		{
 			name: "SetHistory/valor negativo",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(sg, log))
+				return NewSetHistoryHandler(storage.NewSetHistoryUseCase(
+					sg, &contractsfake.HistoryConfigStore{}, &contractsfake.UserInfoSessionCache{}, log))
 			},
 			method:  http.MethodPost,
 			path:    "/storage/history",
 			body:    `{"history":-1}`,
-			wantErr: "history value cannot be negative",
+			wantErr: "history cannot be negative",
 		},
 	}
 
@@ -355,7 +412,7 @@ func TestStorageHandlers_UseCaseRejection_500(t *testing.T) {
 
 			rec, recs := serveStorage(t, tc.build(storageSession(nil)), req)
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, recs, tc.wantErr)
 		})
 	}
@@ -376,7 +433,7 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 		{
 			name: "ConfigureS3",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureS3Handler(storage.NewConfigureS3UseCase(sg, log))
+				return NewConfigureS3Handler(newTestConfigureS3UC(sg, log))
 			},
 			path: "/storage/s3/configure",
 			body: `{"enabled":true,"access_key":"` + logassertAdminToken +
@@ -385,15 +442,15 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 		{
 			name: "ConfigureHmac",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewConfigureHmacHandler(storage.NewConfigureHmacUseCase(sg, log))
+				return NewConfigureHmacHandler(newTestConfigureHmacUC(sg, log))
 			},
 			path: "/storage/hmac/configure",
-			body: `{"enabled":true,"key":"k","secret":"` + logassertGlobalHMACKey + `"}`,
+			body: `{"hmac_key":"` + logassertGlobalHMACKey + `"}`,
 		},
 		{
 			name: "TestS3Connection",
 			build: func(sg appport.SessionGuard) http.Handler {
-				return NewTestS3ConnectionHandler(storage.NewTestS3ConnectionUseCase(sg, log))
+				return NewTestS3ConnectionHandler(newTestTestS3ConnectionUC(sg, log, enabledS3Store()))
 			},
 			path: "/storage/s3/test",
 			body: `{"secret_key":"` + logassertGlobalHMACKey + `"}`,
@@ -416,4 +473,101 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 			logassert.NoSecrets(t, recs)
 		})
 	}
+}
+
+// --- SetProxy: os mesmos eixos, com a guarda que ele de fato tem -----------
+
+// newTestSetProxyHandler monta o handler com os dubles das tres portas novas.
+// `status` decide o estado da sessao, que e' a guarda deste use case: o
+// zero-value do dublê reporta DESCONECTADO, que e' o estado em que o proxy
+// pode ser configurado.
+func newTestSetProxyHandler(status appport.SessionStatusReader) http.Handler {
+	return NewSetProxyHandler(storage.NewSetProxyUseCase(
+		status, &contractsfake.ProxyConfigStore{}, &contractsfake.UserInfoSessionCache{}, true,
+		naoResolveNada{}, silentLogger{}))
+}
+
+// naoResolveNada e' o resolvedor DNS injetado nestes testes de eixo. Todos eles
+// usam `{"enable":false}`, o ramo que nunca olha o endereco, entao uma chamada
+// aqui significa que a guarda do CAP-31 vazou para a desabilitacao — e o erro
+// vira recusa visivel em vez de uma consulta de DNS silenciosa no teste.
+type naoResolveNada struct{}
+
+func (naoResolveNada) LookupIP(context.Context, string, string) ([]net.IP, error) {
+	return nil, errors.New("o ramo de desabilitacao nao pode resolver nome nenhum")
+}
+
+// TestSetProxyHandler_Eixos cobre, para SetProxy, os quatro eixos que a tabela
+// dos outros nove cobre — 200, 401, 400 sem Id e 400 com corpo malformado.
+// Sem ele, tirar SetProxy da tabela teria custado cobertura em vez de trocar
+// uma guarda por outra.
+func TestSetProxyHandler_Eixos(t *testing.T) {
+	const path = "/storage/proxy"
+	const corpoValido = `{"enable":false}`
+
+	t.Run("200 com sessao desconectada", func(t *testing.T) {
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido)), "42")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(&contractsfake.SessionStatusReader{}), req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
+		}
+		env := decodeEnvelope(t, rec)
+		if !env.Success || len(env.Data) == 0 {
+			t.Fatalf("envelope de sucesso mal formado: %s", rec.Body.String())
+		}
+		logassert.NoSecrets(t, recs)
+	})
+
+	t.Run("401 sem userinfo", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{}
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido))
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusUnauthorized)
+		if len(status.SessionStatusCalls) != 0 {
+			t.Fatalf("requisicao nao autenticada alcancou a sessao %d vez(es)", len(status.SessionStatusCalls))
+		}
+		logassert.OutcomeLogged(t, recs, errUnauthorized.Error())
+	})
+
+	t.Run("400 sem Id", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{}
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido)), "")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		if len(status.SessionStatusCalls) != 0 {
+			t.Fatalf("requisicao sem session id alcancou a sessao %d vez(es)", len(status.SessionStatusCalls))
+		}
+		got := logassert.OutcomeLogged(t, recs, errMissingSessionID.Error())
+		if got.str("level") != "warn" {
+			t.Fatalf("rejeicao de cliente logada em %q — queria warn", got.str("level"))
+		}
+	})
+
+	t.Run("400 com corpo malformado", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{}
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader("{nao-e-json")), "42")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		if len(status.SessionStatusCalls) != 0 {
+			t.Fatalf("corpo malformado alcancou a sessao %d vez(es)", len(status.SessionStatusCalls))
+		}
+		if got := logassert.OutcomeLogged(t, recs); got.str("error") == "" {
+			t.Fatal("o erro de decodificacao foi logado sem causa")
+		}
+	})
+
+	t.Run("400 com sessao conectada", func(t *testing.T) {
+		status := &contractsfake.SessionStatusReader{
+			SessionStatusFunc: func(context.Context, string) (bool, bool) { return true, true },
+		}
+		req := withUser(httptest.NewRequest(http.MethodPost, path, strings.NewReader(corpoValido)), "42")
+		rec, recs := serveStorage(t, newTestSetProxyHandler(status), req)
+
+		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		logassert.OutcomeLogged(t, recs, "cannot set proxy while connected")
+	})
 }

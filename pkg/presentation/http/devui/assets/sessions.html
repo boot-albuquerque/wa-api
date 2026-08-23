@@ -4,497 +4,110 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>wa-api — sessões</title>
-<style>
-  /* Tema unico e escuro, de proposito: e' um painel de diagnostico que fica
-     aberto ao lado do terminal, nao uma pagina publica. */
-  :root {
-    --ink:#12141a; --surface:#1b1f27; --raised:#222732; --line:#2c333e;
-    --text:#e4e7ec; --muted:#7d8694;
-    --accent:#3fb9a5; --warn:#d9a441; --danger:#e06c6c;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--ink); color:var(--text); font:15px/1.5 var(--sans); -webkit-font-smoothing:antialiased; }
-
-  header { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 18px; border-bottom:1px solid var(--line); background:var(--surface); }
-  h1 { font-size:15px; font-weight:600; margin:0; margin-right:auto; }
-  h1 small { color:var(--muted); font-weight:400; margin-left:8px; }
-
-  input, button, select { font:inherit; border-radius:6px; border:1px solid var(--line); background:var(--raised); color:var(--text); padding:6px 10px; }
-  input { font-family:var(--mono); font-size:13px; }
-  input:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-  button { cursor:pointer; white-space:nowrap; }
-  button:hover:not(:disabled) { border-color:var(--accent); }
-  button:disabled { opacity:.4; cursor:not-allowed; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#08110f; font-weight:600; }
-  button.danger:hover:not(:disabled) { border-color:var(--danger); color:var(--danger); }
-  .lbl { color:var(--muted); font-size:13px; }
-
-  main { display:grid; grid-template-columns:1fr 420px; gap:1px; background:var(--line); min-height:calc(100vh - 55px); }
-  @media (max-width:940px){ main{grid-template-columns:1fr;} }
-  section { background:var(--ink); display:flex; flex-direction:column; min-height:0; }
-  .head { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--surface); font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); }
-  .head .right { margin-left:auto; text-transform:none; letter-spacing:0; font-family:var(--mono); font-size:11px; }
-
-  .grid { padding:16px; display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:14px; align-content:start; }
-
-  .card { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:10px; }
-  .card.pareando { border-color:var(--warn); }
-  .card.ativa { border-color:var(--accent); }
-  .card-top { display:flex; align-items:center; gap:8px; }
-  .card-top .nome { font-weight:600; }
-  .card-top .tok { font-family:var(--mono); font-size:11px; color:var(--muted); }
-  .card-top .x { margin-left:auto; background:none; border:none; color:var(--muted); padding:2px 6px; font-size:16px; line-height:1; }
-  .card-top .x:hover { color:var(--danger); }
-  .dot { width:8px; height:8px; border-radius:50%; background:var(--muted); flex:none; }
-  .dot.on{background:var(--accent)} .dot.off{background:var(--danger)} .dot.wait{background:var(--warn)}
-  .estado { font-family:var(--mono); font-size:11px; color:var(--muted); }
-  .jid { font-family:var(--mono); font-size:11px; color:var(--muted); word-break:break-all; }
-  .acoes { display:flex; gap:6px; flex-wrap:wrap; }
-  .acoes button { font-size:13px; padding:5px 9px; }
-
-  /* Fundo branco fixo: o PNG da API tem modulos pretos sobre transparente.
-     Sobre o tema escuro a camera nao le. Nao e' decisao estetica. */
-  .qr { background:#fff; border-radius:8px; padding:10px; align-self:center; width:212px; height:212px; display:flex; align-items:center; justify-content:center; position:relative; }
-  .qr img { width:192px; height:192px; image-rendering:pixelated; display:block; }
-  .qr .msg { color:#4a5361; font-size:12px; text-align:center; padding:0 14px; line-height:1.5; }
-  .qr.expirado img { filter:blur(4px) grayscale(1); opacity:.3; }
-  .qr .over { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
-  .qr .over button { background:#1d2530; color:#fff; border-color:#1d2530; font-weight:600; font-size:13px; }
-  /* O atributo `hidden` aplica display:none pela folha do navegador, mas
-     QUALQUER regra de autor com `display` vence — e .qr declara display:flex.
-     Sem estas duas linhas, a caixa branca do QR aparece em toda sessao,
-     inclusive nas que nunca conectaram. Foi o primeiro defeito que o teste
-     no navegador pegou, depois de a pagina passar em curl e em assercao de
-     marcadores: o contrato estava certo e a aparencia nao. */
-  .qr[hidden], .ttl[hidden] { display: none; }
-
-  .ttl { height:3px; background:var(--raised); border-radius:2px; overflow:hidden; }
-  .ttl > i { display:block; height:100%; width:0; background:var(--accent); transition:width .25s linear; }
-  .ttl.low > i { background:var(--warn); }
-
-  .vazio { padding:34px 20px; color:var(--muted); text-align:center; line-height:1.7; grid-column:1/-1; }
-  .vazio b { color:var(--text); }
-
-  .log { flex:1; overflow-y:auto; padding:8px 0; font-family:var(--mono); font-size:12px; min-height:220px; }
-  .ev { padding:5px 14px; border-left:2px solid transparent; display:flex; gap:8px; align-items:baseline; }
-  .ev:hover { background:var(--surface); }
-  .ev time { color:#5d6674; flex:none; font-size:10.5px; }
-  .ev .quem { color:var(--text); font-weight:600; flex:none; }
-  .ev .tipo { color:var(--accent); flex:none; }
-  .ev .carga { color:var(--muted); word-break:break-all; }
-  .ev.sys{border-left-color:var(--warn)} .ev.sys .tipo{color:var(--warn)}
-  .ev.err{border-left-color:var(--danger)} .ev.err .tipo{color:var(--danger)}
-  .empty { color:var(--muted); padding:20px 16px; font-family:var(--sans); font-size:13px; line-height:1.65; }
-  .empty code { background:var(--raised); padding:1px 5px; border-radius:3px; font-family:var(--mono); font-size:11.5px; }
-  .empty b { color:var(--text); }
-
-  dialog { background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:10px; padding:0; max-width:440px; width:92%; }
-  dialog::backdrop { background:rgba(0,0,0,.6); }
-  dialog .corpo { padding:18px; display:flex; flex-direction:column; gap:12px; }
-  dialog h2 { margin:0; font-size:15px; }
-  dialog p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
-  dialog .campo { display:flex; flex-direction:column; gap:4px; }
-  dialog .campo span { font-size:12px; color:var(--muted); }
-  dialog .rodape { display:flex; gap:8px; justify-content:flex-end; }
-</style>
+<link rel="stylesheet" href="devui.css">
 </head>
 <body>
-
 <header>
   <h1>wa-api <small>sessões</small></h1>
-  <span class="lbl">admin</span>
-  <input id="admin" value="admin123" size="12" spellcheck="false" autocomplete="off">
-  <button id="btn-add">+ Adicionar existente</button>
-  <button id="btn-nova" class="primary">+ Nova sessão</button>
+  <nav>
+    <a href="sessions.html" aria-current="page">Sessões</a>
+    <a href="eventos.html">Eventos</a>
+    <button id="btn-limpar-orfas" class="danger" hidden>Remover as sem token</button>
+
+    <button id="btn-nova" class="primary">+ Nova sessão</button>
+  </nav>
 </header>
 
 <main>
-  <section>
-    <div class="head">Sessões <span class="right" id="resumo">0</span></div>
-    <div class="grid" id="grid"></div>
-  </section>
-
-  <section>
-    <div class="head">Eventos <span class="right" id="ws-resumo">0 conectados</span></div>
-    <div class="log" id="log">
-      <div class="empty" id="log-vazio">
-        Sem eventos ainda.<br><br>
-        Cada sessão abre seu próprio <code>/session/ws</code>. O WebSocket entrega
-        apenas os eventos aos quais o usuário está <b>inscrito</b> — há um portão
-        de assinatura antes do broadcast (<code>lifecycle_webhook.go:134</code>).
-        Sessões criadas por esta página nascem com <code>events=All</code>.
-      </div>
-    </div>
-  </section>
+  <div id="aviso-admin" class="aviso" hidden></div>
+  <div class="grid" id="grid"></div>
 </main>
 
-<dialog id="dlg">
+<!-- Criar sessão -->
+<dialog id="dlg-nova">
   <form method="dialog" class="corpo">
-    <h2 id="dlg-titulo">Nova sessão</h2>
-    <p id="dlg-ajuda"></p>
-    <label class="campo"><span>nome</span><input id="dlg-nome" autocomplete="off"></label>
-    <label class="campo"><span>token</span><input id="dlg-token" autocomplete="off" spellcheck="false"></label>
+    <h2>Nova sessão</h2>
+    <p class="ajuda">Cria o utilizador na API já inscrito em todos os eventos. O token é
+      gerado aqui e guardado neste navegador — a API só o devolve na criação.</p>
+    <label class="campo"><span>nome</span><input id="nova-nome" autocomplete="off" required></label>
+    <label class="campo"><span>token da sessão (gerado)</span>
+      <input id="nova-token" autocomplete="off" spellcheck="false" readonly></label>
     <div class="rodape">
       <button value="cancel">Cancelar</button>
-      <button value="ok" class="primary" id="dlg-ok">Confirmar</button>
+      <button type="button" class="primary" id="nova-criar">Criar</button>
+    </div>
+    <div class="resposta" id="nova-resposta" hidden></div>
+  </form>
+</dialog>
+
+<!-- Operações da sessão: envio e chat -->
+<dialog id="dlg-op">
+  <form method="dialog" class="corpo">
+    <h2 id="op-titulo">Operação</h2>
+    <p class="ajuda" id="op-ajuda"></p>
+    <div id="op-campos"></div>
+    <div class="resposta" id="op-resposta" hidden></div>
+    <div class="rodape">
+      <button value="cancel">Fechar</button>
+      <button type="button" class="primary" id="op-enviar">Executar</button>
     </div>
   </form>
 </dialog>
 
-<script>
-(() => {
-  "use strict";
-  const $ = (id) => document.getElementById(id);
+<!-- Remover sessão -->
+<dialog id="dlg-remover">
+  <form method="dialog" class="corpo">
+    <h2 id="rem-titulo">Remover sessão</h2>
+    <p class="ajuda" id="rem-ajuda"></p>
+    <div class="aviso" id="rem-aviso" hidden></div>
+    <div class="resposta" id="rem-resposta" hidden></div>
+    <div class="rodape">
+      <button value="cancel">Cancelar</button>
+      <button type="button" class="danger" id="rem-simples">Remover só da API</button>
+      <button type="button" class="danger" id="rem-completo">Desvincular e remover</button>
+    </div>
+  </form>
+</dialog>
 
-  // A API REDIGE o token em GET /admin/users ("token":""), e com razão. Mas os
-  // endpoints /session/* autenticam POR token, então esta página não consegue
-  // operar sessões a partir da listagem: ela mantém o próprio registro local.
-  // Ao criar via POST /admin/users a resposta traz o token, e é aí que ele
-  // entra aqui. Sessões pré-existentes têm de ser adicionadas informando o
-  // token, que é a consequência honesta de a API não expô-lo.
-  const CHAVE = "wa-devui-sessoes";
-  const POLL_MS = 3000;
+<!-- Confirmação genérica: substitui o confirm() nativo, que o navegador
+     suprime em silêncio depois de alguns diálogos seguidos -->
+<dialog id="dlg-confirma">
+  <form method="dialog" class="corpo">
+    <h2 id="conf-titulo">Confirmar</h2>
+    <p class="ajuda" id="conf-texto"></p>
+    <div class="rodape">
+      <button value="cancel">Cancelar</button>
+      <button type="button" class="danger" id="conf-ok">Confirmar</button>
+    </div>
+  </form>
+</dialog>
 
-  /** @type {{nome:string, token:string, id?:string}[]} */
-  let sessoes = [];
-  const sockets = new Map();   // token -> WebSocket
-  const ttlTimers = new Map(); // token -> intervalo da barra de validade
+<!-- Remoção em lote -->
+<dialog id="dlg-lote">
+  <form method="dialog" class="corpo">
+    <h2>Remover várias sessões</h2>
+    <p class="ajuda">Sessões sem token neste navegador. Só podem ser removidas — não há
+      credencial para as operar.</p>
+    <div class="aviso" id="lote-aviso" hidden></div>
+    <div id="lote-lista"></div>
+    <div class="resposta" id="lote-resposta" hidden></div>
+    <div class="rodape">
+      <button value="cancel">Cancelar</button>
+      <button type="button" class="danger" id="lote-executar">Remover as selecionadas</button>
+    </div>
+  </form>
+</dialog>
 
-  const carregar = () => {
-    try { sessoes = JSON.parse(localStorage.getItem(CHAVE) || "[]"); }
-    catch { sessoes = []; }
-  };
-  const salvar = () => localStorage.setItem(CHAVE, JSON.stringify(sessoes));
-  const admin = () => $("admin").value.trim();
-  const enc = encodeURIComponent;
+<!-- Menu de operações -->
+<dialog id="dlg-menu">
+  <form method="dialog" class="corpo">
+    <h2 id="menu-titulo">Operações</h2>
+    <p class="ajuda" id="menu-ajuda"></p>
+    <div class="ops" id="menu-ops"></div>
+    <div class="rodape"><button value="cancel">Fechar</button></div>
+  </form>
+</dialog>
 
-  // O token das chamadas REST vai no HEADER, nao na query string: a query
-  // continua aceita nesta release mas emite WARN a cada request e sai na
-  // proxima (middleware/auth.go:72-90). Uma pagina de teste que exercita o
-  // caminho deprecado ensina o caminho errado a quem a ler.
-  //
-  // O WebSocket e a EXCECAO, e nao por descuido: a API WebSocket do navegador
-  // nao permite header customizado no handshake. Nao ha alternativa do lado
-  // do cliente — ver F75 em HOUSEKEEP.md.
-
-  // ---- log ----------------------------------------------------------------
-  function log(quem, tipo, carga, classe) {
-    $("log-vazio")?.remove();
-    const l = $("log");
-    const row = document.createElement("div");
-    row.className = "ev" + (classe ? " " + classe : "");
-    row.innerHTML = `<time>${new Date().toLocaleTimeString("pt-BR",{hour12:false})}</time>`
-      + `<span class="quem"></span><span class="tipo"></span><span class="carga"></span>`;
-    row.querySelector(".quem").textContent = quem;
-    row.querySelector(".tipo").textContent = tipo;
-    row.querySelector(".carga").textContent = carga ?? "";
-    const noFim = l.scrollHeight - l.scrollTop - l.clientHeight < 40;
-    l.appendChild(row);
-    if (noFim) l.scrollTop = l.scrollHeight;
-  }
-
-  // ---- render -------------------------------------------------------------
-  function render() {
-    const g = $("grid");
-    g.innerHTML = "";
-    $("resumo").textContent = `${sessoes.length} sessão${sessoes.length === 1 ? "" : "s"}`;
-
-    if (!sessoes.length) {
-      g.innerHTML = `<div class="vazio"><b>Nenhuma sessão.</b><br>
-        Use <b>+ Nova sessão</b> para criar um usuário e parear um número,
-        ou <b>+ Adicionar existente</b> se já souber o token.</div>`;
-      return;
-    }
-
-    for (const s of sessoes) {
-      const card = document.createElement("div");
-      card.className = "card";
-      card.dataset.token = s.token;
-      card.innerHTML = `
-        <div class="card-top">
-          <span class="dot"></span>
-          <span class="nome"></span>
-          <span class="tok"></span>
-          <button class="x" title="Remover desta lista (não apaga o usuário)">×</button>
-        </div>
-        <div class="estado">—</div>
-        <div class="jid"></div>
-        <div class="qr" hidden><div class="msg">…</div></div>
-        <div class="ttl" hidden><i></i></div>
-        <div class="acoes">
-          <button data-a="conectar" class="primary">Conectar</button>
-          <button data-a="desconectar">Desconectar</button>
-          <button data-a="logout" class="danger">Logout</button>
-        </div>`;
-      card.querySelector(".nome").textContent = s.nome;
-      card.querySelector(".tok").textContent = s.token;
-      card.querySelector(".x").onclick = () => removerDaLista(s.token);
-      for (const b of card.querySelectorAll("[data-a]")) {
-        b.onclick = () => acao(s, b.dataset.a);
-      }
-      g.appendChild(card);
-    }
-    sessoes.forEach(atualizarStatus);
-  }
-
-  const cardDe = (token) => $("grid").querySelector(`.card[data-token="${CSS.escape(token)}"]`);
-
-  // ---- status -------------------------------------------------------------
-  async function atualizarStatus(s) {
-    const card = cardDe(s.token);
-    if (!card) return;
-    try {
-      const r = await fetch("/session/status", { cache: "no-store", headers: { token: s.token } });
-      const b = await r.json();
-      if (!b.success) {
-        pintar(card, "off", b?.error?.code || `HTTP ${r.status}`, "");
-        return;
-      }
-      const d = b.data;
-      const estado = d.loggedIn ? "pareada e conectada"
-                   : d.connected ? "conectada, não autenticada"
-                   : "desconectada";
-      pintar(card, d.loggedIn ? "on" : d.connected ? "wait" : "off", estado, d.jid || "");
-      card.classList.toggle("ativa", !!d.loggedIn);
-      if (d.loggedIn) esconderQR(card);
-    } catch (e) {
-      pintar(card, "off", "API inacessível", "");
-    }
-  }
-
-  function pintar(card, cls, estado, jid) {
-    card.querySelector(".dot").className = "dot " + cls;
-    card.querySelector(".estado").textContent = estado;
-    card.querySelector(".jid").textContent = jid;
-  }
-
-  // ---- QR -----------------------------------------------------------------
-  function mostrarQR(token, dataURI, expiraEm) {
-    const card = cardDe(token); if (!card) return;
-    card.classList.add("pareando");
-    const qr = card.querySelector(".qr");
-    qr.hidden = false;
-    qr.classList.remove("expirado");
-    qr.querySelector(".over")?.remove();
-    if (qr.firstElementChild?.tagName !== "IMG") qr.innerHTML = '<img alt="QR code de pareamento">';
-    const img = qr.querySelector("img");
-    if (img.src !== dataURI) img.src = dataURI;
-    if (expiraEm) iniciarTTL(token, expiraEm);
-  }
-
-  function esconderQR(card) {
-    card.classList.remove("pareando");
-    card.querySelector(".qr").hidden = true;
-    card.querySelector(".ttl").hidden = true;
-  }
-
-  // A barra usa o expiresAt que a PRÓPRIA API manda. Não há contagem fixa de
-  // 20s: o primeiro código vale 60s, e assumir 20 mostraria expirado o que
-  // ainda é válido.
-  function iniciarTTL(token, iso) {
-    pararTTL(token);
-    const fim = Date.parse(iso);
-    const card = cardDe(token); if (!card || !Number.isFinite(fim)) return;
-    const barra = card.querySelector(".ttl"), i = barra.querySelector("i");
-    barra.hidden = false;
-    const total = Math.max(1, fim - Date.now());
-    const tick = () => {
-      const resta = fim - Date.now();
-      if (resta <= 0) { pararTTL(token); i.style.width = "0"; return; }
-      i.style.width = Math.max(0, Math.min(100, (resta / total) * 100)) + "%";
-      barra.classList.toggle("low", resta < 7000);
-    };
-    tick();
-    ttlTimers.set(token, setInterval(tick, 250));
-  }
-  function pararTTL(token) {
-    const t = ttlTimers.get(token);
-    if (t) { clearInterval(t); ttlTimers.delete(token); }
-  }
-
-  function marcarExpirado(s) {
-    const card = cardDe(s.token); if (!card) return;
-    pararTTL(s.token);
-    const qr = card.querySelector(".qr");
-    qr.classList.add("expirado");
-    if (!qr.querySelector(".over")) {
-      const o = document.createElement("div");
-      o.className = "over";
-      o.innerHTML = '<button type="button">Gerar novo QR</button>';
-      o.querySelector("button").onclick = () => acao(s, "conectar");
-      qr.appendChild(o);
-    }
-  }
-
-  // ---- WebSocket, um por sessão -------------------------------------------
-  function abrirWS(s) {
-    fecharWS(s.token);
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/session/ws?token=${enc(s.token)}`);
-    sockets.set(s.token, ws);
-
-    ws.onopen = () => { log(s.nome, "ws", "conexão aberta", "sys"); contarWS(); };
-    ws.onerror = () => log(s.nome, "ws", "erro de socket", "err");
-    ws.onclose = (e) => {
-      // Sem reconexão automática: num painel de diagnóstico, um socket que
-      // reabre sozinho esconde o sintoma que se quer observar.
-      log(s.nome, "ws", `fechado (código ${e.code})`, "sys");
-      sockets.delete(s.token); contarWS();
-    };
-    ws.onmessage = (m) => {
-      let d; try { d = JSON.parse(m.data); } catch { log(s.nome, "raw", m.data); return; }
-      const tipo = d.type || d.event || "evento";
-      const resto = { ...d }; delete resto.type;
-      if (resto.qrCodeBase64) resto.qrCodeBase64 = `<png ${resto.qrCodeBase64.length} bytes>`;
-      log(s.nome, tipo, JSON.stringify(resto));
-      tratar(s, String(tipo).toLowerCase(), d);
-    };
-  }
-
-  function fecharWS(token) {
-    const ws = sockets.get(token);
-    if (ws) { ws.onclose = null; ws.close(); sockets.delete(token); }
-    contarWS();
-  }
-
-  const contarWS = () => { $("ws-resumo").textContent = `${sockets.size} conectado${sockets.size === 1 ? "" : "s"}`; };
-
-  function tratar(s, tipo, d) {
-    if (tipo === "qr") {
-      // Dois formatos chegam com o MESMO type "QR" (F68 em HOUSEKEEP.md):
-      // o fluxo de pareamento manda {qrCodeBase64, expiresAt}; o de Subscribe
-      // manda só {code}. Apenas o primeiro tem imagem.
-      if (d.qrCodeBase64) mostrarQR(s.token, d.qrCodeBase64, d.expiresAt);
-      return;
-    }
-    if (tipo === "qrtimeout") { marcarExpirado(s); return; }
-    if (tipo.includes("pairsuccess") || tipo === "connected" || tipo === "loggedout") {
-      atualizarStatus(s);
-    }
-  }
-
-  // ---- ações --------------------------------------------------------------
-  async function acao(s, qual) {
-    const card = cardDe(s.token);
-
-    if (qual === "conectar") {
-      abrirWS(s);
-      const qr = card.querySelector(".qr");
-      qr.hidden = false; qr.classList.remove("expirado");
-      qr.innerHTML = '<div class="msg">Pedindo QR à API…</div>';
-      await chamar(s, "GET", "/session/connect", "connect");
-      return;
-    }
-
-    if (qual === "desconectar") {
-      // Desconectar derruba o TRANSPORTE e mantém o pareamento: reconecta
-      // depois sem QR novo. É diferente de logout.
-      await chamar(s, "GET", "/session/disconnect", "disconnect");
-      fecharWS(s.token);
-      esconderQR(card);
-      return;
-    }
-
-    if (qual === "logout") {
-      // Logout DESVINCULA o aparelho: some da lista de "Aparelhos conectados"
-      // do celular e a próxima conexão exige um QR novo. Irreversível sem o
-      // telefone à mão — por isso confirma.
-      const ok = confirm(
-        `Logout de "${s.nome}"\n\n` +
-        `Isto DESVINCULA o aparelho: a sessão some de "Aparelhos conectados" ` +
-        `no celular e um novo pareamento por QR passa a ser necessário.\n\n` +
-        `Para apenas derrubar a conexão mantendo o pareamento, use Desconectar.`);
-      if (!ok) return;
-      await chamar(s, "POST", "/session/logout", "logout");
-      fecharWS(s.token);
-      esconderQR(card);
-      return;
-    }
-  }
-
-  async function chamar(s, metodo, caminho, rotulo) {
-    try {
-      const r = await fetch(caminho, { method: metodo, cache: "no-store", headers: { token: s.token } });
-      log(s.nome, rotulo, `HTTP ${r.status}`, r.ok ? "sys" : "err");
-    } catch (e) {
-      log(s.nome, rotulo, String(e), "err");
-    }
-    setTimeout(() => atualizarStatus(s), 800);
-  }
-
-  function removerDaLista(token) {
-    const s = sessoes.find(x => x.token === token);
-    if (!confirm(`Remover "${s?.nome}" desta lista?\n\nO usuário NÃO é apagado da API — só sai do painel.`)) return;
-    fecharWS(token); pararTTL(token);
-    sessoes = sessoes.filter(x => x.token !== token);
-    salvar(); render();
-  }
-
-  // ---- diálogo ------------------------------------------------------------
-  function pedir({ titulo, ajuda, okTexto }) {
-    return new Promise((resolve) => {
-      const dlg = $("dlg");
-      $("dlg-titulo").textContent = titulo;
-      $("dlg-ajuda").textContent = ajuda;
-      $("dlg-ok").textContent = okTexto;
-      $("dlg-nome").value = ""; $("dlg-token").value = "";
-      dlg.onclose = () => resolve(
-        dlg.returnValue === "ok"
-          ? { nome: $("dlg-nome").value.trim(), token: $("dlg-token").value.trim() }
-          : null);
-      dlg.showModal();
-      $("dlg-nome").focus();
-    });
-  }
-
-  $("btn-nova").onclick = async () => {
-    const r = await pedir({
-      titulo: "Nova sessão",
-      ajuda: "Cria um usuário na API (POST /admin/users) já inscrito em todos os eventos, e guarda o token neste navegador.",
-      okTexto: "Criar",
-    });
-    if (!r || !r.nome || !r.token) return;
-    try {
-      const resp = await fetch("/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": admin() },
-        body: JSON.stringify({ name: r.nome, token: r.token, events: "All" }),
-      });
-      const b = await resp.json();
-      if (!resp.ok) {
-        log(r.nome, "admin", `HTTP ${resp.status}: ${b?.error || ""}`, "err");
-        return;
-      }
-      sessoes.push({ nome: r.nome, token: r.token, id: b?.data?.id });
-      salvar(); render();
-      log(r.nome, "admin", "usuário criado", "sys");
-    } catch (e) {
-      log(r.nome, "admin", String(e), "err");
-    }
-  };
-
-  $("btn-add").onclick = async () => {
-    const r = await pedir({
-      titulo: "Adicionar sessão existente",
-      ajuda: "GET /admin/users não devolve o token (é redigido, e com razão). Para operar uma sessão já criada, informe o token dela.",
-      okTexto: "Adicionar",
-    });
-    if (!r || !r.token) return;
-    if (sessoes.some(x => x.token === r.token)) return;
-    sessoes.push({ nome: r.nome || r.token, token: r.token });
-    salvar(); render();
-  };
-
-  // ---- ciclo --------------------------------------------------------------
-  carregar();
-  render();
-  setInterval(() => sessoes.forEach(atualizarStatus), POLL_MS);
-  window.addEventListener("beforeunload", () => {
-    for (const t of [...sockets.keys()]) fecharWS(t);
-  });
-})();
-</script>
+<script type="module" src="sessions.js"></script>
 </body>
 </html>

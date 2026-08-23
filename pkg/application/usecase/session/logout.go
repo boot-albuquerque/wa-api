@@ -3,8 +3,11 @@ package session
 import (
 	"context"
 
+	"errors"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+
+	"wa-api/pkg/domain/apperr"
 )
 
 // LogoutUseCase DESVINCULA o aparelho: a sessão some de "Aparelhos
@@ -39,6 +42,24 @@ func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.L
 
 	if err := uc.sessions.Logout(ctx, txtID); err != nil {
 		uc.logger.Warn(ctx, "logout failed", "txtID", txtID, "error", err)
+
+		// Sem transporte vivo o logout não alcança o WhatsApp, mas o estado
+		// LOCAL precisa parar de mentir (F93): sem isto, `users.connected`
+		// ficava em 1 para uma sessão morta, e o `connectOnStartup` religava
+		// uma sessão fantasma a cada subida do processo.
+		//
+		// ACRESCENTA uma chamada no ramo de falha; NÃO move a de sucesso
+		// abaixo. A posição daquela é deliberada e está justificada pela F80 —
+		// trocar a ordem reabriria aquele defeito.
+		//
+		// Só neste caso. Falha por outro motivo pode ser transitória, e
+		// derrubar o estado local de uma sessão possivelmente saudável seria
+		// pior que o problema original.
+		var appErr *apperr.AppError
+		if errors.As(err, &appErr) && appErr.Code == apperr.CodeSessionNotConnected {
+			uc.detacher.Detach(txtID)
+		}
+
 		return nil, err
 	}
 

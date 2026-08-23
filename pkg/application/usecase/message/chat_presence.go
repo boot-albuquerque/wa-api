@@ -3,6 +3,7 @@ package message
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -28,16 +29,16 @@ func (uc *ChatPresenceUseCase) Execute(ctx context.Context, userID string, req d
 	}
 
 	if len(req.Phone) < 1 {
-		return fmt.Errorf("missing Phone in Payload")
+		return apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in Payload", false, nil)
 	}
 
 	if len(req.State) < 1 {
-		return fmt.Errorf("missing State in Payload")
+		return apperr.New("missing_state", apperr.CategoryValidation, "missing State in Payload", false, nil)
 	}
 
 	jid, err := uc.jids.ResolveJID(ctx, req.Phone)
 	if err != nil {
-		return fmt.Errorf("could not parse Phone")
+		return apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
 	}
 
 	if err := uc.presence.SendChatPresence(ctx, userID, jid, req.State, req.Media); err != nil {

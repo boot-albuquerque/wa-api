@@ -7,41 +7,6 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// --- MessageComposer ---------------------------------------------------
-
-// MessageComposerNewMessageIDCall é uma chamada a NewMessageID.
-type MessageComposerNewMessageIDCall struct {
-	Ctx   context.Context
-	TxtID string
-}
-
-// MessageComposer é o fake de port.MessageComposer — a porta dos 12 use cases
-// send_*.
-//
-// Zero-value devolve o ID fixo DefaultMessageID, e não vazio: os use cases de
-// envio tratam ID vazio como falha, e um fake que devolvesse "" faria o
-// caminho feliz falhar por acidente.
-type MessageComposer struct {
-	SessionGuard
-
-	NewMessageIDFunc  func(ctx context.Context, txtID string) (string, error)
-	NewMessageIDCalls []MessageComposerNewMessageIDCall
-}
-
-// DefaultMessageID é o que MessageComposer devolve sem NewMessageIDFunc.
-const DefaultMessageID = "generated-message-id"
-
-var _ port.MessageComposer = (*MessageComposer)(nil)
-
-// NewMessageID implementa port.MessageComposer.
-func (f *MessageComposer) NewMessageID(ctx context.Context, txtID string) (string, error) {
-	f.NewMessageIDCalls = append(f.NewMessageIDCalls, MessageComposerNewMessageIDCall{Ctx: ctx, TxtID: txtID})
-	if f.NewMessageIDFunc != nil {
-		return f.NewMessageIDFunc(ctx, txtID)
-	}
-	return DefaultMessageID, nil
-}
-
 // --- MessagingPort -----------------------------------------------------
 
 // MessagingPortPublishMessageCall é uma chamada a PublishMessage.

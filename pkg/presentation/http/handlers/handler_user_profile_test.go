@@ -27,8 +27,8 @@ func rotaPerfil(t *testing.T, porta *lidPorta) http.Handler {
 }
 
 func TestGetUserProfile_LeOAlvoDoCaminho(t *testing.T) {
-	const jid = "5511912345678@s.whatsapp.net"
-	porta := &lidPorta{lid: "90000000000001@lid"}
+	const jid = "5516981818244@s.whatsapp.net"
+	porta := &lidPorta{lid: "29343770251463@lid"}
 
 	req := withUser(httptest.NewRequest(http.MethodGet, "/user/profile/"+jid, nil), "user-1")
 	rec := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestGetUserProfile_LeOAlvoDoCaminho(t *testing.T) {
 	if !env.Success {
 		t.Fatalf("success=false no caminho feliz: %s", rec.Body.String())
 	}
-	if env.Data.JID != jid || env.Data.LID != "90000000000001@lid" {
+	if env.Data.JID != jid || env.Data.LID != "29343770251463@lid" {
 		t.Errorf("identidades erradas no corpo: %s", rec.Body.String())
 	}
 	if env.Data.Query != jid {

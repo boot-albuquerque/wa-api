@@ -3,6 +3,8 @@ package user_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +55,7 @@ func portasDaLista() (*contractsfake.ChatActivityReader, *contractsfake.ContactD
 
 func listar(t *testing.T, ar *contractsfake.ChatActivityReader, cd *contractsfake.ContactDirectory, gd *contractsfake.GroupDirectory, limit, offset int) *domain.ChatListPage {
 	t.Helper()
-	page, err := user.NewListChatsUseCase(ar, cd, cd, gd, &contractsfake.Logger{}).
+	page, err := user.NewListChatsUseCase(ar, cd, gd, &contractsfake.Logger{}).
 		Execute(context.Background(), listaUser, limit, offset)
 	if err != nil {
 		t.Fatalf("Execute devolveu erro: %v", err)
@@ -203,7 +205,7 @@ func TestLista_HistoricoIndisponivelFalha(t *testing.T) {
 		},
 	}
 
-	_, err := user.NewListChatsUseCase(ar, &contractsfake.ContactDirectory{}, &contractsfake.ContactDirectory{}, &contractsfake.GroupDirectory{}, &contractsfake.Logger{}).
+	_, err := user.NewListChatsUseCase(ar, &contractsfake.ContactDirectory{}, &contractsfake.GroupDirectory{}, &contractsfake.Logger{}).
 		Execute(context.Background(), listaUser, 0, 0)
 
 	if !errors.Is(err, falha) {
@@ -420,5 +422,202 @@ func TestLista_AliasNaoSobrescreveEntradaDiretaPorLID(t *testing.T) {
 
 	if len(page.Chats) != 1 || page.Chats[0].Name != "Nome Direto" {
 		t.Fatalf("o alias derivado do PN sobrescreveu a entrada direta por LID: %+v", page.Chats)
+	}
+}
+
+// --- F181: o telefone como identificador legível -----------------------------
+
+// TestListaChats_TelefoneResolvidoParaConversaSemNome é o defeito medido em
+// campo: 48 conversas mostram `182699419517150@lid`, que não diz nada a
+// ninguém, e nós temos o número para 100% delas.
+func TestListaChats_TelefoneResolvidoParaConversaSemNome(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	cd.GetPNForLIDFunc = func(_ context.Context, _ string, lid domain.JID) (domain.JID, error) {
+		if lid == "222@lid" {
+			return "556799881100:37@s.whatsapp.net", nil
+		}
+		return "", nil
+	}
+
+	page := listar(t, ar, cd, gd, 10, 0)
+	sem := acharChat(t, page, "222@lid")
+	if sem.Phone != "556799881100" {
+		t.Errorf("Phone = %q, quero \"556799881100\"", sem.Phone)
+	}
+	// O JID NÃO muda: é o que o cliente usa nas outras rotas.
+	if sem.JID != "222@lid" {
+		t.Errorf("JID = %q: o telefone e' campo PROPRIO, nao substituto", sem.JID)
+	}
+	// E o telefone NÃO vira nome: quem ordena por nome não pode passar a
+	// misturar nomes com números.
+	if sem.Name != "" {
+		t.Errorf("Name = %q: telefone nao pode virar nome", sem.Name)
+	}
+}
+
+// TestListaChats_TelefoneNaoApagaNomeExistente: quem TEM nome continua a tê-lo,
+// e ganha o telefone por acréscimo.
+func TestListaChats_TelefoneNaoApagaNomeExistente(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	cd.GetPNForLIDFunc = func(context.Context, string, domain.JID) (domain.JID, error) {
+		return "551199999999@s.whatsapp.net", nil
+	}
+
+	com := acharChat(t, listar(t, ar, cd, gd, 10, 0), "111@lid")
+	if com.Name != "Alice Agenda" {
+		t.Errorf("Name = %q, quero \"Alice Agenda\": o telefone nao pode sobrepor o nome", com.Name)
+	}
+	if com.Phone != "551199999999" {
+		t.Errorf("Phone = %q, quero o numero", com.Phone)
+	}
+}
+
+// TestListaChats_ResolucaoCustaPELAPAGINA é a invariante que mais me importou.
+//
+// A lista tem 734 conversas no tenant real e devolve no máximo `limit`.
+// Resolver ANTES de fatiar faria o trabalho crescer com o TOTAL em vez de com o
+// que se devolve — um mecanismo cujo custo cresce com o que ninguém pediu, que
+// é a Regra 1 do CLAUDE.md ignorada.
+//
+// O teste conta CHAMADAS, não resultados: é a única forma de a inversão
+// aparecer, porque resolver tudo e devolver a página produz exatamente a mesma
+// resposta.
+func TestListaChats_ResolucaoCustaPELAPAGINA(t *testing.T) {
+	ar := &contractsfake.ChatActivityReader{
+		GetLastActivityByUserFunc: func(context.Context, string) (map[string]time.Time, error) {
+			m := make(map[string]time.Time, 100)
+			for i := range 100 {
+				m[fmt.Sprintf("%d@lid", 1000+i)] = t0(i)
+			}
+			return m, nil
+		},
+	}
+	cd := &contractsfake.ContactDirectory{
+		GetPNForLIDFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			return "5511000000000@s.whatsapp.net", nil
+		},
+	}
+
+	listar(t, ar, cd, &contractsfake.GroupDirectory{}, 5, 0)
+
+	if n := len(cd.GetPNForLIDCalls); n != 5 {
+		t.Fatalf("resolucoes = %d para uma pagina de 5 em 100 conversas: o custo tem de crescer com a PAGINA, nao com o total", n)
+	}
+}
+
+// TestListaChats_GrupoNaoConsultaOResolvedor: grupo não tem telefone, e o store
+// real recusa GetPNForLID com um JID que não seja @lid.
+func TestListaChats_GrupoNaoConsultaOResolvedor(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	cd.GetPNForLIDFunc = func(context.Context, string, domain.JID) (domain.JID, error) {
+		return "5511000000000@s.whatsapp.net", nil
+	}
+
+	page := listar(t, ar, cd, gd, 10, 0)
+	if g := acharChat(t, page, "120363@g.us"); g.Phone != "" {
+		t.Errorf("grupo veio com Phone = %q", g.Phone)
+	}
+	for _, c := range cd.GetPNForLIDCalls {
+		if !strings.HasSuffix(string(c.LID), "@lid") {
+			t.Errorf("resolvedor chamado com %q: o store real recusa quem nao e' @lid", c.LID)
+		}
+	}
+}
+
+// TestListaChats_ResolvedorEmFalhaNaoDerrubaALista: o telefone é
+// enriquecimento, como o nome de contato e o de grupo já eram. Sessão fora do
+// ar devolve a lista sem telefone, não um erro.
+func TestListaChats_ResolvedorEmFalhaNaoDerrubaALista(t *testing.T) {
+	ar, cd, gd := portasDaLista()
+	cd.GetPNForLIDFunc = func(context.Context, string, domain.JID) (domain.JID, error) {
+		return "", errors.New("sessao offline")
+	}
+
+	page := listar(t, ar, cd, gd, 10, 0)
+	if len(page.Chats) != 3 {
+		t.Fatalf("conversas = %d, quero 3: resolvedor em falha nao pode derrubar a lista", len(page.Chats))
+	}
+	for _, c := range page.Chats {
+		if c.Phone != "" {
+			t.Errorf("chat %s veio com Phone %q apesar da falha", c.JID, c.Phone)
+		}
+	}
+}
+
+func acharChat(t *testing.T, page *domain.ChatListPage, jid string) domain.ChatSummary {
+	t.Helper()
+	for _, c := range page.Chats {
+		if c.JID == jid {
+			return c
+		}
+	}
+	t.Fatalf("chat %q ausente da pagina", jid)
+	return domain.ChatSummary{}
+}
+
+// TestListaChats_ParaNaPrimeiraFalhaDoResolvedor trava o comportamento que o
+// gate de cobertura de log me levou a escrever.
+//
+// GetPNForLID só falha quando a sessão não está registada, e isso não muda
+// entre uma conversa e a seguinte da mesma página. Insistir produziria N
+// chamadas condenadas e N linhas de log por requisição — a F180 outra vez.
+//
+// O teste conta CHAMADAS: com dez conversas e o resolvedor sempre em falha,
+// tem de haver exatamente UMA.
+func TestListaChats_ParaNaPrimeiraFalhaDoResolvedor(t *testing.T) {
+	ar := &contractsfake.ChatActivityReader{
+		GetLastActivityByUserFunc: func(context.Context, string) (map[string]time.Time, error) {
+			m := make(map[string]time.Time, 10)
+			for i := range 10 {
+				m[fmt.Sprintf("%d@lid", 2000+i)] = t0(i)
+			}
+			return m, nil
+		},
+	}
+	cd := &contractsfake.ContactDirectory{
+		GetPNForLIDFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			return "", errors.New("sessao offline")
+		},
+	}
+
+	page := listar(t, ar, cd, &contractsfake.GroupDirectory{}, 10, 0)
+
+	if n := len(cd.GetPNForLIDCalls); n != 1 {
+		t.Fatalf("chamadas = %d para 10 conversas com o resolvedor sempre em falha: quero 1, porque a falha nao muda entre conversas", n)
+	}
+	if len(page.Chats) != 10 {
+		t.Errorf("conversas = %d, quero 10: parar de resolver nao pode encurtar a lista", len(page.Chats))
+	}
+}
+
+// TestListaChats_UmaFalhaNaoImpedeAsAnteriores: quem já foi resolvido ANTES da
+// falha mantém o telefone. Parar não pode desfazer o que já se conseguiu.
+func TestListaChats_UmaFalhaNaoImpedeAsAnteriores(t *testing.T) {
+	ar := &contractsfake.ChatActivityReader{
+		GetLastActivityByUserFunc: func(context.Context, string) (map[string]time.Time, error) {
+			return map[string]time.Time{
+				"aaa@lid": t0(30), // mais recente: resolvido primeiro
+				"bbb@lid": t0(20),
+				"ccc@lid": t0(10),
+			}, nil
+		},
+	}
+	chamadas := 0
+	cd := &contractsfake.ContactDirectory{
+		GetPNForLIDFunc: func(context.Context, string, domain.JID) (domain.JID, error) {
+			chamadas++
+			if chamadas == 1 {
+				return "551188887777@s.whatsapp.net", nil
+			}
+			return "", errors.New("sessao caiu no meio")
+		},
+	}
+
+	page := listar(t, ar, cd, &contractsfake.GroupDirectory{}, 10, 0)
+	if p := acharChat(t, page, "aaa@lid").Phone; p != "551188887777" {
+		t.Errorf("Phone da primeira = %q, quero o numero: a falha seguinte nao pode desfazer o que ja' resolveu", p)
+	}
+	if n := len(cd.GetPNForLIDCalls); n != 2 {
+		t.Errorf("chamadas = %d, quero 2 (uma boa, uma falha, e para)", n)
 	}
 }

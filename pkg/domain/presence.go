@@ -70,4 +70,8 @@ type Reaction struct {
 // aceita pelo servidor.
 type MessageSendResult struct {
 	Timestamp time.Time
+	// ID é o identificador que o servidor efetivamente usou para a
+	// mensagem. Vazio para operações (como SendReaction) cujo ID já é
+	// conhecido do chamador antes do envio.
+	ID string
 }

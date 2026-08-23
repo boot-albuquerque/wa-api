@@ -12,6 +12,8 @@ import (
 	"github.com/go-resty/resty/v2"
 
 	"github.com/rs/zerolog/log"
+
+	dbpkg "wa-api/pkg/infra/db"
 )
 
 // callHookWithHmac entrega um evento ao webhook do usuário.
@@ -21,8 +23,15 @@ import (
 // ficava num time.Sleep DENTRO desta função, e desde a F86 esta função roda
 // num worker do pool de despacho — com os padrões antigos (5 tentativas, base
 // 30s) um evento para um destino morto segurava um worker por 7,5 minutos.
-func callHookWithHmac(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte) {
-	tentarWebhook(myurl, payload, userID, encryptedHmacKey, 0)
+func callHookWithHmac(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte, scope dbpkg.HMACScope) {
+	// Grava a INTENÇÃO antes de tentar (ADR-0005 D3). A ordem é o ponto:
+	// registrar depois de tentar deixaria uma janela em que o processo morre
+	// com a entrega em voo e nenhum rastro dela.
+	//
+	// Id vazio significa "sem outbox" — e daí em diante o caminho é o antigo,
+	// com reagendamento em memória. Nunca os dois para a mesma entrega.
+	outboxID := outboxEnqueue(userID, myurl, payload, scope)
+	tentarWebhook(myurl, payload, userID, encryptedHmacKey, 0, outboxID)
 }
 
 // montarRequisicaoWebhook monta corpo, assinatura e requisição de UMA
@@ -94,13 +103,17 @@ func montarRequisicaoWebhook(client *resty.Client, payload map[string]string, us
 
 // tentarWebhook executa UMA tentativa e decide o que vem depois: sucesso,
 // reagendamento ou caminho terminal (fila de erro).
-func tentarWebhook(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte, tentativa int) {
+func tentarWebhook(myurl string, payload map[string]string, userID string, encryptedHmacKey []byte, tentativa int, outboxID string) {
 	log.Info().Str("url", myurl).Str("userID", userID).Int("attempt", tentativa+1).
 		Msg("Sending POST to client with retry logic")
 
 	client := clientManager.GetHTTPClient(userID)
 	if client == nil {
 		log.Warn().Str("url", myurl).Str("userID", userID).Msg("HTTP client is nil for user, skipping webhook")
+		// Sem cliente HTTP não há tentativa possível agora nem depois: o cliente
+		// é provisionado com a sessão. Deixar a linha viva faria a varredura
+		// retomá-la a cada prazo, para sempre, sem nunca conseguir entregar.
+		outboxSettle(outboxID)
 		return
 	}
 
@@ -122,13 +135,18 @@ func tentarWebhook(myurl string, payload map[string]string, userID string, encry
 			Msg("Webhook failed due to non-2xx status code")
 	default:
 		log.Info().Int("status", resp.StatusCode()).Str("url", myurl).Msg("Webhook call successful")
+		outboxSettle(outboxID)
 		return
 	}
 
-	if agendarProximaTentativa(myurl, payload, userID, encryptedHmacKey, tentativa+1) {
+	if reagendar(myurl, payload, userID, encryptedHmacKey, tentativa+1, outboxID) {
 		return
 	}
 	entregarWebhookNaFilaDeErro(myurl, body, userID, encryptedHmacKey, lastError)
+	// Esgotou: o caminho terminal já recebeu a entrega, então a linha não tem
+	// mais o que retomar. Mantê-la faria a varredura reentregar para sempre
+	// algo que já foi declarado perdido.
+	outboxSettle(outboxID)
 }
 
 // entregarWebhookNaFilaDeErro é o caminho terminal, preservado como estava.

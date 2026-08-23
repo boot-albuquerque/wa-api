@@ -213,6 +213,22 @@ func TestReadExcludeFile(t *testing.T) {
 		"pkg/application/contracts/contractsfake/",
 		"internal/wa-noise/",
 		"pkg/infra/wa-noise/client/testkit/",
+		// F193 (2026-08-21): o extrato de adaptadores saiu do denominador por
+		// decisao de arquitetura — a camada nao e' ponto de instrumentacao,
+		// quem loga a falha e' o use case. Esta linha e' o que torna a
+		// exclusao VISIVEL: acrescentar ou remover um extrato sem passar por
+		// aqui reprova.
+		"pkg/infra/wa-noise/adapters/",
+		// F204 (2026-08-21): a fachada saiu pela MESMA razao que os
+		// adaptadores. O que a forcou foram os 50 wrappers de delegacao pura do
+		// RealClient (decisao 46=a do canal), que diluiam func_coverage de
+		// 74,7% para 69,2% sem que nada que registava deixasse de registar.
+		//
+		// Nota: este extrato e' PREFIXO do "client/testkit/" acima, que passa a
+		// ser redundante. Fica na mesma, e de proposito: se um dia entrar logica
+		// em client/ e a exclusao da fachada sair, o testkit tem de continuar
+		// fora — e uma linha redundante e' mais barata que redescobrir isso.
+		"pkg/infra/wa-noise/client/",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("excludes = %v, quero %v", got, want)

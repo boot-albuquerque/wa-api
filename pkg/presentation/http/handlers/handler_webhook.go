@@ -27,6 +27,23 @@ type WebhookHandlerContext struct {
 	SupportedEvents []string
 	FindInSlice     func(slice []string, val string) bool
 	UpdateUserInfo  func(info interface{}, key, value string) interface{}
+
+	// PublishUserInfo writes the updated Values to BOTH userinfo caches (F164).
+	// The webhook handlers call it instead of UserCache.Set, so that a
+	// webhook configuration change is visible to the dispatch side (keyed by
+	// userID) as well as the HTTP side (keyed by token).
+	//
+	// This field is REQUIRED. A nil PublishUserInfo panics at construction
+	// time (NewSetWebhookHandler et al.) — the same pattern as
+	// bootstrap.NewRouter for Deps.UserCache (router.go:75-83). The F164
+	// defect was exactly this: writing only one cache. A nil fallback that
+	// writes only the token cache reintroduces it one layer up.
+	PublishUserInfo func(userID, token string, values interface{})
+}
+
+// publishValues writes the updated values through PublishUserInfo.
+func (ctx *WebhookHandlerContext) publishValues(userID, token string, values interface{}) {
+	ctx.PublishUserInfo(userID, token, values)
 }
 
 // Os call sites abaixo inlineiam a cadeia hlog.FromRequest(r)...Msg(...) por
@@ -99,6 +116,7 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type SetWebhookHandler struct{ ctx *WebhookHandlerContext }
 
 func NewSetWebhookHandler(ctx *WebhookHandlerContext) *SetWebhookHandler {
+	requirePublishUserInfo(ctx)
 	return &SetWebhookHandler{ctx}
 }
 
@@ -169,7 +187,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	v := h.ctx.UpdateUserInfo(info, "Webhook", webhook)
 	v = h.ctx.UpdateUserInfo(v, "Events", eventstring)
-	h.ctx.UserCache.Set(token, v, cache.NoExpiration)
+	h.ctx.publishValues(txtid, token, v)
 
 	response := map[string]interface{}{"webhook": webhook}
 	customhttp.RespondJSON(w, http.StatusOK, response, nil)
@@ -179,6 +197,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type UpdateWebhookHandler struct{ ctx *WebhookHandlerContext }
 
 func NewUpdateWebhookHandler(ctx *WebhookHandlerContext) *UpdateWebhookHandler {
+	requirePublishUserInfo(ctx)
 	return &UpdateWebhookHandler{ctx}
 }
 
@@ -256,7 +275,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	v := h.ctx.UpdateUserInfo(info, "Webhook", webhook)
 	v = h.ctx.UpdateUserInfo(v, "Events", eventstring)
-	h.ctx.UserCache.Set(token, v, cache.NoExpiration)
+	h.ctx.publishValues(txtid, token, v)
 
 	response := map[string]interface{}{"webhook": webhook, "events": validEvents, "active": t.Active}
 	customhttp.RespondJSON(w, http.StatusOK, response, nil)
@@ -266,7 +285,19 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 type DeleteWebhookHandler struct{ ctx *WebhookHandlerContext }
 
 func NewDeleteWebhookHandler(ctx *WebhookHandlerContext) *DeleteWebhookHandler {
+	requirePublishUserInfo(ctx)
 	return &DeleteWebhookHandler{ctx}
+}
+
+// requirePublishUserInfo panics if the context does not wire PublishUserInfo.
+// Without it, publishValues nil-dereferences at request time — but that is
+// the WRONG failure mode: a nil fallback that writes only one cache would
+// silently reintroduce the F164 defect. Fail at construction, not at
+// request time. Same pattern as bootstrap.NewRouter (router.go:75-83).
+func requirePublishUserInfo(ctx *WebhookHandlerContext) {
+	if ctx.PublishUserInfo == nil {
+		panic("handlers: WebhookHandlerContext.PublishUserInfo is required (F164)")
+	}
 }
 
 func (h *DeleteWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -293,7 +324,7 @@ func (h *DeleteWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	v := h.ctx.UpdateUserInfo(info, "Webhook", "")
 	v = h.ctx.UpdateUserInfo(v, "Events", "")
-	h.ctx.UserCache.Set(token, v, cache.NoExpiration)
+	h.ctx.publishValues(txtid, token, v)
 
 	response := map[string]interface{}{"Details": "Webhook and events deleted successfully"}
 	customhttp.RespondJSON(w, http.StatusOK, response, nil)

@@ -22,8 +22,10 @@ import (
 
 // webhookMockUserInfo implementa a interface userInfo injetada pelo middleware.
 type webhookMockUserInfo struct {
-	id    string
-	token string
+	id      string
+	token   string
+	webhook string
+	events  string
 }
 
 func (m *webhookMockUserInfo) Get(key string) string {
@@ -32,6 +34,10 @@ func (m *webhookMockUserInfo) Get(key string) string {
 		return m.id
 	case "Token":
 		return m.token
+	case "Webhook":
+		return m.webhook
+	case "Events":
+		return m.events
 	default:
 		return ""
 	}
@@ -73,9 +79,10 @@ func (d *webhookFakeDB) Exec(query string, args ...interface{}) (sql.Result, err
 }
 
 func newWebhookTestContext(db *webhookFakeDB) *WebhookHandlerContext {
+	userCache := cache.New(5*time.Minute, 10*time.Minute)
 	return &WebhookHandlerContext{
 		DB:              db,
-		UserCache:       cache.New(5*time.Minute, 10*time.Minute),
+		UserCache:       userCache,
 		SupportedEvents: []string{"Message", "ReadReceipt"},
 		FindInSlice: func(slice []string, val string) bool {
 			for _, s := range slice {
@@ -86,7 +93,49 @@ func newWebhookTestContext(db *webhookFakeDB) *WebhookHandlerContext {
 			return false
 		},
 		UpdateUserInfo: func(info interface{}, key, value string) interface{} { return info },
+		PublishUserInfo: func(userID, token string, values interface{}) {
+			userCache.Set(token, values, cache.DefaultExpiration)
+		},
 	}
+}
+
+// newWebhookTestContextDualCache creates a context wired like production:
+// PublishUserInfo writes to BOTH caches (by userID and by token). Returns
+// the two caches so tests can verify the F164 invariant.
+func newWebhookTestContextDualCache(db *webhookFakeDB) (*WebhookHandlerContext, *cache.Cache, *cache.Cache) {
+	userIDCache := cache.New(cache.NoExpiration, 0)
+	tokenCache := cache.New(5*time.Minute, 10*time.Minute)
+	return &WebhookHandlerContext{
+		DB:              db,
+		UserCache:       tokenCache,
+		SupportedEvents: []string{"Message", "ReadReceipt"},
+		FindInSlice: func(slice []string, val string) bool {
+			for _, s := range slice {
+				if s == val {
+					return true
+				}
+			}
+			return false
+		},
+		UpdateUserInfo: func(info interface{}, key, value string) interface{} {
+			m, ok := info.(*webhookMockUserInfo)
+			if !ok {
+				return info
+			}
+			clone := *m
+			switch key {
+			case "Webhook":
+				clone.webhook = value
+			case "Events":
+				clone.events = value
+			}
+			return &clone
+		},
+		PublishUserInfo: func(userID, token string, values interface{}) {
+			userIDCache.Set(userID, values, cache.NoExpiration)
+			tokenCache.Set(token, values, cache.DefaultExpiration)
+		},
+	}, userIDCache, tokenCache
 }
 
 // withTypedUserInfo popula o contexto com a chave TIPADA appport.UserInfoKey,
@@ -631,4 +680,88 @@ func TestDeleteWebhook_Success_200(t *testing.T) {
 		t.Fatalf("resposta sem Details: %s", rec.Body.String())
 	}
 	logassert.NoSecrets(t, recs)
+}
+
+// TestWebhookHandlers_F164_BothCachesAgree proves the F164 invariant AT THE
+// HANDLER LEVEL: after a webhook mutation via the HTTP handler, both the
+// userID cache and the token cache hold the same values. This is the test
+// that was missing — publish_userinfo_test.go proves the function works;
+// this proves the handler REACHES it.
+func TestWebhookHandlers_F164_BothCachesAgree(t *testing.T) {
+	tests := []struct {
+		method string
+		body   string
+	}{
+		{http.MethodPost, `{"webhookurl":"https://example.com/hook","events":["Message"]}`},
+		{http.MethodPut, `{"webhook":"https://example.com/hook","events":["Message"],"active":true}`},
+		{http.MethodDelete, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.method, func(t *testing.T) {
+			db := &webhookFakeDB{}
+			ctx, userIDCache, tokenCache := newWebhookTestContextDualCache(db)
+
+			var handler http.Handler
+			switch tt.method {
+			case http.MethodPost:
+				handler = NewSetWebhookHandler(ctx)
+			case http.MethodPut:
+				handler = NewUpdateWebhookHandler(ctx)
+			case http.MethodDelete:
+				handler = NewDeleteWebhookHandler(ctx)
+			}
+
+			req := httptest.NewRequest(tt.method, "/webhook", strings.NewReader(tt.body))
+			req = withTypedUserInfo(req)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d, want 200 (body %s)", rec.Code, rec.Body.String())
+			}
+
+			byID, foundByID := userIDCache.Get("42")
+			byToken, foundByToken := tokenCache.Get(logassertAdminToken)
+			if !foundByID {
+				t.Fatal("userID cache was not written — F164 invariant broken")
+			}
+			if !foundByToken {
+				t.Fatal("token cache was not written — F164 invariant broken")
+			}
+			if byID != byToken {
+				t.Fatalf("caches disagree: byID=%v, byToken=%v — F164 invariant broken", byID, byToken)
+			}
+		})
+	}
+}
+
+// TestWebhookHandlers_F164_NilPublishUserInfo_Panics proves that constructing
+// a webhook handler without PublishUserInfo panics at construction time, not
+// at request time. Same pattern as bootstrap.NewRouter (router.go:75-83).
+func TestWebhookHandlers_F164_NilPublishUserInfo_Panics(t *testing.T) {
+	ctx := &WebhookHandlerContext{
+		DB:              &webhookFakeDB{},
+		UserCache:       cache.New(5*time.Minute, 10*time.Minute),
+		SupportedEvents: []string{"Message"},
+		FindInSlice:     func([]string, string) bool { return false },
+		UpdateUserInfo:  func(info interface{}, _, _ string) interface{} { return info },
+	}
+
+	constructors := map[string]func(){
+		"NewSetWebhookHandler":    func() { NewSetWebhookHandler(ctx) },
+		"NewUpdateWebhookHandler": func() { NewUpdateWebhookHandler(ctx) },
+		"NewDeleteWebhookHandler": func() { NewDeleteWebhookHandler(ctx) },
+	}
+
+	for name, ctor := range constructors {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Fatalf("%s did not panic with nil PublishUserInfo", name)
+				}
+			}()
+			ctor()
+		})
+	}
 }

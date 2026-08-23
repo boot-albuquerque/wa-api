@@ -3,6 +3,7 @@ package message
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -33,7 +34,7 @@ func (uc *SendPresenceUseCase) Execute(ctx context.Context, userID string, req d
 	case "unavailable":
 		presence = domain.PresenceUnavailable
 	default:
-		return fmt.Errorf("invalid presence type. Allowed values: 'available', 'unavailable'")
+		return apperr.New("invalid_presence_type", apperr.CategoryValidation, "invalid presence type. Allowed values: 'available', 'unavailable'", false, nil)
 	}
 
 	uc.logger.Info(ctx, "Setting presence", "presence", req.Type, "user_id", userID)

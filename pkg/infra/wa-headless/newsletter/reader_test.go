@@ -30,10 +30,29 @@ func comFollower(f follower) *Reader {
 	return r
 }
 
-func TestSatisfazOPortDeNewsletter(t *testing.T) {
+// NÃO satisfaz NewsletterReader, e o teste trava a HONESTIDADE disso.
+//
+// A fusão de feature/wa-noise levou a porta de 2 para 13 métodos. Este
+// adaptador serve dois — ListSubscribed e CreateNewsletter — e declarar que
+// serve a porta seria a mentira que a decisão 80 existe para impedir.
+//
+// O teste é escrito ao contrário de propósito: quando alguém implementar os
+// onze que faltam, ele FALHA e obriga a decidir — satisfazer a porta inteira,
+// ou parti-la pela decisão 92. Um teste que só verificasse os dois métodos
+// deixaria o adaptador crescer até meio-satisfazer para sempre.
+func TestNaoFingeSatisfazerOPortInteiroDeNewsletter(t *testing.T) {
 	var r any = NewReader(adapter.NewSessions(registry.New(1), cfgFor))
-	if _, ok := r.(appport.NewsletterReader); !ok {
-		t.Fatal("não satisfaz NewsletterReader")
+	if _, ok := r.(appport.NewsletterReader); ok {
+		t.Fatal("passou a satisfazer NewsletterReader: decida entre servir os 13 " +
+			"métodos de verdade ou partir a porta (decisão 92), e atualize o inventário")
+	}
+	// O que ele SERVE, e é verificável: a metade que existe.
+	type serve interface {
+		ListSubscribed(ctx context.Context, txtID string) (any, error)
+		CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error)
+	}
+	if _, ok := r.(serve); !ok {
+		t.Fatal("deixou de servir ListSubscribed/CreateNewsletter")
 	}
 }
 

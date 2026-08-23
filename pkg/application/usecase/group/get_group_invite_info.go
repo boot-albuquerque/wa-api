@@ -3,6 +3,7 @@ package group
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -27,7 +28,7 @@ func (uc *GetGroupInviteInfoUseCase) Execute(ctx context.Context, txtID string, 
 	// Validar Code
 	if req.Code == "" {
 		uc.logger.Warn(ctx, "missing invite code in request", "txtID", txtID)
-		return nil, fmt.Errorf("missing Code in payload")
+		return nil, apperr.New("missing_code", apperr.CategoryValidation, "missing Code in payload", false, nil)
 	}
 
 	// Garantir que há sessão

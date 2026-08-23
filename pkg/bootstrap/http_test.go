@@ -4,8 +4,11 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"wa-api/pkg/infra/media/opengraph"
 )
 
 // TestInitPrivateIPBlocks popula o slice global sem panic.
@@ -156,6 +159,33 @@ func TestNewSafeHTTPClient_EmptyIPs(t *testing.T) {
 	// Se o resolver retorna []IP{}, o dialer falha com "no dialable IP".
 	// Não temos como simular []IP{} sem mock; pulamos.
 	t.Skip("LookupIP rarely returns []IP{}; caminho de erro raro")
+}
+
+// TestNewSafeHTTPClient_BlocksMediaFetchToLoopback prova, contra o CLIENTE
+// SSRF-safe REAL (não um dublê) combinado com o
+// opengraph.URLFetcher que CAP-02 usa para buscar mídia por URL, que uma
+// URL apontando para um servidor loopback (httptest.Server escuta em
+// 127.0.0.1) é recusada — a mesma proteção contra SSRF que /chat/send/image
+// depende de herdar deste client, exercitada pelo caminho de produção
+// real, não por uma política reimplementada no teste (ARMADILHA: dublê
+// mais permissivo que a produção esconde o defeito).
+func TestNewSafeHTTPClient_BlocksMediaFetchToLoopback(t *testing.T) {
+	prev := PrivateIPBlocks
+	defer func() { PrivateIPBlocks = prev }()
+	InitPrivateIPBlocks()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("nao deveria chegar aqui"))
+	}))
+	defer srv.Close()
+
+	fetcher := opengraph.NewURLFetcher(NewSafeHTTPClient())
+	_, _, err := fetcher.FetchBytes(context.Background(), srv.URL, 16*1024*1024)
+
+	if err == nil {
+		t.Fatal("URL loopback foi buscada com sucesso pelo client SSRF-safe")
+	}
 }
 
 // TestNewSafeHTTPClient_DialError cobre o lastDialErr.

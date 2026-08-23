@@ -36,6 +36,19 @@ var SupportedEventTypes = []string{
 	// Privacy and Settings
 	"PrivacySettings",
 	"PushNameSetting",
+	// F73: PushName e BusinessName anunciam que um CONTACTO mudou de nome —
+	// caso distinto do PushNameSetting, que é o nome do PRÓPRIO utilizador.
+	// Sem eles aqui, um integrador não tinha como reagir a "o contacto mudou
+	// de nome", e os eventos caíam no `default` do handler, poluindo o
+	// "Unhandled event" que devia significar "apareceu algo que não
+	// previmos".
+	"PushName",
+	"BusinessName",
+	// F191: etiquetas. A biblioteca emite os três quando outro dispositivo
+	// mexe numa etiqueta; sem eles aqui, o handler despacharia para ninguém.
+	"LabelEdit",
+	"LabelAssociationChat",
+	"LabelAssociationMessage",
 	"UserAbout",
 
 	// Synchronization and State

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -446,5 +447,86 @@ func TestFetchOpenGraphDataSeletoresDeImagem(t *testing.T) {
 				t.Fatalf("dimensoes HQ zeradas: %+v", got)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// FetchTimeout — single budget covers both fetches (F175)
+// ---------------------------------------------------------------------------
+
+// TestFetchOpenGraphDataTimeoutCoversEntireCall proves that FetchTimeout is a
+// single budget shared across the page fetch AND the image fetch. Each
+// individual fetch takes ~60% of the budget (neither exceeds it alone), but
+// together they exceed it. If the implementation applied a per-fetch timeout
+// both would succeed and the test would fail.
+func TestFetchOpenGraphDataTimeoutCoversEntireCall(t *testing.T) {
+	const budget = FetchTimeout // 5 s
+	perFetch := time.Duration(float64(budget) * 0.6)
+
+	srv := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(perFetch)
+		if r.URL.Path == "/img.png" {
+			w.Header().Set("Content-Type", "image/png")
+			if _, err := w.Write(pngBytes(t, 64, 64)); err != nil {
+				t.Errorf("write image: %v", err)
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		html := `<html><head>` +
+			`<meta property="og:title" content="Slow">` +
+			`<meta property="og:image" content="/img.png">` +
+			`</head></html>`
+		if _, err := w.Write([]byte(html)); err != nil {
+			t.Errorf("write html: %v", err)
+		}
+	})
+
+	start := time.Now()
+	got := FetchOpenGraphData(context.Background(), srv.Client(), srv.URL+"/page")
+	elapsed := time.Since(start)
+
+	// The page fetch (~3 s) succeeds, but the image fetch (~3 s more)
+	// pushes the total past the 5 s budget. With a single shared deadline
+	// the image is cut off; with per-fetch timeouts both would succeed.
+	if len(got.ImageData) != 0 {
+		t.Fatalf("image should have been cut off by shared deadline, got %d bytes", len(got.ImageData))
+	}
+	if got.Title != "Slow" {
+		t.Fatalf("page fetch should have completed within budget, Title=%q", got.Title)
+	}
+
+	if elapsed > budget+2*time.Second {
+		t.Fatalf("call took %v — timeout did not fire (budget is %v)", elapsed, budget)
+	}
+}
+
+// TestFetchOpenGraphDataTimeoutSilentDegradation proves the timeout causes
+// silent degradation: the caller gets an empty Result (found=false) with no
+// error, and the message send path continues without a preview. Uses a
+// short parent-context deadline so the test runs fast while still exercising
+// the real WithTimeout path inside FetchOpenGraphData.
+func TestFetchOpenGraphDataTimeoutSilentDegradation(t *testing.T) {
+	const shortDeadline = 200 * time.Millisecond
+
+	srv := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(shortDeadline + 100*time.Millisecond)
+		w.Header().Set("Content-Type", "text/html")
+		if _, err := w.Write([]byte(`<html><head><meta property="og:title" content="Late"></head></html>`)); err != nil {
+			t.Errorf("write html: %v", err)
+		}
+	})
+
+	// context.WithTimeout picks the EARLIER of parent and child deadlines,
+	// so a 200 ms parent fires before the 5 s FetchTimeout while still
+	// exercising the same code path.
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), shortDeadline)
+		got := FetchOpenGraphData(ctx, srv.Client(), srv.URL+"/page")
+		cancel()
+
+		if !isZeroResult(got) {
+			t.Fatalf("run %d: expected zero result on timeout, got %+v", i, got)
+		}
 	}
 }

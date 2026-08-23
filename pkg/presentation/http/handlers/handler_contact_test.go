@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	appport "wa-api/pkg/application/contracts"
@@ -181,13 +182,15 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 			wantErrSubstring: sessionBoom.Error(),
 		},
 		{
-			name:   "GetAvatar sem Phone no payload",
-			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{}`,
+			name:       "GetAvatar sem Phone no payload",
+			wantStatus: http.StatusBadRequest,
+			build:      func(f *chFakes) http.Handler { return f.avatar() },
+			method:     http.MethodPost, path: "/user/avatar", body: `{}`,
 			wantErrSubstring: "missing Phone in Payload",
 		},
 		{
-			name: "GetAvatar JID nao parseia",
+			name:       "GetAvatar JID nao parseia",
+			wantStatus: http.StatusBadRequest,
 			arrange: func(f *chFakes) {
 				f.jids.ResolveJIDFunc = func(context.Context, string) (domain.JID, error) {
 					return "", errors.New("bad jid")
@@ -307,6 +310,12 @@ func TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada(t *testing.T) {
 		if raw == "invalido" {
 			return "", errors.New("bad jid")
 		}
+		// Aplica o servidor por omissão como a produção faz
+		// (mapping/jid/resolver.go:21). O stub devolvia o texto cru, e a
+		// asserção descrevia um JID que a produção nunca produz.
+		if !strings.Contains(raw, "@") {
+			return domain.JID(raw + "@s.whatsapp.net"), nil
+		}
 		return domain.JID(raw), nil
 	}
 
@@ -319,7 +328,7 @@ func TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada(t *testing.T) {
 	if n := len(f.contacts.GetUserInfoCalls); n != 1 {
 		t.Fatalf("GetUserInfo chamado %d vez(es), quero 1", n)
 	}
-	if jids := f.contacts.GetUserInfoCalls[0].JIDs; len(jids) != 1 || jids[0] != domain.JID("5511999") {
+	if jids := f.contacts.GetUserInfoCalls[0].JIDs; len(jids) != 1 || jids[0] != domain.JID("5511999@s.whatsapp.net") {
 		t.Fatalf("o telefone invalido nao foi pulado: %v", jids)
 	}
 	logassert.NoSecrets(t, capture.Records(t))

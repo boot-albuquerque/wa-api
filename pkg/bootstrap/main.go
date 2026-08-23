@@ -5,8 +5,6 @@ import (
 
 	"flag"
 	"fmt"
-	"math/rand"
-
 	"net/http"
 	"os"
 	"os/signal"
@@ -42,6 +40,7 @@ const (
 
 type server struct {
 	DB                  *sqlx.DB
+	StoreDB             *sqlx.DB
 	Router              *mux.Router
 	ExPath              string
 	Mode                ServerMode
@@ -89,6 +88,26 @@ func resolveLogLevel(raw string) (zerolog.Level, bool) {
 		return zerolog.InfoLevel, false
 	}
 	return lvl, true
+}
+
+// openStoreDB returns a *sqlx.DB handle to the wa-noise store database and an
+// optional closer. For Postgres the store lives in the same database as the
+// app, so the existing handle is reused (no closer). For SQLite the store is a
+// separate file (main.db), so a dedicated connection is opened.
+func openStoreDB(dbType, connStr string, appDB *sqlx.DB) (*sqlx.DB, func()) {
+	if dbType == "postgres" {
+		return appDB, func() {}
+	}
+	sdb, err := sqlx.Open("sqlite", connStr)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to open store database for trim")
+		os.Exit(1)
+	}
+	return sdb, func() {
+		if err := sdb.Close(); err != nil {
+			log.Error().Err(err).Msg("Failed to close store database connection")
+		}
+	}
 }
 
 // killchannel helpers now delegate to appCtx.KillChannel (internal/app).
@@ -235,37 +254,17 @@ func Main() {
 		}
 	}
 
-	if *adminToken == "" {
-		if v := os.Getenv("WA_API_ADMIN_TOKEN"); v != "" {
-			*adminToken = v
-		} else {
-			// Generate a random token if none provided
-			const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-			b := make([]byte, 32)
-			for i := range b {
-				b[i] = charset[rand.Intn(len(charset))]
-			}
-			*adminToken = string(b)
-			log.Warn().Str("admin_token", *adminToken).Msg("No admin token provided, generated a random one")
-		}
+	// Global encryption key: flag, else environment, else the process REFUSES to
+	// start. Why it is not generated — and why silencing the old log line alone
+	// would have made things worse — lives in startup_secrets.go.
+	//
+	// The admin token is resolved further down, once the data directory is
+	// known: a generated token is written to a file inside it.
+	resolvedEncryptionKey, _, err := resolveGlobalEncryptionKey(*globalEncryptionKey, os.Getenv(envGlobalEncryptionKey))
+	if err != nil {
+		log.Fatal().Err(err).Msg("could not resolve the global encryption key")
 	}
-
-	if *globalEncryptionKey == "" {
-		if v := os.Getenv("WA_API_GLOBAL_ENCRYPTION_KEY"); v != "" {
-			*globalEncryptionKey = v
-			log.Info().Msg("Encryption key loaded from environment variable")
-		} else {
-			// Generate a random key if none provided
-			const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-			b := make([]byte, 32)
-			for i := range b {
-				b[i] = charset[rand.Intn(len(charset))]
-			}
-			*globalEncryptionKey = string(b)
-			log.Warn().Str("global_encryption_key", *globalEncryptionKey).Msg("No WA_API_GLOBAL_ENCRYPTION_KEY provided, generated a random one. " +
-				"SAVE THIS KEY TO YOUR .ENV FILE OR ALL ENCRYPTED DATA WILL BE LOST ON RESTART!")
-		}
-	}
+	*globalEncryptionKey = resolvedEncryptionKey
 
 	// Check for global webhook in environment variable
 	if *globalWebhook == "" {
@@ -277,25 +276,14 @@ func Main() {
 		log.Info().Str("global_webhook", *globalWebhook).Msg("Global webhook configured from command line")
 	}
 
-	// Check for global HMAC key in environment variable
-	if *globalHMACKey == "" {
-		if v := os.Getenv("WA_API_GLOBAL_HMAC_KEY"); v != "" {
-			*globalHMACKey = v
-			log.Info().Msg("Global HMAC key configured from environment variable")
-		} else {
-			// Generate a random key if none provided
-			const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-			b := make([]byte, 32)
-			for i := range b {
-				b[i] = charset[rand.Intn(len(charset))]
-			}
-			*globalHMACKey = string(b)
-			log.Warn().Str("global_hmac_key", *globalHMACKey).Msg("No WA_API_GLOBAL_HMAC_KEY provided, generated a random one")
-		}
-
-	} else {
-		log.Info().Msg("Global HMAC key configured from command line")
+	// Global HMAC key: flag, else environment, else generated. The rules — and
+	// why the value never reaches a log line — live in global_hmac_key.go.
+	resolvedHMACKey, _, errHMAC := resolveGlobalHMACKey(*globalHMACKey, os.Getenv(envGlobalHMACKey))
+	if errHMAC != nil {
+		log.Fatal().Err(errHMAC).
+			Msg("could not resolve the global HMAC key: the entropy source failed")
 	}
+	*globalHMACKey = resolvedHMACKey
 
 	// Seed the AppContext with runtime config so functions in wmiau.go
 	// and helpers.go can access global state without raw globals.
@@ -318,7 +306,7 @@ func Main() {
 	// segurança, e o receptor não tem como perceber a diferença.
 	//
 	// Não há caso legítimo de seguir adiante: *globalHMACKey nunca chega aqui
-	// vazio (linha 276 gera uma chave aleatória quando nenhuma é fornecida),
+	// vazio (resolveGlobalHMACKey gera uma quando nenhuma é fornecida),
 	// então a assinatura é sempre pretendida. A única falha possível é
 	// WA_API_GLOBAL_ENCRYPTION_KEY inválida — configuração, corrigível, e que
 	// o operador precisa ver antes de o serviço atender requisição.
@@ -349,12 +337,31 @@ func Main() {
 	if *dataDir != "" {
 		dirDados = *dataDir
 	}
-	liberarCluster, err := prepararCluster(dirDados, getDatabaseConfig(exPath, *dataDir).Type)
+	tipoBanco := getDatabaseConfig(exPath, *dataDir).Type
+	modoCluster, liberarCluster, err := prepareCluster(dirDados, tipoBanco)
 	if err != nil {
 		log.Fatal().Err(err).Msg("configuracao de cluster invalida")
 		os.Exit(1)
 	}
 	defer liberarCluster()
+
+	// Admin token: flag, else environment, else generated. It is resolved HERE,
+	// and not next to the encryption key above, because a generated token is
+	// written to a file inside the data directory — and dirDados is only known
+	// after the cluster block resolved it. See startup_secrets.go for why the
+	// token goes to a 0600 file instead of a log line.
+	resolvedAdminToken, _, errAdmin := resolveAdminToken(*adminToken, os.Getenv(envAdminToken), dirDados)
+	if errAdmin != nil {
+		log.Fatal().Err(errAdmin).Msg("could not resolve the admin token")
+	}
+	*adminToken = resolvedAdminToken
+
+	// Relatório de capacidades (ADR-0005 D7, F104): declara o que este processo
+	// pode e não pode fazer, em UMA linha, antes de qualquer outra coisa
+	// acontecer. O que ele existe para evitar é o operador ter de DERIVAR
+	// "isto não aguenta dois pods" a partir de uma variável de ambiente
+	// ausente e de um tipo de banco que ninguém declarou.
+	publishCapabilities(modoCluster, tipoBanco)
 
 	db, err := InitializeDatabase(exPath, *dataDir)
 	if err != nil {
@@ -370,6 +377,10 @@ func Main() {
 
 	// Set DB reference in S3Manager for lazy client initialization
 	storage.GetS3Manager().SetDB(db)
+	// And the key that unwraps the stored S3 secret (ADR-0009). Without it the
+	// lazy initialization fails closed instead of using the envelope as a
+	// credential.
+	storage.GetS3Manager().SetEncryptionKey(appCtx.GlobalEncryptionKey)
 
 	// Nunca nil e nunca um logger nulo: Warn e Error do sqlstore saem sempre.
 	// --wadebug apenas baixa o piso (ver walog.ParseLevel).
@@ -385,7 +396,7 @@ func Main() {
 		)
 		container, err = sqlstore.New(context.Background(), "postgres", storeConnStr, dbLog)
 	} else {
-		storeConnStr = "file:" + filepath.ToSlash(filepath.Join(config.Path, "main.db")) + "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
+		storeConnStr = "file:" + filepath.ToSlash(filepath.Join(config.Path, "main.db")) + dbmig.SQLitePragmas
 		container, err = sqlstore.New(context.Background(), "sqlite", storeConnStr, dbLog)
 	}
 
@@ -393,6 +404,9 @@ func Main() {
 		log.Fatal().Err(err).Msg("Error creating sqlstore")
 		os.Exit(1)
 	}
+
+	storeDB, storeDBClose := openStoreDB(config.Type, storeConnStr, db)
+	defer storeDBClose()
 
 	// Initialize the schema
 	if err = dbmig.InitializeSchema(db); err != nil {
@@ -410,10 +424,11 @@ func Main() {
 	}
 
 	s := &server{
-		Router: mux.NewRouter(),
-		DB:     db,
-		ExPath: exPath,
-		Mode:   serverMode,
+		Router:  mux.NewRouter(),
+		DB:      db,
+		StoreDB: storeDB,
+		ExPath:  exPath,
+		Mode:    serverMode,
 	}
 	s.SessionOrchestrator = newSessionOrchestrator(s)
 	initCustomHandlers(s)
@@ -432,6 +447,18 @@ func Main() {
 	leaseCtx, pararLeases := context.WithCancel(context.Background())
 	defer pararLeases()
 	startLeaseHeartbeat(leaseCtx, s.Leases)
+
+	// Varredura do outbox (ADR-0005 D3). Depois do connectOnStartup pelo mesmo
+	// motivo do heartbeat: antes disso nao ha cliente HTTP provisionado para
+	// nenhuma sessao, e a retomada so encontraria entregas que nao tem como
+	// entregar — gastando tentativas do orcamento a toa.
+	//
+	// NAO existe caminho separado de "carregar pendentes na subida": uma linha
+	// deixada por um processo morto ja esta com o prazo vencido, entao a
+	// primeira varredura a pega. Dois mecanismos para o mesmo trabalho e o
+	// dobro das chances de divergir.
+	setupWebhookOutbox(s)
+	startOutboxSweeper(leaseCtx)
 
 	if serverMode == Stdio {
 		startStdioMode(s)

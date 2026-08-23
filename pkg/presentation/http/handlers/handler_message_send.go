@@ -48,7 +48,6 @@ func (h *SendMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("path", r.URL.Path).
-			Str("user_id", txtID).
 			Msg("send message payload could not be decoded")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -58,7 +57,6 @@ func (h *SendMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).
 			Str("path", r.URL.Path).
-			Str("user_id", txtID).
 			Msg("send message use case failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return

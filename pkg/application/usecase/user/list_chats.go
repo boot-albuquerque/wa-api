@@ -40,12 +40,7 @@ const (
 // conteúdo a tornaria cara sem torná-la mais útil.
 type ListChatsUseCase struct {
 	activity appport.ChatActivityReader
-	// contacts e identity são DUAS portas porque este caso de uso usa duas
-	// capacidades e NÃO usa a terceira: ele casa nomes do roster e normaliza
-	// identidade para LID, e nunca lê avatar. Pedir a composição declararia
-	// dependência de uma capacidade que ele não toca (decisão 82).
-	contacts appport.ContactRoster
-	identity appport.IdentityResolver
+	contacts appport.ContactDirectory
 	groups   appport.GroupDirectory
 	logger   appport.Logger
 }
@@ -53,12 +48,11 @@ type ListChatsUseCase struct {
 // NewListChatsUseCase cria o use case com as portas injetadas.
 func NewListChatsUseCase(
 	ar appport.ChatActivityReader,
-	cr appport.ContactRoster,
-	ir appport.IdentityResolver,
+	cd appport.ContactDirectory,
 	gd appport.GroupDirectory,
 	logger appport.Logger,
 ) *ListChatsUseCase {
-	return &ListChatsUseCase{activity: ar, contacts: cr, identity: ir, groups: gd, logger: logger}
+	return &ListChatsUseCase{activity: ar, contacts: cd, groups: gd, logger: logger}
 }
 
 // Execute devolve uma página da lista, ordenada da interação mais recente
@@ -76,13 +70,13 @@ func (uc *ListChatsUseCase) Execute(ctx context.Context, userID string, limit, o
 		uc.logger.Error(ctx, "nao foi possivel ler a atividade por chat", "error", err, "user_id", userID)
 		return nil, err
 	}
-	atividade := normalizeToLID(ctx, uc.identity, uc.logger, userID, bruto)
+	atividade := normalizeToLID(ctx, uc.contacts, uc.logger, userID, bruto)
 
 	// As duas tabelas de nome sao aliasadas para o espaco @lid porque e' nele
 	// que as chaves de atividade chegam depois de normalizeToLID.
-	nomesContato := aliasarParaLID(ctx, uc.identity, uc.logger, userID, uc.nomesDeContato(ctx, userID))
+	nomesContato := aliasarParaLID(ctx, uc.contacts, uc.logger, userID, uc.nomesDeContato(ctx, userID))
 	nomesGrupo := uc.nomesDeGrupo(ctx, userID)
-	nomesHistorico := aliasarParaLID(ctx, uc.identity, uc.logger, userID, uc.nomesDoHistorico(ctx, userID))
+	nomesHistorico := aliasarParaLID(ctx, uc.contacts, uc.logger, userID, uc.nomesDoHistorico(ctx, userID))
 
 	chats := make([]domain.ChatSummary, 0, len(atividade))
 	for jid, quando := range atividade {
@@ -95,13 +89,100 @@ func (uc *ListChatsUseCase) Execute(ctx context.Context, userID string, limit, o
 	uc.logger.Info(ctx, "lista de conversas montada",
 		"user_id", userID, "total", total, "limit", limit, "offset", offset)
 
+	pagina := fatiar(chats, limit, offset)
+	uc.preencherTelefones(ctx, userID, pagina)
+
 	return &domain.ChatListPage{
-		Chats:  fatiar(chats, limit, offset),
+		Chats:  pagina,
 		Total:  total,
 		Limit:  limit,
 		Offset: offset,
 	}, nil
 }
+
+// preencherTelefones resolve o telefone de cada conversa `@lid` da PÁGINA.
+//
+// POR QUE EXISTE (HOUSEKEEP F181). Medido nas contas reais: das 48 conversas
+// sem nome, 44 pessoas não estão no roster — para elas não há nome a obter, e o
+// Baileys confirma que pode nunca haver. Mas as 48 resolvem para telefone,
+// 100%. O nome é insolúvel; o identificador legível não é, e estava escondido.
+//
+// POR QUE SÓ A PÁGINA, e esta é a decisão que mais me importou. A lista tem 734
+// conversas neste tenant e devolve no máximo `limit`. Resolver antes de fatiar
+// faria o trabalho crescer com o TOTAL em vez de com o que se devolve — e um
+// mecanismo cujo custo cresce com o que ninguém pediu é a Regra 1 do CLAUDE.md
+// a ser ignorada. Resolvendo depois, o custo é limitado pelo tamanho da página,
+// por construção.
+//
+// POR QUE NÃO É IDA AO PROTOCOLO. GetPNForLID lê o CachedLIDMap; com o cache
+// preenchido é leitura de mapa em memória, sem consulta ao banco e sem rede
+// (sqlstore/lidmap.go:86-93). É por isso que o laço é aceitável e não precisou
+// de um método novo em lote na biblioteca vendorizada — que existiria só na
+// direção contrária (GetManyLIDsForPNs) e teria de ser patch do vendor.
+//
+// DEGRADA, não falha: telefone é enriquecimento, e a lista já degrada assim
+// para nome de contato e de grupo. Uma sessão offline devolve a lista sem
+// telefone, não um erro.
+func (uc *ListChatsUseCase) preencherTelefones(ctx context.Context, userID string, chats []domain.ChatSummary) {
+	resolvidos, restantes := 0, 0
+	for i := range chats {
+		if chats[i].IsGroup || !strings.HasSuffix(chats[i].JID, sufixoLID) {
+			continue
+		}
+		if restantes > 0 {
+			restantes++
+			continue
+		}
+		pn, err := uc.contacts.GetPNForLID(ctx, userID, domain.JID(chats[i].JID))
+		if err != nil {
+			// PARA na primeira falha, em vez de tentar as restantes.
+			//
+			// Não é economia de log — é o que a falha SIGNIFICA. GetPNForLID
+			// só falha quando a sessão não está registada, e isso não muda
+			// entre uma conversa e a seguinte da mesma página. Continuar
+			// produziria N chamadas condenadas e N linhas de log por
+			// requisição, que é a F180 outra vez: um diagnóstico que aparece
+			// no caminho normal deixa de ser lido.
+			//
+			// Escrevi isto primeiro como "regista só a primeira e continua", e
+			// o gate de cobertura de log recusou — com razão, porque o aviso
+			// ficava aninhado e o caminho de erro em si continuava mudo. A
+			// recusa levou-me a uma estrutura melhor do que a que eu tinha:
+			// uma linha, com a causa, e zero trabalho condenado a seguir.
+			restantes = 1
+			uc.logger.Warn(ctx, "resolucao de telefone interrompida: sessao indisponivel",
+				"user_id", userID, "chat_jid", chats[i].JID, "error", err)
+			continue
+		}
+		if pn == "" {
+			continue
+		}
+		chats[i].Phone = soNumero(string(pn))
+		resolvidos++
+	}
+	if len(chats) > 0 {
+		uc.logger.Info(ctx, "telefones resolvidos para a pagina de conversas",
+			"user_id", userID, "na_pagina", len(chats), "resolvidos", resolvidos,
+			"nao_tentados_apos_falha", restantes)
+	}
+}
+
+// soNumero devolve a parte de utilizador de um JID, sem servidor e sem
+// dispositivo: `554192421234:37@s.whatsapp.net` vira `554192421234`.
+//
+// O sufixo e o dispositivo são detalhe de protocolo e não ajudam quem lê. O
+// dispositivo, em particular, ENGANA: muda entre aparelhos do mesmo número, e
+// um cliente que o usasse como chave trataria a mesma pessoa como duas.
+func soNumero(jid string) string {
+	if i := strings.IndexAny(jid, ":@"); i >= 0 {
+		return jid[:i]
+	}
+	return jid
+}
+
+// sufixoLID é o servidor de um identificador oculto. Constante porque a
+// decisão que ela guarda muda o que o cliente vê (ADR-0004).
+const sufixoLID = "@lid"
 
 func normalizarPaginacao(limit, offset int) (int, int) {
 	if limit <= 0 {
@@ -179,7 +260,7 @@ func (uc *ListChatsUseCase) nomesDeGrupo(ctx context.Context, userID string) map
 // o PN, ver normalizeToLID).
 func aliasarParaLID[V any](
 	ctx context.Context,
-	identity appport.IdentityResolver,
+	contacts appport.ContactDirectory,
 	logger appport.Logger,
 	userID string,
 	tabela map[string]V,
@@ -197,7 +278,7 @@ func aliasarParaLID[V any](
 		return tabela
 	}
 
-	resolvidos, err := identity.GetManyLIDsForPNs(ctx, userID, pns)
+	resolvidos, err := contacts.GetManyLIDsForPNs(ctx, userID, pns)
 	if err != nil {
 		// Best-effort, como em normalizeToLID: sem o mapa, a tabela original
 		// continua valendo para as chaves que já batem.

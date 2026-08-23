@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,20 +18,37 @@ import (
 // O que continua descoberto e' o RAMO postgres de TrimMessageHistory, que usa
 // OFFSET sem LIMIT -1 — registrado como pendencia, nao como coberto.
 
-// newHistoryDB aplica o schema de producao e cria a tabela que o SDK do
-// wa-noise normalmente cria por conta propria — TrimMessageHistory apaga
-// dela, entao ela precisa existir.
+// newHistoryDB opens the APPLICATION database with the production schema.
 func newHistoryDB(t *testing.T) *sqlx.DB {
 	t.Helper()
 	db := openTestDB(t)
 	if err := InitializeSchema(db); err != nil {
 		t.Fatalf("InitializeSchema: %v", err)
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS wanoise_message_secrets (
-		our_jid TEXT, chat_jid TEXT, sender_jid TEXT, message_id TEXT, key BLOB)`); err != nil {
+	return db
+}
+
+// newStoreDB opens a SEPARATE SQLite database with the wanoise_message_secrets
+// table — the schema that the wa-noise sqlstore creates in the STORE file
+// (main.db), not in the application database (users.db). Using two databases
+// reproduces the production topology that F212 identified as the root cause.
+func newStoreDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+	sdb, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "store.db")+SQLitePragmas)
+	if err != nil {
+		t.Fatalf("open store db: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := sdb.Close(); err != nil {
+			t.Errorf("close store db: %v", err)
+		}
+	})
+	if _, err := sdb.Exec(`CREATE TABLE IF NOT EXISTS wanoise_message_secrets (
+		our_jid TEXT, chat_jid TEXT, sender_jid TEXT, message_id TEXT, key BLOB,
+		UNIQUE(our_jid, chat_jid, sender_jid, message_id))`); err != nil {
 		t.Fatalf("create wanoise_message_secrets: %v", err)
 	}
-	return db
+	return sdb
 }
 
 // countHistory conta as linhas de um par (user, chat).
@@ -148,31 +166,30 @@ func seedMessages(t *testing.T, db *sqlx.DB, userID, chatJID string, n int) []st
 	return ids
 }
 
-// TestTrimMessageHistory_KeepsNewestAndDropsOldest e a propriedade central:
-// o que sobra sao as MAIS NOVAS. Trocar DESC por ASC na subconsulta inverte a
-// retencao e apaga exatamente o que deveria ficar.
+// TestTrimMessageHistory_KeepsNewestAndDropsOldest is the central property:
+// what survives is the NEWEST. Swapping DESC for ASC in the subquery inverts
+// retention and deletes exactly what should stay.
 func TestTrimMessageHistory_KeepsNewestAndDropsOldest(t *testing.T) {
 	db := newHistoryDB(t)
 	ids := seedMessages(t, db, "u1", "chat@s", 5)
 
-	if err := TrimMessageHistory(db, "u1", "chat@s", 2); err != nil {
+	if err := TrimMessageHistory(db, nil, "u1", "chat@s", 2); err != nil {
 		t.Fatalf("TrimMessageHistory: %v", err)
 	}
 
-	var restantes []string
-	if err := db.Select(&restantes,
+	var remaining []string
+	if err := db.Select(&remaining,
 		"SELECT message_id FROM message_history WHERE user_id = ? AND chat_jid = ? ORDER BY timestamp",
 		"u1", "chat@s"); err != nil {
-		t.Fatalf("select restantes: %v", err)
+		t.Fatalf("select remaining: %v", err)
 	}
 
-	if len(restantes) != 2 {
-		t.Fatalf("sobraram %d mensagens, queria 2 (%v)", len(restantes), restantes)
+	if len(remaining) != 2 {
+		t.Fatalf("got %d messages, want 2 (%v)", len(remaining), remaining)
 	}
-	// As duas ultimas semeadas sao as mais novas.
-	if restantes[0] != ids[3] || restantes[1] != ids[4] {
-		t.Fatalf("sobraram %v, queria as duas mais NOVAS %v — a retencao esta invertida",
-			restantes, ids[3:])
+	if remaining[0] != ids[3] || remaining[1] != ids[4] {
+		t.Fatalf("got %v, want the two NEWEST %v — retention is inverted",
+			remaining, ids[3:])
 	}
 }
 
@@ -180,12 +197,12 @@ func TestTrimMessageHistory_LimitZeroClearsTheChat(t *testing.T) {
 	db := newHistoryDB(t)
 	seedMessages(t, db, "u1", "chat@s", 3)
 
-	if err := TrimMessageHistory(db, "u1", "chat@s", 0); err != nil {
+	if err := TrimMessageHistory(db, nil, "u1", "chat@s", 0); err != nil {
 		t.Fatalf("TrimMessageHistory: %v", err)
 	}
 
 	if n := countHistory(t, db, "u1", "chat@s"); n != 0 {
-		t.Fatalf("limite 0 deixou %d mensagens", n)
+		t.Fatalf("limit 0 left %d messages", n)
 	}
 }
 
@@ -193,63 +210,109 @@ func TestTrimMessageHistory_LimitAboveCountDeletesNothing(t *testing.T) {
 	db := newHistoryDB(t)
 	seedMessages(t, db, "u1", "chat@s", 3)
 
-	if err := TrimMessageHistory(db, "u1", "chat@s", 100); err != nil {
+	if err := TrimMessageHistory(db, nil, "u1", "chat@s", 100); err != nil {
 		t.Fatalf("TrimMessageHistory: %v", err)
 	}
 
 	if n := countHistory(t, db, "u1", "chat@s"); n != 3 {
-		t.Fatalf("limite acima do total apagou mensagens: sobraram %d de 3", n)
+		t.Fatalf("limit above count deleted messages: %d of 3 left", n)
 	}
 }
 
-// TestTrimMessageHistory_IsScopedToUserAndChat: sem o filtro, o trim de uma
-// conversa apagaria historico de OUTRO usuario. E' a mutacao mais cara desta
-// funcao e a que nenhum teste de contagem pega.
+// TestTrimMessageHistory_IsScopedToUserAndChat: without the filter, trimming
+// one conversation would delete another user's history.
 func TestTrimMessageHistory_IsScopedToUserAndChat(t *testing.T) {
 	db := newHistoryDB(t)
 	seedMessages(t, db, "u1", "chatA@s", 5)
 	seedMessages(t, db, "u1", "chatB@s", 4)
 	seedMessages(t, db, "u2", "chatA@s", 3)
 
-	if err := TrimMessageHistory(db, "u1", "chatA@s", 1); err != nil {
+	if err := TrimMessageHistory(db, nil, "u1", "chatA@s", 1); err != nil {
 		t.Fatalf("TrimMessageHistory: %v", err)
 	}
 
 	if n := countHistory(t, db, "u1", "chatA@s"); n != 1 {
-		t.Fatalf("u1/chatA: sobraram %d, queria 1", n)
+		t.Fatalf("u1/chatA: %d left, want 1", n)
 	}
 	if n := countHistory(t, db, "u1", "chatB@s"); n != 4 {
-		t.Fatalf("o trim vazou para outra conversa do mesmo usuario: u1/chatB tem %d, queria 4", n)
+		t.Fatalf("trim leaked to another chat: u1/chatB has %d, want 4", n)
 	}
 	if n := countHistory(t, db, "u2", "chatA@s"); n != 3 {
-		t.Fatalf("o trim vazou para OUTRO usuario: u2/chatA tem %d, queria 3", n)
+		t.Fatalf("trim leaked to another user: u2/chatA has %d, want 3", n)
 	}
 }
 
-// TestTrimMessageHistory_AlsoTrimsMessageSecrets: as duas tabelas tem que
-// andar juntas, senao wa-noise_message_secrets cresce sem teto — o vazamento
-// que a funcao existe para evitar.
-func TestTrimMessageHistory_AlsoTrimsMessageSecrets(t *testing.T) {
-	db := newHistoryDB(t)
-	ids := seedMessages(t, db, "u1", "chat@s", 4)
+// TestTrimMessageHistory_TwoDBs_TrimsBothTablesAcrossDatabases reproduces the
+// production topology: message_history in the app DB, wanoise_message_secrets
+// in a SEPARATE store DB. The old code had both in one handle and always
+// failed with "no such table" (F212).
+func TestTrimMessageHistory_TwoDBs_TrimsBothTablesAcrossDatabases(t *testing.T) {
+	appDB := newHistoryDB(t)
+	storeDB := newStoreDB(t)
+	ids := seedMessages(t, appDB, "u1", "chat@s", 4)
 	for _, id := range ids {
-		if _, err := db.Exec(
+		if _, err := storeDB.Exec(
 			"INSERT INTO wanoise_message_secrets (our_jid, chat_jid, sender_jid, message_id, key) VALUES ('', 'chat@s', '', ?, x'00')",
 			id); err != nil {
 			t.Fatalf("seed secret: %v", err)
 		}
 	}
 
-	if err := TrimMessageHistory(db, "u1", "chat@s", 1); err != nil {
+	if err := TrimMessageHistory(appDB, storeDB, "u1", "chat@s", 1); err != nil {
 		t.Fatalf("TrimMessageHistory: %v", err)
 	}
 
-	var n int
-	if err := db.Get(&n, "SELECT COUNT(*) FROM wanoise_message_secrets"); err != nil {
+	if n := countHistory(t, appDB, "u1", "chat@s"); n != 1 {
+		t.Fatalf("history: %d left, want 1", n)
+	}
+
+	var secretCount int
+	if err := storeDB.Get(&secretCount, "SELECT COUNT(*) FROM wanoise_message_secrets"); err != nil {
 		t.Fatalf("count secrets: %v", err)
 	}
-	if n != 1 {
-		t.Fatalf("sobraram %d secrets, queria 1 — as duas tabelas sairam de sincronia", n)
+	if secretCount != 1 {
+		t.Fatalf("secrets: %d left, want 1 — the two tables are out of sync", secretCount)
+	}
+}
+
+// TestTrimMessageHistory_TwoDBs_HistoryTrimmedWhenStoreDBFails tests the ORDER
+// invariant: a broken store DB MUST NOT prevent the history purge. This is the
+// exact failure mode of the original bug — the secrets DELETE failed and the
+// function returned early, leaving history untrimmed forever.
+func TestTrimMessageHistory_TwoDBs_HistoryTrimmedWhenStoreDBFails(t *testing.T) {
+	appDB := newHistoryDB(t)
+	seedMessages(t, appDB, "u1", "chat@s", 5)
+
+	// storeDB with the table deliberately MISSING — simulates the original
+	// bug where the handle doesn't reach the right database.
+	brokenStoreDB, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "broken.db")+SQLitePragmas)
+	if err != nil {
+		t.Fatalf("open broken store: %v", err)
+	}
+	t.Cleanup(func() { brokenStoreDB.Close() })
+
+	if err := TrimMessageHistory(appDB, brokenStoreDB, "u1", "chat@s", 2); err != nil {
+		t.Fatalf("TrimMessageHistory must not fail when store DB fails: %v", err)
+	}
+
+	if n := countHistory(t, appDB, "u1", "chat@s"); n != 2 {
+		t.Fatalf("history: %d left, want 2 — store failure blocked history trim", n)
+	}
+}
+
+// TestTrimMessageHistory_TwoDBs_NilStoreDBStillTrimsHistory: when storeDB is
+// nil (e.g. postgres where both live in the same database and secrets are
+// handled differently), history must still be trimmed.
+func TestTrimMessageHistory_TwoDBs_NilStoreDBStillTrimsHistory(t *testing.T) {
+	appDB := newHistoryDB(t)
+	seedMessages(t, appDB, "u1", "chat@s", 4)
+
+	if err := TrimMessageHistory(appDB, nil, "u1", "chat@s", 1); err != nil {
+		t.Fatalf("TrimMessageHistory: %v", err)
+	}
+
+	if n := countHistory(t, appDB, "u1", "chat@s"); n != 1 {
+		t.Fatalf("history: %d left, want 1", n)
 	}
 }
 

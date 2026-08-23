@@ -90,7 +90,12 @@ func FetchURLBytes(ctx context.Context, httpClient *http.Client, resourceURL str
 }
 
 // FetchOpenGraphData fetches and parses Open Graph metadata from a URL.
+// A single FetchTimeout budget covers both the page fetch and the image
+// fetch so the total wall-clock cost stays bounded.
 func FetchOpenGraphData(ctx context.Context, httpClient *http.Client, urlStr string) Result {
+	ctx, cancel := context.WithTimeout(ctx, FetchTimeout)
+	defer cancel()
+
 	pageData, _, err := FetchURLBytes(ctx, httpClient, urlStr, PageMaxBytes)
 	if err != nil {
 		log.Warn().Err(err).Str("url", urlStr).Msg("Failed to fetch URL for Open Graph data")

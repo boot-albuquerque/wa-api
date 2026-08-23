@@ -30,7 +30,7 @@ import (
 
 func openSQLite(t *testing.T) *sqlx.DB {
 	t.Helper()
-	conn, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "history.db"))
+	conn, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "history.db")+db.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("abrir sqlite: %v", err)
 	}

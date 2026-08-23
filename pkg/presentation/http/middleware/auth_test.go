@@ -20,7 +20,7 @@ import (
 
 func newAuthTestDB(t *testing.T) *sqlx.DB {
 	t.Helper()
-	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db"))
+	db, err := sqlx.Open("sqlite", filepath.Join(t.TempDir(), "auth.db")+dbpkg.SQLitePragmas)
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
@@ -71,18 +71,26 @@ func TestAuthAliceValidToken(t *testing.T) {
 	}
 }
 
-// TestAuthAliceAcceptsRowWithoutTokenHash cobre a janela de transição: linhas
-// gravadas antes da migração (token_hash NULL) continuam autenticando pelo
-// token cru. É a mitigação que impede a fase de invalidar sessões existentes.
-func TestAuthAliceAcceptsRowWithoutTokenHash(t *testing.T) {
+// TestAuthAliceRecusaLinhaSoComTextoClaro fecha a janela de transição que o
+// teste anterior mantinha aberta.
+//
+// Ele AFIRMAVA o contrário: linha com `token_hash` NULL autenticava pelo token
+// cru, e essa mitigação existia para a migração 11 não invalidar sessões. A
+// janela fechou na F97 etapa 2 — a consulta casa só por hash.
+//
+// O que torna isso seguro NÃO é este teste, é a migração 16: ela preenche o
+// hash que faltar e ABORTA se sobrar alguma linha sem ele, em vez de apagar o
+// texto claro e deixar alguém sem acesso. Aqui a linha é construída à mão,
+// justamente no estado que a migração se recusa a deixar existir.
+func TestAuthAliceRecusaLinhaSoComTextoClaro(t *testing.T) {
 	db := newAuthTestDB(t)
 	insertAuthUser(t, db, "u1", "legacy-token", "")
 
 	r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
 	r.Header.Set("token", "legacy-token")
 
-	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
-		t.Errorf("status = %d, want %d", got, http.StatusOK)
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d: o texto claro ainda autentica", got, http.StatusUnauthorized)
 	}
 }
 
@@ -119,7 +127,13 @@ func TestAuthAliceCachedEntryExpires(t *testing.T) {
 	}
 }
 
-func TestAuthAliceQueryStringTokenAcceptedWithWarning(t *testing.T) {
+// TestAuthAliceQueryStringTokenRecusadaForaDoWebSocket fixa a F75.
+//
+// A query string deixou de autenticar nas rotas comuns — nelas o header sempre
+// foi possível, e a query só sobrevivia por compatibilidade. O teste antes
+// AFIRMAVA o contrário (aceitar com aviso de depreciação); ele foi reescrito, e
+// não relaxado: agora exige a recusa.
+func TestAuthAliceQueryStringTokenRecusadaForaDoWebSocket(t *testing.T) {
 	db := newAuthTestDB(t)
 	insertAuthUser(t, db, "u1", "good-token", domain.HashToken("good-token"))
 
@@ -130,19 +144,35 @@ func TestAuthAliceQueryStringTokenAcceptedWithWarning(t *testing.T) {
 
 	r := httptest.NewRequest(http.MethodGet, "/chat/send/text?token=good-token", nil)
 
-	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
-		t.Errorf("status = %d, want %d", got, http.StatusOK)
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d: a query string continua autenticando fora do WebSocket", got, http.StatusUnauthorized)
 	}
 
 	out := logs.String()
-	if !strings.Contains(out, "token received via query string") {
-		t.Errorf("no deprecation WARN emitted for query-string token; logs: %s", out)
-	}
-	if !strings.Contains(out, `"level":"warn"`) {
-		t.Errorf("deprecation message was not logged at WARN; logs: %s", out)
+	if !strings.Contains(out, "recusado nesta rota") {
+		t.Errorf("a recusa nao foi registrada; quem operar nao vai saber por que o cliente parou: %s", out)
 	}
 	if strings.Contains(out, "good-token") {
-		t.Errorf("the token itself leaked into the log; logs: %s", out)
+		t.Errorf("o token vazou para o log: %s", out)
+	}
+}
+
+// TestAuthAliceQueryStringTokenAceitaNoWebSocket é a exceção, e o motivo dela
+// não é preferência nossa: a API `WebSocket` do navegador não permite header
+// customizado no handshake. Recusar aqui quebraria todo painel de navegador sem
+// oferecer saída.
+//
+// O par com o teste acima é o que importa: a exceção precisa ser EXATAMENTE uma
+// rota. Uma regra que aceitasse "rotas de sessão" ou qualquer prefixo mais largo
+// passaria nos dois e deixaria o buraco aberto.
+func TestAuthAliceQueryStringTokenAceitaNoWebSocket(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertAuthUser(t, db, "u1", "good-token", domain.HashToken("good-token"))
+
+	r := httptest.NewRequest(http.MethodGet, wsPath+"?token=good-token", nil)
+
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
+		t.Errorf("status = %d, want %d: o WebSocket de navegador ficou sem forma de autenticar", got, http.StatusOK)
 	}
 }
 
@@ -161,5 +191,59 @@ func TestAuthAliceHeaderTokenEmitsNoDeprecationWarning(t *testing.T) {
 
 	if strings.Contains(logs.String(), "token received via query string") {
 		t.Error("header-supplied token wrongly flagged as query-string usage")
+	}
+}
+
+// TestAuthAliceEmptyTokenNeverMatchesBlankRow fixa a F100.
+//
+// A consulta casa por `token = $1`, e uma requisição sem token nenhum produz
+// $1 = "". Bastava UMA linha com token vazio para essa requisição anônima
+// autenticar como aquele usuário. Medido na bancada: a resposta caiu de 401
+// para 400 no instante em que a coluna foi branqueada.
+//
+// O usuário aqui é gravado JÁ com token vazio de propósito — é o estado que a
+// etapa 1 da F97 vai produzir para todo usuário novo. Um teste que só mandasse
+// requisição sem token contra uma tabela normal passaria antes e depois da
+// guarda, sem provar nada.
+func TestAuthAliceEmptyTokenNeverMatchesBlankRow(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertAuthUser(t, db, "u-blank", "", "")
+
+	t.Run("sem header algum", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
+		if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d: requisição anônima autenticou como o usuário de token vazio", got, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("header presente e vazio", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
+		r.Header.Set("token", "")
+		if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", got, http.StatusUnauthorized)
+		}
+	})
+
+	t.Run("query string vazia", func(t *testing.T) {
+		r := httptest.NewRequest(http.MethodGet, "/chat/send/text?token=", nil)
+		if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusUnauthorized {
+			t.Errorf("status = %d, want %d", got, http.StatusUnauthorized)
+		}
+	})
+}
+
+// TestAuthAliceStillAcceptsRealTokenAlongsideBlankRow é o controle na direção
+// oposta: recusar token vazio não pode virar "recusar tudo". A tabela tem a
+// linha em branco E uma linha legítima; a legítima continua entrando.
+func TestAuthAliceStillAcceptsRealTokenAlongsideBlankRow(t *testing.T) {
+	db := newAuthTestDB(t)
+	insertAuthUser(t, db, "u-blank", "", "")
+	insertAuthUser(t, db, "u-real", "real-token", domain.HashToken("real-token"))
+
+	r := httptest.NewRequest(http.MethodGet, "/chat/send/text", nil)
+	r.Header.Set("token", "real-token")
+
+	if got := serveAuth(db, cache.New(cache.NoExpiration, cache.NoExpiration), r).Code; got != http.StatusOK {
+		t.Errorf("status = %d, want %d: a guarda de token vazio recusou um token legítimo", got, http.StatusOK)
 	}
 }

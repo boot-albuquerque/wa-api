@@ -63,7 +63,7 @@ func TestClaimSessionOwnership_NilManagerAlwaysAllows(t *testing.T) {
 func TestClaimSessionOwnership_DatabaseFailureDenies(t *testing.T) {
 	store := newFakeLeaseStore()
 	store.failWith(fmt.Errorf("%w: connection refused", db.ErrLeaseUnavailable))
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	if claimSessionOwnership(manager, "u1") {
 		t.Error("connected without confirmed ownership; two live owners is worse than one unserved session")
@@ -75,7 +75,7 @@ func TestClaimSessionOwnership_DatabaseFailureDenies(t *testing.T) {
 func TestClaimSessionOwnership_DeniedWhenAnotherOwnerHolds(t *testing.T) {
 	store := newFakeLeaseStore()
 	store.giveTo("u1", "pod-B")
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	if claimSessionOwnership(manager, "u1") {
 		t.Error("claimed a session already owned by another replica")
@@ -93,7 +93,7 @@ func TestReleaseLeasesOnShutdown_NilManagerIsSafe(t *testing.T) {
 // the full TTL on every deploy.
 func TestReleaseLeasesOnShutdown_HandsLeasesBack(t *testing.T) {
 	store := newFakeLeaseStore()
-	manager := newLeaseManager(store, "pod-A", 15*time.Second, 5*time.Second, nil)
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
 
 	for _, userID := range []string{"u1", "u2"} {
 		if ok, err := manager.Claim(context.Background(), userID); err != nil || !ok {
@@ -131,5 +131,29 @@ func TestLeaseReleaseTimeout_IsSeparateFromShutdownBudget(t *testing.T) {
 	if leaseReleaseTimeout >= shutdownBudget {
 		t.Errorf("leaseReleaseTimeout (%s) must stay below the shutdown budget (%s), or lease release competes with connection draining",
 			leaseReleaseTimeout, shutdownBudget)
+	}
+}
+
+// TestReleaseSessionOwnership_NilManagerIsSafe: `single` mode never claimed
+// anything, and the call site is unconditional. A panic here would turn a
+// failed session start into a crash.
+func TestReleaseSessionOwnership_NilManagerIsSafe(t *testing.T) {
+	releaseSessionOwnership(nil, "u1") // must not panic
+}
+
+// TestReleaseSessionOwnership_HandsTheLeaseBack is the F96 fix seen from the
+// wiring: this is the function the orchestrator calls when Start fails.
+func TestReleaseSessionOwnership_HandsTheLeaseBack(t *testing.T) {
+	store := newFakeLeaseStore()
+	manager := newLeaseManager(store, "pod-A", "pod-A:8080", 15*time.Second, 5*time.Second, nil)
+
+	if ok, err := manager.Claim(context.Background(), "u1"); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+
+	releaseSessionOwnership(manager, "u1")
+
+	if left := store.remaining(); left != 0 {
+		t.Errorf("%d leases left: another replica could never take this session", left)
 	}
 }

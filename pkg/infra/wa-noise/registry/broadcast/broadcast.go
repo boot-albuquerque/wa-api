@@ -13,11 +13,11 @@ package broadcast
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 	"github.com/rs/zerolog/log"
 )
 
@@ -25,6 +25,16 @@ import (
 // de desistir dele — um leitor travado do outro lado não pode atrasar a
 // entrega para todas as outras conexões.
 const writeTimeout = 5 * time.Second
+
+// slowWriteThreshold é o ponto a partir do qual uma escrita bem-sucedida ainda
+// assim é registada.
+//
+// Um quinto do writeTimeout: abaixo disto o registo fica ruidoso numa rajada de
+// HistorySync, que produz milhares de escritas legítimas; acima de dois
+// segundos perde-se o sinal de DEGRADAÇÃO antes da queda, que é precisamente o
+// que se quer ver. A escolha é do canal (decisão 47=a); se o registo se mostrar
+// ruidoso em campo, é este número que sobe — não o writeTimeout.
+const slowWriteThreshold = writeTimeout / 5
 
 // Registry é o registro de conexões WebSocket vivas por userID.
 type Registry struct {
@@ -105,9 +115,23 @@ func (r *Registry) Broadcast(userID string, payload interface{}) {
 	// observado em produção com 6 conexões obsoletas do mesmo usuário, uma
 	// delas estourando o deadline. Agora o teto é writeTimeout no total.
 	//
-	// payload é lido, nunca escrito: json.Marshal concorrente sobre o mesmo
-	// valor é seguro. Verificado que o produtor (sendEventWithWebHook) não
-	// muta o mapa depois de despachar.
+	// O Marshal acontece UMA VEZ, aqui, e não uma vez por conexão dentro de
+	// cada goroutine.
+	//
+	// Antes, N goroutines serializavam o MESMO valor em paralelo. Além do
+	// trabalho duplicado, não havia como saber o tamanho do que se estava a
+	// escrever — e é justamente o tamanho que falta para diagnosticar a F85.
+	//
+	// Falhar aqui é falhar para todas as conexões, e é o correto: um payload
+	// que não serializa não vai ser entregue a ninguém, e tentar N vezes só
+	// multiplicaria o mesmo erro no log.
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		log.Error().Err(err).Str("userID", userID).Int("conns", len(conns)).
+			Msg("websocket broadcast payload does not serialise; dropping event")
+		return
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(len(conns))
 	for _, c := range conns {
@@ -115,11 +139,40 @@ func (r *Registry) Broadcast(userID string, payload interface{}) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 			defer cancel()
-			if err := wsjson.Write(ctx, c, payload); err != nil {
+
+			inicio := time.Now()
+			err := c.Write(ctx, websocket.MessageText, bytes)
+			decorrido := time.Since(inicio)
+
+			if err != nil {
 				log.Warn().Err(err).Str("userID", userID).
+					Dur("writeDuration", decorrido).
+					Int("payloadBytes", len(bytes)).
+					Int("conns", len(conns)).
 					Msg("websocket broadcast write failed; dropping connection")
 				r.Remove(userID, c)
 				c.Close(websocket.StatusInternalError, "broadcast write failed")
+				return
+			}
+
+			// F85 (decisão 47=a do canal): a escrita LENTA que não chega a
+			// falhar é o único sinal que faltava.
+			//
+			// Três medições excluíram três mecanismos — painel lento por
+			// mensagem, separador em segundo plano, escrita em SQLite a
+			// esfomear — e nenhuma reproduziu a queda de campo. Continuar a
+			// levantar hipóteses custa mais que registar o que acontece.
+			//
+			// Esta linha faz a PRÓXIMA ocorrência trazer a sua própria prova:
+			// quanto tempo a escrita demorou, quantos bytes, e quantas conexões
+			// disputavam o fan-out. Sem ela, a quarta hipótese seria adivinhada
+			// como as três primeiras.
+			if decorrido > slowWriteThreshold {
+				log.Warn().Str("userID", userID).
+					Dur("writeDuration", decorrido).
+					Int("payloadBytes", len(bytes)).
+					Int("conns", len(conns)).
+					Msg("websocket broadcast write was slow; connection is close to the write deadline")
 			}
 		}(c)
 	}

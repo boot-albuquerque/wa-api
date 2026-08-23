@@ -5,11 +5,15 @@ import (
 	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
 	wagroup "wa-api/pkg/infra/wa-noise/adapters/group"
 	wamisc "wa-api/pkg/infra/wa-noise/adapters/misc"
+	wapairing "wa-api/pkg/infra/wa-noise/adapters/pairing"
 	wapresence "wa-api/pkg/infra/wa-noise/adapters/presence"
 	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
 	"wa-api/pkg/infra/db"
+	"wa-api/pkg/infra/egress"
+	"wa-api/pkg/infra/media/opengraph"
+	"wa-api/pkg/infra/media/sticker"
 	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
@@ -40,6 +44,7 @@ type MessageHandlers struct {
 	SendContact     *handlers.SendContactHandler
 	SendLocation    *handlers.SendLocationHandler
 	SendButtons     *handlers.SendButtonsHandler
+	SendCarousel    *handlers.SendCarouselHandler
 	SendList        *handlers.SendListHandler
 	SendPoll        *handlers.SendPollHandler
 	DeleteMessage   *handlers.DeleteMessageHandler
@@ -75,6 +80,13 @@ type WebhookHandlers struct {
 
 // customHandlers agrupa todos os handlers custom disparazaap.
 type customHandlers struct {
+	// AdminToken existe aqui, e não como parâmetro de registerCustomRoutes,
+	// por uma razão prática: o parâmetro obrigaria a tocar nas nove chamadas
+	// de teste que a função já tem, e nenhuma delas se importa com este
+	// valor. O campo vazio é o caso normal — só o devui o consome, e o devui
+	// só existe com WA_API_DEV_UI ligado.
+	AdminToken string
+
 	Profile     *customhttp.ProfileHandler
 	ProfileFull *customhttp.ProfileFullHandler
 	Message     *MessageHandlers
@@ -90,6 +102,9 @@ type customHandlers struct {
 	Reaction    *handlers.ReactionHandlers
 	Contact     *handlers.ContactHandlers
 	GroupMgmt   *handlers.GroupManagementHandlers
+	ChatHistory *handlers.ChatHistoryHandlers
+	Newsletter  *handlers.NewsletterHandlers
+	Label       *handlers.LabelHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -101,9 +116,15 @@ var customHandlerSet = &customHandlers{}
 func initCustomHandlers(s *server) {
 	// Adapters
 	waClientLookup := waclient.ClientForGetter(clientManager.GetWaNoiseClient)
-	messageComposer := wachat.NewMessageComposerAdapter(waClientLookup)
 	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
-	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup)
+	// WithPollOptions liga o guarda-opcoes de enquete: o adapter memoriza o
+	// texto em claro das opcoes depois de cada envio, e o handler de eventos
+	// o le' para casar o hash SHA-256 do voto com o texto
+	// (eventhandler_message.go:130). Sem ele SendPoll RECUSA-SE a enviar, de
+	// proposito — enquete criada com voto ilegivel e' pior que enquete nao
+	// criada.
+	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup).WithPollOptions(clientManager)
+	mediaDownloader := wachat.NewMediaDownloaderAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)
 	// Declarado aqui, e nao junto dos ContactHandlers: ListChats tambem o
@@ -113,6 +134,7 @@ func initCustomHandlers(s *server) {
 	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
 	sessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
+	phonePairer := wapairing.NewPhonePairerAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase
@@ -126,27 +148,34 @@ func initCustomHandlers(s *server) {
 	// ele, o logout pela API apagava o store e deixava o cliente
 	// registrado, com /session/status mentindo loggedIn=true (F80).
 	logoutUC := session.NewLogoutUseCase(sessionGuard, NewSessionAttachHook(s), logger)
-	pairPhoneUC := session.NewPairPhoneUseCase(sessionGuard, logger)
-	getStatusUC := session.NewGetStatusUseCase(sessionGuard, sessionGuard, userRepo, logger)
-	setStatusMessageUC := session.NewSetStatusMessageUseCase(sessionGuard, logger)
-	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(sessionGuard, logger)
+	pairPhoneUC := session.NewPairPhoneUseCase(phonePairer, logger)
+	getStatusUC := session.NewGetStatusUseCase(sessionGuard, userRepo, logger)
+	setStatusMessageUC := session.NewSetStatusMessageUseCase(miscAdapter, logger)
+	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(miscAdapter, logger)
 	syncContactRosterUC := session.NewSyncContactRosterUseCase(miscAdapter, logger)
 
 	// Message UseCases
-	sendMessageUC := message.NewSendMessageUseCase(messageComposer, logger)
-	sendImageUC := message.NewSendImageUseCase(messageComposer, logger)
-	sendDocumentUC := message.NewSendDocumentUseCase(messageComposer, logger)
-	sendAudioUC := message.NewSendAudioUseCase(messageComposer, logger)
-	sendStickerUC := message.NewSendStickerUseCase(messageComposer, logger)
-	sendVideoUC := message.NewSendVideoUseCase(messageComposer, logger)
-	sendContactUC := message.NewSendContactUseCase(messageComposer, logger)
-	sendLocationUC := message.NewSendLocationUseCase(messageComposer, logger)
-	sendButtonsUC := message.NewSendButtonsUseCase(messageComposer, logger)
-	sendListUC := message.NewSendListUseCase(messageComposer, logger)
-	sendPollUC := message.NewSendPollUseCase(messageComposer, logger)
-	deleteMessageUC := message.NewDeleteMessageUseCase(sessionGuard, logger)
-	sendEditMessageUC := message.NewSendEditMessageUseCase(sessionGuard, logger)
-	sendTemplateUC := message.NewSendTemplateUseCase(messageComposer, logger)
+	linkPreviewFetcher := opengraph.NewFetcher(appCtx.GlobalHTTPClient)
+	mediaFetcher := opengraph.NewURLFetcher(appCtx.GlobalHTTPClient)
+	sendMessageUC := message.NewSendMessageUseCase(chatMessenger, jidResolver, linkPreviewFetcher, logger)
+	sendImageUC := message.NewSendImageUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	sendDocumentUC := message.NewSendDocumentUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	// O chatMessenger entra DUAS vezes: como porta de media e como porta de
+	// texto. A legenda do audio vai como mensagem de texto separada (F116),
+	// porque o protocolo nao tem campo de legenda em audio.
+	sendAudioUC := message.NewSendAudioUseCase(chatMessenger, jidResolver, mediaFetcher, chatMessenger, logger)
+	stickerProcessor := sticker.NewProcessor()
+	sendStickerUC := message.NewSendStickerUseCase(chatMessenger, jidResolver, mediaFetcher, stickerProcessor, logger)
+	sendVideoUC := message.NewSendVideoUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	sendContactUC := message.NewSendContactUseCase(chatMessenger, jidResolver, logger)
+	sendLocationUC := message.NewSendLocationUseCase(chatMessenger, jidResolver, logger)
+	sendButtonsUC := message.NewSendButtonsUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	sendCarouselUC := message.NewSendCarouselUseCase(chatMessenger, jidResolver, mediaFetcher, logger)
+	sendListUC := message.NewSendListUseCase(chatMessenger, jidResolver, logger)
+	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
+	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
+	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)
+	sendTemplateUC := message.NewSendTemplateUseCase(chatMessenger, jidResolver, logger)
 
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)
@@ -164,6 +193,7 @@ func initCustomHandlers(s *server) {
 		SendContact:     handlers.NewSendContactHandler(sendContactUC),
 		SendLocation:    handlers.NewSendLocationHandler(sendLocationUC),
 		SendButtons:     handlers.NewSendButtonsHandler(sendButtonsUC),
+		SendCarousel:    handlers.NewSendCarouselHandler(sendCarouselUC),
 		SendList:        handlers.NewSendListHandler(sendListUC),
 		SendPoll:        handlers.NewSendPollHandler(sendPollUC),
 		DeleteMessage:   handlers.NewDeleteMessageHandler(deleteMessageUC),
@@ -190,6 +220,15 @@ func initCustomHandlers(s *server) {
 		SupportedEvents: supportedEventTypes,
 		FindInSlice:     slices.Contains[[]string, string],
 		UpdateUserInfo:  updateUserInfo,
+		PublishUserInfo: func(userID, token string, values interface{}) {
+			v, ok := values.(Values)
+			if !ok {
+				log.Error().Str("userid", userID).
+					Msg("webhook handler passed unexpected type to PublishUserInfo")
+				return
+			}
+			publishUserInfo(userID, token, v)
+		},
 	}
 	webhookHandlers := &WebhookHandlers{
 		GetWebhook:    handlers.NewGetWebhookHandler(whCtx),
@@ -200,14 +239,14 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
-	addUserUC := user.NewAddUserUseCase(userRepo, logger)
-	editUserUC := user.NewEditUserUseCase(userRepo, logger)
+	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, s3SecretCipher{}, logger)
+	editUserUC := user.NewEditUserUseCase(userRepo, s3SecretCipher{}, userInfoRepublisher{db: s.DB}, logger)
 	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
 	getUserProfileUC := user.NewGetUserProfileUseCase(userAdapter, jidResolver, logger)
-	listChatsUC := user.NewListChatsUseCase(chatActivityRepo, userAdapter, userAdapter, groupAdapter, logger)
+	listChatsUC := user.NewListChatsUseCase(chatActivityRepo, userAdapter, groupAdapter, logger)
 	blockUserUC := user.NewBlockUserUseCase(userAdapter, jidResolver, logger)
 	unblockUserUC := user.NewUnblockUserUseCase(userAdapter, jidResolver, logger)
 	getBlocklistUC := user.NewGetBlocklistUseCase(userAdapter, logger)
@@ -238,6 +277,7 @@ func initCustomHandlers(s *server) {
 	sessionCounter := sessioncount.NewSessionCounterAdapter(clientManager)
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
+	newsletterOpsUC := notification.NewNewsletterOpsUseCase(miscAdapter, logger)
 	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
 	rejectCallUC := chat.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
@@ -269,16 +309,34 @@ func initCustomHandlers(s *server) {
 	}
 
 	// Storage UseCases
-	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, logger)
-	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, logger)
-	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, logger)
-	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, logger)
-	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, logger)
-	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, logger)
-	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, logger)
-	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, logger)
-	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, logger)
-	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, logger)
+	// S3 por usuário: banco + envelope de cifra + registro de clientes +
+	// cache, os quatro REAIS. O stub que respondia 200 sem gravar nada é a
+	// F151/F157 do HOUSEKEEP; o segredo cifrado é o ADR-0009.
+	s3Store := db.NewS3ConfigRepository(s.DB)
+	s3Cipher := s3SecretCipher{}
+	s3Clients := s3ClientManager{}
+	s3Cache := userInfoS3Cache{}
+	configureS3UC := storage.NewConfigureS3UseCase(sessionGuard, s3Store, s3Cipher, s3Clients, s3Cache, logger)
+	getS3ConfigUC := storage.NewGetS3ConfigUseCase(sessionGuard, s3Store, logger)
+	testS3ConnectionUC := storage.NewTestS3ConnectionUseCase(sessionGuard, s3Store, s3Cipher, s3Clients, logger)
+	deleteS3ConfigUC := storage.NewDeleteS3ConfigUseCase(sessionGuard, s3Store, s3Clients, s3Cache, logger)
+	// HMAC por usuário: banco + cifra + cache, os três REAIS. O stub que
+	// respondia 200 sem gravar nada é a F151/F157 do HOUSEKEEP.
+	hmacKeyStore := db.NewHmacConfigRepository(s.DB)
+	hmacEncryptor := hmacKeyEncryptor{}
+	hmacCache := userInfoHmacCache{}
+	configureHmacUC := storage.NewConfigureHmacUseCase(sessionGuard, hmacKeyStore, hmacEncryptor, hmacCache, logger)
+	getHmacConfigUC := storage.NewGetHmacConfigUseCase(sessionGuard, hmacKeyStore, logger)
+	deleteHmacConfigUC := storage.NewDeleteHmacConfigUseCase(sessionGuard, hmacKeyStore, hmacCache, logger)
+	// History e proxy por usuário: banco + os DOIS caches de userinfo, todos
+	// REAIS. O stub que respondia 200 sem gravar nada é a F151/F157, e a
+	// publicação no cache é o que fecha a F128.
+	sessionConfigStore := db.NewSessionConfigRepository(s.DB)
+	sessionConfigCache := userInfoSessionCache{}
+	setProxyUC := storage.NewSetProxyUseCase(sessionGuard, sessionConfigStore, sessionConfigCache,
+		appCtx.GlobalWebhookUseProxy, egress.SystemResolver(), logger)
+	setHistoryUC := storage.NewSetHistoryUseCase(sessionGuard, sessionConfigStore, sessionConfigCache, logger)
+	getHistoryUC := storage.NewGetHistoryUseCase(sessionGuard, sessionConfigStore, logger)
 
 	// Storage Handlers
 	storageHandlers := &handlers.StorageHandlers{
@@ -294,6 +352,19 @@ func initCustomHandlers(s *server) {
 		GetHistory:       handlers.NewGetHistoryHandler(getHistoryUC),
 	}
 
+	// Chat history handlers (/chat/history) — SEPARATE from Storage.GetHistory
+	// (/webhook/history) on purpose: the two routes shared one handler and the
+	// chat branch lost its implementation in the migration (HOUSEKEEP F124).
+	chatHistoryRepo := db.NewChatHistoryRepository(s.DB)
+	chatHistoryHandlers := &handlers.ChatHistoryHandlers{
+		// WithLIDResolver liga a tradução @lid→telefone na LEITURA (F183).
+		// userAdapter satisfaz LIDResolver pelo mesmo GetPNForLID que já
+		// serve /user/lid/{jid} — é a peça existente, não uma nova.
+		GetChatHistory: handlers.NewGetChatHistoryHandler(
+			chat.NewGetChatHistoryUseCase(chatHistoryRepo, logger).
+				WithLIDResolver(userAdapter)),
+	}
+
 	// Blocklist Handlers
 	blocklistHandlers := &handlers.BlocklistHandlers{
 		GetBlocklist: handlers.NewGetBlocklistHandler(getBlocklistUC),
@@ -307,11 +378,11 @@ func initCustomHandlers(s *server) {
 
 	// Download Handlers (/chat/download*)
 	downloadHandlers := &handlers.DownloadHandlers{
-		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(sessionGuard, logger)),
-		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(sessionGuard, logger)),
-		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(sessionGuard, logger)),
-		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(sessionGuard, logger)),
-		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(sessionGuard, logger)),
+		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(mediaDownloader, logger)),
+		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(mediaDownloader, logger)),
+		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(mediaDownloader, logger)),
+		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(mediaDownloader, logger)),
+		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(mediaDownloader, logger)),
 	}
 
 	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)
@@ -351,6 +422,9 @@ func initCustomHandlers(s *server) {
 		Reaction:    reactionHandlers,
 		Contact:     contactHandlers,
 		GroupMgmt:   groupMgmtHandlers,
+		ChatHistory: chatHistoryHandlers,
+		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
+		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),
 	}
 }
 

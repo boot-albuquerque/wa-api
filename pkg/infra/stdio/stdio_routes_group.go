@@ -4,10 +4,10 @@ package stdio
 // participantes.
 
 var groupStaticRoutes = map[string]staticRoute{
-	"group.list":       {httpMethod: "GET", httpPath: "/group/list"},
+	"group.list":       {httpMethod: "POST", httpPath: "/group/list"},
 	"group.create":     {httpMethod: "POST", httpPath: "/group/create"},
-	"group.info":       {httpMethod: "GET", httpPath: "/group/info"},
-	"group.invitelink": {httpMethod: "GET", httpPath: "/group/invitelink"},
+	"group.info":       {httpMethod: "POST", httpPath: "/group/info"},
+	"group.invitelink": {httpMethod: "POST", httpPath: "/group/invitelink"},
 
 	"group.photo":        {httpMethod: "POST", httpPath: "/group/photo"},
 	"group.photo.remove": {httpMethod: "POST", httpPath: "/group/photo/remove"},

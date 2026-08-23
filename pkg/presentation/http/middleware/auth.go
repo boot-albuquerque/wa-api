@@ -79,15 +79,48 @@ func extractRequestToken(r *http.Request) string {
 	if token := r.Header.Get("token"); token != "" {
 		return token
 	}
+
 	token := strings.Join(r.URL.Query()["token"], "")
-	if token != "" {
+	if token == "" {
+		return ""
+	}
+
+	if !queryTokenAllowed(r.URL.Path) {
 		log.Warn().
 			Str("remote_addr", r.RemoteAddr).
 			Str("path", r.URL.Path).
 			Str("user_agent", r.UserAgent()).
-			Msg("token received via query string; deprecated, will be rejected in a future release")
+			Msg("token por query string recusado nesta rota; use o header `token`")
+		return ""
 	}
+
+	log.Debug().
+		Str("path", r.URL.Path).
+		Msg("token por query string aceito: a rota de WebSocket nao tem alternativa")
 	return token
+}
+
+// wsPath é a única rota onde o token pode vir por query string.
+const wsPath = "/session/ws"
+
+// queryTokenAllowed decide se aquela rota aceita token na URL.
+//
+// Só o WebSocket, e a razão é da especificação, não nossa: a API `WebSocket` do
+// navegador NÃO permite header customizado no handshake — não há `headers` em
+// `new WebSocket(url, protocols)`. Um painel web não tem outra forma de
+// autenticar ali, e recusar a query string nessa rota quebraria todo cliente de
+// navegador sem oferecer saída (F75).
+//
+// Nas demais rotas o header sempre foi possível, e a query só sobrevivia por
+// compatibilidade. Aqui ela deixa de ser aceita — e o token que viaja na URL da
+// exceção é redigido no log (ver url_redaction.go), senão a exceção
+// justificada viraria credencial registrada.
+//
+// O destino declarado é o subprotocolo (`new WebSocket(url, [token])`), que
+// tira o token da URL de vez. Ele exige mudança em TODO cliente WebSocket, e
+// por isso não cabe na mesma janela — ver ADR-0006.
+func queryTokenAllowed(path string) bool {
+	return path == wsPath
 }
 
 // AuthAlice returns middleware that looks up a user by token.
@@ -106,6 +139,24 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 
 			token := extractRequestToken(r)
 
+			// Sem token não se consulta o banco. A consulta casa por
+			// `token = $1`, e aqui $1 seria "" — bastaria UMA linha com token
+			// vazio para a requisição anônima autenticar como aquele usuário.
+			// Medido na F100: a resposta caiu de 401 para 400 no instante em
+			// que a coluna foi branqueada.
+			//
+			// Hoje nenhuma linha tem token vazio, então esta guarda não muda
+			// nada observável. Ela existe para que a etapa 1 da F97 — que vai
+			// branquear a coluna — não vire um acesso sem credencial.
+			if token == "" {
+				hlog.FromRequest(r).Warn().
+					Str("path", r.URL.Path).
+					Str("method", r.Method).
+					Msg("authentication rejected: request carries no token")
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
+				return
+			}
+
 			myuserinfo, found := userCache.Get(token)
 			if !found {
 				hlog.FromRequest(r).Debug().
@@ -116,8 +167,8 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 						"hmac_key IS NOT NULL AND length(hmac_key) > 0,"+
 						"CASE WHEN s3_enabled THEN 'true' ELSE 'false' END,"+
 						"COALESCE(media_delivery, 'base64') "+
-						"FROM users WHERE token=$1 OR token_hash=$2 LIMIT 1",
-					token, domain.HashToken(token),
+						"FROM users WHERE token_hash=$1 LIMIT 1",
+					domain.HashToken(token),
 				)
 				if err != nil {
 					hlog.FromRequest(r).Error().Err(err).

@@ -83,7 +83,7 @@ func (o *rateLimitObserver) middleware(next http.Handler) http.Handler {
 			log.Warn().
 				Str("ip", ip).
 				Str("method", r.Method).
-				Stringer("url", r.URL).
+				Str("url", redactURL(r.URL)).
 				Float64("limit_per_sec", float64(o.perIPRate)).
 				Int("burst", o.perIPBurst).
 				Msg("rate limit observe-only: this request would have been rejected")

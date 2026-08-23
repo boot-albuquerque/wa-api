@@ -67,8 +67,8 @@ func rotaLID(t *testing.T, porta *lidPorta) http.Handler {
 }
 
 func TestGetUserLID_LeOJIDDoCaminho(t *testing.T) {
-	const jid = "5511912345678@s.whatsapp.net"
-	porta := &lidPorta{lid: "90000000000001@lid"}
+	const jid = "5516981818244@s.whatsapp.net"
+	porta := &lidPorta{lid: "29343770251463@lid"}
 
 	req := withUser(httptest.NewRequest(http.MethodGet, "/user/lid/"+jid, nil), "user-1")
 	rec := httptest.NewRecorder()
@@ -93,7 +93,7 @@ func TestGetUserLID_LeOJIDDoCaminho(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
 		t.Fatalf("resposta nao e' o envelope do ADR-002: %v", err)
 	}
-	if !env.Success || env.Data.LID != "90000000000001@lid" {
+	if !env.Success || env.Data.LID != "29343770251463@lid" {
 		t.Errorf("envelope inesperado: %s", rec.Body.String())
 	}
 }
@@ -117,7 +117,7 @@ func TestGetUserLID_NaoExigeCorpo(t *testing.T) {
 // de vencer é o caminho — senão a correção teria trocado uma fonte errada
 // por duas fontes concorrentes, que é pior.
 func TestGetUserLID_CaminhoVenceOCorpo(t *testing.T) {
-	const doCaminho = "5511912345678@s.whatsapp.net"
+	const doCaminho = "5516981818244@s.whatsapp.net"
 	const doCorpo = "5599999999999@s.whatsapp.net"
 	porta := &lidPorta{lid: "1@lid"}
 

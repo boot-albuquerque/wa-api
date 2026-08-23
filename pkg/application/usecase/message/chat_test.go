@@ -142,7 +142,7 @@ func TestMarkRead_Success(t *testing.T) {
 		t.Fatalf("MarkRead chamado %d vez(es), esperava 1", n)
 	}
 	call := cm.MarkReadCalls[0]
-	if call.Chat != domain.JID("5511987654321") || call.Sender != domain.JID("5511900000000") {
+	if call.Chat != domain.JID("5511987654321@s.whatsapp.net") || call.Sender != domain.JID("5511900000000@s.whatsapp.net") {
 		t.Errorf("JIDs repassados errados: %+v", call)
 	}
 	if len(call.IDs) != 2 {
@@ -242,7 +242,7 @@ func TestReact_ReactionShape(t *testing.T) {
 			jr:              &contractsfake.JIDResolver{},
 			wantTargetID:    "A",
 			wantText:        "👍",
-			wantParticipant: domain.JID("5511900000000"),
+			wantParticipant: domain.JID("5511900000000@s.whatsapp.net"),
 		},
 		{
 			// Comportamento preservado do upstream: um Participant que não
@@ -290,11 +290,17 @@ func TestReact_ReactionShape(t *testing.T) {
 			if got.Participant != tt.wantParticipant {
 				t.Errorf("Participant: got %q, want %q", got.Participant, tt.wantParticipant)
 			}
-			if out["Id"] != tt.wantTargetID {
-				t.Errorf("resposta.Id: got %v, want %q", out["Id"], tt.wantTargetID)
+			// F190. Isto lia `out["Id"]` e `out["Details"]` — a resposta era um
+			// map literal com a forma HISTÓRICA. Agora é um
+			// domain.SendReactionResult tipado, na mesma forma das catorze
+			// irmãs. A asserção mudou de nome de chave para campo, e é essa a
+			// diferença que interessa: com um tipo, renomear a tag passa a
+			// derrubar a trava de wire.
+			if out.MessageID != tt.wantTargetID {
+				t.Errorf("resposta.MessageID: got %q, want %q", out.MessageID, tt.wantTargetID)
 			}
-			if out["Details"] != "Sent" {
-				t.Errorf("resposta.Details: got %v", out["Details"])
+			if out.Status != domain.StatusSent {
+				t.Errorf("resposta.Status: got %q, want %q", out.Status, domain.StatusSent)
 			}
 			requireLog(t, logger, contractsfake.LevelInfo, "Reaction sent")
 		})
@@ -335,8 +341,9 @@ func TestReact_TimestampComesFromThePort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("caminho feliz falhou: %v", err)
 	}
-	if out["Timestamp"] != at.Unix() {
-		t.Errorf("Timestamp: got %v, want %v", out["Timestamp"], at.Unix())
+	// F190: era `out["Timestamp"]`, com T maiúsculo, da forma histórica.
+	if out.Timestamp != at.Unix() {
+		t.Errorf("Timestamp: got %v, want %v", out.Timestamp, at.Unix())
 	}
 }
 

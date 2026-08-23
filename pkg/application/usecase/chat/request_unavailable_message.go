@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -28,25 +29,25 @@ func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID 
 	}
 
 	if req.Chat == "" {
-		return nil, fmt.Errorf("missing Chat in Payload")
+		return nil, apperr.New("missing_chat", apperr.CategoryValidation, "missing Chat in Payload", false, nil)
 	}
 
 	if req.Sender == "" {
-		return nil, fmt.Errorf("missing Sender in Payload")
+		return nil, apperr.New("missing_sender", apperr.CategoryValidation, "missing Sender in Payload", false, nil)
 	}
 
 	if req.ID == "" {
-		return nil, fmt.Errorf("missing ID in Payload")
+		return nil, apperr.New("missing_id", apperr.CategoryValidation, "missing ID in Payload", false, nil)
 	}
 
 	chatJID, err := uc.jids.ResolveQualifiedJID(ctx, req.Chat)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Chat JID format")
+		return nil, apperr.New("invalid_chat_jid", apperr.CategoryValidation, "invalid Chat JID format", false, nil)
 	}
 
 	senderJID, err := uc.jids.ResolveQualifiedJID(ctx, req.Sender)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Sender JID format")
+		return nil, apperr.New("invalid_sender_jid", apperr.CategoryValidation, "invalid Sender JID format", false, nil)
 	}
 
 	ack, err := uc.chats.RequestUnavailableMessage(ctx, userID, chatJID, senderJID, req.ID)

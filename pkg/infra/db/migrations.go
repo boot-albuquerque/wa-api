@@ -110,7 +110,114 @@ var migrations = []Migration{
 		UpSQL:   addSessionLeasesSQL,
 		DownSQL: addSessionLeasesDownSQL,
 	},
+	{
+		ID:      migrationIDWebhookOutbox,
+		Name:    "add_webhook_outbox",
+		UpSQL:   addWebhookOutboxSQL,
+		DownSQL: addWebhookOutboxDownSQL,
+	},
+	{
+		ID:   migrationIDBlankPlaintextToken,
+		Name: "blank_plaintext_token",
+		// UpSQL vazio: esta migração roda em Go (ver
+		// applyBlankPlaintextTokenMigration). O hash precisa bater byte a byte
+		// com domain.HashToken, e nem SQLite nem Postgres calculam SHA-256 sem
+		// extensão — mesmo motivo da migração 11.
+		UpSQL:   "",
+		DownSQL: "",
+	},
+	{
+		ID:      migrationIDLeaseOwnerAddr,
+		Name:    "add_lease_owner_addr",
+		UpSQL:   addLeaseOwnerAddrSQL,
+		DownSQL: addLeaseOwnerAddrDownSQL,
+	},
+	{
+		ID:      migrationIDLabels,
+		Name:    "add_labels",
+		UpSQL:   addLabelsSQL,
+		DownSQL: addLabelsDownSQL,
+	},
 }
+
+// migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
+// existentes (F97 etapa 2).
+const migrationIDBlankPlaintextToken = 16
+
+// migrationIDLeaseOwnerAddr acrescenta o endereço do dono à tabela de posse
+// (ADR-0007, decisão 1).
+const migrationIDLeaseOwnerAddr = 17
+
+// migrationIDLabels acompanha a F191: os três eventos de etiqueta que a
+// biblioteca emite (LabelEdit, LabelAssociationChat, LabelAssociationMessage)
+// chegavam e eram deitados fora. Estas tabelas são onde eles passam a parar.
+const migrationIDLabels = 18
+
+// migrationIDWebhookOutbox identifica a migração do outbox de webhook, pelo
+// mesmo motivo da constante acima: três lugares a referenciam.
+const migrationIDWebhookOutbox = 15
+
+// addWebhookOutboxSQL cria o outbox de entrega de webhook (ADR-0005, D3).
+//
+// Isto AMENDA a F88, que registrou que retry durável exigiria RabbitMQ e um
+// consumidor. Está errado: durabilidade exige armazenamento TRANSACIONAL, e
+// SQLite é um. Hoje o retry vive só em memória (`time.AfterFunc` em
+// dispatch_retry.go), então todo reinício do processo perde silenciosamente o
+// que estava pendente — e sob k8s reinício é rotina, não exceção.
+//
+// `due_at` é quando a linha volta a ser elegível, e é também o mecanismo de
+// posse: reivindicar empurra `due_at` para frente, de modo que outra réplica
+// não pegue a mesma linha enquanto esta trabalha. Um só campo faz as duas
+// coisas, e não há estado "em processamento" que possa ficar preso se o
+// processo morrer no meio — o prazo vence sozinho.
+//
+// NÃO guarda a chave HMAC. Ela já vive em `users.hmac_key` e é relida por
+// user_id na retomada: duplicar segredo em outra tabela multiplica a
+// superfície de vazamento sem comprar nada.
+//
+// `hmac_scope` existe porque a chave tem DUAS origens: o webhook do usuário
+// assina com `users.hmac_key`, e o webhook global assina com a chave global do
+// processo. Sem o discriminador, a retomada teria de adivinhar comparando a URL
+// com a configuração ATUAL — e uma mudança de configuração faria entregas
+// antigas serem assinadas com a chave errada, silenciosamente. Não é segredo:
+// é qual segredo usar.
+//
+// A tabela é criada nos DOIS dialetos, como a de posse, para que uma
+// instalação que migre de `single` para `multi` não precise de migração
+// retroativa.
+const addWebhookOutboxSQL = `
+CREATE TABLE IF NOT EXISTS webhook_outbox (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT        NOT NULL,
+    url        TEXT        NOT NULL,
+    payload    TEXT        NOT NULL,
+    attempt    INTEGER     NOT NULL DEFAULT 0,
+    due_at     TIMESTAMPTZ NOT NULL,
+    hmac_scope TEXT        NOT NULL DEFAULT 'user',
+    created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_outbox_due_at ON webhook_outbox (due_at);
+`
+
+// addWebhookOutboxSQLiteSQL é a mesma tabela sem TIMESTAMPTZ, que o SQLite não
+// conhece. Aqui, ao contrário da tabela de posse, ela NÃO é inerte: o cenário
+// catastrófico do ADR — um pod com SQLite — é exatamente onde durabilidade de
+// entrega precisa funcionar.
+const addWebhookOutboxSQLiteSQL = `
+CREATE TABLE IF NOT EXISTS webhook_outbox (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT      NOT NULL,
+    url        TEXT      NOT NULL,
+    payload    TEXT      NOT NULL,
+    attempt    INTEGER   NOT NULL DEFAULT 0,
+    due_at     TIMESTAMP NOT NULL,
+    hmac_scope TEXT      NOT NULL DEFAULT 'user',
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_outbox_due_at ON webhook_outbox (due_at);
+`
+
+const addWebhookOutboxDownSQL = `DROP TABLE IF EXISTS webhook_outbox;`
 
 // migrationIDSessionLeases identifica a migração da tabela de posse. Nomeada
 // porque três lugares a referenciam — a lista, o roteamento por dialeto e o
@@ -154,6 +261,86 @@ CREATE INDEX IF NOT EXISTS idx_session_leases_expires_at ON session_leases (expi
 
 const addSessionLeasesDownSQL = `DROP TABLE IF EXISTS session_leases;`
 
+// addLabelsSQL cria as três tabelas de etiqueta (F191).
+//
+// POR QUE TRÊS E NÃO UMA: a etiqueta em si tem nome e cor; a associação a uma
+// CONVERSA e a associação a uma MENSAGEM são coisas diferentes, com chaves
+// diferentes, e o WhatsApp emite um evento distinto para cada. Enfiá-las numa
+// tabela só obrigaria a colunas nulas que só valem para metade das linhas.
+//
+// `labeled` é BOOLEAN e não "a linha existe": o evento de DESetiquetar chega
+// como `labeled=false`, e apagar a linha perderia o instante em que isso
+// aconteceu — que é o que distingue "nunca teve" de "tinha e tiraram".
+const addLabelsSQL = `
+CREATE TABLE IF NOT EXISTS wa_labels (
+    user_id       TEXT        NOT NULL,
+    label_id      TEXT        NOT NULL,
+    name          TEXT        NOT NULL DEFAULT '',
+    color         INTEGER     NOT NULL DEFAULT 0,
+    predefined_id INTEGER     NOT NULL DEFAULT 0,
+    deleted       BOOLEAN     NOT NULL DEFAULT FALSE,
+    updated_at    TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, label_id)
+);
+CREATE TABLE IF NOT EXISTS wa_label_chats (
+    user_id    TEXT        NOT NULL,
+    label_id   TEXT        NOT NULL,
+    chat_jid   TEXT        NOT NULL,
+    labeled    BOOLEAN     NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid)
+);
+CREATE TABLE IF NOT EXISTS wa_label_messages (
+    user_id    TEXT        NOT NULL,
+    label_id   TEXT        NOT NULL,
+    chat_jid   TEXT        NOT NULL,
+    message_id TEXT        NOT NULL,
+    labeled    BOOLEAN     NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wa_label_chats_user_chat ON wa_label_chats (user_id, chat_jid);
+`
+
+// addLabelsSQLiteSQL é a mesma coisa sem TIMESTAMPTZ, que o SQLite não conhece
+// — mesmo motivo de addSessionLeasesSQLiteSQL.
+const addLabelsSQLiteSQL = `
+CREATE TABLE IF NOT EXISTS wa_labels (
+    user_id       TEXT      NOT NULL,
+    label_id      TEXT      NOT NULL,
+    name          TEXT      NOT NULL DEFAULT '',
+    color         INTEGER   NOT NULL DEFAULT 0,
+    predefined_id INTEGER   NOT NULL DEFAULT 0,
+    deleted       BOOLEAN   NOT NULL DEFAULT 0,
+    updated_at    TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, label_id)
+);
+CREATE TABLE IF NOT EXISTS wa_label_chats (
+    user_id    TEXT      NOT NULL,
+    label_id   TEXT      NOT NULL,
+    chat_jid   TEXT      NOT NULL,
+    labeled    BOOLEAN   NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid)
+);
+CREATE TABLE IF NOT EXISTS wa_label_messages (
+    user_id    TEXT      NOT NULL,
+    label_id   TEXT      NOT NULL,
+    chat_jid   TEXT      NOT NULL,
+    message_id TEXT      NOT NULL,
+    labeled    BOOLEAN   NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (user_id, label_id, chat_jid, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_wa_label_chats_user_chat ON wa_label_chats (user_id, chat_jid);
+`
+
+const addLabelsDownSQL = `
+DROP TABLE IF EXISTS wa_label_messages;
+DROP TABLE IF EXISTS wa_label_chats;
+DROP TABLE IF EXISTS wa_labels;
+`
+
 // addSenderPushNameSQL acompanha a F84: o pushName que o WhatsApp manda em
 // cada mensagem passa a ter coluna própria.
 //
@@ -179,6 +366,39 @@ END $$;
 
 const addSenderPushNameDownSQL = `
 ALTER TABLE message_history DROP COLUMN sender_push_name;
+`
+
+// addLeaseOwnerAddrSQL guarda o ENDEREÇO do dono junto com a posse
+// (ADR-0007, decisão 1).
+//
+// # Por que na mesma linha, e não descoberto por fora
+//
+// Quem for rotear precisa de duas respostas: quem é o dono, e onde ele está.
+// Descobrir a segunda por DNS (StatefulSet) ou pela API do k8s são as duas
+// alternativas recusadas no ADR — a primeira amarra a arquitetura a uma
+// topologia, a segunda põe o plano de controle do cluster no caminho quente de
+// toda requisição.
+//
+// Guardando aqui, as duas respostas vêm da MESMA linha, na MESMA consulta,
+// escritas pela MESMA transação. Não existe caminho em que divirjam.
+//
+// # O endereço envelhece, e isso é tratado
+//
+// IP de pod é reciclado, então uma linha velha pode apontar para outro
+// processo. Quem receber confere se o `owner_id` é o seu e recusa se não for;
+// o chamador relê a linha. O erro é DETECTÁVEL e transitório — que é a
+// propriedade que faltava nas duas alternativas.
+//
+// `DEFAULT ”` porque a coluna é NOT NULL e a tabela pode já ter linhas: em
+// `single` ela é inerte (a posse nem é reivindicada), e vazio significa
+// "não roteável", que é a leitura correta para uma linha escrita antes desta
+// migração existir.
+const addLeaseOwnerAddrSQL = `
+ALTER TABLE session_leases ADD COLUMN owner_addr TEXT NOT NULL DEFAULT '';
+`
+
+const addLeaseOwnerAddrDownSQL = `
+ALTER TABLE session_leases DROP COLUMN owner_addr;
 `
 
 // renameMessageSecretsIndexSQL acompanha a renomeação das tabelas do módulo de
@@ -650,6 +870,8 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 		}
 	} else if migration.ID == 11 {
 		err = applyTokenHashMigration(tx, db.DriverName())
+	} else if migration.ID == migrationIDBlankPlaintextToken {
+		err = applyBlankPlaintextTokenMigration(tx)
 	} else if migration.ID == 12 {
 		if db.DriverName() == "sqlite" {
 			// A migração 9 nunca criou o índice no SQLite, então não há o que
@@ -669,6 +891,18 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	} else if migration.ID == migrationIDSessionLeases {
 		if db.DriverName() == "sqlite" {
 			_, err = tx.Exec(addSessionLeasesSQLiteSQL)
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == migrationIDLabels {
+		if db.DriverName() == "sqlite" {
+			_, err = tx.Exec(addLabelsSQLiteSQL)
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == migrationIDWebhookOutbox {
+		if db.DriverName() == "sqlite" {
+			_, err = tx.Exec(addWebhookOutboxSQLiteSQL)
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}
@@ -709,6 +943,17 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 var ErrDuplicateTokens = errors.New(
 	"migration 11 (add_token_hash) aborted: users.token contains duplicate values; " +
 		"resolve them before applying the UNIQUE constraint on token_hash")
+
+// ErrTokenHashBackfillIncomplete é devolvido pela migração 16 quando alguma
+// linha continuaria sem `token_hash` depois do preenchimento.
+//
+// Apagar o texto claro dessas linhas tiraria delas a ÚNICA forma de autenticar,
+// e o valor não existe em nenhum outro lugar — não há como desfazer. Abortar
+// deixa o processo sem subir, com esta mensagem; continuar deixaria um usuário
+// sem acesso e sem diagnóstico.
+var ErrTokenHashBackfillIncomplete = errors.New(
+	"migration 16 (blank_plaintext_token) aborted: some users would be left without token_hash; " +
+		"blanking the plaintext token would remove their only way to authenticate")
 
 func applyTokenHashMigration(tx *sqlx.Tx, driver string) error {
 	var duplicates int
@@ -902,3 +1147,86 @@ END $$;
 
 -- SQLite version (handled in code)
 `
+
+// applyBlankPlaintextTokenMigration apaga o token em texto claro das linhas
+// existentes (F97 etapa 2).
+//
+// A F97 etapa 1 fez o INSERT parar de gravar o texto claro, mas isso só vale
+// para linhas NOVAS. As antigas continuam com a credencial legível em disco —
+// e é ela que aparece num backup, numa réplica ou num dump de suporte.
+//
+// # A ordem, que é o que torna isto seguro
+//
+// Preenche o hash que faltar, VERIFICA que não sobrou ninguém sem hash, e só
+// então apaga. A verificação não é zelo: apagar o texto claro de uma linha sem
+// hash tira dela a única forma de autenticar, e não há como desfazer — o valor
+// não existe em nenhum outro lugar.
+//
+// Por isso a migração ABORTA em vez de continuar. Abortar deixa o processo sem
+// subir, com mensagem; continuar deixaria um usuário sem acesso e sem
+// diagnóstico.
+//
+// # O que NÃO é feito aqui
+//
+// A coluna não é dropada. Ela é NOT NULL, dropar exige reconstruir a tabela no
+// SQLite, e o ganho é cosmético: com todo valor vazio, o segredo já saiu do
+// disco. Fica como limpeza posterior, não como parte desta mudança.
+func applyBlankPlaintextTokenMigration(tx *sqlx.Tx) error {
+	var pendentes []struct {
+		ID    string `db:"id"`
+		Token string `db:"token"`
+	}
+	if err := tx.Select(&pendentes,
+		`SELECT id, token FROM users WHERE token <> '' AND (token_hash IS NULL OR token_hash = '')`); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "select_rows_without_hash").
+			Msg("failed to read rows missing token_hash")
+		return fmt.Errorf("failed to read rows missing token_hash: %w", err)
+	}
+
+	updateSQL := tx.Rebind("UPDATE users SET token_hash = ? WHERE id = ?")
+	for _, linha := range pendentes {
+		if _, err := tx.Exec(updateSQL, domain.HashToken(linha.Token), linha.ID); err != nil {
+			log.Error().Err(err).Str("table", "users").Str("user_id", linha.ID).
+				Msg("failed to backfill token_hash")
+			return fmt.Errorf("failed to backfill token_hash for user %s: %w", linha.ID, err)
+		}
+	}
+
+	// Relê do BANCO em vez de confiar no laço acima: o que importa é o estado
+	// que vai ser destruído, não o que o código acha que fez.
+	//
+	// HOJE esta verificação é inalcançável, e isso foi MEDIDO, não suposto: o
+	// único jeito conhecido de uma linha sobreviver ao preenchimento é o UPDATE
+	// falhar, e aí a função já retornou erro acima. Desligar esta checagem não
+	// muda o resultado de nenhum teste — o controle negativo confirmou.
+	//
+	// Fica assim mesmo. É defesa em profundidade sobre uma operação
+	// IRREVERSÍVEL: o dia em que o preenchimento ganhar um caminho que engole
+	// falha por linha (um `continue` num laço, por exemplo), esta é a única
+	// coisa entre isso e um usuário sem acesso.
+	var semHash int
+	if err := tx.Get(&semHash,
+		`SELECT COUNT(*) FROM users WHERE token <> '' AND (token_hash IS NULL OR token_hash = '')`); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("query", "verify_no_row_without_hash").
+			Msg("failed to verify token_hash backfill")
+		return fmt.Errorf("failed to verify token_hash backfill: %w", err)
+	}
+	if semHash > 0 {
+		log.Error().Str("table", "users").Int("rows", semHash).
+			Msg("migration 16 aborted: rows would lose their only way to authenticate")
+		return fmt.Errorf("%w (%d row(s) still without token_hash)", ErrTokenHashBackfillIncomplete, semHash)
+	}
+
+	res, err := tx.Exec(`UPDATE users SET token = '' WHERE token <> ''`)
+	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("column", "token").
+			Msg("failed to blank the plaintext token")
+		return fmt.Errorf("failed to blank the plaintext token: %w", err)
+	}
+	if apagadas, err := res.RowsAffected(); err == nil {
+		log.Info().Str("table", "users").Int64("rows", apagadas).
+			Msg("plaintext API tokens removed from storage")
+	}
+
+	return nil
+}

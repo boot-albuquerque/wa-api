@@ -1,4 +1,4 @@
-.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-facade waclient-filesize waclient-test
+.PHONY: build test lint lint-strict vet clean coverage coverage-gate coverage-report log-coverage-gate docker check tidy fmt stats help waclient-facade waclient-filesize waclient-test handler-route
 
 # Default Go configuration
 GOCMD := go
@@ -13,7 +13,32 @@ BINARY := wa-api
 # ficou fora dos gates que medem o que escrevemos (cobertura, lint, vet,
 # test) por ter nascido como cópia; hoje é código mantido aqui e a inclusão
 # progressiva nos gates está registrada como F17 em HOUSEKEEP.md.
-COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise')
+# pkg/infra/wa-noise/client — a FACHADA, e só ela (o `$$` casa o pacote exato,
+# não os subpacotes). Sai do denominador de cobertura pela mesma decisão de
+# arquitetura que a tirou do .logcov-exclude (F204, 2026-08-21): não é ponto de
+# instrumentação, é delegação.
+#
+# O que a forçou: a decisão 46=a do canal mandou cobrir os ~66 pontos de info
+# query com wrappers explícitos no RealClient, porque a promoção de métodos não
+# tem onde se intercalar. São 50 métodos de uma linha, e eles NÃO são
+# testáveis por unidade — medido: um `wanoise.Client` de valor-zero entra em
+# pânico ("assignment to entry in nil map", "nil pointer dereference"), e
+# construir um cliente real faria o teste exercitar o SDK, não o wrapper.
+#
+# A diluição foi medida, e é diluição e não regressão — nenhum código coberto
+# deixou de o ser:
+#
+#   com os wrappers    86,2%   (piso 86,8%)
+#   ~100 declaracoes nao cobertas = 50 wrappers x 2 (a chamada e o return),
+#   que e' exatamente o que a aritmetica da queda de 0,6pp exige.
+#
+# A alternativa era BAIXAR min_coverage de 868 para 862, e isso afrouxaria a
+# catraca para TODOS os pacotes em troca de um problema de um só. O que
+# substitui a cobertura de linha aqui e' `TestTodoMetodoComErroTemWrapper`, que
+# le a interface e os wrappers por AST e falha se algum metodo com erro nao
+# tiver wrapper QUE CHAME ClassifyIQ — propriedade mais forte que executar 50
+# delegacoes de uma linha.
+COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | grep -v '^wa-api/pkg/infra/wa-noise/client$$')
 # vet e lint, ao contrario da cobertura, JA' incluem internal/wa-noise/ (F17).
 #
 # A F17 supunha que incluir o modulo quebraria o gate de lint, porque o gocyclo
@@ -103,6 +128,57 @@ COVERAGE_BASELINE_FILE := .coverage-baseline
 # Log coverage ratchet (Fase 9). Estagio advisory: imprime, nao trava.
 LOGCOV_BASELINE_FILE := .log-coverage-baseline
 
+# Leitura FAIL-CLOSED de uma chave=valor de arquivo de baseline.
+#
+# Motivo (HOUSEKEEP F129, 2026-08-18): os gates liam o baseline com
+# `x=$$(grep -oE '^chave=[0-9]+' arquivo | grep -oE '[0-9]+')`. Esse grep
+# devolve TODAS as ocorrencias da chave. Com a chave duplicada — foi o que
+# aconteceu em .log-coverage-baseline entre 6fa6270 e o FIX-GATE, quando um
+# executor ACRESCENTOU `min_func_coverage=` em vez de EDITAR a existente —
+# a variavel vira a string de duas linhas "676\n674", o
+# `[ "$$cur" -lt "$$x" ]` seguinte aborta com "integer expression expected"
+# e o `if` do shell trata esse erro como FALSO. Resultado: o piso NUNCA
+# falha, e o gate passa a aprovar qualquer regressao em silencio.
+#
+# `baseline_key <arquivo> <chave> [num]` imprime o valor e devolve 0 apenas
+# se a chave aparecer EXATAMENTE UMA vez e nao estiver vazia; caso contrario
+# escreve no stderr uma mensagem que NOMEIA a chave e devolve 1. Com o
+# terceiro argumento "num", exige tambem que o valor seja um inteiro.
+BASELINE_KEY_READER = \
+	baseline_key() { \
+	  _f="$$1"; _k="$$2"; _mode="$$3"; \
+	  if [ ! -f "$$_f" ]; then \
+	    echo "FALHA: arquivo de baseline '$$_f' nao existe. Gate FALHA FECHADO." >&2; \
+	    return 1; \
+	  fi; \
+	  _n=$$(grep -cE "^$$_k=" "$$_f" || true); \
+	  if [ "$$_n" -eq 0 ]; then \
+	    echo "FALHA: a chave '$$_k' nao existe em $$_f. Gate FALHA FECHADO:" >&2; \
+	    echo "       chave ausente nao e' licenca para passar." >&2; \
+	    return 1; \
+	  fi; \
+	  if [ "$$_n" -gt 1 ]; then \
+	    echo "FALHA: a chave '$$_k' aparece $$_n vezes em $$_f (linhas $$(grep -nE "^$$_k=" "$$_f" | cut -d: -f1 | tr '\n' ' '))." >&2; \
+	    echo "       Chave DUPLICADA e' ambigua: o gate le por grep e receberia as duas linhas juntas," >&2; \
+	    echo "       o que faria a comparacao numerica abortar e o piso desaparecer em silencio (F129)." >&2; \
+	    echo "       EDITE a chave existente em vez de acrescentar outra. Gate FALHA FECHADO." >&2; \
+	    return 1; \
+	  fi; \
+	  _v=$$(grep -E "^$$_k=" "$$_f" | head -1 | cut -d= -f2-); \
+	  if [ -z "$$_v" ]; then \
+	    echo "FALHA: a chave '$$_k' em $$_f esta' VAZIA. Gate FALHA FECHADO." >&2; \
+	    return 1; \
+	  fi; \
+	  if [ "$$_mode" = "num" ]; then \
+	    case "$$_v" in \
+	      ''|*[!0-9]*) \
+	        echo "FALHA: a chave '$$_k' em $$_f vale '$$_v', que nao e' um inteiro. Gate FALHA FECHADO." >&2; \
+	        return 1 ;; \
+	    esac; \
+	  fi; \
+	  printf '%s' "$$_v"; \
+	}
+
 # Coverage output
 COVERAGE_OUT := coverage.out
 COVERAGE_HTML := coverage.html
@@ -148,7 +224,11 @@ coverage-html: coverage ## Generate HTML coverage report
 	@echo "Coverage report: $(COVERAGE_HTML)"
 
 coverage-report: ## Cobertura por pacote com DEDUP DE BLOCOS + total que bate com go tool cover
-	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > /dev/null
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 || { \
+	   echo "FALHA: os testes do coverage-gate falharam. Saida abaixo (F110):"; \
+	   grep -E '^(--- FAIL|FAIL|panic:)' $(COVERAGE_OUT).log || cat $(COVERAGE_OUT).log; \
+	   exit 1; \
+	 }
 	@$(GOCMD) run ./cmd/logcov -coverprofile=$(COVERAGE_OUT)
 	@echo ""
 	@echo "NOTA: o total acima usa deduplicacao de blocos por chave arquivo:range,"
@@ -179,8 +259,11 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 # sem nada. Numa delas isso me levou a escrever num commit que o gate estava
 # verde tendo lido so' a AUSENCIA de linhas FAIL — ausencia que este redirect
 # garantia mesmo havendo falha.
-	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 \
-	  || { echo "FALHA no passo de cobertura; saida do go test:"; cat $(COVERAGE_OUT).log; exit 1; }
+	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 || { \
+	   echo "FALHA: os testes do coverage-gate falharam. Saida abaixo (F110):"; \
+	   grep -E '^(--- FAIL|FAIL|panic:)' $(COVERAGE_OUT).log || cat $(COVERAGE_OUT).log; \
+	   exit 1; \
+	 }
 	@pct=$$($(GOCMD) tool cover -func=$(COVERAGE_OUT) | tail -1 | grep -oE '[0-9]+(\.[0-9]+)?%' | tr -d '%'); \
 	 if [ -z "$$pct" ]; then \
 	   echo "FALHA: nao consegui extrair a cobertura total de $(COVERAGE_OUT)."; \
@@ -194,11 +277,8 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 	   echo "       Gate FALHA FECHADO: numero ausente nao e' cobertura ok."; \
 	   exit 1; \
 	 fi; \
-	 base=$$(grep -oE '^min_coverage=[0-9]+' $(COVERAGE_BASELINE_FILE) | grep -oE '[0-9]+'); \
-	 if [ -z "$$base" ]; then \
-	   echo "FALHA: $(COVERAGE_BASELINE_FILE) nao declara min_coverage=<N>. Gate FALHA FECHADO."; \
-	   exit 1; \
-	 fi; \
+	 $(BASELINE_KEY_READER); \
+	 base=$$(baseline_key $(COVERAGE_BASELINE_FILE) min_coverage num) || exit 1; \
 	 echo "coverage: $$cur decimos de % (piso declarado $$base decimos de %) — atual $$pct%"; \
 	 if [ "$$cur" -lt "$$base" ]; then \
 	   echo "FALHA: a cobertura caiu ($$pct% < piso declarado)."; \
@@ -217,7 +297,33 @@ lint-tool: ## Compila o golangci-lint fixado com o Go deste repositorio
 	@$$($(GOCMD) env GOPATH)/bin/golangci-lint --version
 
 lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
+	@# F220: a cache do golangci-lint retem resultados de OUTRAS worktrees e
+	@# continua a reporta-los depois de elas serem apagadas. Medido em
+	@# 2026-08-22: 749 linhas de issue apontavam para uma worktree removida
+	@# minutos antes, e a contagem dava 374 contra a baseline de 356. Com a
+	@# cache limpa: 0 estrangeiras e 356, exato.
+	@#
+	@# A contaminacao RECONSTROI-SE: basta uma worktree nascer e morrer. Nao
+	@# e' um estado antigo que se limpa uma vez.
+	@#
+	@# Custo medido: 5s (quente) -> 87s (limpa), +82s. Aceitavel num `make
+	@# check` de mais de quinze minutos, e o que se compra e' a unica TRAVA
+	@# do gate (max_complexity) passar a medir codigo que esta' sob teste.
+	@$(LINT) cache clean >/dev/null 2>&1 || true
 	@$(LINT) run --issues-exit-code 0 $(LINT_TARGETS) 2>&1 | tee .lint.out
+	@# Guarda da F220: `cache clean` sozinho seria "limpamos e esperamos".
+	@# Isto VERIFICA. Os alvos sao todos ./..., portanto qualquer issue com
+	@# caminho relativo para fora do modulo veio da cache, nao do codigo sob
+	@# teste. FALHA FECHADO: contaminacao silenciosa e' pior que gate ruidoso.
+	@alheias=$$(grep -cE '^\.\./' .lint.out || true); \
+	 if [ "$$alheias" -gt 0 ]; then \
+	   echo "FALHA: $$alheias issue(s) apontam para fora do modulo (F220)."; \
+	   echo "       A cache do golangci-lint esta' a reportar outra worktree."; \
+	   echo "       Exemplos:"; \
+	   grep -E '^\.\./' .lint.out | head -3 | sed 's/^/         /'; \
+	   echo "       Corra: $(LINT) cache clean"; \
+	   exit 1; \
+	 fi
 	@found=$$(grep -oE '^[0-9]+ issues' .lint.out | grep -oE '^[0-9]+' | tail -1); \
 	 if [ -z "$$found" ]; then \
 	   echo "FALHA: nao consegui extrair a contagem de issues de .lint.out."; \
@@ -236,12 +342,9 @@ lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
 	   echo "       O formato da mensagem do gocyclo mudou. Gate FALHA FECHADO."; \
 	   exit 1; \
 	 fi; \
-	 base_max=$$(grep -oE '^max_complexity=[0-9]+' $(BASELINE_FILE) | grep -oE '[0-9]+'); \
-	 base_count=$$(grep -oE '^count=[0-9]+' $(BASELINE_FILE) | grep -oE '[0-9]+'); \
-	 if [ -z "$$base_max" ]; then \
-	   echo "FALHA: $(BASELINE_FILE) nao declara max_complexity=<N>. Gate FALHA FECHADO."; \
-	   exit 1; \
-	 fi; \
+	 $(BASELINE_KEY_READER); \
+	 base_max=$$(baseline_key $(BASELINE_FILE) max_complexity num) || exit 1; \
+	 base_count=$$(baseline_key $(BASELINE_FILE) count num) || exit 1; \
 	 echo "lint: complexidade maxima $$max (baseline $$base_max) | $$found issue(s) (informativo, baseline $$base_count)"; \
 	 if [ "$$max" -gt "$$base_max" ]; then \
 	   echo "FALHA: a maior funcao do repo piorou ($$max > $$base_max)."; \
@@ -253,8 +356,10 @@ lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
 	 if [ "$$max" -lt "$$base_max" ]; then \
 	   echo "ATENCAO: a complexidade maxima caiu ($$max < $$base_max). Baixe max_complexity para $$max neste mesmo PR."; \
 	 fi; \
-	 if [ "$$found" -ne "$$base_count" ]; then \
-	   echo "NOTA: a contagem de issues mudou ($$base_count -> $$found). Informativo, nao trava. Atualize count no PR."; \
+	 if [ "$$found" -gt "$$base_count" ]; then \
+	   echo "ATENCAO: a contagem de issues SUBIU ($$base_count -> $$found). Atualize count em .golangci-baseline neste PR."; \
+	 elif [ "$$found" -lt "$$base_count" ]; then \
+	   echo "lint: contagem de issues caiu ($$base_count -> $$found). Baixe count em .golangci-baseline neste PR."; \
 	 fi
 
 lint-strict: ## Lint com tolerancia zero — vira o alvo `lint` quando max_complexity chegar a 10
@@ -270,7 +375,8 @@ tidy: ## Tidy module dependencies
 	$(GOMOD) tidy
 
 log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/floor falham em regressao (ADR-008)
-	@stage=$$(grep -oE '^stage=[a-z]+' $(LOGCOV_BASELINE_FILE) | cut -d= -f2); \
+	@$(BASELINE_KEY_READER); \
+	 stage=$$(baseline_key $(LOGCOV_BASELINE_FILE) stage) || exit 1; \
 	 case "$$stage" in \
 	   advisory|ratchet|floor) ;; \
 	   *) \
@@ -290,10 +396,10 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 	 errpath_cov=$$(echo "$$json" | grep -oE '"errpath_coverage_tenths": *[0-9]+' | grep -oE '[0-9]+'); \
 	 eligible=$$(echo "$$json" | grep -oE '"eligible": *[0-9]+' | head -1 | grep -oE '[0-9]+'); \
 	 exempt=$$(echo "$$json" | grep -oE '"exempt_annotations": *[0-9]+' | grep -oE '[0-9]+'); \
-	 min_func=$$(grep -oE '^min_func_coverage=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
-	 min_errpath=$$(grep -oE '^min_errpath_coverage=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
-	 min_eligible=$$(grep -oE '^min_eligible=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
-	 max_exempt=$$(grep -oE '^max_exempt_annotations=[0-9]+' $(LOGCOV_BASELINE_FILE) | grep -oE '[0-9]+'); \
+	 min_func=$$(baseline_key $(LOGCOV_BASELINE_FILE) min_func_coverage num) || exit 1; \
+	 min_errpath=$$(baseline_key $(LOGCOV_BASELINE_FILE) min_errpath_coverage num) || exit 1; \
+	 min_eligible=$$(baseline_key $(LOGCOV_BASELINE_FILE) min_eligible num) || exit 1; \
+	 max_exempt=$$(baseline_key $(LOGCOV_BASELINE_FILE) max_exempt_annotations num) || exit 1; \
 	 echo ""; \
 	 echo "func_coverage    = $$func_cov decimos de % (piso $$min_func)"; \
 	 echo "errpath_coverage = $$errpath_cov decimos de % (piso $$min_errpath)"; \
@@ -340,6 +446,9 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 
 ##@ Modulo de protocolo (internal/wa-noise/)
 
+handler-route: ## Falha se alguma constante `route` de handler HTTP carimbar no log um caminho que nao esta registrado (F146)
+	@bash scripts/handler-route-check.sh
+
 waclient-facade: ## Falha se algum .go fora de internal/wa-noise/ importar .../core direto em vez da fachada internal/wa-noise/main.go (Fase H etapa 6)
 	@bash scripts/waclient-facade-check.sh
 
@@ -365,12 +474,31 @@ WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
 	./internal/wa-noise/persistence/store/ ./internal/wa-noise/persistence/store/sqlstore/ \
 	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/proto/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
 	./internal/wa-noise/security/cbc/ ./internal/wa-noise/security/gcm/ \
-	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/
+	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/ \
+	./internal/wa-noise/protocol/argo/
 
 waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
-check: build vet test lint coverage-gate log-coverage-gate waclient-facade waclient-filesize waclient-test ## build + vet + test + lint + cobertura + cobertura de log + fachada/tamanho/testes de internal/wa-noise/
+check: build vet fmt-gate test lint coverage-gate log-coverage-gate handler-route waclient-facade waclient-filesize waclient-test ## build + vet + formatacao + test + lint + cobertura + cobertura de log + carimbo de rota dos handlers + fachada/tamanho/testes de internal/wa-noise/
+
+fmt-gate: ## Falha se algum .go de pkg/ ou cmd/ divergir do gofmt (F133)
+	@# Por que este gate existe: ate' 2026-08-20 o `make check` NAO verificava
+	@# formatacao, e QUATRO arquivos divergiam sem que nada avisasse — dois deles
+	@# entraram em commits do mesmo dia que passaram no gate verde. Arquivo
+	@# desalinhado nao quebra nada sozinho; o dano e' que o proximo diff que
+	@# tocar o arquivo mistura reformatacao com mudanca de comportamento, e a
+	@# revisao deixa de conseguir separar as duas.
+	@#
+	@# So' pkg/ e cmd/: internal/wa-noise/ e' vendorizado e acompanha o upstream.
+	@out=$$($(GOCMD)fmt -l pkg cmd 2>/dev/null); \
+	 if [ -n "$$out" ]; then \
+	   echo "FALHA: arquivos fora do formato gofmt:"; \
+	   echo "$$out" | sed 's/^/       /'; \
+	   echo "       Rode: gofmt -w <arquivo>"; \
+	   exit 1; \
+	 fi; \
+	 echo "fmt: pkg/ e cmd/ formatados"
 
 ##@ Utilities
 

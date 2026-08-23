@@ -46,7 +46,7 @@ func TestDeviceInfo_StoreNil(t *testing.T) {
 }
 
 func TestDeviceInfo_StorePreenchido(t *testing.T) {
-	lid := types.NewJID("90000000000002", types.HiddenUserServer)
+	lid := types.NewJID("90937376170214", types.HiddenUserServer)
 	da := &ProfileDataAccess{client: &wanoise.Client{Store: &store.Device{
 		LID:                   lid,
 		Platform:              "iphone",

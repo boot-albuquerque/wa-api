@@ -105,3 +105,42 @@ func (ss *Server) stringParam(req *JSONRpcRequest, name string) (string, bool) {
 	}
 	return value, true
 }
+
+// RouteTarget é o par (método, caminho) HTTP para onde um método JSON-RPC é
+// despachado.
+type RouteTarget struct {
+	Method string
+	Path   string
+}
+
+// StaticRouteTargets expõe a tabela estática de JSON-RPC → HTTP.
+//
+// Existe para o teste de consistência que vive em pkg/bootstrap (aqui não dá:
+// bootstrap importa stdio, e o inverso seria ciclo). Sem ele, as duas tabelas
+// são mantidas à mão sem nada que as compare — foi assim que `session.connect`
+// e `session.disconnect` passaram a ser despachados com POST contra rotas
+// registradas como GET, e o mux devolvia 404 (F99).
+//
+// Only static routes: dynamic routes build the path from request params,
+// so there is no path to expose without a live request.
+func StaticRouteTargets() map[string]RouteTarget {
+	out := make(map[string]RouteTarget, len(staticRoutes))
+	for name, route := range staticRoutes {
+		out[name] = RouteTarget{Method: route.httpMethod, Path: route.httpPath}
+	}
+	return out
+}
+
+// DynamicRouteTargets exposes the dynamic JSON-RPC → HTTP table.
+//
+// Dynamic routes build their HTTP path from request params at dispatch time,
+// so the path is not enumerable here. The RPC method name and HTTP method
+// ARE fixed and are what the consistency test needs to verify that a
+// structural exception citing a dynamic route is not orphaned.
+func DynamicRouteTargets() map[string]string {
+	out := make(map[string]string, len(dynamicRoutes))
+	for name, route := range dynamicRoutes {
+		out[name] = route.httpMethod
+	}
+	return out
+}

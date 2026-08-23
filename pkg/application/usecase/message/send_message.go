@@ -2,63 +2,71 @@ package message
 
 import (
 	"context"
-	"fmt"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 )
 
-// SendMessageUseCase encapsula a validação de mensagem de texto.
-// A lógica de envio complexa (link preview, context info, etc) fica no wrapper handlers.go.
+// SendMessageUseCase envia uma mensagem de texto de verdade pelo wa-noise.
 type SendMessageUseCase struct {
-	messages appport.MessageComposer
+	messages appport.TextMessenger
+	jids     appport.JIDResolver
+	previews appport.LinkPreviewFetcher
 	logger   appport.Logger
 }
 
 // NewSendMessageUseCase cria uma nova instância do usecase.
-func NewSendMessageUseCase(mc appport.MessageComposer, l appport.Logger) *SendMessageUseCase {
+func NewSendMessageUseCase(tm appport.TextMessenger, jr appport.JIDResolver, lpf appport.LinkPreviewFetcher, l appport.Logger) *SendMessageUseCase {
 	return &SendMessageUseCase{
-		messages: mc,
+		messages: tm,
+		jids:     jr,
+		previews: lpf,
 		logger:   l,
 	}
 }
 
-// Execute valida os campos obrigatórios e verifica se o cliente está disponível.
-// Retorna os dados necessários ao wrapper handlers.go para enviar a mensagem.
-// Esta é uma validação MVP — a lógica complexa fica no wrapper por enquanto.
+// Execute valida os campos obrigatórios, resolve o destinatário e envia o
+// texto pela porta de verdade. Só devolve domain.StatusSent depois que o
+// envio retorna sucesso — nunca antes.
 func (uc *SendMessageUseCase) Execute(ctx context.Context, txtID string, req domain.SendMessageRequest) (*domain.SendMessageResult, error) {
-	// 1. Validar campos obrigatórios
 	if req.Phone == "" {
-		return nil, fmt.Errorf("missing Phone in payload")
+		return nil, apperr.New("missing_phone", apperr.CategoryValidation, "missing Phone in payload", false, nil)
 	}
 	if req.Body == "" {
-		return nil, fmt.Errorf("missing Body in payload")
+		return nil, apperr.New("missing_body", apperr.CategoryValidation, "missing Body in payload", false, nil)
 	}
 
-	// 2. Obter cliente wa-noise para verificar se existe sessão
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 
-	// 3. Gerar message ID se não fornecido
-	msgID := req.ID
-	if msgID == "" {
-		generated, err := uc.messages.NewMessageID(ctx, txtID)
-		if err != nil {
-			uc.logger.Error(ctx, "failed to generate message ID", "txtID", txtID, "error", err)
-			return nil, err
+	recipient, err := uc.jids.ResolveJID(ctx, req.Phone)
+	if err != nil {
+		uc.logger.Warn(ctx, "invalid phone in send text payload", "txtID", txtID, "error", err)
+		return nil, apperr.New("invalid_phone", apperr.CategoryValidation, "could not parse Phone", false, nil)
+	}
+
+	var preview *domain.LinkPreviewData
+	if req.LinkPreview {
+		if data, found := uc.previews.FetchLinkPreview(ctx, req.Body); found {
+			preview = &data
 		}
-		msgID = generated
 	}
 
-	// 4. Retornar resultado com dados validados
-	// O wrapper handlers.go irá processar link preview, context info, etc.
+	sent, err := uc.messages.SendText(ctx, txtID, recipient, req.Body, preview, req.ReplyTo, req.MentionedJID, req.ID)
+	if err != nil {
+		uc.logger.Error(ctx, "failed to send text message", "txtID", txtID, "error", err)
+		return nil, err
+	}
+
 	result := &domain.SendMessageResult{
-		MessageID: msgID,
-		Status:    "validated",
+		MessageID: sent.ID,
+		Timestamp: sent.Timestamp.Unix(),
+		Status:    domain.StatusSent,
 	}
 
-	uc.logger.Info(ctx, "message validated", "msgID", msgID)
+	uc.logger.Info(ctx, "message sent", "msgID", result.MessageID)
 	return result, nil
 }

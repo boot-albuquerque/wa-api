@@ -320,6 +320,8 @@ func TestGroupMgmtHandlers_UseCaseFailure(t *testing.T) {
 
 // TestGroupMgmtHandlers_JIDResolutionFailure: o JID do grupo nao resolve. E' o
 // caminho de saida que passa pelo resolver e nao pela porta de escrita.
+// 400 desde a F66: um JID que nao faz parse foi ENVIADO pelo cliente, e o
+// remedio esta no payload dele. Este teste exigia 500.
 func TestGroupMgmtHandlers_JIDResolutionFailure(t *testing.T) {
 	const cause = "malformed group jid"
 	for _, tc := range grpMgmtCases() {
@@ -337,7 +339,7 @@ func TestGroupMgmtHandlers_JIDResolutionFailure(t *testing.T) {
 
 			rec, capture := grpMgmtServe(tc, f, tc.body)
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, capture.Records(t), cause)
 		})
 	}

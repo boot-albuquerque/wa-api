@@ -23,7 +23,7 @@ import (
 
 func devInfoCheio() domain.SessionDeviceInfo {
 	return domain.SessionDeviceInfo{
-		LID:                   "90000000000002:17@lid",
+		LID:                   "90937376170214:17@lid",
 		Platform:              "iphone",
 		RegistrationID:        123456,
 		LIDMigrationTimestamp: 1754600000,

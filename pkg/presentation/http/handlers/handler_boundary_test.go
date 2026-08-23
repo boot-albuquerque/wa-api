@@ -40,6 +40,21 @@ func (s *spyPort) EnsureSession(context.Context, string) error {
 	return s.err
 }
 
+// SetStatusMessage entrou com a F198, pelo mesmo motivo que Disconnect e
+// Logout entraram com a F79: o use case só validava a sessão e devolvia 200
+// sem chamar nada. É a TERCEIRA vez que este padrão aparece neste repositório.
+// historySpy embrulha o spyPort para o teste de fronteira do history sync: o
+// use case precisa da porta nova (F198) e o spy só sabe validar a sessão.
+type historySpy struct{ *spyPort }
+
+func (h *historySpy) RequestHistorySync(context.Context, string, appport.HistoryAnchor, int) (string, error) {
+	return "REQ-SPY", h.err
+}
+
+func (s *spyPort) SetStatusMessage(context.Context, string, string) error {
+	return s.err
+}
+
 // Disconnect e Logout entraram com a F79: os use cases correspondentes
 // passaram a consumir SessionController, porque antes só validavam a sessão
 // e devolviam 200 sem encerrar nada.
@@ -51,6 +66,19 @@ func (s *spyPort) Disconnect(context.Context, string) error {
 func (s *spyPort) Logout(context.Context, string) error {
 	s.calls++
 	return s.err
+}
+
+// IsPaired e RequestPairingCode entraram com o CAP-26: PairPhoneUseCase passou
+// a consumir port.PhonePairer, porque antes só validava a sessão e devolvia
+// 200 com LinkingCode VAZIO (F152).
+func (s *spyPort) IsPaired(context.Context, string) (bool, error) {
+	s.calls++
+	return false, s.err
+}
+
+func (s *spyPort) RequestPairingCode(context.Context, string, string) (string, error) {
+	s.calls++
+	return "SPY-CODE", s.err
 }
 
 // Detach entrou com a F80: o logout pela API agora solta a sessao depois de
@@ -71,6 +99,62 @@ func (s *spyPort) MarkRead(context.Context, string, []string, time.Time, domain.
 func (s *spyPort) SendReaction(context.Context, string, domain.JID, domain.Reaction) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) RevokeMessage(context.Context, string, domain.JID, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) EditMessage(context.Context, string, domain.JID, string, string, *domain.EditContextInfo) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+// Os CINCO métodos de port.SimpleMessenger entraram com o CAP-15
+// (Location/Contact/Poll/Template) e o CAP-22 (List). A tabela só exercita
+// SendTemplate; os outros quatro existem porque a interface é uma só e o
+// use case a exige inteira — e ficam prontos para quando
+// /chat/send/location, /contact, /poll e /list entrarem nesta tabela.
+//
+// Todos contam em s.calls: o boundary test mede se o handler chegou a AGIR
+// sobre o WhatsApp, e enviar é o ato máximo.
+func (s *spyPort) SendLocation(context.Context, string, domain.JID, domain.LocationPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendContact(context.Context, string, domain.JID, domain.ContactPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendPoll(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendTemplate(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+func (s *spyPort) SendList(context.Context, string, domain.JID, domain.ListPayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
+	s.calls++
+	return domain.MessageSendResult{}, s.err
+}
+
+// FetchLinkPreview implementa port.LinkPreviewFetcher. Não conta como
+// "toque" em s.calls: é uma porta de resolução de metadata, não de ação
+// sobre a sessão — os testes de fronteira medem se o handler AGIU no
+// wa-noise, e uma consulta de preview isolada não é essa ação.
+func (s *spyPort) FetchLinkPreview(context.Context, string) (domain.LinkPreviewData, bool) {
+	return domain.LinkPreviewData{}, false
 }
 
 func (s *spyPort) SendPresence(context.Context, string, domain.PresenceType) error {
@@ -265,15 +349,19 @@ func boundaryCases() []boundaryCase {
 	log := silentLogger{}
 	return []boundaryCase{
 		{
-			name:      "SendMessage",
-			build:     func(s *spyPort) http.Handler { return NewSendMessageHandler(message.NewSendMessageUseCase(s, log)) },
+			name: "SendMessage",
+			build: func(s *spyPort) http.Handler {
+				return NewSendMessageHandler(message.NewSendMessageUseCase(s, s, s, log))
+			},
 			method:    http.MethodPost,
 			path:      "/chat/send/text",
 			readsBody: true,
 		},
 		{
-			name:      "DeleteMessage",
-			build:     func(s *spyPort) http.Handler { return NewDeleteMessageHandler(message.NewDeleteMessageUseCase(s, log)) },
+			name: "DeleteMessage",
+			build: func(s *spyPort) http.Handler {
+				return NewDeleteMessageHandler(message.NewDeleteMessageUseCase(s, s, log))
+			},
 			method:    http.MethodPost,
 			path:      "/chat/delete/message",
 			readsBody: true,
@@ -281,15 +369,17 @@ func boundaryCases() []boundaryCase {
 		{
 			name: "SendEditMessage",
 			build: func(s *spyPort) http.Handler {
-				return NewSendEditMessageHandler(message.NewSendEditMessageUseCase(s, log))
+				return NewSendEditMessageHandler(message.NewSendEditMessageUseCase(s, s, log))
 			},
 			method:    http.MethodPost,
 			path:      "/chat/send/edit",
 			readsBody: true,
 		},
 		{
-			name:      "SendTemplate",
-			build:     func(s *spyPort) http.Handler { return NewSendTemplateHandler(message.NewSendTemplateUseCase(s, log)) },
+			name: "SendTemplate",
+			build: func(s *spyPort) http.Handler {
+				return NewSendTemplateHandler(message.NewSendTemplateUseCase(s, s, log))
+			},
 			method:    http.MethodPost,
 			path:      "/chat/send/template",
 			readsBody: true,
@@ -349,7 +439,7 @@ func boundaryCases() []boundaryCase {
 		},
 		{
 			name:      "GetStatus",
-			build:     func(s *spyPort) http.Handler { return NewGetStatusHandler(session.NewGetStatusUseCase(s, s, s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewGetStatusHandler(session.NewGetStatusUseCase(s, s, log)) },
 			method:    http.MethodGet,
 			path:      "/session/status",
 			readsBody: false,
@@ -500,7 +590,17 @@ func TestHandlers_ErrorEnvelopeCarriesOnlyGenericText(t *testing.T) {
 			spy := &spyPort{err: &leakyErr{segredo}}
 			rec := httptest.NewRecorder()
 
-			tc.build(spy).ServeHTTP(rec, withUser(httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}")), "user-1"))
+			// Corpo VÁLIDO, e não `{}`: desde a F66 as validações devolvem
+			// apperr com CategoryValidation, e um corpo vazio faz o handler
+			// responder 400 ANTES de chegar à porta — o teste passaria sem
+			// nunca exercitar o caminho do erro interno que ele existe para
+			// vigiar.
+			//
+			// Antes da F66 ele já não chegava lá: a validação crua produzia a
+			// MESMA string genérica que o erro vazador produziria, então o
+			// teste passava por coincidência. A conversão só tornou isso
+			// visível.
+			tc.build(spy).ServeHTTP(rec, withUser(httptest.NewRequest(tc.method, tc.path, strings.NewReader(corpoValidoParaFronteira)), "user-1"))
 
 			if rec.Code < 400 {
 				t.Fatalf("porta em erro produziu status de sucesso %d", rec.Code)
@@ -557,7 +657,7 @@ func TestSessionUser_AndInlineGuard_AgreeOnEveryInput(t *testing.T) {
 
 			// Via bloco inline.
 			viaInline := httptest.NewRecorder()
-			NewSendMessageHandler(message.NewSendMessageUseCase(&spyPort{}, log)).
+			NewSendMessageHandler(message.NewSendMessageUseCase(&spyPort{}, &spyPort{}, &spyPort{}, log)).
 				ServeHTTP(viaInline, in.mut(httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader("{}"))))
 
 			if viaHelper.Code != viaInline.Code {
@@ -583,7 +683,7 @@ func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 	spy := &spyPort{err: wasession.ErrNoSession("user-1", nil)}
 	rec := httptest.NewRecorder()
 
-	NewGetStatusHandler(session.NewGetStatusUseCase(spy, spy, spy, silentLogger{})).
+	NewGetStatusHandler(session.NewGetStatusUseCase(spy, spy, silentLogger{})).
 		ServeHTTP(rec, withUser(httptest.NewRequest(http.MethodGet, "/session/status", nil), "user-1"))
 
 	if rec.Code != http.StatusBadRequest {
@@ -600,3 +700,42 @@ func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 		t.Errorf("error.code = %v, quero %q", got, "no_session")
 	}
 }
+
+// corpoValidoParaFronteira reúne todos os campos que as validações de use case
+// exigem, para que QUALQUER rota da tabela passe da validação e alcance a
+// porta.
+//
+// Campos a mais são ignorados na desserialização, então um corpo só serve as
+// dezessete rotas — e um corpo por rota seria uma segunda tabela para divergir
+// da primeira.
+//
+// `Buttons` entrou com o CAP-15: sem ele /chat/send/template passaria a ser
+// recusado na validação e nunca alcançaria a porta, que é exatamente a
+// armadilha que o comentário do teste acima descreve — o caso passaria verde
+// sem exercitar o caminho do erro interno que ele existe para vigiar.
+const corpoValidoParaFronteira = `{
+  "Phone": "5511999999999",
+  "ChatPhone": "5511999999999",
+  "SenderPhone": "5511999999999",
+  "Id": "3EB0C767D26B8A3F1B0F",
+  "Url": "https://example.invalid/a.bin",
+  "Body": "texto",
+  "Content": "texto",
+  "Desc": "descricao",
+  "Name": "nome",
+  "State": "available",
+  "Latitude": -23.5,
+  "Longitude": -46.6,
+  "Image": "data:image/png;base64,AAAA",
+  "Video": "data:video/mp4;base64,AAAA",
+  "Audio": "data:audio/ogg;base64,AAAA",
+  "Document": "data:application/pdf;base64,AAAA",
+  "Sticker": "data:image/webp;base64,AAAA",
+  "Vcard": "BEGIN:VCARD\nEND:VCARD",
+  "Group": "120363000000000000",
+  "Header": "cabecalho",
+  "Footer": "rodape",
+  "FileName": "a.pdf",
+  "Options": ["um", "dois"],
+  "Buttons": [{"DisplayText": "Sim", "Type": "quickreply"}]
+}`

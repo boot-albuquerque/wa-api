@@ -44,7 +44,7 @@ func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var req domain.SendContactRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
+		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
@@ -89,97 +89,7 @@ func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	var req domain.SendLocationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
-		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
-		return
-	}
-
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
-	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
-		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
-		return
-	}
-
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
-}
-
-// SendButtonsHandler é o handler HTTP para POST /chat/send/buttons.
-type SendButtonsHandler struct {
-	usecase *message.SendButtonsUseCase
-}
-
-// NewSendButtonsHandler cria o handler com o usecase injetado.
-func NewSendButtonsHandler(uc *message.SendButtonsUseCase) *SendButtonsHandler {
-	return &SendButtonsHandler{usecase: uc}
-}
-
-// ServeHTTP implementa http.Handler para POST /chat/send/buttons.
-func (h *SendButtonsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/buttons"
-
-	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
-	if !ok || info == nil {
-		hlog.FromRequest(r).Warn().Err(errUnauthorized).Str("route", route).Msg("request rejected")
-		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
-		return
-	}
-
-	txtID := info.Get("Id")
-	if txtID == "" {
-		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Str("route", route).Msg("request rejected")
-		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
-		return
-	}
-
-	var req domain.SendButtonsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
-		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
-		return
-	}
-
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
-	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
-		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
-		return
-	}
-
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
-}
-
-// SendListHandler é o handler HTTP para POST /chat/send/list.
-type SendListHandler struct {
-	usecase *message.SendListUseCase
-}
-
-// NewSendListHandler cria o handler com o usecase injetado.
-func NewSendListHandler(uc *message.SendListUseCase) *SendListHandler {
-	return &SendListHandler{usecase: uc}
-}
-
-// ServeHTTP implementa http.Handler para POST /chat/send/list.
-func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/list"
-
-	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
-	if !ok || info == nil {
-		hlog.FromRequest(r).Warn().Err(errUnauthorized).Str("route", route).Msg("request rejected")
-		customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
-		return
-	}
-
-	txtID := info.Get("Id")
-	if txtID == "" {
-		hlog.FromRequest(r).Warn().Err(errMissingSessionID).Str("route", route).Msg("request rejected")
-		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
-		return
-	}
-
-	var req domain.SendListRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
+		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
@@ -224,7 +134,7 @@ func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var req domain.SendPollRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
+		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}

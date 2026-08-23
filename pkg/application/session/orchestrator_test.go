@@ -7,12 +7,14 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 
+	"net/http"
 	"wa-api/pkg/domain/apperr"
 )
 
@@ -373,7 +375,7 @@ func TestStopUnregistersAndDetaches(t *testing.T) {
 // runtime (the /session/connect the dev panel and every new pairing use) ran
 // with NO lease at all. Measured on 2026-08-08 with two live sessions:
 //
-//	teste-d2    connected=1  owner: build-host.local-80338
+//	teste-d2    connected=1  owner: MacBook-Pro-de-Lucas.local-80338
 //	teste-d2-b  connected=1  owner: NO LEASE          <- paired via the panel
 //
 // Under N replicas that is the F89 disaster: the next replica sees connected=1,
@@ -381,7 +383,7 @@ func TestStopUnregistersAndDetaches(t *testing.T) {
 // one of them permanently.
 
 func TestStart_RefusesWhenOwnershipIsDenied(t *testing.T) {
-	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }))
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }, nil))
 	// Paired on purpose, even though the guard should stop us first: if the
 	// guard is ever removed, Start would otherwise enter the BLOCKING
 	// pairing path and this test would hang instead of failing. A hanging
@@ -407,7 +409,7 @@ func TestStart_RefusesWhenOwnershipIsDenied(t *testing.T) {
 // reaches the HTTP layer as an opaque 500. The refusal is not a server fault —
 // the request simply reached the wrong replica — so it has to carry a category.
 func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
-	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }))
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return false }, nil))
 	// Paired on purpose, even though the guard should stop us first: if the
 	// guard is ever removed, Start would otherwise enter the BLOCKING
 	// pairing path and this test would hang instead of failing. A hanging
@@ -427,8 +429,12 @@ func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
 	if appErr.Code != codeSessionOwnedByAnotherReplica {
 		t.Errorf("code = %q, want %q", appErr.Code, codeSessionOwnedByAnotherReplica)
 	}
-	if status := appErr.Category.HTTPStatus(); status >= 500 {
-		t.Errorf("category maps to HTTP %d; refusing because another replica owns the session is not a server fault", status)
+	// 409 specifically, not merely "not 5xx": the request is well formed and
+	// authorized, it just reached the wrong replica. 400 would tell the client
+	// to fix a payload that has nothing wrong with it (F95).
+	if status := appErr.Category.HTTPStatus(); status != http.StatusConflict {
+		t.Errorf("category maps to HTTP %d, want %d: the caller should route to the owner, not fix the request",
+			status, http.StatusConflict)
 	}
 	if appErr.Retryable {
 		t.Error("marked retryable: repeating the same request against the same replica yields the same refusal")
@@ -439,7 +445,7 @@ func TestStart_OwnershipRefusalIsClassified(t *testing.T) {
 // path. A check that always refuses would pass the test above and break
 // everything.
 func TestStart_ProceedsWhenOwnershipIsGranted(t *testing.T) {
-	h := newHarness(t, WithOwnershipCheck(func(string) bool { return true }))
+	h := newHarness(t, WithOwnershipCheck(func(string) bool { return true }, nil))
 	// Already paired: the unpaired path BLOCKS consuming the pairing channel,
 	// so without this the test hangs instead of failing — and a hanging test
 	// reports nothing (ARMADILHAS.md 16).
@@ -465,4 +471,599 @@ func TestStart_WithoutOwnershipCheckAllows(t *testing.T) {
 	if indexOf(h.recorder.Calls, "SessionProvider.NewSession") < 0 {
 		t.Errorf("session was not materialized in single mode: %v", h.recorder.Calls)
 	}
+}
+
+// TestStart_ReleasesOwnershipWhenSessionFailsToStart pins F96, a defect
+// INTRODUCED by the ownership guard itself.
+//
+// Ownership is claimed BEFORE the session is materialized, on purpose: a denial
+// must not leave client and registries dirty. The cost is that a failure
+// afterwards would keep the lease alive forever — the heartbeat renewing
+// ownership of a session that never came up, and no other replica ever able to
+// take that user.
+//
+// Measured before the fix, with a user connected via the API but never paired:
+//
+//	t=6s   connected=0  expires_in=12s
+//	t=12s  connected=0  expires_in=11s
+//	t=18s  connected=0  expires_in=15s   <- renewed
+func TestStart_ReleasesOwnershipWhenSessionFailsToStart(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+	h.provider.NewSessionFunc = func(context.Context, port.SessionSpec) (port.Session, error) {
+		return nil, errors.New("provider refused")
+	}
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err == nil {
+		t.Fatal("Start succeeded even though the provider failed")
+	}
+
+	if len(released) != 1 || released[0] != "user-1" {
+		t.Errorf("ownership released = %v, want [user-1]: the lease would be renewed forever for a session that never came up", released)
+	}
+}
+
+// TestStart_KeepsOwnershipOnSuccess is the other half, and the one that stops
+// the fix above from becoming a worse bug: releasing on the SUCCESS path would
+// hand the session away while it is being served.
+func TestStart_KeepsOwnershipOnSuccess(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(released) != 0 {
+		t.Errorf("ownership released on the SUCCESS path (%v): the session would be given away while running", released)
+	}
+}
+
+// TestStart_DoesNotReleaseWhenClaimWasDenied: we never held it, so releasing
+// would delete ANOTHER replica's lease — handing it a session it is serving.
+func TestStart_DoesNotReleaseWhenClaimWasDenied(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return false },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err == nil {
+		t.Fatal("Start succeeded despite the ownership refusal")
+	}
+
+	if len(released) != 0 {
+		t.Errorf("released ownership we never held (%v): this would delete the lease of the replica that owns the session", released)
+	}
+}
+
+// TestStart_ReleasesOwnershipWhenPairingTimesOut pins F98 — the half of F96
+// that the fix above does NOT reach.
+//
+// The distinction is the whole point. The F96 defer fires when Start RETURNS an
+// error. On the QR path Start already answered 200 {"status":"connecting"} and
+// the pairing dies later, asynchronously, inside the goroutine consuming the
+// events. runPairing then returns nil, so the defer never runs.
+//
+// Measured on the bench before the fix (Postgres, multi mode):
+//
+//	23:11:26  GET /session/connect -> 200 {"status":"connecting"}
+//	23:13:06  log: "QR timeout killing channel"   <- pairing died here
+//	23:16:41  lease still alive, expires_at renewed
+//
+// Under N pods that pins the user to the replica where they walked away from
+// the QR: no other replica can ever take them, and /session/connect elsewhere
+// answers 409 forever.
+func TestStart_ReleasesOwnershipWhenPairingTimesOut(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindQR, Code: "abc", Timeout: 20 * time.Second}
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(events)
+	h.session.PairingEvents = events
+
+	// Start returns nil here, and that is exactly the trap: a test asserting on
+	// the returned error would pass both before and after the fix.
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(released) != 1 || released[0] != "user-1" {
+		t.Errorf("ownership released = %v, want [user-1]: the lease is renewed forever for a pairing that ended in nothing", released)
+	}
+}
+
+// TestStart_KeepsOwnershipWhenPairingSucceeds is the control in the opposite
+// direction: releasing on a pairing that WORKED would hand the session away the
+// moment the user finishes scanning — turning the fix into a worse defect than
+// the leak it repairs.
+func TestStart_KeepsOwnershipWhenPairingSucceeds(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindQR, Code: "abc", Timeout: 20 * time.Second}
+	events <- port.PairingEvent{Kind: port.PairingEventKindSuccess}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(released) != 0 {
+		t.Errorf("ownership released after a SUCCESSFUL pairing (%v): the session would be given away right after the scan", released)
+	}
+}
+
+// TestStart_PairingTimeoutWithoutOwnershipCheck pins `single` mode on the same
+// path: with no release function installed, a QR timeout must not panic on a
+// nil call.
+func TestStart_PairingTimeoutWithoutOwnershipCheck(t *testing.T) {
+	h := newHarness(t) // no WithOwnershipCheck
+
+	events := make(chan port.PairingEvent, 1)
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+}
+
+// --- F153: the QR-timeout that kills a session that JUST paired ---------
+//
+// Measured in production, real account, two consecutive pairing attempts
+// against the same user:
+//
+//	First attempt (broke):
+//	  12:00:02  loggedIn=TRUE                     <- authenticated
+//	  12:00:02  Offline sync completed
+//	  12:00:03  Message Received id=3AE00A2FF...   <- real messages arriving
+//	  12:00:03  Message Received id=3A42A5C18...
+//	  12:00:03  WARN  QR timeout killing channel   <- torn down anyway
+//	  12:00:03  INFO  Received kill signal
+//	  12:00:03  ERROR Failed to do initial fetch of app state (x5)
+//	  12:00:03  no session
+//
+//	Second attempt (survived): connected=true, loggedIn=true, jid populated,
+//	qrcode cleared, stable for 30s+, no "QR timeout killing channel" line.
+//	(Log preserved at /tmp/waapi-live/server.log.)
+//
+// Root cause traced to internal/wa-noise/core/qrchan.go: emitQRs (a
+// goroutine driven by a purely LOCAL per-QR-code timer) and handleEvent (a
+// goroutine driven by the REAL PairSuccess arriving over the websocket) both
+// race for a single atomic CAS on qrc.closed. Only the CAS winner's item
+// (success XOR timeout — never both) ever reaches sess.Pair()'s output
+// channel; the loser is dropped silently inside the SDK
+// ("Got status ..., but channel is already closed"). When the local timer
+// wins, this orchestrator's pairing channel sees ONLY "timeout", even though
+// the session authenticated seconds earlier — confirmed by the completely
+// separate session-event bus (Connected/PairSuccess, registered before the
+// QR-channel's own handler in Start, and never gated by that CAS). Whether
+// the timer or the network wins is a genuine, non-deterministic race,
+// exactly matching why the SAME account paired twice with two different
+// outcomes.
+//
+// Invariant written into runPairing: once pairing is CONFIRMED by the
+// session-event bus, no later item from the QR-pairing channel — timeout or
+// a stale QR code — may tear the session down or rewrite its QR state.
+// Before that confirmation, timeout must still tear everything down, as it
+// always has (F98).
+
+// TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing is
+// the direct reproduction of the field defect: the session-event bus
+// confirms Connected BEFORE this orchestrator reads the QR channel's own
+// "timeout" item — the exact ordering measured in the broken attempt above.
+func TestStart_KeepsSessionWhenChannelTimeoutArrivesAfterConfirmedPairing(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	h.session.PairingEvents = make(chan port.PairingEvent, 1)
+	h.session.PairingEvents <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(h.session.PairingEvents)
+
+	// PairFunc runs inside Start(), synchronously, right after Subscribe
+	// registers this orchestrator's session-event handler — so Emit here
+	// deterministically precedes runPairing consuming the buffered Timeout
+	// item. No sleep, no wall-clock: the order is forced, not raced.
+	h.session.PairFunc = func(ctx context.Context) (<-chan port.PairingEvent, error) {
+		h.session.Emit(port.SessionEvent{Kind: port.SessionEventKindConnected})
+		return h.session.PairingEvents, nil
+	}
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(h.registry.UnregisterCalls) != 0 {
+		t.Errorf("Unregister after a CONFIRMED pairing (%v): the live session got torn down", h.registry.UnregisterCalls)
+	}
+	if len(h.attach.DetachCalls) != 0 {
+		t.Errorf("Detach after a CONFIRMED pairing (%v): the live session got torn down", h.attach.DetachCalls)
+	}
+	if len(released) != 0 {
+		t.Errorf("ownership released after a CONFIRMED pairing (%v): the lease was handed away from a live session", released)
+	}
+	if got := h.dispatcher.DispatchedTypes(); indexOf(got, "QRTimeout") >= 0 {
+		t.Errorf("QRTimeout dispatched after a CONFIRMED pairing: %v", got)
+	}
+}
+
+// TestStart_TimeoutWithoutConfirmationStillTearsDownEverything is the F98
+// regression control in the opposite direction: a QR that the user simply
+// never scans (no Connected/PairSuccess ever observed) must still tear down
+// every holder the teardown enumerates today — Unregister, Detach,
+// QRTimeout dispatch, ownership release, and the qrcode column clear. This
+// is the scenario the guard must NOT weaken.
+func TestStart_TimeoutWithoutConfirmationStillTearsDownEverything(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 1)
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(h.registry.UnregisterCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Unregister, obtive %v", h.registry.UnregisterCalls)
+	}
+	if len(h.attach.DetachCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Detach, obtive %v", h.attach.DetachCalls)
+	}
+	if len(released) != 1 || released[0] != "user-1" {
+		t.Fatalf("esperava ownership liberada para user-1, obtive %v", released)
+	}
+	if got := h.dispatcher.DispatchedTypes(); len(got) != 1 || got[0] != "QRTimeout" {
+		t.Fatalf("esperava despacho de QRTimeout, obtive %v", got)
+	}
+	foundQRClear := false
+	for _, q := range h.db.execQueries {
+		if q == `UPDATE users SET qrcode='' WHERE id=$1` {
+			foundQRClear = true
+		}
+	}
+	if !foundQRClear {
+		t.Fatalf("esperava UPDATE limpando qrcode, obtive %v", h.db.execQueries)
+	}
+}
+
+// TestStart_LateSuccessAfterTimeoutDoesNotResurrectTornDownSession covers
+// the reverse order: if timeout is read BEFORE any confirmation ever
+// arrives, teardown already ran (as F98 requires) and a Success item
+// arriving afterward on the same channel cannot undo it — it can only be a
+// harmless no-op (flip `confirmed`, clear qrcode again).
+func TestStart_LateSuccessAfterTimeoutDoesNotResurrectTornDownSession(t *testing.T) {
+	var released []string
+	h := newHarness(t,
+		WithOwnershipCheck(
+			func(string) bool { return true },
+			func(userID string) { released = append(released, userID) },
+		),
+	)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindTimeout}
+	events <- port.PairingEvent{Kind: port.PairingEventKindSuccess}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if len(h.registry.UnregisterCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Unregister (do timeout), obtive %v", h.registry.UnregisterCalls)
+	}
+	if len(h.attach.DetachCalls) != 1 {
+		t.Fatalf("esperava exatamente 1 Detach (do timeout), obtive %v", h.attach.DetachCalls)
+	}
+	if len(released) != 1 {
+		t.Fatalf("esperava ownership liberada exatamente uma vez, obtive %v", released)
+	}
+}
+
+// TestStart_LateQRAfterSuccessDoesNotResurrectQR covers a QR code event
+// arriving after Success: it must not be dispatched nor rewrite the qrcode
+// column with a stale code the user could scan into a session that is
+// already alive.
+func TestStart_LateQRAfterSuccessDoesNotResurrectQR(t *testing.T) {
+	h := newHarness(t)
+
+	events := make(chan port.PairingEvent, 2)
+	events <- port.PairingEvent{Kind: port.PairingEventKindSuccess}
+	events <- port.PairingEvent{Kind: port.PairingEventKindQR, Code: "late-code", Timeout: 20 * time.Second}
+	close(events)
+	h.session.PairingEvents = events
+
+	if err := h.orch.Start(context.Background(), "user-1", "token-1"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if got := h.dispatcher.DispatchedTypes(); indexOf(got, "QR") >= 0 {
+		t.Errorf("QR dispatched for a code that arrived AFTER success: %v", got)
+	}
+	for _, q := range h.db.execQueries {
+		if strings.Contains(q, "qrcode=$1") {
+			t.Errorf("qrcode column rewritten with a stale QR image after success: %v", h.db.execQueries)
+		}
+	}
+}
+
+// --- F192: um Start de cada vez por utilizador ---------------------------
+//
+// O defeito, medido em 2026-08-20 contra o servidor real com a sessão
+// `qr-teste`: `GET /session/connect` numa sessão que JÁ estava a parear NÃO
+// era um no-op — abria um SEGUNDO fluxo de pareamento e deixava o primeiro
+// órfão. Os dois emissores de QR ficavam vivos, ambos a escrever
+// `users.qrcode`, e os códigos chegavam intercalados ao painel:
+//
+//	1.080s HTTP connect(1)                     -> 200 connecting
+//	1.838s WS MSG type=QR qrlen=1850
+//	6.092s HTTP connect(2, durante pareamento) -> 200 connecting
+//	6.736s WS MSG type=QR qrlen=1846   <- fluxo 2
+//	19.681s WS MSG type=QR qrlen=1874  <- fluxo 1
+//	21.904s WS MSG type=QR qrlen=1850  <- fluxo 2
+//	26.772s WS MSG type=QR qrlen=1838  <- fluxo 1
+//
+// O que morde aqui é a CAUSA (um segundo Pair para o mesmo utilizador), não
+// o sintoma (o painel piscar): silenciar o sintoma no painel deixaria os dois
+// clientes de pé no servidor.
+
+// startEmCurso põe um Start a correr e preso dentro do pareamento, e devolve
+// uma função que o liberta. É o estado "a sessão está a parear agora" — o
+// mesmo em que a medição acima chamou o segundo connect.
+func startEmCurso(t *testing.T, h *harness, userID string) (liberta func()) {
+	t.Helper()
+	eventos := make(chan port.PairingEvent)
+	h.session.PairingEvents = eventos
+
+	emPareamento := make(chan struct{})
+	var mu sync.Mutex
+	primeira := true
+	h.session.PairFunc = func(context.Context) (<-chan port.PairingEvent, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if primeira {
+			primeira = false
+			close(emPareamento)
+			return eventos, nil
+		}
+		// Qualquer Start SEGUINTE recebe um canal JÁ FECHADO, para retornar
+		// de imediato em vez de bloquear no consumo de eventos.
+		//
+		// Sem isto, o controlo negativo desta trava falha por TRAVAMENTO em
+		// vez de por asserção — e um controlo que trava não diz o que
+		// quebrou. A guarda que estes testes protegem tem de ser provada por
+		// uma contagem, não pela ausência de progresso.
+		vazio := make(chan port.PairingEvent)
+		close(vazio)
+		return vazio, nil
+	}
+
+	terminou := make(chan struct{})
+	go func() {
+		defer close(terminou)
+		_ = h.orch.Start(context.Background(), userID, "tok")
+	}()
+
+	select {
+	case <-emPareamento:
+	case <-time.After(2 * time.Second):
+		t.Fatal("o primeiro Start não chegou a Pair")
+	}
+	return func() {
+		close(eventos)
+		select {
+		case <-terminou:
+		case <-time.After(2 * time.Second):
+			t.Fatal("o primeiro Start não retornou depois de o canal fechar")
+		}
+	}
+}
+
+func TestStartRecusaSegundoFluxoEnquantoOPrimeiroPareia(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	pairesAntes := len(h.session.PairCalls)
+
+	err := h.orch.Start(context.Background(), "u1", "tok")
+	if err == nil {
+		t.Fatal("o segundo Start devolveu nil: um segundo fluxo de pareamento foi iniciado para o mesmo utilizador")
+	}
+	if got := appErrCodeDe(err); got != codeSessionStartAlreadyInFlight {
+		t.Fatalf("código = %q, quero %q (erro: %v)", got, codeSessionStartAlreadyInFlight, err)
+	}
+	if got := len(h.session.PairCalls); got != pairesAntes {
+		t.Fatalf("Pair foi chamado %d vezes a mais: o segundo fluxo arrancou mesmo assim", got-pairesAntes)
+	}
+}
+
+// TestStartRecusaAntesDeReivindicarPosse trava a ORDEM. A guarda corre ANTES
+// da reivindicação de posse; instalada depois, dois Starts concorrentes
+// tocariam o lease do mesmo utilizador antes de um desistir — e um teste que
+// só olhasse para o erro devolvido continuaria verde.
+func TestStartRecusaAntesDeReivindicarPosse(t *testing.T) {
+	var reivindicacoes int
+	h := newHarness(t, WithOwnershipCheck(
+		func(string) bool { reivindicacoes++; return true },
+		func(string) {},
+	))
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	antes := reivindicacoes
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err == nil {
+		t.Fatal("esperava recusa do segundo Start")
+	}
+	if reivindicacoes != antes {
+		t.Fatalf("o Start recusado reivindicou posse %d vez(es): a guarda está DEPOIS da reivindicação",
+			reivindicacoes-antes)
+	}
+}
+
+// TestStartDeOutroUtilizadorNaoEBloqueado: a chave é por utilizador. Se fosse
+// global, um pareamento em curso pararia o painel inteiro.
+func TestStartDeOutroUtilizadorNaoEBloqueado(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u2", "tok"); err != nil {
+		t.Fatalf("Start de outro utilizador foi bloqueado: %v", err)
+	}
+}
+
+// TestStartLibertaAChaveAoTerminar é o teste da Regra 4 do CLAUDE.md: o
+// conserto também é um mecanismo. Se a chave não fosse devolvida, a guarda
+// trocaria "dois fluxos concorrentes" por "utilizador que nunca mais
+// conecta" — estritamente pior que o defeito original.
+func TestStartLibertaAChaveAoTerminar(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	liberta()
+
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start depois de o anterior terminar foi recusado: %v", err)
+	}
+}
+
+// TestStartCedeChaveEstagnada: mesmo que um Start nunca retorne, a chave
+// caduca em startInFlightTTL. É o teto que impede o estado absorvente.
+func TestStartCedeChaveEstagnada(t *testing.T) {
+	agora := time.Unix(0, 0)
+	h := newHarness(t, WithClock(func() time.Time { return agora }))
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err == nil {
+		t.Fatal("esperava recusa dentro do TTL")
+	}
+
+	agora = agora.Add(startInFlightTTL + time.Second)
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("chave estagnada não foi cedida depois de %v: %v", startInFlightTTL, err)
+	}
+}
+
+// --- F78: Start numa sessão já conectada é no-op --------------------------
+
+func TestStart_AlreadyConnected_IsNoop(t *testing.T) {
+	h := newHarness(t)
+
+	existingSess := &contractsfake.Session{
+		Recorder:        h.recorder,
+		IsConnectedFunc: func() bool { return true },
+	}
+	h.registry.Sessions = map[string]port.Session{"u1": existingSess}
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start on connected session should be no-op, got: %v", err)
+	}
+
+	if len(h.provider.NewSessionCalls) != 0 {
+		t.Fatal("NewSession must not be called when session is already connected")
+	}
+	if len(h.registry.RegisterCalls) != 0 {
+		t.Fatal("Register must not be called when session is already connected")
+	}
+}
+
+func TestStart_NotConnected_ProceedsNormally(t *testing.T) {
+	h := newHarness(t)
+
+	existingSess := &contractsfake.Session{
+		Recorder:        h.recorder,
+		IsConnectedFunc: func() bool { return false },
+	}
+	h.registry.Sessions = map[string]port.Session{"u1": existingSess}
+
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start on disconnected session should proceed: %v", err)
+	}
+
+	if len(h.provider.NewSessionCalls) == 0 {
+		t.Fatal("NewSession must be called when existing session is not connected")
+	}
+}
+
+func TestStart_NoExistingSession_ProceedsNormally(t *testing.T) {
+	h := newHarness(t)
+	h.session.HasCredentialsFunc = func() bool { return true }
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start with no existing session should proceed: %v", err)
+	}
+
+	if len(h.provider.NewSessionCalls) == 0 {
+		t.Fatal("NewSession must be called when no session exists in registry")
+	}
+}
+
+func appErrCodeDe(err error) string {
+	var e *apperr.AppError
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return ""
 }

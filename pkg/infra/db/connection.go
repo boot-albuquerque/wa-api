@@ -12,6 +12,15 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// SQLitePragmas is the canonical pragma suffix for every file-backed SQLite
+// connection — production and test alike. Each call site builds its own DSN
+// (path, "file:" prefix) and appends this suffix as-is.
+//
+// In-memory databases (:memory:) are excluded: the pool opens separate
+// databases per connection, so WAL and busy_timeout have no contention to
+// manage, and foreign_keys is set per-connection anyway.
+const SQLitePragmas = "?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)"
+
 type DatabaseConfig struct {
 	Type     string
 	Host     string
@@ -125,7 +134,7 @@ func initializeSQLite(config DatabaseConfig) (*sqlx.DB, error) {
 	}
 
 	dbPath := filepath.ToSlash(filepath.Join(config.Path, "users.db"))
-	db, err := sqlx.Open("sqlite", dbPath+"?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)")
+	db, err := sqlx.Open("sqlite", dbPath+SQLitePragmas)
 	if err != nil {
 		log.Error().Err(err).Str("db_type", "sqlite").Str("path", dbPath).
 			Msg("failed to open sqlite database")

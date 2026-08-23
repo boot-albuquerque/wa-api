@@ -81,12 +81,6 @@ var inventarioFase3 = map[string]portStatus{
 	"GroupDirectory":        {satisfeito: true},
 	"GroupLifecycle":        {satisfeito: true},
 
-	"MessageComposer": {motivo: "RECUSADO POR AUSÊNCIA DE SENTIDO: NewMessageID gera um " +
-		"identificador ANTES de enviar, que é o modelo do socket — o cliente cria o " +
-		"ID e manda-o com a mensagem. A página CUNHA o id ao enviar (send.Result.ID " +
-		"vem do envio), e a chave da referência, MsgKey.fromString(_serialized), LANÇA " +
-		"neste build (H98). Um id fornecido pelo chamador não tem para onde ir."},
-
 	"SessionLogouter": {motivo: "RECUSADO POR POLÍTICA, e não por incapacidade. A H122 " +
 		"mediu que Socket.logout EXISTE e funciona neste build — mas chamá-lo " +
 		"DESEMPAREIA a conta, e restaurar exige um humano com o telefone. É uma " +
@@ -112,7 +106,57 @@ var inventarioFase3 = map[string]portStatus{
 		"hipóteses eliminadas por medição. Recusar uma chamada exige receber o evento " +
 		"dela, e é o evento que não chega — implementar a recusa daria um método que " +
 		"nunca é chamado."},
-	"GroupRequests":     {satisfeito: true},
+	"GroupRequests": {satisfeito: true},
+
+	// --- os NOVE ports que a fusão de feature/wa-noise trouxe (2026-08-23) ---
+	//
+	// A branch de socket partiu a mensageria em portas por TIPO de mensagem, e o
+	// dispositivo desta tabela acusou as nove de uma vez. Classificação por
+	// medição, não por expectativa.
+
+	"LIDResolver": {satisfeito: true,
+		motivo: "o adaptador de identidade já o satisfazia; a asserção foi acrescentada e compila"},
+
+	"TextMessenger": {motivo: "PENDENTE com caminho PROVADO: send.Text envia texto, e o " +
+		"LEDGER regista-o como funcionando. Falta o adaptador, não a capacidade."},
+
+	"MediaMessenger": {motivo: "PENDENTE com caminho PROVADO: send.SendMedia cobre imagem, " +
+		"vídeo, áudio, documento e figurinha, e o LEDGER regista os cinco como OK. " +
+		"Falta o adaptador."},
+
+	"MediaDownloader": {motivo: "PENDENTE com caminho: capabilities/media.Get baixa mídia " +
+		"pela página. Falta o adaptador."},
+
+	"InteractiveMessenger": {motivo: "PENDENTE, e agora com evidência em vez de silêncio " +
+		"(H144, 2026-08-23). O build TEM os geradores — WAWebGenerateInteractiveMessageProto e " +
+		"WAWebGenerateNativeFlowButtonsMessageProto, ambos carregáveis como função — e o " +
+		"despacho genérico WAWebSendMsgChatAction.addAndSendMsgToChat, que trata " +
+		"MSG_TYPE.INTERACTIVE num ramo explícito. O pipeline de saída é dirigido por tabela " +
+		"type→generateProtobuf, com `interactive` lá dentro. O que NÃO está provado é ENTREGA: " +
+		"a enquete tem gerador, ação dedicada, e o nosso código chama a ação certa — e o ack " +
+		"fica em 0 (H98/H101). A pergunta que decide exige sessão pareada."},
+
+	"SimpleMessenger": {motivo: "PENDENTE e HETEROGÉNEO — os cinco métodos não têm o mesmo " +
+		"estado, e tratá-los como um só esconderia isso. SendPoll: BLOQUEADO e medido (ack 0, " +
+		"H98/H101). SendList e SendTemplate: geradores presentes e `list`/`hsm` na tabela de " +
+		"saída (H144). SendLocation e SendContact: a H75 dava-os como MISSING, e a H144 " +
+		"reabriu — WAWebSendLocationChatAction é função carregável, não componente React. " +
+		"Quando esta porta for servida, é candidata a divisão pela decisão 92."},
+
+	"PhonePairer": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA: parear exige um humano com o " +
+		"telefone, e o caminho de boot da headless é de RESTAURAÇÃO — recusa página não " +
+		"pareada com `PAIRING_LOADING`, medido em 2026-08-23. Não é código por fazer."},
+
+	"StatusMessageSetter": {motivo: "PENDENTE POR MEDIR: capabilities/profile expõe " +
+		"SetDisplayName, que é o NOME e não o recado. Nenhuma capability põe o `about`, e o " +
+		"LEDGER não o regista. Não medi se a página o expõe — dizer 'recusado' aqui seria " +
+		"repetir o erro da H75."},
+
+	"HistorySyncRequester": {motivo: "RECUSADO POR AUSÊNCIA DE SENTIDO: pedir sincronização " +
+		"de histórico é operação de PROTOCOLO, e quem dirige a SPA não a pede — a página já " +
+		"tem o histórico no próprio store, que é de onde a headless lê. Não é lacuna; é a " +
+		"pergunta não existir deste lado. Zero ocorrências de history sync em capabilities/."},
+
 	"GroupInfoSettings": {satisfeito: true},
 	"GroupParticipants": {satisfeito: true},
 

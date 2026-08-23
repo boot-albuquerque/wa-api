@@ -70,14 +70,14 @@ func (f *uhFakes) failSession(err error) {
 func (f *uhFakes) handlers() *UserHandlers {
 	return NewUserHandlers(
 		user.NewListUsersUseCase(f.users, f.logger, f.sessions),
-		user.NewAddUserUseCase(f.users, f.logger),
-		user.NewEditUserUseCase(f.users, f.logger),
+		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger),
+		user.NewEditUserUseCase(f.users, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, f.logger),
 		user.NewDeleteUserUseCase(f.users, f.logger),
 		user.NewCheckUserUseCase(f.contacts, f.logger),
 		user.NewGetUserUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserLIDUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserProfileUseCase(f.contacts, f.jids, f.logger),
-		user.NewListChatsUseCase(f.activity, f.contacts, f.contacts, f.groups, f.logger),
+		user.NewListChatsUseCase(f.activity, f.contacts, f.groups, f.logger),
 		user.NewBlockUserUseCase(f.block, f.jids, f.logger),
 		user.NewUnblockUserUseCase(f.block, f.jids, f.logger),
 	)
@@ -151,7 +151,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			name:   "AddUser sem name nem token",
 			build:  func(h *UserHandlers) http.Handler { return h.AddUser() },
 			method: http.MethodPost, path: "/admin/users",
-			body: `{}`, want: http.StatusInternalServerError,
+			body: `{}`, want: http.StatusBadRequest,
 			wantErrSubstring: "name and token are required",
 		},
 		{
@@ -201,7 +201,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			},
 			build:  func(h *UserHandlers) http.Handler { return h.EditUser() },
 			method: http.MethodPut, path: "/admin/users/u-1",
-			body: `{"name":"bob"}`, vars: map[string]string{"id": "u-1"}, want: http.StatusInternalServerError,
+			body: `{"name":"bob"}`, vars: map[string]string{"id": "u-1"}, want: http.StatusNotFound,
 			wantErrSubstring: "user not found",
 		},
 		{
@@ -221,7 +221,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 				return h.EditUser()
 			},
 			method: http.MethodPut, path: "/admin/users/",
-			body: `{"name":"bob"}`, want: http.StatusInternalServerError,
+			body: `{"name":"bob"}`, want: http.StatusBadRequest,
 			wantErrSubstring: "user ID is required",
 		},
 		{
@@ -237,7 +237,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			},
 			build:  func(h *UserHandlers) http.Handler { return h.DeleteUser() },
 			method: http.MethodDelete, path: "/admin/users/u-1",
-			vars: map[string]string{"id": "u-1"}, want: http.StatusInternalServerError,
+			vars: map[string]string{"id": "u-1"}, want: http.StatusNotFound,
 			wantErrSubstring: "user not found",
 		},
 		{
@@ -253,7 +253,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 		{
 			name:   "DeleteUser sem id na URL",
 			build:  func(h *UserHandlers) http.Handler { return h.DeleteUser() },
-			method: http.MethodDelete, path: "/admin/users/", want: http.StatusInternalServerError,
+			method: http.MethodDelete, path: "/admin/users/", want: http.StatusBadRequest,
 			wantErrSubstring: "user ID is required",
 		},
 	}
@@ -312,11 +312,15 @@ func uhSessionRoutes() []uhSessionRoute {
 			r.Handle("/user/lid/{jid}", h.GetUserLID()).Methods(http.MethodGet)
 			return r
 		},
-			http.MethodGet, "/user/lid/5511999", "", false},
+			// F182: JID QUALIFICADO, porque é o que a rota aceita. Em produção
+			// "5511999" cru devolve 400 invalid_jid — medido — mas o dublê de
+			// JIDResolver devolve-o inalterado, e por isso este caso passava a
+			// exercitar um caminho impossível. Ver F202.
+			http.MethodGet, "/user/lid/5511999@s.whatsapp.net", "", false},
 		{"BlockUser", func(h *UserHandlers) http.Handler { return h.BlockUser() },
-			http.MethodPost, "/user/block", `{"Phone":"5511999"}`, true},
+			http.MethodPost, "/user/block", `{"Phone":"5511999@s.whatsapp.net"}`, true},
 		{"UnblockUser", func(h *UserHandlers) http.Handler { return h.UnblockUser() },
-			http.MethodPost, "/user/unblock", `{"Phone":"5511999"}`, true},
+			http.MethodPost, "/user/unblock", `{"Phone":"5511999@s.whatsapp.net"}`, true},
 	}
 }
 
@@ -481,6 +485,7 @@ func TestUserHandlers_SessionRoutes_PortaFalha(t *testing.T) {
 
 // TestUserHandlers_BlockSemAlvo: bloquear sem Phone nem JID e' recusa de
 // validacao do use case, e chega a' fronteira como 500 com causa logada.
+// 400 desde a F66: bloquear sem informar alvo e erro do CLIENTE.
 func TestUserHandlers_BlockSemAlvo(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -496,7 +501,7 @@ func TestUserHandlers_BlockSemAlvo(t *testing.T) {
 			rec, capture := uhServe(tc.build(f.handlers()),
 				withUser(uhRequest(http.MethodPost, tc.path, `{}`, nil), "u-1"))
 
-			assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, capture.Records(t), "missing Phone or JID")
 		})
 	}
