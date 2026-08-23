@@ -1,0 +1,67 @@
+# Ambiente EFÊMERO de benchmark no cluster SBX.
+#
+# Aplicado com kubectl direto, deliberadamente FORA do GitOps: o CLAUDE.md da
+# infra reserva `kubectl apply` para bootstrap e debugging pontual, e este
+# namespace existe para ser destruído no fim do teste. Versioná-lo no
+# gitops-infra faria o Argo CD recriá-lo depois da limpeza.
+#
+# Guardrails, nesta ordem de importância:
+#   1. prioridade NEGATIVA — qualquer pod de produção preempta este;
+#   2. ResourceQuota — teto duro de 3 vCPU / 3 GiB no namespace inteiro;
+#   3. namespace próprio — a limpeza é uma única deleção, sem resíduo.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: bench-lowest
+value: -10
+globalDefault: false
+preemptionPolicy: Never
+description: "Benchmark efêmero — sempre cede recursos para produção."
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chromium-study
+  labels:
+    purpose: ephemeral-benchmark
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bench-quota
+  namespace: chromium-study
+spec:
+  hard:
+    limits.cpu: "3"
+    limits.memory: 3Gi
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    pods: "4"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bench
+  namespace: chromium-study
+spec:
+  priorityClassName: bench-lowest
+  restartPolicy: Never
+  # O benchmark é I/O-bound em CDP e CPU-bound no renderer; sem DNS externo
+  # além do apt inicial, e sem acesso a nenhum serviço do cluster.
+  containers:
+    - name: bench
+      image: debian:bookworm-slim
+      command: ["sleep", "infinity"]
+      resources:
+        requests:
+          cpu: "1"
+          memory: 1Gi
+        limits:
+          cpu: "3"
+          memory: 3Gi
+      volumeMounts:
+        - name: out
+          mountPath: /out
+  volumes:
+    - name: out
+      emptyDir: {}

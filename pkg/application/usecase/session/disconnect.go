@@ -16,12 +16,12 @@ import (
 // F79 ele consumia SessionGuard e por isso só conseguia validar — devolvia
 // 200 sem desconectar nada.
 type DisconnectUseCase struct {
-	sessions appport.SessionController
+	sessions appport.SessionDisconnector
 	logger   appport.Logger
 }
 
 // NewDisconnectUseCase cria uma nova instância do usecase.
-func NewDisconnectUseCase(sc appport.SessionController, l appport.Logger) *DisconnectUseCase {
+func NewDisconnectUseCase(sc appport.SessionDisconnector, l appport.Logger) *DisconnectUseCase {
 	return &DisconnectUseCase{
 		sessions: sc,
 		logger:   l,

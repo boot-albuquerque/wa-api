@@ -1,0 +1,13 @@
+# Binários cross-compilados: reproduzíveis com `go build`, ~19 MB cada.
+study-linux-amd64
+study-linux-arm64
+
+# Perfil persistente do Chromium usado pelo Track J.
+#
+# NUNCA versionar: depois de um pareamento ele contém a credencial de sessão da
+# conta de WhatsApp usada no teste. São ~158 MB de IndexedDB com material de
+# autenticação.
+wa-session/
+
+# Screenshots capturados durante execuções (tela de QR, telas de diagnóstico).
+*.png

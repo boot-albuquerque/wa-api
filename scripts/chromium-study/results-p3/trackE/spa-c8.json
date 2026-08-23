@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "concurrency": 8,
+    "cpu_max": "300000 100000",
+    "goarch": "arm64",
+    "iters": 24,
+    "memory_max": "3221225472",
+    "num_cpu": 10,
+    "profile_flags": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-breakpad",
+      "--disable-client-side-phishing-detection",
+      "--disable-default-apps",
+      "--disable-extensions",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-hang-monitor",
+      "--disable-ipc-flooding-protection",
+      "--disable-popup-blocking",
+      "--disable-prompt-on-repost",
+      "--disable-sync",
+      "--metrics-recording-only",
+      "--disable-features=site-per-process,Translate,TranslateUI,BlinkGenPropertyTrees,AcceptCHFrame,MediaRouter,OptimizationHints",
+      "--disable-site-isolation-trials",
+      "--force-color-profile=srgb",
+      "--window-size=1280,800",
+      "--lang=en-US",
+      "--remote-debugging-address=0.0.0.0"
+    ],
+    "started_utc": "2026-08-09T05:37:41Z",
+    "url": "https://filarapida.sbx.decolapps.com/",
+    "warmup": 2
+  },
+  "jobs": 24,
+  "correct_jobs": 17,
+  "false_successes": 7,
+  "failures": 0,
+  "wall_ms": 134683,
+  "correct_jobs_per_sec": 0.12622199279883137,
+  "job_total": {
+    "max_ms": 78164.31,
+    "mean_ms": 44282.946124999995,
+    "n": 24,
+    "p50_ms": 47942.878,
+    "p95_ms": 78028.575,
+    "p99_ms": 78164.31,
+    "stddev_ms": 23778.15114546493
+  },
+  "ops": {
+    "await_lookup": {
+      "max_ms": 21106.804,
+      "mean_ms": 4225.140961538462,
+      "n": 26,
+      "p50_ms": 113.246,
+      "p95_ms": 19054.595,
+      "p99_ms": 21106.804,
+      "stddev_ms": 7499.966628980582
+    },
+    "fill": {
+      "max_ms": 10832.706,
+      "mean_ms": 2662.6883846153846,
+      "n": 26,
+      "p50_ms": 2363.159,
+      "p95_ms": 10662.765,
+      "p99_ms": 10832.706,
+      "stddev_ms": 2528.931969433951
+    },
+    "hydrate": {
+      "max_ms": 11501.687,
+      "mean_ms": 3210.3065384615384,
+      "n": 26,
+      "p50_ms": 1631.062,
+      "p95_ms": 8467.816,
+      "p99_ms": 11501.687,
+      "stddev_ms": 3031.32376250726
+    },
+    "navigate": {
+      "max_ms": 69160.039,
+      "mean_ms": 24993.02530769231,
+      "n": 26,
+      "p50_ms": 20525.618,
+      "p95_ms": 68962.699,
+      "p99_ms": 69160.039,
+      "stddev_ms": 17711.88919589925
+    },
+    "spa_navigate": {
+      "max_ms": 3045.849,
+      "mean_ms": 1266.525730769231,
+      "n": 26,
+      "p50_ms": 1186.402,
+      "p95_ms": 2279.556,
+      "p99_ms": 3045.849,
+      "stddev_ms": 559.2822715193215
+    },
+    "submit": {
+      "max_ms": 30968.132,
+      "mean_ms": 2384.4847307692307,
+      "n": 26,
+      "p50_ms": 671.779,
+      "p95_ms": 7477.553,
+      "p99_ms": 30968.132,
+      "stddev_ms": 5940.987689821815
+    },
+    "truth": {
+      "max_ms": 10323.618,
+      "mean_ms": 1837.0624615384613,
+      "n": 26,
+      "p50_ms": 174.674,
+      "p95_ms": 9352.446,
+      "p99_ms": 10323.618,
+      "stddev_ms": 3434.0303280737194
+    },
+    "verify_commit": {
+      "max_ms": 1611.099,
+      "mean_ms": 170.71323076923076,
+      "n": 26,
+      "p50_ms": 51.416,
+      "p95_ms": 642.903,
+      "p99_ms": 1611.099,
+      "stddev_ms": 329.91524996549174
+    }
+  },
+  "cpu_core_seconds": 338.259246,
+  "nr_throttled": 934,
+  "nr_periods": 1347,
+  "throttled_seconds": 276.746787,
+  "browser_idle_floor_mb": 135.5234375,
+  "memory_over_floor_per_slot_mb": 43.9306640625,
+  "memory_current_mb": 491.53125,
+  "memory_peak_mb": 794.75390625,
+  "memory_events": {
+    "high": 0,
+    "low": 0,
+    "max": 0,
+    "oom": 0,
+    "oom_group_kill": 0,
+    "oom_kill": 0
+  },
+  "memory_stat": {
+    "anon": 422637568,
+    "file": 58454016,
+    "kernel_stack": 4571136,
+    "shmem": 0,
+    "slab": 11851248,
+    "sock": 24576
+  },
+  "chromium_procs": {
+    "browser": 3,
+    "gpu": 1,
+    "renderer": 14,
+    "total": 22,
+    "utility": 2,
+    "zygote": 2
+  },
+  "correct_jobs_per_core_hour": 180.92631827128238,
+  "correct_jobs_per_gib_hour": 946.6432790460667,
+  "origins_observed": [
+    "https://filarapida.sbx.decolapps.com",
+    "https://cdn.prod.website-files.com",
+    "https://i.pravatar.cc"
+  ],
+  "avg_resources_per_job": 29.75,
+  "avg_transfer_kb_per_job": 2.1295166015625,
+  "avg_js_heap_mb": 9.5367431640625,
+  "avg_dom_nodes": 752.4166666666666,
+  "site_isolation_enabled": false
+}

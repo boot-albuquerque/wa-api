@@ -1,0 +1,93 @@
+{
+  "levels": {
+    "L0-raw-evaluate": {
+      "level": "L0-raw-evaluate",
+      "jobs": 40,
+      "errors": 0,
+      "false_successes": 40,
+      "correct_jobs": 0,
+      "jobs_per_sec": 14.567718872266092,
+      "correct_jobs_per_sec": 0,
+      "cdp_commands_per_job": 26.1,
+      "cdp_messages_in_per_job": 68.1,
+      "cdp_bytes_per_job": 24792.425,
+      "job_total": {
+        "max_ms": 239.492,
+        "mean_ms": 68.644125,
+        "n": 40,
+        "p50_ms": 59.307,
+        "p95_ms": 124.478,
+        "p99_ms": 239.492,
+        "stddev_ms": 31.535359546220093
+      },
+      "ops": {
+        "click": {
+          "max_ms": 5.863,
+          "mean_ms": 1.3974749999999998,
+          "n": 40,
+          "p50_ms": 1.154,
+          "p95_ms": 3.295,
+          "p99_ms": 5.863,
+          "stddev_ms": 0.9262423815476163
+        },
+        "fill": {
+          "max_ms": 1.435,
+          "mean_ms": 0.5314,
+          "n": 40,
+          "p50_ms": 0.451,
+          "p95_ms": 1.196,
+          "p99_ms": 1.435,
+          "stddev_ms": 0.24598666630531013
+        },
+        "navigate": {
+          "max_ms": 222.76,
+          "mean_ms": 49.68690000000002,
+          "n": 40,
+          "p50_ms": 40.941,
+          "p95_ms": 89.672,
+          "p99_ms": 222.76,
+          "stddev_ms": 30.87917790745084
+        },
+        "verify": {
+          "max_ms": 1.43,
+          "mean_ms": 0.8240000000000001,
+          "n": 40,
+          "p50_ms": 0.756,
+          "p95_ms": 1.34,
+          "p99_ms": 1.43,
+          "stddev_ms": 0.20308988157956073
+        },
+        "wait_ready": {
+          "max_ms": 6.709,
+          "mean_ms": 1.370475,
+          "n": 40,
+          "p50_ms": 1.019,
+          "p95_ms": 2.524,
+          "p99_ms": 6.709,
+          "stddev_ms": 1.026012012295665
+        },
+        "wait_result": {
+          "max_ms": 22.239,
+          "mean_ms": 14.205175,
+          "n": 40,
+          "p50_ms": 13.604,
+          "p95_ms": 19.753,
+          "p99_ms": 22.239,
+          "stddev_ms": 2.28650869107795
+        }
+      },
+      "alloc_bytes_per_job": 442369,
+      "allocs_per_job": 1910,
+      "gc_cycles": 11
+    }
+  },
+  "meta": {
+    "cgroup_max": "4294967296",
+    "cpu_max": "400000 100000",
+    "iters": 40,
+    "page": "http://127.0.0.1:44511/h",
+    "proxy_ws": "ws://127.0.0.1:38533/devtools/browser/proxy",
+    "started_utc": "2026-08-09T03:49:37Z",
+    "warmup": 5
+  }
+}

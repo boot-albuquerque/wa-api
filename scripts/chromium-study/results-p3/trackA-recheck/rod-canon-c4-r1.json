@@ -1,0 +1,184 @@
+{
+  "meta": {
+    "canonical_flags": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-breakpad",
+      "--disable-client-side-phishing-detection",
+      "--disable-default-apps",
+      "--disable-extensions",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-hang-monitor",
+      "--disable-ipc-flooding-protection",
+      "--disable-popup-blocking",
+      "--disable-prompt-on-repost",
+      "--disable-sync",
+      "--metrics-recording-only",
+      "--disable-features=site-per-process,Translate,TranslateUI,BlinkGenPropertyTrees,AcceptCHFrame,MediaRouter,OptimizationHints",
+      "--disable-site-isolation-trials",
+      "--force-color-profile=srgb",
+      "--window-size=1280,800",
+      "--lang=en-US",
+      "--remote-debugging-address=0.0.0.0"
+    ],
+    "concurrency": 4,
+    "go_version": "go1.26.0",
+    "goarch": "arm64",
+    "goos": "linux",
+    "iters": 80,
+    "num_cpu": 10,
+    "page_url": "http://127.0.0.1:40765/a",
+    "server_requests": 170,
+    "started_utc": "2026-08-09T04:54:41Z",
+    "warmup": 5,
+    "workload": "a"
+  },
+  "controllers": {
+    "rod-canon": {
+      "jobs": 80,
+      "failures": 0,
+      "wall_ms": 20668,
+      "jobs_per_sec": 3.870686990519748,
+      "connect_ms": 1.821,
+      "job_total": {
+        "max_ms": 20668.103,
+        "mean_ms": 1006.9381,
+        "n": 80,
+        "p50_ms": 350.397,
+        "p95_ms": 1354.812,
+        "p99_ms": 20233.702,
+        "stddev_ms": 3130.2026341909186
+      },
+      "ops": {
+        "click": {
+          "max_ms": 1076.258,
+          "mean_ms": 190.21052499999993,
+          "n": 80,
+          "p50_ms": 51.112,
+          "p95_ms": 798.353,
+          "p99_ms": 1036.32,
+          "stddev_ms": 276.89728200670254
+        },
+        "dom_read": {
+          "max_ms": 7.206,
+          "mean_ms": 1.9294874999999998,
+          "n": 80,
+          "p50_ms": 1.505,
+          "p95_ms": 4.717,
+          "p99_ms": 5.352,
+          "stddev_ms": 1.1293980475650514
+        },
+        "evaluate": {
+          "max_ms": 6.005,
+          "mean_ms": 0.7864249999999999,
+          "n": 80,
+          "p50_ms": 0.552,
+          "p95_ms": 1.639,
+          "p99_ms": 2.282,
+          "stddev_ms": 0.704677351257297
+        },
+        "fill": {
+          "max_ms": 20153.048,
+          "mean_ms": 536.2317875,
+          "n": 80,
+          "p50_ms": 28.349,
+          "p95_ms": 75.572,
+          "p99_ms": 19770.64,
+          "stddev_ms": 3111.471612809707
+        },
+        "navigate": {
+          "max_ms": 37.509,
+          "mean_ms": 8.4370625,
+          "n": 80,
+          "p50_ms": 7.112,
+          "p95_ms": 13.674,
+          "p99_ms": 25.132,
+          "stddev_ms": 4.524024735630183
+        },
+        "page_create": {
+          "max_ms": 249.992,
+          "mean_ms": 40.984150000000014,
+          "n": 80,
+          "p50_ms": 30.57,
+          "p95_ms": 105.27,
+          "p99_ms": 143.317,
+          "stddev_ms": 33.62090611067019
+        },
+        "wait_ready": {
+          "max_ms": 55.772,
+          "mean_ms": 17.896537499999997,
+          "n": 80,
+          "p50_ms": 14.788,
+          "p95_ms": 32.593,
+          "p99_ms": 52.466,
+          "stddev_ms": 8.236675143745426
+        },
+        "wait_result": {
+          "max_ms": 215.044,
+          "mean_ms": 202.45769999999996,
+          "n": 80,
+          "p50_ms": 201.425,
+          "p95_ms": 212.27,
+          "p99_ms": 214.329,
+          "stddev_ms": 5.959675331760952
+        }
+      },
+      "controller_before": {
+        "controller_rss_kb": 11768,
+        "goroutines": 2,
+        "os_threads": 7,
+        "open_fds": 8,
+        "heap_alloc_bytes": 399088,
+        "heap_sys_bytes": 7897088
+      },
+      "controller_after": {
+        "controller_rss_kb": 16096,
+        "goroutines": 6,
+        "os_threads": 10,
+        "open_fds": 11,
+        "heap_alloc_bytes": 2638888,
+        "heap_sys_bytes": 11567104
+      },
+      "cgroup_delta_bytes": 33337344,
+      "renderer_kills": 0
+    }
+  },
+  "browser": {
+    "Browser": "Chrome/151.0.7922.108",
+    "Protocol-Version": "1.3",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+    "V8-Version": "15.1.206.16",
+    "WebKit-Version": "537.36 (@4744b886309d987d292e43232776d2206cccb13d)",
+    "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/85316fe5-dd7e-4792-bc94-8ed842753450"
+  },
+  "cgroup": {
+    "cpu_max": "800000 100000",
+    "memory_current_at_end": 287490048,
+    "memory_current_at_start": 255967232,
+    "memory_max": "4294967296",
+    "memory_stat_at_end": {
+      "anon": 223760384,
+      "file": 46682112,
+      "kernel_stack": 1867776,
+      "shmem": 0,
+      "slab": 6817536,
+      "sock": 16384
+    },
+    "memory_stat_at_start": {
+      "anon": 199831552,
+      "file": 40783872,
+      "kernel_stack": 1802240,
+      "shmem": 0,
+      "slab": 5945104,
+      "sock": 8192
+    }
+  }
+}

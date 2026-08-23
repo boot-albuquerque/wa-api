@@ -1,0 +1,55 @@
+{
+  "chat_rows_rendered": 67,
+  "chromium_procs": {
+    "browser": 3,
+    "gpu": 1,
+    "renderer": 4,
+    "total": 12,
+    "utility": 2,
+    "zygote": 2
+  },
+  "cpu_stat": {
+    "nr_periods": 931,
+    "nr_throttled": 25,
+    "system_usec": 7439263,
+    "throttled_usec": 2760649,
+    "usage_usec": 34231181,
+    "user_usec": 26791918
+  },
+  "distinct_origins": 5,
+  "dom_nodes": 2919,
+  "js_heap_limit_mb": 3185.272216796875,
+  "js_heap_mb": 68.85528564453125,
+  "memory_current_mb": 1024.4765625,
+  "memory_events": {
+    "high": 0,
+    "low": 0,
+    "max": 0,
+    "oom": 0,
+    "oom_group_kill": 0,
+    "oom_kill": 0
+  },
+  "memory_peak_mb": 1041.61328125,
+  "memory_stat": {
+    "anon": 871014400,
+    "file": 179929088,
+    "kernel_stack": 2703360,
+    "shmem": 4096,
+    "slab": 8713776,
+    "sock": 40960
+  },
+  "profile_dir_bytes": 179908541,
+  "resource_count": 323,
+  "service_workers": 1,
+  "state": {
+    "state": "app",
+    "matched_by": "#pane-side",
+    "app_selectors_present": [
+      "#pane-side",
+      "[data-testid=\"chat-list\"]"
+    ]
+  },
+  "storage_estimate": null,
+  "sync_settle_seconds": 0.129826542,
+  "transfer_kb": 52.3046875
+}

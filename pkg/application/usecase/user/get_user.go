@@ -11,13 +11,13 @@ import (
 
 // GetUserUseCase obtém informações de usuários do WhatsApp
 type GetUserUseCase struct {
-	contacts appport.ContactDirectory
+	contacts appport.ContactRoster
 	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewGetUserUseCase cria uma nova instância
-func NewGetUserUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, logger appport.Logger) *GetUserUseCase {
+func NewGetUserUseCase(cd appport.ContactRoster, jr appport.JIDResolver, logger appport.Logger) *GetUserUseCase {
 	return &GetUserUseCase{contacts: cd, jids: jr, logger: logger}
 }
 

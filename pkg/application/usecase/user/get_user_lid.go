@@ -11,13 +11,13 @@ import (
 
 // GetUserLIDUseCase obtém o LID para um JID
 type GetUserLIDUseCase struct {
-	contacts appport.ContactDirectory
+	contacts appport.IdentityResolver
 	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewGetUserLIDUseCase cria uma nova instância
-func NewGetUserLIDUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, logger appport.Logger) *GetUserLIDUseCase {
+func NewGetUserLIDUseCase(cd appport.IdentityResolver, jr appport.JIDResolver, logger appport.Logger) *GetUserLIDUseCase {
 	return &GetUserLIDUseCase{contacts: cd, jids: jr, logger: logger}
 }
 

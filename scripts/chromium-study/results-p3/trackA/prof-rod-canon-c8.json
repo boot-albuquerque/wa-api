@@ -1,0 +1,1162 @@
+{
+  "meta": {
+    "browser": {
+      "Browser": "Chrome/151.0.7922.108",
+      "Protocol-Version": "1.3",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+      "V8-Version": "15.1.206.16",
+      "WebKit-Version": "537.36 (@4744b886309d987d292e43232776d2206cccb13d)",
+      "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/0b71a626-01d3-4505-95ae-9f8503ef92ea"
+    },
+    "concurrency": 8,
+    "controller": "rod-canon",
+    "cpu_max": "800000 100000",
+    "goarch": "arm64",
+    "iters": 80,
+    "memory_max": "4294967296",
+    "num_cpu": 10,
+    "profiled": true,
+    "started_utc": "2026-08-09T04:52:09Z"
+  },
+  "samples": [
+    {
+      "t_ms": 256,
+      "goroutines": 48,
+      "threads": 8,
+      "heap_mb": 2.15533447265625,
+      "cgroup_mb": 350.84375,
+      "jobs_done": 0
+    },
+    {
+      "t_ms": 505,
+      "goroutines": 48,
+      "threads": 8,
+      "heap_mb": 2.0599441528320312,
+      "cgroup_mb": 362.28125,
+      "jobs_done": 0
+    },
+    {
+      "t_ms": 752,
+      "goroutines": 48,
+      "threads": 8,
+      "heap_mb": 2.3255233764648438,
+      "cgroup_mb": 362.83203125,
+      "jobs_done": 1
+    },
+    {
+      "t_ms": 1002,
+      "goroutines": 48,
+      "threads": 8,
+      "heap_mb": 2.4416275024414062,
+      "cgroup_mb": 358.5234375,
+      "jobs_done": 2
+    },
+    {
+      "t_ms": 1254,
+      "goroutines": 48,
+      "threads": 8,
+      "heap_mb": 2.701019287109375,
+      "cgroup_mb": 364.91015625,
+      "jobs_done": 2
+    },
+    {
+      "t_ms": 1506,
+      "goroutines": 48,
+      "threads": 9,
+      "heap_mb": 2.0905380249023438,
+      "cgroup_mb": 365.35546875,
+      "jobs_done": 3
+    },
+    {
+      "t_ms": 1753,
+      "goroutines": 48,
+      "threads": 9,
+      "heap_mb": 2.359283447265625,
+      "cgroup_mb": 368.33984375,
+      "jobs_done": 4
+    },
+    {
+      "t_ms": 2013,
+      "goroutines": 51,
+      "threads": 9,
+      "heap_mb": 2.4985580444335938,
+      "cgroup_mb": 372.15625,
+      "jobs_done": 4
+    },
+    {
+      "t_ms": 2267,
+      "goroutines": 44,
+      "threads": 9,
+      "heap_mb": 2.6872634887695312,
+      "cgroup_mb": 361.3515625,
+      "jobs_done": 6
+    },
+    {
+      "t_ms": 2504,
+      "goroutines": 48,
+      "threads": 9,
+      "heap_mb": 2.0813217163085938,
+      "cgroup_mb": 372.68359375,
+      "jobs_done": 6
+    },
+    {
+      "t_ms": 2752,
+      "goroutines": 48,
+      "threads": 9,
+      "heap_mb": 2.2518386840820312,
+      "cgroup_mb": 372.42578125,
+      "jobs_done": 7
+    },
+    {
+      "t_ms": 3005,
+      "goroutines": 48,
+      "threads": 9,
+      "heap_mb": 2.381866455078125,
+      "cgroup_mb": 374.828125,
+      "jobs_done": 7
+    },
+    {
+      "t_ms": 3252,
+      "goroutines": 48,
+      "threads": 9,
+      "heap_mb": 2.7350387573242188,
+      "cgroup_mb": 375.453125,
+      "jobs_done": 8
+    },
+    {
+      "t_ms": 3503,
+      "goroutines": 49,
+      "threads": 10,
+      "heap_mb": 2.0901260375976562,
+      "cgroup_mb": 374.703125,
+      "jobs_done": 9
+    },
+    {
+      "t_ms": 3754,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.4256744384765625,
+      "cgroup_mb": 370.51171875,
+      "jobs_done": 11
+    },
+    {
+      "t_ms": 4004,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.7824630737304688,
+      "cgroup_mb": 374.359375,
+      "jobs_done": 12
+    },
+    {
+      "t_ms": 4253,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.0891342163085938,
+      "cgroup_mb": 375.9453125,
+      "jobs_done": 13
+    },
+    {
+      "t_ms": 4506,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.1703948974609375,
+      "cgroup_mb": 374.4765625,
+      "jobs_done": 14
+    },
+    {
+      "t_ms": 4755,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.3098373413085938,
+      "cgroup_mb": 377.078125,
+      "jobs_done": 14
+    },
+    {
+      "t_ms": 5003,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.621337890625,
+      "cgroup_mb": 377.51953125,
+      "jobs_done": 15
+    },
+    {
+      "t_ms": 5254,
+      "goroutines": 49,
+      "threads": 10,
+      "heap_mb": 3.0693893432617188,
+      "cgroup_mb": 374.640625,
+      "jobs_done": 17
+    },
+    {
+      "t_ms": 5503,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.314178466796875,
+      "cgroup_mb": 372.828125,
+      "jobs_done": 18
+    },
+    {
+      "t_ms": 5752,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.1170578002929688,
+      "cgroup_mb": 374.7890625,
+      "jobs_done": 19
+    },
+    {
+      "t_ms": 6004,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.489105224609375,
+      "cgroup_mb": 376.09765625,
+      "jobs_done": 20
+    },
+    {
+      "t_ms": 6252,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.7106246948242188,
+      "cgroup_mb": 378.94140625,
+      "jobs_done": 21
+    },
+    {
+      "t_ms": 6502,
+      "goroutines": 44,
+      "threads": 10,
+      "heap_mb": 3.1373062133789062,
+      "cgroup_mb": 365.55859375,
+      "jobs_done": 23
+    },
+    {
+      "t_ms": 6752,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.4257965087890625,
+      "cgroup_mb": 378.11328125,
+      "jobs_done": 23
+    },
+    {
+      "t_ms": 7004,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.3094100952148438,
+      "cgroup_mb": 379.5703125,
+      "jobs_done": 24
+    },
+    {
+      "t_ms": 7252,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.72314453125,
+      "cgroup_mb": 376.97265625,
+      "jobs_done": 26
+    },
+    {
+      "t_ms": 7503,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.9513092041015625,
+      "cgroup_mb": 374.28515625,
+      "jobs_done": 27
+    },
+    {
+      "t_ms": 7754,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.2253341674804688,
+      "cgroup_mb": 375.21875,
+      "jobs_done": 28
+    },
+    {
+      "t_ms": 8007,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.3124465942382812,
+      "cgroup_mb": 377.875,
+      "jobs_done": 29
+    },
+    {
+      "t_ms": 8252,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.4928665161132812,
+      "cgroup_mb": 373.30078125,
+      "jobs_done": 30
+    },
+    {
+      "t_ms": 8502,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.8675689697265625,
+      "cgroup_mb": 373.640625,
+      "jobs_done": 31
+    },
+    {
+      "t_ms": 8753,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.1184539794921875,
+      "cgroup_mb": 375.29296875,
+      "jobs_done": 32
+    },
+    {
+      "t_ms": 9003,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.39373779296875,
+      "cgroup_mb": 376.1015625,
+      "jobs_done": 33
+    },
+    {
+      "t_ms": 9254,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.501190185546875,
+      "cgroup_mb": 373.625,
+      "jobs_done": 34
+    },
+    {
+      "t_ms": 9503,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.2907943725585938,
+      "cgroup_mb": 374.48828125,
+      "jobs_done": 35
+    },
+    {
+      "t_ms": 9753,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.682952880859375,
+      "cgroup_mb": 375.90234375,
+      "jobs_done": 36
+    },
+    {
+      "t_ms": 10003,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.7922439575195312,
+      "cgroup_mb": 374.00390625,
+      "jobs_done": 37
+    },
+    {
+      "t_ms": 10253,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.09136962890625,
+      "cgroup_mb": 372.39453125,
+      "jobs_done": 38
+    },
+    {
+      "t_ms": 10504,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.5007095336914062,
+      "cgroup_mb": 372.25390625,
+      "jobs_done": 39
+    },
+    {
+      "t_ms": 10752,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.1361923217773438,
+      "cgroup_mb": 372.61328125,
+      "jobs_done": 40
+    },
+    {
+      "t_ms": 11004,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.4763717651367188,
+      "cgroup_mb": 372.91015625,
+      "jobs_done": 41
+    },
+    {
+      "t_ms": 11254,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.8009262084960938,
+      "cgroup_mb": 372.48828125,
+      "jobs_done": 42
+    },
+    {
+      "t_ms": 11502,
+      "goroutines": 49,
+      "threads": 10,
+      "heap_mb": 3.1957778930664062,
+      "cgroup_mb": 373.87890625,
+      "jobs_done": 43
+    },
+    {
+      "t_ms": 11753,
+      "goroutines": 44,
+      "threads": 10,
+      "heap_mb": 3.2589874267578125,
+      "cgroup_mb": 369.26171875,
+      "jobs_done": 44
+    },
+    {
+      "t_ms": 12006,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.5206222534179688,
+      "cgroup_mb": 375.94921875,
+      "jobs_done": 44
+    },
+    {
+      "t_ms": 12255,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.7537994384765625,
+      "cgroup_mb": 374.3203125,
+      "jobs_done": 45
+    },
+    {
+      "t_ms": 12509,
+      "goroutines": 44,
+      "threads": 10,
+      "heap_mb": 2.3724746704101562,
+      "cgroup_mb": 359.63671875,
+      "jobs_done": 47
+    },
+    {
+      "t_ms": 12753,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.646484375,
+      "cgroup_mb": 374.1796875,
+      "jobs_done": 47
+    },
+    {
+      "t_ms": 13010,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.7943572998046875,
+      "cgroup_mb": 373.171875,
+      "jobs_done": 48
+    },
+    {
+      "t_ms": 13260,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 2.9382095336914062,
+      "cgroup_mb": 375.74609375,
+      "jobs_done": 48
+    },
+    {
+      "t_ms": 13504,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.2758255004882812,
+      "cgroup_mb": 374.73828125,
+      "jobs_done": 49
+    },
+    {
+      "t_ms": 13752,
+      "goroutines": 44,
+      "threads": 10,
+      "heap_mb": 3.4153900146484375,
+      "cgroup_mb": 365.04296875,
+      "jobs_done": 50
+    },
+    {
+      "t_ms": 14003,
+      "goroutines": 48,
+      "threads": 10,
+      "heap_mb": 3.68304443359375,
+      "cgroup_mb": 374.40234375,
+      "jobs_done": 51
+    },
+    {
+      "t_ms": 14253,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.5097579956054688,
+      "cgroup_mb": 376.94140625,
+      "jobs_done": 52
+    },
+    {
+      "t_ms": 14503,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.7841796875,
+      "cgroup_mb": 374.3984375,
+      "jobs_done": 53
+    },
+    {
+      "t_ms": 14753,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.1438369750976562,
+      "cgroup_mb": 377.25390625,
+      "jobs_done": 54
+    },
+    {
+      "t_ms": 15003,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.4321060180664062,
+      "cgroup_mb": 375.421875,
+      "jobs_done": 56
+    },
+    {
+      "t_ms": 15253,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.3230819702148438,
+      "cgroup_mb": 375.453125,
+      "jobs_done": 57
+    },
+    {
+      "t_ms": 15504,
+      "goroutines": 44,
+      "threads": 11,
+      "heap_mb": 2.5348739624023438,
+      "cgroup_mb": 364.5234375,
+      "jobs_done": 58
+    },
+    {
+      "t_ms": 15759,
+      "goroutines": 44,
+      "threads": 11,
+      "heap_mb": 2.79913330078125,
+      "cgroup_mb": 365.921875,
+      "jobs_done": 59
+    },
+    {
+      "t_ms": 16021,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.107666015625,
+      "cgroup_mb": 375.57421875,
+      "jobs_done": 60
+    },
+    {
+      "t_ms": 16254,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.190887451171875,
+      "cgroup_mb": 377.3828125,
+      "jobs_done": 60
+    },
+    {
+      "t_ms": 16504,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.4832687377929688,
+      "cgroup_mb": 376.24609375,
+      "jobs_done": 61
+    },
+    {
+      "t_ms": 16764,
+      "goroutines": 51,
+      "threads": 11,
+      "heap_mb": 3.5792236328125,
+      "cgroup_mb": 370.125,
+      "jobs_done": 61
+    },
+    {
+      "t_ms": 17007,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.2102432250976562,
+      "cgroup_mb": 375.38671875,
+      "jobs_done": 62
+    },
+    {
+      "t_ms": 17253,
+      "goroutines": 51,
+      "threads": 11,
+      "heap_mb": 2.314849853515625,
+      "cgroup_mb": 363.65234375,
+      "jobs_done": 62
+    },
+    {
+      "t_ms": 17503,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.6623382568359375,
+      "cgroup_mb": 377.94140625,
+      "jobs_done": 63
+    },
+    {
+      "t_ms": 17761,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.8547286987304688,
+      "cgroup_mb": 378.42578125,
+      "jobs_done": 64
+    },
+    {
+      "t_ms": 18004,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.9832534790039062,
+      "cgroup_mb": 381.19921875,
+      "jobs_done": 64
+    },
+    {
+      "t_ms": 18263,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.2126235961914062,
+      "cgroup_mb": 379.59765625,
+      "jobs_done": 65
+    },
+    {
+      "t_ms": 18520,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.43060302734375,
+      "cgroup_mb": 371.8125,
+      "jobs_done": 66
+    },
+    {
+      "t_ms": 18784,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.5412826538085938,
+      "cgroup_mb": 370.74609375,
+      "jobs_done": 67
+    },
+    {
+      "t_ms": 19006,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.8293914794921875,
+      "cgroup_mb": 375.80078125,
+      "jobs_done": 67
+    },
+    {
+      "t_ms": 19270,
+      "goroutines": 44,
+      "threads": 11,
+      "heap_mb": 3.90118408203125,
+      "cgroup_mb": 362.171875,
+      "jobs_done": 68
+    },
+    {
+      "t_ms": 19541,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.2769851684570312,
+      "cgroup_mb": 375.359375,
+      "jobs_done": 68
+    },
+    {
+      "t_ms": 19758,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.4154891967773438,
+      "cgroup_mb": 375.5546875,
+      "jobs_done": 68
+    },
+    {
+      "t_ms": 20006,
+      "goroutines": 51,
+      "threads": 11,
+      "heap_mb": 2.5660018920898438,
+      "cgroup_mb": 377.578125,
+      "jobs_done": 68
+    },
+    {
+      "t_ms": 20254,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 2.8808212280273438,
+      "cgroup_mb": 378.8671875,
+      "jobs_done": 69
+    },
+    {
+      "t_ms": 20504,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.1629791259765625,
+      "cgroup_mb": 377.078125,
+      "jobs_done": 70
+    },
+    {
+      "t_ms": 20754,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.275665283203125,
+      "cgroup_mb": 379.671875,
+      "jobs_done": 70
+    },
+    {
+      "t_ms": 21006,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.5505828857421875,
+      "cgroup_mb": 381.0546875,
+      "jobs_done": 71
+    },
+    {
+      "t_ms": 21252,
+      "goroutines": 48,
+      "threads": 11,
+      "heap_mb": 3.796875,
+      "cgroup_mb": 378.79296875,
+      "jobs_done": 72
+    },
+    {
+      "t_ms": 21504,
+      "goroutines": 38,
+      "threads": 11,
+      "heap_mb": 2.274871826171875,
+      "cgroup_mb": 349.43359375,
+      "jobs_done": 74
+    },
+    {
+      "t_ms": 21754,
+      "goroutines": 38,
+      "threads": 11,
+      "heap_mb": 2.385986328125,
+      "cgroup_mb": 352.0859375,
+      "jobs_done": 74
+    },
+    {
+      "t_ms": 22009,
+      "goroutines": 33,
+      "threads": 11,
+      "heap_mb": 2.5343246459960938,
+      "cgroup_mb": 339.359375,
+      "jobs_done": 75
+    },
+    {
+      "t_ms": 22252,
+      "goroutines": 28,
+      "threads": 11,
+      "heap_mb": 2.6859512329101562,
+      "cgroup_mb": 329.0859375,
+      "jobs_done": 76
+    },
+    {
+      "t_ms": 22508,
+      "goroutines": 23,
+      "threads": 11,
+      "heap_mb": 2.931793212890625,
+      "cgroup_mb": 316.203125,
+      "jobs_done": 77
+    },
+    {
+      "t_ms": 22752,
+      "goroutines": 18,
+      "threads": 11,
+      "heap_mb": 3.109527587890625,
+      "cgroup_mb": 302.82421875,
+      "jobs_done": 78
+    },
+    {
+      "t_ms": 23013,
+      "goroutines": 13,
+      "threads": 11,
+      "heap_mb": 3.1791229248046875,
+      "cgroup_mb": 290.55859375,
+      "jobs_done": 79
+    },
+    {
+      "t_ms": 23253,
+      "goroutines": 13,
+      "threads": 11,
+      "heap_mb": 3.3479156494140625,
+      "cgroup_mb": 292.26953125,
+      "jobs_done": 79
+    }
+  ],
+  "jobs": 80,
+  "failures": 0,
+  "wall_ms": 23304,
+  "jobs_per_sec": 3.4327667768375747,
+  "Total": {
+    "max_ms": 23304.759,
+    "mean_ms": 2225.3213625,
+    "n": 80,
+    "p50_ms": 376.08,
+    "p95_ms": 22043.661,
+    "p99_ms": 23002.675,
+    "stddev_ms": 5803.780156200225
+  },
+  "ops": {
+    "click": {
+      "max_ms": 1255.594,
+      "mean_ms": 189.996675,
+      "n": 80,
+      "p50_ms": 49.452,
+      "p95_ms": 1038.778,
+      "p99_ms": 1227.278,
+      "stddev_ms": 306.27325825954733
+    },
+    "dom_read": {
+      "max_ms": 54.044,
+      "mean_ms": 4.527387500000001,
+      "n": 80,
+      "p50_ms": 1.644,
+      "p95_ms": 16.598,
+      "p99_ms": 46.048,
+      "stddev_ms": 8.851933710345087
+    },
+    "evaluate": {
+      "max_ms": 5.059,
+      "mean_ms": 1.0280749999999999,
+      "n": 80,
+      "p50_ms": 0.706,
+      "p95_ms": 2.681,
+      "p99_ms": 3.414,
+      "stddev_ms": 0.8466227137131391
+    },
+    "fill": {
+      "max_ms": 22742.964,
+      "mean_ms": 1713.3852125,
+      "n": 80,
+      "p50_ms": 30.382,
+      "p95_ms": 21484.127,
+      "p99_ms": 22421.24,
+      "stddev_ms": 5770.360753981859
+    },
+    "navigate": {
+      "max_ms": 67.024,
+      "mean_ms": 11.646237500000002,
+      "n": 80,
+      "p50_ms": 8.167,
+      "p95_ms": 31.829,
+      "p99_ms": 56.962,
+      "stddev_ms": 10.520794157576402
+    },
+    "page_create": {
+      "max_ms": 264.565,
+      "mean_ms": 60.369787500000015,
+      "n": 80,
+      "p50_ms": 34.169,
+      "p95_ms": 227.483,
+      "p99_ms": 257.542,
+      "stddev_ms": 61.450605449355365
+    },
+    "wait_ready": {
+      "max_ms": 161.623,
+      "mean_ms": 27.09495,
+      "n": 80,
+      "p50_ms": 16.296,
+      "p95_ms": 69.096,
+      "p99_ms": 139.243,
+      "stddev_ms": 25.73200926710738
+    },
+    "wait_result": {
+      "max_ms": 257.12,
+      "mean_ms": 206.19765,
+      "n": 80,
+      "p50_ms": 205.533,
+      "p95_ms": 214.406,
+      "p99_ms": 222.334,
+      "stddev_ms": 8.535931941065371
+    }
+  },
+  "block_top": [
+    {
+      "value": 177699957331,
+      "count": 170,
+      "stack": [
+        "0x70c07",
+        "0x3c615b"
+      ]
+    },
+    {
+      "value": 177603001438,
+      "count": 10086,
+      "stack": [
+        "0x70c07",
+        "0x3c9db3"
+      ]
+    },
+    {
+      "value": 177385253019,
+      "count": 10068,
+      "stack": [
+        "0x70c07",
+        "0x3c68a7"
+      ]
+    },
+    {
+      "value": 176748901076,
+      "count": 10598,
+      "stack": [
+        "0x25243",
+        "0x3d0ff7"
+      ]
+    },
+    {
+      "value": 135810676273,
+      "count": 160,
+      "stack": [
+        "0x70c07",
+        "0x3b0db7",
+        "0x3c9517",
+        "0x3d0d97",
+        "0x3844f7",
+        "0x3d1913"
+      ]
+    },
+    {
+      "value": 25162839936,
+      "count": 1493,
+      "stack": [
+        "0x25243",
+        "0x3ca0d7"
+      ]
+    },
+    {
+      "value": 22783256760,
+      "count": 94,
+      "stack": [
+        "0x70c07",
+        "0x3f91a3"
+      ]
+    },
+    {
+      "value": 21136551052,
+      "count": 72,
+      "stack": [
+        "0x24347",
+        "0x3f872b",
+        "0x3f592b",
+        "0x5d3b3"
+      ]
+    },
+    {
+      "value": 16193112344,
+      "count": 80,
+      "stack": [
+        "0x70c07",
+        "0x3c8e5b",
+        "0x3d306f",
+        "0x3d2f70",
+        "0x3d2f1f",
+        "0x3f0d8f"
+      ]
+    },
+    {
+      "value": 6680901672,
+      "count": 160,
+      "stack": [
+        "0x70c07",
+        "0x3b0db7",
+        "0x3c9517",
+        "0x3d0d97",
+        "0x3844f7",
+        "0x3d1913"
+      ]
+    },
+    {
+      "value": 6431326666,
+      "count": 80,
+      "stack": [
+        "0x70c07",
+        "0x3b0db7",
+        "0x3c9517",
+        "0x3d0d97",
+        "0x3844f7",
+        "0x3ce9bf"
+      ]
+    },
+    {
+      "value": 2167440959,
+      "count": 1,
+      "stack": [
+        "0xa0cf7",
+        "0x3f87ef",
+        "0x3f592b",
+        "0x5d3b3"
+      ]
+    }
+  ],
+  "mutex_top": [
+    {
+      "value": 921124563,
+      "count": 8,
+      "stack": [
+        "0x3c9bec",
+        "0x3c9afb",
+        "0x3c9317",
+        "0x3f1053",
+        "0x3eb663",
+        "0x3f0993"
+      ]
+    },
+    {
+      "value": 6689521,
+      "count": 53,
+      "stack": [
+        "0x3d3f6c",
+        "0x3d3e0f",
+        "0x3d102b"
+      ]
+    },
+    {
+      "value": 2604227,
+      "count": 19,
+      "stack": [
+        "0x3d3f6c",
+        "0x3d3ec7",
+        "0x3d102b"
+      ]
+    },
+    {
+      "value": 538333,
+      "count": 27,
+      "stack": [
+        "0x669ec",
+        "0x669e8",
+        "0x961f7",
+        "0x6677f",
+        "0x90fdf",
+        "0xaecff"
+      ]
+    },
+    {
+      "value": 384042,
+      "count": 1,
+      "stack": [
+        "0x90f3c",
+        "0x90f38",
+        "0x5eeef",
+        "0x24b23",
+        "0x961f7",
+        "0x24acb"
+      ]
+    },
+    {
+      "value": 347834,
+      "count": 8,
+      "stack": [
+        "0x60d98",
+        "0x60d94",
+        "0x394cf",
+        "0x961f7",
+        "0x38c63",
+        "0x38c34"
+      ]
+    },
+    {
+      "value": 336622,
+      "count": 6,
+      "stack": [
+        "0x637b0",
+        "0x637ac",
+        "0x652ef",
+        "0x65773",
+        "0x96163"
+      ]
+    },
+    {
+      "value": 274227,
+      "count": 2,
+      "stack": [
+        "0x5ebdc",
+        "0x5ebd8",
+        "0x6116b",
+        "0x61dc3",
+        "0x62467",
+        "0x90f5b"
+      ]
+    },
+    {
+      "value": 268959,
+      "count": 8,
+      "stack": [
+        "0xc1e10",
+        "0xc1e0c",
+        "0xc1dd3",
+        "0xc268b",
+        "0xc1dd3",
+        "0xc0617"
+      ]
+    },
+    {
+      "value": 245500,
+      "count": 1,
+      "stack": [
+        "0x65998",
+        "0x65994",
+        "0x778bf",
+        "0x778b8",
+        "0x962ff"
+      ]
+    },
+    {
+      "value": 225083,
+      "count": 2,
+      "stack": [
+        "0x43628",
+        "0x43624",
+        "0x6ad2b",
+        "0x60817",
+        "0x60753",
+        "0x960f3"
+      ]
+    },
+    {
+      "value": 119209,
+      "count": 6,
+      "stack": [
+        "0x61060",
+        "0x6105c",
+        "0x6309b",
+        "0x652ef",
+        "0x65773",
+        "0x96163"
+      ]
+    }
+  ],
+  "goroutine_top": [
+    {
+      "value": 2,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeae73",
+        "0xeae64",
+        "0x1e5867",
+        "0x1edc63"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x3db993",
+        "0x3db7bf",
+        "0x3d8fc3",
+        "0x3f9a2f",
+        "0x3f8a0b",
+        "0x3f592b"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x3ca0d7"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeae73",
+        "0xeae64",
+        "0x1e5867",
+        "0x1edc63"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeb773",
+        "0xeb764",
+        "0x1e6417",
+        "0x1f4d53"
+      ]
+    }
+  ]
+}

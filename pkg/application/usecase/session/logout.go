@@ -19,13 +19,13 @@ import (
 // F79: até então este use case só conseguia validar, e devolvia 200 sem
 // desvincular coisa alguma.
 type LogoutUseCase struct {
-	sessions appport.SessionController
+	sessions appport.SessionLogouter
 	detacher appport.SessionDetacher
 	logger   appport.Logger
 }
 
 // NewLogoutUseCase cria uma nova instância do usecase.
-func NewLogoutUseCase(sc appport.SessionController, d appport.SessionDetacher, l appport.Logger) *LogoutUseCase {
+func NewLogoutUseCase(sc appport.SessionLogouter, d appport.SessionDetacher, l appport.Logger) *LogoutUseCase {
 	return &LogoutUseCase{
 		sessions: sc,
 		detacher: d,

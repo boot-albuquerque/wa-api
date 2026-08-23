@@ -1,0 +1,202 @@
+{
+  "cases": 8,
+  "experiment": "hostile-interaction-suite",
+  "results": [
+    {
+      "case": "overlay-sobre-botao",
+      "agent": "chromedp-direto",
+      "agent_should_act": false,
+      "agent_reported_success": true,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 1,
+      "outcome": "wrong_target",
+      "decision_ms": 403
+    },
+    {
+      "case": "overlay-sobre-botao",
+      "agent": "interaction-policy",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_failure",
+      "refusal": "validate: OCCLUDED_OR_REPLACED (hit-test nao retornou o alvo)",
+      "decision_ms": 240
+    },
+    {
+      "case": "removido-apos-query",
+      "agent": "chromedp-direto",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_failure",
+      "refusal": "Action(chromedp-direto/removido-apos-query/click): deadline of 15s exceeded",
+      "decision_ms": 15006
+    },
+    {
+      "case": "removido-apos-query",
+      "agent": "interaction-policy",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_failure",
+      "refusal": "resolve: NO_MATCH (#target)",
+      "decision_ms": 5004
+    },
+    {
+      "case": "node-replacement",
+      "agent": "chromedp-direto",
+      "agent_should_act": false,
+      "agent_reported_success": true,
+      "ground_truth_clicked": true,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_success",
+      "decision_ms": 121
+    },
+    {
+      "case": "node-replacement",
+      "agent": "interaction-policy",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 1,
+      "outcome": "correct_failure",
+      "refusal": "verify: POSTCONDITION_NOT_MET (window.__truth.clicked === true)",
+      "decision_ms": 5334
+    },
+    {
+      "case": "disabled-vira-enabled",
+      "agent": "chromedp-direto",
+      "agent_should_act": true,
+      "agent_reported_success": true,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "false_success",
+      "decision_ms": 96
+    },
+    {
+      "case": "disabled-vira-enabled",
+      "agent": "interaction-policy",
+      "agent_should_act": true,
+      "agent_reported_success": true,
+      "ground_truth_clicked": true,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_success",
+      "decision_ms": 975
+    },
+    {
+      "case": "selector-duplicado",
+      "agent": "chromedp-direto",
+      "agent_should_act": false,
+      "agent_reported_success": true,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 1,
+      "outcome": "wrong_target",
+      "decision_ms": 285
+    },
+    {
+      "case": "selector-duplicado",
+      "agent": "interaction-policy",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_failure",
+      "refusal": "resolve: AMBIGUOUS_TARGET (2 candidatos interagiveis)",
+      "decision_ms": 4932
+    },
+    {
+      "case": "zero-size",
+      "agent": "chromedp-direto",
+      "agent_should_act": false,
+      "agent_reported_success": true,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "false_success",
+      "decision_ms": 113
+    },
+    {
+      "case": "zero-size",
+      "agent": "interaction-policy",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_failure",
+      "refusal": "resolve: NO_ACTIONABLE_CANDIDATE (1 casaram, nenhum interagivel)",
+      "decision_ms": 4910
+    },
+    {
+      "case": "fora-do-viewport",
+      "agent": "chromedp-direto",
+      "agent_should_act": false,
+      "agent_reported_success": true,
+      "ground_truth_clicked": true,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_success",
+      "decision_ms": 18
+    },
+    {
+      "case": "fora-do-viewport",
+      "agent": "interaction-policy",
+      "agent_should_act": false,
+      "agent_reported_success": false,
+      "ground_truth_clicked": false,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_failure",
+      "refusal": "validate: OUT_OF_VIEWPORT",
+      "decision_ms": 224
+    },
+    {
+      "case": "modal-animando",
+      "agent": "chromedp-direto",
+      "agent_should_act": true,
+      "agent_reported_success": true,
+      "ground_truth_clicked": true,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_success",
+      "decision_ms": 102
+    },
+    {
+      "case": "modal-animando",
+      "agent": "interaction-policy",
+      "agent_should_act": true,
+      "agent_reported_success": true,
+      "ground_truth_clicked": true,
+      "ground_truth_wrong_clicks": 0,
+      "outcome": "correct_success",
+      "decision_ms": 1908
+    }
+  ],
+  "settle_budget": "5s",
+  "started_utc": "2026-08-10T03:23:50Z",
+  "summary": {
+    "chromedp-direto": {
+      "correct_failure": 1,
+      "correct_success": 3,
+      "false_failure": 0,
+      "false_success": 2,
+      "timeout": 0,
+      "wrong_target": 2
+    },
+    "interaction-policy": {
+      "correct_failure": 6,
+      "correct_success": 2,
+      "false_failure": 0,
+      "false_success": 0,
+      "timeout": 0,
+      "wrong_target": 0
+    }
+  },
+  "verdict": "PASS",
+  "watchdog": {
+    "budget_sec": 600,
+    "deadline_exceeded": 1,
+    "elapsed_sec": 69.655224532,
+    "experiment": "hostile-suite",
+    "operations": 313,
+    "status": "COMPLETED"
+  }
+}

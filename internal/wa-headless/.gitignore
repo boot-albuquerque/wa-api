@@ -1,0 +1,10 @@
+# Perfil de laboratorio da conta de TESTE do wa-headless.
+#
+# Segue a convencao do scripts/chromium-study/.gitignore, que ignora
+# wa-session/ pelo mesmo motivo: um perfil de browser pareado contem a
+# CREDENCIAL da sessao — IndexedDB, Local Storage, cookies — e nada disso pode
+# entrar em Git, nem num repo privado.
+#
+# O prefixo `.` tambem faz o toolchain do Go ignorar o diretorio, entao ele
+# nunca vira pacote nem entra em `go list ./...`.
+.lab/

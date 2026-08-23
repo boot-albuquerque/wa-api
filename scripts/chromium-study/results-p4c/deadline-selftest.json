@@ -1,0 +1,107 @@
+{
+  "cases": [
+    {
+      "name": "navigate-never-responds",
+      "operation": "Navigate",
+      "deadline_ms": 3000,
+      "observed_ms": 3004,
+      "overhead_ms": 4,
+      "timed_out_as_expected": true,
+      "within_bound": true,
+      "verdict": "PASS",
+      "observed_over_deadline": 1.0014579726666668
+    },
+    {
+      "name": "query-element-never-exists",
+      "operation": "Query",
+      "deadline_ms": 3000,
+      "observed_ms": 3001,
+      "overhead_ms": 1,
+      "timed_out_as_expected": true,
+      "within_bound": true,
+      "verdict": "PASS",
+      "observed_over_deadline": 1.0004016116666665
+    },
+    {
+      "name": "evaluate-promise-never-resolves",
+      "operation": "Evaluate",
+      "deadline_ms": 3000,
+      "observed_ms": 3006,
+      "overhead_ms": 6,
+      "timed_out_as_expected": true,
+      "within_bound": true,
+      "verdict": "PASS",
+      "observed_over_deadline": 1.0021891253333333
+    },
+    {
+      "name": "poll-condition-never-true",
+      "operation": "StateProbe",
+      "deadline_ms": 2000,
+      "observed_ms": 2004,
+      "overhead_ms": 4,
+      "timed_out_as_expected": true,
+      "within_bound": true,
+      "verdict": "PASS",
+      "observed_over_deadline": 1.002335584
+    }
+  ],
+  "experiment": "deadline-policy-selftest",
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "navigate-never-responds",
+      "start_ms": 0,
+      "duration_ms": 3002,
+      "deadline_ms": 3000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "Query",
+      "label": "query-element-never-exists",
+      "start_ms": 3016,
+      "duration_ms": 3000,
+      "deadline_ms": 3000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "Evaluate",
+      "label": "evaluate-promise-never-resolves",
+      "start_ms": 6021,
+      "duration_ms": 3005,
+      "deadline_ms": 3000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "poll-condition-never-true",
+      "start_ms": 9043,
+      "duration_ms": 2002,
+      "deadline_ms": 2000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    }
+  ],
+  "overhead_budget_ms": 2500,
+  "policy_under_test": {
+    "navigate": 3000000000,
+    "query": 3000000000,
+    "evaluate": 3000000000,
+    "action": 3000000000,
+    "state_probe": 2000000000,
+    "recovery_probe": 2000000000,
+    "shutdown": 3000000000
+  },
+  "started_utc": "2026-08-09T12:40:36Z",
+  "verdict": "PASS",
+  "watchdog": {
+    "budget_sec": 120,
+    "deadline_exceeded": 4,
+    "elapsed_sec": 13.82412109,
+    "experiment": "deadline-selftest",
+    "operations": 4,
+    "status": "COMPLETED"
+  }
+}

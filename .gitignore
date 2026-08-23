@@ -186,3 +186,4 @@ dev-debug.log
 *.swp
 *.orig
 wuzapi
+coverage.out.log

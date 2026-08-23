@@ -12,13 +12,13 @@ import (
 
 // GetAvatarUseCase retrieves avatar info for a user
 type GetAvatarUseCase struct {
-	contacts appport.ContactDirectory
+	contacts appport.AvatarReader
 	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewGetAvatarUseCase creates a new instance
-func NewGetAvatarUseCase(cd appport.ContactDirectory, jr appport.JIDResolver, logger appport.Logger) *GetAvatarUseCase {
+func NewGetAvatarUseCase(cd appport.AvatarReader, jr appport.JIDResolver, logger appport.Logger) *GetAvatarUseCase {
 	return &GetAvatarUseCase{contacts: cd, jids: jr, logger: logger}
 }
 

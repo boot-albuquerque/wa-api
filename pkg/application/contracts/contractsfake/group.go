@@ -258,7 +258,7 @@ type GroupSettings struct {
 	SetDisappearingTimerFunc  func(ctx context.Context, txtID string, group domain.JID, d time.Duration, at time.Time) error
 	SetDisappearingTimerCalls []GroupSettingsSetDisappearingTimerCall
 
-	UpdateGroupParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (any, error)
+	UpdateGroupParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (domain.ParticipantsUpdate, error)
 	UpdateGroupParticipantsCalls []GroupSettingsUpdateGroupParticipantsCall
 }
 
@@ -319,12 +319,16 @@ func (f *GroupSettings) SetDisappearingTimer(ctx context.Context, txtID string, 
 }
 
 // UpdateGroupParticipants implementa port.GroupSettings.
-func (f *GroupSettings) UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (any, error) {
+func (f *GroupSettings) UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
 	f.UpdateGroupParticipantsCalls = append(f.UpdateGroupParticipantsCalls, GroupSettingsUpdateGroupParticipantsCall{Ctx: ctx, TxtID: txtID, Group: group, Participants: participants, Action: action})
 	if f.UpdateGroupParticipantsFunc != nil {
 		return f.UpdateGroupParticipantsFunc(ctx, txtID, group, participants, action)
 	}
-	return nil, nil
+	// O dublê responde CONFIRMADO por omissão, imitando a produção do socket —
+	// que confirma na própria chamada. Um dublê que respondesse não-confirmado
+	// por omissão seria mais permissivo que a produção e esconderia o defeito
+	// que o campo existe para revelar.
+	return domain.ParticipantsUpdate{Confirmed: true}, nil
 }
 
 // --- GroupRequests -----------------------------------------------------

@@ -216,3 +216,144 @@ linha de diff que alguem tem de aprovar conscientemente.
 Duas execucoes sobre a mesma arvore produzem bytes identicos. As entradas sao
 ordenadas por chave e, em empate, por linha; as tabelas por pacote sao
 ordenadas por nome. Nenhuma saida depende da ordem de iteracao de mapa.
+
+## L1-d — observabilidade por estágio tipado e por operação rastreada
+
+Acrescentada pela **decisão 78** (2026-08-22), e ela quebra `rules_frozen=true`
+de propósito. O congelamento diz que uma mudança depois da Fase 12 é decisão
+deliberada e não efeito colateral; esta é deliberada, e o motivo fica aqui.
+
+### O que a obrigou
+
+A Fase 3 fiou `internal/wa-headless` em `pkg/`, e a árvore inteira entrou no
+denominador — `packages.Visit` inclui qualquer pacote transitivamente importado
+sob `wa-api/`. Medido com prova causal, removendo e repondo o consumidor da
+fachada:
+
+| | `eligible` | `func` | `errpath` |
+| --- | --- | --- | --- |
+| sem consumidor da fachada | 571 | 697 | 858 |
+| com consumidor da fachada | 660 | 603 | 808 |
+
+Nenhum sítio deixou de logar. Foi diluição pura — e a régua estava a medir
+aquela árvore com o critério da camada de aplicação.
+
+### Por que não bastava excluir nem instrumentar
+
+Excluir `internal/wa-headless/` seria encolher o denominador para embelezar o
+número, que é exatamente o que `min_eligible` existe para impedir. A exclusão
+do `internal/wa-noise/` tem outro fundamento — é terceiro vendorizado, não é
+código nosso.
+
+Instrumentar as funções com log contradiria o desenho da árvore. Ela observa
+por duas formas:
+
+```go
+BootFailure{Stage: StageOwnership, Cause: err}    // o erro CARREGA onde falhou
+runner.Do(ctx, OpBoot, label+"/await-endpoint")   // a operação fica no OpLog
+```
+
+Um estágio tipado diz mais que uma linha de log: chega intacto a quem decide se
+aquilo é erro, e é essa camada que loga. É o padrão "adapter não loga, use case
+loga" que este arquivo já aceitou dezenas de vezes, agora em escala de
+biblioteca.
+
+### A regra
+
+**L1-d1, falha com estágio.** Um literal composto que preenche `Stage` **e**
+`Cause`. Os dois juntos: `Stage` sozinho classifica sem dizer a causa, `Cause`
+sozinho embrulha sem dizer onde. Conta como nível `Error`, e por isso vale
+também para L2 — construir uma dessas é, por definição, relatar uma falha.
+
+**L1-d2, operação rastreada.** Uma chamada `X.Do(ctx, kind, label, …)` onde
+`kind` é do tipo `OpKind` (verificado por TIPO, não por nome de variável) e
+`label` contém ao menos um literal de texto não vazio, direto ou dentro de uma
+concatenação. Conta como nível `Info`, e isso é deliberado: rastrear prova que
+a operação ACONTECEU, não que alguém classificou uma falha. Satisfaz L1 e
+**não** satisfaz L2 — tratá-la como `Warn` faria toda função que chama o
+rastreador parecer ter coberto os seus erros, que é a confiança falsa que esta
+métrica existe para não dar.
+
+### O erro que a primeira versão da regra cometeu
+
+L1-d2 exigia que o rótulo fosse literal PURO. O idioma real da árvore é
+`label + "/kick"`, então a regra rejeitava **163 dos 169** sítios: ela media a
+minha suposição sobre o código em vez do código. Um rótulo inteiramente montado
+em tempo de execução continua recusado — pode ser vazio, e rastro sem rótulo
+não localiza nada.
+
+## L1-e — delegação observável (decisão 91, 2026-08-23)
+
+Uma função elegível **sem sítio de log próprio** satisfaz L1 quando delega a
+observabilidade, e a delegação é **comprovada** por duas condições cumulativas:
+
+1. a chamada tem por destino uma função **do mesmo pacote** que satisfaz L1 por
+   **operação rastreada** (L1-d2, forma `op`); e
+2. quem chama passa ao destino um **rótulo com pedaço constante**, na mesma
+   leitura que L1-d2 faz do rótulo de `Do`.
+
+Um salto só. Cadeia mais funda credita cada vez mais longe do sítio observável,
+e o valor da prova cai com a distância.
+
+### Por que a condição (2) é o coração da regra
+
+Sem ela, a regra creditaria qualquer função que chamasse um ajudante rastreado,
+e o rastro diria apenas que o **ajudante** rodou — nunca qual chamador o
+accionou. O rótulo repassado é o que faz a operação de quem chama aparecer no
+rastro, que é exatamente o que L1 promete. No idioma da árvore isto lê-se
+`m.parked(ctx, script, key, label+"/list")`, e o rastro sai como
+`<rótulo-do-chamador>/list/kick`.
+
+### O defeito que a regra corrige, medido
+
+Elegibilidade exige **alcance de produção**: uma capability de
+`internal/wa-headless` só entra no denominador quando `pkg/` a liga. Como as
+capabilities foram escritas antes de serem ligadas, cada port novo acordava de
+uma vez a dívida inteira de uma capability, e `min_func_coverage` — declarado
+ratchet-UP — **desceu nos seis commits anteriores** à decisão 91:
+
+    564 → 560 → 558 → 554 → 551 → 545 → 543
+
+Cada queda tinha justificativa própria e correta; o padrão não tinha ninguém,
+porque cada commit só vê o próprio delta. Com 20 das 35 capabilities ainda por
+ligar, a projeção era terminar a fase perto de 45%.
+
+A decisão 91 recusou tanto continuar a baixar quanto reestruturar produção para
+agradar a métrica: **quem estava errado era o instrumento**, que creditava o
+ajudante e cobrava do método.
+
+### Efeito medido da regra
+
+`func_coverage` 53,5% → **55,6%** (458/824), com **17 funções** creditadas e
+**nenhuma** perdida — enumeradas por comparação A/B de `-list-uncovered` com e
+sem a passagem. As 17 são todas métodos de capability que delegam a um ajudante
+rastreado; nenhum adaptador de `pkg/` foi creditado, porque nenhum delega a
+ajudante rastreado.
+
+### O limite da regra: delegação através de INTERFACE não é creditável
+
+Medido ao ligar o `GroupInfoSettings` (2026-08-23), e o resultado foi negativo
+de propósito registado.
+
+Os adaptadores de `pkg/infra/wa-headless` chamam a capability por uma interface
+local declarada no próprio adaptador (é assim que ficam testáveis sem página).
+`group.Manager.SetSubject` **rastreia direto**, e o adaptador passa-lhe um
+rótulo constante — pelo argumento acima, pareceria creditável.
+
+Não é, e a razão não é de implementação: `info.Uses` resolve `s.SetSubject` para
+o método da INTERFACE, não para o método do tipo concreto. Qual implementação
+vai lá parar decide-se no ponto de montagem, em tempo de execução. **A
+observabilidade de quem chama através de uma interface depende de quem for
+injetado**, e um analisador estático não pode saber isso — creditar ali seria
+creditar uma suposição, que é precisamente o que L1-e existe para não fazer.
+
+Consequência aceita: os adaptadores finos ficam em 0,0% de `func_coverage`, e
+`min_func_coverage` desce quando um adaptador novo entra. Isso é diferente da
+queda que a decisão 91 corrigiu — aquela cobrava por observabilidade que
+EXISTIA e não era vista; esta cobra por observabilidade que o instrumento não
+pode provar. A primeira era defeito; a segunda é limite, e um limite escreve-se
+em vez de se contornar.
+
+Verificação de que isto foi medido e não deduzido: afrouxar a regra para aceitar
+alvo de qualquer pacote do módulo não mudou nada — 458 funções creditadas antes
+e depois. O que bloqueia é a interface, não a fronteira de pacote.

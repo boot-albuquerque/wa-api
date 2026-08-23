@@ -61,10 +61,39 @@ func TestFormaPortaResolvida(t *testing.T) {
 	if jr.ByForm["port"].Files == 0 {
 		t.Fatal("port sem arquivos")
 	}
-	total := jr.ByForm["port"].CallSites + jr.ByForm["zerolog"].CallSites + jr.ByForm["hlog"].CallSites
-	if jr.CallSitesTotal != total {
-		t.Fatalf("call_sites_total = %d, soma das formas = %d", jr.CallSitesTotal, total)
+	// MUNDO FECHADO: o conjunto de formas reconhecidas e' EXATAMENTE este.
+	//
+	// A versao anterior somava tres formas a mao e comparava com
+	// call_sites_total, e foi assim que ela apanhou as formas novas da decisao
+	// 78. Mas isso era efeito colateral, nao asserção: call_sites_total E' a
+	// soma das formas (main.go:240), entao somar TODAS dos dois lados nao pode
+	// falhar nunca — tautologia. Descobri isso porque o controle negativo nao
+	// mordeu.
+	//
+	// O que o teste vale de facto e' isto: uma forma nova nao entra em silencio.
+	// Acrescentar uma exige documenta-la em METRIC.md e reconciliar
+	// .log-coverage-baseline, e esta linha e' o que obriga a passagem por aqui.
+	formasConhecidas := map[string]bool{
+		"port": true, "zerolog": true, "hlog": true, // L1-a, L1-b, L1-c
+		"stage": true, "op": true, // L1-d, decisao 78
 	}
+	for forma := range jr.ByForm {
+		if !formasConhecidas[forma] {
+			t.Errorf("forma %q nao declarada: documente-a em METRIC.md e "+
+				"reconcilie .log-coverage-baseline antes de a acrescentar", forma)
+		}
+	}
+	// E' preciso exigir SITIOS, e nao presenca da chave: as chaves de ByForm
+	// sao pre-criadas, entao uma regra que deixasse de casar produziria uma
+	// forma com zero sitios e a chave continuaria la'. O controle negativo
+	// mostrou isso — desligar L1-d1 passava neste teste.
+	for forma := range formasConhecidas {
+		if jr.ByForm[forma].CallSites == 0 {
+			t.Errorf("forma %q com zero call sites: a regra que a produz "+
+				"deixou de casar", forma)
+		}
+	}
+
 	if jr.Eligible == 0 || jr.Covered == 0 || len(jr.ByPackage) == 0 {
 		t.Fatalf("relatorio JSON incompleto: %+v", jr)
 	}

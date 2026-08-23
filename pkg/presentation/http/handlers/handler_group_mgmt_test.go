@@ -46,7 +46,7 @@ func (f *grpMgmtFakes) failSession(err error) {
 // handlers monta o conjunto real, pelo mesmo construtor que o bootstrap usa.
 func (f *grpMgmtFakes) handlers() *GroupManagementHandlers {
 	return NewGroupManagementHandlers(
-		group.NewGroupManagementUseCase(f.lifecycle, f.settings, f.jids, f.logger))
+		group.NewGroupManagementUseCase(f.lifecycle, f.settings, f.settings, f.settings, f.settings, f.jids, f.logger))
 }
 
 // grpMgmtMissing e' um caso de campo obrigatorio ausente: o corpo que o omite
@@ -90,6 +90,12 @@ func grpMgmtCases() []grpMgmtCase {
 			missing: []grpMgmtMissing{
 				{"sem name", `{"participants":["5511999999999"]}`, "missing name"},
 				{"sem participants", `{"name":"squad"}`, "missing participants"},
+				// F101: o tamanho da lista passava e o ELEMENTO vazio descia
+				// ate' o parser de JID, que entrava em panico nele.
+				{"participante vazio", `{"name":"squad","participants":[""]}`, "empty participants at index 0"},
+				// O indice tem de ser o REAL, e nao um zero constante: por isso
+				// o vazio aqui esta na segunda posicao.
+				{"participante vazio no meio", `{"name":"squad","participants":["5511999999999",""]}`, "empty participants at index 1"},
 			},
 		},
 		{
@@ -193,13 +199,17 @@ func grpMgmtCases() []grpMgmtCase {
 			body: `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
 			failOp: func(f *grpMgmtFakes, err error) {
-				f.settings.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (any, error) {
-					return nil, err
+				f.settings.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+					return domain.ParticipantsUpdate{}, err
 				}
 			},
 			missing: []grpMgmtMissing{
 				{"sem Phone", `{"GroupJID":"` + grpMgmtJID + `"}`, "missing phones"},
 				{"sem Action", `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"]}`, "missing action"},
+				{"phone vazio", `{"GroupJID":"` + grpMgmtJID + `","Phone":[""],"Action":"add"}`, "empty phones at index 0"},
+				// F101: este handler nunca validou GroupJID, entao o campo
+				// ausente tambem alcancava o parser.
+				{"sem GroupJID", `{"Phone":["5511999999999"],"Action":"add"}`, "missing groupjid"},
 			},
 		},
 	}

@@ -11,13 +11,13 @@ import (
 
 // ArchiveChatUseCase archives or unarchives a chat
 type ArchiveChatUseCase struct {
-	chats  appport.ChatOperations
+	chats  appport.ChatArchiver
 	jids   appport.JIDResolver
 	logger appport.Logger
 }
 
 // NewArchiveChatUseCase creates a new instance
-func NewArchiveChatUseCase(co appport.ChatOperations, jr appport.JIDResolver, logger appport.Logger) *ArchiveChatUseCase {
+func NewArchiveChatUseCase(co appport.ChatArchiver, jr appport.JIDResolver, logger appport.Logger) *ArchiveChatUseCase {
 	return &ArchiveChatUseCase{chats: co, jids: jr, logger: logger}
 }
 

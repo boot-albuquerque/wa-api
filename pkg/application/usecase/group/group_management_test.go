@@ -26,7 +26,7 @@ func newMgmt() *mgmtFakes {
 		jids: &contractsfake.JIDResolver{},
 		log:  &contractsfake.Logger{},
 	}
-	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 	return f
 }
 
@@ -196,7 +196,7 @@ func TestGroupManagement_JIDInvalidoRecusaComLog(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newMgmt()
 			f.jids = failJID(boom)
-			f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+			f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
 			if err := tt.call(f.uc); err == nil {
 				t.Fatal("esperava erro de JID")
@@ -219,7 +219,7 @@ func TestGroupManagement_ParseJIDsLogaOIndiceQueReprovou(t *testing.T) {
 			return domain.JID(raw), nil
 		},
 	}
-	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
 	if _, err := f.uc.CreateGroup(context.Background(), "u1", "g", []string{"a", "b", "ruim"}); err == nil {
 		t.Fatal("esperava erro")
@@ -368,8 +368,8 @@ func TestGroupManagement_FalhaDaPortaLogaEPropaga(t *testing.T) {
 		{
 			name: "UpdateGroupParticipants",
 			arrange: func(f *mgmtFakes) {
-				f.set.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (any, error) {
-					return nil, boom
+				f.set.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+					return domain.ParticipantsUpdate{}, boom
 				}
 			},
 			call: func(uc *group.GroupManagementUseCase) error {
@@ -564,16 +564,24 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.action, func(t *testing.T) {
 			f := newMgmt()
-			f.set.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (any, error) {
-				return "ok", nil
+			f.set.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+				return domain.ParticipantsUpdate{Result: "ok", Confirmed: true}, nil
 			}
 
 			res, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", tt.action, []string{"5511987654321", "5522987654321"})
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
-			if res != "ok" {
-				t.Errorf("res = %v", res)
+			// O desfecho agora e TIPADO (decisao 86): o payload continua a vir
+			// em Result, e Confirmed diz se a sessao que agiu leu a mudanca de
+			// volta. Comparar o desfecho inteiro com "ok" era possivel quando
+			// ele era `any`, e deixou de o ser de proposito.
+			if res.Result != "ok" {
+				t.Errorf("res.Result = %v", res.Result)
+			}
+			if !res.Confirmed {
+				t.Errorf("res.Confirmed = false com Reason %q; este dublê imita o "+
+					"socket, que confirma na propria chamada", res.Reason)
 			}
 			call := f.set.UpdateGroupParticipantsCalls[0]
 			if call.Action != tt.want {
@@ -602,7 +610,7 @@ func TestGroupManagement_UpdateParticipantsListaInvalida(t *testing.T) {
 			return domain.JID(raw), nil
 		},
 	}
-	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.jids, f.log)
+	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
 	if _, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", "add", []string{"ruim"}); err == nil {
 		t.Fatal("esperava erro")

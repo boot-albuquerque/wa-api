@@ -67,6 +67,11 @@ type entry struct {
 	L3       bool
 	Sites    []logSite
 	Paths    []exitPath
+	// Delegations sao as chamadas a ajudantes do mesmo pacote que levam
+	// rotulo constante. Ficam guardadas porque L1-e so' pode ser decidida
+	// depois de todas as entradas existirem — o alvo pode ser analisado
+	// depois de quem o chama.
+	Delegations []delegation `json:"-"`
 }
 
 func (e entry) covered() bool { return e.L1 && e.L3 }
@@ -366,6 +371,10 @@ func (a *analysis) Analyze(pkgs []*packages.Package) *report {
 		"port":    {files: map[string]bool{}},
 		"zerolog": {files: map[string]bool{}},
 		"hlog":    {files: map[string]bool{}},
+		// L1-d, decisao 78: as duas formas de observabilidade da arvore
+		// headless — falha com estagio tipado, e operacao rastreada.
+		"stage": {files: map[string]bool{}},
+		"op":    {files: map[string]bool{}},
 	}}
 	var roots []*packages.Package
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
@@ -384,6 +393,10 @@ func (a *analysis) Analyze(pkgs []*packages.Package) *report {
 		}
 		return rep.Entries[i].Line < rep.Entries[j].Line
 	})
+	// L1-e corre AQUI, entre a analise e a agregacao: precisa de todas as
+	// entradas (o alvo da delegacao pode ter sido analisado depois de quem o
+	// chama) e tem de acontecer antes de os totais serem somados.
+	applyDelegatedL1(rep)
 	rep.aggregate()
 	return rep
 }
@@ -588,6 +601,9 @@ func (a *analysis) analyzeBody(ctx *pkgCtx, pkgRel, fileRel, key string, fd *ast
 	}
 
 	e.L1 = len(sites) > 0
+	if !e.L1 {
+		e.Delegations = a.collectDelegations(ctx, pkgRel, body, promoted)
+	}
 	e.L3 = true
 	for i := range e.Sites {
 		e.Sites[i].valid = ruleL3Structured(e.Sites[i])
@@ -673,8 +689,20 @@ func (a *analysis) collectLogSites(ctx *pkgCtx, fileRel string, body *ast.BlockS
 		if skipPromoted(n, promoted) {
 			return false
 		}
+		// L1-d1: falha com estagio tipado. E' um literal, e nao uma chamada,
+		// entao e' testado antes do recorte para CallExpr.
+		if lit, ok := n.(*ast.CompositeLit); ok {
+			if s, ok := ruleL1dStagedFailure(ctx, lit); ok {
+				out = append(out, s)
+			}
+			return true
+		}
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
+			return true
+		}
+		if s, ok := ruleL1dTracedOp(ctx, call); ok {
+			out = append(out, s)
 			return true
 		}
 		if s, ok := ruleL1aPort(ctx, call); ok {

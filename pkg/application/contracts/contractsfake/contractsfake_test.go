@@ -639,7 +639,7 @@ func TestGroupSettings(t *testing.T) {
 	if err := f.SetDisappearingTimer(ctx, "u1", "g@g.us", 7*24*time.Hour, at); err != nil {
 		t.Errorf("SetDisappearingTimer = %v", err)
 	}
-	if v, err := f.UpdateGroupParticipants(ctx, "u1", "g@g.us", parts, domain.ParticipantAdd); v != nil || err != nil {
+	if v, err := f.UpdateGroupParticipants(ctx, "u1", "g@g.us", parts, domain.ParticipantAdd); !v.Confirmed || err != nil {
 		t.Errorf("UpdateGroupParticipants zero-value = %v, %v", v, err)
 	}
 
@@ -671,8 +671,8 @@ func TestGroupSettings(t *testing.T) {
 	f.SetGroupAnnounceFunc = func(context.Context, string, domain.JID, bool) error { return errBoom }
 	f.SetGroupLockedFunc = func(context.Context, string, domain.JID, bool) error { return errBoom }
 	f.SetDisappearingTimerFunc = func(context.Context, string, domain.JID, time.Duration, time.Time) error { return errBoom }
-	f.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (any, error) {
-		return nil, errBoom
+	f.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+		return domain.ParticipantsUpdate{}, errBoom
 	}
 
 	for name, err := range map[string]error{

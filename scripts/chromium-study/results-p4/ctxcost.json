@@ -1,0 +1,296 @@
+{
+  "meta": {
+    "chromedp": false,
+    "contexts": 4,
+    "cpu_max": "200000 100000",
+    "note": "raw CDP only — no chromedp connection is ever opened",
+    "started_utc": "2026-08-09T06:13:49Z"
+  },
+  "samples": [
+    {
+      "stage": "0-baseline",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 391.61328125,
+      "cpu_core_seconds_cumulative": 0.207582
+    },
+    {
+      "stage": "1-context-1-created",
+      "browser_contexts": 1,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 392.40234375,
+      "cpu_core_seconds_cumulative": 0.273697
+    },
+    {
+      "stage": "1-context-2-created",
+      "browser_contexts": 2,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 393.03515625,
+      "cpu_core_seconds_cumulative": 0.339236
+    },
+    {
+      "stage": "1-context-3-created",
+      "browser_contexts": 3,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 394.328125,
+      "cpu_core_seconds_cumulative": 0.482817
+    },
+    {
+      "stage": "1-context-4-created",
+      "browser_contexts": 4,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 394.9453125,
+      "cpu_core_seconds_cumulative": 0.548041
+    },
+    {
+      "stage": "2-page-in-context-1",
+      "browser_contexts": 4,
+      "targets_by_type": {
+        "browser_ui": 4,
+        "page": 2
+      },
+      "targets_total": 6,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 4,
+        "total": 12,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 523.86328125,
+      "cpu_core_seconds_cumulative": 1.807277
+    },
+    {
+      "stage": "2-page-in-context-2",
+      "browser_contexts": 4,
+      "targets_by_type": {
+        "browser_ui": 6,
+        "page": 3
+      },
+      "targets_total": 9,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 6,
+        "total": 14,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 666.0078125,
+      "cpu_core_seconds_cumulative": 4.140643
+    },
+    {
+      "stage": "2-page-in-context-3",
+      "browser_contexts": 4,
+      "targets_by_type": {
+        "browser_ui": 8,
+        "page": 4
+      },
+      "targets_total": 12,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 8,
+        "total": 16,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 808.19921875,
+      "cpu_core_seconds_cumulative": 5.960695
+    },
+    {
+      "stage": "2-page-in-context-4",
+      "browser_contexts": 4,
+      "targets_by_type": {
+        "browser_ui": 10,
+        "page": 5
+      },
+      "targets_total": 15,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 10,
+        "total": 18,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 959.75,
+      "cpu_core_seconds_cumulative": 7.684191
+    },
+    {
+      "stage": "3-disposed-all",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 410.8203125,
+      "cpu_core_seconds_cumulative": 8.145406
+    },
+    {
+      "stage": "4-page-in-default-1",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 2
+      },
+      "targets_total": 4,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 3,
+        "total": 11,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 426.49609375,
+      "cpu_core_seconds_cumulative": 8.478379
+    },
+    {
+      "stage": "4-page-in-default-2",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 3
+      },
+      "targets_total": 5,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 4,
+        "total": 12,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 435.82421875,
+      "cpu_core_seconds_cumulative": 8.83254
+    },
+    {
+      "stage": "4-page-in-default-3",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 4
+      },
+      "targets_total": 6,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 5,
+        "total": 13,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 444.31640625,
+      "cpu_core_seconds_cumulative": 9.322059
+    },
+    {
+      "stage": "4-page-in-default-4",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 5
+      },
+      "targets_total": 7,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 6,
+        "total": 14,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 452.6328125,
+      "cpu_core_seconds_cumulative": 10.596826
+    },
+    {
+      "stage": "5-closed-default-pages",
+      "browser_contexts": 0,
+      "targets_by_type": {
+        "browser_ui": 2,
+        "page": 1
+      },
+      "targets_total": 3,
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 2,
+        "total": 10,
+        "utility": 2,
+        "zygote": 2
+      },
+      "memory_current_mb": 412.8671875,
+      "cpu_core_seconds_cumulative": 11.310461
+    }
+  ]
+}

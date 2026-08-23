@@ -1,0 +1,23 @@
+### environment
+chromium: Chromium 151.0.7922.108 built on Debian GNU/Linux 12 (bookworm)
+kernel:   6.10.11-linuxkit aarch64
+cgroup:   cpuset cpu io memory hugetlb pids rdma
+mem.max:  4294967296
+cpu.max:  400000 100000
+profile:  canonical
+memory.current before browser: 3284992
+memory.current with idle browser: 254681088
+browser-only floor: 239 MiB
+== rod-canon ==
+   jobs=60 fail=0 jobs/s=1.83 p50=540.1ms p95=595.3ms p99=599.5ms ctlRSS=14660KB
+== rod-default ==
+   jobs=60 fail=0 jobs/s=1.58 p50=567.0ms p95=930.8ms p99=966.9ms ctlRSS=16156KB
+== cdp-min ==
+   jobs=60 fail=0 jobs/s=6.53 p50=133.1ms p95=277.0ms p99=319.7ms ctlRSS=16232KB
+== chromedp ==
+   jobs=60 fail=0 jobs/s=4.11 p50=213.5ms p95=389.0ms p99=492.8ms ctlRSS=17244KB
+== chromedp-cdproto ==
+   jobs=60 fail=0 jobs/s=6.92 p50=124.9ms p95=222.8ms p99=295.9ms ctlRSS=17364KB
+report -> /out/normB-rep2.json
+memory.current at end: 270176256 (254 MiB over idle)
+chromium processes at end: 8

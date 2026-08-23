@@ -10,12 +10,12 @@ import (
 
 // CheckUserUseCase verifica se usuários estão no WhatsApp
 type CheckUserUseCase struct {
-	contacts appport.ContactDirectory
+	contacts appport.IdentityResolver
 	logger   appport.Logger
 }
 
 // NewCheckUserUseCase cria uma nova instância
-func NewCheckUserUseCase(cd appport.ContactDirectory, logger appport.Logger) *CheckUserUseCase {
+func NewCheckUserUseCase(cd appport.IdentityResolver, logger appport.Logger) *CheckUserUseCase {
 	return &CheckUserUseCase{contacts: cd, logger: logger}
 }
 

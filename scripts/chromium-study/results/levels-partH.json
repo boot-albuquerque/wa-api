@@ -1,0 +1,253 @@
+{
+  "levels": {
+    "L0-raw-evaluate": {
+      "level": "L0-raw-evaluate",
+      "jobs": 40,
+      "errors": 0,
+      "false_successes": 40,
+      "correct_jobs": 0,
+      "jobs_per_sec": 11.694643069348421,
+      "correct_jobs_per_sec": 0,
+      "cdp_commands_per_job": 26.2,
+      "cdp_messages_in_per_job": 68.2,
+      "cdp_bytes_per_job": 24844.55,
+      "job_total": {
+        "max_ms": 310.808,
+        "mean_ms": 85.50829999999999,
+        "n": 40,
+        "p50_ms": 70.027,
+        "p95_ms": 127.959,
+        "p99_ms": 310.808,
+        "stddev_ms": 42.0523122926671
+      },
+      "ops": {
+        "click": {
+          "max_ms": 8.845,
+          "mean_ms": 1.9586499999999998,
+          "n": 40,
+          "p50_ms": 1.311,
+          "p95_ms": 3.256,
+          "p99_ms": 8.845,
+          "stddev_ms": 1.6157940238470994
+        },
+        "fill": {
+          "max_ms": 3.706,
+          "mean_ms": 0.815625,
+          "n": 40,
+          "p50_ms": 0.492,
+          "p95_ms": 2.112,
+          "p99_ms": 3.706,
+          "stddev_ms": 0.6703915530307643
+        },
+        "navigate": {
+          "max_ms": 283.728,
+          "mean_ms": 61.539850000000015,
+          "n": 40,
+          "p50_ms": 50.378,
+          "p95_ms": 102.503,
+          "p99_ms": 283.728,
+          "stddev_ms": 39.25647179864105
+        },
+        "verify": {
+          "max_ms": 33.469,
+          "mean_ms": 2.1201250000000003,
+          "n": 40,
+          "p50_ms": 0.807,
+          "p95_ms": 3.481,
+          "p99_ms": 33.469,
+          "stddev_ms": 5.225290145951227
+        },
+        "wait_ready": {
+          "max_ms": 6.118,
+          "mean_ms": 1.7129249999999998,
+          "n": 40,
+          "p50_ms": 1.279,
+          "p95_ms": 3.529,
+          "p99_ms": 6.118,
+          "stddev_ms": 1.143783969714124
+        },
+        "wait_result": {
+          "max_ms": 30.723,
+          "mean_ms": 16.326274999999992,
+          "n": 40,
+          "p50_ms": 15.214,
+          "p95_ms": 22.348,
+          "p99_ms": 30.723,
+          "stddev_ms": 3.6448886470473965
+        }
+      },
+      "alloc_bytes_per_job": 443012,
+      "allocs_per_job": 1912,
+      "gc_cycles": 12
+    },
+    "L1-cdproto-equivalent": {
+      "level": "L1-cdproto-equivalent",
+      "jobs": 39,
+      "errors": 1,
+      "false_successes": 0,
+      "correct_jobs": 39,
+      "jobs_per_sec": 3.66916021091734,
+      "correct_jobs_per_sec": 3.66916021091734,
+      "cdp_commands_per_job": 63.975,
+      "cdp_messages_in_per_job": 123.35,
+      "cdp_bytes_per_job": 56280.7,
+      "job_total": {
+        "max_ms": 1475.457,
+        "mean_ms": 249.59102564102562,
+        "n": 39,
+        "p50_ms": 131.986,
+        "p95_ms": 682.28,
+        "p99_ms": 1475.457,
+        "stddev_ms": 260.3387977610445
+      },
+      "ops": {
+        "click": {
+          "max_ms": 174.662,
+          "mean_ms": 18.36705,
+          "n": 40,
+          "p50_ms": 5.33,
+          "p95_ms": 75.853,
+          "p99_ms": 174.662,
+          "stddev_ms": 31.836528626681332
+        },
+        "fill": {
+          "max_ms": 261.431,
+          "mean_ms": 33.631725,
+          "n": 40,
+          "p50_ms": 12.047,
+          "p95_ms": 143.962,
+          "p99_ms": 261.431,
+          "stddev_ms": 50.906660019582645
+        },
+        "navigate": {
+          "max_ms": 976.764,
+          "mean_ms": 139.64365000000004,
+          "n": 40,
+          "p50_ms": 47.598,
+          "p95_ms": 468.999,
+          "p99_ms": 976.764,
+          "stddev_ms": 188.69567513029412
+        },
+        "verify": {
+          "max_ms": 15.917,
+          "mean_ms": 2.2617692307692314,
+          "n": 39,
+          "p50_ms": 0.852,
+          "p95_ms": 5.945,
+          "p99_ms": 15.917,
+          "stddev_ms": 2.8406760522673205
+        },
+        "wait_ready": {
+          "max_ms": 62.889,
+          "mean_ms": 11.282925,
+          "n": 40,
+          "p50_ms": 8.443,
+          "p95_ms": 24.868,
+          "p99_ms": 62.889,
+          "stddev_ms": 10.389569951127669
+        },
+        "wait_result": {
+          "max_ms": 72.286,
+          "mean_ms": 57.387410256410256,
+          "n": 39,
+          "p50_ms": 55.836,
+          "p95_ms": 66.11,
+          "p99_ms": 72.286,
+          "stddev_ms": 4.591953233467905
+        }
+      },
+      "alloc_bytes_per_job": 748711,
+      "allocs_per_job": 3275,
+      "gc_cycles": 17
+    },
+    "L2-chromedp-highlevel": {
+      "level": "L2-chromedp-highlevel",
+      "jobs": 40,
+      "errors": 0,
+      "false_successes": 0,
+      "correct_jobs": 40,
+      "jobs_per_sec": 7.094330021442969,
+      "correct_jobs_per_sec": 7.094330021442969,
+      "cdp_commands_per_job": 62.2,
+      "cdp_messages_in_per_job": 118.2,
+      "cdp_bytes_per_job": 44166.3,
+      "job_total": {
+        "max_ms": 188.652,
+        "mean_ms": 140.95675000000003,
+        "n": 40,
+        "p50_ms": 135.615,
+        "p95_ms": 170.625,
+        "p99_ms": 188.652,
+        "stddev_ms": 14.259352041292058
+      },
+      "ops": {
+        "click": {
+          "max_ms": 10.367,
+          "mean_ms": 5.186475,
+          "n": 40,
+          "p50_ms": 4.558,
+          "p95_ms": 9.323,
+          "p99_ms": 10.367,
+          "stddev_ms": 1.6828923760523133
+        },
+        "fill": {
+          "max_ms": 68.315,
+          "mean_ms": 18.747950000000003,
+          "n": 40,
+          "p50_ms": 16.42,
+          "p95_ms": 24.697,
+          "p99_ms": 68.315,
+          "stddev_ms": 8.626799875823016
+        },
+        "navigate": {
+          "max_ms": 68.066,
+          "mean_ms": 45.692575,
+          "n": 40,
+          "p50_ms": 43.777,
+          "p95_ms": 66.262,
+          "p99_ms": 68.066,
+          "stddev_ms": 8.068173429864718
+        },
+        "verify": {
+          "max_ms": 7.87,
+          "mean_ms": 1.32905,
+          "n": 40,
+          "p50_ms": 0.831,
+          "p95_ms": 3.816,
+          "p99_ms": 7.87,
+          "stddev_ms": 1.3444980280759062
+        },
+        "wait_ready": {
+          "max_ms": 15.097,
+          "mean_ms": 12.785374999999998,
+          "n": 40,
+          "p50_ms": 12.977,
+          "p95_ms": 14.604,
+          "p99_ms": 15.097,
+          "stddev_ms": 1.5163553291939849
+        },
+        "wait_result": {
+          "max_ms": 62.316,
+          "mean_ms": 56.27997499999998,
+          "n": 40,
+          "p50_ms": 55.9,
+          "p95_ms": 59.522,
+          "p99_ms": 62.316,
+          "stddev_ms": 2.3625756229960135
+        }
+      },
+      "alloc_bytes_per_job": 650925,
+      "allocs_per_job": 3127,
+      "gc_cycles": 15
+    }
+  },
+  "meta": {
+    "cgroup_max": "4294967296",
+    "cpu_max": "400000 100000",
+    "iters": 40,
+    "page": "http://127.0.0.1:44253/h",
+    "proxy_ws": "ws://127.0.0.1:38969/devtools/browser/proxy",
+    "started_utc": "2026-08-09T03:51:21Z",
+    "warmup": 5
+  }
+}

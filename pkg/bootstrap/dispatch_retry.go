@@ -10,7 +10,7 @@ import (
 
 // Reagendamento de webhook (F88).
 //
-// A waitFull entre tentativas NÃO pode acontecer dentro de um worker do pool de
+// A espera entre tentativas NÃO pode acontecer dentro de um worker do pool de
 // despacho. Com os padrões que estavam em produção — 5 tentativas, base de 30s,
 // backoff exponencial — as esperas somavam 30+60+120+240 = 450s: um único
 // evento para um destino morto segurava um worker por 7,5 MINUTOS.
@@ -24,7 +24,7 @@ import (
 // Isso era regressão introduzida pelo próprio pool (F86): antes dele as mesmas
 // esperas eram goroutines soltas dormindo, feio e inofensivo.
 //
-// Aqui a waitFull vira TIMER: o worker devolve o slot imediatamente e o trabalho
+// Aqui a espera vira TIMER: o worker devolve o slot imediatamente e o trabalho
 // volta ao pool quando o prazo vence. Um timer pendente não custa goroutine.
 
 const (

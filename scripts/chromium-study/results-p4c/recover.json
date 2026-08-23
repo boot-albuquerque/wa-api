@@ -1,0 +1,241 @@
+{
+  "experiment": "browser-crash-recovery",
+  "fault": "SIGKILL no processo principal do Chromium",
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "rec1/baseline/navigate",
+      "start_ms": 2444,
+      "duration_ms": 849,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec1/baseline/ready",
+      "start_ms": 3293,
+      "duration_ms": 9497,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "RecoveryProbe",
+      "label": "rec1/detect",
+      "start_ms": 12791,
+      "duration_ms": 17,
+      "deadline_ms": 2000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rec1/recover/navigate",
+      "start_ms": 15291,
+      "duration_ms": 1450,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec1/recover/ready",
+      "start_ms": 16742,
+      "duration_ms": 10834,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rec1/recover/state",
+      "start_ms": 27578,
+      "duration_ms": 21,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rec2/baseline/navigate",
+      "start_ms": 31062,
+      "duration_ms": 827,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec2/baseline/ready",
+      "start_ms": 31890,
+      "duration_ms": 12770,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "RecoveryProbe",
+      "label": "rec2/detect",
+      "start_ms": 44662,
+      "duration_ms": 18,
+      "deadline_ms": 2000,
+      "result": "error",
+      "error": "context canceled"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rec2/recover/navigate",
+      "start_ms": 47084,
+      "duration_ms": 864,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec2/recover/ready",
+      "start_ms": 47950,
+      "duration_ms": 7124,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rec2/recover/state",
+      "start_ms": 55074,
+      "duration_ms": 32,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rec3/baseline/navigate",
+      "start_ms": 58004,
+      "duration_ms": 1272,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec3/baseline/ready",
+      "start_ms": 59276,
+      "duration_ms": 6539,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rec4/baseline/navigate",
+      "start_ms": 68339,
+      "duration_ms": 857,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec4/baseline/ready",
+      "start_ms": 69196,
+      "duration_ms": 6597,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rec5/baseline/navigate",
+      "start_ms": 78278,
+      "duration_ms": 780,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rec5/baseline/ready",
+      "start_ms": 79058,
+      "duration_ms": 6841,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    }
+  ],
+  "reps": 5,
+  "started_utc": "2026-08-09T15:21:11Z",
+  "summary": {
+    "attempts": 5,
+    "authentication_loss": 0,
+    "authentication_loss_rate": 0,
+    "recovery_p50_sec": 12.961741881,
+    "recovery_p95_sec": 12.961741881,
+    "successes": 1
+  },
+  "trials": [
+    {
+      "rep": 1,
+      "cdp_disconnect_detected_sec": 0.020430083,
+      "browser_launch_sec": 0.454196167,
+      "time_to_app_ready_sec": 12.507545548000001,
+      "total_recovery_sec": 12.961741881,
+      "qr_required": false,
+      "outcome": "RECOVERED_AUTHENTICATED",
+      "profile_bytes_after": 130630052,
+      "memory_peak_mb": 941.33984375,
+      "orphan_procs_after_kill": 0,
+      "singleton_files_reclaimed": 3
+    },
+    {
+      "rep": 2,
+      "cdp_disconnect_detected_sec": 0.019346958,
+      "browser_launch_sec": 0.446351376,
+      "time_to_app_ready_sec": 8.142081837,
+      "total_recovery_sec": 8.588433379,
+      "qr_required": false,
+      "outcome": "TIMEOUT",
+      "profile_bytes_after": 117786716,
+      "memory_peak_mb": 941.33984375,
+      "orphan_procs_after_kill": 0,
+      "singleton_files_reclaimed": 3
+    },
+    {
+      "rep": 3,
+      "cdp_disconnect_detected_sec": 0,
+      "browser_launch_sec": 0,
+      "time_to_app_ready_sec": 0,
+      "total_recovery_sec": 0,
+      "qr_required": false,
+      "outcome": "TIMEOUT",
+      "profile_bytes_after": 0,
+      "memory_peak_mb": 0,
+      "orphan_procs_after_kill": 0,
+      "singleton_files_reclaimed": 0
+    },
+    {
+      "rep": 4,
+      "cdp_disconnect_detected_sec": 0,
+      "browser_launch_sec": 0,
+      "time_to_app_ready_sec": 0,
+      "total_recovery_sec": 0,
+      "qr_required": false,
+      "outcome": "TIMEOUT",
+      "profile_bytes_after": 0,
+      "memory_peak_mb": 0,
+      "orphan_procs_after_kill": 0,
+      "singleton_files_reclaimed": 0
+    },
+    {
+      "rep": 5,
+      "cdp_disconnect_detected_sec": 0,
+      "browser_launch_sec": 0,
+      "time_to_app_ready_sec": 0,
+      "total_recovery_sec": 0,
+      "qr_required": false,
+      "outcome": "TIMEOUT",
+      "profile_bytes_after": 0,
+      "memory_peak_mb": 0,
+      "orphan_procs_after_kill": 0,
+      "singleton_files_reclaimed": 0
+    }
+  ],
+  "watchdog": {
+    "budget_sec": 960,
+    "deadline_exceeded": 0,
+    "elapsed_sec": 85.947547788,
+    "experiment": "browser-recovery",
+    "operations": 18,
+    "status": "COMPLETED"
+  }
+}
