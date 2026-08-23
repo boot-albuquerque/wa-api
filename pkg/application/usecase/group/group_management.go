@@ -230,17 +230,22 @@ func (uc *GroupManagementUseCase) SetDisappearingTimer(ctx context.Context, txtI
 }
 
 // UpdateGroupParticipants adds or removes participants from a group.
-func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, txtID, groupJID, action string, phones []string) (interface{}, error) {
+// UpdateGroupParticipants devolve o desfecho TIPADO, e nao um `any`.
+//
+// O tipo carrega se a sessao que agiu conseguiu CONFIRMAR a mudanca (decisao
+// 86). Achatar aqui anularia o proposito: o handler perderia a unica informacao
+// que distingue "aplicado e verificado" de "enviado e nao observavel".
+func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, txtID, groupJID, action string, phones []string) (domain.ParticipantsUpdate, error) {
 	if err := uc.ensure(ctx, txtID); err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jids, err := uc.parseJIDs(ctx, phones)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 
 	// Qualquer ação diferente de "add" é remoção — regra preservada do
@@ -252,7 +257,16 @@ func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, t
 	res, err := uc.settings.UpdateGroupParticipants(ctx, txtID, jid, jids, participantAction)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to update group participants", "txtID", txtID, "groupJID", groupJID, "action", action, "participants", len(jids), "error", err)
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
+	}
+	// Uma mudança que o transporte NAO conseguiu confirmar e' registrada em
+	// Warn, com o motivo que ele deu. E' a unica forma de a incerteza chegar a
+	// quem opera: o chamador HTTP recebe 200, porque a operacao foi de facto
+	// enviada, e o log e' onde fica escrito que ninguem a verificou.
+	if !res.Confirmed {
+		uc.logger.Warn(ctx, "group participants updated WITHOUT confirmation",
+			"txtID", txtID, "groupJID", groupJID, "action", action,
+			"participants", len(jids), "reason", res.Reason)
 	}
 	return res, nil
 }

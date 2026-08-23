@@ -1484,3 +1484,49 @@ a medição contradiz**. Um `NewMessageID` implementado "para compilar" devolver
 um id que a página ignora; um `MarkRead` sem a ressalva faria alguém concluir que
 o remetente vê os tiques. Ambos compilariam, ambos passariam em teste de tipo, e
 ambos mentiriam.
+
+## Decisão 86 — a primeira vez que a resposta certa foi mudar o CONTRATO
+
+A invariante 14 exige que nenhuma escrita devolva sucesso silencioso: quem
+escreve lê a pós-condição de volta. As operações de participante de grupo são o
+único lugar onde isso é **impossível para quem age**, e não por falta de esforço:
+H58 para adicionar e remover, H65 para promover e rebaixar. A mudança CHEGA ao
+servidor, e a sessão que agiu não a vê — a metadata não refresca e nenhum aviso
+de sistema chega. A confirmação só aparece em OUTRA sessão.
+
+A capability já sabia e já dizia, em `Membership.Verified`:
+
+> "Verified diz se a mudança foi CONFIRMADA. Neste build é verdadeiro só para um
+> no-op, porque uma mudança real é invisível para a sessão que a fez. Reportar
+> uma mudança como confirmada aqui seria uma mentira que o chamador não pode
+> detetar, e uma que já custou a este repositório um grupo de laboratório
+> quebrado."
+
+**Faltava-lhe um lugar no PORT onde dizê-lo.** Havia três saídas e duas eram
+ruins: devolver sucesso sem pós-condição abriria exceção à invariante; ler de
+volta assim mesmo reportaria FALHA para uma mudança bem-sucedida.
+
+A terceira, que a orquestração escolheu: o "não confirmável" deixa de ser
+silêncio e vira **desfecho relatado**. A invariante sobrevive porque proíbe o
+sucesso mudo, não a incerteza declarada.
+
+### O que a mudança trouxe além do pedido
+
+`domain.ParticipantsUpdate` tem `Valida()`, que recusa `Confirmed:false` sem
+motivo — porque isso traria o silêncio de volta **disfarçado de estrutura**, e
+seria pior que antes por ter aparência de rigor. O controle negativo confirmou:
+a mutação falhou **dentro do adaptador**, não no teste.
+
+O socket ganhou onde dizer quando ELE não confirma — coisa que não tinha e que
+ninguém notara faltar.
+
+E o use case ganhou um `Warn` com o motivo. O cliente HTTP recebe 200, porque a
+operação FOI enviada; o log é onde fica escrito que ninguém a verificou.
+
+### Uma mudança real contamina o lote
+
+A sessão não observa NENHUMA delas, então um lote com uma mudança real não é
+confirmável mesmo que as outras sejam no-op. Relatar o lote como confirmado
+porque a maioria era no-op seria uma média aritmética a substituir uma verdade.
+
+**Estado: 13 de 22 ports satisfeitos, 4 recusados com motivo medido.**

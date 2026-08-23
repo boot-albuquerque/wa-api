@@ -84,7 +84,12 @@ type GroupSettings interface {
 	SetDisappearingTimer(ctx context.Context, txtID string, group domain.JID, d time.Duration, at time.Time) error
 
 	// UpdateGroupParticipants adiciona ou remove participantes.
-	UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (any, error)
+	//
+	// Devolve um desfecho TIPADO, e não um `any`, porque há transporte em que a
+	// mudança chega ao servidor e a sessão que agiu NÃO consegue lê-la de volta
+	// (medido: H58 e H65 do stack headless). Sem um lugar para dizer isso, o
+	// adaptador teria de escolher entre mentir sucesso e mentir falha.
+	UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (domain.ParticipantsUpdate, error)
 }
 
 // GroupRequests cobre a fila de solicitações de entrada em grupo.

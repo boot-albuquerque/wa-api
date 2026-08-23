@@ -39,6 +39,7 @@ import (
 	"wa-api/internal/wa-headless/capabilities/chats"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/contacts"
+	"wa-api/internal/wa-headless/capabilities/group"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	"wa-api/internal/wa-headless/capabilities/presence"
@@ -307,3 +308,19 @@ func NewChatLister(runner *Runner, eval Evaluator) *ChatLister { return chats.Ne
 
 // NewReactor builds the reaction capability over a session's page.
 func NewReactor(runner *Runner, eval Evaluator) *Reactor { return react.New(runner, eval) }
+
+// Groups: membership and admin roles.
+type (
+	// GroupManager changes group membership and roles.
+	GroupManager = group.Manager
+	// GroupMembership is what a membership change did — COUNTS, never
+	// identities, because the log must not name who is in a group.
+	GroupMembership = group.Membership
+	// GroupAdminChange is what a promote or demote did.
+	GroupAdminChange = group.AdminChange
+)
+
+// NewGroupManager builds the group capability over a session's page.
+func NewGroupManager(runner *Runner, eval Evaluator) *GroupManager {
+	return group.New(runner, eval)
+}

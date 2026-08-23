@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	waheadless "wa-api/internal/wa-headless"
@@ -87,5 +88,87 @@ func TestIdentidadeInvalidaERecusada(t *testing.T) {
 	}
 	if _, _, err := s.ContactInfo(context.Background(), domain.JID("")); err == nil {
 		t.Fatal("JID vazio foi aceito")
+	}
+}
+
+type fetcherDuplo struct {
+	pic waheadless.AvatarPicture
+	err error
+}
+
+func (f fetcherDuplo) Fetch(context.Context, string, string) (waheadless.AvatarPicture, error) {
+	return f.pic, f.err
+}
+
+type listerDuplo struct {
+	roster waheadless.ContactRoster
+	err    error
+}
+
+func (l listerDuplo) List(context.Context, string) (waheadless.ContactRoster, error) {
+	return l.roster, l.err
+}
+
+func comCapabilities(f fetcher, l lister) *snapshot {
+	s := &snapshot{}
+	if f != nil {
+		s.newFetcher = func() fetcher { return f }
+	}
+	if l != nil {
+		s.newLister = func() lister { return l }
+	}
+	return s
+}
+
+// Ausência de foto é PAR VAZIO sem erro; falha de leitura é ERRO. É a distinção
+// da F83: um avatar_url vazio por falha era indistinguível de um vazio por não
+// haver foto, e o par de retornos separados existe para isso.
+func TestFotoAusenteContraFalhaDeLeitura(t *testing.T) {
+	url, tag, err := comCapabilities(fetcherDuplo{pic: waheadless.AvatarPicture{Present: false}}, nil).
+		ProfilePictureURL(context.Background(), domain.JID("5511999999999@c.us"))
+	if err != nil {
+		t.Fatalf("ausência de foto virou erro: %v", err)
+	}
+	if url != "" || tag != "" {
+		t.Fatalf("ausência devolveu url=%q tag=%q", url, tag)
+	}
+
+	_, _, err = comCapabilities(fetcherDuplo{err: errors.New("a página não respondeu")}, nil).
+		ProfilePictureURL(context.Background(), domain.JID("5511999999999@c.us"))
+	if err == nil {
+		t.Fatal("uma falha de leitura virou 'esta pessoa não tem foto'")
+	}
+}
+
+// TestContatoForaDoRosterERespostaENaoFalha: não conhecer alguém é uma resposta.
+// Devolver erro faria o chamador tratar "não está na agenda" como avaria.
+func TestContatoForaDoRosterERespostaENaoFalha(t *testing.T) {
+	roster := waheadless.ContactRoster{Contacts: []waheadless.RosterContact{
+		{LID: "111@lid", Pushname: "Ana"},
+	}}
+
+	nome, negocio, err := comCapabilities(nil, listerDuplo{roster: roster}).
+		ContactInfo(context.Background(), domain.JID("999@lid"))
+	if err != nil {
+		t.Fatalf("contato desconhecido virou erro: %v", err)
+	}
+	if nome != "" || negocio != "" {
+		t.Fatalf("contato desconhecido devolveu %q/%q", nome, negocio)
+	}
+
+	// E quem ESTÁ no roster é encontrado, senão o teste acima passaria mesmo
+	// com a busca quebrada.
+	nome, _, err = comCapabilities(nil, listerDuplo{roster: roster}).
+		ContactInfo(context.Background(), domain.JID("111@lid"))
+	if err != nil || nome != "Ana" {
+		t.Fatalf("contato conhecido devolveu %q (err=%v)", nome, err)
+	}
+}
+
+// A falha ao LER o roster é erro, e não "não conhecemos ninguém".
+func TestFalhaDoRosterNaoViraDesconhecido(t *testing.T) {
+	if _, _, err := comCapabilities(nil, listerDuplo{err: errors.New("a página recusou")}).
+		ContactInfo(context.Background(), domain.JID("111@lid")); err == nil {
+		t.Fatal("a falha de leitura virou contato desconhecido")
 	}
 }

@@ -673,7 +673,28 @@ rules_frozen=true
 # MessageComposer recusado por AUSENCIA DE SENTIDO: NewMessageID gera id ANTES de
 # enviar, que e o modelo do socket. A pagina CUNHA o id ao enviar, e a chave da
 # referencia (MsgKey.fromString) LANCA neste build (H98).
-min_func_coverage=554
+# justificativa: decisao 86 (2026-08-23), o contrato do port passa a carregar a
+# CONFIRMACAO. Entra o pacote capabilities/group.
+#
+# A invariante 14 proibe SUCESSO SILENCIOSO, nao incerteza. As operacoes de
+# participante sao o unico lugar onde a leitura de volta e IMPOSSIVEL para quem
+# age, e isso foi medido (H58 para adicionar/remover, H65 para promover/rebaixar):
+# a mudanca chega ao servidor e a sessao que agiu nao a ve.
+#
+# Havia tres saidas e duas eram ruins. Devolver sucesso sem pos-condicao abriria
+# excecao a invariante. Ler de volta assim mesmo reportaria FALHA para uma
+# mudanca bem-sucedida. A terceira: o "nao confirmavel" vira DESFECHO RELATADO.
+#
+# NUMEROS, e corrijo aqui um erro factual que escrevi na primeira versao desta
+# justificativa: eu disse que errpath SUBIA, e ele DESCE (797->785).
+#
+# O use case ganhou de facto um Warn com o motivo quando o transporte nao
+# confirma — e' onde a incerteza chega a quem opera, ja que o cliente HTTP recebe
+# 200 porque a operacao FOI enviada. Mas esse ganho e' de uma unidade, e o pacote
+# capabilities/group entra com muitos caminhos de saida descobertos: min_eligible
+# salta 752->799, o maior de toda a fase. O saldo e negativo, e escrever o
+# contrario seria justificar uma queda com um ganho que nao a cobre.
+min_func_coverage=551
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -695,7 +716,7 @@ min_func_coverage=554
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=792
+min_errpath_coverage=785
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -746,7 +767,7 @@ min_errpath_coverage=792
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=772
+min_eligible=799
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

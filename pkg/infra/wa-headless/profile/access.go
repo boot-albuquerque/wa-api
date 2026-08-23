@@ -62,12 +62,41 @@ func (p *Provider) ProfileAccess(ctx context.Context, txtID string) (appport.Pro
 	return &snapshot{identity: id, runner: runner, eval: eval}, nil
 }
 
+// fetcher e lister são as fatias das capabilities que o instantâneo usa, como
+// interfaces para que as REGRAS deste adaptador — foto ausente contra falha de
+// leitura, contato fora do roster contra roster ilegível — sejam testáveis sem
+// browser. Essa lógica é a parte com regras; construir a capability é fiação.
+type fetcher interface {
+	Fetch(ctx context.Context, jid, label string) (waheadless.AvatarPicture, error)
+}
+
+type lister interface {
+	List(ctx context.Context, label string) (waheadless.ContactRoster, error)
+}
+
 // snapshot answers from what was captured, and asks the page only for the two
 // methods that carry a context.
 type snapshot struct {
 	identity waheadless.OwnIdentity
 	runner   *waheadless.Runner
 	eval     waheadless.Evaluator
+	// Sobrescritíveis em teste. Nil usa a capability real.
+	newFetcher func() fetcher
+	newLister  func() lister
+}
+
+func (s *snapshot) fetcher() fetcher {
+	if s.newFetcher != nil {
+		return s.newFetcher()
+	}
+	return waheadless.NewAvatarFetcher(s.runner, s.eval)
+}
+
+func (s *snapshot) lister() lister {
+	if s.newLister != nil {
+		return s.newLister()
+	}
+	return waheadless.NewContactLister(s.runner, s.eval)
 }
 
 // PushName is EMPTY on this build, and that is measured rather than missing.
@@ -102,7 +131,7 @@ func (s *snapshot) ProfilePictureURL(ctx context.Context, jid domain.JID) (strin
 	if err != nil {
 		return "", "", err
 	}
-	pic, err := waheadless.NewAvatarFetcher(s.runner, s.eval).Fetch(ctx, pageJID, pictureLabel)
+	pic, err := s.fetcher().Fetch(ctx, pageJID, pictureLabel)
 	if err != nil {
 		return "", "", err
 	}
@@ -123,7 +152,7 @@ func (s *snapshot) ContactInfo(ctx context.Context, jid domain.JID) (string, str
 	if err != nil {
 		return "", "", err
 	}
-	roster, err := waheadless.NewContactLister(s.runner, s.eval).List(ctx, contactLabel)
+	roster, err := s.lister().List(ctx, contactLabel)
 	if err != nil {
 		return "", "", err
 	}

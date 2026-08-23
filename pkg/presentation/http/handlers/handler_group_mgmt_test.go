@@ -199,8 +199,8 @@ func grpMgmtCases() []grpMgmtCase {
 			body: `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
 			failOp: func(f *grpMgmtFakes, err error) {
-				f.settings.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (any, error) {
-					return nil, err
+				f.settings.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+					return domain.ParticipantsUpdate{}, err
 				}
 			},
 			missing: []grpMgmtMissing{
