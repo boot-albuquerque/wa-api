@@ -297,6 +297,18 @@ type (
 	// MarkReadResult is the postcondition of marking read, read back —
 	// invariant 14.
 	MarkReadResult = chats.MarkResult
+	// ChatList is a page of conversations WITH the denominators that make it
+	// readable: Total > len(Chats) means the listing was truncated, and a
+	// caller reading a short list as a complete one is the silent-incompleteness
+	// failure this module keeps meeting.
+	ChatList = chats.List
+	// Chat is one conversation. Title is PII and never rendered by String.
+	Chat = chats.Chat
+	// GroupInvite is what a group invite link resolves to.
+	GroupInvite = group.InviteInfo
+	// GroupInviteCode is a group's invite credential. Code is never rendered,
+	// and Link() is a method so the dangerous form has to be asked for.
+	GroupInviteCode = group.Invite
 	// Reactor adds and removes reactions.
 	Reactor = react.Reactor
 	// ReactionResult is what a reaction actually did.

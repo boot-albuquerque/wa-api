@@ -78,6 +78,7 @@ var inventarioFase3 = map[string]portStatus{
 	"ProfileAccessProvider": {satisfeito: true},
 	"AppStateSyncer":        {satisfeito: true},
 	"ChatMessenger":         {satisfeito: true},
+	"GroupDirectory":        {satisfeito: true},
 
 	"MessageComposer": {motivo: "RECUSADO POR AUSÊNCIA DE SENTIDO: NewMessageID gera um " +
 		"identificador ANTES de enviar, que é o modelo do socket — o cliente cria o " +
@@ -106,7 +107,6 @@ var inventarioFase3 = map[string]portStatus{
 		"nada — a página já entrega texto. Não é lacuna, é ausência de sentido."},
 
 	"CallRejecter":   {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
-	"GroupDirectory": {motivo: "pendente"},
 	"GroupLifecycle": {motivo: "pendente"},
 	"GroupRequests":  {motivo: "pendente"},
 	"GroupSettings":  {motivo: "pendente"},

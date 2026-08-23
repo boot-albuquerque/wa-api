@@ -1530,3 +1530,37 @@ confirmável mesmo que as outras sejam no-op. Relatar o lote como confirmado
 porque a maioria era no-op seria uma média aritmética a substituir uma verdade.
 
 **Estado: 13 de 22 ports satisfeitos, 4 recusados com motivo medido.**
+
+## GroupDirectory — a primeira fatia a atravessar DUAS capabilities
+
+A página **não tem coleção de grupos**. Um grupo é uma CONVERSA cujo jid termina
+em `@g.us`, então listar grupos é filtrar a lista de conversas — e o convite vem
+da capability de grupo. Daí duas capabilities numa fatia só.
+
+O título vem de `formattedTitle` e não de `getName`, porque `getName` responde
+para **1 de 384** conversas: num aparelho companheiro a agenda está quase vazia.
+
+### Três regras com números plausíveis quando erradas
+
+**A contagem é de GRUPOS, não de conversas.** Devolver o total faria o chamador
+acreditar que está em centenas de grupos.
+
+**Um jid de pessoa não passa por grupo.** Devolveria uma conversa bem-formada e
+errada; recusar é mais barato que deixar o chamador tratar uma pessoa como grupo.
+
+**O link é pedido explicitamente.** `Invite.Link()` é método e não campo, de
+propósito — *"para que o código e o url nunca divirjam, e para que um chamador
+tenha de pedir a forma perigosa"*. O port chama-se `GetGroupInviteLink`, então
+pedi-la é o que ele promete.
+
+### O que esta fatia corrigiu no meu modelo
+
+Eu tratava "port → capability" como correspondência de um para um. Era suposição
+minha, não propriedade do sistema — e não é caso isolado: a `ContactRoster` já
+indexava a mesma pessoa por duas identidades, e a `ProfileDataAccess` já
+misturava identidade, avatar e roster.
+
+**A fronteira dos ports foi desenhada sobre o modelo do socket**, e cada
+divergência de forma que encontro é isso a aparecer.
+
+**Estado: 14 de 22 ports satisfeitos, 4 recusados com motivo medido.**

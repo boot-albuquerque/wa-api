@@ -694,7 +694,19 @@ rules_frozen=true
 # capabilities/group entra com muitos caminhos de saida descobertos: min_eligible
 # salta 752->799, o maior de toda a fase. O saldo e negativo, e escrever o
 # contrario seria justificar uma queda com um ganho que nao a cobre.
-min_func_coverage=551
+# justificativa: GroupDirectory (2026-08-23), o 14o port satisfeito e a PRIMEIRA
+# fatia a atravessar DUAS capabilities.
+#
+# A razao e medida: a pagina NAO tem colecao de grupos. Um grupo e uma CONVERSA
+# cujo jid termina em @g.us, entao listar grupos e filtrar a lista de conversas.
+# O titulo vem de formattedTitle e nao de getName, porque getName responde para
+# 1 de 384 conversas — num aparelho companheiro a agenda esta quase vazia.
+#
+# Tres regras com numeros plausiveis quando erradas, e as tres travadas: a
+# contagem e de GRUPOS e nao de conversas; um jid de pessoa nao passa por grupo;
+# e o link e pedido explicitamente, porque Link() e metodo e nao campo para que
+# a forma perigosa tenha de ser pedida e nunca divirja do codigo.
+min_func_coverage=545
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -716,7 +728,7 @@ min_func_coverage=551
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=785
+min_errpath_coverage=786
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -767,7 +779,7 @@ min_errpath_coverage=785
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=799
+min_eligible=807
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

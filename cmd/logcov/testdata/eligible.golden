@@ -2928,6 +2928,16 @@ pkg/infra/wa-headless/chat.Archiver.ArchiveChat	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/chat.Archiver.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/chat.Archiver.setter	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/chat.NewArchiver	EXCLUDED	X1
+pkg/infra/wa-headless/groupdir.Directory.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/groupdir.Directory.GetGroupInfo	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,directory.go:80)
+pkg/infra/wa-headless/groupdir.Directory.GetGroupInfoFromLink	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,directory.go:140)
+pkg/infra/wa-headless/groupdir.Directory.GetGroupInviteLink	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupdir.Directory.GroupNames	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupdir.Directory.ListJoinedGroups	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupdir.Directory.grupos	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupdir.Directory.inviter	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupdir.Directory.lister	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/groupdir.NewDirectory	EXCLUDED	X1
 pkg/infra/wa-headless/groupmembers.Manager.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/groupmembers.Manager.UpdateGroupParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,members.go:75);uncovered:L2(S-ret,members.go:78)
 pkg/infra/wa-headless/groupmembers.Manager.members	ELIGIBLE	uncovered:L1

@@ -127,3 +127,55 @@ func TestFalhaDaCapabilityPropaga(t *testing.T) {
 		t.Fatal("a falha virou sucesso silencioso")
 	}
 }
+
+// EnsureSession responde POSSE sem bootar — a ADR-0005 D6 separa posse de
+// prontidão, e subir um browser para responder a uma consulta de estado
+// transformaria uma checagem barata num minuto de trabalho.
+func TestEnsureSessionRespondePosseSemBootar(t *testing.T) {
+	reg := registry.New(2)
+	m := NewMessenger(adapter.NewSessions(reg, cfgFor))
+
+	if err := m.EnsureSession(context.Background(), "desconhecida"); !errors.Is(err, registry.ErrUnknownSession) {
+		t.Fatalf("got %v, want ErrUnknownSession", err)
+	}
+	if _, err := reg.Acquire("conhecida", waheadless.StartConfig{}, registry.KindOperational); err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if err := m.EnsureSession(context.Background(), "conhecida"); err != nil {
+		t.Fatalf("posse negada para sessão detida: %v", err)
+	}
+}
+
+// A falha ao resolver a CONFIGURAÇÃO propaga nos dois caminhos. Engoli-la faria
+// o chamador acreditar que marcou lida — ou que reagiu — quando a sessão nem
+// existe.
+func TestFalhaDeConfiguracaoPropagaNosDoisCaminhos(t *testing.T) {
+	semPerfil := func(string) (waheadless.StartConfig, error) {
+		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
+	}
+	m := NewMessenger(adapter.NewSessions(registry.New(1), semPerfil))
+
+	if err := m.MarkRead(context.Background(), "s1", nil, time.Time{},
+		domain.JID("5511999999999@c.us"), ""); err == nil {
+		t.Fatal("MarkRead: falha de configuração virou sucesso")
+	}
+	if _, err := m.SendReaction(context.Background(), "s1", "",
+		domain.Reaction{TargetMessageID: "msg-1", Text: "👍"}); err == nil {
+		t.Fatal("SendReaction: falha de configuração virou reação enviada")
+	}
+}
+
+// A identidade inválida é recusada ANTES de resolver a sessão, para que um
+// pedido impossível não gaste capacidade limitada.
+func TestIdentidadeInvalidaNaoGastaSlot(t *testing.T) {
+	reg := registry.New(1)
+	m := NewMessenger(adapter.NewSessions(reg, cfgFor))
+
+	if err := m.MarkRead(context.Background(), "s1", nil, time.Time{},
+		domain.JID("status@broadcast"), ""); err == nil {
+		t.Fatal("um broadcast foi aceito como conversa")
+	}
+	if reg.Len() != 0 {
+		t.Fatalf("Len=%d: a recusa consumiu slot de sessão", reg.Len())
+	}
+}
