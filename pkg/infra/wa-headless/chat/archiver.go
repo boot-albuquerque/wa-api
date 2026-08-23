@@ -25,6 +25,11 @@ import (
 // label locates nothing.
 const archiveLabel = "adapter/archive-chat"
 
+// setter is the slice of the page capability this adapter uses.
+type setter interface {
+	SetArchived(ctx context.Context, jid string, archived bool, label string) (waheadless.ChatStateChange, error)
+}
+
 // Archiver implements appport.ChatArchiver over a headless session.
 type Archiver struct {
 	sessions *registry.Registry
@@ -33,6 +38,8 @@ type Archiver struct {
 	// getter: the lookup is injected, not invented here.
 	configFor func(txtID string) (waheadless.StartConfig, error)
 	runner    *waheadless.Runner
+	// newSetter is overridable in tests. Nil uses the real page capability.
+	newSetter func(ctx context.Context, txtID string) (setter, error)
 }
 
 // NewArchiver builds the adapter.
@@ -63,15 +70,7 @@ func (a *Archiver) ArchiveChat(ctx context.Context, txtID string, chat domain.JI
 		return err
 	}
 
-	cfg, err := a.configFor(txtID)
-	if err != nil {
-		return fmt.Errorf("waheadless: config for session: %w", err)
-	}
-	holder, err := a.sessions.Acquire(txtID, cfg, registry.KindOperational)
-	if err != nil {
-		return err
-	}
-	sess, err := holder.Session(ctx)
+	s, err := a.setter(ctx, txtID)
 	if err != nil {
 		return err
 	}
@@ -80,9 +79,27 @@ func (a *Archiver) ArchiveChat(ctx context.Context, txtID string, chat domain.JI
 	// silent success — and the Change it returns IS that postcondition. It is
 	// discarded here because the port promises only an error; a port that
 	// wanted the confirmation would have to say so in its signature.
-	_, err = waheadless.NewChatState(a.runner, sess.Tab().Evaluate).
-		SetArchived(ctx, pageJID, archive, archiveLabel)
+	_, err = s.SetArchived(ctx, pageJID, archive, archiveLabel)
 	return err
+}
+
+func (a *Archiver) setter(ctx context.Context, txtID string) (setter, error) {
+	if a.newSetter != nil {
+		return a.newSetter(ctx, txtID)
+	}
+	cfg, err := a.configFor(txtID)
+	if err != nil {
+		return nil, fmt.Errorf("waheadless: config for session: %w", err)
+	}
+	holder, err := a.sessions.Acquire(txtID, cfg, registry.KindOperational)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := holder.Session(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return waheadless.NewChatState(a.runner, sess.Tab().Evaluate), nil
 }
 
 // Compile-time proof that this adapter satisfies the narrow port — and only it.

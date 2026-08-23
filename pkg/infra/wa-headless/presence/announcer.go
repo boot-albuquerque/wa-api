@@ -49,11 +49,19 @@ var chatStates = map[string]waheadless.PresenceState{
 	"audio":   waheadless.PresenceRecording,
 }
 
+// announcer is the slice of the page capability this adapter uses.
+type announcer interface {
+	Set(ctx context.Context, toJID string, s waheadless.PresenceState, label string) error
+	SetOnline(ctx context.Context, available bool, label string) error
+}
+
 // Announcer implements appport.PresenceAnnouncer over a headless session.
 type Announcer struct {
 	sessions  *registry.Registry
 	configFor func(txtID string) (waheadless.StartConfig, error)
 	runner    *waheadless.Runner
+	// newAnnouncer is overridable in tests. Nil uses the real page capability.
+	newAnnouncer func(ctx context.Context, txtID string) (announcer, error)
 }
 
 // NewAnnouncer builds the adapter.
@@ -81,7 +89,7 @@ func (a *Announcer) SendPresence(ctx context.Context, txtID string, p domain.Pre
 		return fmt.Errorf("waheadless: unknown presence %q", p)
 	}
 
-	cap, err := a.capability(ctx, txtID)
+	cap, err := a.announcer(ctx, txtID)
 	if err != nil {
 		return err
 	}
@@ -100,7 +108,7 @@ func (a *Announcer) SendChatPresence(ctx context.Context, txtID string, chat dom
 		return err
 	}
 
-	cap, err := a.capability(ctx, txtID)
+	cap, err := a.announcer(ctx, txtID)
 	if err != nil {
 		return err
 	}
@@ -108,6 +116,13 @@ func (a *Announcer) SendChatPresence(ctx context.Context, txtID string, chat dom
 }
 
 // capability resolves the session and builds the page capability over it.
+func (a *Announcer) announcer(ctx context.Context, txtID string) (announcer, error) {
+	if a.newAnnouncer != nil {
+		return a.newAnnouncer(ctx, txtID)
+	}
+	return a.capability(ctx, txtID)
+}
+
 func (a *Announcer) capability(ctx context.Context, txtID string) (*waheadless.PresenceAnnouncer, error) {
 	cfg, err := a.configFor(txtID)
 	if err != nil {

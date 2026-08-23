@@ -2,6 +2,7 @@ package blocklist
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -74,5 +75,94 @@ func TestIdentidadeInvalidaNaoChegaAoRegistry(t *testing.T) {
 	}
 	if reg.Len() != 0 {
 		t.Fatalf("Len=%d", reg.Len())
+	}
+}
+
+// blockerDuplo registra QUAIS verbos foram chamados, porque a ordem e a escolha
+// são as regras deste adaptador — a capability já tem os seus próprios testes.
+type blockerDuplo struct {
+	chamadas []string
+	lista    []string
+	err      error
+}
+
+func (b *blockerDuplo) Block(context.Context, string, string) (waheadless.BlockResult, error) {
+	b.chamadas = append(b.chamadas, "block")
+	return waheadless.BlockResult{}, b.err
+}
+
+func (b *blockerDuplo) Unblock(context.Context, string, string) (waheadless.BlockResult, error) {
+	b.chamadas = append(b.chamadas, "unblock")
+	return waheadless.BlockResult{}, b.err
+}
+
+func (b *blockerDuplo) List(context.Context, string) ([]string, error) {
+	b.chamadas = append(b.chamadas, "list")
+	return b.lista, b.err
+}
+
+func comBlocker(b blocker) *Manager {
+	m := NewManager(registry.New(1), cfgFor)
+	m.newBlocker = func(context.Context, string) (blocker, error) { return b, nil }
+	return m
+}
+
+// TestBloquearLeDeVoltaAListaResultante trava a pós-condição da invariante 14 na
+// fronteira: o port promete a lista resultante, e o Result da capability carrega
+// SÓ TAMANHOS, nunca as entradas. Sem a releitura, o adaptador devolveria uma
+// lista vazia com ar de resposta.
+func TestBloquearLeDeVoltaAListaResultante(t *testing.T) {
+	d := &blockerDuplo{lista: []string{"5511999999999@c.us"}}
+	m := comBlocker(d)
+
+	got, err := m.UpdateBlocklist(context.Background(), "s1", domain.JID("5511999999999@c.us"), true)
+	if err != nil {
+		t.Fatalf("UpdateBlocklist: %v", err)
+	}
+	if len(got.Entries) != 1 {
+		t.Fatalf("Entries=%v: a lista resultante não foi lida de volta", got.Entries)
+	}
+	if len(d.chamadas) != 2 || d.chamadas[0] != "block" || d.chamadas[1] != "list" {
+		t.Fatalf("chamadas=%v, quero block seguido de list", d.chamadas)
+	}
+}
+
+// Desbloquear chama o verbo INVERSO. Trocar os dois é o bug que nenhum teste de
+// tipo apanha, porque as assinaturas são idênticas.
+func TestDesbloquearChamaOVerboInverso(t *testing.T) {
+	d := &blockerDuplo{}
+	m := comBlocker(d)
+
+	if _, err := m.UpdateBlocklist(context.Background(), "s1", domain.JID("5511999999999@c.us"), false); err != nil {
+		t.Fatalf("UpdateBlocklist: %v", err)
+	}
+	if len(d.chamadas) == 0 || d.chamadas[0] != "unblock" {
+		t.Fatalf("chamadas=%v, quero unblock primeiro", d.chamadas)
+	}
+}
+
+// A leitura simples devolve o que a página deu, com o DHash honesto.
+func TestGetBlocklistDevolveALista(t *testing.T) {
+	m := comBlocker(&blockerDuplo{lista: []string{"a@c.us", "b@lid"}})
+
+	got, err := m.GetBlocklist(context.Background(), "s1")
+	if err != nil {
+		t.Fatalf("GetBlocklist: %v", err)
+	}
+	if len(got.JIDs) != 2 {
+		t.Fatalf("JIDs=%v", got.JIDs)
+	}
+	if got.DHash != "" {
+		t.Fatalf("DHash=%q: esta página não versiona a blocklist", got.DHash)
+	}
+}
+
+// A falha ao resolver a CONFIGURAÇÃO propaga, em vez de virar lista vazia.
+func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
+	m := NewManager(registry.New(1), func(string) (waheadless.StartConfig, error) {
+		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
+	})
+	if _, err := m.GetBlocklist(context.Background(), "s1"); err == nil {
+		t.Fatal("falha de configuração virou blocklist vazia")
 	}
 }

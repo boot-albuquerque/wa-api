@@ -37,6 +37,15 @@ var inventarioFase3 = map[string]portStatus{
 	"PresenceAnnouncer": {satisfeito: true},
 	"BlocklistManager":  {satisfeito: true},
 
+	// Os tres nascidos da divisao do ContactDirectory (decisao 82). Todos
+	// satisfaziveis por este transporte, sem assimetria: lookup.NumberID e
+	// lookup.LidAndPhone estao PROVEN na H127, avatar.Fetch existe, e o roster
+	// do contacts.Lister foi provado na H129 com as duas linhas fundidas.
+	"IdentityResolver": {satisfeito: true},
+	"AvatarReader":     {satisfeito: true},
+	"ContactRoster": {motivo: "pendente; o roster esta PROVEN na H129 (as duas " +
+		"linhas, PN e LID, fundidas), entao e trabalho e nao bloqueio"},
+
 	"PresenceSubscriber": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA, medida na H144: " +
 		"com as duas contas acordadas ao mesmo tempo, a assinatura nunca chega a " +
 		"`subscribed` em 45s, e os sinalizadores da agenda leem `isMyContact:false " +
@@ -53,7 +62,6 @@ var inventarioFase3 = map[string]portStatus{
 	"AppStateSyncer":        {motivo: "pendente"},
 	"CallRejecter":          {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
 	"ChatMessenger":         {motivo: "pendente"},
-	"ContactDirectory":      {motivo: "pendente"},
 	"GroupDirectory":        {motivo: "pendente"},
 	"GroupLifecycle":        {motivo: "pendente"},
 	"GroupRequests":         {motivo: "pendente"},

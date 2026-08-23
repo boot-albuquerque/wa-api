@@ -31,8 +31,10 @@
 package waheadless
 
 import (
+	"wa-api/internal/wa-headless/capabilities/avatar"
 	"wa-api/internal/wa-headless/capabilities/block"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
+	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/presence"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
@@ -187,3 +189,40 @@ var (
 
 // NewBlocker builds the blocking capability over a session's page.
 func NewBlocker(runner *Runner, eval Evaluator) *Blocker { return block.New(runner, eval) }
+
+// Identity: who somebody is, in a build that files nearly everything under LID.
+type (
+	// Resolver answers identity questions by ASKING the page, which is the only
+	// place that knows. Decision 66: a reader that cannot answer must refuse
+	// explicitly rather than answer wrongly.
+	Resolver = lookup.Resolver
+	// Identity is what the server returned for one query.
+	Identity = lookup.Identity
+	// IdentityPair is the LID and the phone name of the same person. Either can
+	// be empty, and empty means "the page did not produce it" — never "there is
+	// none".
+	IdentityPair = lookup.Pair
+)
+
+// ErrNotOnWhatsApp is a DEFINITIVE answer: the identity does not resolve on this
+// build. It is not a lookup failure, and conflating the two would make a real
+// "no such account" indistinguishable from a timeout.
+var ErrNotOnWhatsApp = lookup.ErrNotOnWhatsApp
+
+// NewResolver builds the identity capability over a session's page.
+func NewResolver(runner *Runner, eval Evaluator) *Resolver { return lookup.New(runner, eval) }
+
+// Avatar: the profile picture.
+type (
+	// AvatarFetcher reads profile pictures.
+	AvatarFetcher = avatar.Fetcher
+	// AvatarPicture is what the page knows about one picture. Present is the
+	// field to branch on — an empty URL with Present true would be a different
+	// bug from "this person has no picture".
+	AvatarPicture = avatar.Avatar
+)
+
+// NewAvatarFetcher builds the avatar capability over a session's page.
+func NewAvatarFetcher(runner *Runner, eval Evaluator) *AvatarFetcher {
+	return avatar.New(runner, eval)
+}

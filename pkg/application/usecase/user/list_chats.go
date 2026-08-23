@@ -40,7 +40,12 @@ const (
 // conteúdo a tornaria cara sem torná-la mais útil.
 type ListChatsUseCase struct {
 	activity appport.ChatActivityReader
-	contacts appport.ContactDirectory
+	// contacts e identity são DUAS portas porque este caso de uso usa duas
+	// capacidades e NÃO usa a terceira: ele casa nomes do roster e normaliza
+	// identidade para LID, e nunca lê avatar. Pedir a composição declararia
+	// dependência de uma capacidade que ele não toca (decisão 82).
+	contacts appport.ContactRoster
+	identity appport.IdentityResolver
 	groups   appport.GroupDirectory
 	logger   appport.Logger
 }
@@ -48,11 +53,12 @@ type ListChatsUseCase struct {
 // NewListChatsUseCase cria o use case com as portas injetadas.
 func NewListChatsUseCase(
 	ar appport.ChatActivityReader,
-	cd appport.ContactDirectory,
+	cr appport.ContactRoster,
+	ir appport.IdentityResolver,
 	gd appport.GroupDirectory,
 	logger appport.Logger,
 ) *ListChatsUseCase {
-	return &ListChatsUseCase{activity: ar, contacts: cd, groups: gd, logger: logger}
+	return &ListChatsUseCase{activity: ar, contacts: cr, identity: ir, groups: gd, logger: logger}
 }
 
 // Execute devolve uma página da lista, ordenada da interação mais recente
@@ -70,13 +76,13 @@ func (uc *ListChatsUseCase) Execute(ctx context.Context, userID string, limit, o
 		uc.logger.Error(ctx, "nao foi possivel ler a atividade por chat", "error", err, "user_id", userID)
 		return nil, err
 	}
-	atividade := normalizeToLID(ctx, uc.contacts, uc.logger, userID, bruto)
+	atividade := normalizeToLID(ctx, uc.identity, uc.logger, userID, bruto)
 
 	// As duas tabelas de nome sao aliasadas para o espaco @lid porque e' nele
 	// que as chaves de atividade chegam depois de normalizeToLID.
-	nomesContato := aliasarParaLID(ctx, uc.contacts, uc.logger, userID, uc.nomesDeContato(ctx, userID))
+	nomesContato := aliasarParaLID(ctx, uc.identity, uc.logger, userID, uc.nomesDeContato(ctx, userID))
 	nomesGrupo := uc.nomesDeGrupo(ctx, userID)
-	nomesHistorico := aliasarParaLID(ctx, uc.contacts, uc.logger, userID, uc.nomesDoHistorico(ctx, userID))
+	nomesHistorico := aliasarParaLID(ctx, uc.identity, uc.logger, userID, uc.nomesDoHistorico(ctx, userID))
 
 	chats := make([]domain.ChatSummary, 0, len(atividade))
 	for jid, quando := range atividade {
@@ -173,7 +179,7 @@ func (uc *ListChatsUseCase) nomesDeGrupo(ctx context.Context, userID string) map
 // o PN, ver normalizeToLID).
 func aliasarParaLID[V any](
 	ctx context.Context,
-	contacts appport.ContactDirectory,
+	identity appport.IdentityResolver,
 	logger appport.Logger,
 	userID string,
 	tabela map[string]V,
@@ -191,7 +197,7 @@ func aliasarParaLID[V any](
 		return tabela
 	}
 
-	resolvidos, err := contacts.GetManyLIDsForPNs(ctx, userID, pns)
+	resolvidos, err := identity.GetManyLIDsForPNs(ctx, userID, pns)
 	if err != nil {
 		// Best-effort, como em normalizeToLID: sem o mapa, a tabela original
 		// continua valendo para as chaves que já batem.

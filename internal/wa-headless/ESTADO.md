@@ -1116,3 +1116,49 @@ aqui*.
 A terceira é a mais fácil de errar, porque o compilador aceita qualquer valor.
 
 **Estado: 3 de 18 ports satisfeitos, 2 recusados com motivo medido, 13 restantes.**
+
+## Decisão 82 — ContactDirectory dividido, e um controle negativo achou regra solta
+
+Oito métodos, 21 referências, 9 casos de uso. Medi quem usa o quê antes de
+desenhar, e os dados desenharam a divisão sozinhos: **sete dos nove casos de uso
+precisavam de UM método**; só `get_user_profile` usa cinco, por ser o endpoint
+consolidado.
+
+| port novo | métodos |
+| --- | --- |
+| `IdentityResolver` | `IsOnWhatsApp`, `GetLIDForPN`, `GetPNForLID`, `GetManyLIDsForPNs` |
+| `AvatarReader` | `GetProfilePicture` |
+| `ContactRoster` | `GetAllContacts`, `ContactNames`, `GetUserInfo` |
+
+`ContactDirectory` fica como composição, para o adaptador do socket declarar
+numa linha que satisfaz as três.
+
+### O compilador fez o trabalho de auditoria
+
+Ao estreitar `list_chats` — que usa roster **e** identidade, mas **não** avatar —
+o compilador apontou cada sítio que precisava de uma metade em vez da outra. Uma
+dependência larga demais some no meio do código; uma dividida não compila até
+alguém dizer qual das duas quer.
+
+E o inventário da 81 **disparou sozinho, em condições reais**: os três ports
+novos apareceram e ele recusou-se a passar até serem classificados. Não foi um
+controle negativo encenado — foi o dispositivo a funcionar.
+
+### O achado que vale mais que os dois adaptadores
+
+Um controle negativo mostrou que esta regra do `IsOnWhatsApp` **não estava
+travada por teste nenhum**:
+
+> `ErrNotOnWhatsApp` é resposta DEFINITIVA e vira `IsIn:false`; qualquer outro
+> erro ABORTA.
+
+Ela vivia num comentário, inline. Invertê-la **compilava e a suíte ficava
+verde** — reportar "não está no WhatsApp" para alguém que apenas falhámos em
+consultar é um palpite com forma de fato, e o chamador agiria sobre uma ausência
+que nunca foi medida.
+
+O conserto não foi escrever um teste em cima do código existente: foi **extrair
+a regra para função pura**, para que um teste pudesse alcançá-la. Regra que
+nenhum teste consegue alcançar não está travada, mesmo estando certa.
+
+**Estado: 5 de 18 ports satisfeitos, 2 recusados com motivo medido, 11 restantes.**

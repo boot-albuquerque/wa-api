@@ -18,7 +18,7 @@ import (
 // os dois tornaria a rota barata refém da cara.
 type GetProfileFullUseCase struct {
 	profiles appport.ProfileAccessProvider
-	contacts appport.ContactDirectory
+	contacts appport.ContactRoster
 	privacy  appport.PrivacyManager
 	logger   appport.Logger
 }
@@ -26,7 +26,7 @@ type GetProfileFullUseCase struct {
 // NewGetProfileFullUseCase cria o use case com as portas injetadas.
 func NewGetProfileFullUseCase(
 	pp appport.ProfileAccessProvider,
-	cd appport.ContactDirectory,
+	cd appport.ContactRoster,
 	pm appport.PrivacyManager,
 	logger appport.Logger,
 ) *GetProfileFullUseCase {

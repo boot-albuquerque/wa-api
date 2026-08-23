@@ -97,3 +97,67 @@ func TestValidacaoAconteceAntesDeGastarSlot(t *testing.T) {
 		t.Fatalf("Len=%d: uma recusa de validação consumiu slot de sessão", reg.Len())
 	}
 }
+
+type announcerDuplo struct {
+	jid        string
+	estado     waheadless.PresenceState
+	disponivel bool
+	online     bool
+}
+
+func (a *announcerDuplo) Set(_ context.Context, jid string, s waheadless.PresenceState, _ string) error {
+	a.jid, a.estado = jid, s
+	return nil
+}
+
+func (a *announcerDuplo) SetOnline(_ context.Context, available bool, _ string) error {
+	a.online, a.disponivel = true, available
+	return nil
+}
+
+func comAnnouncer(d announcer) *Announcer {
+	a := NewAnnouncer(registry.New(1), cfgFor)
+	a.newAnnouncer = func(context.Context, string) (announcer, error) { return d, nil }
+	return a
+}
+
+// O vocabulário do socket é TRADUZIDO para o estado desta página, e não
+// repassado. Um "typing" cru chamaria uma função de página que não existe.
+func TestOVocabularioDoSocketETraduzidoENaoRepassado(t *testing.T) {
+	d := &announcerDuplo{}
+	if err := comAnnouncer(d).SendChatPresence(context.Background(), "s1",
+		domain.JID("5511999999999@c.us"), "typing", ""); err != nil {
+		t.Fatalf("SendChatPresence: %v", err)
+	}
+	if d.estado != waheadless.PresenceComposing {
+		t.Fatalf("estado=%q, quero %q: o vocabulário do socket não foi traduzido",
+			d.estado, waheadless.PresenceComposing)
+	}
+}
+
+// Disponível e indisponível chegam com o valor CERTO. Inverter o booleano
+// anunciaria o oposto do pedido, e compila.
+func TestPresencaGlobalNaoEInvertida(t *testing.T) {
+	for _, caso := range []struct {
+		p    domain.PresenceType
+		quer bool
+	}{{domain.PresenceAvailable, true}, {domain.PresenceUnavailable, false}} {
+		d := &announcerDuplo{}
+		if err := comAnnouncer(d).SendPresence(context.Background(), "s1", caso.p); err != nil {
+			t.Fatalf("SendPresence(%v): %v", caso.p, err)
+		}
+		if !d.online || d.disponivel != caso.quer {
+			t.Fatalf("%v chegou como disponivel=%v", caso.p, d.disponivel)
+		}
+	}
+}
+
+// A falha ao resolver a CONFIGURAÇÃO propaga.
+func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
+	a := NewAnnouncer(registry.New(1), func(string) (waheadless.StartConfig, error) {
+		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
+	})
+	if err := a.SendPresence(context.Background(), "s1", domain.PresenceAvailable); err == nil {
+		t.Fatal("falha de configuração virou anúncio bem-sucedido")
+	}
+}

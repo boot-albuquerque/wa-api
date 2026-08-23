@@ -53,7 +53,7 @@ func portasDaLista() (*contractsfake.ChatActivityReader, *contractsfake.ContactD
 
 func listar(t *testing.T, ar *contractsfake.ChatActivityReader, cd *contractsfake.ContactDirectory, gd *contractsfake.GroupDirectory, limit, offset int) *domain.ChatListPage {
 	t.Helper()
-	page, err := user.NewListChatsUseCase(ar, cd, gd, &contractsfake.Logger{}).
+	page, err := user.NewListChatsUseCase(ar, cd, cd, gd, &contractsfake.Logger{}).
 		Execute(context.Background(), listaUser, limit, offset)
 	if err != nil {
 		t.Fatalf("Execute devolveu erro: %v", err)
@@ -203,7 +203,7 @@ func TestLista_HistoricoIndisponivelFalha(t *testing.T) {
 		},
 	}
 
-	_, err := user.NewListChatsUseCase(ar, &contractsfake.ContactDirectory{}, &contractsfake.GroupDirectory{}, &contractsfake.Logger{}).
+	_, err := user.NewListChatsUseCase(ar, &contractsfake.ContactDirectory{}, &contractsfake.ContactDirectory{}, &contractsfake.GroupDirectory{}, &contractsfake.Logger{}).
 		Execute(context.Background(), listaUser, 0, 0)
 
 	if !errors.Is(err, falha) {

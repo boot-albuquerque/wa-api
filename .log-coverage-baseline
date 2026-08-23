@@ -521,7 +521,47 @@ rules_frozen=true
 #
 # errpath NAO cai desta vez: os caminhos novos de List ja vinham com a causa
 # nomeada, entao numerador e denominador subiram juntos.
-min_func_coverage=598
+# justificativa: decisao 82 (2026-08-22), ContactDirectory dividido em
+# IdentityResolver / AvatarReader / ContactRoster, e os dois primeiros
+# satisfeitos. min_eligible 687->702, func 598->588, errpath 814->811.
+#
+# Quarto e quinto ports fiados, mesmo pedagio de sempre: entram os pacotes
+# capabilities/lookup e capabilities/avatar. Anunciado na justificativa da 78,
+# cobrado na 80, 81 e agora aqui. Restam capabilities por fiar, e cada uma
+# repete isto.
+#
+# As descobertas foram conferidas no golden e seguem o padrao ja registrado:
+# metodos que correm atraves do rastreador (regra L1-d2, presenca reconhecida,
+# cobertura de caminho de saida deliberadamente NAO), mais construtores e
+# acessores puros excluidos por X1/X4.
+#
+# Do lado dos adaptadores novos vale a justificativa da decisao 77 — adapter nao
+# loga, quem tem o contexto do pedido loga. A duvida registrada la continua
+# valida e agora aplica-se a cinco adaptadores em vez de um: quando o consumidor
+# existir e NAO logar a recusa, isto vira lacuna de verdade.
+# justificativa: capability INJETAVEL nos cinco adaptadores headless
+# (2026-08-22). min_eligible 702->707 e errpath 811->812 (ratchet-UP).
+#
+# func_coverage cai 588->584: as cinco funcoes novas entram no denominador e
+# nao no numerador, pelo motivo abaixo.
+#
+# As cinco funcoes novas sao os resolvedores de capability (fetcher, blocker,
+# setter, lookuper, announcer), que escolhem entre o dublê do teste e a
+# capability real. Nao logam: sao dois returns e nenhuma decisao de negocio.
+#
+# O MOTIVO da refatoracao ficou registrado porque e o mais util daqui: o
+# coverage-gate acusou a cobertura de LINHA a cair de 845 para 838, abaixo do
+# piso 843. Os adaptadores tinham 11-39% porque a resolucao de sessao exige
+# browser. A resposta NAO foi baixar o piso — foi tornar a capability injetavel,
+# o que subiu os cinco para 51-81% e destravou regras que estavam escritas e nao
+# testadas: ausencia de avatar contra falha de leitura (a distincao da F83),
+# block contra unblock (assinaturas identicas, trocar compila), JID convertido
+# contra repassado, ausencia de mapeamento como resposta e nao falha, e o
+# booleano de disponibilidade nao invertido.
+#
+# Todas essas sao regras onde o codigo COMPILA IGUAL estando certo ou errado. Era
+# isso que a cobertura baixa estava a sinalizar.
+min_func_coverage=584
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -542,7 +582,8 @@ min_func_coverage=598
 # +1 (817->818): ver a justificativa da decisao 77 acima.
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
-min_errpath_coverage=814
+# 814->811: ver a justificativa da decisao 82 acima.
+min_errpath_coverage=812
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -592,7 +633,8 @@ min_errpath_coverage=814
 # fiada — ver a justificativa acima.
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
-min_eligible=687
+# +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
+min_eligible=707
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

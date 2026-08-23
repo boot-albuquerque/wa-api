@@ -79,3 +79,76 @@ func TestIdentidadeInvalidaERecusadaAntesDeTocarNoRegistry(t *testing.T) {
 		t.Fatalf("Len=%d: a recusa de identidade consumiu um slot de sessão", reg.Len())
 	}
 }
+
+// setterDuplo registra o JID e o valor que chegaram à capability — que é o que
+// este adaptador decide. A capability já tem os seus próprios testes.
+type setterDuplo struct {
+	jid      string
+	archived bool
+	err      error
+}
+
+func (s *setterDuplo) SetArchived(_ context.Context, jid string, archived bool, _ string) (waheadless.ChatStateChange, error) {
+	s.jid, s.archived = jid, archived
+	return waheadless.ChatStateChange{}, s.err
+}
+
+func comSetter(s setter) *Archiver {
+	a := NewArchiver(registry.New(1), cfgFor)
+	a.newSetter = func(context.Context, string) (setter, error) { return s, nil }
+	return a
+}
+
+// TestOJIDChegaConvertidoACapability é a prova de ponta a ponta da decisão 74
+// DENTRO do adaptador: o que a página recebe é a grafia dela, não a do socket.
+func TestOJIDChegaConvertidoACapability(t *testing.T) {
+	d := &setterDuplo{}
+	a := comSetter(d)
+
+	// Entrada na grafia do SOCKET, que é o caso perigoso.
+	if err := a.ArchiveChat(context.Background(), "s1", domain.JID("5511999999999@s.whatsapp.net"), true); err != nil {
+		t.Fatalf("ArchiveChat: %v", err)
+	}
+	if strings.HasSuffix(d.jid, "@s.whatsapp.net") {
+		t.Fatalf("a capability recebeu %q, a grafia do SOCKET: a página "+
+			"responderia 'não há tal conversa' para uma conversa presente", d.jid)
+	}
+	if !strings.HasSuffix(d.jid, waheadless.ServerPhone) {
+		t.Fatalf("a capability recebeu %q, quero sufixo %q", d.jid, waheadless.ServerPhone)
+	}
+}
+
+// Arquivar e desarquivar passam o valor CORRETO. Inverter o booleano é o bug
+// que compila, passa em todo teste de tipo, e faz o oposto do pedido.
+func TestOValorDeArquivamentoNaoEInvertido(t *testing.T) {
+	for _, quer := range []bool{true, false} {
+		d := &setterDuplo{}
+		if err := comSetter(d).ArchiveChat(context.Background(), "s1",
+			domain.JID("5511999999999@c.us"), quer); err != nil {
+			t.Fatalf("ArchiveChat(%v): %v", quer, err)
+		}
+		if d.archived != quer {
+			t.Fatalf("pedido %v chegou como %v à capability", quer, d.archived)
+		}
+	}
+}
+
+// A falha da capability PROPAGA. Engoli-la faria o chamador acreditar que
+// arquivou — silêncio com forma de sucesso, que é o que a invariante 14 proíbe.
+func TestFalhaDaCapabilityPropaga(t *testing.T) {
+	d := &setterDuplo{err: errors.New("a página recusou")}
+	if err := comSetter(d).ArchiveChat(context.Background(), "s1",
+		domain.JID("5511999999999@c.us"), true); err == nil {
+		t.Fatal("a falha da página virou sucesso silencioso")
+	}
+}
+
+// A falha ao resolver a CONFIGURAÇÃO propaga, em vez de virar sucesso mudo.
+func TestFalhaDeConfiguracaoPropaga(t *testing.T) {
+	a := NewArchiver(registry.New(1), func(string) (waheadless.StartConfig, error) {
+		return waheadless.StartConfig{}, errors.New("sem perfil para esta sessão")
+	})
+	if err := a.ArchiveChat(context.Background(), "s1", domain.JID("5511999999999@c.us"), true); err == nil {
+		t.Fatal("falha de configuração virou sucesso")
+	}
+}

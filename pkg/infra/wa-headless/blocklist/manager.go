@@ -38,11 +38,22 @@ const (
 	dhashUnavailable = ""
 )
 
+// blocker is the slice of the page capability this adapter uses, as an
+// interface so the adapter's own rules — the read-back, what DHash gets, which
+// verb runs — are testable without a browser.
+type blocker interface {
+	Block(ctx context.Context, jid, label string) (waheadless.BlockResult, error)
+	Unblock(ctx context.Context, jid, label string) (waheadless.BlockResult, error)
+	List(ctx context.Context, label string) ([]string, error)
+}
+
 // Manager implements appport.BlocklistManager over a headless session.
 type Manager struct {
 	sessions  *registry.Registry
 	configFor func(txtID string) (waheadless.StartConfig, error)
 	runner    *waheadless.Runner
+	// newBlocker is overridable in tests. Nil uses the real page capability.
+	newBlocker func(ctx context.Context, txtID string) (blocker, error)
 }
 
 // NewManager builds the adapter.
@@ -60,11 +71,11 @@ func (m *Manager) EnsureSession(_ context.Context, txtID string) error {
 
 // GetBlocklist returns who this account refuses to hear from.
 func (m *Manager) GetBlocklist(ctx context.Context, txtID string) (domain.Blocklist, error) {
-	blocker, err := m.capability(ctx, txtID)
+	b, err := m.blocker(ctx, txtID)
 	if err != nil {
 		return domain.Blocklist{}, err
 	}
-	jids, err := blocker.List(ctx, listLabel)
+	jids, err := b.List(ctx, listLabel)
 	if err != nil {
 		return domain.Blocklist{}, err
 	}
@@ -79,15 +90,15 @@ func (m *Manager) UpdateBlocklist(ctx context.Context, txtID string, target doma
 		return domain.BlocklistUpdate{}, err
 	}
 
-	blocker, err := m.capability(ctx, txtID)
+	b, err := m.blocker(ctx, txtID)
 	if err != nil {
 		return domain.BlocklistUpdate{}, err
 	}
 
 	if blockIt {
-		_, err = blocker.Block(ctx, pageJID, updateLabel)
+		_, err = b.Block(ctx, pageJID, updateLabel)
 	} else {
-		_, err = blocker.Unblock(ctx, pageJID, updateLabel)
+		_, err = b.Unblock(ctx, pageJID, updateLabel)
 	}
 	if err != nil {
 		return domain.BlocklistUpdate{}, err
@@ -97,7 +108,7 @@ func (m *Manager) UpdateBlocklist(ctx context.Context, txtID string, target doma
 	// The port promises the resulting list, so it is read back — which is also
 	// the postcondition invariant 14 asks for, now visible to the caller
 	// instead of only to the capability.
-	jids, err := blocker.List(ctx, updateLabel+"/readback")
+	jids, err := b.List(ctx, updateLabel+"/readback")
 	if err != nil {
 		return domain.BlocklistUpdate{}, err
 	}
@@ -112,6 +123,13 @@ func (m *Manager) UpdateBlocklist(ctx context.Context, txtID string, target doma
 		Entries:      jids,
 		DHash:        dhashUnavailable,
 	}, nil
+}
+
+func (m *Manager) blocker(ctx context.Context, txtID string) (blocker, error) {
+	if m.newBlocker != nil {
+		return m.newBlocker(ctx, txtID)
+	}
+	return m.capability(ctx, txtID)
 }
 
 func (m *Manager) capability(ctx context.Context, txtID string) (*waheadless.Blocker, error) {

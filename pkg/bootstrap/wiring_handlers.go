@@ -207,7 +207,7 @@ func initCustomHandlers(s *server) {
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
 	getUserProfileUC := user.NewGetUserProfileUseCase(userAdapter, jidResolver, logger)
-	listChatsUC := user.NewListChatsUseCase(chatActivityRepo, userAdapter, groupAdapter, logger)
+	listChatsUC := user.NewListChatsUseCase(chatActivityRepo, userAdapter, userAdapter, groupAdapter, logger)
 	blockUserUC := user.NewBlockUserUseCase(userAdapter, jidResolver, logger)
 	unblockUserUC := user.NewUnblockUserUseCase(userAdapter, jidResolver, logger)
 	getBlocklistUC := user.NewGetBlocklistUseCase(userAdapter, logger)

@@ -9,12 +9,12 @@ import (
 
 // GetContactsUseCase retrieves all contacts
 type GetContactsUseCase struct {
-	contacts appport.ContactDirectory
+	contacts appport.ContactRoster
 	logger   appport.Logger
 }
 
 // NewGetContactsUseCase creates a new instance
-func NewGetContactsUseCase(cd appport.ContactDirectory, logger appport.Logger) *GetContactsUseCase {
+func NewGetContactsUseCase(cd appport.ContactRoster, logger appport.Logger) *GetContactsUseCase {
 	return &GetContactsUseCase{contacts: cd, logger: logger}
 }
 

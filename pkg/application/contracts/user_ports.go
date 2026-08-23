@@ -7,33 +7,27 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// ContactDirectory expõe as consultas sobre contatos e usuários WhatsApp.
-type ContactDirectory interface {
+// As consultas sobre contatos vivem em TRÊS portas, e a fronteira entre elas foi
+// medida e não escolhida (decisão 82).
+//
+// Contei quem usa o quê: dos nove casos de uso que consumiam a interface única,
+// SETE precisavam de um único método. Só `get_user_profile` usava cinco — e usa,
+// porque é o endpoint consolidado que junta identidade, avatar e metadados de
+// propósito.
+//
+// Uma interface de oito métodos obrigava cada um desses sete a declarar
+// dependência de sete capacidades que não toca, e obrigava qualquer transporte
+// novo a implementar as oito para satisfazer qualquer uma.
+
+// IdentityResolver responde QUEM é alguém, nas duas direções da identidade dupla.
+type IdentityResolver interface {
 	SessionGuard
 
 	// IsOnWhatsApp verifica quais dos telefones informados têm conta.
 	IsOnWhatsApp(ctx context.Context, txtID string, phones []string) ([]domain.WhatsAppCheck, error)
 
-	// GetUserInfo devolve os metadados dos JIDs informados.
-	GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error)
-
-	// GetAllContacts devolve a agenda da sessão e a contagem, que o use
-	// case usa para logar.
-	GetAllContacts(ctx context.Context, txtID string) (any, int, error)
-
-	// GetProfilePicture devolve o avatar de um contato, ou nil se não há.
-	GetProfilePicture(ctx context.Context, txtID string, target domain.JID, preview bool) (*domain.AvatarInfo, error)
-
 	// GetLIDForPN resolve o LID correspondente a um número de telefone.
 	GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error)
-
-	// ContactNames devolve o roster TIPADO, por JID.
-	//
-	// Existe ao lado de GetAllContacts, que devolve `any`, porque quem
-	// precisa CASAR nomes por JID não pode receber o tipo do SDK: isso
-	// arrastaria o vendor para dentro da camada de aplicação. GetAllContacts
-	// segue servindo quem só repassa o bloco cru ao cliente.
-	ContactNames(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error)
 
 	// GetPNForLID resolve o número de telefone correspondente a um LID — a
 	// direção INVERSA de GetLIDForPN.
@@ -55,6 +49,42 @@ type ContactDirectory interface {
 	// AUSENTE do mapa devolvido (não é erro — o caller mantém o PN original
 	// como fallback).
 	GetManyLIDsForPNs(ctx context.Context, txtID string, jids []domain.JID) (map[domain.JID]domain.JID, error)
+}
+
+// AvatarReader lê a foto de perfil.
+type AvatarReader interface {
+	SessionGuard
+
+	// GetProfilePicture devolve o avatar de um contato, ou nil se não há.
+	GetProfilePicture(ctx context.Context, txtID string, target domain.JID, preview bool) (*domain.AvatarInfo, error)
+}
+
+// ContactRoster lê a agenda da sessão.
+type ContactRoster interface {
+	SessionGuard
+
+	// GetAllContacts devolve a agenda da sessão e a contagem, que o use
+	// case usa para logar.
+	GetAllContacts(ctx context.Context, txtID string) (any, int, error)
+
+	// ContactNames devolve o roster TIPADO, por JID.
+	//
+	// Existe ao lado de GetAllContacts, que devolve `any`, porque quem
+	// precisa CASAR nomes por JID não pode receber o tipo do SDK: isso
+	// arrastaria o vendor para dentro da camada de aplicação. GetAllContacts
+	// segue servindo quem só repassa o bloco cru ao cliente.
+	ContactNames(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error)
+
+	// GetUserInfo devolve os metadados dos JIDs informados.
+	GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error)
+}
+
+// ContactDirectory é a composição das três, para o adaptador que satisfaz todas
+// declarar isso numa linha. Um caso de uso deve pedir a parte que usa.
+type ContactDirectory interface {
+	IdentityResolver
+	AvatarReader
+	ContactRoster
 }
 
 // ChatActivityReader expõe o histórico de atividade por chat já persistido
