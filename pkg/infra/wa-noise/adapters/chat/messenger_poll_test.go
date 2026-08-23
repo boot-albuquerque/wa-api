@@ -63,7 +63,7 @@ func TestChatMessengerAdapter_SendPoll_NoSession(t *testing.T) {
 	rec := &pollRecorder{}
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil)).WithPollOptions(rec)
 
-	_, err := a.SendPoll(context.Background(), "u1", pollGroupJID, domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, "")
+	_, err := a.SendPoll(context.Background(), "u1", pollGroupJID, domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, "")
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendPoll code = %q", testkit.AppErrCode(err))
 	}
@@ -94,7 +94,7 @@ func TestChatMessengerAdapter_SendPoll_SelectableOptionCountIsOne(t *testing.T) 
 	a := pollAdapter(f, &pollRecorder{})
 
 	if _, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-		domain.PollPayload{Name: "Que horas almoçamos?", Options: pollTestOptions()}, ""); err != nil {
+		domain.PollPayload{Name: "Que horas almoçamos?", Options: pollTestOptions()}, nil, ""); err != nil {
 		t.Fatalf("SendPoll: %v", err)
 	}
 
@@ -125,7 +125,7 @@ func TestChatMessengerAdapter_SendPoll_RealBuilderProducesSelectableOne(t *testi
 	a := pollAdapter(f, &pollRecorder{})
 
 	if _, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, ""); err != nil {
+		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, ""); err != nil {
 		t.Fatalf("SendPoll: %v", err)
 	}
 
@@ -168,7 +168,7 @@ func TestChatMessengerAdapter_SendPoll_RemembersOptionsUnderServerID(t *testing.
 	a := pollAdapter(f, rec)
 
 	res, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, "id-pedido-pelo-cliente")
+		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, "id-pedido-pelo-cliente")
 	if err != nil {
 		t.Fatalf("SendPoll: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestChatMessengerAdapter_SendPoll_StoredOptionsResolveTheVoteHashes(t *test
 
 	options := pollTestOptions()
 	if _, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-		domain.PollPayload{Name: "Qual?", Options: options}, ""); err != nil {
+		domain.PollPayload{Name: "Qual?", Options: options}, nil, ""); err != nil {
 		t.Fatalf("SendPoll: %v", err)
 	}
 	if len(rec.Calls) != 1 {
@@ -264,7 +264,7 @@ func TestChatMessengerAdapter_SendPoll_SendFailureNeverRemembers(t *testing.T) {
 	a := pollAdapter(f, rec)
 
 	res, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, "")
+		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, "")
 	if !errors.Is(err, sendErr) {
 		t.Fatalf("erro do envio nao chegou ao chamador: %#v", err)
 	}
@@ -299,7 +299,7 @@ func TestChatMessengerAdapter_SendPoll_ClientIDIsForwarded(t *testing.T) {
 			a := pollAdapter(f, &pollRecorder{})
 
 			if _, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-				domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, tc.id); err != nil {
+				domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, tc.id); err != nil {
 				t.Fatalf("SendPoll: %v", err)
 			}
 			if len(gotExtra) != tc.wantExtra {
@@ -326,7 +326,7 @@ func TestChatMessengerAdapter_SendPoll_InvalidJIDNeverSends(t *testing.T) {
 	a := pollAdapter(f, rec)
 
 	if _, err := a.SendPoll(context.Background(), "u1", domain.JID(string([]byte{0x00})),
-		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, ""); err == nil {
+		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, ""); err == nil {
 		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
 	if sendCalled {
@@ -353,7 +353,7 @@ func TestChatMessengerAdapter_SendPoll_WithoutRecorderRefusesToSend(t *testing.T
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": f}))
 
 	_, err := a.SendPoll(context.Background(), "u1", pollGroupJID,
-		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, "")
+		domain.PollPayload{Name: "Qual?", Options: pollTestOptions()}, nil, "")
 	if !errors.Is(err, errNoPollOptionRecorder) {
 		t.Fatalf("sem registrador, SendPoll devolveu %#v; quero errNoPollOptionRecorder", err)
 	}

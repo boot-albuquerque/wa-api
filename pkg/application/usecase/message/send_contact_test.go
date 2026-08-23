@@ -107,7 +107,7 @@ func TestSendContact_InvalidPhoneNeverReachesSendContact(t *testing.T) {
 func TestSendContact_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 10, 30, 0, 0, time.UTC)
 	sm := &contractsfake.SimpleMessenger{
-		SendContactFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ContactPayload, id string) (domain.MessageSendResult, error) {
+		SendContactFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ContactPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-contact-123"}, nil
 		},
 	}
@@ -148,7 +148,7 @@ func TestSendContact_CausalSuccess(t *testing.T) {
 // que a porta devolveu, mesmo quando diverge do id de entrada.
 func TestSendContact_MessageIDIsTheOneActuallySent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendContactFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ContactPayload, _ string) (domain.MessageSendResult, error) {
+		SendContactFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ContactPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
 		},
 	}
@@ -174,7 +174,7 @@ func TestSendContact_MessageIDIsTheOneActuallySent(t *testing.T) {
 // não pode virar Status=StatusSent nem resultado não-nil.
 func TestSendContact_DownstreamFailureNeverProducesSent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendContactFunc: func(context.Context, string, domain.JID, domain.ContactPayload, string) (domain.MessageSendResult, error) {
+		SendContactFunc: func(context.Context, string, domain.JID, domain.ContactPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}

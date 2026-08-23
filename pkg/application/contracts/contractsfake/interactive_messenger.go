@@ -21,6 +21,7 @@ type InteractiveMessengerSendButtonsCall struct {
 	TxtID   string
 	Target  domain.JID
 	Payload domain.ButtonsPayload
+	ReplyTo *domain.ReplyContext
 	ID      string
 }
 
@@ -30,6 +31,7 @@ type InteractiveMessengerSendCarouselCall struct {
 	TxtID   string
 	Target  domain.JID
 	Payload domain.CarouselPayload
+	ReplyTo *domain.ReplyContext
 	ID      string
 }
 
@@ -37,29 +39,29 @@ type InteractiveMessengerSendCarouselCall struct {
 type InteractiveMessenger struct {
 	SessionGuard
 
-	SendButtonsFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, id string) (domain.MessageSendResult, error)
+	SendButtonsFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 	SendButtonsCalls []InteractiveMessengerSendButtonsCall
 
-	SendCarouselFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, id string) (domain.MessageSendResult, error)
+	SendCarouselFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 	SendCarouselCalls []InteractiveMessengerSendCarouselCall
 }
 
 var _ port.InteractiveMessenger = (*InteractiveMessenger)(nil)
 
 // SendButtons implementa port.InteractiveMessenger.
-func (f *InteractiveMessenger) SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, id string) (domain.MessageSendResult, error) {
-	f.SendButtonsCalls = append(f.SendButtonsCalls, InteractiveMessengerSendButtonsCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+func (f *InteractiveMessenger) SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+	f.SendButtonsCalls = append(f.SendButtonsCalls, InteractiveMessengerSendButtonsCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
 	if f.SendButtonsFunc != nil {
-		return f.SendButtonsFunc(ctx, txtID, target, payload, id)
+		return f.SendButtonsFunc(ctx, txtID, target, payload, replyTo, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentButtonsMessageID}, nil
 }
 
 // SendCarousel implementa port.InteractiveMessenger.
-func (f *InteractiveMessenger) SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, id string) (domain.MessageSendResult, error) {
-	f.SendCarouselCalls = append(f.SendCarouselCalls, InteractiveMessengerSendCarouselCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ID: id})
+func (f *InteractiveMessenger) SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+	f.SendCarouselCalls = append(f.SendCarouselCalls, InteractiveMessengerSendCarouselCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
 	if f.SendCarouselFunc != nil {
-		return f.SendCarouselFunc(ctx, txtID, target, payload, id)
+		return f.SendCarouselFunc(ctx, txtID, target, payload, replyTo, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentCarouselMessageID}, nil
 }

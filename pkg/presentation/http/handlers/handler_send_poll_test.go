@@ -81,7 +81,7 @@ type sendPollResultBody struct {
 func TestSendPoll_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500115)
 	sm := &contractsfake.SimpleMessenger{
-		SendPollFunc: func(_ context.Context, _ string, target domain.JID, payload domain.PollPayload, _ string) (domain.MessageSendResult, error) {
+		SendPollFunc: func(_ context.Context, _ string, target domain.JID, payload domain.PollPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if target != domain.JID(sendPollGroup) {
 				t.Errorf("target: got %q, want %q", target, sendPollGroup)
 			}
@@ -202,7 +202,7 @@ func TestSendPoll_InvalidGroupNeverSends(t *testing.T) {
 // mentira de volta.
 func TestSendPoll_DownstreamFailureNeverReturns200(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendPollSentinel
 		},
 	}
@@ -221,7 +221,7 @@ func TestSendPoll_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendPoll_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendPollFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.PollPayload, id string) (domain.MessageSendResult, error) {
+		SendPollFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.PollPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

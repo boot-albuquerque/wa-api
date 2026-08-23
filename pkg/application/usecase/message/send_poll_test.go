@@ -153,7 +153,7 @@ func TestSendPoll_GroupResolvedWithDefaultServerRule(t *testing.T) {
 func TestSendPoll_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 10, 30, 0, 0, time.UTC)
 	sm := &contractsfake.SimpleMessenger{
-		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-poll-123"}, nil
 		},
 	}
@@ -204,7 +204,7 @@ func TestSendPoll_CausalSuccess(t *testing.T) {
 func TestSendPoll_SendFailureNeverReportsSent(t *testing.T) {
 	sendErr := errors.New("porta: envio de enquete recusado pelo servidor")
 	sm := &contractsfake.SimpleMessenger{
-		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, sendErr
 		},
 	}
@@ -229,7 +229,7 @@ func TestSendPoll_SendFailureNeverReportsSent(t *testing.T) {
 // guardadas (pkg/bootstrap/eventhandler_message.go:117).
 func TestSendPoll_MessageIDIsTheOneActuallySent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+		SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
 		},
 	}

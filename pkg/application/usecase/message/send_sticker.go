@@ -160,7 +160,7 @@ func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req dom
 
 	payload := domain.MediaPayload{Bytes: processed, MimeType: detectedMimeType, PngThumbnail: req.PngThumbnail}
 
-	sent, err := uc.media.SendSticker(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.media.SendSticker(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send sticker message", "txtID", txtID, "error", err)
 		return nil, err

@@ -27,13 +27,13 @@ type MediaMessenger interface {
 	// bem-sucedido NÃO produz domain.MessageSendResult algum: o erro do
 	// SendMessage é propagado, sem tentativa de desfazer o upload (o
 	// protocolo não oferece essa operação).
-	SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendDocument sobe payload.Bytes (com wanoise.MediaDocument, não
 	// MediaImage) e envia uma DocumentMessage para target, usando
 	// payload.FileName como metadata pura (CAP-04). Mesma disciplina de
 	// SendImage quanto a upload/envio e a ausência de rollback de upload.
-	SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendAudio sobe payload.Bytes (com wanoise.MediaAudio) e envia uma
 	// AudioMessage para target, usando payload.PTT e payload.Seconds como
@@ -49,7 +49,7 @@ type MediaMessenger interface {
 	// assinatura própria em vez de reaproveitar o tipo. A PORTA continua
 	// única (upload+envio de mídia é uma capacidade coerente) — só o
 	// payload de áudio é um tipo à parte.
-	SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error)
+	SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendVideo sobe payload.Bytes (com wanoise.MediaVideo, não
 	// MediaImage/MediaDocument/MediaAudio) e envia uma VideoMessage para
@@ -62,7 +62,7 @@ type MediaMessenger interface {
 	// MediaPayload não já tenha (sem PTT, sem Seconds; Seconds/Width/
 	// Height/GIF/playback nunca eram preenchidos historicamente e não são
 	// implementados aqui — sem probing).
-	SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendSticker sobe payload.Bytes (com wanoise.MediaImage — sticker NÃO
 	// tem MediaType próprio no SDK) e envia uma StickerMessage para target
@@ -80,5 +80,5 @@ type MediaMessenger interface {
 	// para os quatro campos de metadata de pacote (PackId/PackName/
 	// PackPublisher/Emojis), que alimentam a EXIF dentro do pipeline de
 	// conversão, não StickerMessage diretamente.
-	SendSticker(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error)
+	SendSticker(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 }

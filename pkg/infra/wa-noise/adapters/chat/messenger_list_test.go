@@ -32,7 +32,7 @@ func listAdapter(f *testkit.Fake) *ChatMessengerAdapter {
 
 // sendListCapturing envia payload e devolve a mensagem que chegou a
 // SendMessage, mais os extras.
-func sendListCapturing(t *testing.T, payload domain.ListPayload, id string) (*waE2E.Message, []wanoise.SendRequestExtra) {
+func sendListCapturing(t *testing.T, payload domain.ListPayload, _ *domain.ReplyContext, id string) (*waE2E.Message, []wanoise.SendRequestExtra) {
 	t.Helper()
 
 	var sent *waE2E.Message
@@ -44,7 +44,7 @@ func sendListCapturing(t *testing.T, payload domain.ListPayload, id string) (*wa
 		},
 	}
 
-	_, err := listAdapter(f).SendList(context.Background(), "u1", listChatJID, payload, id)
+	_, err := listAdapter(f).SendList(context.Background(), "u1", listChatJID, payload, nil, id)
 	if err != nil {
 		t.Fatalf("SendList: %v", err)
 	}
@@ -74,7 +74,7 @@ func listMessage(t *testing.T, m *waE2E.Message) *waE2E.ListMessage {
 func TestChatMessengerAdapter_SendList_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
 
-	_, err := a.SendList(context.Background(), "u1", listChatJID, domain.ListPayload{Body: "corpo"}, "")
+	_, err := a.SendList(context.Background(), "u1", listChatJID, domain.ListPayload{Body: "corpo"}, nil, "")
 
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendList code = %q, quero no_session", testkit.AppErrCode(err))
@@ -90,7 +90,7 @@ func TestChatMessengerAdapter_SendList_Wrapper(t *testing.T) {
 		Body:       "Escolha",
 		ButtonText: "Select",
 		Sections:   []domain.ListSection{{Title: "Sec", Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
-	}, "")
+	}, nil, "")
 
 	if sent.GetViewOnceMessage() != nil {
 		t.Fatal("mensagem enviada usa o embrulho ERRADO (ViewOnceMessage)")
@@ -109,7 +109,7 @@ func TestChatMessengerAdapter_SendList_ListTypeIsSingleSelect(t *testing.T) {
 		Body:       "Escolha",
 		ButtonText: "Select",
 		Sections:   []domain.ListSection{{Title: "Sec", Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
-	}, "")
+	}, nil, "")
 
 	lm := listMessage(t, sent)
 	if got := lm.GetListType(); got != waE2E.ListMessage_SINGLE_SELECT {
@@ -132,7 +132,7 @@ func TestChatMessengerAdapter_SendList_SectionsAndRowsTranslated(t *testing.T) {
 			}},
 			{Title: "Segunda", Rows: []domain.ListRow{{Title: "Item C", RowId: "id-c"}}},
 		},
-	}, "")
+	}, nil, "")
 
 	lm := listMessage(t, sent)
 	if got := lm.GetButtonText(); got != "Ver opcoes" {
@@ -178,7 +178,7 @@ func TestChatMessengerAdapter_SendList_TitleAndFooterAreOptional(t *testing.T) {
 		Body:       "Escolha",
 		ButtonText: "Select",
 		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
-	}, "")
+	}, nil, "")
 
 	lm := listMessage(t, sent)
 	if lm.Title != nil {
@@ -200,7 +200,7 @@ func TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent(t *testing.T) {
 		Body:       "Escolha",
 		ButtonText: "Select",
 		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
-	}, "")
+	}, nil, "")
 
 	if len(extra) != 1 {
 		t.Fatalf("SendMessage recebeu %d extra(s), quero 1", len(extra))
@@ -234,7 +234,7 @@ func TestChatMessengerAdapter_SendList_CallerIDIsForwarded(t *testing.T) {
 		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
 	}
 
-	_, comID := sendListCapturing(t, payload, "id-do-cliente")
+	_, comID := sendListCapturing(t, payload, nil, "id-do-cliente")
 	if got := string(comID[0].ID); got != "id-do-cliente" {
 		t.Errorf("extra.ID = %q, quero o id do chamador", got)
 	}
@@ -242,7 +242,7 @@ func TestChatMessengerAdapter_SendList_CallerIDIsForwarded(t *testing.T) {
 		t.Error("com id do chamador, o no' BIZ sumiu")
 	}
 
-	_, semID := sendListCapturing(t, payload, "")
+	_, semID := sendListCapturing(t, payload, nil, "")
 	if got := string(semID[0].ID); got != "" {
 		t.Errorf("extra.ID = %q sem id do chamador, quero vazio", got)
 	}
@@ -265,7 +265,7 @@ func TestChatMessengerAdapter_SendList_ResultComesFromTheWire(t *testing.T) {
 		Body:       "Escolha",
 		ButtonText: "Select",
 		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
-	}, "id-do-cliente")
+	}, nil, "id-do-cliente")
 	if err != nil {
 		t.Fatalf("SendList: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestChatMessengerAdapter_SendList_InvalidJIDNeverSends(t *testing.T) {
 
 	_, err := listAdapter(f).SendList(context.Background(), "u1", "@@@", domain.ListPayload{
 		Body: "Escolha",
-	}, "")
+	}, nil, "")
 	if err == nil {
 		t.Fatal("JID invalido foi aceito")
 	}

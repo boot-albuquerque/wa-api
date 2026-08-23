@@ -132,7 +132,7 @@ func (uc *SendListUseCase) Execute(ctx context.Context, txtID string, req domain
 		Sections:   sections,
 	}
 
-	sent, err := uc.messages.SendList(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.messages.SendList(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send list message", "txtID", txtID, "error", err)
 		return nil, err

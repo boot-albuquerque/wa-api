@@ -91,12 +91,13 @@ const StatusDeleted = "deleted"
 // dois casos, herdado de handlers.go pré-refactor (ver
 // `git show 41bc8e2^:handlers.go`).
 type SendImageRequest struct {
-	Phone         string `json:"Phone"`
-	Image         string `json:"Image"`
-	Caption       string `json:"Caption,omitempty"`
-	ID            string `json:"Id,omitempty"`
-	MimeType      string `json:"MimeType,omitempty"`
-	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
+	Phone         string        `json:"Phone"`
+	Image         string        `json:"Image"`
+	Caption       string        `json:"Caption,omitempty"`
+	ID            string        `json:"Id,omitempty"`
+	MimeType      string        `json:"MimeType,omitempty"`
+	JPEGThumbnail []byte        `json:"JPEGThumbnail,omitempty"`
+	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendImageResult representa o resultado do envio de imagem.
@@ -130,12 +131,13 @@ type MediaPayload struct {
 // mesmo racional de SendImageRequest (CAP-02/CAP-03) — ver
 // `git show 41bc8e2^:handlers.go`, em torno da linha 900.
 type SendDocumentRequest struct {
-	Phone    string `json:"Phone"`
-	Document string `json:"Document"`
-	FileName string `json:"FileName"`
-	Caption  string `json:"Caption,omitempty"`
-	ID       string `json:"Id,omitempty"`
-	MimeType string `json:"MimeType,omitempty"`
+	Phone    string        `json:"Phone"`
+	Document string        `json:"Document"`
+	FileName string        `json:"FileName"`
+	Caption  string        `json:"Caption,omitempty"`
+	ID       string        `json:"Id,omitempty"`
+	MimeType string        `json:"MimeType,omitempty"`
+	ReplyTo  *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendDocumentResult representa o resultado do envio de documento.
@@ -165,14 +167,15 @@ type SendDocumentResult struct {
 // CAP-05, reportado — não implementado por conta própria (decisão de
 // contrato não é do executor).
 type SendAudioRequest struct {
-	Phone    string `json:"Phone"`
-	Audio    string `json:"Audio"`
-	Caption  string `json:"Caption,omitempty"`
-	ID       string `json:"Id,omitempty"`
-	PTT      *bool  `json:"ptt,omitempty"`
-	MimeType string `json:"mimetype,omitempty"`
-	Seconds  uint32 `json:"Seconds,omitempty"`
-	Waveform []byte `json:"Waveform,omitempty"`
+	Phone    string        `json:"Phone"`
+	Audio    string        `json:"Audio"`
+	Caption  string        `json:"Caption,omitempty"`
+	ID       string        `json:"Id,omitempty"`
+	PTT      *bool         `json:"ptt,omitempty"`
+	MimeType string        `json:"mimetype,omitempty"`
+	Seconds  uint32        `json:"Seconds,omitempty"`
+	Waveform []byte        `json:"Waveform,omitempty"`
+	ReplyTo  *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendAudioResult representa o resultado do envio de áudio.
@@ -217,15 +220,16 @@ type AudioPayload struct {
 
 // SendStickerRequest representa o payload de envio de sticker.
 type SendStickerRequest struct {
-	Phone         string   `json:"Phone"`
-	Sticker       string   `json:"Sticker"`
-	ID            string   `json:"Id,omitempty"`
-	MimeType      string   `json:"MimeType,omitempty"`
-	PngThumbnail  []byte   `json:"PngThumbnail,omitempty"`
-	PackID        string   `json:"PackId,omitempty"`
-	PackName      string   `json:"PackName,omitempty"`
-	PackPublisher string   `json:"PackPublisher,omitempty"`
-	Emojis        []string `json:"Emojis,omitempty"`
+	Phone         string        `json:"Phone"`
+	Sticker       string        `json:"Sticker"`
+	ID            string        `json:"Id,omitempty"`
+	MimeType      string        `json:"MimeType,omitempty"`
+	PngThumbnail  []byte        `json:"PngThumbnail,omitempty"`
+	PackID        string        `json:"PackId,omitempty"`
+	PackName      string        `json:"PackName,omitempty"`
+	PackPublisher string        `json:"PackPublisher,omitempty"`
+	Emojis        []string      `json:"Emojis,omitempty"`
+	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendStickerResult representa o resultado do envio de sticker.
@@ -243,12 +247,13 @@ type SendStickerResult struct {
 // nem "data:" (como Document) — ver `git show 41bc8e2^:handlers.go`, em
 // torno da linha 1583, e isDataVideo em send_video.go.
 type SendVideoRequest struct {
-	Phone         string `json:"Phone"`
-	Video         string `json:"Video"`
-	Caption       string `json:"Caption,omitempty"`
-	ID            string `json:"Id,omitempty"`
-	MimeType      string `json:"MimeType,omitempty"`
-	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
+	Phone         string        `json:"Phone"`
+	Video         string        `json:"Video"`
+	Caption       string        `json:"Caption,omitempty"`
+	ID            string        `json:"Id,omitempty"`
+	MimeType      string        `json:"MimeType,omitempty"`
+	JPEGThumbnail []byte        `json:"JPEGThumbnail,omitempty"`
+	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendVideoResult representa o resultado do envio de vídeo.
@@ -260,10 +265,11 @@ type SendVideoResult struct {
 
 // SendContactRequest representa o payload de envio de contato.
 type SendContactRequest struct {
-	Phone string `json:"Phone"`
-	Name  string `json:"Name"`
-	Vcard string `json:"Vcard"`
-	ID    string `json:"Id,omitempty"`
+	Phone   string        `json:"Phone"`
+	Name    string        `json:"Name"`
+	Vcard   string        `json:"Vcard"`
+	ID      string        `json:"Id,omitempty"`
+	ReplyTo *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendContactResult representa o resultado do envio de contato.
@@ -286,9 +292,10 @@ type SendLocationRequest struct {
 	// A mudança só AMPLIA o que é aceite: quem omite o campo continua a receber
 	// 400, e quem manda 0 passa a ser aceite em vez de recusado. Nenhum cliente
 	// existente perde comportamento.
-	Latitude  *float64 `json:"Latitude"`
-	Longitude *float64 `json:"Longitude"`
-	ID        string   `json:"Id,omitempty"`
+	Latitude  *float64      `json:"Latitude"`
+	Longitude *float64      `json:"Longitude"`
+	ID        string        `json:"Id,omitempty"`
+	ReplyTo   *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendLocationResult representa o resultado do envio de localização.
@@ -388,6 +395,7 @@ type SendButtonsRequest struct {
 	Image   string              `json:"Image"`
 	Buttons []InteractiveButton `json:"Buttons"`
 	ID      string              `json:"Id,omitempty"`
+	ReplyTo *ReplyContext       `json:"ReplyTo,omitempty"`
 }
 
 // SendButtonsResult representa o resultado do envio de botões.
@@ -483,6 +491,7 @@ type SendListRequest struct {
 	Sections   []ListSection `json:"Sections"`   // preferida: multi-seção
 	List       []ListRow     `json:"List"`       // legado: lista plana
 	ID         string        `json:"Id,omitempty"`
+	ReplyTo    *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendListResult representa o resultado do envio de lista.
@@ -516,10 +525,11 @@ type ListPayload struct {
 
 // SendPollRequest representa o payload de envio de enquete.
 type SendPollRequest struct {
-	Group   string   `json:"Group"`
-	Header  string   `json:"Header"`
-	Options []string `json:"Options"`
-	ID      string   `json:"Id,omitempty"`
+	Group   string        `json:"Group"`
+	Header  string        `json:"Header"`
+	Options []string      `json:"Options"`
+	ID      string        `json:"Id,omitempty"`
+	ReplyTo *ReplyContext `json:"ReplyTo,omitempty"`
 }
 
 // SendPollResult representa o resultado do envio de enquete.
@@ -661,6 +671,7 @@ type SendTemplateRequest struct {
 	Footer  string           `json:"Footer"`
 	ID      string           `json:"Id,omitempty"`
 	Buttons []TemplateButton `json:"Buttons"`
+	ReplyTo *ReplyContext    `json:"ReplyTo,omitempty"`
 }
 
 // SendTemplateResult representa o resultado do envio de template.
@@ -750,9 +761,10 @@ type SendCarouselRequest struct {
 	Phone string `json:"Phone"`
 	Body  string `json:"Body"`
 	// Footer is the carousel-level footer, below all cards.
-	Footer string                    `json:"Footer,omitempty"`
-	Cards  []SendCarouselCardRequest `json:"Cards"`
-	ID     string                    `json:"Id,omitempty"`
+	Footer  string                    `json:"Footer,omitempty"`
+	Cards   []SendCarouselCardRequest `json:"Cards"`
+	ID      string                    `json:"Id,omitempty"`
+	ReplyTo *ReplyContext             `json:"ReplyTo,omitempty"`
 }
 
 // SendCarouselCardRequest is one card in a SendCarouselRequest.

@@ -99,7 +99,7 @@ func TestSendButtons_Success_ViaRegisteredRoute(t *testing.T) {
 		`{"type":"COPY","title":"Copiar","copy_code":"PROMO10"}]}`
 
 	im := &contractsfake.InteractiveMessenger{
-		SendButtonsFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ButtonsPayload, _ string) (domain.MessageSendResult, error) {
+		SendButtonsFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ButtonsPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if target != domain.JID(sendButtonsPhone) {
 				t.Errorf("target: got %q, want %q", target, sendButtonsPhone)
 			}
@@ -283,7 +283,7 @@ func TestSendButtons_InvalidPhoneNeverSends(t *testing.T) {
 // 200 seria a mentira de volta.
 func TestSendButtons_DownstreamFailureNeverReturns200(t *testing.T) {
 	im := &contractsfake.InteractiveMessenger{
-		SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, string) (domain.MessageSendResult, error) {
+		SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendButtonsSentinel
 		},
 	}
@@ -302,7 +302,7 @@ func TestSendButtons_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendButtons_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	im := &contractsfake.InteractiveMessenger{
-		SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, id string) (domain.MessageSendResult, error) {
+		SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

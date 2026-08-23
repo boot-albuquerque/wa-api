@@ -88,7 +88,7 @@ type sendStickerResultBody struct {
 // bytes/MIME que chegam a SendSticker são os PROCESSADOS, não os buscados.
 func TestSendSticker_Success_ViaRegisteredRoute(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -194,7 +194,7 @@ func TestSendSticker_RejectMissingRequiredField(t *testing.T) {
 // MediaFetcher nunca é tocado.
 func TestSendSticker_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -374,7 +374,7 @@ func TestSendSticker_ConversionFailure_Returns500_NeverSent(t *testing.T) {
 // central contra falso-sucesso, pela rota registrada.
 func TestSendSticker_DownstreamFailureNeverReturns200(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendStickerSentinel
 		},
 	}
@@ -396,7 +396,7 @@ func TestSendSticker_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendSticker_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

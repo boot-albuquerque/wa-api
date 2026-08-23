@@ -132,7 +132,7 @@ func TestSendLocation_InvalidPhoneNeverReachesSendLocation(t *testing.T) {
 func TestSendLocation_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 10, 30, 0, 0, time.UTC)
 	sm := &contractsfake.SimpleMessenger{
-		SendLocationFunc: func(_ context.Context, _ string, target domain.JID, payload domain.LocationPayload, id string) (domain.MessageSendResult, error) {
+		SendLocationFunc: func(_ context.Context, _ string, target domain.JID, payload domain.LocationPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-location-123"}, nil
 		},
 	}
@@ -197,7 +197,7 @@ func TestSendLocation_NameOptional_EmptyStringForwarded(t *testing.T) {
 // que a porta devolveu, mesmo quando diverge do id de entrada.
 func TestSendLocation_MessageIDIsTheOneActuallySent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendLocationFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.LocationPayload, _ string) (domain.MessageSendResult, error) {
+		SendLocationFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.LocationPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
 		},
 	}
@@ -223,7 +223,7 @@ func TestSendLocation_MessageIDIsTheOneActuallySent(t *testing.T) {
 // falhando não pode virar Status=StatusSent nem resultado não-nil.
 func TestSendLocation_DownstreamFailureNeverProducesSent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendLocationFunc: func(context.Context, string, domain.JID, domain.LocationPayload, string) (domain.MessageSendResult, error) {
+		SendLocationFunc: func(context.Context, string, domain.JID, domain.LocationPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}

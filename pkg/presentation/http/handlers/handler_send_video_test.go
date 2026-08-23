@@ -76,7 +76,7 @@ type sendVideoResultBody struct {
 func TestSendVideo_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500110)
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -174,7 +174,7 @@ func TestSendVideo_RejectMissingRequiredField(t *testing.T) {
 func TestSendVideo_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500120)
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -339,7 +339,7 @@ func TestSendVideo_FetchFailure_NeverReturns200(t *testing.T) {
 // CAP-06 contra falso-sucesso, pela rota registrada.
 func TestSendVideo_DownstreamFailureNeverReturns200(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendVideoSentinel
 		},
 	}
@@ -360,7 +360,7 @@ func TestSendVideo_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendVideo_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -389,7 +389,7 @@ func TestSendVideo_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 // preenchido chega intacto ao payload de envio.
 func TestSendVideo_Caption_ForwardedFromRequest(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.MediaPayload, _ string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if payload.Caption != "legenda do clipe" {
 				t.Errorf("Caption: got %q, want %q", payload.Caption, "legenda do clipe")
 			}
@@ -415,7 +415,7 @@ func TestSendVideo_Caption_ForwardedFromRequest(t *testing.T) {
 // final vem do sniffing dos bytes.
 func TestSendVideo_MimeType_SniffedFromBytes_ViaRegisteredRoute(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.MediaPayload, _ string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if payload.MimeType == "video/quicktime" {
 				t.Errorf("mimetype: Content-Type remoto (%q) venceu, mas nao deveria ter precedencia", payload.MimeType)
 			}

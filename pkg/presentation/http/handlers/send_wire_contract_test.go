@@ -162,7 +162,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/image",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				mm := &contractsfake.MediaMessenger{
-					SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+					SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-image-1"), nil
 					},
 				}
@@ -175,7 +175,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/audio",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				mm := &contractsfake.MediaMessenger{
-					SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, string) (domain.MessageSendResult, error) {
+					SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-audio-1"), nil
 					},
 				}
@@ -188,7 +188,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/video",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				mm := &contractsfake.MediaMessenger{
-					SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+					SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-video-1"), nil
 					},
 				}
@@ -201,7 +201,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/document",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				mm := &contractsfake.MediaMessenger{
-					SendDocumentFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+					SendDocumentFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-document-1"), nil
 					},
 				}
@@ -215,7 +215,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/sticker",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				mm := &contractsfake.MediaMessenger{
-					SendStickerFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+					SendStickerFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-sticker-1"), nil
 					},
 				}
@@ -229,7 +229,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/location",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				sm := &contractsfake.SimpleMessenger{
-					SendLocationFunc: func(context.Context, string, domain.JID, domain.LocationPayload, string) (domain.MessageSendResult, error) {
+					SendLocationFunc: func(context.Context, string, domain.JID, domain.LocationPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-location-1"), nil
 					},
 				}
@@ -243,7 +243,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/contact",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				sm := &contractsfake.SimpleMessenger{
-					SendContactFunc: func(context.Context, string, domain.JID, domain.ContactPayload, string) (domain.MessageSendResult, error) {
+					SendContactFunc: func(context.Context, string, domain.JID, domain.ContactPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-contact-1"), nil
 					},
 				}
@@ -257,7 +257,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/poll",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				sm := &contractsfake.SimpleMessenger{
-					SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+					SendPollFunc: func(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-poll-1"), nil
 					},
 				}
@@ -271,7 +271,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/template",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				sm := &contractsfake.SimpleMessenger{
-					SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+					SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-template-1"), nil
 					},
 				}
@@ -286,7 +286,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/buttons",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				im := &contractsfake.InteractiveMessenger{
-					SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, string) (domain.MessageSendResult, error) {
+					SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-buttons-1"), nil
 					},
 				}
@@ -301,7 +301,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/carousel",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				im := &contractsfake.InteractiveMessenger{
-					SendCarouselFunc: func(context.Context, string, domain.JID, domain.CarouselPayload, string) (domain.MessageSendResult, error) {
+					SendCarouselFunc: func(context.Context, string, domain.JID, domain.CarouselPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-carousel-1"), nil
 					},
 				}
@@ -316,7 +316,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/list",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				sm := &contractsfake.SimpleMessenger{
-					SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, string) (domain.MessageSendResult, error) {
+					SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-list-1"), nil
 					},
 				}

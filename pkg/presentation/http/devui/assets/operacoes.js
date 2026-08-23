@@ -13,6 +13,8 @@ import { soDigitos } from "./devui.js";
 
 const telefone = { nome: "Phone", rotulo: "telefone (só dígitos)", pre: soDigitos, req: true };
 const legenda = { nome: "Caption", rotulo: "legenda (opcional)" };
+const replyTo = { nome: "ReplyTo", rotulo: "reply-to (JSON, opcional)", tipo: "textarea",
+  pre: (v) => { const s = String(v || "").trim(); return s ? JSON.parse(s) : undefined; } };
 
 // ficheiro devolve um campo que lê um ficheiro local e o converte em data URI,
 // que é o formato que as rotas de mídia aceitam além de URL.
@@ -20,15 +22,13 @@ const ficheiro = (nome, rotulo) => ({ nome, rotulo, tipo: "file", req: true });
 
 export const ENVIO = [
   { id: "text", rotulo: "Texto", rota: "/chat/send/text",
-    campos: [telefone, { nome: "Body", rotulo: "mensagem", tipo: "textarea", req: true },
-             { nome: "ReplyTo", rotulo: "reply-to (JSON, opcional)", tipo: "textarea",
-               pre: (v) => { const s = String(v || "").trim(); return s ? JSON.parse(s) : undefined; } }] },
+    campos: [telefone, { nome: "Body", rotulo: "mensagem", tipo: "textarea", req: true }, replyTo] },
 
   { id: "image", rotulo: "Imagem", rota: "/chat/send/image",
-    campos: [telefone, ficheiro("Image", "imagem"), legenda] },
+    campos: [telefone, ficheiro("Image", "imagem"), legenda, replyTo] },
 
   { id: "video", rotulo: "Vídeo", rota: "/chat/send/video",
-    campos: [telefone, ficheiro("Video", "vídeo"), legenda] },
+    campos: [telefone, ficheiro("Video", "vídeo"), legenda, replyTo] },
 
   // A legenda do áudio existe, mas NÃO é um campo do protocolo: o WhatsApp não
   // tem legenda em áudio, e a API envia-a como mensagem de texto SEPARADA, logo
@@ -36,24 +36,26 @@ export const ENVIO = [
   // rótulo para o operador não ser surpreendido pelo que vê no telemóvel.
   { id: "audio", rotulo: "Áudio", rota: "/chat/send/audio",
     campos: [telefone, ficheiro("Audio", "áudio"),
-             { nome: "Caption", rotulo: "legenda (vai como mensagem separada)" }] },
+             { nome: "Caption", rotulo: "legenda (vai como mensagem separada)" }, replyTo] },
 
   { id: "document", rotulo: "Documento", rota: "/chat/send/document",
     campos: [telefone, ficheiro("Document", "ficheiro"),
-             { nome: "FileName", rotulo: "nome do ficheiro" }] },
+             { nome: "FileName", rotulo: "nome do ficheiro" }, replyTo] },
 
   { id: "sticker", rotulo: "Sticker", rota: "/chat/send/sticker",
-    campos: [telefone, ficheiro("Sticker", "webp 512×512")] },
+    campos: [telefone, ficheiro("Sticker", "webp 512×512"), replyTo] },
 
   { id: "location", rotulo: "Localização", rota: "/chat/send/location",
     campos: [telefone, { nome: "Name", rotulo: "nome do local" },
              { nome: "Latitude", rotulo: "latitude", tipo: "number", pre: Number, req: true },
-             { nome: "Longitude", rotulo: "longitude", tipo: "number", pre: Number, req: true }] },
+             { nome: "Longitude", rotulo: "longitude", tipo: "number", pre: Number, req: true },
+             replyTo] },
 
   { id: "contact", rotulo: "Contacto", rota: "/chat/send/contact",
     campos: [telefone, { nome: "Name", rotulo: "nome", req: true },
              { nome: "Vcard", rotulo: "vCard", tipo: "textarea", req: true,
-               valor: "BEGIN:VCARD\nVERSION:3.0\nFN:Nome\nTEL;type=CELL:+5511999999999\nEND:VCARD" }] },
+               valor: "BEGIN:VCARD\nVERSION:3.0\nFN:Nome\nTEL;type=CELL:+5511999999999\nEND:VCARD" },
+             replyTo] },
 
   { id: "poll", rotulo: "Enquete", rota: "/chat/send/poll",
     // A rota chama ao destinatário `Group`, e não `Phone`, apesar de aceitar
@@ -62,7 +64,8 @@ export const ENVIO = [
     campos: [{ nome: "Group", rotulo: "telefone ou grupo", pre: soDigitos, req: true },
              { nome: "Header", rotulo: "pergunta", req: true },
              { nome: "Options", rotulo: "opções (uma por linha)", tipo: "textarea", req: true,
-               pre: (v) => String(v).split("\n").map((s) => s.trim()).filter(Boolean) }] },
+               pre: (v) => String(v).split("\n").map((s) => s.trim()).filter(Boolean) },
+             replyTo] },
 
   { id: "buttons", rotulo: "Botões", rota: "/chat/send/buttons",
     campos: [telefone, { nome: "Title", rotulo: "título" },
@@ -74,20 +77,23 @@ export const ENVIO = [
              // que quem experimenta caia nessa.
              { nome: "Buttons", rotulo: "botões (JSON)", tipo: "textarea", req: true,
                valor: '[{"type":"reply","title":"Sim"},{"type":"reply","title":"Não"}]',
-               pre: JSON.parse }] },
+               pre: JSON.parse },
+             replyTo] },
 
   { id: "carousel", rotulo: "Carrossel", rota: "/chat/send/carousel",
     campos: [telefone, { nome: "Body", rotulo: "corpo do carrossel", req: true },
              { nome: "Footer", rotulo: "rodapé" },
              { nome: "Cards", rotulo: "cartões (JSON — Title só aparece no Android)", tipo: "textarea", req: true,
                valor: '[{"Title":"Cartão 1","Body":"Descrição","Buttons":[{"type":"reply","title":"Sim"}]},{"Title":"Cartão 2","Body":"Descrição","Buttons":[{"type":"reply","title":"Não"}]}]',
-               pre: JSON.parse }] },
+               pre: JSON.parse },
+             replyTo] },
 
   { id: "template", rotulo: "Template", rota: "/chat/send/template",
     campos: [telefone, { nome: "Content", rotulo: "conteúdo", req: true },
              { nome: "Footer", rotulo: "rodapé" },
              { nome: "Buttons", rotulo: "botões (JSON)", tipo: "textarea",
-               valor: '[{"DisplayText":"Ok","Type":"quickreply","Id":"t1"}]', pre: JSON.parse }] },
+               valor: '[{"DisplayText":"Ok","Type":"quickreply","Id":"t1"}]', pre: JSON.parse },
+             replyTo] },
 
   { id: "list", rotulo: "Lista", rota: "/chat/send/list",
     campos: [telefone, { nome: "ButtonText", rotulo: "texto do botão", req: true },
@@ -96,7 +102,8 @@ export const ENVIO = [
              { nome: "FooterText", rotulo: "rodapé" },
              { nome: "Sections", rotulo: "secções (JSON)", tipo: "textarea", req: true,
                valor: '[{"title":"Secção","rows":[{"title":"Item","desc":"d","rowid":"r1"}]}]',
-               pre: JSON.parse }] },
+               pre: JSON.parse },
+             replyTo] },
 
   { id: "edit", rotulo: "Editar mensagem", rota: "/chat/send/edit",
     campos: [telefone, { nome: "Id", rotulo: "id da mensagem", req: true },

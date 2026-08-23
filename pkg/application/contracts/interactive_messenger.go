@@ -56,7 +56,7 @@ type InteractiveMessenger interface {
 	// ButtonParamsJSON, e não como campos de protobuf. QUE a ordem dos
 	// botões seja preservada é contrato desta porta — é a ordem em que
 	// eles aparecem no aparelho de quem recebe.
-	SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, id string) (domain.MessageSendResult, error)
+	SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendCarousel mounts an InteractiveMessage whose oneof is
 	// CarouselMessage and sends it to target. Each card is itself a
@@ -66,5 +66,5 @@ type InteractiveMessenger interface {
 	//
 	// payload.Cards must arrive with buttons ALREADY NORMALISED by the
 	// use case, same discipline as SendButtons.
-	SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, id string) (domain.MessageSendResult, error)
+	SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 }

@@ -78,7 +78,7 @@ type sendAudioResultBody struct {
 func TestSendAudio_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500110)
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -181,7 +181,7 @@ func TestSendAudio_RejectMissingRequiredField(t *testing.T) {
 func TestSendAudio_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500120)
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -331,7 +331,7 @@ func TestSendAudio_FetchFailure_NeverReturns200(t *testing.T) {
 // CAP-05 contra falso-sucesso, pela rota registrada.
 func TestSendAudio_DownstreamFailureNeverReturns200(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendAudioSentinel
 		},
 	}
@@ -352,7 +352,7 @@ func TestSendAudio_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendAudio_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -383,7 +383,7 @@ func TestSendAudio_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 // por PTT — nível 4 da precedência.
 func TestSendAudio_MimeType_FallbackByPTT_ViaRegisteredRoute(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.AudioPayload, _ string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if payload.MimeType != "audio/mpeg" {
 				t.Errorf("mimetype: got %q, want %q (fallback ptt=false)", payload.MimeType, "audio/mpeg")
 			}
@@ -448,7 +448,7 @@ func TestSendAudio_NoSecretLeak(t *testing.T) {
 func TestSendAudio_CaptionAcceptedButInert_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500130)
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.AudioPayload, _ string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-caption-inert", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}

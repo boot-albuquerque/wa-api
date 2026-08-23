@@ -84,7 +84,7 @@ func TestSendList_Success_ViaRegisteredRoute(t *testing.T) {
 		`{"title":"Pratos","rows":[{"title":"Feijoada","desc":"com torresmo","RowId":"feijoada"}]}]}`
 
 	sm := &contractsfake.SimpleMessenger{
-		SendListFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ListPayload, _ string) (domain.MessageSendResult, error) {
+		SendListFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ListPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if target != domain.JID(sendListPhone) {
 				t.Errorf("target: got %q, want %q", target, sendListPhone)
 			}
@@ -259,7 +259,7 @@ func TestSendList_InvalidPhoneNeverSends(t *testing.T) {
 // 200 seria a mentira de volta.
 func TestSendList_DownstreamFailureNeverReturns200(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, string) (domain.MessageSendResult, error) {
+		SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendListSentinel
 		},
 	}
@@ -278,7 +278,7 @@ func TestSendList_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendList_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, id string) (domain.MessageSendResult, error) {
+		SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

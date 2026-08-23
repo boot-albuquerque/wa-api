@@ -78,7 +78,7 @@ type sendDocumentResultBody struct {
 func TestSendDocument_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500060)
 	mm := &contractsfake.MediaMessenger{
-		SendDocumentFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendDocumentFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -193,7 +193,7 @@ func TestSendDocument_RejectMissingRequiredField(t *testing.T) {
 func TestSendDocument_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500070)
 	mm := &contractsfake.MediaMessenger{
-		SendDocumentFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendDocumentFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -346,7 +346,7 @@ func TestSendDocument_FetchFailure_NeverReturns200(t *testing.T) {
 // central do CAP-04 contra falso-sucesso, pela rota registrada.
 func TestSendDocument_DownstreamFailureNeverReturns200(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendDocumentFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendDocumentFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendDocumentSentinel
 		},
 	}
@@ -370,7 +370,7 @@ func TestSendDocument_DownstreamFailureNeverReturns200(t *testing.T) {
 // a porta devolveu — nunca o do request usado às cegas.
 func TestSendDocument_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -401,7 +401,7 @@ func TestSendDocument_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 // precedência extra que Document tem sobre Image.
 func TestSendDocument_MimeType_RemoteContentTypeUsedWhenReqEmpty(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.MediaPayload, _ string) (domain.MessageSendResult, error) {
+		SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if payload.MimeType != "application/zip" {
 				t.Errorf("mimetype: got %q, want %q (Content-Type remoto)", payload.MimeType, "application/zip")
 			}

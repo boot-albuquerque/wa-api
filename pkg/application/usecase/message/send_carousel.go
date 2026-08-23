@@ -113,7 +113,7 @@ func (uc *SendCarouselUseCase) Execute(ctx context.Context, txtID string, req do
 		Cards:    cards,
 	}
 
-	sent, err := uc.messages.SendCarousel(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.messages.SendCarousel(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send carousel message", "txtID", txtID, "error", err)
 		return nil, err

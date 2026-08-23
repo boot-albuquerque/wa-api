@@ -483,7 +483,7 @@ func TestSendAudio_Upload_BytesForwardedIntact(t *testing.T) {
 func TestSendAudio_CausalSuccess(t *testing.T) {
 	sentAt := int64(1755500080)
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-audio", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}
@@ -537,7 +537,7 @@ func TestSendAudio_CausalSuccess(t *testing.T) {
 
 func TestSendAudio_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -567,7 +567,7 @@ func TestSendAudio_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 // — a garantia central anti-falso-sucesso, agora para áudio.
 func TestSendAudio_DownstreamFailureNeverProducesSent(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -598,7 +598,7 @@ func TestSendAudio_AcquisitionOK_UploadOK_SendFail_NeverSent(t *testing.T) {
 	sendErr := errors.New("sendmessage: boom apos upload bem-sucedido")
 	uploadThenSendCalled := false
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(context.Context, string, domain.JID, domain.AudioPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			uploadThenSendCalled = true
 			return domain.MessageSendResult{}, sendErr
 		},
@@ -632,7 +632,7 @@ func TestSendAudio_AcquisitionOK_UploadOK_SendFail_NeverSent(t *testing.T) {
 func TestSendAudio_DataURI_CausalSuccess(t *testing.T) {
 	sentAt := int64(1755500090)
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-audio-datauri", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}
@@ -684,7 +684,7 @@ func TestSendAudio_DataURI_MalformedBase64_Rejected(t *testing.T) {
 func TestSendAudio_URLBranch_NotCapturedByDataURIDiscrimination(t *testing.T) {
 	sentAt := int64(1755500100)
 	mm := &contractsfake.MediaMessenger{
-		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, id string) (domain.MessageSendResult, error) {
+		SendAudioFunc: func(_ context.Context, _ string, target domain.JID, payload domain.AudioPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-url-conservation", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}

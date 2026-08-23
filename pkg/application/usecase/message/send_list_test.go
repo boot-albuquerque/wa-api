@@ -378,7 +378,7 @@ func TestSendList_InvalidPhoneNeverSends(t *testing.T) {
 func TestSendList_CausalSuccess(t *testing.T) {
 	sentAt := time.Unix(1755500777, 0)
 	sm := &contractsfake.SimpleMessenger{
-		SendListFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ListPayload, _ string) (domain.MessageSendResult, error) {
+		SendListFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ListPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if target != domain.JID(listPhone+"@s.whatsapp.net") {
 				t.Errorf("target: got %q, want resolvido com o servidor padrao", target)
 			}
@@ -431,7 +431,7 @@ func TestSendList_CausalSuccess(t *testing.T) {
 func TestSendList_SendFailureNeverReportsSent(t *testing.T) {
 	sendErr := errors.New("send-list-downstream-boom")
 	sm := &contractsfake.SimpleMessenger{
-		SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, string) (domain.MessageSendResult, error) {
+		SendListFunc: func(context.Context, string, domain.JID, domain.ListPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, sendErr
 		},
 	}
@@ -451,7 +451,7 @@ func TestSendList_SendFailureNeverReportsSent(t *testing.T) {
 // porta, mas o MessageID publicado é o que a sessão REALMENTE usou.
 func TestSendList_MessageIDIsTheOneActuallySent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, id string) (domain.MessageSendResult, error) {
+		SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

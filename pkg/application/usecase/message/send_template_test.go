@@ -217,7 +217,7 @@ func TestSendTemplate_PhoneResolvedWithDefaultServerRule(t *testing.T) {
 func TestSendTemplate_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 19, 10, 30, 0, 0, time.UTC)
 	sm := &contractsfake.SimpleMessenger{
-		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-template-123"}, nil
 		},
 	}
@@ -272,7 +272,7 @@ func TestSendTemplate_CausalSuccess(t *testing.T) {
 func TestSendTemplate_SendFailureNeverReportsSent(t *testing.T) {
 	sendErr := errors.New("porta: envio de template recusado pelo servidor")
 	sm := &contractsfake.SimpleMessenger{
-		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, sendErr
 		},
 	}
@@ -294,7 +294,7 @@ func TestSendTemplate_SendFailureNeverReportsSent(t *testing.T) {
 // entrada é repassado à porta para que o SDK possa usá-lo.
 func TestSendTemplate_MessageIDIsTheOneActuallySent(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
 		},
 	}

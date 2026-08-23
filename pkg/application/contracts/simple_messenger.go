@@ -29,13 +29,13 @@ type SimpleMessenger interface {
 	// mensagem que o chamador quer usar; o resultado devolvido traz o ID e
 	// o Timestamp que a sessão REALMENTE usou, nunca fabricados
 	// localmente.
-	SendLocation(ctx context.Context, txtID string, target domain.JID, payload domain.LocationPayload, id string) (domain.MessageSendResult, error)
+	SendLocation(ctx context.Context, txtID string, target domain.JID, payload domain.LocationPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendContact monta um ContactMessage a partir de payload
 	// (DisplayName/Vcard — nenhum outro campo) e o envia para target.
 	// Mesma disciplina de SendLocation quanto a id e ao resultado
 	// devolvido.
-	SendContact(ctx context.Context, txtID string, target domain.JID, payload domain.ContactPayload, id string) (domain.MessageSendResult, error)
+	SendContact(ctx context.Context, txtID string, target domain.JID, payload domain.ContactPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendPoll monta um PollCreationMessage a partir de payload
 	// (Name/Options) e o envia para target, que é sempre um grupo nesta
@@ -58,7 +58,7 @@ type SimpleMessenger interface {
 	// guardado o consumidor do webhook recebe hashes sem significado (ver
 	// pkg/bootstrap/eventhandler_message.go:130). Onde essa memória vive é
 	// escolha da infra; QUE ela exista é contrato desta porta.
-	SendPoll(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, id string) (domain.MessageSendResult, error)
+	SendPoll(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendTemplate monta um TemplateMessage com HydratedFourRowTemplate a
 	// partir de payload (Content/Footer/Buttons) e o envia para target.
@@ -78,7 +78,7 @@ type SimpleMessenger interface {
 	// identificador é exigência do wire, e o use case não conhece
 	// protobuf. QUE a ordem dos botões seja preservada é contrato desta
 	// porta — é a ordem em que eles aparecem no aparelho de quem recebe.
-	SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, id string) (domain.MessageSendResult, error)
+	SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
 	// SendList monta um ListMessage a partir de payload
 	// (Body/ButtonText/Title/Footer/Sections) e o envia para target.
@@ -95,5 +95,5 @@ type SimpleMessenger interface {
 	// waE2E.ListMessage_Section/Row é da IMPLEMENTAÇÃO. QUE a ordem de
 	// seções e linhas seja preservada é contrato desta porta — é a ordem em
 	// que aparecem no aparelho de quem recebe.
-	SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, id string) (domain.MessageSendResult, error)
+	SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 }

@@ -55,7 +55,7 @@ func (uc *SendContactUseCase) Execute(ctx context.Context, txtID string, req dom
 
 	payload := domain.ContactPayload{Name: req.Name, Vcard: req.Vcard}
 
-	sent, err := uc.messages.SendContact(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.messages.SendContact(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send contact message", "txtID", txtID, "error", err)
 		return nil, err

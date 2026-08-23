@@ -17,7 +17,7 @@ import (
 
 func TestChatMessengerAdapter_SendSticker_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
-	_, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}}, "")
+	_, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}}, nil, "")
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendSticker code = %q", testkit.AppErrCode(err))
 	}
@@ -32,7 +32,7 @@ func TestChatMessengerAdapter_SendSticker_InvalidJID(t *testing.T) {
 		return wanoise.UploadResponse{}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	_, err := a.SendSticker(context.Background(), "u1", domain.JID(string([]byte{0x00})), domain.MediaPayload{Bytes: []byte{1, 2, 3}}, "")
+	_, err := a.SendSticker(context.Background(), "u1", domain.JID(string([]byte{0x00})), domain.MediaPayload{Bytes: []byte{1, 2, 3}}, nil, "")
 	if err == nil {
 		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
@@ -56,7 +56,7 @@ func TestChatMessengerAdapter_SendSticker_UploadFailurePropagates(t *testing.T) 
 		},
 	}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "image/webp"}, "")
+	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "image/webp"}, nil, "")
 	if err == nil {
 		t.Fatal("SendSticker não propagou a falha de upload")
 	}
@@ -84,7 +84,7 @@ func TestChatMessengerAdapter_SendSticker_UploadOK_SendMessageFail_NeverSent(t *
 		},
 	}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "image/webp"}, "")
+	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1, 2, 3}, MimeType: "image/webp"}, nil, "")
 	if !uploadCalled {
 		t.Fatal("upload nunca foi chamado — teste nao exercita o caso upload-ok-send-fail")
 	}
@@ -136,7 +136,7 @@ func TestChatMessengerAdapter_SendSticker_OK(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
 	convertedWebP := []byte{0x52, 0x49, 0x46, 0x46, 0xDE, 0xAD, 0xBE, 0xEF}
 	payload := domain.MediaPayload{Bytes: convertedWebP, MimeType: "image/webp"}
-	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", payload, "")
+	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", payload, nil, "")
 	if err != nil {
 		t.Fatalf("SendSticker = %v", err)
 	}
@@ -193,7 +193,7 @@ func TestChatMessengerAdapter_SendSticker_WithCallerID(t *testing.T) {
 		},
 	}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1}, MimeType: "image/webp"}, "caller-id")
+	res, err := a.SendSticker(context.Background(), "u1", "x@y.com", domain.MediaPayload{Bytes: []byte{1}, MimeType: "image/webp"}, nil, "caller-id")
 	if err != nil {
 		t.Fatalf("SendSticker = %v", err)
 	}

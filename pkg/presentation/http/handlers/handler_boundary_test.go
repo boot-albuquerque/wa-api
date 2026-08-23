@@ -124,27 +124,27 @@ func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.
 //
 // Todos contam em s.calls: o boundary test mede se o handler chegou a AGIR
 // sobre o WhatsApp, e enviar é o ato máximo.
-func (s *spyPort) SendLocation(context.Context, string, domain.JID, domain.LocationPayload, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendLocation(context.Context, string, domain.JID, domain.LocationPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) SendContact(context.Context, string, domain.JID, domain.ContactPayload, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendContact(context.Context, string, domain.JID, domain.ContactPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) SendPoll(context.Context, string, domain.JID, domain.PollPayload, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendPoll(context.Context, string, domain.JID, domain.PollPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) SendTemplate(context.Context, string, domain.JID, domain.TemplatePayload, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendTemplate(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) SendList(context.Context, string, domain.JID, domain.ListPayload, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendList(context.Context, string, domain.JID, domain.ListPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }

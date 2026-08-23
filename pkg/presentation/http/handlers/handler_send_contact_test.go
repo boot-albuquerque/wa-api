@@ -76,7 +76,7 @@ func TestSendContact_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500110)
 	vcard := "BEGIN:VCARD\\nVERSION:3.0\\nFN:Alice\\nEND:VCARD"
 	sm := &contractsfake.SimpleMessenger{
-		SendContactFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ContactPayload, id string) (domain.MessageSendResult, error) {
+		SendContactFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ContactPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -197,7 +197,7 @@ func TestSendContact_InvalidPhoneNeverSends(t *testing.T) {
 
 func TestSendContact_DownstreamFailureNeverReturns200(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendContactFunc: func(context.Context, string, domain.JID, domain.ContactPayload, string) (domain.MessageSendResult, error) {
+		SendContactFunc: func(context.Context, string, domain.JID, domain.ContactPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendContactSentinel
 		},
 	}
@@ -217,7 +217,7 @@ func TestSendContact_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendContact_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendContactFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ContactPayload, id string) (domain.MessageSendResult, error) {
+		SendContactFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ContactPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

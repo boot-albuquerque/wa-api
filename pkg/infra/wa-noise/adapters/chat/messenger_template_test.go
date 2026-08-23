@@ -34,7 +34,7 @@ func templateAdapter(f *testkit.Fake) *ChatMessengerAdapter {
 
 // sendTemplateCapturing envia payload e devolve a mensagem que chegou a
 // SendMessage, mais os extras.
-func sendTemplateCapturing(t *testing.T, payload domain.TemplatePayload, id string) (*waE2E.Message, []wanoise.SendRequestExtra) {
+func sendTemplateCapturing(t *testing.T, payload domain.TemplatePayload, _ *domain.ReplyContext, id string) (*waE2E.Message, []wanoise.SendRequestExtra) {
 	t.Helper()
 
 	var sent *waE2E.Message
@@ -46,7 +46,7 @@ func sendTemplateCapturing(t *testing.T, payload domain.TemplatePayload, id stri
 		},
 	}
 
-	if _, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID, payload, id); err != nil {
+	if _, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID, payload, nil, id); err != nil {
 		t.Fatalf("SendTemplate: %v", err)
 	}
 	if sent == nil {
@@ -73,7 +73,7 @@ func TestChatMessengerAdapter_SendTemplate_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
 
 	_, err := a.SendTemplate(context.Background(), "u1", templateChatJID,
-		domain.TemplatePayload{Content: "c", Footer: "f"}, "")
+		domain.TemplatePayload{Content: "c", Footer: "f"}, nil, "")
 
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendTemplate code = %q, quero no_session", testkit.AppErrCode(err))
@@ -89,7 +89,7 @@ func TestChatMessengerAdapter_SendTemplate_HydratedFourRowTemplateFields(t *test
 		Content: "Escolha uma opcao",
 		Footer:  "Equipe wa-api",
 		Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}},
-	}, "")
+	}, nil, "")
 
 	tpl := sent.GetTemplateMessage().GetHydratedTemplate()
 	if tpl == nil {
@@ -128,7 +128,7 @@ func TestChatMessengerAdapter_SendTemplate_ButtonTypes(t *testing.T) {
 			Buttons: []domain.TemplateButton{
 				{DisplayText: "Confirmar", ID: "cta-42", Type: domain.TemplateButtonQuickReply},
 			},
-		}, "")
+		}, nil, "")
 
 		btns := hydratedButtons(t, sent)
 		if n := len(btns); n != 1 {
@@ -152,7 +152,7 @@ func TestChatMessengerAdapter_SendTemplate_ButtonTypes(t *testing.T) {
 			Buttons: []domain.TemplateButton{
 				{DisplayText: "Abrir site", URL: "https://example.invalid/promo", Type: domain.TemplateButtonURL},
 			},
-		}, "")
+		}, nil, "")
 
 		btns := hydratedButtons(t, sent)
 		url := btns[0].GetUrlButton()
@@ -178,7 +178,7 @@ func TestChatMessengerAdapter_SendTemplate_ButtonTypes(t *testing.T) {
 			Buttons: []domain.TemplateButton{
 				{DisplayText: "Ligar agora", PhoneNumber: "+5511987654321", Type: domain.TemplateButtonCall},
 			},
-		}, "")
+		}, nil, "")
 
 		btns := hydratedButtons(t, sent)
 		call := btns[0].GetCallButton()
@@ -203,7 +203,7 @@ func TestChatMessengerAdapter_SendTemplate_UnknownTypeFallsBackToQuickReply(t *t
 		Buttons: []domain.TemplateButton{
 			{DisplayText: "Talvez", Type: "tipo-que-nao-existe"},
 		},
-	}, "")
+	}, nil, "")
 
 	btns := hydratedButtons(t, sent)
 	if n := len(btns); n != 1 {
@@ -234,7 +234,7 @@ func TestChatMessengerAdapter_SendTemplate_AutomaticButtonNumbering(t *testing.T
 			{DisplayText: "Primeiro", Type: domain.TemplateButtonQuickReply},
 			{DisplayText: "Segundo", Type: domain.TemplateButtonQuickReply},
 		},
-	}, "")
+	}, nil, "")
 
 	btns := hydratedButtons(t, sent)
 	if n := len(btns); n != 2 {
@@ -269,7 +269,7 @@ func TestChatMessengerAdapter_SendTemplate_ExplicitIDBeatsNumbering(t *testing.T
 			{DisplayText: "Primeiro", ID: "id-do-cliente", Type: domain.TemplateButtonQuickReply},
 			{DisplayText: "Segundo", Type: domain.TemplateButtonQuickReply},
 		},
-	}, "")
+	}, nil, "")
 
 	btns := hydratedButtons(t, sent)
 	if n := len(btns); n != 2 {
@@ -295,7 +295,7 @@ func TestChatMessengerAdapter_SendTemplate_NumberingCountsNonQuickReplyButtons(t
 			{DisplayText: "Site", URL: "https://example.invalid/a", Type: domain.TemplateButtonURL},
 			{DisplayText: "Confirmar", Type: domain.TemplateButtonQuickReply},
 		},
-	}, "")
+	}, nil, "")
 
 	btns := hydratedButtons(t, sent)
 	if n := len(btns); n != 2 {
@@ -320,7 +320,7 @@ func TestChatMessengerAdapter_SendTemplate_ButtonOrderIsPreserved(t *testing.T) 
 			{DisplayText: "B", Type: domain.TemplateButtonQuickReply},
 			{DisplayText: "C", URL: "https://example.invalid/c", Type: domain.TemplateButtonURL},
 		},
-	}, "")
+	}, nil, "")
 
 	btns := hydratedButtons(t, sent)
 	if n := len(btns); n != 3 {
@@ -354,7 +354,7 @@ func TestChatMessengerAdapter_SendTemplate_IDForwardedAndServerIDWins(t *testing
 	res, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID,
 		domain.TemplatePayload{Content: "c", Footer: "f",
 			Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}}},
-		"id-do-cliente")
+		nil, "id-do-cliente")
 
 	if err != nil {
 		t.Fatalf("SendTemplate: %v", err)
@@ -373,7 +373,7 @@ func TestChatMessengerAdapter_SendTemplate_NoIDSendsNoRequestExtra(t *testing.T)
 	_, extra := sendTemplateCapturing(t, domain.TemplatePayload{
 		Content: "c", Footer: "f",
 		Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}},
-	}, "")
+	}, nil, "")
 
 	if len(extra) != 0 {
 		t.Errorf("RequestExtra = %+v, quero nenhum quando o id de entrada e' vazio", extra)
@@ -391,7 +391,7 @@ func TestChatMessengerAdapter_SendTemplate_SendFailurePropagates(t *testing.T) {
 
 	res, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID,
 		domain.TemplatePayload{Content: "c", Footer: "f",
-			Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}}}, "")
+			Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}}}, nil, "")
 
 	if err == nil {
 		t.Fatal("envio falho nao propagou erro")

@@ -79,7 +79,7 @@ func sendImageServe(t *testing.T, mm *contractsfake.MediaMessenger, jr *contract
 func TestSendImage_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500003)
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -189,7 +189,7 @@ func TestSendImage_RejectMissingRequiredField(t *testing.T) {
 func TestSendImage_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500020)
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -347,7 +347,7 @@ func TestSendImage_FetchFailure_NeverReturns200(t *testing.T) {
 // CAP-02 contra falso-sucesso, pela rota registrada.
 func TestSendImage_DownstreamFailureNeverReturns200(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendImageSentinel
 		},
 	}
@@ -371,7 +371,7 @@ func TestSendImage_DownstreamFailureNeverReturns200(t *testing.T) {
 // devolveu — nunca o do request usado às cegas.
 func TestSendImage_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

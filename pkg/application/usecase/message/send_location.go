@@ -64,7 +64,7 @@ func (uc *SendLocationUseCase) Execute(ctx context.Context, txtID string, req do
 
 	payload := domain.LocationPayload{Latitude: *req.Latitude, Longitude: *req.Longitude, Name: req.Name}
 
-	sent, err := uc.messages.SendLocation(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.messages.SendLocation(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send location message", "txtID", txtID, "error", err)
 		return nil, err

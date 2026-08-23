@@ -56,7 +56,7 @@ func TestSendCarousel_Success_ViaRegisteredRoute(t *testing.T) {
 		`]}`
 
 	im := &contractsfake.InteractiveMessenger{
-		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ string) (domain.MessageSendResult, error) {
+		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if len(payload.Cards) != 2 {
 				t.Fatalf("payload.Cards = %d, want 2", len(payload.Cards))
 			}
@@ -149,7 +149,7 @@ func TestSendCarousel_CardWithNoButtonsIsDropped(t *testing.T) {
 // silently dropped.
 func TestSendCarousel_CardWithEmptyBodyIsDropped(t *testing.T) {
 	im := &contractsfake.InteractiveMessenger{
-		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ string) (domain.MessageSendResult, error) {
+		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if len(payload.Cards) != 1 {
 				t.Fatalf("expected 1 surviving card, got %d", len(payload.Cards))
 			}
@@ -177,7 +177,7 @@ func TestSendCarousel_ButtonNormalisationMatchesButtons(t *testing.T) {
 		`"Cards":[{"Body":"Cartao","Buttons":[{"type":"reply","title":"` + longTitle + `"}]}]}`
 
 	im := &contractsfake.InteractiveMessenger{
-		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ string) (domain.MessageSendResult, error) {
+		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			btn := payload.Cards[0].Buttons[0]
 			if got := len([]rune(btn.Title)); got != 20 {
 				t.Errorf("button title length = %d runes, want 20 (truncated)", got)
@@ -198,7 +198,7 @@ func TestSendCarousel_ButtonNormalisationMatchesButtons(t *testing.T) {
 // request, the use case always hardcodes HSCROLL_CARDS.
 func TestSendCarousel_AlbumImageIsNeverExposed(t *testing.T) {
 	im := &contractsfake.InteractiveMessenger{
-		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ string) (domain.MessageSendResult, error) {
+		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
 			if payload.CardType != domain.CarouselHScrollCards {
 				t.Errorf("CardType = %q, want hscroll_cards — ALBUM_IMAGE must not leak", payload.CardType)
 			}
@@ -250,7 +250,7 @@ func TestSendCarousel_ClientSuppliedIDIsForwarded(t *testing.T) {
 	body := `{"Phone":"` + sendCarouselPhone + `","Body":"Corpo","Id":"client-id-99",` +
 		`"Cards":[{"Body":"C","Buttons":[{"type":"reply","title":"Y"}]}]}`
 	im := &contractsfake.InteractiveMessenger{
-		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.CarouselPayload, id string) (domain.MessageSendResult, error) {
+		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.CarouselPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "client-id-99" {
 				t.Errorf("id = %q, want client-id-99", id)
 			}

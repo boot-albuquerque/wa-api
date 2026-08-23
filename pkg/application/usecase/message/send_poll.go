@@ -71,7 +71,7 @@ func (uc *SendPollUseCase) Execute(ctx context.Context, txtID string, req domain
 
 	payload := domain.PollPayload{Name: req.Header, Options: req.Options}
 
-	sent, err := uc.messages.SendPoll(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.messages.SendPoll(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send poll message", "txtID", txtID, "error", err)
 		return nil, err

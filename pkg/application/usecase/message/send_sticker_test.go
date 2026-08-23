@@ -345,7 +345,7 @@ func TestSendSticker_CausalSuccess(t *testing.T) {
 	const processedMime = "image/webp"
 
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				return domain.MessageSendResult{}, errors.New("target inesperado")
 			}
@@ -456,7 +456,7 @@ func TestSendSticker_PackMetadataAndThumbnailFlow(t *testing.T) {
 
 func TestSendSticker_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -486,7 +486,7 @@ func TestSendSticker_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 func TestSendSticker_DownstreamFailureNeverProducesSent(t *testing.T) {
 	sendErr := errors.New("sendsticker: boom")
 	mm := &contractsfake.MediaMessenger{
-		SendStickerFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendStickerFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, sendErr
 		},
 	}

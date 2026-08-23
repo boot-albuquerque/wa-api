@@ -148,7 +148,7 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 
 	payload := domain.AudioPayload{Bytes: data, MimeType: mimeType, PTT: ptt, Seconds: req.Seconds, Waveform: req.Waveform}
 
-	sent, err := uc.media.SendAudio(ctx, txtID, recipient, payload, req.ID)
+	sent, err := uc.media.SendAudio(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send audio message", "txtID", txtID, "error", err)
 		return nil, err

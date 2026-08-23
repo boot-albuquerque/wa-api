@@ -89,7 +89,7 @@ func listSections(sections []domain.ListSection) []*waE2E.ListMessage_Section {
 // como ERRADO: sem o embrulho CORRETO a lista chega como texto simples ou
 // nem chega. Vide também o nó BIZ (listBizNodes), sem o qual o servidor não
 // processa a mensagem como lista.
-func (a *ChatMessengerAdapter) SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -111,6 +111,9 @@ func (a *ChatMessengerAdapter) SendList(ctx context.Context, txtID string, targe
 	}
 	if payload.Footer != "" {
 		listMsg.FooterText = proto.String(payload.Footer)
+	}
+	if ci := replyContextInfo(replyTo); ci != nil {
+		listMsg.ContextInfo = ci
 	}
 
 	msg := &waE2E.Message{

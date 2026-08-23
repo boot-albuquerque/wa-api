@@ -314,7 +314,7 @@ func TestSendVideo_Caption_EmptyWhenAbsent(t *testing.T) {
 func TestSendVideo_CausalSuccess(t *testing.T) {
 	sentAt := int64(1755500080)
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-video", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}
@@ -365,7 +365,7 @@ func TestSendVideo_CausalSuccess(t *testing.T) {
 
 func TestSendVideo_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -395,7 +395,7 @@ func TestSendVideo_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 // — a garantia central anti-falso-sucesso.
 func TestSendVideo_DownstreamFailureNeverProducesSent(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -426,7 +426,7 @@ func TestSendVideo_AcquisitionOK_UploadOK_SendFail_NeverSent(t *testing.T) {
 	sendErr := errors.New("sendmessage: boom apos upload bem-sucedido")
 	uploadThenSendCalled := false
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			uploadThenSendCalled = true
 			return domain.MessageSendResult{}, sendErr
 		},
@@ -460,7 +460,7 @@ func TestSendVideo_AcquisitionOK_UploadOK_SendFail_NeverSent(t *testing.T) {
 func TestSendVideo_DataURI_CausalSuccess(t *testing.T) {
 	sentAt := int64(1755500090)
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-video-datauri", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}
@@ -510,7 +510,7 @@ func TestSendVideo_DataURI_MalformedBase64_Rejected(t *testing.T) {
 func TestSendVideo_URLBranch_NotCapturedByDataDiscrimination(t *testing.T) {
 	sentAt := int64(1755500100)
 	mm := &contractsfake.MediaMessenger{
-		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, id string) (domain.MessageSendResult, error) {
+		SendVideoFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-url-conservation", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}

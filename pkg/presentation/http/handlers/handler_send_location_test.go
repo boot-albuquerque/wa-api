@@ -76,7 +76,7 @@ type sendLocationResultBody struct {
 func TestSendLocation_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500110)
 	sm := &contractsfake.SimpleMessenger{
-		SendLocationFunc: func(_ context.Context, _ string, target domain.JID, payload domain.LocationPayload, id string) (domain.MessageSendResult, error) {
+		SendLocationFunc: func(_ context.Context, _ string, target domain.JID, payload domain.LocationPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -257,7 +257,7 @@ func TestSendLocation_InvalidPhoneNeverSends(t *testing.T) {
 
 func TestSendLocation_DownstreamFailureNeverReturns200(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendLocationFunc: func(context.Context, string, domain.JID, domain.LocationPayload, string) (domain.MessageSendResult, error) {
+		SendLocationFunc: func(context.Context, string, domain.JID, domain.LocationPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendLocationSentinel
 		},
 	}
@@ -277,7 +277,7 @@ func TestSendLocation_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendLocation_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendLocationFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.LocationPayload, id string) (domain.MessageSendResult, error) {
+		SendLocationFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.LocationPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
