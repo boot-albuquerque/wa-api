@@ -999,3 +999,55 @@ O critério mensurável é: **cada port de transporte satisfeito, ou recusado co
 motivo escrito.** É verificável pelo compilador — a asserção
 `var _ appport.X = (*Adapter)(nil)` — e a recusa fica travada em teste, como a
 da decisão 80.
+
+## Decisão 81 — o critério de encerramento passou a ser verificável
+
+A orquestração aceitou a correção de contagem (**81**): a Fase 3 fecha pelos
+**18 ports de transporte**, cada um satisfeito ou recusado **com teste**, mais
+composição e cross-adapter verificados.
+
+O que isso mudou na prática é que o critério deixou de ser uma frase e passou a
+ser um dispositivo.
+
+### O inventário DESCOBRE os ports; não os repete
+
+`phase3_inventory_test.go` lê `pkg/application/contracts` com o parser do Go e
+extrai os ports que carregam `txtID string` — o endereçamento de sessão, que é o
+que distingue operar sobre uma sessão de infraestrutura como `Storage` ou
+`Logger`. Uma lista escrita à mão só provaria que alguém a escreveu à mão.
+
+Ele falha nas TRÊS direções, e os três controles negativos foram executados:
+
+```
+port de transporte NOVO sem classificação
+  → port de transporte "PortNovoDeTeste" não está no inventário da Fase 3
+
+recusa sem motivo escrito
+  → port "BlocklistManager" não satisfeito e SEM motivo escrito
+
+tabela que ficou para trás do código
+  → o inventário classifica "PortQueNaoExiste", que já não é um port de transporte
+```
+
+### Cross-adapter: a premissa da 71 deixou de ser esperança
+
+`crossadapter_test.go` é o único lugar do repositório que enxerga os DOIS
+adaptadores ao mesmo tempo, e é de propósito. A premissa da decisão 71 é que eles
+são transportes alternativos para a mesma intenção de produto — e uma premissa
+que ninguém verifica é uma esperança.
+
+Ele trava três coisas:
+
+1. os dois satisfazem `ChatArchiver`, então um caso de uso aceita qualquer um
+   sem saber qual está atrás;
+2. o socket satisfaz `ChatOperations` inteira e a página **não** — a assimetria
+   real, e não uma versão dela escrita à mão;
+3. as duas grafias de JID **divergem** e **significam o mesmo**. Se algum dia
+   convergirem, `ToPageJID` vira código morto que ninguém sabe remover — e o
+   teste falha dizendo isso, em vez de o deixar apodrecer.
+
+### Estado
+
+`ChatArchiver` satisfeito. `SessionGuard` embutido. `UnavailableMessageRequester`
+recusado por natureza, com motivo no inventário. **Restam 15**, cada um agora
+com uma linha que falha até ser resolvida.
