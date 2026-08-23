@@ -18,8 +18,9 @@ import (
 // OITO; o CAP-14 acrescentou a nona (/chat/send/poll), o CAP-15 a decima
 // (/chat/send/template), o CAP-21 a decima primeira (/chat/send/buttons),
 // o CAP-22 a DÉCIMA SEGUNDA (/chat/send/list), o carrossel a DÉCIMA
-// TERCEIRA (/chat/send/carousel), e o CAP-48 a DÉCIMA QUARTA
-// (/chat/send/pollvote) — cada uma no mesmo movimento em que passou a
+// TERCEIRA (/chat/send/carousel), o CAP-48 a DÉCIMA QUARTA
+// (/chat/send/pollvote) e o CAP-49 a DÉCIMA QUINTA
+// (/chat/send/forward) — cada uma no mesmo movimento em que passou a
 // enviar de verdade. Capability nova que fica de fora desta trava e' a
 // proxima F137.
 //
@@ -140,7 +141,7 @@ type sendWireCase struct {
 	serve func(t *testing.T) *httptest.ResponseRecorder
 }
 
-// sendWireCases enumera as CATORZE capabilities de envio, uma por entrada. Cada
+// sendWireCases enumera as QUINZE capabilities de envio, uma por entrada. Cada
 // serve monta o roteador gorilla/mux da propria capability (os helpers
 // sendXRouter de cada arquivo de teste) e faz um POST autenticado.
 func sendWireCases() []sendWireCase {
@@ -150,7 +151,7 @@ func sendWireCases() []sendWireCase {
 			rota: "POST /chat/send/text",
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				tm := &contractsfake.TextMessenger{
-					SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
+					SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, *domain.ForwardContext, string) (domain.MessageSendResult, error) {
 						return sendWireResult("wire-text-1"), nil
 					},
 				}
@@ -341,6 +342,20 @@ func sendWireCases() []sendWireCase {
 						`"Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`)
 			},
 		},
+		{
+			nome: "forward",
+			rota: "POST /chat/send/forward",
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				tm := &contractsfake.TextMessenger{
+					SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, *domain.ForwardContext, string) (domain.MessageSendResult, error) {
+						return sendWireResult("wire-forward-1"), nil
+					},
+				}
+				return sendWirePost(t, sendForwardRouter(tm, &contractsfake.JIDResolver{}),
+					"/chat/send/forward",
+					`{"Phone":"5511999999999","Body":"forwarded text"}`)
+			},
+		},
 	}
 }
 
@@ -352,12 +367,12 @@ func sendWirePost(t *testing.T, h http.Handler, target, body string) *httptest.R
 	return rec
 }
 
-// TestSendWireContract_FieldNames trava os nomes do wire das CATORZE
+// TestSendWireContract_FieldNames trava os nomes do wire das QUINZE
 // capabilities de envio, cada uma pela sua rota registrada.
 func TestSendWireContract_FieldNames(t *testing.T) {
 	casos := sendWireCases()
-	if len(casos) != 14 {
-		t.Fatalf("a suite cobre %d capabilities de envio, quero as 14 enumeradas no CAP-13 + CAP-14 + CAP-15 + CAP-21 + CAP-22 + CAP-carousel + CAP-48", len(casos))
+	if len(casos) != 15 {
+		t.Fatalf("a suite cobre %d capabilities de envio, quero as 15 enumeradas no CAP-13 + CAP-14 + CAP-15 + CAP-21 + CAP-22 + CAP-carousel + CAP-48 + CAP-49", len(casos))
 	}
 
 	for _, caso := range casos {

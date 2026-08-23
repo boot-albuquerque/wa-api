@@ -166,11 +166,13 @@ func buildContextInfo(replyTo *domain.ReplyContext, mentionedJID []string) *waE2
 // texto sem link preview nem contexto, ver ARMADILHAS.md sobre não
 // introduzir ExtendedTextMessage sem necessidade. Com preview (CAP-01.1)
 // ou replyTo (CAP-46A), monta ExtendedTextMessage; os dois podem coexistir.
+// forward (CAP-49), quando não-nil, marca a mensagem como encaminhada via
+// ContextInfo.IsForwarded e ForwardingScore; também força ExtendedTextMessage.
 // Quando id não é vazio, é repassado como RequestExtra.ID para que o SDK
 // use exatamente esse identificador; o ID devolvido em
 // domain.MessageSendResult.ID vem sempre de resp.ID — o identificador que
 // o SDK REALMENTE usou — nunca do id de entrada por construção própria.
-func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, mentionedJID []string, forward *domain.ForwardContext, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -181,7 +183,7 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 		return domain.MessageSendResult{}, err
 	}
 
-	needsExtended := preview != nil || replyTo != nil || len(mentionedJID) > 0
+	needsExtended := preview != nil || replyTo != nil || len(mentionedJID) > 0 || forward != nil
 
 	msg := &waE2E.Message{
 		Conversation: proto.String(text),
@@ -211,7 +213,15 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 				}
 			}
 		}
-		if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
+		ci := buildContextInfo(replyTo, mentionedJID)
+		if forward != nil {
+			if ci == nil {
+				ci = &waE2E.ContextInfo{}
+			}
+			ci.IsForwarded = proto.Bool(true)
+			ci.ForwardingScore = proto.Uint32(forward.ForwardingScore)
+		}
+		if ci != nil {
 			etm.ContextInfo = ci
 		}
 		msg = &waE2E.Message{ExtendedTextMessage: etm}

@@ -39,7 +39,7 @@ func mentionsCases() []mentionsCase {
 			bodyNo:   `{"Phone":"5511999999999","Body":"plain text"}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				tm := &contractsfake.TextMessenger{
-					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
+					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, mentionedJID []string, _ *domain.ForwardContext, _ string) (domain.MessageSendResult, error) {
 						cap.got = mentionedJID
 						cap.set = true
 						return result, nil

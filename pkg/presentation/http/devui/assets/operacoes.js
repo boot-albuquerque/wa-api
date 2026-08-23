@@ -2,7 +2,7 @@
 //
 // É DADO, e não código, de propósito: acrescentar uma rota passa a ser uma
 // linha nesta tabela em vez de um bloco de HTML e um handler novo. O painel
-// tem hoje 14 rotas de envio e 7 de chat; escrevê-las à mão uma a uma seria
+// tem hoje 15 rotas de envio e 7 de chat; escrevê-las à mão uma a uma seria
 // garantir que a próxima ficasse de fora — que foi exatamente como a
 // HOUSEKEEP F190 nasceu do lado do servidor.
 //
@@ -112,6 +112,13 @@ export const ENVIO = [
              { nome: "Sections", rotulo: "secções (JSON)", tipo: "textarea", req: true,
                valor: '[{"title":"Secção","rows":[{"title":"Item","desc":"d","rowid":"r1"}]}]',
                pre: JSON.parse },
+             replyTo] },
+
+  { id: "forward", rotulo: "Encaminhar", rota: "/chat/send/forward",
+    campos: [telefone,
+             { nome: "Body", rotulo: "texto a encaminhar", tipo: "textarea", req: true },
+             { nome: "ForwardingScore", rotulo: "forwarding score (padrão 1)",
+               pre: (v) => { const n = Number(v); return n > 0 ? n : undefined; } },
              replyTo] },
 
   { id: "edit", rotulo: "Editar mensagem", rota: "/chat/send/edit",

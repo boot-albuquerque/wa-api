@@ -958,7 +958,7 @@ func TestSendAudio_SemLegendaNaoEnviaTexto(t *testing.T) {
 func TestSendAudio_LegendaFalhaMasAudioJaFoi(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{}
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, *domain.ForwardContext, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSession
 		},
 	}

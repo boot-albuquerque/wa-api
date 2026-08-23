@@ -116,7 +116,7 @@ func (s *spyPort) SendPollVote(context.Context, string, domain.JID, domain.PollV
 	return domain.MessageSendResult{}, s.err
 }
 
-func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
+func (s *spyPort) SendText(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, *domain.ForwardContext, string) (domain.MessageSendResult, error) {
 	s.calls++
 	return domain.MessageSendResult{}, s.err
 }

@@ -225,6 +225,22 @@ func sessionAxisCases() []sessionAxisCase {
 				return rec, sessionAxisEnsureTxtIDs(cm.SessionGuard), send
 			},
 		},
+		{
+			nome:      "forward",
+			rota:      "POST /chat/send/forward",
+			sessionID: "send-forward-session-d7f192",
+			serve: func(t *testing.T, sessionID string) (*httptest.ResponseRecorder, []string, []string) {
+				tm := &contractsfake.TextMessenger{}
+				rec := sessionAxisPost(t, sendForwardRouter(tm, &contractsfake.JIDResolver{}),
+					"/chat/send/forward",
+					`{"Phone":"5511999999999","Body":"forwarded text"}`, sessionID)
+				send := make([]string, 0, len(tm.SendTextCalls))
+				for _, c := range tm.SendTextCalls {
+					send = append(send, c.TxtID)
+				}
+				return rec, sessionAxisEnsureTxtIDs(tm.SessionGuard), send
+			},
+		},
 	}
 }
 
@@ -240,14 +256,14 @@ func sessionAxisPost(t *testing.T, h http.Handler, target, body, sessionID strin
 	return rec
 }
 
-// TestSendCapabilities_AuthenticatedSessionReachesPort trava, nas DEZ
+// TestSendCapabilities_AuthenticatedSessionReachesPort trava, nas ONZE
 // capabilities, que o txtID entregue a' porta e' o do contexto autenticado —
 // nos DOIS pontos.
 func TestSendCapabilities_AuthenticatedSessionReachesPort(t *testing.T) {
 	casos := sessionAxisCases()
-	if len(casos) != 10 {
-		t.Fatalf("a tabela cobre %d capabilities, quero as 10 do CAP-16 + CAP-48 "+
-			"(text, image, audio, video, document, sticker, location, contact, poll, pollvote)", len(casos))
+	if len(casos) != 11 {
+		t.Fatalf("a tabela cobre %d capabilities, quero as 11 do CAP-16 + CAP-48 + CAP-49 "+
+			"(text, image, audio, video, document, sticker, location, contact, poll, pollvote, forward)", len(casos))
 	}
 
 	// Sentinela repetido entre casos passaria por coincidencia num handler que

@@ -147,7 +147,7 @@ func TestChatMessengerAdapter_SendReaction_OK(t *testing.T) {
 // TestChatMessengerAdapter_SendText_NoSession.
 func TestChatMessengerAdapter_SendText_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, nil, nil, "")
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendText code = %q", testkit.AppErrCode(err))
 	}
@@ -162,7 +162,7 @@ func TestChatMessengerAdapter_SendText_InvalidJID(t *testing.T) {
 		return wanoise.SendResponse{}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	_, err := a.SendText(context.Background(), "u1", domain.JID(string([]byte{0x00})), "ola", nil, nil, nil, "")
+	_, err := a.SendText(context.Background(), "u1", domain.JID(string([]byte{0x00})), "ola", nil, nil, nil, nil, "")
 	if err == nil {
 		t.Skip("wajid.ParseJID não falhou; caminho de erro raro")
 	}
@@ -179,7 +179,7 @@ func TestChatMessengerAdapter_SendText_PropagatesError(t *testing.T) {
 		return wanoise.SendResponse{}, sdkErr
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, nil, nil, "")
 	if err == nil {
 		t.Fatal("SendText não propagou erro")
 	}
@@ -201,7 +201,7 @@ func TestChatMessengerAdapter_SendText_OK(t *testing.T) {
 		return wanoise.SendResponse{Timestamp: now, ID: types.MessageID("wire-id")}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola mundo", nil, nil, nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola mundo", nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -231,7 +231,7 @@ func TestChatMessengerAdapter_SendText_WithCallerID(t *testing.T) {
 		return wanoise.SendResponse{ID: types.MessageID("caller-id")}, nil
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, nil, "caller-id")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "ola", nil, nil, nil, nil, "caller-id")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -261,7 +261,7 @@ func TestChatMessengerAdapter_SendText_WithPreview_BuildsExtendedTextMessage(t *
 		Description:   "Descrição",
 		ThumbnailJPEG: []byte{0xFF, 0xD8, 0xFF},
 	}
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "olha https://exemplo.com/pagina", preview, nil, nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "olha https://exemplo.com/pagina", preview, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -329,7 +329,7 @@ func TestChatMessengerAdapter_SendText_WithPreview_UploadsHQThumbnail(t *testing
 		HQHeight:      400,
 	}
 
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, nil, nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -396,7 +396,7 @@ func TestChatMessengerAdapter_SendText_WithPreview_UploadFailsDegrades(t *testin
 		HQHeight:      400,
 	}
 
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, nil, nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "link https://exemplo.com", preview, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText should succeed even when upload fails: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestChatMessengerAdapter_SendText_WithReplyTo_BuildsContextInfo(t *testing.
 		Participant: "5511888888888@s.whatsapp.net",
 		QuotedText:  "the original message",
 	}
-	res, err := a.SendText(context.Background(), "u1", "x@y.com", "my reply", nil, reply, nil, "")
+	res, err := a.SendText(context.Background(), "u1", "x@y.com", "my reply", nil, reply, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -489,7 +489,7 @@ func TestChatMessengerAdapter_SendText_WithReplyTo_NoQuotedText(t *testing.T) {
 		StanzaID:    "quoted-msg-id-xyz",
 		Participant: "5511777777777@s.whatsapp.net",
 	}
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "reply without quoted text", nil, reply, nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "reply without quoted text", nil, reply, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -524,7 +524,7 @@ func TestChatMessengerAdapter_SendText_WithReplyToAndPreview(t *testing.T) {
 		Participant: "5511666666666@s.whatsapp.net",
 		QuotedText:  "original with link",
 	}
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "reply with link https://exemplo.com", preview, reply, nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "reply with link https://exemplo.com", preview, reply, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -559,7 +559,7 @@ func TestChatMessengerAdapter_SendText_WithoutReplyTo_NoContextInfo(t *testing.T
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
 
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "plain text", nil, nil, nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "plain text", nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -1726,7 +1726,7 @@ func TestChatMessengerAdapter_SendText_MentionsForcesExtendedTextMessage(t *test
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
 
 	jids := []string{"5511888888888@s.whatsapp.net"}
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "hey @Alice", nil, nil, jids, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "hey @Alice", nil, nil, jids, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -1753,7 +1753,7 @@ func TestChatMessengerAdapter_SendText_NoMentionsKeepsConversation(t *testing.T)
 	}}
 	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
 
-	_, err := a.SendText(context.Background(), "u1", "x@y.com", "plain", nil, nil, nil, "")
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "plain", nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendText = %v", err)
 	}
@@ -1762,5 +1762,95 @@ func TestChatMessengerAdapter_SendText_NoMentionsKeepsConversation(t *testing.T)
 	}
 	if gotMsg.GetConversation() != "plain" {
 		t.Errorf("Conversation = %q", gotMsg.GetConversation())
+	}
+}
+
+// --- CAP-49 Forwarding adapter tests ---
+
+func TestChatMessengerAdapter_SendText_ForwardSetsIsForwardedAndScore(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{Timestamp: time.Now(), ID: "wire-fwd"}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	fwd := &domain.ForwardContext{ForwardingScore: 3}
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "forwarded text", nil, nil, nil, fwd, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	if gotMsg.ExtendedTextMessage == nil {
+		t.Fatal("forwarding should force ExtendedTextMessage")
+	}
+	ci := gotMsg.ExtendedTextMessage.ContextInfo
+	if ci == nil {
+		t.Fatal("ContextInfo is nil")
+	}
+	if !ci.GetIsForwarded() {
+		t.Error("IsForwarded should be true")
+	}
+	if ci.GetForwardingScore() != 3 {
+		t.Errorf("ForwardingScore = %d, want 3", ci.GetForwardingScore())
+	}
+}
+
+func TestChatMessengerAdapter_SendText_NoForwardNoContextInfo(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{Timestamp: time.Now(), ID: "wire-nf"}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "plain no forward", nil, nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	if gotMsg.ExtendedTextMessage != nil {
+		t.Error("no forward should produce Conversation, got ExtendedTextMessage")
+	}
+	if gotMsg.GetConversation() != "plain no forward" {
+		t.Errorf("Conversation = %q", gotMsg.GetConversation())
+	}
+}
+
+func TestChatMessengerAdapter_SendText_ForwardWithReplyToAndMentions(t *testing.T) {
+	var gotMsg *waE2E.Message
+	fake := &testkit.Fake{SendMessageFn: func(ctx context.Context, to types.JID, m *waE2E.Message, extra ...wanoise.SendRequestExtra) (wanoise.SendResponse, error) {
+		gotMsg = m
+		return wanoise.SendResponse{Timestamp: time.Now(), ID: "wire-coexist"}, nil
+	}}
+	a := NewChatMessengerAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	reply := &domain.ReplyContext{
+		StanzaID:    "q-999",
+		Participant: "5511888888888@s.whatsapp.net",
+	}
+	jids := []string{"5511777777777@s.whatsapp.net"}
+	fwd := &domain.ForwardContext{ForwardingScore: 2}
+
+	_, err := a.SendText(context.Background(), "u1", "x@y.com", "fwd+reply+mention", nil, reply, jids, fwd, "")
+	if err != nil {
+		t.Fatalf("SendText = %v", err)
+	}
+	if gotMsg.ExtendedTextMessage == nil {
+		t.Fatal("expected ExtendedTextMessage")
+	}
+	ci := gotMsg.ExtendedTextMessage.ContextInfo
+	if ci == nil {
+		t.Fatal("ContextInfo is nil")
+	}
+	if !ci.GetIsForwarded() {
+		t.Error("IsForwarded should be true")
+	}
+	if ci.GetForwardingScore() != 2 {
+		t.Errorf("ForwardingScore = %d, want 2", ci.GetForwardingScore())
+	}
+	if ci.GetStanzaID() != "q-999" {
+		t.Errorf("StanzaID = %q, want %q", ci.GetStanzaID(), "q-999")
+	}
+	if len(ci.MentionedJID) != 1 || ci.MentionedJID[0] != "5511777777777@s.whatsapp.net" {
+		t.Errorf("MentionedJID = %v", ci.MentionedJID)
 	}
 }

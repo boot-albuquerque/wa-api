@@ -48,6 +48,7 @@ type MessageHandlers struct {
 	SendList        *handlers.SendListHandler
 	SendPoll        *handlers.SendPollHandler
 	SendPollVote    *handlers.SendPollVoteHandler
+	SendForward     *handlers.SendForwardHandler
 	DeleteMessage   *handlers.DeleteMessageHandler
 	SendEditMessage *handlers.SendEditMessageHandler
 	SendTemplate    *handlers.SendTemplateHandler
@@ -175,6 +176,7 @@ func initCustomHandlers(s *server) {
 	sendListUC := message.NewSendListUseCase(chatMessenger, jidResolver, logger)
 	sendPollUC := message.NewSendPollUseCase(chatMessenger, jidResolver, logger)
 	sendPollVoteUC := message.NewSendPollVoteUseCase(chatMessenger, jidResolver, logger)
+	sendForwardUC := message.NewSendForwardUseCase(chatMessenger, jidResolver, logger)
 	deleteMessageUC := message.NewDeleteMessageUseCase(chatMessenger, jidResolver, logger)
 	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)
 	sendTemplateUC := message.NewSendTemplateUseCase(chatMessenger, jidResolver, logger)
@@ -199,6 +201,7 @@ func initCustomHandlers(s *server) {
 		SendList:        handlers.NewSendListHandler(sendListUC),
 		SendPoll:        handlers.NewSendPollHandler(sendPollUC),
 		SendPollVote:    handlers.NewSendPollVoteHandler(sendPollVoteUC),
+		SendForward:     handlers.NewSendForwardHandler(sendForwardUC),
 		DeleteMessage:   handlers.NewDeleteMessageHandler(deleteMessageUC),
 		SendEditMessage: handlers.NewSendEditMessageHandler(sendEditMessageUC),
 		SendTemplate:    handlers.NewSendTemplateHandler(sendTemplateUC),

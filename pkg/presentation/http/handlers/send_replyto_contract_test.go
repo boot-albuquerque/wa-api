@@ -44,7 +44,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Body":"plain"}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				tm := &contractsfake.TextMessenger{
-					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
+					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ []string, _ *domain.ForwardContext, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},

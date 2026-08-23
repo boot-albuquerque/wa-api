@@ -1971,6 +1971,7 @@ pkg/application/usecase/message.NewSendCarouselUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendContactUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendDocumentUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendEditMessageUseCase	EXCLUDED	X1
+pkg/application/usecase/message.NewSendForwardUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendImageUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendListUseCase	EXCLUDED	X1
 pkg/application/usecase/message.NewSendLocationUseCase	EXCLUDED	X1
@@ -1993,6 +1994,7 @@ pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
 pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:45);uncovered:L2(S-ret,send_edit_message.go:48);uncovered:L2(S-ret,send_edit_message.go:63)
+pkg/application/usecase/message.SendForwardUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_forward.go:31);uncovered:L2(S-ret,send_forward.go:34)
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:81);uncovered:L2(S-ret,send_list.go:84);uncovered:L2(S-ret,send_list.go:87);uncovered:L2(S-ret,send_list.go:108)
@@ -3117,6 +3119,7 @@ pkg/presentation/http/handlers.NewSendCarouselHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendContactHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendDocumentHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendEditMessageHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewSendForwardHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendImageHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendListHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewSendLocationHandler	EXCLUDED	X1
@@ -3151,6 +3154,7 @@ pkg/presentation/http/handlers.SendCarouselHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendContactHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendDocumentHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendEditMessageHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.SendForwardHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendImageHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendListHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.SendLocationHandler.ServeHTTP	ELIGIBLE	covered

@@ -37,5 +37,9 @@ type TextMessenger interface {
 	// ContextInfo.MentionedJID — a lista de JIDs a notificar (CAP-47).
 	// Também força ExtendedTextMessage, porque Conversation simples não
 	// carrega ContextInfo.
-	SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
+	//
+	// forward, quando não-nil, faz o adapter popular
+	// ContextInfo.IsForwarded e ContextInfo.ForwardingScore (CAP-49).
+	// Também força ExtendedTextMessage, pela mesma razão que mentions.
+	SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, mentionedJID []string, forward *domain.ForwardContext, id string) (domain.MessageSendResult, error)
 }

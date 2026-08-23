@@ -1193,7 +1193,12 @@ rules_frozen=true
 #   handlers.SendPollVoteHandler.ServeHTTP (coberta por hlog). covered SOBE
 #   472->474 (+2). eligible SOBE 631->633 (+2). Ambas elegiveis nascem
 #   cobertas; func_coverage sobe porque covered/eligible aumenta.
-min_func_coverage=749
+# CAP-49 (2026-08-23): func_coverage SOBE 749->750 (+1). ENTRAM (2):
+#   message.SendForwardUseCase.Execute (coberta por logger.Warn/Error/Info) e
+#   handlers.SendForwardHandler.ServeHTTP (coberta por hlog). covered SOBE
+#   474->476 (+2). eligible SOBE 633->635 (+2). Ambas elegiveis nascem
+#   cobertas; func_coverage sobe porque covered/eligible aumenta.
+min_func_coverage=750
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1667,7 +1672,12 @@ min_errpath_coverage=868
 #   (multiplos statements e caminhos de saida de tipo error). O adapter
 #   ChatMessengerAdapter.SendPollVote nao entra: adapters/ esta em
 #   .logcov-exclude (F193).
-min_eligible=633
+# CAP-49 (2026-08-23): min_eligible SOBE 633->635 (+2). ENTRAM (2):
+#   message.SendForwardUseCase.Execute e
+#   handlers.SendForwardHandler.ServeHTTP — ambas elegiveis de verdade
+#   (multiplos statements e caminhos de saida de tipo error). O adapter
+#   SendText ja existia; nenhuma funcao nova nele.
+min_eligible=635
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.

@@ -607,6 +607,46 @@ type PollVotePayload struct {
 	OptionNames   []string
 }
 
+// ForwardContext marks a message as forwarded and carries the forwarding score.
+// Analogous to ReplyContext for reply-to: a non-nil pointer means "this is a
+// forwarded message", nil means "not forwarded". The score tracks how many
+// times the message has been forwarded — Baileys increments by 1 on each hop,
+// starting at 1 for the first forward.
+//
+// When the caller does not provide a score (ForwardingScore == 0), the use case
+// defaults to 1 — the same value Baileys produces for a first-time forward.
+type ForwardContext struct {
+	ForwardingScore uint32
+}
+
+// SendForwardRequest represents the HTTP payload for POST /chat/send/forward.
+//
+// Design choice (a): by content, stateless. The caller provides the text body
+// and the API marks it as forwarded. The alternative (b) — looking up the
+// original message from message_history — would depend on retention and fail
+// silently when the history was pruned. This is the same reasoning as CAP-48
+// (pollvote): the caller always knows what it passed, and errors are always
+// about what it passed.
+//
+// Media forwarding is out of scope for CAP-49. Start with text; media
+// forwarding gets its own CAP if the plumbing cost is non-trivial.
+type SendForwardRequest struct {
+	Phone           string        `json:"Phone"`
+	Body            string        `json:"Body"`
+	ForwardingScore *uint32       `json:"ForwardingScore,omitempty"`
+	ID              string        `json:"Id,omitempty"`
+	ReplyTo         *ReplyContext `json:"ReplyTo,omitempty"`
+	MentionedJID    []string      `json:"MentionedJid,omitempty"`
+}
+
+// SendForwardResult represents the response for POST /chat/send/forward.
+// Same shape as every other send capability: {message_id, timestamp, status}.
+type SendForwardResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}
+
 // DeleteMessageRequest representa o payload de exclusão de mensagem.
 type DeleteMessageRequest struct {
 	Phone string `json:"Phone"`
