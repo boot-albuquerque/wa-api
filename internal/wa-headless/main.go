@@ -36,11 +36,13 @@ import (
 	"wa-api/internal/wa-headless/capabilities/avatar"
 	"wa-api/internal/wa-headless/capabilities/block"
 	"wa-api/internal/wa-headless/capabilities/channel"
+	"wa-api/internal/wa-headless/capabilities/chats"
 	"wa-api/internal/wa-headless/capabilities/chatstate"
 	"wa-api/internal/wa-headless/capabilities/contacts"
 	"wa-api/internal/wa-headless/capabilities/lookup"
 	"wa-api/internal/wa-headless/capabilities/owner"
 	"wa-api/internal/wa-headless/capabilities/presence"
+	"wa-api/internal/wa-headless/capabilities/react"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	"wa-api/internal/wa-headless/runtime"
@@ -286,3 +288,22 @@ type (
 	// answer, and the measured ordinary case.
 	RosterPrimeResult = contacts.PrimeResult
 )
+
+// Reading a conversation, and reacting to a message.
+type (
+	// ChatLister reads and marks conversations.
+	ChatLister = chats.Lister
+	// MarkReadResult is the postcondition of marking read, read back —
+	// invariant 14.
+	MarkReadResult = chats.MarkResult
+	// Reactor adds and removes reactions.
+	Reactor = react.Reactor
+	// ReactionResult is what a reaction actually did.
+	ReactionResult = react.Result
+)
+
+// NewChatLister builds the chat capability over a session's page.
+func NewChatLister(runner *Runner, eval Evaluator) *ChatLister { return chats.New(runner, eval) }
+
+// NewReactor builds the reaction capability over a session's page.
+func NewReactor(runner *Runner, eval Evaluator) *Reactor { return react.New(runner, eval) }

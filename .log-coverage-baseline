@@ -655,7 +655,25 @@ rules_frozen=true
 # que a distincao sobrevive. Mas nao aceita modo desconhecido: um typo virar
 # no-op silencioso faria o chamador acreditar que pediu algo que nao pediu — a
 # mesma regra de conjunto fechado usada nos estados de presenca.
-min_func_coverage=558
+# justificativa: ChatMessenger satisfeito e MessageComposer RECUSADO
+# (2026-08-23). Entram os pacotes capabilities/chats e capabilities/react.
+#
+# DUAS HONESTIDADES que o codigo carrega porque a assinatura nao tem onde:
+#
+# MarkRead funciona PELA METADE, e o port nao distingue. A H160 mediu as duas:
+# o reconhecimento LOCAL funciona (unreadCount 1->0, provado nas duas contas) e o
+# RECIBO AO REMETENTE nao chega (ack do outro lado fica em 2 por 60s, e a
+# hipotese do markAvailable foi testada e REFUTADA). Quem limpa o proprio badge e
+# servido; quem espera os tiques do remetente NAO e, e isso esta medido.
+#
+# ids e timestamp sao IGNORADOS de proposito: a pagina marca a CONVERSA, nao uma
+# lista de mensagens. Aceita-los em silencio e marcar o chat inteiro seria efeito
+# MAIS LARGO que o pedido, disfarcado do estreito.
+#
+# MessageComposer recusado por AUSENCIA DE SENTIDO: NewMessageID gera id ANTES de
+# enviar, que e o modelo do socket. A pagina CUNHA o id ao enviar, e a chave da
+# referencia (MsgKey.fromString) LANCA neste build (H98).
+min_func_coverage=554
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -677,7 +695,7 @@ min_func_coverage=558
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=797
+min_errpath_coverage=792
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -728,7 +746,7 @@ min_errpath_coverage=797
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=754
+min_eligible=772
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

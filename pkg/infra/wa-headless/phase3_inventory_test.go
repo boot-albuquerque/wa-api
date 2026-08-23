@@ -22,6 +22,35 @@ import (
 // de sessão, e é o que distingue "operar sobre uma sessão" de infraestrutura
 // como Storage, Logger ou UserRepository.
 
+// TestOTotalDePortsEOMedidoENaoOAnunciado trava uma correção de contagem que eu
+// mesmo precisei de fazer: durante várias decisões reportei "X de 18", que era o
+// número medido ANTES das divisões.
+//
+// Cada divisão de port CRIA ports. Dividir ChatOperations em três, e
+// ContactDirectory em três, e PresenceController e SessionController em dois
+// cada, levou o total de 18 para 22 — e o numerador e o denominador crescem
+// JUNTOS. Reportar contra o denominador antigo fazia o progresso parecer melhor
+// do que era.
+//
+// Este teste não fixa o número: ele obriga a que o número reportado venha da
+// MEDIÇÃO. Se alguém dividir outro port, o total muda e quem reportar tem de
+// olhar em vez de repetir.
+func TestOTotalDePortsEOMedidoENaoOAnunciado(t *testing.T) {
+	encontrados := portsDeTransporte(t)
+	if len(encontrados) != len(inventarioFase3) {
+		t.Fatalf("o código tem %d ports de transporte e o inventário classifica %d: "+
+			"a contagem reportada tem de vir da medição, não de um número anotado "+
+			"antes das divisões", len(encontrados), len(inventarioFase3))
+	}
+	satisfeitos := 0
+	for _, st := range inventarioFase3 {
+		if st.satisfeito {
+			satisfeitos++
+		}
+	}
+	t.Logf("Fase 3: %d de %d ports satisfeitos", satisfeitos, len(encontrados))
+}
+
 type portStatus struct {
 	// satisfeito diz que existe adaptador headless com asserção em tempo de
 	// compilação. O compilador é a prova; esta tabela é só o índice.
@@ -48,6 +77,13 @@ var inventarioFase3 = map[string]portStatus{
 	"SessionDisconnector":   {satisfeito: true},
 	"ProfileAccessProvider": {satisfeito: true},
 	"AppStateSyncer":        {satisfeito: true},
+	"ChatMessenger":         {satisfeito: true},
+
+	"MessageComposer": {motivo: "RECUSADO POR AUSÊNCIA DE SENTIDO: NewMessageID gera um " +
+		"identificador ANTES de enviar, que é o modelo do socket — o cliente cria o " +
+		"ID e manda-o com a mensagem. A página CUNHA o id ao enviar (send.Result.ID " +
+		"vem do envio), e a chave da referência, MsgKey.fromString(_serialized), LANÇA " +
+		"neste build (H98). Um id fornecido pelo chamador não tem para onde ir."},
 
 	"SessionLogouter": {motivo: "RECUSADO POR POLÍTICA, e não por incapacidade. A H122 " +
 		"mediu que Socket.logout EXISTE e funciona neste build — mas chamá-lo " +
@@ -69,14 +105,12 @@ var inventarioFase3 = map[string]portStatus{
 		"de uma mensagem que não pôde ser DECIFRADA, e quem dirige a SPA não decifra " +
 		"nada — a página já entrega texto. Não é lacuna, é ausência de sentido."},
 
-	"CallRejecter":    {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
-	"ChatMessenger":   {motivo: "pendente"},
-	"GroupDirectory":  {motivo: "pendente"},
-	"GroupLifecycle":  {motivo: "pendente"},
-	"GroupRequests":   {motivo: "pendente"},
-	"GroupSettings":   {motivo: "pendente"},
-	"MessageComposer": {motivo: "pendente"},
-	"PrivacyManager":  {motivo: "pendente"},
+	"CallRejecter":   {motivo: "pendente; o LEDGER regista reject como PARTIAL neste build"},
+	"GroupDirectory": {motivo: "pendente"},
+	"GroupLifecycle": {motivo: "pendente"},
+	"GroupRequests":  {motivo: "pendente"},
+	"GroupSettings":  {motivo: "pendente"},
+	"PrivacyManager": {motivo: "pendente"},
 }
 
 // portsDeTransporte lê os contratos e devolve os que carregam txtID.

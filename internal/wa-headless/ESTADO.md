@@ -1440,3 +1440,47 @@ que limitou o custo NÃO foi ter a armadilha escrita — ela estava. Foi
 em segundos.
 
 **Estado: 10 de 18 ports satisfeitos, 3 recusados com motivo medido, 5 restantes.**
+
+## ChatMessenger, MessageComposer, e uma correção de contagem que é minha
+
+**Correção primeiro.** Eu vinha reportando "X de 18 ports". O total NÃO é 18 —
+são **22**. Cada divisão de port CRIA ports: `ChatOperations` virou três,
+`ContactDirectory` virou três, `PresenceController` e `SessionController` viraram
+dois cada. O numerador e o denominador cresceram juntos, e reportar contra o
+denominador antigo fazia o progresso parecer melhor do que era.
+
+Já não depende de eu lembrar: `TestOTotalDePortsEOMedidoENaoOAnunciado` imprime a
+contagem MEDIDA e falha se a tabela divergir do código.
+
+**Estado real: 12 de 22 satisfeitos, 4 recusados com motivo medido, 6 pendentes.**
+
+### MarkRead funciona PELA METADE, e o port não distingue
+
+A H160 mediu as duas metades. O reconhecimento LOCAL funciona — `unreadCount`
+1 → 0, provado nas duas contas. O RECIBO AO REMETENTE não chega: com sessão
+dupla, o ack do outro lado fica em 2 por 60 s, e a hipótese do `markAvailable`
+foi testada e REFUTADA.
+
+Quem limpa o próprio badge é servido; quem espera que o remetente veja os tiques
+**não é**, e isso está medido. A ressalva vive no adaptador porque não há onde a
+pôr na assinatura.
+
+E `ids` e o timestamp são IGNORADOS de propósito: a página marca a CONVERSA, não
+uma lista de mensagens. Aceitá-los em silêncio e marcar o chat inteiro seria um
+efeito MAIS LARGO que o pedido, disfarçado do estreito.
+
+### MessageComposer — recusa por ausência de sentido
+
+`NewMessageID` gera um id ANTES de enviar, que é o modelo do socket: o cliente
+cria o id e manda-o com a mensagem. A página CUNHA o id ao enviar
+(`send.Result.ID` vem do envio), e a chave da referência,
+`MsgKey.fromString(_serialized)`, **lança** neste build (H98). Um id fornecido
+pelo chamador não tem para onde ir.
+
+### O que estas duas fatias têm em comum
+
+Desfechos opostos, mesmo trabalho: **não deixar o chamador acreditar em algo que
+a medição contradiz**. Um `NewMessageID` implementado "para compilar" devolveria
+um id que a página ignora; um `MarkRead` sem a ressalva faria alguém concluir que
+o remetente vê os tiques. Ambos compilariam, ambos passariam em teste de tipo, e
+ambos mentiriam.
