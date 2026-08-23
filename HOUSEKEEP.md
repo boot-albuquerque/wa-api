@@ -20513,3 +20513,53 @@ dois lados não há resultado, porque o `200` mente.
 exige quando divergimos do que Baileys/Evolution fazem.
 
 <!-- f-status: nao-se-faz -->
+
+## F222 — `QuotedMessage` NÃO é necessário para a citação renderizar no mobile
+
+**Data**: 2026-08-22
+**Contexto**: verificação em campo do CAP-46A (reply-to). A afirmação refutada
+é da própria entrega, e eu tinha-a aceite ao integrar.
+
+**Onde**: `pkg/domain/message.go`, comentário do campo `QuotedText` em
+`ReplyContext`.
+
+**A afirmação, como estava escrita**:
+
+> "sem `ContextInfo.QuotedMessage` o WhatsApp mobile NÃO desenha a bolha de
+> citação (o Web desenha, da cache local). Ver mautrix/whatsapp#904."
+
+Veio de uma issue de OUTRO projeto. Não foi medida por nós — e é exatamente o
+padrão da armadilha #26: a issue descreve o defeito DELES.
+
+**Medição** — duas respostas ao MESMO original, enviadas no mesmo instante,
+variando **um** eixo. Fotografadas num iPhone real:
+
+| id | `QuotedText` | citação no telemóvel |
+|---|---|---|
+| `3EB0AB10E5129268F041E1` | **ausente** | **RENDERIZA** |
+| `3EB0441937CD01B77A0E78` | presente | renderiza |
+
+As duas desenharam a bolha, com o remetente e o texto do original. A afirmação
+está **REFUTADA como enunciada**.
+
+**Limite da medição, que é meu e digo por inteiro**: a mensagem citada tinha
+sido enviada minutos antes, logo estava na história LOCAL do destinatário.
+**Não testei** citar mensagem que o destinatário NÃO tenha localmente — muito
+antiga, ou depois de reinstalar o WhatsApp. É plausível que o `QuotedMessage`
+sirva precisamente para esse caso, e a minha medição não o toca.
+
+Portanto: refutado o "é obrigatório"; **não** provado o "é inútil".
+
+**O que se faz com isso**: `QuotedText` fica OPCIONAL e é enviado quando
+existe. Não se valida a presença, não se recusa pedido sem ele, e não se
+constrói consulta ao histórico para o preencher — não há prova de que compense.
+
+**Onde já foi aplicado**: comentário corrigido no `ReplyContext`, e o worker da
+parte B (as 13 rotas restantes) foi avisado em curso, antes de replicar a
+premissa errada por treze sítios.
+
+**Por que isto vale uma entrada**: um comentário de código que afirma uma
+exigência inexistente faz a próxima pessoa construir plumbing para a satisfazer.
+O custo de o deixar lá é maior que o de o corrigir.
+
+<!-- f-status: corrigido -->

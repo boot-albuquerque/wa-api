@@ -8,10 +8,20 @@ package domain
 // force every consumer to carry fields it never uses, and the name would be
 // wrong for at least one of the two callers.
 //
-// QuotedText is the text preview of the quoted message. Baileys always
-// embeds the full message content in ContextInfo.QuotedMessage; without it,
-// WhatsApp mobile does NOT render the quote preview bubble (WhatsApp Web
-// does, from local cache). See mautrix/whatsapp#904.
+// QuotedText is the text preview of the quoted message, embedded as
+// ContextInfo.QuotedMessage. Baileys always sends it.
+//
+// It is OPTIONAL, and the claim that it is required has been REFUTED BY
+// MEASUREMENT (F222). Two replies to the same original, sent in the same
+// instant and differing only in QuotedText, BOTH rendered the quote bubble on
+// a real iOS device. The earlier note here — taken from mautrix/whatsapp#904 —
+// said mobile would not render without it; field measurement says otherwise.
+//
+// The measurement has a limit worth stating: the quoted message had been sent
+// minutes earlier, so it was in the recipient's LOCAL history. Quoting a
+// message the recipient does NOT hold locally (very old, or after a reinstall)
+// was not tested, and QuotedMessage may well matter there. Send it when you
+// have it; do not require it.
 type ReplyContext struct {
 	StanzaID    string `json:"StanzaId"`
 	Participant string `json:"Participant"`
