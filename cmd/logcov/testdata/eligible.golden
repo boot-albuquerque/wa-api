@@ -2772,6 +2772,7 @@ pkg/infra/wa-headless.NewSessions	EXCLUDED	X1
 pkg/infra/wa-headless.Sessions.EnsureSession	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless.Sessions.Evaluator	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless.Sessions.Holds	EXCLUDED	X1
+pkg/infra/wa-headless.Sessions.Release	EXCLUDED	X7
 pkg/infra/wa-headless.Sessions.Runner	EXCLUDED	X1
 pkg/infra/wa-headless.ToPageJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid.go:28);uncovered:L2(S-ret,jid.go:44);uncovered:L2(S-ret,jid.go:50)
 pkg/infra/wa-headless.user	EXCLUDED	X1
@@ -2828,6 +2829,10 @@ pkg/infra/wa-headless/roster.Roster.GetAllContacts	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/roster.Roster.GetUserInfo	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/roster.Roster.list	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/roster.Roster.lister	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/session.Disconnector.Disconnect	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/session.Disconnector.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/session.Disconnector.SessionStatus	EXCLUDED	X1
+pkg/infra/wa-headless/session.NewDisconnector	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,messenger.go:43)
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendReaction	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/chat.MessageComposerAdapter.NewMessageID	ELIGIBLE	uncovered:L1

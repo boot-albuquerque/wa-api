@@ -41,10 +41,18 @@ var inventarioFase3 = map[string]portStatus{
 	// satisfaziveis por este transporte, sem assimetria: lookup.NumberID e
 	// lookup.LidAndPhone estao PROVEN na H127, avatar.Fetch existe, e o roster
 	// do contacts.Lister foi provado na H129 com as duas linhas fundidas.
-	"IdentityResolver": {satisfeito: true},
-	"AvatarReader":     {satisfeito: true},
-	"ContactRoster":    {satisfeito: true},
-	"NewsletterReader": {satisfeito: true},
+	"IdentityResolver":    {satisfeito: true},
+	"AvatarReader":        {satisfeito: true},
+	"ContactRoster":       {satisfeito: true},
+	"NewsletterReader":    {satisfeito: true},
+	"SessionDisconnector": {satisfeito: true},
+
+	"SessionLogouter": {motivo: "RECUSADO POR POLÍTICA, e não por incapacidade. A H122 " +
+		"mediu que Socket.logout EXISTE e funciona neste build — mas chamá-lo " +
+		"DESEMPAREIA a conta, e restaurar exige um humano com o telefone. É uma " +
+		"quinta categoria: a capacidade FUNCIONA, e exercitá-la custa algo que só " +
+		"uma pessoa pode repor. Implementar para satisfazer o compilador seria " +
+		"chamar a operação que funciona, apagando um pareamento que ninguém pediu."},
 
 	"PresenceSubscriber": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA, medida na H144: " +
 		"com as duas contas acordadas ao mesmo tempo, a assinatura nunca chega a " +
@@ -69,7 +77,6 @@ var inventarioFase3 = map[string]portStatus{
 	"MessageComposer":       {motivo: "pendente"},
 	"PrivacyManager":        {motivo: "pendente"},
 	"ProfileAccessProvider": {motivo: "pendente"},
-	"SessionController":     {motivo: "pendente"},
 }
 
 // portsDeTransporte lê os contratos e devolve os que carregam txtID.

@@ -59,6 +59,15 @@ func (s *Sessions) EnsureSession(_ context.Context, txtID string) error {
 	return nil
 }
 
+// Release stops the session and frees its slot, reporting HOW it went down.
+//
+// A dirty stop still frees the slot: a holder that failed to go down cleanly is
+// gone as far as this process is concerned, and keeping its slot would leak
+// capacity on exactly the failures that need capacity most.
+func (s *Sessions) Release(ctx context.Context, txtID string) (waheadless.StopVia, error) {
+	return s.registry.Release(ctx, txtID)
+}
+
 // Evaluator resolves txtID into a way to reach its page.
 //
 // The order is load-bearing and tested: the config is resolved BEFORE a slot is

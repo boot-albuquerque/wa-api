@@ -605,6 +605,19 @@ rules_frozen=true
 #
 # E uma quarta categoria de divergencia, depois de "sem sentido", "dependencia
 # humana" e "dado ausente": a resposta e COMPLETA e o FRESCOR nao e garantido.
+# justificativa: SessionDisconnector, o OITAVO port de transporte satisfeito
+# (2026-08-22), com SessionLogouter RECUSADO POR POLITICA.
+#
+# A H122 mediu que Socket.logout EXISTE e funciona neste build. Chama-lo
+# desempareia a conta, e restaurar exige um humano com o telefone. E a QUINTA
+# categoria de divergencia, e a mais perigosa das cinco: as outras quatro sao
+# limites (nao pode existir, nao consegue hoje, nao sabe, pode estar velho) e
+# esta e' "consegue, e nao deve".
+#
+# E' perigosa porque a implementacao obvia FUNCIONA: quem "completasse" o
+# adaptador para satisfazer o compilador chamaria a operacao que funciona,
+# apagando um pareamento que ninguem pediu. Separar as portas torna isso
+# inalcancavel por ACIDENTE, em vez de depender de disciplina.
 min_func_coverage=564
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
@@ -627,7 +640,7 @@ min_func_coverage=564
 # 818->815: ver a justificativa da decisao 80 acima.
 # 815->814: ver a justificativa do PresenceAnnouncer acima.
 # 814->811: ver a justificativa da decisao 82 acima.
-min_errpath_coverage=796
+min_errpath_coverage=797
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -678,7 +691,7 @@ min_errpath_coverage=796
 # +8 (671->679): o pacote capabilities/presence, pelo segundo port fiado.
 # +8 (679->687): o pacote capabilities/block, pelo terceiro port fiado.
 # +15 (687->702): os pacotes capabilities/lookup e capabilities/avatar.
-min_eligible=746
+min_eligible=747
 max_exempt_annotations=0
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):

@@ -1289,3 +1289,46 @@ padrão do controle negativo que quebra o build: a armadilha documentada reduz o
 tempo de reconhecimento, a verificação imediata é que evita o estrago.
 
 **Estado: 7 de 18 ports satisfeitos, 2 recusados com motivo medido, 9 restantes.**
+
+## SessionDisconnector — a QUINTA categoria, e a única que não é um limite
+
+Oitavo port satisfeito, e ele fechou o vocabulário de divergência:
+
+| categoria | exemplo | a recusa diz |
+| --- | --- | --- |
+| sem sentido | `UnavailableMessageRequester` | não pode existir |
+| bloqueada por humano | `PresenceSubscriber` (H144) | não consegue hoje |
+| dado ausente | `DHash` | não sabe |
+| frescor não garantido | `Followed` (H139) | sabe, mas pode estar velho |
+| **política** | `SessionLogouter` (H122) | **consegue, e não deve** |
+
+As quatro primeiras descrevem o que o transporte É CAPAZ de fazer. A quinta
+descreve o que **decidimos** que ele faça — e essa diferença muda o que um leitor
+futuro faz com a informação: as quatro primeiras convidam a tentar de novo
+quando algo mudar; a quinta só muda se a POLÍTICA mudar, e o teste diz onde essa
+conversa começa (a H122).
+
+### Por que esta é a mais perigosa
+
+A H122 mediu que `Socket.logout` **existe e funciona** neste build. Chamá-lo
+desempareia a conta, e restaurar exige um humano com o telefone.
+
+A implementação óbvia FUNCIONA. Quem "completasse" o adaptador para satisfazer o
+compilador chamaria a operação que funciona — apagando um pareamento que ninguém
+pediu para apagar. Separar as portas torna isso inalcançável por ACIDENTE, em vez
+de depender de disciplina, e o controle negativo confirma:
+
+```
+passou a satisfazer SessionLogouter: alguém implementou o logout, que DESEMPAREIA
+a conta e exige um humano com o telefone para restaurar — se isso foi deliberado,
+a H122 precisa de ser revista antes
+```
+
+### E uma honestidade menor, no SessionStatus
+
+A ADR-0005 D6 separa intenção de estado observado. Este adaptador relata POSSE,
+e diz isso: saber se a página está mesmo utilizável exigiria subir um browser
+para responder a uma consulta de estado. Relatar posse é a resposta honesta
+disponível; afirmar mais seria inventar.
+
+**Estado: 8 de 18 ports satisfeitos, 3 recusados com motivo medido, 7 restantes.**
