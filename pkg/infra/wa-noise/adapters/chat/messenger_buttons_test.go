@@ -40,14 +40,14 @@ func buttonsAdapter(f *testkit.Fake) *ChatMessengerAdapter {
 // SendMessage, mais os extras.
 func sendButtonsCapturing(t *testing.T, payload domain.ButtonsPayload, _ *domain.ReplyContext, id string) (*waE2E.Message, []wanoise.SendRequestExtra) {
 	t.Helper()
-	sent, extra, _ := sendButtonsCapturingWithFake(t, &testkit.Fake{}, payload, nil, id)
+	sent, extra, _ := sendButtonsCapturingWithFake(t, &testkit.Fake{}, payload, nil, nil, id)
 	return sent, extra
 }
 
 // sendButtonsCapturingWithFake é o mesmo, mas deixa o chamador configurar o
 // dublê do cliente (para exercitar o Upload) e devolve os bytes que foram a
 // ele.
-func sendButtonsCapturingWithFake(t *testing.T, f *testkit.Fake, payload domain.ButtonsPayload, _ *domain.ReplyContext, id string) (*waE2E.Message, []wanoise.SendRequestExtra, error) {
+func sendButtonsCapturingWithFake(t *testing.T, f *testkit.Fake, payload domain.ButtonsPayload, _ *domain.ReplyContext, mentionedJID []string, id string) (*waE2E.Message, []wanoise.SendRequestExtra, error) {
 	t.Helper()
 
 	var sent *waE2E.Message
@@ -57,7 +57,7 @@ func sendButtonsCapturingWithFake(t *testing.T, f *testkit.Fake, payload domain.
 		return wanoise.SendResponse{ID: "buttons-wire-id", Timestamp: time.Unix(1755500140, 0)}, nil
 	}
 
-	_, err := buttonsAdapter(f).SendButtons(context.Background(), "u1", buttonsChatJID, payload, nil, id)
+	_, err := buttonsAdapter(f).SendButtons(context.Background(), "u1", buttonsChatJID, payload, nil, mentionedJID, id)
 	return sent, gotExtra, err
 }
 
@@ -98,7 +98,7 @@ func TestChatMessengerAdapter_SendButtons_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
 
 	_, err := a.SendButtons(context.Background(), "u1", buttonsChatJID,
-		domain.ButtonsPayload{Body: "corpo"}, nil, "")
+		domain.ButtonsPayload{Body: "corpo"}, nil, nil, "")
 
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendButtons code = %q, quero no_session", testkit.AppErrCode(err))
@@ -311,7 +311,7 @@ func TestChatMessengerAdapter_SendButtons_HeaderImageIsUploaded(t *testing.T) {
 		Buttons:             []domain.InteractiveButton{{Type: domain.ButtonTypeReply, Title: "Sim", ID: "s"}},
 		HeaderImage:         bytes,
 		HeaderImageMimeType: "image/png",
-	}, nil, "")
+	}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendButtons: %v", err)
 	}
@@ -365,7 +365,7 @@ func TestChatMessengerAdapter_SendButtons_UploadFailureNeverSends(t *testing.T) 
 		Body:        "Escolha",
 		Buttons:     []domain.InteractiveButton{{Type: domain.ButtonTypeReply, Title: "Sim", ID: "s"}},
 		HeaderImage: []byte("bytes"),
-	}, nil, "")
+	}, nil, nil, "")
 
 	if !errors.Is(err, uploadErr) {
 		t.Fatalf("erro do upload nao chegou ao chamador: got %#v", err)
@@ -458,7 +458,7 @@ func TestChatMessengerAdapter_SendButtons_ResultComesFromTheWire(t *testing.T) {
 	got, err := buttonsAdapter(f).SendButtons(context.Background(), "u1", buttonsChatJID, domain.ButtonsPayload{
 		Body:    "Escolha",
 		Buttons: []domain.InteractiveButton{{Type: domain.ButtonTypeReply, Title: "Sim", ID: "s"}},
-	}, nil, "id-do-cliente")
+	}, nil, nil, "id-do-cliente")
 	if err != nil {
 		t.Fatalf("SendButtons: %v", err)
 	}
@@ -485,7 +485,7 @@ func TestChatMessengerAdapter_SendButtons_InvalidJIDNeverUploads(t *testing.T) {
 		Body:        "Escolha",
 		Buttons:     []domain.InteractiveButton{{Type: domain.ButtonTypeReply, Title: "Sim", ID: "s"}},
 		HeaderImage: []byte("bytes"),
-	}, nil, "")
+	}, nil, nil, "")
 	if err == nil {
 		t.Fatal("JID invalido foi aceito")
 	}
@@ -506,7 +506,7 @@ func TestChatMessengerAdapter_SendButtons_WithReplyTo(t *testing.T) {
 		Body:    "Escolha",
 		Buttons: []domain.InteractiveButton{{Type: domain.ButtonTypeReply, Title: "Sim", ID: "btn-sim"}},
 	}
-	_, err := buttonsAdapter(f).SendButtons(context.Background(), "u1", buttonsChatJID, payload, reply, "")
+	_, err := buttonsAdapter(f).SendButtons(context.Background(), "u1", buttonsChatJID, payload, reply, nil, "")
 	if err != nil {
 		t.Fatalf("SendButtons = %v", err)
 	}

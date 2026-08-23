@@ -84,7 +84,7 @@ func (uc *SendTemplateUseCase) Execute(ctx context.Context, txtID string, req do
 		Buttons: req.Buttons,
 	}
 
-	sent, err := uc.messages.SendTemplate(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
+	sent, err := uc.messages.SendTemplate(ctx, txtID, recipient, payload, req.ReplyTo, req.MentionedJID, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send template message", "txtID", txtID, "error", err)
 		return nil, err

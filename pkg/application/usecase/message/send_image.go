@@ -136,7 +136,7 @@ func (uc *SendImageUseCase) Execute(ctx context.Context, txtID string, req domai
 
 	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption, JPEGThumbnail: req.JPEGThumbnail}
 
-	sent, err := uc.media.SendImage(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
+	sent, err := uc.media.SendImage(ctx, txtID, recipient, payload, req.ReplyTo, req.MentionedJID, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send image message", "txtID", txtID, "error", err)
 		return nil, err

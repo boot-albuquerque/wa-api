@@ -43,7 +43,7 @@ const carouselMessageVersion = 1
 // o envio falhar depois de uploads bem-sucedidos, o erro sobe sem tentativa de
 // desfazer — o protocolo não oferece essa operação, e é a mesma disciplina de
 // SendImage e SendButtons.
-func (a *ChatMessengerAdapter) SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendCarousel(ctx context.Context, txtID string, target domain.JID, payload domain.CarouselPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -81,7 +81,7 @@ func (a *ChatMessengerAdapter) SendCarousel(ctx context.Context, txtID string, t
 	if payload.Footer != "" {
 		interactive.Footer = &waE2E.InteractiveMessage_Footer{Text: proto.String(payload.Footer)}
 	}
-	if ci := replyContextInfo(replyTo); ci != nil {
+	if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 		interactive.ContextInfo = ci
 	}
 

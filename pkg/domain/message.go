@@ -31,11 +31,12 @@ type ReplyContext struct {
 // SendMessageRequest representa o payload de envio de mensagem de texto.
 // Corresponde ao struct textStruct em handlers.go:SendMessage().
 type SendMessageRequest struct {
-	Phone       string        `json:"Phone"`
-	Body        string        `json:"Body"`
-	LinkPreview bool          `json:"LinkPreview,omitempty"`
-	ID          string        `json:"Id,omitempty"`
-	ReplyTo     *ReplyContext `json:"ReplyTo,omitempty"`
+	Phone        string        `json:"Phone"`
+	Body         string        `json:"Body"`
+	LinkPreview  bool          `json:"LinkPreview,omitempty"`
+	ID           string        `json:"Id,omitempty"`
+	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
+	MentionedJID []string      `json:"MentionedJid,omitempty"`
 }
 
 // SendMessageResult representa o resultado do envio de mensagem.
@@ -98,6 +99,7 @@ type SendImageRequest struct {
 	MimeType      string        `json:"MimeType,omitempty"`
 	JPEGThumbnail []byte        `json:"JPEGThumbnail,omitempty"`
 	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
+	MentionedJID  []string      `json:"MentionedJid,omitempty"`
 }
 
 // SendImageResult representa o resultado do envio de imagem.
@@ -131,13 +133,14 @@ type MediaPayload struct {
 // mesmo racional de SendImageRequest (CAP-02/CAP-03) — ver
 // `git show 41bc8e2^:handlers.go`, em torno da linha 900.
 type SendDocumentRequest struct {
-	Phone    string        `json:"Phone"`
-	Document string        `json:"Document"`
-	FileName string        `json:"FileName"`
-	Caption  string        `json:"Caption,omitempty"`
-	ID       string        `json:"Id,omitempty"`
-	MimeType string        `json:"MimeType,omitempty"`
-	ReplyTo  *ReplyContext `json:"ReplyTo,omitempty"`
+	Phone        string        `json:"Phone"`
+	Document     string        `json:"Document"`
+	FileName     string        `json:"FileName"`
+	Caption      string        `json:"Caption,omitempty"`
+	ID           string        `json:"Id,omitempty"`
+	MimeType     string        `json:"MimeType,omitempty"`
+	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
+	MentionedJID []string      `json:"MentionedJid,omitempty"`
 }
 
 // SendDocumentResult representa o resultado do envio de documento.
@@ -254,6 +257,7 @@ type SendVideoRequest struct {
 	MimeType      string        `json:"MimeType,omitempty"`
 	JPEGThumbnail []byte        `json:"JPEGThumbnail,omitempty"`
 	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
+	MentionedJID  []string      `json:"MentionedJid,omitempty"`
 }
 
 // SendVideoResult representa o resultado do envio de vídeo.
@@ -387,15 +391,16 @@ type InteractiveButton struct {
 // Text é o fallback de Body (`body <- Body <- Text`, na ordem do histórico),
 // e não um campo com significado próprio.
 type SendButtonsRequest struct {
-	Phone   string              `json:"Phone"`
-	Body    string              `json:"Body"`
-	Text    string              `json:"text"`
-	Title   string              `json:"Title"`
-	Footer  string              `json:"Footer"`
-	Image   string              `json:"Image"`
-	Buttons []InteractiveButton `json:"Buttons"`
-	ID      string              `json:"Id,omitempty"`
-	ReplyTo *ReplyContext       `json:"ReplyTo,omitempty"`
+	Phone        string              `json:"Phone"`
+	Body         string              `json:"Body"`
+	Text         string              `json:"text"`
+	Title        string              `json:"Title"`
+	Footer       string              `json:"Footer"`
+	Image        string              `json:"Image"`
+	Buttons      []InteractiveButton `json:"Buttons"`
+	ID           string              `json:"Id,omitempty"`
+	ReplyTo      *ReplyContext       `json:"ReplyTo,omitempty"`
+	MentionedJID []string            `json:"MentionedJid,omitempty"`
 }
 
 // SendButtonsResult representa o resultado do envio de botões.
@@ -480,18 +485,19 @@ type ListSection struct {
 // dívida separada (F134/F148), decisão do Orchestrator não reaberta aqui
 // (HOUSEKEEP F149).
 type SendListRequest struct {
-	Phone      string        `json:"Phone"`
-	ButtonText string        `json:"ButtonText"` // rótulo do botão que abre a lista; default "Select"
-	Desc       string        `json:"Desc"`       // corpo principal. Fallback: Body, body, text
-	Body       string        `json:"Body"`
-	Body2      string        `json:"body"`
-	Text       string        `json:"text"`
-	TopText    string        `json:"TopText"`    // cabeçalho opcional; também default do título da seção legada
-	FooterText string        `json:"FooterText"` // rodapé opcional
-	Sections   []ListSection `json:"Sections"`   // preferida: multi-seção
-	List       []ListRow     `json:"List"`       // legado: lista plana
-	ID         string        `json:"Id,omitempty"`
-	ReplyTo    *ReplyContext `json:"ReplyTo,omitempty"`
+	Phone        string        `json:"Phone"`
+	ButtonText   string        `json:"ButtonText"` // rótulo do botão que abre a lista; default "Select"
+	Desc         string        `json:"Desc"`       // corpo principal. Fallback: Body, body, text
+	Body         string        `json:"Body"`
+	Body2        string        `json:"body"`
+	Text         string        `json:"text"`
+	TopText      string        `json:"TopText"`    // cabeçalho opcional; também default do título da seção legada
+	FooterText   string        `json:"FooterText"` // rodapé opcional
+	Sections     []ListSection `json:"Sections"`   // preferida: multi-seção
+	List         []ListRow     `json:"List"`       // legado: lista plana
+	ID           string        `json:"Id,omitempty"`
+	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
+	MentionedJID []string      `json:"MentionedJid,omitempty"`
 }
 
 // SendListResult representa o resultado do envio de lista.
@@ -666,12 +672,13 @@ type TemplateButton struct {
 // mensagem de texto com rodapé. O acréscimo é aditivo, mas é mudança de
 // contrato, e não só reconexão de fiação como nos blocos anteriores.
 type SendTemplateRequest struct {
-	Phone   string           `json:"Phone"`
-	Content string           `json:"Content"`
-	Footer  string           `json:"Footer"`
-	ID      string           `json:"Id,omitempty"`
-	Buttons []TemplateButton `json:"Buttons"`
-	ReplyTo *ReplyContext    `json:"ReplyTo,omitempty"`
+	Phone        string           `json:"Phone"`
+	Content      string           `json:"Content"`
+	Footer       string           `json:"Footer"`
+	ID           string           `json:"Id,omitempty"`
+	Buttons      []TemplateButton `json:"Buttons"`
+	ReplyTo      *ReplyContext    `json:"ReplyTo,omitempty"`
+	MentionedJID []string         `json:"MentionedJid,omitempty"`
 }
 
 // SendTemplateResult representa o resultado do envio de template.
@@ -761,10 +768,11 @@ type SendCarouselRequest struct {
 	Phone string `json:"Phone"`
 	Body  string `json:"Body"`
 	// Footer is the carousel-level footer, below all cards.
-	Footer  string                    `json:"Footer,omitempty"`
-	Cards   []SendCarouselCardRequest `json:"Cards"`
-	ID      string                    `json:"Id,omitempty"`
-	ReplyTo *ReplyContext             `json:"ReplyTo,omitempty"`
+	Footer       string                    `json:"Footer,omitempty"`
+	Cards        []SendCarouselCardRequest `json:"Cards"`
+	ID           string                    `json:"Id,omitempty"`
+	ReplyTo      *ReplyContext             `json:"ReplyTo,omitempty"`
+	MentionedJID []string                  `json:"MentionedJid,omitempty"`
 }
 
 // SendCarouselCardRequest is one card in a SendCarouselRequest.

@@ -283,7 +283,7 @@ func TestSendImage_InvalidMimeType_Rejected(t *testing.T) {
 func TestSendImage_CausalSuccess(t *testing.T) {
 	sentAt := int64(1755500002)
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-image", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}
@@ -337,7 +337,7 @@ func TestSendImage_CausalSuccess(t *testing.T) {
 // devolveu — nunca o do request usado às cegas.
 func TestSendImage_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -367,7 +367,7 @@ func TestSendImage_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 // — a mesma garantia anti-falso-sucesso do CAP-01, agora para mídia.
 func TestSendImage_DownstreamFailureNeverProducesSent(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -438,7 +438,7 @@ func dataImageURI(mime string, data []byte) string {
 func TestSendImage_DataURI_CausalSuccess(t *testing.T) {
 	sentAt := int64(1755500010)
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-datauri", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}
@@ -519,7 +519,7 @@ func TestSendImage_DataURI_MimeType_LabelIsNotTrusted(t *testing.T) {
 // avaliador independente provou aceito incorretamente antes desta correção.
 func TestSendImage_DataURI_MimeType_SniffedOverridesLabel(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-spoof-check"}, nil
 		},
 	}
@@ -601,7 +601,7 @@ func TestSendImage_DataURI_SizeBoundary(t *testing.T) {
 
 	t.Run("exactly16MB_accepted", func(t *testing.T) {
 		mm := &contractsfake.MediaMessenger{
-			SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+			SendImageFunc: func(context.Context, string, domain.JID, domain.MediaPayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 				return domain.MessageSendResult{ID: "wire-id-exact-16mb"}, nil
 			},
 		}
@@ -652,7 +652,7 @@ func TestSendImage_DataURI_SizeBoundary(t *testing.T) {
 func TestSendImage_URLBranch_NotCapturedByDataURIDiscrimination(t *testing.T) {
 	sentAt := int64(1755500011)
 	mm := &contractsfake.MediaMessenger{
-		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendImageFunc: func(_ context.Context, _ string, target domain.JID, payload domain.MediaPayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-url-conservation", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
 	}

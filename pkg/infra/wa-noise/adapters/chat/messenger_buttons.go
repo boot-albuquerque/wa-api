@@ -167,7 +167,7 @@ func bizNativeFlowNodes() []waBinary.Node {
 //
 // A PRIORIDADE do header é a do histórico: imagem primeiro; só na ausência
 // dela o Title vira texto de header. Um header com os dois nunca existiu.
-func (a *ChatMessengerAdapter) SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendButtons(ctx context.Context, txtID string, target domain.JID, payload domain.ButtonsPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -213,7 +213,7 @@ func (a *ChatMessengerAdapter) SendButtons(ctx context.Context, txtID string, ta
 	if payload.Footer != "" {
 		interactive.Footer = &waE2E.InteractiveMessage_Footer{Text: proto.String(payload.Footer)}
 	}
-	if ci := replyContextInfo(replyTo); ci != nil {
+	if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 		interactive.ContextInfo = ci
 	}
 

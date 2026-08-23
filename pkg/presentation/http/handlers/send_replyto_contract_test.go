@@ -44,7 +44,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Body":"plain"}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				tm := &contractsfake.TextMessenger{
-					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -62,7 +62,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `","Caption":"leg"}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				mm := &contractsfake.MediaMessenger{
-					SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -98,7 +98,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				mm := &contractsfake.MediaMessenger{
-					SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -116,7 +116,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				mm := &contractsfake.MediaMessenger{
-					SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -206,7 +206,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Content":"Escolha","Footer":"Equipe","Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				sm := &contractsfake.SimpleMessenger{
-					SendTemplateFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.TemplatePayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendTemplateFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.TemplatePayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -224,7 +224,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Body":"Escolha","Buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				im := &contractsfake.InteractiveMessenger{
-					SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -242,7 +242,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Body":"Escolha","Cards":[{"Body":"C","Buttons":[{"type":"reply","title":"Sim"}]}]}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				im := &contractsfake.InteractiveMessenger{
-					SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.CarouselPayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.CarouselPayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},
@@ -260,7 +260,7 @@ func replyToCases() []replyToCase {
 			bodyNo:   `{"Phone":"5511999999999","Desc":"Escolha","Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`,
 			serve: func(t *testing.T, cap *replyToCapture) serveFunc {
 				sm := &contractsfake.SimpleMessenger{
-					SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+					SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 						cap.got = replyTo
 						return result, nil
 					},

@@ -89,7 +89,7 @@ func TestSendMessage_InvalidPhoneNeverReachesSendText(t *testing.T) {
 func TestSendMessage_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 10, 30, 0, 0, time.UTC)
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-123"}, nil
 		},
 	}
@@ -127,7 +127,7 @@ func TestSendMessage_CausalSuccess(t *testing.T) {
 // diverge do id de entrada — nunca o id do request usado "às cegas".
 func TestSendMessage_MessageIDIsTheOneActuallySent(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "id-que-o-sdk-usou"}, nil
 		},
 	}
@@ -151,7 +151,7 @@ func TestSendMessage_MessageIDIsTheOneActuallySent(t *testing.T) {
 // pode virar Status=StatusSent nem resultado não-nil.
 func TestSendMessage_DownstreamFailureNeverProducesSent(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -274,7 +274,7 @@ func TestSendMessage_LinkPreviewRequested_NoURLFound_FallsBackToPlainText(t *tes
 func TestSendMessage_LinkPreviewRequested_SenderRealContinuaObrigatorio(t *testing.T) {
 	sentAt := time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC)
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-id-preview", Timestamp: sentAt}, nil
 		},
 	}
@@ -314,7 +314,7 @@ func TestSendMessage_LinkPreviewRequested_SenderRealContinuaObrigatorio(t *testi
 // CAP-01 contra falso-sucesso, agora no caminho com preview.
 func TestSendMessage_LinkPreviewRequested_DownstreamFailureNeverProducesSent(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errDownstream
 		},
 	}
@@ -352,7 +352,7 @@ func TestSendMessage_ReplyTo_ForwardedToPort(t *testing.T) {
 		QuotedText:  "original text",
 	}
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{ID: "wire-reply"}, nil
 		},
 	}

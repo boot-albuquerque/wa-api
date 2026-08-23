@@ -428,7 +428,7 @@ func TestSendButtons_PhoneResolvedWithDefaultServerRule(t *testing.T) {
 func TestSendButtons_CausalSuccess(t *testing.T) {
 	sentAt := time.Date(2026, 8, 19, 10, 30, 0, 0, time.UTC)
 	im := &contractsfake.InteractiveMessenger{
-		SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{Timestamp: sentAt, ID: "wire-id-buttons-123"}, nil
 		},
 	}
@@ -498,7 +498,7 @@ func TestSendButtons_CausalSuccess(t *testing.T) {
 func TestSendButtons_SendFailureNeverReportsSent(t *testing.T) {
 	sendErr := errors.New("porta: envio de botoes recusado pelo servidor")
 	im := &contractsfake.InteractiveMessenger{
-		SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendButtonsFunc: func(context.Context, string, domain.JID, domain.ButtonsPayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, sendErr
 		},
 	}
@@ -520,7 +520,7 @@ func TestSendButtons_SendFailureNeverReportsSent(t *testing.T) {
 // entrada é repassado à porta para que o SDK possa usá-lo.
 func TestSendButtons_MessageIDIsTheOneActuallySent(t *testing.T) {
 	im := &contractsfake.InteractiveMessenger{
-		SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			if id != callerID {
 				t.Errorf("id repassado a porta: got %q, want %q", id, callerID)
 			}

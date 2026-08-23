@@ -55,12 +55,13 @@ type SimpleMessengerSendPollCall struct {
 
 // SimpleMessengerSendTemplateCall é uma chamada a SendTemplate.
 type SimpleMessengerSendTemplateCall struct {
-	Ctx     context.Context
-	TxtID   string
-	Target  domain.JID
-	Payload domain.TemplatePayload
-	ReplyTo *domain.ReplyContext
-	ID      string
+	Ctx          context.Context
+	TxtID        string
+	Target       domain.JID
+	Payload      domain.TemplatePayload
+	ReplyTo      *domain.ReplyContext
+	MentionedJID []string
+	ID           string
 }
 
 // DefaultSentListMessageID é o ID que SimpleMessenger devolve em
@@ -69,12 +70,13 @@ const DefaultSentListMessageID = "sent-list-message-id"
 
 // SimpleMessengerSendListCall é uma chamada a SendList.
 type SimpleMessengerSendListCall struct {
-	Ctx     context.Context
-	TxtID   string
-	Target  domain.JID
-	Payload domain.ListPayload
-	ReplyTo *domain.ReplyContext
-	ID      string
+	Ctx          context.Context
+	TxtID        string
+	Target       domain.JID
+	Payload      domain.ListPayload
+	ReplyTo      *domain.ReplyContext
+	MentionedJID []string
+	ID           string
 }
 
 // SimpleMessenger é o fake de port.SimpleMessenger.
@@ -90,10 +92,10 @@ type SimpleMessenger struct {
 	SendPollFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.PollPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 	SendPollCalls []SimpleMessengerSendPollCall
 
-	SendTemplateFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendTemplateFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 	SendTemplateCalls []SimpleMessengerSendTemplateCall
 
-	SendListFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendListFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 	SendListCalls []SimpleMessengerSendListCall
 }
 
@@ -127,19 +129,19 @@ func (f *SimpleMessenger) SendPoll(ctx context.Context, txtID string, target dom
 }
 
 // SendTemplate implementa port.SimpleMessenger.
-func (f *SimpleMessenger) SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
-	f.SendTemplateCalls = append(f.SendTemplateCalls, SimpleMessengerSendTemplateCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
+func (f *SimpleMessenger) SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
+	f.SendTemplateCalls = append(f.SendTemplateCalls, SimpleMessengerSendTemplateCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, MentionedJID: mentionedJID, ID: id})
 	if f.SendTemplateFunc != nil {
-		return f.SendTemplateFunc(ctx, txtID, target, payload, replyTo, id)
+		return f.SendTemplateFunc(ctx, txtID, target, payload, replyTo, mentionedJID, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentTemplateMessageID}, nil
 }
 
 // SendList implementa port.SimpleMessenger.
-func (f *SimpleMessenger) SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
-	f.SendListCalls = append(f.SendListCalls, SimpleMessengerSendListCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
+func (f *SimpleMessenger) SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
+	f.SendListCalls = append(f.SendListCalls, SimpleMessengerSendListCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, MentionedJID: mentionedJID, ID: id})
 	if f.SendListFunc != nil {
-		return f.SendListFunc(ctx, txtID, target, payload, replyTo, id)
+		return f.SendListFunc(ctx, txtID, target, payload, replyTo, mentionedJID, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentListMessageID}, nil
 }

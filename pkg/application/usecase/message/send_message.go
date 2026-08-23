@@ -55,7 +55,7 @@ func (uc *SendMessageUseCase) Execute(ctx context.Context, txtID string, req dom
 		}
 	}
 
-	sent, err := uc.messages.SendText(ctx, txtID, recipient, req.Body, preview, req.ReplyTo, req.ID)
+	sent, err := uc.messages.SendText(ctx, txtID, recipient, req.Body, preview, req.ReplyTo, req.MentionedJID, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send text message", "txtID", txtID, "error", err)
 		return nil, err

@@ -78,7 +78,7 @@ type SimpleMessenger interface {
 	// identificador é exigência do wire, e o use case não conhece
 	// protobuf. QUE a ordem dos botões seja preservada é contrato desta
 	// porta — é a ordem em que eles aparecem no aparelho de quem recebe.
-	SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 
 	// SendList monta um ListMessage a partir de payload
 	// (Body/ButtonText/Title/Footer/Sections) e o envia para target.
@@ -95,5 +95,5 @@ type SimpleMessenger interface {
 	// waE2E.ListMessage_Section/Row é da IMPLEMENTAÇÃO. QUE a ordem de
 	// seções e linhas seja preservada é contrato desta porta — é a ordem em
 	// que aparecem no aparelho de quem recebe.
-	SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendList(ctx context.Context, txtID string, target domain.JID, payload domain.ListPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 }

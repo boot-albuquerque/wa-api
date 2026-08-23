@@ -93,7 +93,7 @@ func TestSendTemplate_Success_ViaRegisteredRoute(t *testing.T) {
 		`{"DisplayText":"Ligar","PhoneNumber":"+5511987654321","Type":"call"}]}`
 
 	sm := &contractsfake.SimpleMessenger{
-		SendTemplateFunc: func(_ context.Context, _ string, target domain.JID, payload domain.TemplatePayload, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTemplateFunc: func(_ context.Context, _ string, target domain.JID, payload domain.TemplatePayload, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			if target != domain.JID(sendTemplatePhone) {
 				t.Errorf("target: got %q, want %q", target, sendTemplatePhone)
 			}
@@ -232,7 +232,7 @@ func TestSendTemplate_InvalidPhoneNeverSends(t *testing.T) {
 // seria a mentira de volta.
 func TestSendTemplate_DownstreamFailureNeverReturns200(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendTemplateFunc: func(context.Context, string, domain.JID, domain.TemplatePayload, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendTemplateSentinel
 		},
 	}
@@ -251,7 +251,7 @@ func TestSendTemplate_DownstreamFailureNeverReturns200(t *testing.T) {
 
 func TestSendTemplate_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{
-		SendTemplateFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.TemplatePayload, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendTemplateFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.TemplatePayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}

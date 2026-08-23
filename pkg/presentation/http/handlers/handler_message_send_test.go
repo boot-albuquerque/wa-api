@@ -70,7 +70,7 @@ func sendTextServeWithPreview(t *testing.T, tm *contractsfake.TextMessenger, jr 
 func TestSendText_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500000)
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, target domain.JID, text string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			if target != domain.JID("5511999999999@s.whatsapp.net") {
 				t.Errorf("target: got %q", target)
 			}
@@ -194,7 +194,7 @@ func TestSendText_InvalidPhoneNeverSends(t *testing.T) {
 // falso-sucesso.
 func TestSendText_DownstreamFailureNeverReturns200(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(context.Context, string, domain.JID, string, *domain.LinkPreviewData, *domain.ReplyContext, []string, string) (domain.MessageSendResult, error) {
 			return domain.MessageSendResult{}, errSendTextSentinel
 		},
 	}
@@ -216,7 +216,7 @@ func TestSendText_DownstreamFailureNeverReturns200(t *testing.T) {
 // devolveu de volta — nunca o do request usado às cegas.
 func TestSendText_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			if id != "id-do-cliente" {
 				t.Errorf("id repassado a porta: got %q, want %q", id, "id-do-cliente")
 			}
@@ -257,7 +257,7 @@ func TestSendText_LinkPreview_ViaRegisteredRoute(t *testing.T) {
 	}
 	var gotPreview *domain.LinkPreviewData
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, preview *domain.LinkPreviewData, _ *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, preview *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			gotPreview = preview
 			return domain.MessageSendResult{ID: "wire-id-preview-route", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
@@ -335,7 +335,7 @@ func TestSendText_ReplyTo_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500002)
 	var gotReply *domain.ReplyContext
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			gotReply = replyTo
 			return domain.MessageSendResult{ID: "wire-reply-route", Timestamp: time.Unix(sentAt, 0)}, nil
 		},
@@ -367,7 +367,7 @@ func TestSendText_ReplyTo_ViaRegisteredRoute(t *testing.T) {
 func TestSendText_WithoutReplyTo_ViaRegisteredRoute(t *testing.T) {
 	var gotReply *domain.ReplyContext
 	tm := &contractsfake.TextMessenger{
-		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ string) (domain.MessageSendResult, error) {
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, replyTo *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
 			gotReply = replyTo
 			return domain.MessageSendResult{ID: "wire-no-reply"}, nil
 		},

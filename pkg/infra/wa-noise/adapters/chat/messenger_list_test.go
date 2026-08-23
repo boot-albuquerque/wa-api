@@ -44,7 +44,7 @@ func sendListCapturing(t *testing.T, payload domain.ListPayload, _ *domain.Reply
 		},
 	}
 
-	_, err := listAdapter(f).SendList(context.Background(), "u1", listChatJID, payload, nil, id)
+	_, err := listAdapter(f).SendList(context.Background(), "u1", listChatJID, payload, nil, nil, id)
 	if err != nil {
 		t.Fatalf("SendList: %v", err)
 	}
@@ -74,7 +74,7 @@ func listMessage(t *testing.T, m *waE2E.Message) *waE2E.ListMessage {
 func TestChatMessengerAdapter_SendList_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
 
-	_, err := a.SendList(context.Background(), "u1", listChatJID, domain.ListPayload{Body: "corpo"}, nil, "")
+	_, err := a.SendList(context.Background(), "u1", listChatJID, domain.ListPayload{Body: "corpo"}, nil, nil, "")
 
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendList code = %q, quero no_session", testkit.AppErrCode(err))
@@ -265,7 +265,7 @@ func TestChatMessengerAdapter_SendList_ResultComesFromTheWire(t *testing.T) {
 		Body:       "Escolha",
 		ButtonText: "Select",
 		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
-	}, nil, "id-do-cliente")
+	}, nil, nil, "id-do-cliente")
 	if err != nil {
 		t.Fatalf("SendList: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestChatMessengerAdapter_SendList_InvalidJIDNeverSends(t *testing.T) {
 
 	_, err := listAdapter(f).SendList(context.Background(), "u1", "@@@", domain.ListPayload{
 		Body: "Escolha",
-	}, nil, "")
+	}, nil, nil, "")
 	if err == nil {
 		t.Fatal("JID invalido foi aceito")
 	}

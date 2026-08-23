@@ -2689,6 +2689,7 @@ pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.bizNativeFlowNodes	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.buildContextInfo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.downloadableFor	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listBizNodes	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listRows	EXCLUDED	X5

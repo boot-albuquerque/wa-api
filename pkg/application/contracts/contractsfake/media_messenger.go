@@ -29,22 +29,24 @@ const DefaultSentStickerMessageID = "sent-sticker-message-id"
 
 // MediaMessengerSendImageCall é uma chamada a SendImage.
 type MediaMessengerSendImageCall struct {
-	Ctx     context.Context
-	TxtID   string
-	Target  domain.JID
-	Payload domain.MediaPayload
-	ReplyTo *domain.ReplyContext
-	ID      string
+	Ctx          context.Context
+	TxtID        string
+	Target       domain.JID
+	Payload      domain.MediaPayload
+	ReplyTo      *domain.ReplyContext
+	MentionedJID []string
+	ID           string
 }
 
 // MediaMessengerSendDocumentCall é uma chamada a SendDocument.
 type MediaMessengerSendDocumentCall struct {
-	Ctx     context.Context
-	TxtID   string
-	Target  domain.JID
-	Payload domain.MediaPayload
-	ReplyTo *domain.ReplyContext
-	ID      string
+	Ctx          context.Context
+	TxtID        string
+	Target       domain.JID
+	Payload      domain.MediaPayload
+	ReplyTo      *domain.ReplyContext
+	MentionedJID []string
+	ID           string
 }
 
 // MediaMessengerSendAudioCall é uma chamada a SendAudio.
@@ -59,12 +61,13 @@ type MediaMessengerSendAudioCall struct {
 
 // MediaMessengerSendVideoCall é uma chamada a SendVideo.
 type MediaMessengerSendVideoCall struct {
-	Ctx     context.Context
-	TxtID   string
-	Target  domain.JID
-	Payload domain.MediaPayload
-	ReplyTo *domain.ReplyContext
-	ID      string
+	Ctx          context.Context
+	TxtID        string
+	Target       domain.JID
+	Payload      domain.MediaPayload
+	ReplyTo      *domain.ReplyContext
+	MentionedJID []string
+	ID           string
 }
 
 // MediaMessengerSendStickerCall é uma chamada a SendSticker.
@@ -81,16 +84,16 @@ type MediaMessengerSendStickerCall struct {
 type MediaMessenger struct {
 	SessionGuard
 
-	SendImageFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendImageFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 	SendImageCalls []MediaMessengerSendImageCall
 
-	SendDocumentFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendDocumentFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 	SendDocumentCalls []MediaMessengerSendDocumentCall
 
 	SendAudioFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 	SendAudioCalls []MediaMessengerSendAudioCall
 
-	SendVideoFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	SendVideoFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 	SendVideoCalls []MediaMessengerSendVideoCall
 
 	SendStickerFunc  func(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
@@ -100,19 +103,19 @@ type MediaMessenger struct {
 var _ port.MediaMessenger = (*MediaMessenger)(nil)
 
 // SendImage implementa port.MediaMessenger.
-func (f *MediaMessenger) SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
-	f.SendImageCalls = append(f.SendImageCalls, MediaMessengerSendImageCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
+func (f *MediaMessenger) SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
+	f.SendImageCalls = append(f.SendImageCalls, MediaMessengerSendImageCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, MentionedJID: mentionedJID, ID: id})
 	if f.SendImageFunc != nil {
-		return f.SendImageFunc(ctx, txtID, target, payload, replyTo, id)
+		return f.SendImageFunc(ctx, txtID, target, payload, replyTo, mentionedJID, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentImageMessageID}, nil
 }
 
 // SendDocument implementa port.MediaMessenger.
-func (f *MediaMessenger) SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
-	f.SendDocumentCalls = append(f.SendDocumentCalls, MediaMessengerSendDocumentCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
+func (f *MediaMessenger) SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
+	f.SendDocumentCalls = append(f.SendDocumentCalls, MediaMessengerSendDocumentCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, MentionedJID: mentionedJID, ID: id})
 	if f.SendDocumentFunc != nil {
-		return f.SendDocumentFunc(ctx, txtID, target, payload, replyTo, id)
+		return f.SendDocumentFunc(ctx, txtID, target, payload, replyTo, mentionedJID, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentDocumentMessageID}, nil
 }
@@ -127,10 +130,10 @@ func (f *MediaMessenger) SendAudio(ctx context.Context, txtID string, target dom
 }
 
 // SendVideo implementa port.MediaMessenger.
-func (f *MediaMessenger) SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
-	f.SendVideoCalls = append(f.SendVideoCalls, MediaMessengerSendVideoCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, ID: id})
+func (f *MediaMessenger) SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
+	f.SendVideoCalls = append(f.SendVideoCalls, MediaMessengerSendVideoCall{Ctx: ctx, TxtID: txtID, Target: target, Payload: payload, ReplyTo: replyTo, MentionedJID: mentionedJID, ID: id})
 	if f.SendVideoFunc != nil {
-		return f.SendVideoFunc(ctx, txtID, target, payload, replyTo, id)
+		return f.SendVideoFunc(ctx, txtID, target, payload, replyTo, mentionedJID, id)
 	}
 	return domain.MessageSendResult{ID: DefaultSentVideoMessageID}, nil
 }

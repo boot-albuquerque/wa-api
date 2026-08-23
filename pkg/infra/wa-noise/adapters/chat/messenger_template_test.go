@@ -46,7 +46,7 @@ func sendTemplateCapturing(t *testing.T, payload domain.TemplatePayload, _ *doma
 		},
 	}
 
-	if _, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID, payload, nil, id); err != nil {
+	if _, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID, payload, nil, nil, id); err != nil {
 		t.Fatalf("SendTemplate: %v", err)
 	}
 	if sent == nil {
@@ -73,7 +73,7 @@ func TestChatMessengerAdapter_SendTemplate_NoSession(t *testing.T) {
 	a := NewChatMessengerAdapter(testkit.GetterWith(nil))
 
 	_, err := a.SendTemplate(context.Background(), "u1", templateChatJID,
-		domain.TemplatePayload{Content: "c", Footer: "f"}, nil, "")
+		domain.TemplatePayload{Content: "c", Footer: "f"}, nil, nil, "")
 
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("SendTemplate code = %q, quero no_session", testkit.AppErrCode(err))
@@ -354,7 +354,7 @@ func TestChatMessengerAdapter_SendTemplate_IDForwardedAndServerIDWins(t *testing
 	res, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID,
 		domain.TemplatePayload{Content: "c", Footer: "f",
 			Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}}},
-		nil, "id-do-cliente")
+		nil, nil, "id-do-cliente")
 
 	if err != nil {
 		t.Fatalf("SendTemplate: %v", err)
@@ -391,7 +391,7 @@ func TestChatMessengerAdapter_SendTemplate_SendFailurePropagates(t *testing.T) {
 
 	res, err := templateAdapter(f).SendTemplate(context.Background(), "u1", templateChatJID,
 		domain.TemplatePayload{Content: "c", Footer: "f",
-			Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}}}, nil, "")
+			Buttons: []domain.TemplateButton{{DisplayText: "Sim", Type: domain.TemplateButtonQuickReply}}}, nil, nil, "")
 
 	if err == nil {
 		t.Fatal("envio falho nao propagou erro")

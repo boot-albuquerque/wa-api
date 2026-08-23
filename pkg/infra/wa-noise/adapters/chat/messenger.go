@@ -146,6 +146,21 @@ func replyContextInfo(replyTo *domain.ReplyContext) *waE2E.ContextInfo {
 	return ci
 }
 
+// buildContextInfo merges reply-to and mentions into a single ContextInfo.
+// Returns nil when both are absent, preserving exact compatibility with
+// messages that carry neither (CAP-47).
+func buildContextInfo(replyTo *domain.ReplyContext, mentionedJID []string) *waE2E.ContextInfo {
+	ci := replyContextInfo(replyTo)
+	if len(mentionedJID) == 0 {
+		return ci
+	}
+	if ci == nil {
+		ci = &waE2E.ContextInfo{}
+	}
+	ci.MentionedJID = mentionedJID
+	return ci
+}
+
 // SendText monta uma mensagem de texto e a envia. Sem preview (nil) nem
 // replyTo (nil), monta Conversation — a forma canônica do protocolo para
 // texto sem link preview nem contexto, ver ARMADILHAS.md sobre não
@@ -155,7 +170,7 @@ func replyContextInfo(replyTo *domain.ReplyContext) *waE2E.ContextInfo {
 // use exatamente esse identificador; o ID devolvido em
 // domain.MessageSendResult.ID vem sempre de resp.ID — o identificador que
 // o SDK REALMENTE usou — nunca do id de entrada por construção própria.
-func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -166,7 +181,7 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 		return domain.MessageSendResult{}, err
 	}
 
-	needsExtended := preview != nil || replyTo != nil
+	needsExtended := preview != nil || replyTo != nil || len(mentionedJID) > 0
 
 	msg := &waE2E.Message{
 		Conversation: proto.String(text),
@@ -196,7 +211,7 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 				}
 			}
 		}
-		if ci := replyContextInfo(replyTo); ci != nil {
+		if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 			etm.ContextInfo = ci
 		}
 		msg = &waE2E.Message{ExtendedTextMessage: etm}
@@ -219,7 +234,7 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 // SendMessage falhar depois de um upload bem-sucedido, o erro é propagado
 // sem tentativa de desfazer o upload — o protocolo não oferece essa
 // operação, e um upload órfão não é uma mensagem entregue.
-func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -248,7 +263,7 @@ func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, targ
 			JPEGThumbnail: payload.JPEGThumbnail,
 		},
 	}
-	if ci := replyContextInfo(replyTo); ci != nil {
+	if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 		msg.ImageMessage.ContextInfo = ci
 	}
 
@@ -269,7 +284,7 @@ func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, targ
 // vai direto para DocumentMessage.FileName, sem sanitização e sem tocar o
 // sistema de arquivos (mesma disciplina de SendImage quanto a upload
 // órfão sem tentativa de desfazer).
-func (a *ChatMessengerAdapter) SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -298,7 +313,7 @@ func (a *ChatMessengerAdapter) SendDocument(ctx context.Context, txtID string, t
 			Caption:       proto.String(payload.Caption),
 		},
 	}
-	if ci := replyContextInfo(replyTo); ci != nil {
+	if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 		msg.DocumentMessage.ContextInfo = ci
 	}
 
@@ -373,7 +388,7 @@ func (a *ChatMessengerAdapter) SendAudio(ctx context.Context, txtID string, targ
 // atual — achado reportado, não implementado). Mesma disciplina de
 // SendImage/SendDocument/SendAudio quanto a upload órfão sem tentativa de
 // desfazer.
-func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -402,7 +417,7 @@ func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, targ
 			JPEGThumbnail: payload.JPEGThumbnail,
 		},
 	}
-	if ci := replyContextInfo(replyTo); ci != nil {
+	if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 		msg.VideoMessage.ContextInfo = ci
 	}
 
@@ -692,7 +707,7 @@ func templateButtons(buttons []domain.TemplateButton) []*waE2E.HydratedTemplateB
 // DocumentMessage, ImageMessage, VideoMessage), mesma disciplina do histórico
 // (`git show 41bc8e2^:handlers.go`, linha 3226). Sem upload, sem fetch: tudo
 // já chega pronto no payload.
-func (a *ChatMessengerAdapter) SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error) {
+func (a *ChatMessengerAdapter) SendTemplate(ctx context.Context, txtID string, target domain.JID, payload domain.TemplatePayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return domain.MessageSendResult{}, err
@@ -713,7 +728,7 @@ func (a *ChatMessengerAdapter) SendTemplate(ctx context.Context, txtID string, t
 			},
 		},
 	}
-	if ci := replyContextInfo(replyTo); ci != nil {
+	if ci := buildContextInfo(replyTo, mentionedJID); ci != nil {
 		msg.TemplateMessage.ContextInfo = ci
 	}
 

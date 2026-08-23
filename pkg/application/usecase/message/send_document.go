@@ -146,7 +146,7 @@ func (uc *SendDocumentUseCase) Execute(ctx context.Context, txtID string, req do
 
 	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption, FileName: req.FileName}
 
-	sent, err := uc.media.SendDocument(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
+	sent, err := uc.media.SendDocument(ctx, txtID, recipient, payload, req.ReplyTo, req.MentionedJID, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send document message", "txtID", txtID, "error", err)
 		return nil, err

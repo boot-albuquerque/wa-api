@@ -144,7 +144,7 @@ func (uc *SendButtonsUseCase) Execute(ctx context.Context, txtID string, req dom
 		payload.HeaderImageMimeType = http.DetectContentType(headerImage)
 	}
 
-	sent, err := uc.messages.SendButtons(ctx, txtID, recipient, payload, req.ReplyTo, req.ID)
+	sent, err := uc.messages.SendButtons(ctx, txtID, recipient, payload, req.ReplyTo, req.MentionedJID, req.ID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to send buttons message", "txtID", txtID, "error", err)
 		return nil, err

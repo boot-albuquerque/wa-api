@@ -32,5 +32,10 @@ type TextMessenger interface {
 	// StanzaID, Participant e QuotedMessage no ExtendedTextMessage
 	// (CAP-46A). Tanto preview quanto replyTo forçam ExtendedTextMessage;
 	// sem nenhum dos dois, monta Conversation simples.
-	SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
+	//
+	// mentionedJID, quando não-vazio, faz o adapter popular
+	// ContextInfo.MentionedJID — a lista de JIDs a notificar (CAP-47).
+	// Também força ExtendedTextMessage, porque Conversation simples não
+	// carrega ContextInfo.
+	SendText(ctx context.Context, txtID string, target domain.JID, text string, preview *domain.LinkPreviewData, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 }
