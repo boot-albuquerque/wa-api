@@ -3687,18 +3687,38 @@ Postgres em modo `single` não são detectadas — é para isso que existe `mult
 com lease (D2). O caso coberto é o que de fato acontece: alguém sobe um segundo
 processo sem perceber.
 
-**Status**: **parcialmente corrigido** — D1 (flock) e D2 (lease) do ADR-0005
-implementados e verificados. F108 (2026-08-24) fecha o buraco observável da D2:
-o `ConnectHandler` agora verifica a posse SINCRONAMENTE e responde 409 quando
-negada, em vez de despachar e mentir com 200. Testes: handler
+**Status**: **corrigido** (2026-08-24, auditoria da sessão F89).
+
+Todas as decisões do ADR-0005 que envolvem código estão implementadas e
+testadas. O que falta (D5 — roteamento por dono) é infraestrutura de ingress,
+não código da aplicação, e o próprio ADR o classifica como "NÃO entrou" sem
+que isso bloqueie o resto.
+
+| decisão | estado | ficheiro(s) |
+|---|---|---|
+| D1 — modo explícito + flock | **implementado** | `pkg/bootstrap/cluster.go` |
+| D2 — lease com TTL | **implementado** | `pkg/bootstrap/lease.go`, `lease_wiring.go` |
+| D3 — outbox de webhook | **implementado** | `pkg/infra/db/webhook_outbox.go`, `pkg/bootstrap/dispatch_callhook.go` |
+| D4 — RabbitMQ é distribuição | **decisão** (sem código) | emenda à F88 |
+| D5 — roteamento por dono | **NÃO implementado** | depende de ingress por utilizador |
+| D6 — saúde separada | **implementado** | `pkg/bootstrap/health.go`, rotas em `router.go:310-334` |
+| D7 — relatório de capacidades | **implementado** | `pkg/bootstrap/capabilities.go`, chamado em `main.go:364` |
+
+A entrada anterior (2026-08-24, sessão F108) dizia "D3 e D6 seguem abertos" —
+estava desatualizada: ambos já tinham sido implementados em sessões anteriores
+(commits no ADR-0005 Fechamento: D3 em `149a649`/`daa0c79`, D6 em `3906ac3`).
+D7 nem constava como pendente mas também já existia.
+
+F108 (2026-08-24) fecha o buraco observável da D2: o `ConnectHandler` verifica
+posse SINCRONAMENTE e responde 409 quando negada. Testes: handler
 (`TestConnectHandler_OwnershipDenied_409`, `TestConnectHandler_OwnershipGranted_200`,
 `TestConnectHandler_WithoutCheckOwnership_200`) e fiação
 (`TestConnectOwnershipCheckIsWired`, `TestConnectOwnershipCheckGranted_200`),
-ambos via rota registrada. D3 (outbox) e D6 (saúde separada) seguem abertos.
+ambos via rota registrada.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F90 — desconexão do cliente é logada como `error`, e parece falha de banco
 
@@ -18627,10 +18647,25 @@ Decidir se `200 "connecting"` sem lançador é aceitável é CONTRATO HTTP, item
 NÃO conserta a resposta: se alguém remover o decorador e ignorar o gate
 vermelho, a rota continua a mentir.
 
+**Status**: **corrigido** (parte 1 — a trava de fiação). Teste:
+`TestStartSessionIsWiredIntoConnectHandler`
+(`pkg/bootstrap/start_session_wiring_test.go`). Parte 2 (resposta que mente)
+é decisão de contrato HTTP, aguarda o humano.
+
+**Controlo negativo reexecutado (2026-08-24, sessão F89)**: remoção de
+`.WithStartSession(s.startSession)` de `wiring_handlers.go:457`:
+```
+--- FAIL: TestStartSessionIsWiredIntoConnectHandler (0.01s)
+    start_session_wiring_test.go:95: StartSession is nil after initCustomHandlers —
+    the wiring in initConnectHandler (wiring_handlers.go:410) no longer calls
+    .WithStartSession(s.startSession). Without it, GET /session/connect responds
+    200 {"status":"connecting"} but no WhatsApp session starts: the response lies.
+```
+Código restaurado após CN; teste verde com código intacto.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F177 — a string de pragmas de produção está DUPLICADA, sem constante que as una
 

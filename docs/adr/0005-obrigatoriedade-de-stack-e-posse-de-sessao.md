@@ -364,7 +364,7 @@ política de retenção do outbox.
 | D4 — RabbitMQ é distribuição, não durabilidade | **decisão, sem código** | emenda à F88, absorvida pelo D3 |
 | D5 — Redis por padrão não; roteamento por dono | **NÃO entrou** | — |
 | D6 — `/health/live` separado de `/health/ready` | **entrou** | `3906ac3` |
-| D7 — relatório de capacidades no arranque | **NÃO entrou** | — |
+| D7 — relatório de capacidades no arranque | **entrou** | `pkg/bootstrap/capabilities.go`, chamado em `main.go:364` |
 
 ### A consequência de D5 não ter entrado
 
