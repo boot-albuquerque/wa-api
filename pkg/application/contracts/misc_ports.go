@@ -41,6 +41,19 @@ type ChatMuter interface {
 	MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error
 }
 
+// ChatPinner pins and unpins conversations in the chat list.
+//
+// Pin is app-state (like archive), not a message — the response carries no
+// message_id. The BuildArchive comment in the fork confirms that archiving a
+// chat also unpins it automatically; this port does not enforce that invariant
+// because the server does.
+type ChatPinner interface {
+	SessionGuard
+
+	// PinChat pins or unpins a conversation in the chat list.
+	PinChat(ctx context.Context, txtID string, chat domain.JID, pin bool) error
+}
+
 // CallRejecter rejeita chamadas recebidas.
 type CallRejecter interface {
 	SessionGuard

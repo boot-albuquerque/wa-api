@@ -62,7 +62,10 @@ type portStatus struct {
 }
 
 var inventarioFase3 = map[string]portStatus{
-	"ChatArchiver":      {satisfeito: true},
+	"ChatArchiver": {satisfeito: true},
+	"ChatPinner": {motivo: "PENDENTE com caminho PROVADO: mesmo mecanismo de ChatArchiver " +
+		"(SendAppState com BuildPin), que já é satisfeito pela headless. Falta criar " +
+		"o adaptador headless espelhando chat/archiver.go — uma sessão de trabalho."},
 	"PresenceAnnouncer": {satisfeito: true},
 	"BlocklistManager":  {satisfeito: true},
 

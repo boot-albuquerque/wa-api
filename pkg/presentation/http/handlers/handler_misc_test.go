@@ -449,3 +449,87 @@ func TestGetPrivacySettingsHandler_ReadFailure(t *testing.T) {
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
 	logassert.OutcomeLogged(t, recs, "failed to get privacy settings")
 }
+
+// --- POST /chat/pin ---------------------------------------------------
+
+func pinChatHandler(cp *contractsfake.ChatPinner) http.Handler {
+	return NewPinChatHandler(chat.NewPinChatUseCase(cp, &contractsfake.JIDResolver{}, &contractsfake.Logger{}))
+}
+
+func TestPinChatHandler_Success(t *testing.T) {
+	cp := &contractsfake.ChatPinner{}
+
+	rec, recs := ipmServe(t, pinChatHandler(cp), http.MethodPost, "/chat/pin",
+		`{"jid":"5511999999999@s.whatsapp.net","pin":true}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
+	}
+	if env := decodeEnvelope(t, rec); !env.Success {
+		t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
+	}
+	if len(cp.PinChatCalls) != 1 {
+		t.Fatalf("PinChat chamado %d vez(es), quero 1", len(cp.PinChatCalls))
+	}
+	if !cp.PinChatCalls[0].Pin {
+		t.Error("pin devia ser true")
+	}
+	assertNoOutcomeLog(t, recs)
+}
+
+func TestPinChatHandler_Unauthorized(t *testing.T) {
+	cp := &contractsfake.ChatPinner{}
+
+	rec, _ := ipmServe(t, pinChatHandler(cp), http.MethodPost, "/chat/pin",
+		`{"jid":"5511999999999@s.whatsapp.net","pin":true}`, nil)
+
+	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
+	if len(cp.EnsureSessionCalls) != 0 {
+		t.Fatal("requisicao nao autenticada alcancou a porta")
+	}
+}
+
+func TestPinChatHandler_MalformedBody(t *testing.T) {
+	cp := &contractsfake.ChatPinner{}
+
+	rec, recs := ipmServe(t, pinChatHandler(cp), http.MethodPost, "/chat/pin", `{"jid":`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	logassert.OutcomeLogged(t, recs, "could not decode payload")
+}
+
+func TestPinChatHandler_IncompletePayload(t *testing.T) {
+	cp := &contractsfake.ChatPinner{}
+
+	rec, recs := ipmServe(t, pinChatHandler(cp), http.MethodPost, "/chat/pin", `{}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	logassert.OutcomeLogged(t, recs, "missing jid in Payload")
+}
+
+func TestPinChatHandler_SessionFailure(t *testing.T) {
+	cp := &contractsfake.ChatPinner{SessionGuard: contractsfake.FailSession(ipmErrBoom)}
+
+	rec, recs := ipmServe(t, pinChatHandler(cp), http.MethodPost, "/chat/pin",
+		`{"jid":"5511999999999@s.whatsapp.net","pin":true}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+	logassert.OutcomeLogged(t, recs, ipmErrBoom.Error())
+}
+
+func TestPinChatHandler_OperationFailure(t *testing.T) {
+	cp := &contractsfake.ChatPinner{
+		PinChatFunc: func(context.Context, string, domain.JID, bool) error { return ipmErrBoom },
+	}
+
+	rec, recs := ipmServe(t, pinChatHandler(cp), http.MethodPost, "/chat/pin",
+		`{"jid":"5511999999999@s.whatsapp.net","pin":true}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+	logassert.OutcomeLogged(t, recs, "failed to pin chat")
+}

@@ -305,6 +305,7 @@ func initCustomHandlers(s *server) {
 	muteChatUC := chat.NewMuteChatUseCase(miscAdapter, jidResolver, logger)
 	archiveChatUC := chat.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
 	starMessageUC := chat.NewStarMessageUseCase(miscAdapter, jidResolver, logger)
+	pinChatUC := chat.NewPinChatUseCase(miscAdapter, jidResolver, logger)
 	setDisappearingTimerUC := chat.NewSetDisappearingTimerUseCase(miscAdapter, jidResolver, logger)
 	setDefaultDisappearingTimerUC := chat.NewSetDefaultDisappearingTimerUseCase(miscAdapter, logger)
 
@@ -330,6 +331,7 @@ func initCustomHandlers(s *server) {
 		RequestUnavailableMessage:   handlers.NewRequestUnavailableMessageHandler(requestUnavailableMessageUC),
 		MuteChat:                    handlers.NewMuteChatHandler(muteChatUC),
 		ArchiveChat:                 handlers.NewArchiveChatHandler(archiveChatUC),
+		PinChat:                     handlers.NewPinChatHandler(pinChatUC),
 		SetDisappearingTimer:        handlers.NewSetDisappearingTimerHandler(setDisappearingTimerUC),
 		SetDefaultDisappearingTimer: handlers.NewSetDefaultDisappearingTimerHandler(setDefaultDisappearingTimerUC),
 		StarMessage:                 handlers.NewStarMessageHandler(starMessageUC),

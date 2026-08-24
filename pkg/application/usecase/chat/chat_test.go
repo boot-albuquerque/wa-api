@@ -39,6 +39,11 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 			return chat.NewArchiveChatUseCase(co, jr, log).
 				Execute(context.Background(), userID, domain.ArchiveChatRequest{Jid: "5511@s.whatsapp.net"})
 		}},
+		{"PinChat", func(co *contractsfake.ChatOperations, jr *contractsfake.JIDResolver, log *contractsfake.Logger) (any, error) {
+			cp := &contractsfake.ChatPinner{SessionGuard: co.SessionGuard}
+			return chat.NewPinChatUseCase(cp, jr, log).
+				Execute(context.Background(), userID, domain.PinChatRequest{Jid: "5511@s.whatsapp.net"})
+		}},
 		{"RejectCall", func(co *contractsfake.ChatOperations, jr *contractsfake.JIDResolver, log *contractsfake.Logger) (any, error) {
 			return chat.NewRejectCallUseCase(co, jr, log).
 				Execute(context.Background(), userID, domain.RejectCallRequest{CallFrom: "5511@s.whatsapp.net", CallID: "c1"})
@@ -173,6 +178,99 @@ func TestArchiveChat(t *testing.T) {
 			call := co.ArchiveChatCalls[0]
 			if call.TxtID != userID || call.Chat != domain.JID("c@g.us") || call.Archive != tc.archive {
 				t.Errorf("archive=%v: ArchiveChat recebeu %+v", tc.archive, call)
+			}
+		}
+	})
+}
+
+// --- PinChat -----------------------------------------------------------
+
+func TestPinChat(t *testing.T) {
+	t.Run("jid ausente recusa antes do resolver", func(t *testing.T) {
+		cp, jr, log := &contractsfake.ChatPinner{}, &contractsfake.JIDResolver{}, &contractsfake.Logger{}
+
+		r, err := chat.NewPinChatUseCase(cp, jr, log).
+			Execute(context.Background(), userID, domain.PinChatRequest{})
+
+		if err == nil {
+			t.Fatal("jid vazio devia ser recusado")
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if len(jr.ResolveQualifiedJIDCalls) != 0 || len(cp.PinChatCalls) != 0 {
+			t.Error("recusa por payload nao devia tocar resolver nem porta")
+		}
+	})
+
+	t.Run("jid irresolvivel recusa antes de fixar", func(t *testing.T) {
+		cp := &contractsfake.ChatPinner{}
+		jr := &contractsfake.JIDResolver{ResolveQualifiedJIDFunc: func(context.Context, string) (domain.JID, error) {
+			return "", errJID
+		}}
+
+		r, err := chat.NewPinChatUseCase(cp, jr, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.PinChatRequest{Jid: "lixo"})
+
+		if err == nil {
+			t.Fatal("JID irresolvivel devia ser recusado")
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if len(cp.PinChatCalls) != 0 {
+			t.Error("PinChat nao devia ser chamada com JID invalido")
+		}
+	})
+
+	t.Run("falha da porta e' logada e embrulhada com a causa", func(t *testing.T) {
+		cp := &contractsfake.ChatPinner{PinChatFunc: func(context.Context, string, domain.JID, bool) error {
+			return errPorta
+		}}
+		log := &contractsfake.Logger{}
+
+		r, err := chat.NewPinChatUseCase(cp, &contractsfake.JIDResolver{}, log).
+			Execute(context.Background(), userID, domain.PinChatRequest{Jid: "c@g.us", Pin: true})
+
+		if !errors.Is(err, errPorta) {
+			t.Fatalf("a causa da porta se perdeu: %v", err)
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if !log.Logged("failed to pin chat") {
+			t.Errorf("falha nao foi logada: %v", log.Messages())
+		}
+	})
+
+	t.Run("fixar e desafixar produzem mensagens distintas", func(t *testing.T) {
+		cases := []struct {
+			pin  bool
+			want string
+		}{
+			{true, "Chat pinned"},
+			{false, "Chat unpinned"},
+		}
+		for _, tc := range cases {
+			cp := &contractsfake.ChatPinner{}
+			r, err := chat.NewPinChatUseCase(cp, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+				Execute(context.Background(), userID, domain.PinChatRequest{Jid: "c@g.us", Pin: tc.pin})
+
+			if err != nil {
+				t.Fatalf("pin=%v: erro inesperado: %v", tc.pin, err)
+			}
+			if !r.Success {
+				t.Errorf("pin=%v: Success = false", tc.pin)
+			}
+			if r.Message != tc.want {
+				t.Errorf("pin=%v: Message = %q, quero %q", tc.pin, r.Message, tc.want)
+			}
+			if len(cp.PinChatCalls) != 1 {
+				t.Fatalf("pin=%v: PinChat chamada %d vez(es)", tc.pin, len(cp.PinChatCalls))
+			}
+			call := cp.PinChatCalls[0]
+			if call.TxtID != userID || call.Chat != domain.JID("c@g.us") || call.Pin != tc.pin {
+				t.Errorf("pin=%v: PinChat recebeu %+v", tc.pin, call)
 			}
 		}
 	})

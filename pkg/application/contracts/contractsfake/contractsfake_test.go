@@ -513,6 +513,23 @@ func TestChatMuter(t *testing.T) {
 	}
 }
 
+func TestChatPinner(t *testing.T) {
+	f := &contractsfake.ChatPinner{}
+	ctx := context.Background()
+
+	if err := f.PinChat(ctx, "u1", "c@s", true); err != nil {
+		t.Errorf("PinChat = %v", err)
+	}
+	if c := f.PinChatCalls[0]; c.Chat != "c@s" || !c.Pin {
+		t.Errorf("PinChatCalls[0] = %+v", c)
+	}
+
+	f.PinChatFunc = func(context.Context, string, domain.JID, bool) error { return errBoom }
+	if err := f.PinChat(ctx, "u1", "", false); !errors.Is(err, errBoom) {
+		t.Errorf("PinChatFunc = %v", err)
+	}
+}
+
 func TestNewsletterReader(t *testing.T) {
 	f := &contractsfake.NewsletterReader{}
 	got, err := f.ListSubscribed(context.Background(), "u1")

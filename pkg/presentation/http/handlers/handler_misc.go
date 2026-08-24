@@ -15,7 +15,7 @@ import (
 	"wa-api/pkg/application/usecase/user"
 )
 
-// MiscHandlers agrupa os handlers de miscelânea (health, newsletter, privacy, calls, archive)
+// MiscHandlers agrupa os handlers de miscelânea (health, newsletter, privacy, calls, archive, pin)
 type MiscHandlers struct {
 	Health                      *GetHealthHandler
 	ListNewsletter              *ListNewsletterHandler
@@ -26,6 +26,7 @@ type MiscHandlers struct {
 	RequestUnavailableMessage   *RequestUnavailableMessageHandler
 	MuteChat                    *MuteChatHandler
 	ArchiveChat                 *ArchiveChatHandler
+	PinChat                     *PinChatHandler
 	SetDisappearingTimer        *SetDisappearingTimerHandler
 	SetDefaultDisappearingTimer *SetDefaultDisappearingTimerHandler
 	StarMessage                 *StarMessageHandler
@@ -250,6 +251,34 @@ func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.ArchiveChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
+		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
+		return
+	}
+	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
+		customhttp.RespondJSON(w, 500, nil, err)
+		return
+	}
+	customhttp.RespondJSON(w, 200, rsp, nil)
+}
+
+// PinChatHandler handles POST /chat/pin
+type PinChatHandler struct{ usecase *chat.PinChatUseCase }
+
+func NewPinChatHandler(uc *chat.PinChatUseCase) *PinChatHandler {
+	return &PinChatHandler{uc}
+}
+func (h *PinChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	const route = "/chat/pin"
+
+	id, ok := sessionUser(w, r)
+	if !ok {
+		return
+	}
+	var req domain.PinChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)

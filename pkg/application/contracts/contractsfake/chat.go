@@ -425,6 +425,35 @@ func (f *ChatOperations) SetDisappearingTimer(ctx context.Context, txtID string,
 	return nil
 }
 
+// --- ChatPinner -------------------------------------------------------
+
+// ChatPinnerPinChatCall is a call to PinChat.
+type ChatPinnerPinChatCall struct {
+	Ctx   context.Context
+	TxtID string
+	Chat  domain.JID
+	Pin   bool
+}
+
+// ChatPinner is the fake for port.ChatPinner.
+type ChatPinner struct {
+	SessionGuard
+
+	PinChatFunc  func(ctx context.Context, txtID string, chat domain.JID, pin bool) error
+	PinChatCalls []ChatPinnerPinChatCall
+}
+
+var _ port.ChatPinner = (*ChatPinner)(nil)
+
+// PinChat implements port.ChatPinner.
+func (f *ChatPinner) PinChat(ctx context.Context, txtID string, chat domain.JID, pin bool) error {
+	f.PinChatCalls = append(f.PinChatCalls, ChatPinnerPinChatCall{Ctx: ctx, TxtID: txtID, Chat: chat, Pin: pin})
+	if f.PinChatFunc != nil {
+		return f.PinChatFunc(ctx, txtID, chat, pin)
+	}
+	return nil
+}
+
 // --- DefaultDisappearingTimerSetter ------------------------------------
 
 // DefaultDisappearingTimerSetterCall é uma chamada a

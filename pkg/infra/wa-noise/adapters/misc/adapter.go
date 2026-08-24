@@ -59,11 +59,7 @@ func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain
 
 // StarMessage stars or unstars a message via app-state patch.
 func (a *MiscAdapter) StarMessage(ctx context.Context, txtID string, chat, sender domain.JID, messageID string, fromMe, star bool) error {
-	client, err := a.Client(txtID)
-	if err != nil {
-		return err
-	}
-	chatJID, err := wajid.ToJID(chat)
+	client, chatJID, err := a.clientAndJID(txtID, chat)
 	if err != nil {
 		return err
 	}
@@ -78,13 +74,24 @@ func (a *MiscAdapter) StarMessage(ctx context.Context, txtID string, chat, sende
 	return client.SendAppState(ctxWithTimeout, appstate.BuildStar(chatJID, senderJID, types.MessageID(messageID), fromMe, star))
 }
 
-// MuteChat mutes or unmutes a conversation via app-state patch.
-func (a *MiscAdapter) MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error {
-	client, err := a.Client(txtID)
+// PinChat pins or unpins a conversation in the chat list.
+//
+// Same shape as ArchiveChat: SendAppState with the builder, 30s timeout.
+func (a *MiscAdapter) PinChat(ctx context.Context, txtID string, chat domain.JID, pin bool) error {
+	client, parsed, err := a.clientAndJID(txtID, chat)
 	if err != nil {
 		return err
 	}
-	jid, err := wajid.ToJID(chat)
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+
+	return client.SendAppState(ctxWithTimeout, appstate.BuildPin(parsed, pin))
+}
+
+// MuteChat mutes or unmutes a conversation via app-state patch.
+func (a *MiscAdapter) MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error {
+	client, jid, err := a.clientAndJID(txtID, chat)
 	if err != nil {
 		return err
 	}
@@ -213,6 +220,7 @@ func (a *MiscAdapter) SetDefaultDisappearingTimer(ctx context.Context, txtID str
 var (
 	_ appport.ChatMuter                      = (*MiscAdapter)(nil)
 	_ appport.ChatOperations                 = (*MiscAdapter)(nil)
+	_ appport.ChatPinner                     = (*MiscAdapter)(nil)
 	_ appport.ProfileAccessProvider          = (*MiscAdapter)(nil)
 	_ appport.NewsletterReader               = (*MiscAdapter)(nil)
 	_ appport.AppStateSyncer                 = (*MiscAdapter)(nil)

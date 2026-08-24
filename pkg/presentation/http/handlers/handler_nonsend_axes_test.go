@@ -325,6 +325,22 @@ func nonSendAxisCases() []nonSendAxisCase {
 			},
 		},
 		{
+			nome:        "PinChat",
+			rota:        "/chat/pin",
+			validBody:   `{"jid":"5511999999999@s.whatsapp.net","pin":true}`,
+			decodeCause: nonSendAxisDecodeCauseSentinel,
+			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
+				cp := &contractsfake.ChatPinner{}
+				h := NewPinChatHandler(chat.NewPinChatUseCase(cp, &contractsfake.JIDResolver{}, silentLogger{}))
+				rec, recs := nonSendAxisServe(t, nonSendAxisRouter("/chat/pin", h), "/chat/pin", body, mut)
+				out := nonSendAxisOutcome{rec: rec, recs: recs, portCalls: len(cp.PinChatCalls)}
+				if out.portCalls > 0 {
+					out.portTxtID = cp.PinChatCalls[0].TxtID
+				}
+				return out
+			},
+		},
+		{
 			// POST /user/privacy chega pelo mesmo HandlerFunc que
 			// wiring_routes.go:161-167 registra para GET e POST; o
 			// roteador do caso reproduz esse desvio por metodo em vez de
@@ -387,6 +403,7 @@ func nonSendAxisCasesChecked(t *testing.T) []nonSendAxisCase {
 	want := []string{
 		"SendPresence", "SubscribePresence", "ChatPresence", "MarkRead", "React",
 		"RejectCall", "RequestUnavailableMessage", "MuteChat", "ArchiveChat", "StarMessage", "SetPrivacySetting",
+		"RejectCall", "RequestUnavailableMessage", "ArchiveChat", "PinChat", "SetPrivacySetting",
 		"DownloadImage", "DownloadVideo", "DownloadAudio", "DownloadDocument", "DownloadSticker",
 	}
 	if len(casos) != len(want) {
