@@ -18126,7 +18126,66 @@ decisão.
 
 ---
 
-<!-- f-status: aberto -->
+
+### CORRIGIDO 2026-08-24 — e o enunciado estava OBSOLETO
+
+O achado dizia que o teste "só olha para UM lado". **Já não é verdade**: as duas
+direções existem em `pkg/bootstrap/stdio_route_consistency_test.go`:
+
+- `TestStdioRoutesMatchRegisteredHTTPRoutes` (linha 30) — stdio -> HTTP
+- `TestRegisteredHTTPRoutesHaveStdioEntry` (linha 71) — HTTP -> stdio
+
+Foram tornadas bidirecionais na CAP-40, e ninguém fechou esta entrada. O
+"lado cego" de 28 rotas encolheu para **7**, todas rastreadas explicitamente na
+lista `knownPending`, que traz o comentário certo: *"that list tracks
+historical gaps and must shrink, not grow"*.
+
+As 7 que faltam, nominalmente — porque afirmação agregada não é evidência:
+
+```
+POST   /chat/downloadsticker
+POST   /group/updaterequestparticipants
+DELETE /session/s3/config
+POST   /hmac/configure
+POST   /webhook/history
+GET    /user/contacts/last-activity
+GET    /session/profile/full
+```
+
+### O que FALTAVA, e é o que esta sessão acrescentou
+
+A lista de exceções não se validava a si própria. Podia apodrecer de duas
+formas, e as duas passariam despercebidas:
+
+1. **Entrada fantasma**: a rota é removida do router, a entrada fica na lista.
+2. **Entrada resolvida**: a rota ganha stdio, e continua listada como pendente.
+
+Nos dois casos a lista mente sobre o tamanho do buraco — que é exatamente o
+defeito que esta entrada denunciava, com outra roupa.
+
+Acrescentadas duas auto-validações (`stdio_route_consistency_test.go:221-233`).
+
+**Controlo negativo EXECUTADO** por mim ao integrar, um por validação:
+
+```
+$ # entrada fantasma
+--- FAIL: TestRegisteredHTTPRoutesHaveStdioEntry
+    knownPending entry "POST /rota/fantasma/que-nao-existe" no longer exists
+    in the HTTP router — remove it
+
+$ # entrada ja' resolvida
+--- FAIL: TestRegisteredHTTPRoutesHaveStdioEntry
+    knownPending entry "POST /chat/send/text" is now covered by the stdio
+    table — remove it from knownPending
+```
+
+As mensagens dizem o que fazer, não só que falhou.
+
+**Status**: corrigido. A bidirecionalidade já existia; o que faltava era a
+lista de exceções não poder apodrecer em silêncio. As 7 rotas pendentes ficam
+rastreadas e o teste agora garante que a lista só encolhe.
+
+<!-- f-status: corrigido -->
 
 ## F174 — o caminho VIVO de link preview perdeu o cache e o limite de concorrência que o código morto tinha
 
