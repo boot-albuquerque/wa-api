@@ -171,6 +171,7 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 
 	type missing struct{ method, path string }
 	var uncovered []missing
+	routerKeys := make(map[string]bool)
 
 	err := router.Walk(func(route *mux.Route, _ *mux.Router, _ []*mux.Route) error {
 		methods, err := route.GetMethods()
@@ -183,6 +184,7 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		}
 		for _, m := range methods {
 			key := m + " " + pathTpl
+			routerKeys[key] = true
 			if coveredByStdio[key] || knownPending[key] {
 				continue
 			}
@@ -211,6 +213,23 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 			"  (2) add it to structuralExceptions with a structural justification.\n"+
 			"  Do NOT add it to knownPending — that list tracks historical gaps and must shrink, not grow.",
 			r.method, r.path)
+	}
+
+	// Self-validation: knownPending entries that no longer exist in the
+	// router are ghost entries — the route was removed but the pending
+	// entry stayed. Catch them so the list doesn't silently grow stale.
+	for key := range knownPending {
+		if !routerKeys[key] {
+			t.Errorf("knownPending entry %q no longer exists in the HTTP router — remove it", key)
+		}
+	}
+
+	// Self-validation: a knownPending entry that is ALSO covered by
+	// stdio means the gap was resolved but nobody cleaned the list.
+	for key := range knownPending {
+		if coveredByStdio[key] {
+			t.Errorf("knownPending entry %q is now covered by the stdio table — remove it from knownPending", key)
+		}
 	}
 }
 
