@@ -10,6 +10,7 @@ import (
 	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
+	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/egress"
 	"wa-api/pkg/infra/media/opengraph"
@@ -441,5 +442,29 @@ func initCustomHandlers(s *server) {
 // initConnectHandler creates a ConnectHandler wired to the SessionOrchestrator.
 func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
 	h := handlers.NewConnectHandler(uc)
-	return h.WithStartSession(s.startSession)
+	return h.WithStartSession(s.startSession).WithCheckOwnership(connectOwnershipCheck(s))
+}
+
+// connectOwnershipCheck returns a pre-check function for the ConnectHandler
+// (F108). The handler calls it SYNCHRONOUSLY before responding; a denial
+// becomes 409 at the HTTP boundary instead of a silent no-op behind a 200.
+//
+// The function calls claimSessionOwnership, which is idempotent for the same
+// owner: the goroutine's Start will claim the same lease again, succeed
+// because the owner is the same process, and release on failure via its own
+// defer. In `single` mode s.Leases is nil, so the claim always succeeds and
+// the handler never rejects.
+func connectOwnershipCheck(s *server) func(string) error {
+	return func(userID string) error {
+		if !claimSessionOwnership(s.Leases, userID) {
+			return apperr.New(
+				"session_owned_by_another_replica",
+				apperr.CategoryConflict,
+				"this session is owned by another replica; route the request to its owner",
+				false,
+				nil,
+			)
+		}
+		return nil
+	}
 }

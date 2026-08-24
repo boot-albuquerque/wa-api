@@ -627,3 +627,82 @@ func TestConnectHandler_WithoutStartSession_StillResponds(t *testing.T) {
 	}
 	logassert.NoSecrets(t, recs)
 }
+
+// F108: ownership denied must reach the client as 409, not as 200.
+//
+// Before this fix, the handler fired startSession in a goroutine and
+// responded 200 "connecting" without knowing whether ownership was denied.
+// The client received success for a request that would never connect.
+
+// TestConnectHandler_OwnershipDenied_409: when CheckOwnership rejects, the
+// handler responds 409 with the classified error — not 200.
+func TestConnectHandler_OwnershipDenied_409(t *testing.T) {
+	ownershipErr := apperr.New(
+		"session_owned_by_another_replica",
+		apperr.CategoryConflict,
+		"this session is owned by another replica; route the request to its owner",
+		false,
+		nil,
+	)
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
+		WithStartSession(func(string, string) { t.Fatal("StartSession must not be called when ownership is denied") }).
+		WithCheckOwnership(func(string) error { return ownershipErr })
+
+	rec, recs := serveSession(t, h, http.MethodGet, "/session/connect", "", "user-1", true)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d, want 409 — CategoryConflict must reach the HTTP boundary (body: %s)",
+			rec.Code, rec.Body.String())
+	}
+	errObj, ok := sessionEnvelope(t, rec)["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("envelope.error is not the typed object from ADR-002: %s", rec.Body.String())
+	}
+	if errObj["code"] != "session_owned_by_another_replica" {
+		t.Fatalf("error.code = %v, want session_owned_by_another_replica", errObj["code"])
+	}
+	got := logassert.OutcomeLogged(t, recs, "owned by another replica")
+	if got.str("level") != "warn" {
+		t.Fatalf("level %q for a 409 (client-side), want warn", got.str("level"))
+	}
+	if got.str("user_id") != "user-1" {
+		t.Fatalf("log record without correlatable user_id: %s", got.Raw)
+	}
+}
+
+// TestConnectHandler_OwnershipGranted_200: when CheckOwnership passes, the
+// handler proceeds normally — the check must not block the happy path.
+func TestConnectHandler_OwnershipGranted_200(t *testing.T) {
+	started := make(chan string, 1)
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
+		WithStartSession(func(userID, _ string) { started <- userID }).
+		WithCheckOwnership(func(string) error { return nil })
+
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect", "", "user-1", true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	uid := <-started
+	if uid != "user-1" {
+		t.Fatalf("StartSession received userID %q, want user-1", uid)
+	}
+}
+
+// TestConnectHandler_WithoutCheckOwnership_200: without the check installed
+// (single mode), the handler behaves exactly as before F108.
+func TestConnectHandler_WithoutCheckOwnership_200(t *testing.T) {
+	started := make(chan string, 1)
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
+		WithStartSession(func(userID, _ string) { started <- userID })
+
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect", "", "user-1", true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	uid := <-started
+	if uid != "user-1" {
+		t.Fatalf("StartSession received userID %q, want user-1", uid)
+	}
+}

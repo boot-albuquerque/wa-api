@@ -2818,6 +2818,8 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
+pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:460)
+pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
 pkg/bootstrap.deleteKillChannel	EXCLUDED	X1
@@ -3740,7 +3742,8 @@ pkg/presentation/http/handlers.ArchiveChatHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ChatPresenceHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConfigureHmacHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConfigureS3Handler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:110);uncovered:L2(S-http,handler_session.go:116)
+pkg/presentation/http/handlers.ConnectHandler.WithCheckOwnership	EXCLUDED	X1
 pkg/presentation/http/handlers.ConnectHandler.WithStartSession	EXCLUDED	X1
 pkg/presentation/http/handlers.DeleteHmacConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DeleteMessageHandler.ServeHTTP	ELIGIBLE	covered

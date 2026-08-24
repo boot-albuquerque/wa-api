@@ -55,8 +55,9 @@ func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 // ConnectHandler handles GET /session/connect. After validation, it spawns
 // a goroutine to start the WhatsApp WebSocket connection.
 type ConnectHandler struct {
-	usecase      *session.ConnectUseCase
-	StartSession func(userID, token string) // injected by bootstrap
+	usecase        *session.ConnectUseCase
+	StartSession   func(userID, token string) // injected by bootstrap
+	CheckOwnership func(userID string) error  // injected by bootstrap (F108)
 }
 
 func NewConnectHandler(uc *session.ConnectUseCase) *ConnectHandler {
@@ -68,6 +69,17 @@ func NewConnectHandler(uc *session.ConnectUseCase) *ConnectHandler {
 // attach hook, so the handler no longer creates one.
 func (h *ConnectHandler) WithStartSession(fn func(userID, token string)) *ConnectHandler {
 	h.StartSession = fn
+	return h
+}
+
+// WithCheckOwnership injects a synchronous ownership pre-check (F108).
+//
+// Without it, ownership is verified inside startSession — which runs in a
+// goroutine AFTER the handler already responded 200. If ownership is denied
+// the client receives 200 {"status":"connecting"} and nothing connects: the
+// response lies.
+func (h *ConnectHandler) WithCheckOwnership(fn func(userID string) error) *ConnectHandler {
+	h.CheckOwnership = fn
 	return h
 }
 
@@ -87,6 +99,25 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
+
+	// F108: ownership check BEFORE responding. Without this, the handler
+	// fires startSession in a goroutine and responds 200 "connecting" without
+	// knowing whether ownership was denied — the client receives success for
+	// a request that will never connect. The check is idempotent: the
+	// orchestrator claims the same lease again inside Start, succeeds because
+	// the owner is the same process, and releases on failure via its own defer.
+	if h.CheckOwnership != nil {
+		if ownerErr := h.CheckOwnership(id); ownerErr != nil {
+			if isClientCausedSessionError(ownerErr) {
+				hlog.FromRequest(r).Warn().Err(ownerErr).Str("handler", "Connect").Str("user_id", id).Msg("session ownership denied")
+			} else {
+				hlog.FromRequest(r).Error().Err(ownerErr).Str("handler", "Connect").Str("user_id", id).Msg("session ownership denied")
+			}
+			customhttp.RespondJSON(w, 500, nil, ownerErr)
+			return
+		}
+	}
+
 	hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartSession", h.StartSession != nil).Msg("ConnectHandler starting WhatsApp client")
 	// Fire-and-forget: start WhatsApp client in background
 	if h.StartSession != nil {

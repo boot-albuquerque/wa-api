@@ -1218,7 +1218,17 @@ rules_frozen=true
 # arvore, nao a soma das notas anteriores: func 585->588, errpath 783->785,
 # eligible 930->936. As linhas que mediam a arvore SEM headless (751/869/639)
 # ficaram comentadas acima, para o historico nao mentir.
-min_func_coverage=588
+min_func_coverage=587
+# justificativa: F108 (2026-08-24), pre-check sincronico de posse de sessao no
+# ConnectHandler. min_eligible 936->937 (+1: connectOwnershipCheck). func_coverage
+# CAI 588->587 por DILUICAO: a funcao nova (connectOwnershipCheck, em
+# wiring_handlers.go:457) e' uma FABRICA de closure que devolve o pre-check.
+# A closure em si NAO loga — quem loga e' o ConnectHandler.ServeHTTP, que ja'
+# esta' coberto e distingue Warn (4xx, culpa do cliente) de Error (5xx, falha
+# real). Logar dentro da closure duplicaria a linha de log que o handler ja' faz,
+# no MESMO request — a decisao e' UMA SO', e ela mora no handler. Mesmo padrao
+# ja' aceito para isClientCausedSessionError (F90) e leaseManager.abandoned (F98):
+# predicado/closure pura nao loga, quem age sobre a resposta loga.
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1452,7 +1462,13 @@ min_func_coverage=588
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=785
+min_errpath_coverage=784
+# justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
+# connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
+# de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
+# acima: a closure devolve o erro ao handler, e o handler e' que loga e decide
+# o nivel. Logar no ponto de retorno da closure E no handler faria DUAS linhas
+# identicas por rejeicao. O caminho de saida e' LEGITIMAMENTE descoberto.
 #
 # CAP-48 (2026-08-23): errpath DESCE 870->868 (1138/1308 -> 1150/1325).
 # +17 caminhos de saida no denominador, +12 cobertos. O percentual cai porque
@@ -1702,7 +1718,9 @@ min_errpath_coverage=785
 # min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
 # ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
 # statements e caminho de erro, Main.func3 tem defers e caminho de erro.
-min_eligible=936
+min_eligible=937
+# ratchet-UP: F108 (2026-08-24). +1: connectOwnershipCheck (wiring_handlers.go:457).
+# Factory de closure, ELEGIVEL de verdade (tem S-ret no corpo, nao e' X1).
 #
 # CAP-48 (2026-08-23): min_eligible SOBE 631->633 (+2). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute e

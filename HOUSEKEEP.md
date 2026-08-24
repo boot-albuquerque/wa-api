@@ -3687,10 +3687,14 @@ Postgres em modo `single` não são detectadas — é para isso que existe `mult
 com lease (D2). O caso coberto é o que de fato acontece: alguém sobe um segundo
 processo sem perceber.
 
-**Status**: **parcialmente corrigido** — D1 do ADR-0005 implementado e
-verificado. D2 (lease), D3 (outbox) e D6 (saúde separada) seguem abertos. Em
-`multi` o processo avisa em `Warn` que a posse por lease ainda não existe e que
-não se deve subir mais de uma réplica.
+**Status**: **parcialmente corrigido** — D1 (flock) e D2 (lease) do ADR-0005
+implementados e verificados. F108 (2026-08-24) fecha o buraco observável da D2:
+o `ConnectHandler` agora verifica a posse SINCRONAMENTE e responde 409 quando
+negada, em vez de despachar e mentir com 200. Testes: handler
+(`TestConnectHandler_OwnershipDenied_409`, `TestConnectHandler_OwnershipGranted_200`,
+`TestConnectHandler_WithoutCheckOwnership_200`) e fiação
+(`TestConnectOwnershipCheckIsWired`, `TestConnectOwnershipCheckGranted_200`),
+ambos via rota registrada. D3 (outbox) e D6 (saúde separada) seguem abertos.
 
 ---
 
@@ -4232,11 +4236,17 @@ que clientes já recebem. Para a posse de sessão isso é seguro (código novo,
 sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
 decidida como tal.
 
-**Status**: **não corrigido** — registrado com os dois sites que já sofrem.
+**Status**: **corrigido** (2026-08-08, confirmado em 2026-08-24).
+`CategoryConflict` já existia em `pkg/domain/apperr/codes.go:44`, mapeando para
+409 em `pkg/domain/apperr/codes.go:132-133`. Dois testes de mapeamento
+(`TestCategory_HTTPStatus`, `TestCategoryConflict_HTTPStatus`) e dois sites de
+uso (`orchestrator.go:codeSessionOwnedByAnotherReplica`,
+`wiring_handlers.go:connectOwnershipCheck`). A entrada estava desatualizada — a
+correção foi feita na sessão da F89/D2 (ADR-0005), mas o status não acompanhou.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F94 — o harness do estudo desligava o Chromium por sinal nos modos que carregam a credencial do WhatsApp
 
@@ -9201,12 +9211,57 @@ dono (D5): a requisição cai em qualquer pod, e a maioria dos pods não é o do
 o D5 vai precisar de qualquer forma — 409 com o dono, ou encaminhar. Isso se
 resolve junto com a decisão 2 do ADR-0007, não separado.
 
-**Status**: **não corrigido** — está no caminho da Fase 4 do ADR-0007, e
-corrigir antes seria decidir o roteamento por acidente.
+**Status**: **corrigido** (2026-08-24).
+
+O `ConnectHandler` agora verifica a posse SINCRONAMENTE, via
+`CheckOwnership func(userID string) error` (campo novo), chamado ANTES de
+responder. Quando a posse é negada, o handler responde 409 (via
+`CategoryConflict` da `apperr`) em vez de 200 "connecting". Em `single` mode
+(`s.Leases == nil`), `claimSessionOwnership` retorna `true` e o handler nunca
+rejeita — compatibilidade total.
+
+**Fiação**: `wiring_handlers.go:445` encadeia
+`.WithCheckOwnership(connectOwnershipCheck(s))` ao `ConnectHandler`.
+`connectOwnershipCheck` é uma factory que devolve uma closure chamando
+`claimSessionOwnership`; a closure retorna `apperr.New` com `CategoryConflict`
+quando negada. O handler escolhe o nível do log: Warn para 4xx (cliente), Error
+para 5xx (falha real).
+
+**Testes**:
+
+| teste | arquivo | o que prova |
+|---|---|---|
+| `TestConnectHandler_OwnershipDenied_409` | `handler_session_test.go` | status 409, `error.code`, log warn, `user_id` |
+| `TestConnectHandler_OwnershipGranted_200` | `handler_session_test.go` | 200 e `StartSession` invocado |
+| `TestConnectHandler_WithoutCheckOwnership_200` | `handler_session_test.go` | `single` mode funciona sem check |
+| `TestConnectOwnershipCheckIsWired` | `connect_ownership_wiring_test.go` | fiação liga `CheckOwnership`, 409 pela rota registrada |
+| `TestConnectOwnershipCheckGranted_200` | `connect_ownership_wiring_test.go` | happy path pela rota registrada |
+
+**Controles negativos executados** (dois, cada um morde por razão diferente):
+
+CN-1 — remoção de `.WithCheckOwnership(...)` de `wiring_handlers.go:445`:
+```
+--- FAIL: TestConnectOwnershipCheckIsWired (0.03s)
+    connect_ownership_wiring_test.go:36: CheckOwnership is nil after initCustomHandlers —
+    the wiring in initConnectHandler (wiring_handlers.go) no longer calls
+    .WithCheckOwnership(...). Without it, GET /session/connect responds 200
+    {"status":"connecting"} when ownership is denied: the response lies (F108).
+```
+
+CN-2 — remoção do bloco `if h.CheckOwnership != nil` de `handler_session.go`:
+```
+--- FAIL: TestConnectHandler_OwnershipDenied_409 (0.00s)
+    handler_session_test.go:648: StartSession must not be called when ownership is denied
+    handler_session_test.go:654: status 200, want 409 — CategoryConflict must reach the
+    HTTP boundary (body: {"code":200,"data":{"status":"connecting"},"success":true})
+```
+
+Nos DOIS casos o status era 200 — confirmação empírica de que o defeito é
+silencioso e só o teste o pega. Código restaurado e conferido após cada CN.
 
 ---
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F109 — retomada de lease EXPIRADO é indistinguível de renovação normal, e não deixa rastro
 
@@ -18554,6 +18609,17 @@ não é formalidade num teste que envolve goroutine e canal.
 
 **Gate**: `make check` EXIT 0, rodado por mim. Zero arquivos deletados, zero
 testes removidos, um acrescentado. Conjunto elegível IDÊNTICO — nada a regenerar.
+
+**Controle negativo adicional (2026-08-24, sessão F108)**: remoção de
+`.WithStartSession(s.startSession)` de `wiring_handlers.go:445`:
+```
+--- FAIL: TestStartSessionIsWiredIntoConnectHandler (0.01s)
+    start_session_wiring_test.go:95: StartSession is nil after initCustomHandlers —
+    the wiring in initConnectHandler (wiring_handlers.go:410) no longer calls
+    .WithStartSession(s.startSession). Without it, GET /session/connect responds
+    200 {"status":"connecting"} but no WhatsApp session starts: the response lies.
+```
+Código restaurado após CN.
 
 **Status da parte (2), a RESPOSTA QUE MENTE**: não corrigido, e não é meu.
 Decidir se `200 "connecting"` sem lançador é aceitável é CONTRATO HTTP, item
