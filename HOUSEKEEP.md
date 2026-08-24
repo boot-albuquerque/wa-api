@@ -24668,3 +24668,69 @@ exigência inexistente faz a próxima pessoa construir plumbing para a satisfaze
 O custo de o deixar lá é maior que o de o corrigir.
 
 <!-- f-status: corrigido -->
+
+## F223 — patches `regular_high` falham com `mismatching LTHash`, e a rota devolve 500
+
+**Data**: 2026-08-24
+**Contexto**: primeiro teste em campo das CAP-52/53/54 (mute, pin, star), com
+datadir NOVO e duas sessões pareadas de raiz.
+
+**Onde**: caminho de `SendAppState`, visível em
+`pkg/infra/wa-noise/adapters/misc/adapter.go` (as três capabilities) e no
+tratamento de erro que sobe até ao handler.
+
+**Medição em campo** — três rotas, mesma sessão, mesmo instante:
+
+| rota | tipo de patch | resultado |
+|---|---|---|
+| `POST /chat/pin` | `WAPatchRegularLow` | **200 OK** |
+| `POST /chat/mute` | `WAPatchRegularHigh` | **500** |
+| `POST /message/star` | `WAPatchRegularHigh` | **500** |
+
+Repetido nas DUAS sessões (`lucas`, com `regular_high` na versão 301, e
+`filarapida`, conta nova, versão 63). Falha nas duas.
+
+O erro real, do log:
+
+```
+WRN Failed to update app state, trying to apply conflicts and retry
+    error="server returned error updating app state (regular_high):
+           <error code="409" text="conflict"/>"
+ERR failed to star message: ... (also, applying patches in the response failed:
+    failed to decode app state regular_high patches:
+    failed to verify patch v64: mismatching LTHash)
+```
+
+**Diagnóstico**: o servidor recusa o patch com `409 conflict`; o cliente tenta
+reconciliar buscando os patches do servidor; a reconciliação falha a **verificar
+o LTHash** do patch recebido. A nossa cópia local de `regular_high` divergiu da
+do servidor e o mecanismo de recuperação não consegue convergir.
+
+**Não é defeito das rotas novas.** O `pin` prova isso: mesma sessão, mesmo
+adapter, mesmo `SendAppState`, mas `regular_low` — e passa. O que separa as
+três é o TIPO de patch.
+
+**Dois problemas distintos, e o segundo é nosso:**
+
+1. **A dessincronização do `regular_high`** — do fork ou do estado da conta.
+   Precisa de investigação própria: ver se um `FetchAppState` forçado converge,
+   e se o `mismatching LTHash` vem de patch que nós escrevemos ou de estado
+   pré-existente.
+
+2. **A classificação do erro está errada, e essa é nossa.** Um `409 conflict`
+   do servidor sobe como **500 internal server error**. A F95 acrescentou
+   `CategoryConflict` precisamente para isto, e este caminho não a usa. Quem
+   chama a API não consegue distinguir "conflito de estado, tenta outra vez"
+   de "o servidor rebentou".
+
+**Correção sugerida (2)**: classificar o erro de app-state com conflito como
+`CategoryConflict` → 409, com mensagem que diga que é dessincronização de
+estado. É pequeno e independente de (1).
+
+**Correção sugerida (1)**: medir primeiro. Não implementar reconciliação nova
+sem saber se a existente falha sempre ou só neste estado.
+
+**Status**: não corrigido. Achado de campo, no primeiro teste real das três
+capabilities.
+
+<!-- f-status: aberto -->
