@@ -24,6 +24,7 @@ type MiscHandlers struct {
 	GetPrivacySettings          *GetPrivacySettingsHandler
 	SetPrivacySetting           *SetPrivacySettingHandler
 	RequestUnavailableMessage   *RequestUnavailableMessageHandler
+	MuteChat                    *MuteChatHandler
 	ArchiveChat                 *ArchiveChatHandler
 	SetDisappearingTimer        *SetDisappearingTimerHandler
 	SetDefaultDisappearingTimer *SetDefaultDisappearingTimerHandler
@@ -193,6 +194,34 @@ func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *h
 		return
 	}
 	var req domain.RequestUnavailableMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
+		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
+		return
+	}
+	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	if err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
+		customhttp.RespondJSON(w, 500, nil, err)
+		return
+	}
+	customhttp.RespondJSON(w, 200, rsp, nil)
+}
+
+// MuteChatHandler handles POST /chat/mute
+type MuteChatHandler struct{ usecase *chat.MuteChatUseCase }
+
+func NewMuteChatHandler(uc *chat.MuteChatUseCase) *MuteChatHandler {
+	return &MuteChatHandler{uc}
+}
+func (h *MuteChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	const route = "/chat/mute"
+
+	id, ok := sessionUser(w, r)
+	if !ok {
+		return
+	}
+	var req domain.MuteChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)

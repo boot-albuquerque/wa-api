@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gorilla/mux"
 	_ "modernc.org/sqlite"
@@ -244,6 +245,19 @@ func miscBodyCases() []miscBodyCase {
 				}
 			},
 			opErr: "failed to send unavailable message request",
+		},
+		{
+			name: "MuteChat",
+			path: "/chat/mute",
+			build: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, jids *contractsfake.JIDResolver) http.Handler {
+				return NewMuteChatHandler(chat.NewMuteChatUseCase(ops, jids, log))
+			},
+			validBody:    `{"jid":"5511999999999@s.whatsapp.net","mute":true}`,
+			emptyBodyErr: "missing jid in payload",
+			failOp: func(ops *contractsfake.ChatOperations, _ *contractsfake.PrivacyManager, err error) {
+				ops.MuteChatFunc = func(context.Context, string, domain.JID, bool, time.Duration) error { return err }
+			},
+			opErr: "failed to mute chat",
 		},
 		{
 			name: "ArchiveChat",

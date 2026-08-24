@@ -452,6 +452,9 @@ func TestChatOperations(t *testing.T) {
 	if err := f.ArchiveChat(ctx, "u1", "c@s", true); err != nil {
 		t.Errorf("ArchiveChat = %v", err)
 	}
+	if err := f.MuteChat(ctx, "u1", "c@s", true, 8*time.Hour); err != nil {
+		t.Errorf("MuteChat = %v", err)
+	}
 	if err := f.RejectCall(ctx, "u1", "f@s", "call-1"); err != nil {
 		t.Errorf("RejectCall = %v", err)
 	}
@@ -463,6 +466,9 @@ func TestChatOperations(t *testing.T) {
 	if c := f.ArchiveChatCalls[0]; c.Chat != "c@s" || !c.Archive {
 		t.Errorf("ArchiveChatCalls[0] = %+v", c)
 	}
+	if c := f.MuteChatCalls[0]; c.Chat != "c@s" || !c.Mute || c.MuteDuration != 8*time.Hour {
+		t.Errorf("MuteChatCalls[0] = %+v", c)
+	}
 	if c := f.RejectCallCalls[0]; c.From != "f@s" || c.CallID != "call-1" {
 		t.Errorf("RejectCallCalls[0] = %+v", c)
 	}
@@ -471,6 +477,7 @@ func TestChatOperations(t *testing.T) {
 	}
 
 	f.ArchiveChatFunc = func(context.Context, string, domain.JID, bool) error { return errBoom }
+	f.MuteChatFunc = func(context.Context, string, domain.JID, bool, time.Duration) error { return errBoom }
 	f.RejectCallFunc = func(context.Context, string, domain.JID, string) error { return errBoom }
 	f.RequestUnavailableMessageFunc = func(context.Context, string, domain.JID, domain.JID, string) (domain.UnavailableMessageAck, error) {
 		return domain.UnavailableMessageAck{}, errBoom
@@ -478,11 +485,31 @@ func TestChatOperations(t *testing.T) {
 	if err := f.ArchiveChat(ctx, "u1", "", false); !errors.Is(err, errBoom) {
 		t.Errorf("ArchiveChatFunc = %v", err)
 	}
+	if err := f.MuteChat(ctx, "u1", "", false, 0); !errors.Is(err, errBoom) {
+		t.Errorf("MuteChatFunc = %v", err)
+	}
 	if err := f.RejectCall(ctx, "u1", "", ""); !errors.Is(err, errBoom) {
 		t.Errorf("RejectCallFunc = %v", err)
 	}
 	if _, err := f.RequestUnavailableMessage(ctx, "u1", "", "", ""); !errors.Is(err, errBoom) {
 		t.Errorf("RequestUnavailableMessageFunc = %v", err)
+	}
+}
+
+func TestChatMuter(t *testing.T) {
+	f := &contractsfake.ChatMuter{}
+	ctx := context.Background()
+
+	if err := f.MuteChat(ctx, "u1", "c@s", true, 8*time.Hour); err != nil {
+		t.Errorf("MuteChat = %v", err)
+	}
+	if c := f.MuteChatCalls[0]; c.Chat != "c@s" || !c.Mute || c.MuteDuration != 8*time.Hour {
+		t.Errorf("MuteChatCalls[0] = %+v", c)
+	}
+
+	f.MuteChatFunc = func(context.Context, string, domain.JID, bool, time.Duration) error { return errBoom }
+	if err := f.MuteChat(ctx, "u1", "", false, 0); !errors.Is(err, errBoom) {
+		t.Errorf("MuteChatFunc = %v", err)
 	}
 }
 

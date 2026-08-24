@@ -291,6 +291,36 @@ func (f *ChatMessenger) SendPollVote(ctx context.Context, txtID string, target d
 	return domain.MessageSendResult{}, nil
 }
 
+// --- ChatMuter --------------------------------------------------------
+
+// ChatMuterMuteChatCall records a call to MuteChat.
+type ChatMuterMuteChatCall struct {
+	Ctx          context.Context
+	TxtID        string
+	Chat         domain.JID
+	Mute         bool
+	MuteDuration time.Duration
+}
+
+// ChatMuter is the fake for port.ChatMuter.
+type ChatMuter struct {
+	SessionGuard
+
+	MuteChatFunc  func(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error
+	MuteChatCalls []ChatMuterMuteChatCall
+}
+
+var _ port.ChatMuter = (*ChatMuter)(nil)
+
+// MuteChat implements port.ChatMuter.
+func (f *ChatMuter) MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error {
+	f.MuteChatCalls = append(f.MuteChatCalls, ChatMuterMuteChatCall{Ctx: ctx, TxtID: txtID, Chat: chat, Mute: mute, MuteDuration: muteDuration})
+	if f.MuteChatFunc != nil {
+		return f.MuteChatFunc(ctx, txtID, chat, mute, muteDuration)
+	}
+	return nil
+}
+
 // --- ChatOperations ----------------------------------------------------
 
 // ChatOperationsArchiveChatCall é uma chamada a ArchiveChat.
@@ -335,6 +365,9 @@ type ChatOperations struct {
 	ArchiveChatFunc  func(ctx context.Context, txtID string, chat domain.JID, archive bool) error
 	ArchiveChatCalls []ChatOperationsArchiveChatCall
 
+	MuteChatFunc  func(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error
+	MuteChatCalls []ChatMuterMuteChatCall
+
 	RejectCallFunc  func(ctx context.Context, txtID string, from domain.JID, callID string) error
 	RejectCallCalls []ChatOperationsRejectCallCall
 
@@ -352,6 +385,15 @@ func (f *ChatOperations) ArchiveChat(ctx context.Context, txtID string, chat dom
 	f.ArchiveChatCalls = append(f.ArchiveChatCalls, ChatOperationsArchiveChatCall{Ctx: ctx, TxtID: txtID, Chat: chat, Archive: archive})
 	if f.ArchiveChatFunc != nil {
 		return f.ArchiveChatFunc(ctx, txtID, chat, archive)
+	}
+	return nil
+}
+
+// MuteChat implements port.ChatOperations.
+func (f *ChatOperations) MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error {
+	f.MuteChatCalls = append(f.MuteChatCalls, ChatMuterMuteChatCall{Ctx: ctx, TxtID: txtID, Chat: chat, Mute: mute, MuteDuration: muteDuration})
+	if f.MuteChatFunc != nil {
+		return f.MuteChatFunc(ctx, txtID, chat, mute, muteDuration)
 	}
 	return nil
 }

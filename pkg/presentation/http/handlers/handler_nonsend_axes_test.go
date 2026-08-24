@@ -277,6 +277,22 @@ func nonSendAxisCases() []nonSendAxisCase {
 			},
 		},
 		{
+			nome:        "MuteChat",
+			rota:        "/chat/mute",
+			validBody:   `{"jid":"5511999999999@s.whatsapp.net","mute":true}`,
+			decodeCause: nonSendAxisDecodeCauseSentinel,
+			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
+				ops := &contractsfake.ChatOperations{}
+				h := NewMuteChatHandler(chat.NewMuteChatUseCase(ops, &contractsfake.JIDResolver{}, silentLogger{}))
+				rec, recs := nonSendAxisServe(t, nonSendAxisRouter("/chat/mute", h), "/chat/mute", body, mut)
+				out := nonSendAxisOutcome{rec: rec, recs: recs, portCalls: len(ops.MuteChatCalls)}
+				if out.portCalls > 0 {
+					out.portTxtID = ops.MuteChatCalls[0].TxtID
+				}
+				return out
+			},
+		},
+		{
 			nome:        "ArchiveChat",
 			rota:        "/chat/archive",
 			validBody:   `{"jid":"5511999999999@s.whatsapp.net","archive":true}`,
@@ -363,14 +379,14 @@ func nonSendAxisCases() []nonSendAxisCase {
 }
 
 // nonSendAxisCasesChecked devolve a tabela depois de verificar que ela ainda
-// cobre as capabilities do CAP-19+, na ordem, por NOME. Uma capability
+// cobre as DEZASSEIS capabilities non-send, na ordem, por NOME. Uma capability
 // removida em silencio levaria os cinco eixos junto, sem nenhuma falha.
 func nonSendAxisCasesChecked(t *testing.T) []nonSendAxisCase {
 	t.Helper()
 	casos := nonSendAxisCases()
 	want := []string{
 		"SendPresence", "SubscribePresence", "ChatPresence", "MarkRead", "React",
-		"RejectCall", "RequestUnavailableMessage", "ArchiveChat", "StarMessage", "SetPrivacySetting",
+		"RejectCall", "RequestUnavailableMessage", "MuteChat", "ArchiveChat", "StarMessage", "SetPrivacySetting",
 		"DownloadImage", "DownloadVideo", "DownloadAudio", "DownloadDocument", "DownloadSticker",
 	}
 	if len(casos) != len(want) {

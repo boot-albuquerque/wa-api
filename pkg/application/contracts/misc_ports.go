@@ -32,6 +32,15 @@ type ChatArchiver interface {
 	ArchiveChat(ctx context.Context, txtID string, chat domain.JID, archive bool) error
 }
 
+// ChatMuter mutes and unmutes conversations.
+type ChatMuter interface {
+	SessionGuard
+
+	// MuteChat mutes or unmutes a conversation. When muting,
+	// muteDuration controls for how long (zero = forever).
+	MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error
+}
+
 // CallRejecter rejeita chamadas recebidas.
 type CallRejecter interface {
 	SessionGuard
@@ -74,6 +83,7 @@ type DefaultDisappearingTimerSetter interface {
 // pedir: pedir a composição é voltar a exigir capacidades que não se usa.
 type ChatOperations interface {
 	ChatArchiver
+	ChatMuter
 	CallRejecter
 	UnavailableMessageRequester
 }

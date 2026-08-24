@@ -70,6 +70,7 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | GET | `/chat/list` | lista as conversas |
 | GET | `/chat/history` | histórico de mensagens de uma conversa |
 | POST | `/chat/archive` | arquivar / desarquivar |
+| POST | `/chat/mute` | silenciar / dessilenciar (8h, 1 semana, sempre) (CAP-52) |
 | POST | `/chat/delete` | apagar conversa |
 | POST | `/chat/markread` | marcar como lida |
 | POST | `/chat/presence` | "a escrever" / "a gravar" |

@@ -43,6 +43,10 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 			return chat.NewRejectCallUseCase(co, jr, log).
 				Execute(context.Background(), userID, domain.RejectCallRequest{CallFrom: "5511@s.whatsapp.net", CallID: "c1"})
 		}},
+		{"MuteChat", func(co *contractsfake.ChatOperations, jr *contractsfake.JIDResolver, log *contractsfake.Logger) (any, error) {
+			return chat.NewMuteChatUseCase(co, jr, log).
+				Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "5511@s.whatsapp.net", Mute: true})
+		}},
 		{"RequestUnavailableMessage", func(co *contractsfake.ChatOperations, jr *contractsfake.JIDResolver, log *contractsfake.Logger) (any, error) {
 			return chat.NewRequestUnavailableMessageUseCase(co, jr, log).
 				Execute(context.Background(), userID, domain.RequestUnavailableMessageRequest{Chat: "c@g.us", Sender: "s@s.whatsapp.net", ID: "m1"})
@@ -399,6 +403,157 @@ func TestRequestUnavailableMessage(t *testing.T) {
 		call := co.RequestUnavailableMessageCalls[0]
 		if call.Chat != domain.JID(completo.Chat) || call.Sender != domain.JID(completo.Sender) || call.MessageID != completo.ID {
 			t.Errorf("porta recebeu %+v", call)
+		}
+	})
+}
+
+// --- MuteChat -----------------------------------------------------------
+
+func TestMuteChat(t *testing.T) {
+	eightHours := 8 * time.Hour
+	oneWeek := 7 * 24 * time.Hour
+	badDuration := 3 * time.Hour
+
+	t.Run("jid ausente recusa antes do resolver", func(t *testing.T) {
+		cm, jr, log := &contractsfake.ChatMuter{}, &contractsfake.JIDResolver{}, &contractsfake.Logger{}
+
+		r, err := chat.NewMuteChatUseCase(cm, jr, log).
+			Execute(context.Background(), userID, domain.MuteChatRequest{})
+
+		if err == nil {
+			t.Fatal("jid vazio devia ser recusado")
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if len(jr.ResolveQualifiedJIDCalls) != 0 || len(cm.MuteChatCalls) != 0 {
+			t.Error("recusa por payload nao devia tocar resolver nem porta")
+		}
+	})
+
+	t.Run("jid irresolvivel recusa antes de silenciar", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{}
+		jr := &contractsfake.JIDResolver{ResolveQualifiedJIDFunc: func(context.Context, string) (domain.JID, error) {
+			return "", errJID
+		}}
+
+		r, err := chat.NewMuteChatUseCase(cm, jr, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "lixo", Mute: true})
+
+		if err == nil {
+			t.Fatal("JID irresolvivel devia ser recusado")
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if len(cm.MuteChatCalls) != 0 {
+			t.Error("MuteChat nao devia ser chamada com JID invalido")
+		}
+	})
+
+	t.Run("duracao invalida recusa antes da porta", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{}
+
+		r, err := chat.NewMuteChatUseCase(cm, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "c@g.us", Mute: true, MuteDuration: &badDuration})
+
+		if err == nil {
+			t.Fatal("duracao invalida devia ser recusada")
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if len(cm.MuteChatCalls) != 0 {
+			t.Error("MuteChat nao devia ser chamada com duracao invalida")
+		}
+	})
+
+	t.Run("falha da porta e' logada e embrulhada com a causa", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{MuteChatFunc: func(context.Context, string, domain.JID, bool, time.Duration) error {
+			return errPorta
+		}}
+		log := &contractsfake.Logger{}
+
+		r, err := chat.NewMuteChatUseCase(cm, &contractsfake.JIDResolver{}, log).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "c@g.us", Mute: true})
+
+		if !errors.Is(err, errPorta) {
+			t.Fatalf("a causa da porta se perdeu: %v", err)
+		}
+		if r != nil {
+			t.Error("resultado devia ser nil")
+		}
+		if !log.Logged("failed to mute chat") {
+			t.Errorf("falha nao foi logada: %v", log.Messages())
+		}
+	})
+
+	t.Run("silenciar 8h chega a porta com duracao certa", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{}
+		r, err := chat.NewMuteChatUseCase(cm, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "c@g.us", Mute: true, MuteDuration: &eightHours})
+
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !r.Success || r.Message != "Chat muted" {
+			t.Errorf("resultado = %+v", r)
+		}
+		if len(cm.MuteChatCalls) != 1 {
+			t.Fatalf("MuteChat chamada %d vez(es)", len(cm.MuteChatCalls))
+		}
+		call := cm.MuteChatCalls[0]
+		if call.TxtID != userID || call.Chat != domain.JID("c@g.us") || !call.Mute || call.MuteDuration != eightHours {
+			t.Errorf("MuteChat recebeu %+v", call)
+		}
+	})
+
+	t.Run("silenciar 1 semana chega a porta com duracao certa", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{}
+		r, err := chat.NewMuteChatUseCase(cm, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "c@g.us", Mute: true, MuteDuration: &oneWeek})
+
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !r.Success || r.Message != "Chat muted" {
+			t.Errorf("resultado = %+v", r)
+		}
+		if cm.MuteChatCalls[0].MuteDuration != oneWeek {
+			t.Errorf("duracao = %v, quero %v", cm.MuteChatCalls[0].MuteDuration, oneWeek)
+		}
+	})
+
+	t.Run("silenciar para sempre (nil duration)", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{}
+		r, err := chat.NewMuteChatUseCase(cm, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "c@g.us", Mute: true})
+
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !r.Success || r.Message != "Chat muted" {
+			t.Errorf("resultado = %+v", r)
+		}
+		if cm.MuteChatCalls[0].MuteDuration != 0 {
+			t.Errorf("duracao = %v, quero 0 (forever)", cm.MuteChatCalls[0].MuteDuration)
+		}
+	})
+
+	t.Run("dessilenciar ignora duracao", func(t *testing.T) {
+		cm := &contractsfake.ChatMuter{}
+		r, err := chat.NewMuteChatUseCase(cm, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+			Execute(context.Background(), userID, domain.MuteChatRequest{Jid: "c@g.us", Mute: false, MuteDuration: &badDuration})
+
+		if err != nil {
+			t.Fatalf("erro inesperado: %v", err)
+		}
+		if !r.Success || r.Message != "Chat unmuted" {
+			t.Errorf("resultado = %+v", r)
+		}
+		call := cm.MuteChatCalls[0]
+		if call.Mute {
+			t.Error("mute deveria ser false")
 		}
 	})
 }

@@ -78,6 +78,23 @@ func (a *MiscAdapter) StarMessage(ctx context.Context, txtID string, chat, sende
 	return client.SendAppState(ctxWithTimeout, appstate.BuildStar(chatJID, senderJID, types.MessageID(messageID), fromMe, star))
 }
 
+// MuteChat mutes or unmutes a conversation via app-state patch.
+func (a *MiscAdapter) MuteChat(ctx context.Context, txtID string, chat domain.JID, mute bool, muteDuration time.Duration) error {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return err
+	}
+	jid, err := wajid.ToJID(chat)
+	if err != nil {
+		return err
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+
+	return client.SendAppState(ctxWithTimeout, appstate.BuildMute(jid, mute, muteDuration))
+}
+
 // RejectCall rejeita uma chamada recebida.
 func (a *MiscAdapter) RejectCall(ctx context.Context, txtID string, from domain.JID, callID string) error {
 	client, err := a.Client(txtID)
@@ -194,6 +211,7 @@ func (a *MiscAdapter) SetDefaultDisappearingTimer(ctx context.Context, txtID str
 
 // Verificações em tempo de compilação de que o adapter implementa as portas.
 var (
+	_ appport.ChatMuter                      = (*MiscAdapter)(nil)
 	_ appport.ChatOperations                 = (*MiscAdapter)(nil)
 	_ appport.ProfileAccessProvider          = (*MiscAdapter)(nil)
 	_ appport.NewsletterReader               = (*MiscAdapter)(nil)
