@@ -24723,14 +24723,64 @@ três é o TIPO de patch.
    chama a API não consegue distinguir "conflito de estado, tenta outra vez"
    de "o servidor rebentou".
 
-**Correção sugerida (2)**: classificar o erro de app-state com conflito como
-`CategoryConflict` → 409, com mensagem que diga que é dessincronização de
-estado. É pequeno e independente de (1).
-
 **Correção sugerida (1)**: medir primeiro. Não implementar reconciliação nova
 sem saber se a existente falha sempre ou só neste estado.
 
-**Status**: não corrigido. Achado de campo, no primeiro teste real das três
-capabilities.
+### Parte (2) — classificação do erro: CORRIGIDA
+
+**O que foi feito**: `errmap.ClassifyAppState` traduz o erro de app-state com
+`code="409"` em `apperr.CategoryConflict` → HTTP 409. A função vive em
+`pkg/infra/wa-noise/errmap/appstate.go`, ao lado de `ClassifyIQ`, e é chamada
+em `realclient_wrappers.go:SendAppState` encadeada após `ClassifyIQ`.
+
+Apenas o conflito 409 é traduzido. Dois guardas: `errors.Is(err,
+appstatesync.ErrUpdate)` (só erros de app-state) e `strings.Contains` em
+`code="409"` (só conflito, não qualquer recusa). Erros de rede, encoding e
+recusas não-409 passam intactos.
+
+**Fragilidade documentada**: o match é por texto (`code="409"` do XML
+serializado por `waBinary.Node.XMLString()`) porque o fork não exporta
+sentinela tipada para conflito — `ErrUpdate` cobre TODAS as recusas de
+app-state. Se a serialização mudar, o match quebra em silêncio. A alternativa
+— modificar `internal/` — foi descartada por política (ADR-001).
+
+**Testes** (17 total, todos via rota registrada com `mux.Router`):
+
+- `pkg/infra/wa-noise/errmap/appstate_test.go` — 5 testes unitários:
+  `ConflictBecomesA409`, `NonConflictStaysUnchanged`, `PassthroughCases`,
+  `Code409WithoutErrUpdateIsIgnored`, `BareErrUpdateIsNotConflict`.
+- `pkg/presentation/http/handlers/handler_appstate_conflict_test.go` — 12
+  testes de rota (4 cenários × 3 rotas: `/chat/pin`, `/chat/mute`,
+  `/message/star`): conflito→409, erro genérico→500, sucesso→200, controle
+  negativo (catch-all falharia).
+
+**Controle negativo EXECUTADO** — `isAppStateConflict` forçada a retornar
+`true` (classificador largo demais, o modo de falha mais provável):
+
+```
+--- FAIL: TestClassifyAppState_NonConflictStaysUnchanged (0.00s)
+    appstate_test.go:69: a non-conflict app state error was classified as AppError (conflict): only the 409 conflict should be translated
+--- FAIL: TestClassifyAppState_BareErrUpdateIsNotConflict (0.00s)
+    appstate_test.go:117: bare ErrUpdate without a conflict code was classified: conflict
+```
+
+Dois testes falham como esperado: provam que o guard de `code="409"` está a
+ser exercitado.
+
+**`make check`**: passou (exit 0, zero FAILs, GOFLAGS=-p=2 GOMAXPROCS=2).
+
+**Arquivos tocados**:
+- `pkg/infra/wa-noise/errmap/appstate.go` — novo classificador
+- `pkg/infra/wa-noise/errmap/appstate_test.go` — 5 testes unitários
+- `pkg/infra/wa-noise/client/realclient_wrappers.go:211` — encadeamento
+- `pkg/presentation/http/handlers/handler_appstate_conflict_test.go` — 12
+  testes de rota
+
+### Parte (1) — dessincronização do `regular_high`: ABERTA
+
+O LTHash continua a falhar na reconciliação. Precisa de investigação própria:
+ver se um `FetchAppState` forçado converge, e se o `mismatching LTHash` vem
+de patch que nós escrevemos ou de estado pré-existente. Não se toca sem medir
+primeiro.
 
 <!-- f-status: aberto -->

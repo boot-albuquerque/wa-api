@@ -208,7 +208,7 @@ func (r RealClient) RejectCall(ctx context.Context, callFrom types.JID, callID s
 }
 
 func (r RealClient) SendAppState(ctx context.Context, patch appstate.PatchInfo) error {
-	return errmap.ClassifyIQ(r.Client.SendAppState(ctx, patch))
+	return errmap.ClassifyAppState(errmap.ClassifyIQ(r.Client.SendAppState(ctx, patch)))
 }
 
 func (r RealClient) FetchAppState(ctx context.Context, name appstate.WAPatchName, fullSync, onlyIfNotSynced bool) error {
