@@ -11,13 +11,13 @@ import (
 
 // SubscribePresenceUseCase subscribes to contact presence updates
 type SubscribePresenceUseCase struct {
-	presence appport.PresenceController
+	presence appport.PresenceSubscriber
 	jids     appport.JIDResolver
 	logger   appport.Logger
 }
 
 // NewSubscribePresenceUseCase creates a new instance
-func NewSubscribePresenceUseCase(pc appport.PresenceController, jr appport.JIDResolver, logger appport.Logger) *SubscribePresenceUseCase {
+func NewSubscribePresenceUseCase(pc appport.PresenceSubscriber, jr appport.JIDResolver, logger appport.Logger) *SubscribePresenceUseCase {
 	return &SubscribePresenceUseCase{presence: pc, jids: jr, logger: logger}
 }
 

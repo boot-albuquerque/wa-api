@@ -1,0 +1,264 @@
+{
+  "attempts": [
+    {
+      "iteration": 1,
+      "agent": "chromedp-direto",
+      "agent_reported_success": true,
+      "witness": {
+        "clicks": 1,
+        "onTarget": 0,
+        "offTarget": 1,
+        "focusedTarget": false
+      },
+      "outcome": "wrong_target",
+      "decision_ms": 628,
+      "dom_nodes_at_attempt": 2673,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 1,
+      "agent": "interaction-policy",
+      "agent_reported_success": false,
+      "witness": {
+        "clicks": 0,
+        "onTarget": 0,
+        "offTarget": 0,
+        "focusedTarget": false
+      },
+      "outcome": "false_failure",
+      "refusal": "validate: OCCLUDED_OR_REPLACED (hit-test nao retornou o alvo)",
+      "decision_ms": 193,
+      "dom_nodes_at_attempt": 2673,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 2,
+      "agent": "chromedp-direto",
+      "agent_reported_success": true,
+      "witness": {
+        "clicks": 1,
+        "onTarget": 0,
+        "offTarget": 1,
+        "focusedTarget": false
+      },
+      "outcome": "wrong_target",
+      "decision_ms": 20,
+      "dom_nodes_at_attempt": 2673,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 2,
+      "agent": "interaction-policy",
+      "agent_reported_success": false,
+      "witness": {
+        "clicks": 0,
+        "onTarget": 0,
+        "offTarget": 0,
+        "focusedTarget": false
+      },
+      "outcome": "false_failure",
+      "refusal": "validate: OCCLUDED_OR_REPLACED (hit-test nao retornou o alvo)",
+      "decision_ms": 227,
+      "dom_nodes_at_attempt": 2703,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 3,
+      "agent": "chromedp-direto",
+      "agent_reported_success": true,
+      "witness": {
+        "clicks": 1,
+        "onTarget": 0,
+        "offTarget": 1,
+        "focusedTarget": false
+      },
+      "outcome": "wrong_target",
+      "decision_ms": 129,
+      "dom_nodes_at_attempt": 2708,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 3,
+      "agent": "interaction-policy",
+      "agent_reported_success": false,
+      "witness": {
+        "clicks": 0,
+        "onTarget": 0,
+        "offTarget": 0,
+        "focusedTarget": false
+      },
+      "outcome": "false_failure",
+      "refusal": "validate: OCCLUDED_OR_REPLACED (hit-test nao retornou o alvo)",
+      "decision_ms": 220,
+      "dom_nodes_at_attempt": 2766,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 4,
+      "agent": "chromedp-direto",
+      "agent_reported_success": true,
+      "witness": {
+        "clicks": 1,
+        "onTarget": 0,
+        "offTarget": 1,
+        "focusedTarget": false
+      },
+      "outcome": "wrong_target",
+      "decision_ms": 21,
+      "dom_nodes_at_attempt": 2786,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 4,
+      "agent": "interaction-policy",
+      "agent_reported_success": false,
+      "witness": {
+        "clicks": 0,
+        "onTarget": 0,
+        "offTarget": 0,
+        "focusedTarget": false
+      },
+      "outcome": "false_failure",
+      "refusal": "validate: OCCLUDED_OR_REPLACED (hit-test nao retornou o alvo)",
+      "decision_ms": 185,
+      "dom_nodes_at_attempt": 2793,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 5,
+      "agent": "chromedp-direto",
+      "agent_reported_success": true,
+      "witness": {
+        "clicks": 1,
+        "onTarget": 0,
+        "offTarget": 1,
+        "focusedTarget": false
+      },
+      "outcome": "wrong_target",
+      "decision_ms": 15,
+      "dom_nodes_at_attempt": 2793,
+      "chat_rows_at_attempt": 67
+    },
+    {
+      "iteration": 5,
+      "agent": "interaction-policy",
+      "agent_reported_success": false,
+      "witness": {
+        "clicks": 0,
+        "onTarget": 0,
+        "offTarget": 0,
+        "focusedTarget": false
+      },
+      "outcome": "false_failure",
+      "refusal": "validate: OCCLUDED_OR_REPLACED (hit-test nao retornou o alvo)",
+      "decision_ms": 192,
+      "dom_nodes_at_attempt": 2793,
+      "chat_rows_at_attempt": 67
+    }
+  ],
+  "cpu_max": "300000 100000",
+  "discovery": [
+    {
+      "actionable": 0,
+      "matched": 0,
+      "selector": "[data-testid=\"chat-list-search\"]"
+    },
+    {
+      "actionable": 0,
+      "matched": 0,
+      "selector": "#side div[contenteditable=\"true\"][data-tab]"
+    },
+    {
+      "actionable": 0,
+      "matched": 0,
+      "selector": "#side div[contenteditable=\"true\"]"
+    },
+    {
+      "actionable": 0,
+      "matched": 0,
+      "selector": "div[role=\"textbox\"][contenteditable=\"true\"]"
+    },
+    {
+      "actionable": 1,
+      "matched": 1,
+      "selector": "[aria-label*=\"Pesquis\"]"
+    },
+    {
+      "actionable": 0,
+      "matched": 0,
+      "selector": "[aria-label*=\"Search\"]"
+    }
+  ],
+  "experiment": "cpu-correctness-boundary",
+  "selector_used": "[aria-label*=\"Pesquis\"]",
+  "settle_budget": "5s",
+  "shape_initial": {
+    "chat_rows_rendered": 67,
+    "chromium_procs": {
+      "browser": 3,
+      "gpu": 1,
+      "renderer": 4,
+      "total": 12,
+      "utility": 2,
+      "zygote": 2
+    },
+    "cpu_stat": {
+      "nr_periods": 156,
+      "nr_throttled": 32,
+      "system_usec": 6519293,
+      "throttled_usec": 5160019,
+      "usage_usec": 22053058,
+      "user_usec": 15533764
+    },
+    "distinct_origins": 3,
+    "dom_nodes": 2703,
+    "js_heap_limit_mb": 3185.272216796875,
+    "js_heap_mb": 10.68115234375,
+    "memory_current_mb": 944.96875,
+    "memory_events": {
+      "high": 0,
+      "low": 0,
+      "max": 0,
+      "oom": 0,
+      "oom_group_kill": 0,
+      "oom_kill": 0
+    },
+    "memory_peak_mb": 945.22265625,
+    "memory_stat": {
+      "anon": 718954496,
+      "file": 249692160,
+      "kernel_stack": 2555904,
+      "shmem": 4096,
+      "slab": 7590640,
+      "sock": 28672
+    },
+    "resource_count": 152,
+    "service_workers": 1,
+    "storage_estimate": null,
+    "transfer_kb": 1250.236328125
+  },
+  "started_utc": "2026-08-10T04:19:33Z",
+  "summary": {
+    "chromedp-direto": {
+      "correct_success": 0,
+      "false_failure": 0,
+      "false_success": 0,
+      "wrong_target": 5
+    },
+    "interaction-policy": {
+      "correct_success": 0,
+      "false_failure": 5,
+      "false_success": 0,
+      "wrong_target": 0
+    }
+  },
+  "verdict": "FAIL",
+  "watchdog": {
+    "budget_sec": 900,
+    "deadline_exceeded": 0,
+    "elapsed_sec": 20.407890177,
+    "experiment": "cpu-boundary",
+    "operations": 63,
+    "status": "COMPLETED"
+  }
+}

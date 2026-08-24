@@ -1,0 +1,554 @@
+{
+  "meta": {
+    "browser": {
+      "Browser": "Chrome/151.0.7922.108",
+      "Protocol-Version": "1.3",
+      "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36",
+      "V8-Version": "15.1.206.16",
+      "WebKit-Version": "537.36 (@4744b886309d987d292e43232776d2206cccb13d)",
+      "webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser/6399b7cc-0d9c-495c-bd35-9a6494ccd537"
+    },
+    "concurrency": 8,
+    "controller": "chromedp-shared-conn",
+    "cpu_max": "800000 100000",
+    "goarch": "arm64",
+    "iters": 80,
+    "memory_max": "4294967296",
+    "num_cpu": 10,
+    "profiled": true,
+    "started_utc": "2026-08-09T04:51:31Z"
+  },
+  "samples": [
+    {
+      "t_ms": 257,
+      "goroutines": 45,
+      "threads": 11,
+      "heap_mb": 3.6994857788085938,
+      "cgroup_mb": 363.421875,
+      "jobs_done": 0
+    },
+    {
+      "t_ms": 503,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 4.077262878417969,
+      "cgroup_mb": 360.87109375,
+      "jobs_done": 8
+    },
+    {
+      "t_ms": 752,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 3.9213943481445312,
+      "cgroup_mb": 352.984375,
+      "jobs_done": 16
+    },
+    {
+      "t_ms": 1002,
+      "goroutines": 45,
+      "threads": 11,
+      "heap_mb": 3.8251724243164062,
+      "cgroup_mb": 352.265625,
+      "jobs_done": 24
+    },
+    {
+      "t_ms": 1254,
+      "goroutines": 41,
+      "threads": 11,
+      "heap_mb": 3.138427734375,
+      "cgroup_mb": 356.78515625,
+      "jobs_done": 32
+    },
+    {
+      "t_ms": 1505,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 4.617164611816406,
+      "cgroup_mb": 370.421875,
+      "jobs_done": 32
+    },
+    {
+      "t_ms": 1754,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 3.9709548950195312,
+      "cgroup_mb": 361.3046875,
+      "jobs_done": 40
+    },
+    {
+      "t_ms": 2005,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 3.87261962890625,
+      "cgroup_mb": 372.23046875,
+      "jobs_done": 40
+    },
+    {
+      "t_ms": 2252,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 5.8468017578125,
+      "cgroup_mb": 361.80078125,
+      "jobs_done": 48
+    },
+    {
+      "t_ms": 2502,
+      "goroutines": 49,
+      "threads": 11,
+      "heap_mb": 4.2400665283203125,
+      "cgroup_mb": 357.390625,
+      "jobs_done": 56
+    },
+    {
+      "t_ms": 2753,
+      "goroutines": 37,
+      "threads": 11,
+      "heap_mb": 5.3079681396484375,
+      "cgroup_mb": 384.84375,
+      "jobs_done": 64
+    },
+    {
+      "t_ms": 3004,
+      "goroutines": 41,
+      "threads": 11,
+      "heap_mb": 3.936798095703125,
+      "cgroup_mb": 360.4296875,
+      "jobs_done": 69
+    }
+  ],
+  "jobs": 80,
+  "failures": 0,
+  "wall_ms": 3245,
+  "jobs_per_sec": 24.649929580373893,
+  "Total": {
+    "max_ms": 600.579,
+    "mean_ms": 323.84947500000004,
+    "n": 80,
+    "p50_ms": 301.235,
+    "p95_ms": 479.479,
+    "p99_ms": 577.105,
+    "stddev_ms": 80.89866888953968
+  },
+  "ops": {
+    "click": {
+      "max_ms": 16.273,
+      "mean_ms": 8.784075000000001,
+      "n": 80,
+      "p50_ms": 8.589,
+      "p95_ms": 13.203,
+      "p99_ms": 14.777,
+      "stddev_ms": 2.7646445466596603
+    },
+    "dom_read": {
+      "max_ms": 36.612,
+      "mean_ms": 10.4199375,
+      "n": 80,
+      "p50_ms": 8.524,
+      "p95_ms": 28.938,
+      "p99_ms": 36.094,
+      "stddev_ms": 7.624476303890894
+    },
+    "evaluate": {
+      "max_ms": 40.236,
+      "mean_ms": 7.5255624999999995,
+      "n": 80,
+      "p50_ms": 3.638,
+      "p95_ms": 23.349,
+      "p99_ms": 27.813,
+      "stddev_ms": 8.309209238615535
+    },
+    "fill": {
+      "max_ms": 58.702,
+      "mean_ms": 26.090537499999993,
+      "n": 80,
+      "p50_ms": 23.702,
+      "p95_ms": 52.436,
+      "p99_ms": 56.008,
+      "stddev_ms": 10.490104955318309
+    },
+    "navigate": {
+      "max_ms": 137.05,
+      "mean_ms": 45.613612500000016,
+      "n": 80,
+      "p50_ms": 35.944,
+      "p95_ms": 88.684,
+      "p99_ms": 134.053,
+      "stddev_ms": 26.997897944790886
+    },
+    "page_create": {
+      "max_ms": 230.202,
+      "mean_ms": 119.33248749999993,
+      "n": 80,
+      "p50_ms": 117.11,
+      "p95_ms": 194.792,
+      "p99_ms": 210.763,
+      "stddev_ms": 32.69443972489579
+    },
+    "wait_ready": {
+      "max_ms": 125.02,
+      "mean_ms": 30.739200000000004,
+      "n": 80,
+      "p50_ms": 20.732,
+      "p95_ms": 65.326,
+      "p99_ms": 123.534,
+      "stddev_ms": 23.70663423305805
+    },
+    "wait_result": {
+      "max_ms": 155.707,
+      "mean_ms": 68.9274125,
+      "n": 80,
+      "p50_ms": 61.775,
+      "p95_ms": 125.35,
+      "p99_ms": 136.644,
+      "stddev_ms": 21.61393638818121
+    }
+  },
+  "block_top": [
+    {
+      "value": 26325084081,
+      "count": 9102,
+      "stack": [
+        "0x70c07",
+        "0x32999b"
+      ]
+    },
+    {
+      "value": 26299534557,
+      "count": 85,
+      "stack": [
+        "0x25223",
+        "0x32462f"
+      ]
+    },
+    {
+      "value": 22107376299,
+      "count": 1183,
+      "stack": [
+        "0x70c07",
+        "0x3297d7",
+        "0x325b83"
+      ]
+    },
+    {
+      "value": 4038466445,
+      "count": 11305,
+      "stack": [
+        "0x70c07",
+        "0x3233df",
+        "0x322773"
+      ]
+    },
+    {
+      "value": 3568613819,
+      "count": 634,
+      "stack": [
+        "0x70c07",
+        "0x325c73",
+        "0x325d5b",
+        "0x327893",
+        "0x324eab",
+        "0x324e0c"
+      ]
+    },
+    {
+      "value": 3200879126,
+      "count": 13,
+      "stack": [
+        "0x70c07",
+        "0x3f91a3"
+      ]
+    },
+    {
+      "value": 3022026711,
+      "count": 72,
+      "stack": [
+        "0x24347",
+        "0x3f872b",
+        "0x3f592b",
+        "0x5d3b3"
+      ]
+    },
+    {
+      "value": 2321844170,
+      "count": 80,
+      "stack": [
+        "0x70c07",
+        "0x323013",
+        "0x322bc3",
+        "0x12bfe7",
+        "0x1804f3",
+        "0x3255d7"
+      ]
+    },
+    {
+      "value": 2189196926,
+      "count": 170,
+      "stack": [
+        "0x70c07",
+        "0x32a223",
+        "0x12bfe7",
+        "0x14c353",
+        "0x32a8ef",
+        "0x32b437"
+      ]
+    },
+    {
+      "value": 2175115210,
+      "count": 80,
+      "stack": [
+        "0x70c07",
+        "0x3ee46b",
+        "0x325bd3",
+        "0x324eab",
+        "0x324e0c",
+        "0x3ee14b"
+      ]
+    },
+    {
+      "value": 1926058120,
+      "count": 714,
+      "stack": [
+        "0x70c07",
+        "0x32a223",
+        "0x12bfe7",
+        "0x14c5b3",
+        "0x327fb3",
+        "0x327a63"
+      ]
+    },
+    {
+      "value": 1918786589,
+      "count": 80,
+      "stack": [
+        "0x70c07",
+        "0x32a223",
+        "0x12bfe7",
+        "0x325783",
+        "0x325738",
+        "0x32525b"
+      ]
+    }
+  ],
+  "mutex_top": [
+    {
+      "value": 434068586,
+      "count": 59,
+      "stack": [
+        "0xa0907",
+        "0x32ab1f",
+        "0x32aa6f",
+        "0x32b437",
+        "0x32984f",
+        "0x325b83"
+      ]
+    },
+    {
+      "value": 9007123,
+      "count": 3,
+      "stack": [
+        "0x8b7fc",
+        "0x8b7f8",
+        "0x6506b",
+        "0x4361f",
+        "0x6ad2b",
+        "0x60817"
+      ]
+    },
+    {
+      "value": 5977142,
+      "count": 11,
+      "stack": [
+        "0x68733"
+      ]
+    },
+    {
+      "value": 1223003,
+      "count": 12,
+      "stack": [
+        "0x60d98",
+        "0x60d94",
+        "0x394cf",
+        "0x961f7",
+        "0x38c63",
+        "0x38c34"
+      ]
+    },
+    {
+      "value": 219792,
+      "count": 1,
+      "stack": [
+        "0x8e0cc",
+        "0x8e0c8",
+        "0x2a503",
+        "0xf71bf",
+        "0xf6917",
+        "0xf095f"
+      ]
+    },
+    {
+      "value": 115750,
+      "count": 17,
+      "stack": [
+        "0x669ec",
+        "0x669e8",
+        "0x961f7",
+        "0x6677f",
+        "0x90fdf",
+        "0xaecff"
+      ]
+    },
+    {
+      "value": 112374,
+      "count": 7,
+      "stack": [
+        "0x61060",
+        "0x6105c",
+        "0x6309b",
+        "0x652ef",
+        "0x65773",
+        "0x96163"
+      ]
+    },
+    {
+      "value": 94542,
+      "count": 58,
+      "stack": [
+        "0x32967b",
+        "0x329670",
+        "0x327933",
+        "0x325d43",
+        "0x327893",
+        "0x324eab"
+      ]
+    },
+    {
+      "value": 89041,
+      "count": 7,
+      "stack": [
+        "0x62db4",
+        "0x62db0",
+        "0x63383",
+        "0x652ef",
+        "0x65773",
+        "0x96163"
+      ]
+    },
+    {
+      "value": 63250,
+      "count": 1,
+      "stack": [
+        "0x705c0",
+        "0x705a4",
+        "0x71607",
+        "0x3233df"
+      ]
+    },
+    {
+      "value": 59917,
+      "count": 2,
+      "stack": [
+        "0x546d4",
+        "0x546c0",
+        "0x4684b",
+        "0x314eb",
+        "0x30d97",
+        "0x30ecb"
+      ]
+    },
+    {
+      "value": 53584,
+      "count": 1,
+      "stack": [
+        "0x60530",
+        "0x6052c",
+        "0x5fecb",
+        "0x961f7",
+        "0x5fdeb",
+        "0x53327"
+      ]
+    }
+  ],
+  "goroutine_top": [
+    {
+      "value": 6,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeae73",
+        "0xeae64",
+        "0x1e5867",
+        "0x1edc63"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x3db993",
+        "0x3db7bf",
+        "0x3d8fc3",
+        "0x3f9a2f",
+        "0x3f8a0b",
+        "0x3f592b"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x322217"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x32228b",
+        "0xa0e97"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x32462f"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeae73",
+        "0xeae64",
+        "0x1e5867",
+        "0x1edc63"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x8ff0f",
+        "0xea287",
+        "0xeb773",
+        "0xeb764",
+        "0x1e6417",
+        "0x1f4d53"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x3233df"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x3297d7"
+      ]
+    },
+    {
+      "value": 1,
+      "stack": [
+        "0x32999b"
+      ]
+    }
+  ]
+}

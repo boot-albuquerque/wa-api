@@ -1,0 +1,303 @@
+{
+  "experiment": "whatsapp-multi-tab",
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "rep1/A/navigate",
+      "start_ms": 2523,
+      "duration_ms": 774,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep1/A/ready",
+      "start_ms": 3298,
+      "duration_ms": 15000,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep1/A/state",
+      "start_ms": 18299,
+      "duration_ms": 22,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep1/B/navigate",
+      "start_ms": 18417,
+      "duration_ms": 710,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep1/B/ready",
+      "start_ms": 19127,
+      "duration_ms": 15032,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep1/B/state",
+      "start_ms": 34160,
+      "duration_ms": 28,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep1/A/state-after-B",
+      "start_ms": 34189,
+      "duration_ms": 28,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep2/A/navigate",
+      "start_ms": 38019,
+      "duration_ms": 1370,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep2/A/ready",
+      "start_ms": 39389,
+      "duration_ms": 15000,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep2/A/state",
+      "start_ms": 54390,
+      "duration_ms": 25,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep2/B/navigate",
+      "start_ms": 54552,
+      "duration_ms": 548,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep2/B/ready",
+      "start_ms": 55101,
+      "duration_ms": 15006,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep2/B/state",
+      "start_ms": 70108,
+      "duration_ms": 60,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep2/A/state-after-B",
+      "start_ms": 70168,
+      "duration_ms": 43,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep3/A/navigate",
+      "start_ms": 73667,
+      "duration_ms": 742,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep3/A/ready",
+      "start_ms": 74410,
+      "duration_ms": 15002,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep3/A/state",
+      "start_ms": 89413,
+      "duration_ms": 14,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "rep3/B/navigate",
+      "start_ms": 89528,
+      "duration_ms": 1047,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "rep3/B/ready",
+      "start_ms": 90577,
+      "duration_ms": 15003,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep3/B/state",
+      "start_ms": 105581,
+      "duration_ms": 18,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "rep3/A/state-after-B",
+      "start_ms": 105599,
+      "duration_ms": 31,
+      "deadline_ms": 5000,
+      "result": "ok"
+    }
+  ],
+  "reps": 3,
+  "started_utc": "2026-08-09T15:16:29Z",
+  "trials": [
+    {
+      "rep": 1,
+      "page_a_initial": {
+        "url": "https://web.whatsapp.com/",
+        "title": "(8) WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": true,
+        "has_qr": false,
+        "dom_nodes": 2803,
+        "text_length": 616,
+        "text_sample": "Novidades do WhatsApp Web\nCompartilhe mensagens anteriores com novos membros do grupo para que eles fiquem por dentro do contexto.\nMostre sua personalidade com uma atualização de status dinâmica. Seus",
+        "class": "APP_READY"
+      },
+      "page_b": {
+        "url": "https://web.whatsapp.com/",
+        "title": "(8) WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": true,
+        "has_qr": false,
+        "dom_nodes": 2752,
+        "text_length": 183,
+        "text_sample": "8\nAtualizações no status\nTudo\nNão lidas\n15\nArquivadas\nSuas mensagens pessoais são protegidas com a criptografia de ponta a ponta\nEnviar documento\nAdicionar contato\nPerguntar à Meta AI",
+        "class": "APP_READY"
+      },
+      "page_a_after_b": {
+        "url": "https://web.whatsapp.com/",
+        "title": "WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": false,
+        "has_qr": false,
+        "dom_nodes": 306,
+        "text_length": 129,
+        "text_sample": "O WhatsApp está aberto em outra janela. Clique em “Usar nesta janela” para usar o WhatsApp nesta janela.\nFechar\nUsar nesta janela",
+        "class": "SESSION_CONFLICT"
+      },
+      "verdict": "SESSION_MIGRATES_TO_NEWEST_TAB"
+    },
+    {
+      "rep": 2,
+      "page_a_initial": {
+        "url": "https://web.whatsapp.com/",
+        "title": "(8) WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": true,
+        "has_qr": false,
+        "dom_nodes": 2775,
+        "text_length": 616,
+        "text_sample": "Novidades do WhatsApp Web\nCompartilhe mensagens anteriores com novos membros do grupo para que eles fiquem por dentro do contexto.\nMostre sua personalidade com uma atualização de status dinâmica. Seus",
+        "class": "APP_READY"
+      },
+      "page_b": {
+        "url": "https://web.whatsapp.com/",
+        "title": "(8) WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": true,
+        "has_qr": false,
+        "dom_nodes": 2709,
+        "text_length": 183,
+        "text_sample": "8\nAtualizações no status\nTudo\nNão lidas\n15\nArquivadas\nSuas mensagens pessoais são protegidas com a criptografia de ponta a ponta\nEnviar documento\nAdicionar contato\nPerguntar à Meta AI",
+        "class": "APP_READY"
+      },
+      "page_a_after_b": {
+        "url": "https://web.whatsapp.com/",
+        "title": "WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": false,
+        "has_qr": false,
+        "dom_nodes": 304,
+        "text_length": 129,
+        "text_sample": "O WhatsApp está aberto em outra janela. Clique em “Usar nesta janela” para usar o WhatsApp nesta janela.\nFechar\nUsar nesta janela",
+        "class": "SESSION_CONFLICT"
+      },
+      "verdict": "SESSION_MIGRATES_TO_NEWEST_TAB"
+    },
+    {
+      "rep": 3,
+      "page_a_initial": {
+        "url": "https://web.whatsapp.com/",
+        "title": "(8) WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": true,
+        "has_qr": false,
+        "dom_nodes": 2775,
+        "text_length": 616,
+        "text_sample": "Novidades do WhatsApp Web\nCompartilhe mensagens anteriores com novos membros do grupo para que eles fiquem por dentro do contexto.\nMostre sua personalidade com uma atualização de status dinâmica. Seus",
+        "class": "APP_READY"
+      },
+      "page_b": {
+        "url": "https://web.whatsapp.com/",
+        "title": "(8) WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": true,
+        "has_qr": false,
+        "dom_nodes": 2709,
+        "text_length": 183,
+        "text_sample": "8\nAtualizações no status\nTudo\nNão lidas\n15\nArquivadas\nSuas mensagens pessoais são protegidas com a criptografia de ponta a ponta\nEnviar documento\nAdicionar contato\nPerguntar à Meta AI",
+        "class": "APP_READY"
+      },
+      "page_a_after_b": {
+        "url": "https://web.whatsapp.com/",
+        "title": "WhatsApp",
+        "ready_state": "complete",
+        "has_pane_side": false,
+        "has_qr": false,
+        "dom_nodes": 304,
+        "text_length": 129,
+        "text_sample": "O WhatsApp está aberto em outra janela. Clique em “Usar nesta janela” para usar o WhatsApp nesta janela.\nFechar\nUsar nesta janela",
+        "class": "SESSION_CONFLICT"
+      },
+      "verdict": "SESSION_MIGRATES_TO_NEWEST_TAB"
+    }
+  ],
+  "verdict": "SESSION_MIGRATES_TO_NEWEST_TAB",
+  "watchdog": {
+    "budget_sec": 420,
+    "deadline_exceeded": 6,
+    "elapsed_sec": 105.869012299,
+    "experiment": "single-tab",
+    "operations": 21,
+    "status": "COMPLETED"
+  }
+}

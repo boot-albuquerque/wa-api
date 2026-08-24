@@ -1,0 +1,26 @@
+{
+  "experiment": "browser-close-wire-probe",
+  "result": {
+    "browser_close_sent": true,
+    "browser_close_acknowledged": true,
+    "browser_close_ms": 2,
+    "raw_response": "{}",
+    "chromium_procs_before": 10,
+    "chromium_procs_after_1s": 0,
+    "chromium_procs_after_5s": 0,
+    "chromium_procs_after_20s": 0,
+    "main_process_exited": false,
+    "main_process_exit_sec": 0,
+    "main_alive_by_signal0": true,
+    "verdict": "C_SESSAO_ENCERRA_PROCESSO_PAI_FICA"
+  },
+  "started_utc": "2026-08-09T16:07:51Z",
+  "watchdog": {
+    "budget_sec": 180,
+    "deadline_exceeded": 0,
+    "elapsed_sec": 22.57517651,
+    "experiment": "browser-close-probe",
+    "operations": 0,
+    "status": "COMPLETED"
+  }
+}

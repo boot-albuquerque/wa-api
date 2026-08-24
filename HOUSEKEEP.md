@@ -480,6 +480,8 @@ não resolve.
    e não como referência viva — mas `PATCHES.md` **é** consultado ao decidir
    sobre divergências do fork, então não é o caso.
 
+**Status**: **não corrigido**. Precisa da sua decisão entre as três, porque a
+escolha é sobre o que esses documentos são, não sobre o texto deles.
 **Status**: **corrigido** (opção 1). Nota de época acrescentada ao topo de
 `internal/wa-noise/PATCHES.md` com tabela de mapeamento dos quatro caminhos
 reorganizados em `ca34600`. O corpo do arquivo ficou intacto, preservando o
@@ -637,6 +639,7 @@ F64 fecha quando cada item tiver sido movido para uma destas situações:
 Enquanto isso não acontece, a categoria A inteira permanece como está **por
 decisão**, não por esquecimento.
 
+**Status**: **não corrigidos, por decisão registrada acima.**
 **Status**: **REFERÊNCIA, não trabalho pendente** — e a entrada já dizia isso no
 próprio corpo (*"Esta entrada é registro de decisão, não trabalho pendente"*).
 Estava a aparecer na lista de abertos por classificação errada do campo Status,
@@ -816,6 +819,16 @@ tentativa.
 `apperr.New(<code>, apperr.CategoryValidation, <msg>, false, nil)` e ligar
 `Category.HTTPStatus()` no caminho de resposta.
 
+Vale notar: `Category.HTTPStatus()` **já existe e já tem teste**, mas nada o
+chama ainda — o mesmo achado que apareceu ao classificar
+`user_info_failed` (que foi corrigido para `CategoryValidation` nesta leva,
+mas cuja tradução para status HTTP depende desta mesma ligação). Esta entrada
+é a evidência de produção de que a ligação faz falta, e não só de que está
+pendente no plano.
+
+**Status**: **não corrigido**. São 67 sítios mais a ligação do
+`HTTPStatus()`; é mudança de contrato de API (respostas que hoje são 500
+passam a ser 400) e merece commit próprio, fora do merge.
 ~~Vale notar: `Category.HTTPStatus()` **já existe e já tem teste**, mas nada o
 chama ainda.~~ **Isso estava errado quando foi escrito e ficou errado por dois
 dias.** `RespondJSON` (`pkg/presentation/http/response.go:52`) já ignora o
@@ -949,6 +962,8 @@ A (1) é menos disruptiva para quem já consome; a (2) é mais honesta sobre
 serem eventos de origens diferentes. Ambas são mudança de contrato de webhook
 e precisam de decisão.
 
+**Status**: **não corrigido**. É contrato externo (webhook + WS), fora do
+escopo de criar a página.
 **Status**: **CORRIGIDO (2026-08-09)** pela saída (1), a recomendada.
 
 Um construtor só (`buildQRPayload`), usado pelos dois fluxos. O payload sempre
@@ -1457,6 +1472,9 @@ um cliente de navegador de verdade — que passou a existir agora, com o
 
 A (2) é a resposta técnica correta; a (1) é a que cabe numa release.
 
+**Status**: **não corrigido — mas é bloqueador da remoção anunciada.** O
+`devui` já migrou os `fetch` para header e mantém a query só no WebSocket,
+com comentário apontando para esta entrada.
 **Status**: **CORRIGIDO (2026-08-09)** pela saída (1), a recomendada — e com a
 redação de log que a torna honesta.
 
@@ -1591,6 +1609,9 @@ chama `abrirWS`, ou abrir o socket automaticamente ao renderizar o card de
 uma sessão já pareada. A ausência de reconexão continua valendo; o que falta
 é uma forma de abrir o socket **sem** efeito colateral de sessão.
 
+**Status**: **não corrigido** — descoberto durante o teste, e a decisão de
+UI é do dono do painel. Contornado no teste com um observador injetado pelo
+console, que abre `/session/ws` direto.
 **Status**: **CORRIGIDO** em 2026-08-21 (decisão 40=b do canal: abrir o socket
 automaticamente no card de sessão já pareada). A página foi entretanto partida
 em `assets/sessions.js`; a abertura vive agora em `sessions.js:103`.
@@ -1752,6 +1773,9 @@ explícita — quando já houver sessão viva. Alternativa mais conservadora:
 `Register` devolver a sessão anterior para que `Start` a encerre antes de
 substituir.
 
+**Status**: **não corrigido, e não verificado experimentalmente.** Antes de
+mexer, vale um teste controlado numa sessão descartável: chamar
+`/session/connect` duas vezes e observar se aparece `StreamReplaced`.
 ### VERIFICADO EXPERIMENTALMENTE (2026-08-22) — e a leitura estava certa
 
 Sessão `aulapratica` (5516988263575), pareada de fresco para este fim, com
@@ -1988,6 +2012,7 @@ permanece registrada, como tem de ser.
 Sucesso — logout do `iphone7`, pareado e conectado:
 
 ```
+antes:  connected=True  loggedIn=True  jid=5511912345678:19@s.whatsapp.net
 antes:  connected=True  loggedIn=True  jid=5516981818244:19@s.whatsapp.net
 POST /session/logout -> 200 {"details":""}
 07:53:31 info logged out
@@ -2035,6 +2060,13 @@ EOF e o endpoint devolve 400 **sempre**.
 **Evidência**:
 
 ```
+GET /user/lid/5511912345678@s.whatsapp.net      -> 400
+GET /user/lid/5511912345678                     -> 400
+GET /user/lid/5511912345678%40s.whatsapp.net    -> 400
+log: could not decode payload | error=EOF
+
+GET /user/lid/ignorado  -d '{"JID":"5511912345678@s.whatsapp.net"}'  -> 200
+    {"jid":"5511912345678@s.whatsapp.net","lid":"90000000000001@lid"}
 GET /user/lid/5516981818244@s.whatsapp.net      -> 400
 GET /user/lid/5516981818244                     -> 400
 GET /user/lid/5516981818244%40s.whatsapp.net    -> 400
@@ -2083,12 +2115,18 @@ registrada dava 400. A tabela agora serve esta rota sob o router e ganhou
 Verificado ao vivo:
 
 ```
+GET /user/lid/5511912345678@s.whatsapp.net   (sem corpo)
+  -> 200 {"jid":"5511912345678@s.whatsapp.net","lid":"90000000000001@lid"}
 GET /user/lid/5516981818244@s.whatsapp.net   (sem corpo)
   -> 200 {"jid":"5516981818244@s.whatsapp.net","lid":"29343770251463@lid"}
 
 GET mesmo caminho + corpo {"JID":"5599999999999@s.whatsapp.net"}
   -> 200 com o LID do CAMINHO (o corpo não teve efeito)
 ```
+
+**Fica aberto**: um número sem servidor (`/user/lid/5511912345678`) devolve
+**500**, não 400 — `invalid jid format` é erro de cliente. É a F66 (23/25
+endpoints devolvendo 500) aparecendo aqui, e não uma regressão desta correção.
 
 **Fica aberto**: um número sem servidor (`/user/lid/5516981818244`) devolve
 **500**, não 400 — `invalid jid format` é erro de cliente. É a F66 (23/25
@@ -2288,6 +2326,7 @@ wanoise_lid_map:   5364 mapeamentos LID<->PN
    Contra o banco inteiro são 261 de 1717.
 2. A primeira consulta SQL disse que LID→PN recuperava **zero**. Estava
    errada: `wanoise_lid_map` guarda LID e PN **sem sufixo** (`lid` =
+   `90000000000002`, e não `90000000000002@lid`), então o JOIN com
    `90937376170214`, e não `90937376170214@lid`), então o JOIN com
    `chat_jid` nunca casava. Com o sufixo removido, recupera 73. Quase
    descartei o caminho por causa do meu próprio JOIN.
@@ -3221,6 +3260,12 @@ nada para medir o efeito de ligar o teto.
    respondido: o orçamento de atraso do handler já está sendo consumido por
    outra coisa.
 
+**Status**: **não corrigido** — registrado no momento em que apareceu.
+Diagnóstico dos 5,7s não iniciado; a parte estrutural está confirmada e já
+está em uso como premissa da F86.
+
+---
+
 **DIAGNOSTICADO em 2026-08-09.** A resposta é a menos confortável das duas
 hipóteses: o lento é o **nosso handler**, não o SDK. E não é soluço — é
 estrutural, em toda mídia recebida.
@@ -3681,6 +3726,11 @@ madrugada por causa de um F5.
 `context.DeadlineExceeded`, que é timeout NOSSO e continua sendo erro de
 verdade.
 
+**Status**: **não corrigido** — fora do escopo da F89, que era o que estava em
+andamento. Registrado para decisão.
+
+---
+
 **Status**: **corrigido**. `apperr.IsClientGaveUp` decide o nível nos três
 sites que produziram as quinze linhas: o repositório (`user_repository.go`), o
 use case (`get_status.go`) e o handler (`handler_session.go`, estendendo o
@@ -3744,6 +3794,8 @@ preserva o valor do aviso (descobrir tipo não previsto) e elimina a classe
 inteira do vazamento, em vez de fechar um tipo por vez conforme cada um
 vaza algo.
 
+**Status**: **não corrigido** — registrado. Fora do escopo da F89, que estava
+em andamento.
 **Status**: **corrigido**. O `default` passa a logar `%T` (nome do tipo) e a
 lista de NOMES dos campos, via `unhandledEventFields`. O aviso não perde valor:
 `%T` identifica o tipo com precisão maior que o dump, e os nomes de campo
@@ -3812,6 +3864,8 @@ mesmos números de gate.
 (`lease.go`, `session_lease.go` e testes) já nasceram em inglês; `cluster.go` e
 `dispatch*.go`, escritos nesta sessão antes da política, ficam para um commit
 de conversão pura. O restante aguarda decisão sobre mutirão.
+
+---
 
 ### Fecho (2026-08-22): política escrita, conversão em massa deliberadamente recusada
 
@@ -3967,6 +4021,8 @@ duas vezes.
    `/session/connect` primeiro. A primeira opção é a que remove a pegadinha;
    a segunda é a barata. Qualquer uma é melhor que 500 opaco.
 
+**Status**: **não corrigido** — só diagnosticado, a pedido do dono do
+repositório. Nada foi alterado no código nem no banco.
 **Status**: **corrigido e VALIDADO EM BANCADA (2026-08-08)**, no fluxo real
 (Postgres 5433, sessão pareada `teste-d2-b`), medindo os dois efeitos:
 
@@ -4075,6 +4131,9 @@ BasePath = "/devui/"                                   // devui.go:46
 registry.Register(devui.BasePath+"{rest:.*}", devChain, "GET")  // wiring_routes.go:42
 ```
 
+O padrão registrado é `/devui/{rest:.*}`, que casa com `/devui/` (rest vazio) e
+**não casa** com `/devui`. Não há rota nem redirecionamento para a forma sem
+barra.
 > **CORREÇÃO desta entrada (2026-08-08)**: o parágrafo abaixo, como escrito
 > originalmente, estava ERRADO. Eu afirmei que não havia rota para `/devui`.
 > **Há** — `wiring_routes.go:43` registra `strings.TrimSuffix(devui.BasePath,
@@ -4101,6 +4160,16 @@ que se digita naturalmente, e o 404 é indistinguível de "o devui está
 desligado" ou "a instância caiu" — que foi exatamente a hipótese levantada
 quando aconteceu. Custa uma rodada de diagnóstico para descobrir que o único
 problema é uma barra.
+
+**Correção sugerida**: registrar `/devui` com um `http.RedirectHandler` para
+`/devui/` (301 ou 308), ao lado do registro atual. É o comportamento que a
+maioria dos servidores tem por padrão para diretório, e resolve a classe
+inteira em uma linha.
+
+**Status**: **não corrigido** — fora do escopo do D2, que estava em andamento.
+Registrado assim que aconteceu.
+
+---
 
 **Status**: **corrigido**. O handler passa a redirecionar `/devui` para
 `/devui/` com 301.
@@ -4163,6 +4232,3771 @@ que clientes já recebem. Para a posse de sessão isso é seguro (código novo,
 sem cliente ainda); para a F93 é mudança de contrato observável e precisa ser
 decidida como tal.
 
+**Status**: **não corrigido** — registrado com os dois sites que já sofrem.
+
+---
+
+<!-- f-status: aberto -->
+
+## F94 — o harness do estudo desligava o Chromium por sinal nos modos que carregam a credencial do WhatsApp
+
+**Data**: 2026-08-09.
+
+**Contexto**: apareceu na Fase 5 do estudo `scripts/chromium-study`, ao abrir o
+WhatsApp Web para medir o CPU correctness boundary. Não é escopo da Fase 5 — é
+dívida deixada pela Fase 4C.
+
+**Onde**: `scripts/chromium-study/p4_wa.go:187,236,442`,
+`p4b_wasession.go:65`, `p4c_target.go:275,451,457,477,539`.
+
+```go
+defer gracefulStop(browsers[0])   // = SIGTERM
+```
+
+**Problema**: a Fase 4C mediu que desligar por sinal corrompe o estado de sessão
+do WhatsApp (logout na 4ª e na 6ª iteração, contra 40 iterações limpas com
+`Browser.close`), e escreveu isso como requisito nº 1 de produção no
+`RELATORIO-FASE-4C.md` §7. **O requisito nunca saiu do experimento que o
+mediu.** Todos os modos que carregam a credencial — `waprep`, `waopen`,
+`wacap`, `wasession`, `watabs` — continuaram em `gracefulStop`.
+
+Evidência medida nesta sessão: após dois `waopen`, o perfil ficou com os **3
+arquivos `Singleton` presentes**, que é a assinatura de saída suja estabelecida
+pela 4C (o Chromium remove os próprios `Singleton` ao sair limpo; sob SIGTERM
+ficavam em 3 sempre). O perfil ainda estava em 148 MB, acima dos 118 MB que
+marcam degradação, então a credencial sobreviveu — mas por margem, e a 4C viu
+logout já na 4ª iteração desse regime.
+
+Três das nove chamadas eram piores que as demais: em `oneRecoveryTrial`
+(`p4c_target.go:451,457,477`) o desligamento sujo está em **caminho de erro**, e
+o da linha 477 roda justamente quando o baseline falha — ou seja, suja o perfil
+exatamente quando a credencial já está frágil.
+
+**Correção**: aplicada nesta sessão. Novo `cleanStop`
+(`p4c_lifecycle.go`) envia `Browser.close` via CDP, espera a saída, e imprime
+sempre o caminho usado (`stopped_via=`), porque os call sites usam `defer` e
+descartariam o retorno. Os nove call sites migraram, exceto os dois em que a
+forma de parada É a variável sob ablação (`p4c_target.go:502` sob
+`RecoveryFault`, `p4c_lifecycle.go:240` sob `LifecycleStop`), marcados
+`//ablation:stop-form`.
+
+**Testes que travam** (`scripts/chromium-study/shutdown_policy_test.go`):
+
+1. `TestCredentialModesNeverStopBySignal` — estático sobre a AST: qualquer
+   função que atribua `PersistentProfileDir` e chame `gracefulStop` sem o
+   marcador falha. É estático de propósito: o defeito não é "o desligamento não
+   funciona" (`closeBrowserViaCDP` sempre funcionou), é "o call site chama a
+   função errada", e um teste de comportamento sobre `cleanStop` passaria com
+   os cinco modos ainda quebrados.
+2. `TestCleanStopGoesThroughBrowserClose` — impede que esvaziar `cleanStopVia`
+   deixe a suíte verde com todos os modos desligando por sinal por dentro.
+
+**Controle negativo EXECUTADO**: reintroduzido `gracefulStop` em
+`p4_wa.go:236`:
+
+```
+--- FAIL: TestCredentialModesNeverStopBySignal (0.01s)
+    shutdown_policy_test.go:114: modo que carrega a credencial desliga por sinal
+    — SIGTERM corrompe o estado de sessao (Fase 4C §7 req. 1). Use cleanStop.
+      p4_wa.go:236:8 em RunWAOpen
+```
+
+Restaurado, volta a `ok`.
+
+**Nota de método**: a primeira versão do teste isentava funções inteiras por
+nome, e teria deixado passar as três chamadas de caminho de erro em
+`oneRecoveryTrial` — só uma das quatro ali era ablação legítima. A isenção
+passou a ser por linha (`//ablation:stop-form`). Isenção por nome de função
+cobre também o código que ainda vai ser escrito lá dentro.
+
+**Status**: **corrigido** nesta sessão, com os dois testes acima e controle
+negativo colado.
+
+<!-- f-status: corrigido -->
+
+## F96 — `make check` está VERMELHO por toolchain, e não por código: `covdata` ausente
+
+**Data**: 2026-08-20 · **Contexto**: fechamento da CAP-07 (`sendText`) no
+`internal/wa-headless`; o gate foi rodado antes de commitar e reprovou.
+
+**Onde**: `Makefile:132-133` (alvo `coverage-gate`).
+
+**Sintoma**: o alvo falha, e a falha é por pacote SEM arquivo de teste:
+
+```
+# wa-api/cmd/core
+go: no such tool "covdata"
+# wa-api/cmd/listroutes
+go: no such tool "covdata"
+# wa-api/cmd/wss
+go: no such tool "covdata"
+# wa-api/pkg/infra/wa-noise/client/testkit
+go: no such tool "covdata"
+make: *** [coverage-gate] Error 1
+```
+
+**Causa medida**: a toolchain em uso é a BAIXADA por `GOTOOLCHAIN=auto`, e o
+diretório de ferramentas dela não tem `covdata`:
+
+```
+$ go env GOROOT
+/Users/albuquerque/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64
+$ ls $(go env GOROOT)/pkg/tool/darwin_arm64/
+asm cgo compile cover fix link preprofile vet
+```
+
+O `go test -coverprofile` chama `covdata` para produzir o perfil VAZIO de um
+pacote sem testes. Pacote com testes não passa por esse caminho — que é por que
+o gate reprova exatamente nos quatro pacotes sem `_test.go`.
+
+**Não é do código.** Reproduzido em `wa-api/cmd/core`, pacote que a tarefa não
+tocou:
+
+```
+$ go test -count=1 -coverprofile=/tmp/c3.out wa-api/cmd/core
+# wa-api/cmd/core
+go: no such tool "covdata"
+```
+
+Cobertura de pacote único e cobertura multi-pacote com `-coverpkg` funcionam
+normalmente; só o caminho do pacote sem testes quebra.
+
+**Correção sugerida** (uma das três, e é decisão de ambiente, não de código):
+
+1. Fixar `GOTOOLCHAIN` numa instalação local completa em vez da baixada.
+2. Reinstalar/completar a toolchain do módulo.
+3. Excluir do `COVER_PKGS` os pacotes sem testes — **o pior dos três**, porque
+   troca um problema de ambiente por uma mentira permanente no denominador da
+   cobertura.
+
+**Impacto no fechamento desta sessão**: as etapas `build`, `vet` e `test -race`
+passam; `coverage-gate` reprova. Ou seja, `make check` NÃO está verde, e a razão
+está integralmente fora do diff — registrada aqui para que o commit desta sessão
+não seja lido como "gate verde".
+
+### Resolvido (2026-08-20) — e NÃO é correção de toolchain, é contorno local
+
+**O diagnóstico inicial estava errado, e medir derrubou-o.** A hipótese era
+download truncado da toolchain de módulo. Executei a correção: movi a toolchain
+de lado (reversível) e forcei re-download. Vieram **exatamente as mesmas 8
+ferramentas**.
+
+**A causa real**: a toolchain de MÓDULO do Go 1.26 publica 8 ferramentas
+(`asm cgo compile cover fix link preprofile vet`) e constrói as outras 10 —
+`covdata`, `pprof`, `trace`, `test2json`, `nm`, `objdump`, `pack`, `doc`,
+`addr2line`, `buildid` — **sob demanda no `GOCACHE`**. A prova: `go tool -n
+covdata` resolve para `~/Library/Caches/go-build/.../covdata`, e
+`go tool covdata` funciona.
+
+Onde quebra: cobertura de pacote COM teste funciona; de pacote SEM arquivo de
+teste falha, porque esse caminho procura em `GOTOOLDIR` em vez de usar a
+resolução sob demanda. **É bug do Go 1.26**, não ambiente incompleto e não
+código nosso.
+
+`GOTOOLCHAIN=local` não serve: `/usr/local/go` é **go1.24.2** — o `go version`
+dizia 1.26 porque o `auto` já trocava — e o `go.mod` exige ≥1.26. A 1.24.2 local
+É completa (18 ferramentas), só velha demais.
+
+**A alternativa tentadora foi MEDIDA e MENTE.** Manter o pacote sem teste apenas
+em `-coverpkg`, sem ser alvo de teste, produz perfil com ZERO linhas dele e a
+cobertura SOBE artificialmente — num experimento de dois pacotes, de 80,0% para
+83,3%. Não foi proposta.
+
+**A saída aplicada**: os quatro pacotes ganharam testes REAIS, o que faz o
+caminho quebrado deixar de ser exercido sem tocar no denominador.
+
+| pacote | propriedade travada |
+|---|---|
+| `cmd/listroutes` | a saída é ORDENADA e estável — o harness golden compara por diff, e ordem de mapa em Go é aleatória por desenho |
+| `cmd/wss` | o argv do operador SOBREVIVE (substituir em vez de estender perderia o nome do programa e toda flag), e `--mode=stdio` não duplica |
+| `cmd/core` | ele **não** injeta modo — a única diferença para o `wss` — e a tabela de rotas não é vazia |
+| `testkit` | asserção em tempo de COMPILAÇÃO de que os dublês satisfazem `waclient.Client` e `store.ContactStore` (ARMADILHAS §1) |
+
+> **Um desses testes achou algo e o defeito era MEU.** A asserção "toda rota
+> declara método" falhou em `/admin`. Não é defeito do router: é
+> `PathPrefix("/admin").Subrouter()` (`pkg/bootstrap/router.go:268`), ponto de
+> montagem cujos métodos vivem nos filhos. A asserção foi trocada pela que
+> realmente vale: rota sem método precisa ter algo montado SOB ela, porque folha
+> sem método é inalcançável. 101 rotas, 1 ponto de montagem.
+
+**Denominador CONFERIDO depois**, que era condição explícita: os quatro pacotes
+continuam presentes em `coverage.out`. Cobertura 83,2% → **83,8%**, e o piso foi
+subido para 838 no mesmo commit, como o próprio gate manda.
+
+**Como registrar isto**: é **contorno local para um bug do Go 1.26** no caminho
+de cobertura de pacote sem arquivo de teste — NÃO correção da toolchain. Se o Go
+corrigir, os testes continuam valendo por si.
+
+**Status**: corrigido — `make check` verde ponta a ponta (build, vet, race,
+lint, coverage 838/838, log-coverage em ratchet, facade e filesize).
+
+
+## F97 — o teste do launcher perdia uma corrida com a própria limpeza que ele testa
+
+**Data**: 2026-08-20 · **Contexto**: fechamento da F96, ao rodar o gate completo.
+
+**Onde**: `internal/wa-headless/engine/launcher_test.go`,
+`TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers`.
+
+**O sintoma**: falha com *"the browser never started, so this test did not
+exercise the cleanup"* — ou seja, a PRECONDIÇÃO do teste, não o comportamento.
+
+**A medição é o que separa flake de defeito:**
+
+| execução | falhas |
+|---|---|
+| isolado, sob `-cover` | **0 de 6** |
+| dentro do run de cobertura do repo inteiro | **2 de 2** |
+
+Não é raro: é determinístico naquele modo.
+
+**A causa**: o teste corre contra si mesmo. O `Launch` MATA o navegador quando o
+endpoint não responde — que é o comportamento sob teste — mas o falso escreve o
+marcador de um shell que precisa ser escalonado antes. Com orçamento de boot de
+`300ms`, instrumentar todo o repositório deixa a partida de processo lenta o
+bastante para o shell morrer antes do `touch`, toda vez.
+
+**Correção**: `300ms` → `2s`, com a razão escrita no código. Nada é enfraquecido:
+o endpoint continua nunca respondendo, o `Launch` continua falhando, e a limpeza
+continua sendo o que se assere. O teste IRMÃO logo abaixo já usava `5s`.
+
+**Verificado**: o run completo de cobertura, que falhava 2/2, passou limpo.
+
+**Nota de método**: o valor `300ms` não estava protegendo nada — era só "rápido".
+Um número escolhido por conveniência dentro de um teste que mata processos é um
+prazo disfarçado de constante.
+
+**Status**: corrigido — causa medida nos dois regimes, correção verificada no
+regime que falhava.
+
+
+## F98 — dois arquivos fora de `gofmt` desde 2026-08-08, deixados de propósito
+
+**Data**: 2026-08-20 · **Contexto**: fechamento da F96, quando o `gofmt -l` do
+gate os listou.
+
+**Onde**: `pkg/bootstrap/config.go` e
+`pkg/presentation/http/handlers/handler_session_test.go`.
+
+**O que é**: deriva de formatação pré-existente. Confirmado que NÃO foram
+tocados por este trabalho (`git show --name-only` do commit não os lista) e que
+o último commit a mexer no primeiro é de 2026-08-08. O `lint` os conta como
+informativo, então nada trava.
+
+**Decisão da orquestração, e a razão dela**: NÃO formatar agora. Estão fora do
+write set desta feature, e um commit mecânico aumentaria desnecessariamente a
+superfície de conflito do merge futuro — que já tem 34 conflitos conhecidos com
+`feature/macbook-lucas`.
+
+**Correção sugerida**: `gofmt -w` nos dois, num commit isolado, **no closeout**,
+e só se a política final exigir árvore globalmente `gofmt`-clean.
+
+**Status**: aberto — deliberadamente adiado, com a razão registrada.
+
+## F99 — o `coverage-gate` joga fora a evidência de que precisa quando falha
+
+**Data**: 2026-08-20 · **Contexto**: uma execução do `make check` reprovou no
+`coverage-gate` e não deixou NADA para diagnosticar.
+
+**Onde**: `Makefile:133`.
+
+```make
+@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=... -coverprofile=$(COVERAGE_OUT) > /dev/null
+```
+
+**Problema**: o `> /dev/null` existe para não poluir a saída no caminho feliz —
+e no caminho de falha ele apaga exatamente o que se precisa ler. O log do gate
+mostrou `make: *** [coverage-gate] Error 1` logo depois do lint, sem uma única
+linha de `--- FAIL`, sem nome de pacote, sem nada.
+
+Reexecutado isolado logo em seguida, passou (`coverage: 838/838`), e o
+`make check` completo seguinte também (`MAKE_CHECK_EXIT=0`). Ou seja: a falha
+era transitória — provavelmente da mesma família de contenção da F97 — e o gate
+tornou impossível confirmar isso, porque a evidência foi descartada no instante
+em que passou a importar.
+
+**Custo concreto nesta sessão**: escrevi num commit que o gate estava "verde
+ponta a ponta" tendo lido só a ausência de linhas `FAIL` — que o `> /dev/null`
+garante mesmo quando há falha. A afirmação acabou verdadeira, verificada depois
+com `make check` completo e `exit 0`, mas foi feita sem evidência. **O gate
+convida a esse erro.**
+
+**Correção sugerida**: mandar o stdout para um arquivo em vez do vazio, e
+imprimi-lo apenas quando o passo falhar.
+
+```make
+@$(GOTEST) ... > $(COVERAGE_OUT).log 2>&1 || { cat $(COVERAGE_OUT).log; exit 1; }
+```
+
+Mantém o caminho feliz silencioso e devolve o diagnóstico no único momento em
+que ele vale alguma coisa.
+
+**Vale para os vizinhos**: o mesmo padrão `> /dev/null` deve ser procurado nos
+outros alvos antes de aparecer de novo — a F97 e esta entrada são a mesma
+lição vista de dois lados, uma sobre prazo escolhido por conveniência e outra
+sobre silêncio escolhido por conveniência.
+
+### Corrigido (2026-08-20), e pagou-se na PRIMEIRA execução
+
+Aplicado sob a autorização de "hardening oportunista" da orquestração, depois de
+o silêncio me morder uma SEGUNDA vez: outra execução reprovou no `coverage-gate`
+mostrando apenas `make: *** [coverage-gate] Error 1`.
+
+O stdout passou a ir para `$(COVERAGE_OUT).log` e só é impresso quando o passo
+FALHA. Caminho feliz continua silencioso.
+
+**A primeira execução com o conserto revelou uma REGRESSÃO REAL** que as duas
+investigações cegas anteriores não tinham como ver:
+
+```
+coverage: 836 decimos de % (piso declarado 838) — atual 83.6%
+FALHA: a cobertura caiu (83.6% < piso declarado).
+```
+
+Eu havia acrescentado código de produção (`media.go`, `resolve.go`, o ramo de
+grupo) cujo `resolve.go` ficava **0%** no gate, porque só o teste AO VIVO o
+exercitava — e testes ao vivo não rodam ali. O gate estava certo e eu não sabia.
+
+**A correção foi cobrir, não baixar o piso**: oito testes novos para `Resolve`,
+`Resolution.String`, `Result.String` e `kindOf`, incluindo o caso que importa —
+`kindOf` recusando `notification_template`, `revoked` e `poll_creation`, para
+que uma mensagem de sistema nunca sirva de prova de que a conta enviou algo.
+Cobertura de volta a 838.
+
+**A lição, e ela é a razão de esta entrada existir**: um gate que descarta a
+própria saída não é só inconveniente — ele esconde regressão verdadeira e faz o
+leitor gastar as investigações em fantasmas. As duas cegas anteriores foram
+atribuídas a contenção (F100), e uma delas era; esta não era.
+
+**Status**: corrigido — saída preservada e impressa na falha, com uma regressão
+real de cobertura encontrada e consertada na primeira execução.
+
+## F100 — o gate é sensível à CARGA da máquina, e isso já produziu quatro falsas falhas num dia
+
+**Data**: 2026-08-20 · **Contexto**: quarta ocorrência em uma sessão.
+
+**O padrão**, todas as quatro medidas nos dois regimes (isolado × sob carga):
+
+| teste | isolado | sob carga |
+|---|---|---|
+| `TestBrowserChainVerifiesTheModuleInventory` | 2,08 s | **travou 18m28s** (H36) |
+| `TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers` | 0/6 falhas | **2/2 falhas** (F97) |
+| `TestStartSession_ConcurrentStartOnSameProfileEndToEnd` | 3/3 verdes | falhou |
+| `TestStartSession_NotReadyFailure_PreservesFinalSnapshot` | 3/3 verdes | falhou |
+
+> **ATUALIZAÇÃO 2026-08-22 (decisão 79): a CAUSA foi medida, e não era "a
+> máquina estava ocupada".** Esta entrada tratou a carga como ambiental. Ela é
+> produzida pelo PRÓPRIO gate: o `go test` paraleliza pacotes até ao número de
+> CPUs, e quatro pacotes desta árvore lançam browsers sem coordenação alguma.
+> Medido durante uma execução: **24 browsers vivos ao mesmo tempo, 4 binários de
+> teste, 10 CPUs, load average 59,58.**
+>
+> E havia uma segunda causa, independente da carga: o helper `freePort` era
+> bind-`:0`-e-fecha, um TOCTOU clássico. Com a máquina JÁ serializada e a carga
+> em 9,63, um teste ainda estourou 2m30 porque a porta reservada foi tomada
+> antes de o Chromium se ligar a ela — a colisão ficou visível no log como um
+> `httptest.Server` ainda a segurá-la.
+>
+> **Correção aplicada (F103)**: os quatro pacotes de browser correm com `-p 1`,
+> e os 185 sítios que pediam porta reservada passaram a usar porta efêmera, que
+> não tem alocação para disputar. Resultado medido:
+>
+> | | browsers simultâneos | pico de carga | órfãos após | `runtime` |
+> |---|---|---|---|---|
+> | antes | 24 | 59,58 | 28 | 220 s (com falha) |
+> | depois | 8 | 9,63 | **0** | **30,8 s** |
+>
+> As quatro falhas desta tabela são, portanto, candidatas a ter a MESMA causa —
+> e não "a máquina estava ocupada". Antes de voltar a atribuir uma falha do gate
+> a carga externa, reproduza-a com o teto ativo: se ainda acontecer, é outra
+> coisa, e é essa outra coisa que precisa de ser medida.
+
+**A causa comum**: esses testes sobem CHROME DE VERDADE. Sob carga, o navegador
+não responde no `/json/version` dentro do orçamento de boot de 30 s, e o teste
+reporta honestamente `launch failure` — que não é o estágio que ele queria
+exercitar.
+
+Medido no momento da falha: **load average 6,73 / 9,43 / 8,93**, sem nenhum
+Chrome vazado (`pgrep -f headless=new` = 0). Ou seja, não era vazamento — era a
+máquina ocupada, em boa parte pelos meus próprios `make check` sucessivos com
+`-race` somados aos testes contra a SPA real.
+
+**O que NÃO é**: não é defeito desses testes. Os dois últimos falham RÁPIDO e
+com diagnóstico — exatamente o comportamento que a H36 pediu. O `launch failure`
+é uma leitura correta do mundo naquele instante.
+
+**Prática de trabalho, que é a correção real**: rodar o `make check` numa
+máquina quieta, e não em paralelo com trabalho contra a SPA real. Uma execução
+concorrente mede a máquina, não o código — que é literalmente a lição do
+"Medir antes de projetar" no `CLAUDE.md`, item 2, aplicada ao próprio gate.
+
+**Correção sugerida no código, se a prática não bastar**: os testes que sobem
+navegador real poderiam declarar isso e ser puláveis por variável de ambiente
+num modo "gate sob carga", em vez de reprovar. Mas isso troca sinal por
+conveniência, e por isso NÃO está sendo proposta como padrão — só registrada
+como opção consciente.
+
+**Como distinguir na hora**: falha com `launch: browser never answered on
+/json/version` ou `Boot(...): deadline of 30s exceeded` é candidata a carga.
+Reexecute isolado ANTES de investigar o código; se passar 3/3, o alvo era a
+máquina.
+
+**Status**: aberto — padrão medido quatro vezes com os dois regimes, causa
+identificada, correção é de prática e não de código.
+
+**Quinta ocorrência — 2026-08-21**, e é a mais limpa como evidência:
+
+```
+--- FAIL: TestHolder_StoppedHolderRefusesToBootAgain (30.00s)
+```
+
+`git status --porcelain internal/wa-headless/runtime/` estava **vazio** — o
+pacote não foi tocado na sessão. Reexecutado isolado com `-count=3 -race`:
+**4,5 s, verde nas três**. Trinta segundos é o teto do teste; 4,5 s é o custo
+real. A distância entre os dois é a máquina, não o código.
+
+O que esta ocorrência acrescenta às quatro anteriores: as outras foram medidas
+com o pacote alterado na mesma sessão, então "não é o código" era inferência.
+Aqui é observação — árvore limpa naquele diretório.
+
+**Sexta ocorrência — 2026-08-21**, mesmo padrão em outro pacote:
+
+```
+--- FAIL: TestStartSession_SuspectMarkerComposedPath_ClearedOnSuccess (30.00s)
+```
+
+`git status --porcelain internal/wa-headless/core/` vazio; isolado com
+`-count=3 -race`: **4,6 s, verde**. Duas ocorrências observadas (não inferidas)
+em pacotes diferentes no mesmo dia, ambas em testes com teto de 30 s. O padrão é
+o TETO, não o pacote: 30 s é generoso para o custo real e apertado para uma
+máquina carregada rodando o gate inteiro com `-race`.
+
+Isso muda a correção sugerida: em vez de investigar cada teste, **subir o teto
+dos testes que cronometram boot de navegador** — o que eles medem é
+comportamento, não latência, e latência é o que a máquina carregada altera.
+
+**Sétima ocorrência, 2026-08-21**, terceira no mesmo dia:
+`TestStartSession_SettleLoopRespectsTheBudgetItWasGiven` estourou 30 s no gate e
+passou 3× isolado (16,5 s no total). Três testes diferentes, dois pacotes, o
+MESMO teto.
+
+**Custo medido**: três execuções de `make check` perdidas nesta sessão. Cada uma
+custa minutos e, pior, cada vermelho exige decidir se é real antes de seguir. O
+ruído já é maior que o defeito.
+
+**Não corrigido de propósito**: é defeito pré-existente fora do escopo da tarefa,
+e a regra do `CLAUDE.md` manda registrar e PERGUNTAR em vez de consertar de
+graça. A correção sugerida é uma linha por teste — subir o teto de 30 s para 90 s
+nos que cronometram boot de navegador — e está esperando decisão.
+
+---
+
+### CORRIGIDO em 2026-08-21, com a distinção que a decisão exigiu
+
+A orquestração autorizou subir para 90 s **somente nos testes de integração que
+cronometram boot**, e foi explícita: *"registre 90 s como orçamento de harness,
+não SLA do produto"*.
+
+Isso mudou o conserto. O caminho óbvio era subir `engine.DefaultDeadlines.Boot`
+— e teria sido **errado**: 30 s ali é decisão de produto apoiada numa medição
+(SPA utilizável pré-login em 6,1–8,5 s, 30 s de folga para cache frio). Subir
+esse número para calar o gate teria mudado o que o produto promete, como efeito
+colateral de conveniência de teste.
+
+O conserto real usa `StartConfig.Runner`, que já existia: os helpers de teste
+(`core.baseConfig`, `runtime.holderConfig`) injetam um Runner com
+`Policy.Boot = 90s` e tudo o mais em produção.
+
+**Travado por dois testes**, e o segundo foi exigência explícita da decisão:
+
+| teste | o que impede |
+|---|---|
+| `TestTheHarnessBudgetIsNotTheProductBudget` | alguém subir o deadline de PRODUTO para calar o gate; falha se `DefaultDeadlines.Boot` sair de 30 s, ou se o runner do harness mexer em qualquer outro deadline |
+| `TestAHungBootStillTerminatesBounded` | o teto virar ausência de teto — dá um orçamento minúsculo a um boot que nunca fica pronto e prova que ele **desiste dentro do orçamento** |
+
+O segundo usa orçamento pequeno de propósito: a propriedade é "o deadline limita
+a espera", e prová-la com 90 s custaria 90 s para aprender o mesmo.
+
+**Status**: corrigido.
+
+### OITAVA OCORRÊNCIA, 2026-08-21 — e ela mostra que o conserto foi ESTREITO demais
+
+```
+--- FAIL: TestBrowserChainReportsAWedgedPageAsUnresponsive (50.00s)
+--- FAIL: TestStartSession_FailureTearsDownDeterministicallyWithNoOrphan (32.05s)
+```
+
+Árvore limpa nos dois pacotes; isolados, passam em **9,5 s** contra tetos de 50 s
+e 32 s. Na execução seguinte do `make check`, sem tocar em nada, verde.
+
+O conserto anterior injetou o orçamento de harness em `core.baseConfig` e
+`runtime.holderConfig`. **Estes dois testes não passam por lá** — têm prazos
+próprios, escritos no corpo deles.
+
+Ou seja: eu consertei os três testes que estavam falhando, não a CLASSE de
+problema. O `TestTheHarnessBudgetIsNotTheProductBudget` protege o deadline de
+produto e não diz nada sobre testes que trazem o próprio relógio.
+
+**Correção sugerida, não aplicada**: os prazos escritos dentro de testes de
+integração deveriam vir do mesmo `harnessBootBudget`, para que exista UM número a
+ajustar. Fica registrado em vez de emendado agora, porque mexer nos prazos de
+dois testes que acabaram de falhar é o momento errado para decidir qual é o valor
+certo.
+
+---
+
+## H142 — o zero da H106 era do DADO, não da página: menções fechadas produzindo uma
+
+**Data**: 2026-08-22
+**Contexto**: fechar as três últimas linhas `MISSING` do `LEDGER-WWEBJS.md`
+(`getMentions`, `getGroupMentions`, `MESSAGE_REVOKED_ME`).
+
+**Onde**: `internal/wa-headless/capabilities/message/script.go` (`mentionsScript`),
+`internal/wa-headless/capabilities/message/message.go` (`MentionsOf`).
+
+**Problema**: a H106 mediu 395 mensagens carregadas e achou ZERO menções sob
+cinco nomes de campo candidatos, e concluiu — corretamente — que embarcar um
+leitor nunca visto devolvendo algo seria a armadilha H93. A entrada ficou
+`MISSING` com essa medição anexada e parecia encerrada.
+
+**O que estava errado não era a medição, era a leitura dela.** O zero não dizia
+"a página não expõe menções". Dizia "ninguém nesta conta jamais mencionou
+ninguém" — e essas são afirmações diferentes, com remédios diferentes. A
+primeira é um beco; a segunda é falta de fixture.
+
+**Evidência**: produzida UMA menção no grupo de laboratório, mencionando o par
+resolvido por `lookup.NumberID` e o próprio grupo. A varredura seguinte, sobre
+62 mensagens:
+
+```
+mentionedJidList  viaGetter 2  viaUnderscore 2
+                  entrada: object, keys [_serialized, server, user]
+groupMentions     viaGetter 2  viaUnderscore 2
+                  entrada: object, keys [groupJid, groupSubject]
+```
+
+Os dois campos respondem igual pelo getter e pelo `__x_`, o que torna o getter o
+caminho estável.
+
+**A armadilha da H131 apareceu de novo, e o primeiro instrumento caiu nela.**
+A varredura inicial listou NOMES de campo e reportou `__x_nonJidMentions` como
+"preenchido" em **46 de 62** mensagens — inclusive em mensagens que não mencionam
+ninguém. O campo não é array: é sentinela preguiçosa. Um leitor construído sobre
+aquela varredura diria que quase toda mensagem menciona alguém. O conserto foi
+medir a FORMA em vez do nome, e a regra virou código: `mentionsScript` só itera
+o que passa em `Array.isArray`.
+
+**Correção aplicada**: `Reader.MentionsOf` devolve `Mentions{People, Groups}`.
+Pessoas e grupos são campos separados porque a página os carrega em campos
+separados com formas diferentes — fundi-los perderia o assunto e mentiria sobre
+a espécie. O assunto do grupo vem **congelado na mensagem**, não resolvido do
+grupo de hoje: é o que foi dito na hora.
+
+**Divergência consciente da referência**: o `getMentions` de lá mapeia cada id
+por `getContactById` e devolve `Contact`. Aqui devolve identidades, porque
+`contacts.Recipients` (H132) já resolve lista de jids reportando encontrados e
+ausentes SEPARADAMENTE — distinção que a versão da referência transforma em
+objeto meio vazio.
+
+**Status**: corrigido. Travado por:
+- `TestTheMentionsScriptDoesNotReadTheSentinelField` — CN: trocar
+  `m.mentionedJidList` por `m.nonJidMentions`. Falha com *"the script reads
+  nonJidMentions, which is not an array and was measured as present on 46 of 62
+  messages including ones that mention nobody"*.
+- `TestTheMentionsScriptTakesOnlyArrays` — CN: `const list = v => v || []`.
+  Falha com *"the script does not check Array.isArray before iterating"*.
+- `TestPeopleAndGroupsDoNotShareAList` — CN: `m.People = append(m.People, g.JID)`.
+  Falha.
+- `TestTheMentionsRenderingIsQuiet` — CN: imprimir `m.Groups`. Falha com
+  *"the rendering leaks \"120363\""*.
+- `TestAnUnloadedMessageHasNoMentionsAnswer`,
+  `TestAnEmptyIDNeverReachesThePageForMentions`.
+
+Prova em SPA real: `TestProbeProduceMention` envia 1 pessoa + 1 grupo e lê de
+volta por `MentionsOf` — `people=1 groups=1`, identidade batendo com a resolvida
+e assunto não vazio.
+
+**Lição, e é a terceira vez que ela cobra**: *uma ausência medida precisa dizer
+se é ausência de CAPACIDADE ou ausência de DADO.* A H114 já tinha ensinado que
+um zero precisa de controle positivo; aqui o controle positivo era produzir o
+fato. As linhas ficaram três meses `MISSING` por uma medição correta lida como
+conclusão errada.
+
+---
+
+## H143 — `MESSAGE_REVOKED_ME`: o diagnóstico estava certo, e a pós-condição estava no lugar errado
+
+**Data**: 2026-08-22
+**Contexto**: idem H142 — última linha `MISSING`.
+
+**Onde**: `internal/wa-headless/capabilities/revoke/revoke.go` (`ForMe`,
+`waitGone`, `loadedScript`), `internal/wa-headless/events/events.go`
+(`MessageRemoved`), `internal/wa-headless/events/ingress.go` (`onRemove`).
+
+**Problema**: a nota da H88 dizia *"não temos 'apagar para mim'; é falta de
+MÉTODO antes de ser falta de evento"* — e estava certa. O `revoke` só oferecia
+`ForEveryone`, apesar de o próprio `ErrNotRevocable` já dizer ao chamador
+*"apague localmente"*: o pacote nomeava um remédio que não vendia.
+
+**Nome enumerado, não adivinhado.** Três nomes de função inventados a partir da
+referência não existiam neste build esta semana (H134, H137). Desta vez o módulo
+foi enumerado antes:
+
+```
+Cmd delete surface: clearChat, clearCurrentChatConversationHistory,
+clearSelectedChats, deleteOrExitChat, deleteOrExitChatFromEntryPoint,
+newsletterDeleteDrawer, sendDeleteMsgs
+sendDeleteMsgs: aridade 6   (a referência passa 3; o resto tem padrão)
+```
+
+**A medição que eu não teria adivinhado**: a primeira versão verificava a
+pós-condição DENTRO da página, imediatamente depois do `await sendDeleteMsgs`.
+Contra produção, falhou:
+
+```
+sent: send.Result(id=3EB0078A0EE0866F6826CC ack=1 waited=1ms)
+ForMe: revoke: the page accepted the local deletion and the message is still loaded
+```
+
+`sendDeleteMsgs` **resolve antes de a coleção soltar o modelo**. Movida a espera
+para o Go — que é onde a invariante 6 manda o relógio ficar —, o tempo real
+medido foi **4,539 s**. A verificação na página estava garantida a falhar; um
+`sleep` na página teria "consertado" o sintoma violando a invariante.
+
+Por isso o script deixou de responder `loaded`: uma página que reportasse a
+pós-condição a reportaria no único instante em que ela está garantidamente
+errada.
+
+**O evento é `message.removed`, não `message.revoked`, e a distinção é o motivo
+de ele existir.** Revogar é fato da CONVERSA — some do telefone de todo mundo e
+os dois lados veem. Apagar local é fato deste APARELHO — ninguém mais percebe.
+Emitir um pelo outro diria ao assinante que uma mensagem sumiu para todos quando
+sumiu só aqui. O ouvinte é `MsgCollection.on('remove')` filtrado por `isNewMsg`,
+o mesmo filtro da referência e pelo mesmo motivo: sem ele, cada despejo de
+conversa antiga viraria "alguém apagou isto".
+
+**`ForMe` não consulta `canSenderRevokeMsg`**, e isso é decisão: aquela pergunta
+é sobre as cópias DE OUTRAS PESSOAS. Consultá-la aqui recusaria — em nome delas —
+um ato que nunca sai deste aparelho.
+
+**Status**: corrigido. Travado por:
+- `TestALocallyDeletedMessageStillLoadedIsAFailure` — CN: remover a chamada a
+  `waitGone`. Falha.
+- `TestTheLocalDeleteDoesNotConsultTheRevokeEntitlement` — CN: introduzir
+  `canSenderRevokeMsg` no script. Falha.
+- `TestTheLocalDeleteVerifiesAgainstTheCollection` — CN: idem `waitGone`. Falha
+  com *"the postcondition never asked the collection whether the message is still
+  there"*.
+- `TestALocalDeleteThatLandsReportsItself`,
+  `TestAnEmptyIDNeverReachesThePageForALocalDelete`,
+  `TestAMessageNotLoadedCannotBeDeletedLocally`.
+
+Prova em SPA real: `TestProbeDeleteForMe` envia, mede a LINHA DE BASE
+(`message.removed before the delete: 0`), apaga, e observa `message.removed`
+nomeando exatamente a mensagem apagada (`total 1, was 0`).
+
+**Lição**: *a pós-condição tem de ser lida no relógio de quem espera.* A
+invariante 6 é normalmente enunciada como "não decida na página"; este caso
+mostra a outra metade — **não VERIFIQUE na página**, porque verificar cedo demais
+é decidir com a informação errada.
+
+---
+
+## H144 — a sessão dupla não destravou a presença, e o que ela produziu foi melhor: a causa medida
+
+**Data**: 2026-08-22
+**Contexto**: reauditar os 56 `PARTIAL` procurando os que ficaram acionáveis por
+causa das capacidades novas de hoje.
+
+**Onde**: `internal/wa-headless/probe_presence2_test.go` (novo),
+linhas `sendPresenceAvailable` e `sendPresenceUnavailable` do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: as duas linhas estavam `PARTIAL` desde a H50 com a nota
+*"observação não provada; exige as duas contas na agenda uma da outra"*. Aquilo
+era uma SUPOSIÇÃO sobre a causa — plausível, nunca medida —, escrita quando não
+havia como acordar as duas contas ao mesmo tempo. A sessão dupla (H135) parecia
+ser exatamente a peça que faltava.
+
+**Não era.** Com conta-A e conta-B acordadas simultaneamente, conta-B anunciando
+disponível e conta-A observando, `Observe` nunca chega a `subscribed` em 45 s de
+tentativa.
+
+**A medição que valeu a rodada** foi a que perguntou POR QUÊ, em vez de concluir
+a partir da falha:
+
+```
+conta-B in conta-A's address book: found=true
+record: contacts.Contact(identity=<redacted> pn=true lid=true merged=true)
+address-book flags: {"inCollection":true, "isMyContact":false,
+                     "isAddressBookContact":false, "isWAContact":false}
+```
+
+O par ESTÁ na coleção, com PN e LID fundidos — a identidade está resolvida e
+correta. O que falta é o vínculo de AGENDA, e `isMyContact` e
+`isAddressBookContact` leem `false` nos dois. A assinatura de presença exige esse
+vínculo, e ele se cria no TELEFONE, salvando o contato.
+
+**O `Contact` deste módulo não carrega esses sinalizadores**, e foi por isso que
+a leitura teve de ser crua: `contacts.ByJID` respondeu `found=true`, que é
+resposta a *"existe no WhatsApp"* — pergunta diferente de *"está na agenda"*.
+Ler a primeira como a segunda é o erro que teria mantido a hipótese viva.
+
+**Correção aplicada**: nenhuma no código. As duas linhas continuam `PARTIAL`, mas
+a nota deixou de ser hipótese e virou medição, e a pendência mudou de categoria:
+é **dependência humana** (salvar o contato no telefone), não trabalho parado
+deste módulo. Fica na lista de dependências humanas junto com foto de perfil e
+status.
+
+**Status**: não corrigido — e o "não corrigido" agora tem causa em vez de
+suspeita.
+
+**Lição**: *uma capacidade nova não destrava o que ela não toca, e descobrir isso
+depressa vale a rodada.* A tentação era registrar "a sessão dupla não resolveu" e
+seguir. O que fez a rodada valer foi a segunda pergunta — POR QUE não —, que
+transformou uma nota de três meses em fato verificável. A H142 é o mesmo
+movimento com o sinal trocado: lá, perguntar por que o zero era zero abriu a
+linha; aqui, fechou a dúvida.
+
+**Achado incidental**: `contacts.Contact` não expõe `isMyContact` /
+`isAddressBookContact`, e a distinção entre "existe no WhatsApp" e "está na minha
+agenda" é real e útil — o `isMyContact` da referência existe exatamente para
+isso. **Correção sugerida, não aplicada**: acrescentar os dois campos ao
+`Contact`, medindo antes a distribuição deles sobre as 944 entradas desta conta
+(um campo que lê `false` em 944 de 944 não é campo, é ruído). Fora do escopo da
+tarefa atual.
+
+---
+
+## H145 — `description`: a metade aberta do leitor não é trabalho parado, é consequência de escrita bloqueada
+
+**Data**: 2026-08-22
+**Contexto**: continuação da reauditoria dos `PARTIAL` (H144).
+
+**Onde**: `internal/wa-headless/probe_gdesc2_test.go` (novo), linha `description`
+do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: a linha `description` diz que o leitor está entregue e **nunca foi
+observado não-vazio** — no grupo de laboratório `desc` e `displayedDesc` leem
+`undefined`, o que é compatível com *"o grupo não tem descrição"* E com *"o
+leitor olha o campo errado"*. Era candidata natural à manobra da H142: produzir o
+dado com `group.SetDescription` (H126) e observar o leitor.
+
+**Medição**:
+
+```
+BEFORE: descLen=0 source="none"
+SetDescription: group: the description did not take:
+                asked for 35 bytes and the server reports 0
+```
+
+A escrita reproduziu, pela **terceira vez independente**, o bloqueio já medido em
+canal (H113) e em grupo (H126): a página ACEITA a chamada e o servidor nunca
+armazena. A pós-condição do `SetDescription` mordeu corretamente e recusou
+declarar sucesso — invariante 14 funcionando.
+
+**O que isto estabelece, e o ledger não dizia**: não existe, dentro deste módulo,
+produtor para o dado que o leitor precisaria observar. A metade aberta da linha
+`description` não é trabalho pendente — é consequência de uma linha `BLOCKED`.
+
+Isso muda a classificação prática de *"PARTIAL, talvez acionável"* para
+*"PARTIAL, comprovadamente não acionável aqui"*, que é exatamente a distinção que
+o critério de encerramento da Fase 1 (decisão 52/62) pede e que não estava
+registrada.
+
+**Status**: não corrigido, por não haver o que corrigir. A sonda ficou no repo e
+faz `Skip` com a mensagem do bloqueio em vez de falhar: se o servidor um dia
+passar a armazenar, ela deixa de pular e a linha volta a ser acionável sozinha.
+
+**Lição**: *nem toda metade aberta é trabalho; algumas são sombra de outra
+linha.* Varrer `PARTIAL` procurando o que ficou acionável só é honesto se
+também registrar o que ficou provado INACIONÁVEL — senão a mesma linha é
+reexaminada a cada varredura, e cada varredura paga de novo o custo de descobrir
+o mesmo bloqueio.
+
+---
+
+## H146 — `getBlockedContacts`: "não é exposto" era afirmação sobre a nossa superfície, não sobre a página
+
+**Data**: 2026-08-22
+**Contexto**: varredura sistemática dos 56 `PARTIAL` (continuação de H144/H145).
+
+**Onde**: `internal/wa-headless/capabilities/block/block.go` (`List`, `listScript`),
+linha `getBlockedContacts` do `LEDGER-WWEBJS.md`.
+
+**Problema**: a linha dizia *"bloquear/desbloquear provados; LISTAR os bloqueados
+não é exposto"*. Isso é verdade sobre o NOSSO módulo e nunca foi conferido contra
+a página. Enumerar — a técnica que achou o `sendDeleteMsgs` na H143 depois de três
+nomes inventados falharem — respondeu em uma chamada:
+
+```
+collections: {"Blocklist": 0}
+WAWebBlocklistCollection: ["BlocklistCollection"]
+WAWebBlockContactAction: ["blockContact","unblockContact","updatePSAUserBlockingStatus"]
+WAWebContactBlockStore: empty
+WAWebBlocklistStore: empty
+contactFlag: {contacts: 945, withIsBlocked: 0, blocked: 0}
+```
+
+**Dois achados, e o segundo é o que salva o leitor.** A coleção EXISTE e responde
+`getModelsArray` — lia 0 porque ninguém está bloqueado nesta conta, não porque
+esteja ausente. E o caminho que um implementador apressado tomaria — filtrar o
+roster por `isBlocked` — **não existe**: de 945 contatos, ZERO carregam o campo.
+Uma versão assim devolveria vazio para sempre e pareceria saudável fazendo isso.
+
+**Correção aplicada**: `Blocker.List`. É um alargamento deliberado do que o
+pacote emite: o `Result` sempre carregou `Before`/`After` como TAMANHOS, com um
+"nunca as entradas" escrito — narrowing correto quando a única pergunta era "a
+mudança pegou". Um número não diz a quem desbloquear.
+
+**Status**: corrigido. Travado por:
+- `TestARefusedReadIsNotAnEmptyBlocklist` — CN: remover a checagem de `out.OK`.
+  Falha. É a distinção que torna o método usável: "ninguém bloqueado" e "a
+  leitura falhou" têm a mesma forma depois que um erro é engolido, e quem agisse
+  sobre a primeira desbloquearia ninguém acreditando ter conferido.
+- `TestTheListReadsTheBlocklistAndNotTheRoster` — CN: trocar
+  `BlocklistCollection` por `ContactCollection`. Falha.
+- `TestAnEmptyBlocklistIsNotAnError` — CN: erro quando a lista é vazia. Falha.
+- `TestTheListNamesWhoIsBlocked`.
+
+Prova em SPA real (`TestProbeBlocklistNamed`), com restauração no padrão da H27:
+`0 → 1` nomeando o par → `0`. O desbloqueio é agendado ANTES de qualquer
+asserção — registrá-lo depois deixaria o par bloqueado justamente quando uma
+verificação falhasse, que é quando o fixture mais importa.
+
+**Lição**: *uma nota que diz "não é exposto" precisa dizer POR QUEM.* "Nós não
+expomos" e "a página não oferece" são fatos diferentes com custos diferentes, e
+a linha os fundia havia meses.
+
+---
+
+## H147 — `isRegisteredUser`: a nota estava metade obsoleta e metade certa por outro motivo
+
+**Data**: 2026-08-22
+**Contexto**: idem H146.
+
+**Onde**: `internal/wa-headless/probe_notreg_test.go` (novo), linha
+`isRegisteredUser` do `LEDGER-WWEBJS.md`.
+
+**Problema**: a linha dizia *"é passo interno de todo envio; não exposto"* e
+apontava para `spa.ResolveIdentityExpr`. A H127 criou `capabilities/lookup`
+exatamente para essa classe de nota — o doc do pacote diz, com todas as letras,
+que cinco linhas estavam `PARTIAL` pelo mesmo motivo. Esta ficou para trás.
+
+**Mas corrigir o mapeamento não bastava**, e é aqui que a linha ganhou algo que
+não tinha: a referência define `isRegisteredUser(id)` como
+`Boolean(await getNumberId(id))`, e toda prova ao vivo desta resolução até hoje
+perguntou sobre um número que **EXISTE**. Uma capacidade só vista dizendo "sim"
+passa em qualquer teste que só pergunte por números reais — inclusive uma que
+respondesse "sim" para tudo.
+
+**Medição**, com controle positivo na MESMA sessão (a regra da H114):
+
+```
+positive control:    lookup.Identity(jid=true group=false resolved=true)
+implausible number:  lookup.Identity(jid=false ...) err=lookup: that number is not on WhatsApp
+```
+
+O controle positivo não é cerimônia: sem ele, um "não existe" é compatível com a
+resolução inteira estar quebrada.
+
+**Sobre o alcance da consulta**: `queryWidExists` é a mesma pergunta que todo
+envio faz antes de despachar. Nenhuma mensagem sai, nenhuma conversa é aberta, e
+o número usado é sintaticamente válido e deliberadamente implausível — nenhuma
+pessoa real é implicada pela pergunta.
+
+**Status**: corrigido, linha para `PROVEN` apontando para `lookup.NumberID`.
+
+**Lição**: *quando uma capacidade tem duas respostas, provar uma prova metade.*
+Vale para toda linha que devolve booleano ou erro-como-resposta, e esta varredura
+deveria procurar outras: uma guarda só exercitada pelo caminho de recusa foi a
+armadilha nº 2 do `ARMADILHAS.md`; esta é a mesma armadilha com o sinal trocado.
+
+---
+
+## H148 — `getContactDeviceCount`: o registro sempre esteve lá, sob a outra identidade
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, seguindo a lição da H147 (procurar linhas
+provadas por metade).
+
+**Onde**: `internal/wa-headless/probe_devcount_test.go` (novo),
+`internal/wa-headless/capabilities/addressbook/addressbook.go` (doc de
+`DeviceCount`), linha `getContactDeviceCount` do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: a linha dizia *"o caminho funciona e o par NÃO tem registro de
+dispositivo nesta conta"* (H90). A hipótese desta rodada era que o registro
+apareceria com o par ACORDADO e depois de tráfego real — daí a sessão dupla e uma
+mensagem.
+
+**A hipótese era irrelevante.** O registro já existia antes da mensagem, e a
+sessão dupla não teve nada a ver com isso. Medidos os dois jids lado a lado, na
+mesma sessão:
+
+```
+BEFORE (resolved):  count=5   err=<nil>
+BEFORE (asked-for): count=0   err=... the page has no device record for that user
+AFTER  (resolved):  count=5   err=<nil>
+AFTER  (asked-for): count=0   err=... the page has no device record for that user
+```
+
+A H90 mediu contra o jid de TELEFONE num build LID-first — a mesma armadilha que
+a H136 nomearia meses depois, cometida antes de ela existir. O caminho estava
+provado e a linha ficou `PARTIAL` por causa da identidade usada na medição, não
+por causa da capacidade.
+
+**A decisão original continua certa**: não fundir "sem registro" no número 0 foi
+o que tornou este diagnóstico possível. Se a implementação tivesse devolvido 0
+para o jid de telefone, as duas leituras teriam sido `0` e `5`, e a diferença
+pareceria variação de dado em vez de erro de identidade.
+
+**Correção aplicada**: doc de `DeviceCount` passa a dizer que a identidade tem de
+ser a resolvida, com os dois números medidos, porque **as duas respostas são bem
+formadas** — e é isso que torna o erro invisível: a resposta do jid de telefone
+parece um fato sobre a pessoa e é um fato sobre o argumento.
+
+**Status**: corrigido (linha para `PROVEN`).
+
+**Achado incidental, NÃO corrigido**: `DeviceCount` aceita jid não resolvido e
+responde "sem registro", indistinguível de um usuário genuinamente desconhecido.
+**Correção sugerida**: ou resolver internamente via `capabilities/lookup`, ou
+recusar um jid `@c.us` com erro próprio (`ErrUnresolvedIdentity`) em vez de
+responder sobre ele. A primeira esconde uma chamada de rede dentro de um leitor;
+a segunda quebra chamadores existentes. **Não aplicado sem perguntar**, conforme
+a regra do projeto — e a pergunta vale para TODO leitor deste módulo que aceite
+jid cru, não só para este. É decisão de superfície, não conserto pontual.
+
+**Lição**: *quando duas identidades nomeiam a mesma pessoa, toda medição precisa
+dizer com qual foi feita.* A H136 aprendeu isso num envio; esta linha mostra que
+o mesmo erro contamina MEDIÇÕES antigas que ninguém suspeita — e que o custo é
+uma linha parada por meses com diagnóstico errado.
+
+---
+
+## H149 — `getAbout`: a hipótese da H148 foi testada e DESCARTADA
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, aplicando a lição da H148.
+
+**Onde**: `internal/wa-headless/probe_about2_test.go` (novo), linha `getAbout`.
+
+**Hipótese**: depois da H148 — em que uma medição antiga contra o jid de telefone
+tinha produzido um diagnóstico errado por meses — era natural suspeitar do mesmo
+em `getAbout`, cuja nota (H70) diz que o par tem recado vazio e em cache.
+
+**Resultado: negativo, e por isso está aqui.** Os dois jids, na mesma sessão:
+
+```
+resolved:  contacts.About(len=0 fetched=false waited=510ms)
+asked-for: contacts.About(len=0 fetched=false waited=515ms)
+```
+
+Idênticos. A identidade NÃO é a causa aqui, e o dado que importa é o
+`fetched=false` nos **dois**: o caminho de servidor não é exercitado por nenhuma
+das identidades. A nota da H70 está intacta.
+
+**Status**: não corrigido, e a linha continua `PARTIAL` com a mesma causa de
+antes — agora com uma hipótese a menos.
+
+**Lição, e é a razão de gastar uma entrada num resultado negativo**: *uma
+generalização recém-aprendida é exatamente o que vai ser aplicada em excesso.* A
+H148 ensinou "toda medição precisa dizer com qual identidade foi feita", e a
+tentação imediata é reler todo `PARTIAL` como se fosse o mesmo erro. Testar e
+registrar o descarte é o que impede a próxima varredura de pagar de novo pela
+mesma suspeita — do mesmo jeito que a regra do `ARMADILHAS.md` sobre dublês
+permissivos existe porque a lição sem o contra-exemplo vira superstição.
+
+---
+
+## H150 — `chat.changed` refinado por campo: tentado, medido, e a página não sustenta
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. `CHAT_ARCHIVED` e `UNREAD_COUNT` estavam
+`PARTIAL` pela MESMA causa — *"o nosso evento é grosso: diz que a conversa mudou,
+não QUAL campo"* (H87) —, o que fazia delas o item de maior alcance da varredura:
+uma medição, duas linhas.
+
+**Onde**: `internal/wa-headless/probe_chatfields_test.go` (novo), linhas
+`CHAT_ARCHIVED` e `UNREAD_COUNT` do `LEDGER-WWEBJS.md`.
+
+**Hipótese**: a referência emite um evento por campo. Se a coleção entregasse os
+atributos alterados ao ouvinte, a classificação iria para o Go — exatamente o
+padrão dos subtipos `gp2` da H119, que respeita a invariante 6: a página carrega
+a palavra, o Go decide o que ela significa.
+
+**Primeira medição, e a primeira armadilha**: `model.changed`, que é o nome
+Backbone, é **nulo em 40 de 40** eventos. Ler o nome que a referência usaria
+daria zero para sempre. Mas o modelo expõe `__fired` e `__changes`, contabilidade
+própria do build, e `__fired` vinha populado — o que parecia a saída:
+
+```
+40 eventos de UM envio: msgsChanged:24, msgsLength:8, lastReceivedKey:8
+```
+
+**Segunda medição, com os atos SEPARADOS, e é ela que decide.** A primeira
+juntava tudo numa contagem só, e uma lista de nomes sem dono não responde à
+pergunta — que é justamente de quem é cada nome. Rotulando cada ato:
+
+```
+send:      typing, msgsChanged, msgsLength, createdLocally,
+           markedUnread, ftsCache, lastReceivedKey
+archive:   showUnreadInTitle ×2
+unarchive: showUnreadInTitle ×2
+unread:    pendingAction ×2
+```
+
+**Três fatos que matam o desenho:**
+
+1. **Arquivar e desarquivar são INDISTINGUÍVEIS** — os dois disparam
+   `showUnreadInTitle` e nada mais. Não existe `archive` em `__fired`.
+2. **Marcar não-lida dispara `pendingAction`**, não `markedUnread`.
+3. **`markedUnread` dispara durante um ENVIO** — ou seja, o nome existe e é
+   emitido pelo ato errado.
+
+`__fired` carrega campos derivados de UI, não o campo semântico. Um classificador
+construído sobre ele diria "arquivada" para um desarquivamento.
+
+**Status**: não corrigido, por medição. As duas linhas continuam `PARTIAL` e
+agora dizem POR QUÊ, em vez de descrever o sintoma.
+
+**Lição**: *quando um instrumento junta várias causas numa contagem, ele mede a
+soma e não a correspondência.* A primeira rodada teria sustentado a hipótese —
+`markedUnread` estava lá, afinal. Separar os atos mostrou que ele veio do envio.
+É a mesma disciplina da regra "meça onde deveria PIORAR": aqui, meça onde o nome
+deveria APARECER, e veja se aparece pelo motivo certo.
+
+---
+
+## H151 — identidade crua na superfície: três capacidades, três respostas enganosas diferentes
+
+**Data**: 2026-08-22
+**Contexto**: consolidação de um padrão que apareceu três vezes hoje em lugares
+independentes.
+
+**Onde**: `capabilities/addressbook.DeviceCount`, `capabilities/chats.ByJID`,
+`capabilities/chats.MarkUnread`. Sonda em
+`internal/wa-headless/probe_unreadid_test.go`.
+
+**O padrão**: este build arquiva sob LID. Um chamador que tenha o jid de telefone
+— que é o que um humano digita e o que a maior parte das APIs recebe — recebe
+resposta **bem formada e errada**, e cada capacidade erra de um jeito diferente:
+
+| capacidade | com jid de telefone | com identidade resolvida |
+|---|---|---|
+| `addressbook.DeviceCount` | erro "sem registro de dispositivo" | **5** dispositivos |
+| `chats.ByJID` | `ErrNoChat` ("no conversation for that jid (384 in this session)") | encontrado |
+| `chats.MarkUnread` | `ErrNoChat` ("no such conversation") | executa (`before=21`) |
+
+**Hipótese testada e DESCARTADA**: suspeitei que `chats` se contradissesse
+internamente — `ByJID` documentado como casando PN ou LID e `MarkUnread` não.
+Não é o caso: os dois são exatos e concordam. A promessa de casar PN **ou** LID é
+do `contacts.ByJID`, que é outro pacote. Registro o descarte para ninguém
+reexaminar.
+
+**O defeito real não é de implementação, é de SUPERFÍCIE**: o erro é honesto
+sobre a COLEÇÃO e enganoso sobre o MUNDO. *"Não há conversa para esse jid"* é
+verdade sobre o que está indexado e falso sobre a pessoa, e o chamador não tem
+como saber a diferença.
+
+**Correção sugerida, NÃO aplicada** — e é decisão de superfície, não conserto
+pontual, então vale para todo leitor do módulo que aceite jid cru:
+
+- **(a)** resolver internamente via `capabilities/lookup`. Esconde uma ida à rede
+  dentro de um leitor, e um leitor que faz E/S surpreende quem o chama em laço.
+- **(b)** recusar `@c.us` com erro próprio (`ErrUnresolvedIdentity`) dizendo
+  "resolva primeiro". Honesto e quebra chamadores existentes.
+- **(c)** aceitar as duas formas na busca, como `contacts.ByJID` já faz. Consistente
+  com um precedente do próprio módulo, e o mais barato — mas espalha a regra de
+  identidade por cada leitor em vez de centralizá-la.
+
+**Status**: não corrigido. Escalado como pergunta de desenho — a regra do projeto
+proíbe consertar de graça fora do escopo, e as três opções têm custos
+diferentes o bastante para que a escolha não seja minha.
+
+**Lição**: *o mesmo erro cometido em três lugares não é três bugs, é uma decisão
+que ninguém tomou.* Cada um sozinho pareceria um conserto de uma linha; juntos
+mostram que o módulo nunca decidiu quem resolve identidade — o chamador ou a
+capacidade — e a ausência dessa decisão é o que produz três comportamentos
+diferentes para a mesma pergunta.
+
+---
+
+## H152 — `MESSAGE_CREATE`: a nota errava sobre a referência, e o teste unitário fixava o campo que decidia
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/probe_msgcreate_test.go` (novo),
+`internal/wa-headless/events/ingress_test.go` (`rowFrom`,
+`TestBothDirectionsSurviveTheBoundary`, `TestTheIngressScriptReadsFromMe`),
+linha `MESSAGE_CREATE` do `LEDGER-WWEBJS.md`.
+
+**Problema**: a linha dizia *"o mesmo evento cobre os dois; o upstream distingue
+criada de recebida e nós não"*. A segunda metade é falsa, e ler a referência
+resolve em dez linhas (`client.js:648-664`):
+
+```js
+this.emit(Events.MESSAGE_CREATE, message);
+if (msg.id.fromMe) return;
+this.emit(Events.MESSAGE_RECEIVED, message);
+```
+
+O único discriminador é `msg.id.fromMe` — **o mesmo campo que o nosso
+`message.added` já carrega**. Nosso evento não "cobre os dois" por imprecisão:
+ele É o `MESSAGE_CREATE`, um para um, e o `MESSAGE_RECEIVED` é ele filtrado por
+um campo que já viaja. A linha `MESSAGE_RECEIVED` já estava `PROVEN` com o mesmo
+mapeamento, o que torna a assimetria ainda mais claramente um erro de nota.
+
+**Mas corrigir a nota não bastava, e o que faltava é o achado desta entrada.**
+Para que a afirmação seja verdadeira, o campo tem de **variar** — e nada provava
+isso:
+
+- **Nenhum teste unitário jamais viu `fromMe:false`.** O helper `row()` deste
+  pacote fixa `"fromMe":true` em toda linha de fixture, então todo teste de
+  ingresso via mensagens desta conta. Um campo que só carrega um valor é um campo
+  que nenhum teste está conferindo.
+- **Nenhuma medição ao vivo tinha as duas direções**, porque até a sessão dupla
+  (H135) não havia como fazer o par falar enquanto observávamos.
+
+**Medição** (sessão dupla, barramento em conta-A, uma mensagem em cada direção):
+
+```
+baseline: fromMe=0 notFromMe=0
+PROVEN:   message.added carried BOTH values of FromMe (own=27, incoming=14)
+```
+
+**Status**: corrigido, linha para `PROVEN`. Travado por:
+- `TestBothDirectionsSurviveTheBoundary` — CN: marcar o campo `FromMe` do decode
+  como `json:"-"`. Falha com *"the two directions did not arrive as two:
+  fromMe=0 incoming=2"*.
+- `TestTheIngressScriptReadsFromMe` — CN: trocar `fromMe: !!(id && id.fromMe)`
+  por `fromMe: false` no script. Falha.
+- `rowFrom`, que existe para que o próximo teste deste pacote possa escolher a
+  direção em vez de herdar `true`.
+
+**Lição**: *um fixture que fixa um campo esconde o campo.* O `row()` deste pacote
+foi escrito para testar OUTRA coisa, e o `true` era uma escolha inocente de
+conveniência — que depois virou a razão de uma linha do ledger ficar `PARTIAL`
+por meses. Vale a pergunta em toda suíte: **que campo dos meus fixtures nunca
+mudou de valor?** Esse é o campo que ninguém está testando.
+
+---
+
+## H153 — `getInfo`: a medição da H71 estava certa e a conclusão dela, errada
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/capabilities/message/message.go` (`InfoOf`,
+`Info`, `ErrNotMine`), `.../script.go` (`infoScript`),
+`internal/wa-headless/probe_msginfo_test.go` (novo), linha `getInfo`.
+
+**Problema**: a linha dizia *"MsgInfoCollection VAZIA (0 de 368); temos ack, não
+'quem leu'"* (H71). A contagem estava correta — a coleção lê **0 ainda hoje** —
+e a conclusão tirada dela não: a referência **nunca lê essa coleção**. Ela chama
+`WAWebApiMessageInfoStore.queryMsgInfo(msg.id)` (`wwebjs_message.js:758-781`), e
+a coleção é populada **pela** consulta, não em vez dela.
+
+**É a armadilha da H142 com outra roupa**: medir um cache antes de alguém
+enchê-lo. Lá o zero era ausência de dado produzível; aqui é ausência de dado
+*solicitável*. Nos dois casos a leitura correta do zero era "ninguém pediu", não
+"não existe".
+
+**Enumeração antes da chamada** (regra da H143):
+
+```
+WAWebApiMessageInfoStore: [RetryEligibilityResult, createOrMergeReceiptRecords,
+                           isRetryEligible, queryMsgInfo, queryMsgInfos,
+                           getHighestMsgAcks]
+WAWebMsgInfoCollection:   [MsgInfoCollection]      msgInfoSize: 0
+```
+
+**Medição da forma**, numa mensagem própria enviada ao grupo de laboratório:
+
+```
+delivery: array[1]   deliveryRemaining: number
+read:     array[0]   readRemaining:     number
+played:   array[0]   playedRemaining:   number
+```
+
+**Correção aplicada**: `Reader.InfoOf`, devolvendo `Info` com as três LISTAS e os
+três contadores de restantes. Três decisões que o tipo carrega:
+
+1. **Listas, não contagens.** Em um-para-um o `ack` já diz tudo; em grupo,
+   *"dois de cinco leram"* é fato diferente de *"estes dois leram"*, e só o
+   segundo permite agir.
+2. **Os "restantes" vêm da página, não de subtração.** Derivá-los exigiria o
+   número de participantes NO MOMENTO DO ENVIO, que não é o tamanho do grupo
+   hoje — erraria calado assim que alguém saísse. `-1` distingue "a página não
+   disse" de zero, distinção que este módulo já pagou duas vezes (H90, H108).
+3. **`Answered` separa "ninguém recebeu" de "ninguém perguntou".** Sem ele, uma
+   mensagem jovem demais voltaria como três listas vazias, que se lê como falha
+   de entrega.
+
+**A guarda de posse fica ANTES da consulta**, como na referência
+(`if (!msg.id.fromMe) return null`). Não é cortesia: o servidor responde sobre
+entrega do que ESTA conta mandou, e perguntar sobre mensagem alheia é pergunta
+sem sentido, não erro de permissão — daí `ErrNotMine` e não `ErrRead`.
+
+**Status**: corrigido, linha para `PROVEN`. Travado por cinco controles negativos,
+todos EXECUTADOS e todos falhando:
+- `TestTheInfoScriptChecksOwnershipBeforeQuerying` — CN: mover a guarda para
+  depois da consulta. Falha (é teste de ORDEM, que passa em todos os outros).
+- `TestTheInfoScriptDoesNotReadTheEmptyCollection` — CN: trocar `queryMsgInfo`
+  por leitura da `MsgInfoCollection`. Falha.
+- `TestTheRemainingCountsComeFromThePage` — CN: derivar os restantes de
+  `len(lista)`. Falha.
+- `TestAnUnansweredInfoIsNotThreeEmptyLists` — CN: fixar `Answered: true`. Falha.
+- `TestInfoAboutSomebodyElsesMessageIsItsOwnError` — CN: remover o ramo
+  `NotMine`. Falha.
+
+Prova em SPA real: `answered=true delivered=1 read=0 played=0 remaining=0/1/1`
+numa mensagem própria de grupo, **e a recusa** com `ErrNotMine` sobre mensagem
+alheia — porque uma capacidade só vista aceitando não está provada (H147, aplicada
+no mesmo dia em que foi escrita).
+
+**Lição**: *uma medição correta pode sustentar uma conclusão errada, e o jeito de
+descobrir é perguntar como a REFERÊNCIA obtém o dado, não se ele está onde
+procuramos.* A H71 procurou no lugar plausível e o encontrou vazio; dez linhas do
+upstream diziam que o lugar plausível não é o lugar.
+
+---
+
+## H154 — `getReactions`: duas medições certas, duas conclusões erradas, e a causa era a CHAVE
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. A pergunta que abriu esta entrada foi a
+mesma que fechou a H153 — *como a REFERÊNCIA obtém o dado?* — aplicada às
+reações porque três linhas dependiam da mesma resposta.
+
+**Onde**: `internal/wa-headless/capabilities/message/message.go` (`ReactionsOf`,
+`Reactions`, `Reaction`), `.../script.go` (`reactionsScript`),
+`internal/wa-headless/probe_reactread_test.go` (novo). Linhas `getReactions`,
+`sendReaction`, `react` e `MESSAGE_REACTION`.
+
+**A história das duas medições anteriores**, e ambas foram honestas:
+
+- **H83**: concluiu que o agregado *"não tem fonte neste build"*.
+- **H124**: remediu a H83 com instrumento melhor — `WAWebCollections.Reactions`
+  EXISTE, com `on` e `getModelsArray` —, mediu **0 mesmo depois de uma reação que
+  a capacidade tinha verificado**, e concluiu: *"não é falta de coleção — a
+  coleção não enche"*.
+
+**A H124 estava certa sobre o fato e errada sobre o que ele significa.** A
+coleção não enche mesmo — medida de novo hoje, `size: 0` depois de uma reação
+verificada. Mas `Reactions.find` **não é busca nos modelos carregados**: é um
+fetch assíncrono, que a referência aguarda (`wwebjs_message.js:848-853`), e cujo
+registro nunca aterrissa no `getModelsArray`. Medir o array era medir o lugar
+errado — exatamente a forma da H153, no mesmo dia.
+
+**E havia uma segunda camada, que é por que isto levou três tentativas: a CHAVE
+da referência não existe aqui.** Ela chama `find(msg.id._serialized)`, e
+`_serialized` é **nulo** neste build LID-first — a família de enquetes já tinha
+tido de pular a mesma conversão. Medidos lado a lado, sobre UMA mensagem que
+carrega uma reação:
+
+```
+find(m.id._serialized)  →  threw "called find without an id"
+find(m.id.id)           →  null
+find(m.id)              →  o registro, reactions=1
+```
+
+**O objeto `id` é a chave.** Essa linha é a diferença inteira entre *"este build
+não reporta reações"* e a função que agora existe.
+
+**Forma medida** antes de projetar o tipo:
+
+```
+entrada:   {aggregateEmoji, hasReactionByMe, id, senders}
+remetente: {ack, id, msgKey, orphan, parentMsgKey, reactionText,
+            read, senderUserJid, timestamp}
+```
+
+**Correção aplicada**: `Reader.ReactionsOf`, agrupado por emoji porque é assim
+que a página tem — achatar perderia o agrupamento sem ganhar nada, já que quem
+quer lista plana a constrói e quem quer "quantos curtiram" não reconstrói os
+grupos a partir dela. `ByMe` vem do `hasReactionByMe` da página e **não** de
+comparar jids: essa comparação é precisamente a que já deu errado aqui (H136,
+H148).
+
+**Status**: corrigido, `getReactions` de `BLOCKED` para `PROVEN`. Travado por
+quatro controles negativos, todos EXECUTADOS:
+- `TestTheReactionsScriptKeysByTheIdObject` — CN: chavear por `_serialized`,
+  a chave da referência. Falha.
+- `TestTheReactionsScriptDoesNotReadTheModelsArray` — CN: ler
+  `getModelsArray()[0]`. Falha.
+- `TestReactionsComeBackGroupedByEmoji` — CN: achatar os grupos num só. Falha.
+- `TestTheReactionsRenderingIsQuiet` — CN: imprimir `r.Groups`. Falha.
+
+Prova em SPA real **por transição**, porque uma leitura não-vazia sozinha é
+compatível com um leitor que devolve constante: `groups=1 senders=1` depois de
+reagir, `groups=0 senders=0` depois de retirar.
+
+**O que NÃO foi fechado por associação**: `sendReaction` e `react` continuam
+`PARTIAL` porque `react.Remove` ainda devolve `Verified:false`. A CAUSA disso
+caiu — havia como saber quais reações existem — mas usar a fonte para verificar o
+`Remove` é trabalho em outro pacote, com seus próprios testes e prova. Ficou
+registrado como **acionável**, que é a informação honesta, em vez de a linha ser
+movida porque uma vizinha andou. `MESSAGE_REACTION` idem: a afirmação *"o
+agregado não tem fonte neste build"* está refutada na nota, e enriquecer o evento
+segue pendente.
+
+**Lição**: *quando duas pessoas medem a mesma ausência e concluem coisas
+diferentes, a pergunta certa não é "quem mediu melhor" — é "o que a referência
+faz que nós não fazemos".* As duas mediram bem. Nenhuma perguntou pela CHAVE, e
+era ali que estava. E a chave é justamente o tipo de detalhe que só aparece
+comparando com a implementação que funciona — que é a razão de a regra deste
+repositório mandar consultar as referências ANTES de projetar, e não depois de
+concluir que algo é impossível.
+
+---
+
+## H155 — `react.Remove` verifica: a assimetria era falta de FONTE, não de rigor
+
+**Data**: 2026-08-22
+**Contexto**: completar o que a H154 destravou. Registrei ali que usar a fonte
+para verificar o `Remove` era trabalho ACIONÁVEL e não impedimento; esta entrada
+é esse trabalho.
+
+**Onde**: `internal/wa-headless/spa/reactions.go` (novo,
+`ReactionsForMessageExpr`), `capabilities/react/mine.go` (novo, `mineOn`),
+`capabilities/react/react.go` (o ramo de remoção),
+`capabilities/message/script.go` (passa a embutir a expressão compartilhada).
+Linhas `sendReaction` e `react`.
+
+**Problema**: `Remove` devolvia `Verified:false` **por medição honesta** — a H53
+verificou em três sessões FRESCAS que a remoção funciona, e que na sessão que
+removeu `hasReaction` fica pegajoso por pelo menos 30 s. Esperar por uma flag que
+não vira produziria uma capacidade que sempre falha em algo que sempre funciona.
+O raciocínio estava certo; faltava um sinal.
+
+**Correção aplicada**: `mineOn`, que pergunta ao registro de reações se ESTA
+conta ainda tem reação na mensagem, e que o `Remove` passa a esperar.
+
+**A expressão foi para o `spa/` em vez de copiada**, seguindo o precedente do
+`capabilities/lookup` com o `ResolveIdentityExpr`. O motivo é concreto: o
+`capabilities/message` reporta o mesmo fato a quem chama, e duas cópias
+divergiriam **na única forma de defeito que se esconde** — uma remoção que
+verifica de um lado e relê como presente do outro, com as duas metades parecendo
+corretas isoladamente.
+
+**Os dois lados esperam por sinais DIFERENTES, e isso é desenho**: `Add` espera
+pela flag pegajosa (que vira em menos de um segundo ao adicionar), `Remove`
+espera pelo registro. O dublê do teste ganhou dois campos separados por isso — um
+dublê que respondesse aos dois a partir de um campo só deixaria um `Remove` que
+consultasse a flag parecer verificado.
+
+**Status**: corrigido. `sendReaction` e `react` para `PROVEN`. Travado por:
+- `TestBothAddingAndRemovingAreVerified` — CN1: voltar `Verified:false`. Falha.
+  CN2: trocar `mineOn` por `waitFor` (a flag pegajosa). Falha. Ambos compilam.
+- `TestARefusedVerificationLeavesRemoveUnverified` — CN: verificação que falha
+  virar `Verified:true`. Falha.
+- `TestTheMineScriptUsesThePagesOwnFlag`, `TestTheMineScriptEmbedsTheSharedExpression`.
+- Do lado do `message`: `TestTheReactionsScriptEmbedsTheSharedExpression`.
+
+Prova em SPA real: `react.Remove` devolveu `had=true has=false verified=true`, e o
+leitor independente confirmou `groups=0 senders=0`.
+
+**Dois controles negativos falharam como controles antes de morder, e os dois
+são as armadilhas do catálogo, encontradas de novo no mesmo dia:**
+
+1. **O controle não COMPILAVA.** Trocar `spa.ReactionsForMessageExpr` por uma
+   cópia inline deixava o import sem uso, e `[build failed]` não é falha de
+   teste — é armadilha nº 3 do `ARMADILHAS.md`. Corrigido acrescentando
+   `var _ = spa.ReactionsForMessageExpr` para manter o import vivo, e aí o teste
+   falhou com a mensagem certa. *Um controle que quebra o build passa por
+   "mordeu" numa leitura apressada da saída.*
+2. **A asserção media o parser.** O primeiro controle da regra do `byMe` mudou a
+   lógica do script e o teste continuou verde, porque o dublê responde `mine`
+   diretamente e o script nunca roda. A regra teve de ser afirmada sobre o
+   SCRIPT — a mesma correção que este módulo já fez seis vezes.
+
+**Lição**: *uma decisão registrada como "impossível" merece ser reexaminada quando
+a razão dela muda, e não quando a paciência acaba.* A H53 não errou: ela mediu, e
+recusou verificar o que não podia. O que mudou não foi o critério — foi o mundo
+disponível. O ledger só permite distinguir os dois casos porque a H53 escreveu
+POR QUE não verificava, em vez de apenas que não verificava.
+
+---
+
+## H156 — linhas de "delegação literal": provadas no PONTO DE CHAMADA, e duas deliberadamente NÃO movidas
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Dez linhas do ledger dizem *"delegação
+literal"* — o upstream não tem lógica própria ali, apenas encaminha para um
+método do `Client`.
+
+**Onde**: `internal/wa-headless/probe_delegation_test.go` (novo). Linhas
+`Chat.getContact`, `GroupNotification.getChat`, `GroupNotification.getContact`.
+
+**A tentação, e por que ela é errada**: `getChatById` e `getContactById` estão
+`PROVEN`. Como as linhas de delegação apenas encaminham para eles, movê-las
+pareceria papelada — atualizar o estado porque o par mudou.
+
+**Não é papelada, e a razão é a lição mais cara deste dia**: uma delegação está
+provada quando a capacidade funciona **NA ENTRADA QUE AQUELE PONTO DE CHAMADA
+PASSA**, e as entradas são diferentes. `GroupNotification.getContact` passa
+`author` — um PARTICIPANTE de grupo, não o chat. Neste build LID-first, *"a
+capacidade funciona"* e *"a capacidade funciona neste jid"* já se separaram três
+vezes (H136, H148, H151). Fechar por herança é exatamente onde essa separação
+passaria despercebida.
+
+**Medição**, cada ponto de chamada com a entrada que ele realmente usa:
+
+```
+GroupNotification.getChat    jid do grupo          → resolve
+GroupNotification.getContact author de gp2         → resolve
+Chat.getContact              contraparte 1:1       → resolve
+```
+
+**O terceiro exigiu produzir o fato.** Nenhuma notificação `gp2` carregava autor
+(a única no store era `membership_approval_mode`, sem autor), então uma foi
+produzida renomeando o grupo de laboratório — e o nome restaurado em `defer`,
+verificado pela pós-condição do próprio `SetSubject`. A primeira tentativa usou
+`nome + " "` e a página recusou com *"Could not perform action"*: aparado, o
+assunto era o mesmo, e um rename que não renomeia é recusado.
+
+**Status**: corrigido — três linhas para `PROVEN`.
+
+**Duas linhas foram deliberadamente NÃO movidas**, e isto é o conteúdo real da
+entrada: `Broadcast.getChat` e `Broadcast.getContact` também delegam para os
+mesmos dois métodos provados, e continuam `PARTIAL`. Elas passam um id de
+**STATUS**, não de conversa, e as linhas de identidade de broadcast são `PARTIAL`
+pela medição delas mesmas (H100). Movê-las seria fechar por associação — o mesmo
+que recusei fazer com `sendReaction` na H154, no dia em que a associação teria
+acertado por sorte.
+
+**Lição**: *"delegação literal" descreve o upstream, não prova o nosso lado.* A
+anotação é útil porque diz onde NÃO procurar lógica; ela não diz que a entrada
+daquele ponto de chamada já foi exercitada. Toda linha de delegação restante
+merece a mesma pergunta: **que jid, exatamente, esse ponto de chamada passa?**
+
+---
+
+## H157 — `getContactLidAndPhone`: o helper da referência não funciona aqui, e isso é a resposta
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Esta linha foi escolhida porque toca
+diretamente a pergunta que a H151 deixou aberta — *quem resolve identidade neste
+módulo* — e uma primitiva que devolva AS DUAS identidades é o que qualquer das
+três respostas precisaria.
+
+**Onde**: `internal/wa-headless/capabilities/lookup/pair.go` (novo, `LidAndPhone`,
+`Pair`), `internal/wa-headless/probe_lidpn_test.go` (novo).
+
+**O que a referência faz** (`wwebjs_util.js:1694-1716`): ramifica por `isLid`,
+pega a metade que falta em `WAWebApiContact.getCurrentLid` ou `getPhoneNumber`, e
+quando isso falha chama `queryWidExists` e pergunta **`getCurrentLid` de novo**.
+
+**O que foi medido aqui**: a segunda chamada continua vazia.
+
+```
+fromPhone: {ok:true, hasLid:false, hasPn:true, pnServer:"c.us",
+            queried:true, askedServer:"c.us"}
+```
+
+A consulta rodou — `queried: true` — e `getCurrentLid` não produziu nada, sobre o
+par de laboratório que este módulo resolve com sucesso todos os dias. **O helper
+da referência devolveria `{}` para alguém perfeitamente alcançável.**
+
+O LID está no RESULTADO da consulta, que é exatamente de onde o
+`spa.ResolveIdentityExpr` já o tira. É o mesmo padrão do `sendText` registrado no
+`CLAUDE.md`: copiar o caminho da referência teria falhado, e o que serve é copiar
+o ENTENDIMENTO — aqui, "resolver identidade é perguntar ao servidor", não "chamar
+`getCurrentLid`".
+
+**A guarda `isLid` foi mantida, e não é estilo.** Chamar `getPhoneNumber` com um
+jid de telefone lança `WaWebLidPnCache - Invalid get call (not lid)` — medido
+porque a primeira sonda cometeu exatamente esse erro, e a mensagem de erro é que
+explicou por que a referência ramifica.
+
+**Correção aplicada**: `Resolver.LidAndPhone`, devolvendo `Pair{LID, PN, Queried}`.
+Três decisões:
+1. **Metade ausente fica ausente.** Vazio significa "a página não produziu",
+   nunca "não existe" — preencher com a entrada reportaria um número inventado.
+2. **`Queried` é reportado** porque quem varre um roster quer saber que acabou de
+   fazer N idas à rede.
+3. **Entrada LID não consulta.** A identidade entregue já é metade da resposta.
+
+**Status**: corrigido, linha para `PROVEN`. Travado por quatro controles
+negativos, todos compilando e falhando:
+- `TestAnAbsentHalfIsNotFilledIn` — CN: preencher `PN` vazio com a entrada.
+- `TestThePairScriptGuardsGetPhoneNumber` — CN: chamar `getPhoneNumber` antes da
+  guarda (teste de ORDEM).
+- `TestThePairScriptTakesTheLidFromTheResolution` — CN: tirar o LID de
+  `getCurrentLid`, como a referência faz.
+- `TestALidInputIsNotResolvedAgain` — CN: resolver antes do ramo `isLid`.
+
+Prova em SPA real nas duas direções: do telefone, `lid=true pn=true queried=true`;
+do LID devolvido, `lid=true pn=true queried=false` — o telefone vem do cache de
+mapeamento sem custar consulta.
+
+**Duas armadilhas do catálogo apareceram de novo nesta entrada, e as duas já
+tinham aparecido hoje:**
+
+1. **A guarda casou com o próprio comentário** — décima ocorrência. A asserção
+   *"o script não chama `getCurrentLid`"* falhou contra um comentário
+   EXPLICANDO por que ele não chama. Corrigido com `withoutComments`, que este
+   pacote não tinha e agora tem.
+2. **A asserção media o parser.** O CN de "entrada LID não consulta" não mordeu,
+   porque o dublê devolve `queried` do próprio campo. Refeito como asserção
+   ESTRUTURAL sobre o script — a posição do `await resolve(` contra o retorno do
+   ramo `isLid` —, e aí mordeu.
+
+**Lição**: *quando a referência tem um helper para exatamente o seu problema, a
+primeira coisa a medir é se ele funciona aqui.* Ele não funcionava, e descobrir
+isso levou uma sonda; assumir que funcionava teria produzido um leitor que
+devolve vazio para todo mundo e parece correto, porque `{}` é uma resposta
+plausível para "não achei".
+
+---
+
+## H158 — `getBroadcasts`: o zero foi interrogado e desta vez é o mundo
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Três linhas caíram hoje porque um zero
+significava *"ninguém pediu"* e não *"não existe"* — mensões (H142), informação de
+mensagem (H153) e reações (H154). Interrogar este zero era obrigatório.
+
+**Onde**: `internal/wa-headless/probe_status2_test.go` (novo), linhas
+`getBroadcasts` e `getBroadcastById`.
+
+**Por que a suspeita era razoável**: os feeds de status são de OUTRAS pessoas.
+Se qualquer um dos 947 contatos tivesse status ativo, uma coleção hidratada
+mostraria — e um zero passaria a significar que falta buscar, não que o mundo
+está vazio. A superfície reforçava a suspeita: a `Status` tem `sync`, `hasSynced`,
+`find`, `_serverQuery` e até um `findImpl` (que o `Chat` deste build **não** tem),
+mais um `WAWebApiStatus.getAllStatuses` independente.
+
+**Medição**:
+
+```
+sizeBefore: 0        hasSyncedBefore: true
+syncOk: true         hasSyncedAfter:  true
+sizeAfterSync: 0     getAllStatuses:  array[0]
+sizeFinal: 0         contatos:        947
+```
+
+**`hasSynced` já era `true` ANTES**, o `sync()` rodou sem erro e nada mudou, e o
+caminho **independente** da coleção devolveu lista vazia. Dois instrumentos que
+não compartilham cache concordando é o que transforma este zero em fato.
+
+**Status**: não corrigido, e não há o que corrigir. A linha continua `PARTIAL`
+com a causa agora MEDIDA: a coleção está hidratada e o mundo está vazio. Provar
+um feed não-vazio exige postar um status desta conta — visível a 944 contatos, já
+escalado ao humano e confirmado legítimo pela decisão 61.
+
+`getBroadcastById` herda a mesma medição por um motivo que não é herança: sem
+feed de NINGUÉM, não há entrada para buscar por contato.
+
+**Lição, e é o contrapeso da H142**: *interrogar um zero é obrigatório; concluir
+que todo zero é do instrumento é o excesso.* A H149 já tinha registrado esse
+excesso uma vez hoje, com a identidade. Uma generalização recém-aprendida vale
+pelo teste que ela sobrevive, e esta sobreviveu ao contrário: a suspeita era boa,
+a evidência disse não, e o custo de descobrir foi uma sonda. **O que torna o
+resultado utilizável é ter medido com DOIS caminhos independentes** — se só a
+coleção tivesse respondido, o zero continuaria ambíguo.
+
+---
+
+## H159 — `sendSeen` medido pelo lado certo: o recibo não chega ao remetente
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. A H82 rebaixou esta linha porque a
+pós-condição do `MarkRead` afirma que `unreadCount` mudou NA MESMA SESSÃO, e a
+H78 mediu esse contador como cross-session — *"se generaliza é pergunta em
+aberto"*.
+
+**Onde**: `internal/wa-headless/probe_seen_test.go` (novo).
+
+**O contador é a testemunha errada, de qualquer forma.** O que `sendSeen`
+produz que alguém pode observar é dizer ao REMETENTE que sua mensagem foi lida:
+ack 3 na cópia dele. Isso é fato sobre a outra sessão — exatamente o que nenhuma
+sessão sozinha checa, e para o que a sessão dupla (H135) existe.
+
+**Medição**: conta-B manda, conta-A marca lida, o ack em conta-B fica em **2** por
+60 s.
+
+**O confundidor foi atacado, não ignorado.** *"O recibo não saiu"* e *"esta conta
+tem recibo de leitura desligado"* produzem o mesmo ack. Tentei ler a
+configuração e os quatro nomes de módulo que chutei não existem neste build —
+armadilha da H137 de novo. Em vez de concluir com o confundidor de pé, inverti o
+experimento: **conta-A manda e conta-B marca lida**. Falha igual, ack em 2.
+
+Falhar simetricamente com DUAS contas torna a explicação de privacidade bem menos
+provável, mas — e isto fica dito — não a exclui: as duas são contas de laboratório
+configuradas do mesmo jeito.
+
+**Status**: não corrigido nesta entrada (ver H160 para o que FOI corrigido).
+
+**Lição**: *quando duas causas produzem a mesma observação e você não consegue
+medir uma delas, inverta o experimento.* Procurar a configuração custou uma sonda
+e quatro nomes errados; trocar os papéis das contas custou uma perna a mais no
+mesmo teste e respondeu.
+
+---
+
+## H160 — `MarkRead` usava a primitiva errada, e a pós-condição da H82 agora vale
+
+**Data**: 2026-08-22
+**Contexto**: continuação da H159. Depois de medir que o recibo não sai, li a
+referência para ver o que ela faz de diferente — que é a ordem correta: medir,
+depois comparar.
+
+**Onde**: `internal/wa-headless/capabilities/chats/markread.go`,
+`internal/wa-headless/spa/modules.go` (`ModuleUpdateUnreadChatAction`,
+`ModuleStreamModel`), `internal/wa-headless/probe_seenstream_test.go` (novo).
+
+**O que a referência faz** (`wwebjs_util.js:131-143`):
+
+```js
+Stream.markAvailable();
+await UpdateUnreadChatAction.sendSeen({chat, threadId: undefined});
+Stream.markUnavailable();
+```
+
+Duas diferenças: um MÓDULO diferente do nosso (`WAWebChatSendConversationSeen`) e
+o anúncio de presença em volta.
+
+**A hipótese testada primeiro foi a errada, e testá-la crua foi o que salvou.**
+Achei que o `markAvailable` fosse a chave — recibo de cliente offline não sai.
+Testei a sequência **crua na página**, sem tocar na capacidade, porque mudar a
+capacidade e remedir confundiria *"o bracketing ajudou"* com *"a repetição
+ajudou"*. Resultado:
+
+```
+unreadBefore: 1   →   unreadAfter: 0
+ack em conta-B:   2 (continuou 2)
+```
+
+**Hipótese do recibo REFUTADA. E, no mesmo experimento, um achado que eu não
+procurava**: o `unreadCount` foi de 1 a 0 — coisa que a nossa primitiva nunca
+fez. O módulo é que estava errado, não o bracketing.
+
+**Enumeração incidental**, do mesmo módulo: `markUnread`, `sendSeenDebounced`,
+`sendSeen`, `markSeen`, `markUnseen`, `updateUnreadCountMD`, `clearUnreadMentions`.
+O `markUnread` aí dentro é candidato direto para a linha `markChatUnread`, que
+está `BLOCKED` desde a H78 por *"duas primitivas medidas, nenhuma marca"* —
+**registrado como pista, não perseguido nesta sessão**.
+
+**Correção aplicada**: `MarkRead` passa a chamar
+`WAWebUpdateUnreadChatAction.sendSeen({chat, threadId})`, com o
+`markAvailable`/`markUnavailable` em volta. O bracketing ficou **mesmo tendo sido
+refutado** para o recibo: é o que a referência faz, não custa nada, e divergir
+sem motivo é o que o `CLAUDE.md` proíbe. O desfazer da presença está num
+`finally` — sair deste caminho anunciado como online é efeito colateral que nada
+pediu, e sobreviveria ao erro.
+
+**Status**: corrigido. `before=1 after=0 changed=true`, sem erro, **nas duas
+contas**. Travado por:
+- `TestTheAcknowledgementUsesThePrimitiveThatMoves` — CN: voltar a
+  `sendConversationSeen`. Falha. Substituiu
+  `TestTheAcknowledgementNamesWhatWasRead`, que era asserção correta sobre a
+  primitiva ERRADA: a nova chamada não recebe `lastReceivedKey`, e exigir uma
+  chave que ela não tem seria pedir o que não existe.
+- `TestThePresenceAnnouncementIsUndoneOnFailure` — CN: tirar o desfazer do
+  `finally`. Falha. É teste de ORDEM.
+
+**A linha continua `PARTIAL`, e agora por um motivo medido em vez de duvidoso**:
+o reconhecimento local está provado; o recibo ao remetente não foi observado.
+
+**Duas armadilhas minhas, registradas:**
+1. **Crases dentro de raw string.** Escrevi `` `finally` `` num comentário JS
+   dentro de uma raw string Go, e as crases a terminaram. O build acusou
+   `expected ';', found finally`.
+2. **A guarda casou com o próprio comentário** — décima primeira vez, segunda
+   hoje. A asserção de ORDEM sobre `markUnavailable` falhou contra o comentário
+   que EXPLICA a ordem. `withoutComments` acrescentado a este pacote também.
+
+**Lição**: *teste a hipótese crua antes de embuti-la.* A hipótese estava errada e
+o experimento estava certo — e foi justamente por rodá-lo cru, medindo tudo que
+mudou em vez de só o que eu esperava, que o achado verdadeiro apareceu. Se eu
+tivesse mudado a capacidade e olhado só o ack, teria concluído "não adiantou" e
+descartado a correção junto com a hipótese.
+
+---
+
+## H161 — `markChatUnread`: a melhor pista já disponível foi gasta, e o `BLOCKED` sai reforçado
+
+**Data**: 2026-08-22
+**Contexto**: seguir a pista que a H160 registrou e deliberadamente não perseguiu.
+
+**Onde**: `internal/wa-headless/probe_markunread2_test.go` (novo), linha
+`markChatUnread`.
+
+**Por que a pista era boa**: a H160 consertou o `MarkRead` trocando de MÓDULO —
+chamávamos `sendConversationSeen`, a referência chama
+`WAWebUpdateUnreadChatAction.sendSeen`, e o contador passou a se mexer. O mesmo
+módulo exporta `markUnread`. Uma linha `BLOCKED` desde a H78 por *"duas
+primitivas medidas, nenhuma marca"* ganhou, pela primeira vez, um candidato
+específico com precedente de sucesso no mesmo dia.
+
+**Medição**, três primitivas no mesmo chat, cada uma em separado:
+
+```
+inicial                                        markedUnread=false unreadCount=0
+Cmd.markChatUnread(chat, true)          ok     markedUnread=false unreadCount=undef
+UpdateUnreadChatAction.markUnread(...)  ok     markedUnread=false unreadCount=undef
+markUnread com presença anunciada       ok     markedUnread=false unreadCount=undef
+restauro (sendSeen)                            markedUnread=false unreadCount=0
+```
+
+**As três retornam sem erro e nenhuma vira `markedUnread`.** O `BLOCKED` continua,
+com evidência três vezes melhor do que tinha.
+
+**A forma da terceira NÃO foi chutada.** A primeira tentativa passou `{chat}` e
+levou `Cannot read properties of undefined (reading 'markUnread')` — de dentro da
+função, não do require. Em vez de tentar variações, li a assinatura da própria
+função:
+
+```js
+function h(e, t, n) {
+  return n === void 0 && (n = !0),
+    E({allowAction: n, chat: o("WAWebStateUtils").unproxy(e), unread: t})
+}
+```
+
+`markUnread(chat, unread, allowAction = true)` — posicional, três argumentos.
+Isso é mais barato e mais confiável que enumerar nomes, e é a evolução natural da
+regra da H143: **quando o nome existe e a chamada falha, leia a assinatura.**
+
+**Um defeito do meu instrumento, e ele já estava catalogado por mim mesmo.** A
+primeira versão guardou o modelo do chat numa variável e leu dela; depois da
+primeira chamada, `unreadCount` virou não-numérico. Não era a página quebrando —
+`markUnread` passa o chat por `WAWebStateUtils.unproxy`, e o objeto em mãos deixa
+de ser o vivo. É exatamente o *"A COLEÇÃO É RELIDA, não se confia no modelo em
+mãos"* que escrevi na H143, aplicado a um caso novo. Custou uma rodada.
+
+**Status**: não corrigido, e agora com a pista específica gasta. Fica registrado
+que `unreadCount` vira **indefinido** (não zero) depois de qualquer das três — o
+que é uma mudança de estado real, só não a que o verbo pede.
+
+**Lição**: *uma pista boa merece ser gasta, e gastá-la é resultado.* A linha
+estava `BLOCKED` com duas primitivas; agora está `BLOCKED` com três, incluindo a
+da referência e a da família que consertou a vizinha no mesmo dia. Isso não muda
+o estado e muda o que a próxima pessoa precisa tentar — que é o único jeito de um
+`BLOCKED` não virar dívida permanente.
+
+---
+
+## H162 — `pin` não estava bloqueado: a H81 mediu do único lado que não podia ver
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, começando por `getPinnedMessages`, que
+parecia ser mais um caso de "sombra de escrita `BLOCKED`" como o `description` da
+H145.
+
+**Onde**: `internal/wa-headless/probe_pinned_test.go` e
+`probe_pindual_test.go` (novos). Linhas `pin` (era `BLOCKED`) e
+`getPinnedMessages` (duas).
+
+**O que eu ia registrar, e por que teria sido errado.** A primeira sonda mandou
+uma mensagem, tentou fixá-la e leu a lista: 0 antes, 0 depois. A conclusão pronta
+— "a escrita continua bloqueada, o leitor não tem produtor, linha não acionável"
+— estava a uma frase de ser escrita.
+
+**O que impediu foi ler o doc do tipo que eu mesmo estava usando:**
+
+> `Verified` is false for a real change: this build does not show the session its
+> own pin.
+
+Ou seja: dentro da sessão que age, *"funcionou e eu não vejo"* e *"não fez nada"*
+produzem **a mesma leitura**. A H81 mediu do lado que não podia responder, e
+qualquer remedição do mesmo lado reproduziria a ambiguidade em vez de resolvê-la.
+
+**É a forma da H86/H135**, com outro verbo: um zero que era sobre a sessão ATORA,
+não sobre o mundo. Lá foram eventos de participante; aqui é o pin.
+
+**Medição, com o observador decidindo:**
+
+```
+BEFORE (visto por conta-B): 0 fixados
+conta-A pin.Message:        verified=false   ← honesto, não falho
+AFTER  (visto por conta-B): 1 fixado
+```
+
+**conta-B VÊ o pin.** A escrita funciona. A linha `BLOCKED` estava errada não por
+falta de rigor, mas por um ponto cego que só a sessão dupla abre.
+
+**Correção aplicada** (só no ledger; o código estava certo o tempo todo):
+- `pin` sai de `BLOCKED` para `PARTIAL`, **não** para `PROVEN` — pela convenção
+  que o `addParticipants` (H58) já estabeleceu para exatamente esta situação:
+  confirmação só entre sessões. Promover além disso seria inventar um critério
+  novo para uma linha só.
+- `getPinnedMessages` (duas) vão para `PROVEN`: o leitor foi exercitado
+  **não-vazio**, rodando em conta-B, e ele não depende de sessão dupla — a sessão
+  dupla foi o que produziu o DADO, como nas menções (H142).
+
+**Status**: corrigido. Placar: `PROVEN 123`, `PARTIAL 44`, `BLOCKED 47`.
+
+**A linha de base veio do OBSERVADOR, não do ator**, e isso foi deliberado: é a
+leitura de conta-B que decide, então é dela que o "antes" tem de vir. Um "antes"
+lido em conta-A compararia coisas diferentes.
+
+**Lição, e é a mais cara desta varredura**: *quando uma capacidade documenta que
+não consegue se verificar, toda medição feita por ela é inconclusiva — inclusive
+a que a declarou impossível.* O aviso estava escrito no campo `Verified`, no
+mesmo arquivo, e sobreviveu a uma reclassificação para `BLOCKED` (H140, decisão
+60) sem ninguém cruzar as duas coisas. **Vale reler todo `BLOCKED` cujo veredito
+venha de uma pós-condição que o próprio tipo diz não conseguir observar.**
+
+---
+
+## H163 — a auditoria que a H162 gerou: um ponto cego real, e o resto confirmado
+
+**Data**: 2026-08-22
+**Contexto**: a H162 terminou com uma ação sistemática, não com uma linha
+fechada: *"vale reler todo `BLOCKED` cujo veredito venha de uma pós-condição que
+o próprio tipo diz não conseguir observar"*. Esta entrada é essa auditoria.
+
+**Onde**: `internal/wa-headless/probe_descdual_test.go` (novo), linhas
+`setDescription` (duas) e `description`.
+
+**A varredura dos 47 `BLOCKED`** procurou vereditos que dependem de não-observação
+na mesma sessão. Sobraram três candidatos, e só um era de verdade:
+
+| linha | veredito | resultado |
+|---|---|---|
+| `pin` | "chamada aceita e nada fixado" | **era ponto cego** — H162, agora `PARTIAL` |
+| `setDescription` (×2) | "a página aceita e o servidor nunca armazena" | testado aqui |
+| `mute` | já corrigido na H134 por medição própria | nada a fazer |
+
+**`setDescription` era o candidato mais forte**: as TRÊS medições que o
+bloquearam — canal (H113), grupo (H126) e a minha reprodução (H145) — foram
+todas da sessão que agiu, exatamente o padrão que acabara de enganar o `pin`.
+
+**Medição**, com o observador decidindo e a linha de base lida DELE:
+
+```
+BEFORE (conta-B):  descLen=0  source="none"
+conta-A SetDescription: err="asked for 43 bytes and the server reports 0"
+AFTER  (conta-B, 60s):  descLen=0  source="none"
+```
+
+**conta-B não vê.** O `BLOCKED` sai reforçado, agora do lado que nunca tinha sido
+perguntado — e a não-acionabilidade que a H145 registrou para o leitor
+`description` foi reconfirmada por um caminho independente.
+
+**O erro não encerrou a medição.** A pós-condição do `SetDescription` lê do lado
+que a H162 mostrou ser cego, então parar no erro dela teria repetido o mesmo
+engano com outro nome. O experimento continuou depois da falha, de propósito.
+
+**Um efeito colateral ficou dito em vez de escondido**: o grupo não tinha
+descrição antes, e limpar exigiria a mesma escrita que está sob teste. Como ela
+não armazena nada, nada ficou para trás — mas o `defer` reporta isso em vez de
+supor.
+
+**Status**: não corrigido; as linhas continuam `BLOCKED`, com evidência dos dois
+lados.
+
+**Lição, e é o contrapeso necessário da H162**: *nem todo "o ator não enxerga" é
+ponto cego.* A H162 encontrou um caso real e produziu uma generalização
+poderosa; aplicá-la sem testar teria convertido três linhas `BLOCKED` bem medidas
+em falsos positivos. O mesmo par apareceu hoje com as identidades — H148 achou o
+caso, H149 testou a generalização e a descartou. **A regra é: gere a hipótese
+pela analogia, decida pela medição.**
+
+---
+
+## H164 — `acceptInvite`: o fixture foi construído em vez de emprestado
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. A linha tinha uma metade provada ao vivo
+(o caminho de APROVAÇÃO, H89) e a outra intocada.
+
+**Onde**: `internal/wa-headless/probe_directjoin_test.go` (novo), linha
+`acceptInvite`.
+
+**Por que a metade faltante nunca tinha sido feita**: o grupo de laboratório
+exige aprovação de entrada. Desligar isso num fixture de que todo outro teste
+depende não é mudança para fazer por causa de uma linha. Então o fixture foi
+**construído**: conta-A cria um grupo descartável, conta-B sai dele, e volta a
+entrar pelo CÓDIGO de convite. As duas saem no fim, em `defer`.
+
+**Medição**:
+
+```
+created: participants=2 created=true   approval_mode=false
+invite:  code=true len=22 revoked=false
+conta-B JoinByInvite: pending=false
+conta-B conta 2 participantes
+```
+
+`pending=false` é o que distingue este caminho do da H89, em que a página recusa
+com `UnexpectedJoinGroupViaInviteResponse` e a recusa É o pedido sendo criado.
+
+**Três tropeços, e cada um ensinou algo utilizável:**
+
+1. **`Ensure` recusa criar um grupo vazio** — *"a group needs at least one
+   participant"*. É a página falando, não escolha nossa, então o grupo nasce com
+   conta-B e ela SAI antes de entrar por convite. Assim o que fica sob teste
+   continua sendo a entrada por código, não a adição por participante.
+
+2. **A propagação tem de ser esperada, não presumida.** A criação volta com 2
+   participantes do lado de quem criou, e conta-B ainda não tem o grupo: pedir a
+   saída nesse instante responde `NO_CHAT` — verdade sobre a SESSÃO, não sobre o
+   grupo. É a mesma família de erro da H162, em miniatura.
+
+3. **`Ensure` é idempotente POR ASSUNTO**, e isso envenenou uma rodada inteira.
+   Com nome fixo, a segunda execução reusou o grupo abandonado pela primeira — do
+   qual conta-A já tinha saído —, e o sintoma foi `this account is not an admin
+   of that group` sobre um grupo recém-"criado". **A resposta já dizia**:
+   `created=false`. Corrigido com assunto único por execução E com uma asserção
+   sobre `Created`, para que a próxima vez falhe alto em vez de confundir.
+
+**Status**: corrigido, linha para `PROVEN`.
+
+**Achado incidental, NÃO corrigido**: as duas tentativas frustradas deixaram
+grupos descartáveis abandonados no servidor — ninguém é membro deles, então este
+módulo não tem como apagá-los. Não afetam nenhum teste (o assunto agora é único),
+mas ficam registrados em vez de silenciados. **Correção sugerida**: quando um
+probe criar fixture no servidor, o nome deve ser único E o `defer` deve rodar
+antes de qualquer `Fatal` que o preceda — foi por um `Fatal` antes do `defer` que
+o primeiro grupo ficou órfão.
+
+**Lição**: *um helper idempotente é uma armadilha em teste de fixture.* `Ensure`
+faz exatamente o que promete, e é o certo em produção; num probe que precisa de
+um grupo NOVO, "achei um igual" e "criei" são fatos diferentes e a diferença
+estava no valor de retorno o tempo todo. Ler o que a chamada devolve custa menos
+que depurar o efeito dela.
+
+---
+
+## H165 — `rejectGroupMembershipRequests`: o motivo de nunca ter sido testado deixou de valer
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`, aplicando a técnica que a H164 produziu.
+
+**Onde**: `internal/wa-headless/probe_reject_test.go` (novo), linhas
+`rejectGroupMembershipRequests` (duas).
+
+**Por que estava `PARTIAL`**: implementado e travado por teste unitário, mas
+**nunca exercitado ao vivo**, por uma razão concreta e boa — rejeitar conta-B a
+expulsaria do grupo de laboratório, que é o fixture de que todo o resto depende.
+`Approve` foi exercitado; `Reject` não, e *"mesma RPC, chave diferente"* é
+argumento, não medição.
+
+**O que mudou não foi o risco, foi a alternativa.** A H164 estabeleceu:
+**não empreste o fixture, construa um**. Um grupo descartável com aprovação
+ligada dá a conta-B o que pedir e a conta-A o que rejeitar, sem tocar em nada.
+
+**Medição**:
+
+```
+conta-B JoinByInvite: pending=true kind=UnexpectedJoinGroupViaInviteResponse
+conta-A vê:           1 pedido pendente
+Reject:               ok=true code=0
+depois:               0 pendentes, grupo ainda com 1 participante
+```
+
+**A segunda metade da última linha é o que faz disto uma prova.** "0 pendentes"
+sozinho é igual para rejeição e para aprovação — o pedido some nos dois casos. É
+o grupo **não crescer** que distingue os dois, e o teste falha explicitamente se
+crescer: *"that is an APPROVAL, not a rejection"*.
+
+O achado da H89 — a recusa da página com `UnexpectedJoinGroupViaInviteResponse`
+**é** o pedido sendo criado — foi reusado aqui como PRÉ-CONDIÇÃO em vez de
+conclusão, que é o melhor destino de um achado antigo.
+
+**Um erro meu, e é o mesmo da H162 num disfarce menor.** A primeira versão
+esperava `Count` responder do lado de conta-B e seguia; `Count` respondeu e o
+`Leave` seguinte disse *"this account is not a member of that group"*. **Ler o
+grupo e pertencer a ele são fatos diferentes.** A espera passou a ser pela
+PRÓPRIA operação — tenta sair até conseguir —, que é a única condição que
+significa o que o teste precisa.
+
+**E a correção sugerida na H164 foi aplicada aqui**: o `defer` de limpeza é
+registrado ANTES de qualquer `Fatal` que o siga. Foi por registrá-lo tarde que a
+H164 deixou dois grupos órfãos; este não deixou nenhum.
+
+**Status**: corrigido, duas linhas para `PROVEN`.
+
+**Lição**: *"não dá para testar sem estragar o fixture" é uma afirmação sobre o
+fixture, não sobre a capacidade.* Ela era verdadeira e passou meses parecendo
+definitiva. O que a derrubou não foi coragem nem um risco aceito — foi perceber
+que o fixture podia ser construído. Vale reler toda linha cujo impedimento seja
+**custo colateral** e não impossibilidade.
+
+---
+
+## H166 — a auditoria do "custo colateral": três linhas caem, e uma medição salva um falso defeito
+
+**Data**: 2026-08-22
+**Contexto**: a H165 terminou pedindo uma auditoria — *"vale reler toda linha
+cujo impedimento seja CUSTO COLATERAL e não impossibilidade"*. Esta é ela.
+
+**Onde**: `internal/wa-headless/probe_lifecycle_test.go` (novo), linhas
+`clearMessages`, `delete` e `leave`.
+
+**A varredura** achou cinco linhas cujo impedimento é custo, não impossibilidade:
+
+| linha | impedimento | destino |
+|---|---|---|
+| `clearMessages` | "destruiria o fixture de todos os outros testes" (H66) | **fechada** |
+| `delete` | idem, "recusa DELIBERADA" (H66) | **fechada** |
+| `leave` | "quem sai de grupo que criou não volta sem convite" (H65) | **fechada** |
+| `revokeStatusMessage` | postar status é visível a 944 contatos | continua — decisão humana |
+| `getData` (catálogo) | exigiria acrescentar produto real ao perfil comercial | continua |
+
+As três primeiras caem com a mesma resposta da H164/H165: **um grupo descartável**,
+criado, enchido, esvaziado, abandonado e apagado. As duas últimas **não** caem, e
+a diferença é real: um status e um produto são artefatos que saem para o mundo
+além do par de laboratório.
+
+**A medição que importa é a do `clearMessages`, porque ela quase virou defeito.**
+A primeira asserção exigiu zero mensagens depois do `Clear` e o chat parou em
+**1**. "Clear deixou uma" é compatível com falha da capacidade E com comportamento
+correto do app — diagnósticos opostos, e a diferença está no TIPO do que sobrou.
+Medido:
+
+```
+antes: 4    depois: 1
+sobrevivente: {"type":"e2e_notification","subtype":"encrypt","fromMe":false}
+```
+
+Notificação de sistema, não mensagem de conversa. O `Clear` fez o que devia.
+Exigir zero teria registrado um defeito que não existe — e é exatamente o erro
+que a H150 evitou de outra forma, separando os atos antes de acusar.
+
+**Achado incidental, NÃO corrigido**: `chats.Clear` **não verifica a própria
+pós-condição**. O `Emptied` carrega `MessagesBefore`, `KeptStarred` e `Waited` —
+nenhum "depois". Um `Clear` que não apagasse nada devolveria exatamente o mesmo
+valor de sucesso. Foi por ler de volta na sonda que os números apareceram.
+**Correção sugerida**: acrescentar `MessagesAfter` e recusar quando não diminuir
+— com o cuidado de tratar a notificação de sistema como sobrevivente legítima,
+senão a nova pós-condição falharia sempre. Não aplicado: mudar uma capacidade de
+"nunca falha" para "pode falhar" é mudança de contrato, e a regra do projeto manda
+perguntar.
+
+**Status**: corrigido — três linhas para `PROVEN`. `PROVEN 129`, `PARTIAL 38`.
+
+**Lição**: *uma recusa deliberada envelhece.* As três eram decisões corretas
+quando foram tomadas, e continuaram escritas como se fossem propriedades da
+capacidade. O que mudou não foi o julgamento sobre o risco — foi a existência de
+uma alternativa que ninguém tinha procurado. **Toda linha cujo motivo comece com
+"não dá para" merece a pergunta: não dá para QUEM, e sob quais condições?**
+
+---
+
+## H167 — `syncHistory` fecha, e o `require` deste build mente sobre módulos ausentes
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`. Duas linhas foram escolhidas juntas porque
+pediam a mesma técnica — enumerar e ler a assinatura, que já pagou quatro vezes
+hoje.
+
+**Onde**: `internal/wa-headless/capabilities/fetchmessages/synchistory.go` (novo),
+`internal/wa-headless/probe_synchist_test.go` (novo). Linhas `syncHistory` (duas)
+e `reject` (chamada).
+
+### `syncHistory`: a nota estava certa sobre a diferença e calada sobre o módulo
+
+*"Buscamos histórico de uma conversa; sincronizar não"* descreve corretamente
+dois atos diferentes — ler o que esta sessão já tem (`Fetch`) e PEDIR ao telefone
+pareado que mande mais. O que a nota não dizia é se o segundo era possível aqui.
+
+A referência faz algo pequeno e específico (`wwebjs_client.js:3173-3189`):
+guarda em `chat.endOfHistoryTransferType === 0` e chama
+`WAWebSendNonMessageDataRequest.sendPeerDataOperationRequest(3, {chatId})`.
+
+**Medido**: o módulo existe, a função tem aridade 3, e o campo da guarda está em
+383 dos 389 chats — **378 em 0** (há o que pedir), 5 em outro valor, 6 sem o
+campo.
+
+**Correção aplicada**: `Fetcher.SyncHistory`, devolvendo `SyncRequest{Requested,
+TransferType, HasTransferType}`. Três decisões:
+
+1. **O tipo se chama `SyncRequest`, não `SyncResult`.** O histórico chega depois,
+   pelo socket; não há nada para reler que prove que funcionou. Um nome que
+   prometesse resultado convidaria o sucesso silencioso que a invariante 14
+   proíbe, então o tipo reporta o que FOI FEITO.
+2. **A guarda vem antes do pedido**, e é teste de ORDEM: invertida, passa em todos
+   os outros. Pedir a uma conversa que já entregou tudo devolveria "sucesso"
+   indistinguível de um pedido útil.
+3. **Ausente não é zero** — 6 de 389 chats não têm o campo, e zero é justamente o
+   valor que significa "peça". Fundi-los reportaria pedido possível sobre
+   conversa que a página nunca descreveu.
+
+**Provado com AS DUAS respostas** (regra da H147), e as duas existem no mesmo
+roster: `requested=true type=0` num elegível, `requested=false type=1` num já
+transferido. Quatro controles negativos, todos compilando e falhando.
+
+### `reject` (chamada): a H130 está certa, e a minha lista estava errada
+
+A H130 mediu quatro módulos de ação de chamada como ausentes. Quatro nomes é
+amostra, não censo, então reenumerei nove. O primeiro relatório disse **todos
+presentes** — e estava errado, por defeito do meu próprio predicado.
+
+**O `require` deste build NÃO LANÇA para um módulo inexistente: devolve objeto
+VAZIO.** Separando `require lançou` de `require devolveu {}`:
+
+```
+WAWebCallCollection    → 8 exports reais
+WAWebCallModel         → 2 exports
+WAWebApiCall, WAWebCallActions, WAWebRejectCallAction,
+WAWebEndCallAction, WAWebOfferCallAction, WAWebCallSignaling,
+WAWebCallState         → require OK, ZERO exports
+```
+
+A H130 está confirmada. **E isto é um fato sobre o INSTRUMENTO que vale para toda
+enumeração deste repositório**: `try { require(m) } catch` classifica módulos
+inexistentes como presentes. Só listar as CHAVES distingue. As enumerações
+anteriores (H143, H146, H160) escaparam por listarem chaves; a regra passa a ser
+explícita.
+
+**Status**: `syncHistory` (duas linhas) para `PROVEN`; `reject` continua
+`PARTIAL` com a medição confirmada por um censo maior.
+
+**Lição**: *um predicado de existência precisa ser testado contra algo que
+sabidamente não existe.* Eu enumerei nove módulos e não incluí nenhum nome
+inventado como controle — se tivesse, `WAWebNaoExisteMesmo` teria aparecido
+"presente" na primeira leitura e o defeito do instrumento apareceria antes da
+conclusão errada.
+
+---
+
+## H168 — `AUTHENTICATION_FAILURE`: a classe da página passou a viajar, e o controle negativo achou o elo sem teste
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/core/session.go` (`BootFailure.PageClass`,
+`failClass`), `core/lifecycle.go` (`LifecycleFact.PageClass`),
+`runtime/lifecycle.go`, `events/events.go` (`Event.PageClass`,
+`PublishSessionStateWithClass`), `probe_authfail_test.go` (novo).
+
+**A objeção da linha era exata**: o evento carregava o ESTÁGIO do boot, e o
+estágio sozinho não distingue um boot que morre em `not_ready` contra uma tela de
+pareamento de um que morre contra página quebrada — os dois chegam ao mesmo
+lugar por motivos opostos, e o primeiro é o que o upstream chama de falha de
+autenticação. A classe existia, mas **dentro da mensagem de erro**, e mensagem de
+erro não entra neste barramento (H88) — regra certa, que deixava a informação
+inacessível.
+
+**Correção aplicada**: a classe viaja como campo próprio, de vocabulário FECHADO
+(`spa.PageClass`), por todo o caminho. `Event.PageClass` é campo SEPARADO do
+`Reason`: um diz até onde o boot foi, o outro diz o que o parou.
+
+`PublishSessionState` continua existindo e não inventa classe — quem não tem o
+que dizer sobre a página continua não dizendo, em vez de mandar um `"UNKNOWN"`
+que se leria como medição.
+
+**Duas correções minhas, e a segunda é a que ensina:**
+
+1. **`failClass` é variável, não parâmetro.** `fail()` tem uma dúzia de
+   chamadores e onze não têm classe alguma para passar; enfiar `""` em todos
+   poria ruído onde não há informação.
+
+2. **A asserção da prova estava errada, não o código.** Exigi `LOGIN_REQUIRED` de
+   um perfil vazio e recebi `PAIRING_LOADING`, em 2,9 s de um orçamento de 90 s —
+   o classificador reconhece a tela de pareamento e **não espera o QR renderizar**,
+   que é o comportamento certo. Os dois valores dizem *"esta página quer
+   autenticação"*. Exigir um deles seria medir o tempo de renderização do QR e
+   chamar isso de significado. A asserção passou a ser sobre a FAMÍLIA.
+
+**A prova é a DISTINÇÃO, não um valor**: perfil não pareado dá pareamento; página
+em branco dá `REDIRECT`. Se as duas dessem o mesmo, o campo não separaria nada, e
+o teste falha explicitamente nesse caso.
+
+**Status**: corrigido, linha para `PROVEN`. Quatro controles negativos, todos
+compilando e falhando.
+
+**O achado sobre método**: um dos controles — apagar o repasse no `runtime` —
+**compilou e não foi pego por nenhum teste unitário**. O elo `core → runtime →
+barramento` não tinha guarda. A asserção foi então acrescentada ao teste de
+`runtime` que já sobe navegador contra página em branco, e os dois controles que
+atravessam o caminho passaram a morder.
+
+**Lição**: *um controle negativo que não é pego revela um teste que falta, não um
+controle ruim.* A tentação é ajustar o controle até algo falhar; o certo foi
+perguntar POR QUE nada falhou — e a resposta foi um elo inteiro sem cobertura,
+que agora tem.
+
+---
+
+## H169 — `GROUP_MEMBERSHIP_REQUEST`: o pedido tem palavra própria, e ninguém tinha perguntado qual
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/events/group.go` (`GroupMembershipRequest`, o
+mapa de subtipos), `probe_memreq_test.go` (novo), linha
+`GROUP_MEMBERSHIP_REQUEST`.
+
+**A medição anterior estava certa e parou uma pergunta cedo.** A H89 mediu o que
+CHEGA quando um pedido entra — 9 `chat.changed` mais 1 `message.added`, contra 5
+`chat.changed` de uma saída — e concluiu que `chat.changed` é grosso demais para
+ser o evento. Correto. Mas **nunca perguntou o que o `message.added` diz**.
+
+Ele diz:
+
+```
+group.updated  kind=gp2  subtype=membership_approval_request   x1
+chat.changed                                                    x7
+```
+
+Uma palavra própria, atravessando a fronteira, dentro da maquinaria que a H119 já
+construiu: a página carrega o subtipo, o Go classifica, a invariante 6 intacta.
+
+**Correção aplicada**: `GroupMembershipRequest` como tipo dedicado. Um pedido é
+uma DECISÃO PENDENTE dirigida a um admin; os outros subtipos sob `group.updated`
+são o grupo anunciando algo já decidido. Quem quisesse agir sobre pedidos tinha
+de receber toda mudança de assunto e de foto para achá-los.
+
+**Duas coisas NÃO foram movidas, e as duas asimetrias são deliberadas:**
+
+- `membership_approval_mode` fica em `group.updated`. É a política sendo ligada
+  ou desligada — o grupo anunciando uma mudança feita. Arrastá-la junto diria a um
+  assinante que alguém pediu para entrar quando ninguém pediu.
+- `created_membership_requests` **também fica**, e essa é a assimetria que custa
+  explicar: só o subtipo acima foi OBSERVADO. Mover o irmão seria classificar
+  pelo NOME — e este mesmo arquivo já recusa o `else` catch-all da referência
+  exatamente por isso. Um teste trava a recusa.
+
+**Status**: corrigido, linha para `PROVEN`. Três controles negativos, todos
+compilando e falhando.
+
+Prova em SPA real, num grupo descartável: o pedido chega **1 vez e sozinho**, sem
+`group.updated` junto — asserção que existe porque um assinante dos dois contaria
+o mesmo fato duas vezes.
+
+**Uma escolha de instrumento que valeu**: o barramento só foi ligado DEPOIS de
+todo o preparo (criar, sair, ligar aprovação, pegar convite). Ligá-lo antes teria
+enchido a medição com três atos alheios — que é precisamente o erro que a H150
+cometeu e levou uma rodada para desfazer.
+
+**Lição**: *"este evento é grosso demais" é uma conclusão sobre o evento que
+você olhou, não sobre os que chegaram junto.* A H89 tinha o `message.added` nas
+mãos, contado e registrado, e a pergunta seguinte — *o que ele diz?* — ficou por
+fazer por meses. Toda medição que termina em "não dá para distinguir" merece uma
+última passada pelos campos que ela já coletou.
+
+---
+
+## H170 — `sendStateRecording`: o bloqueio confirmado por um caminho que não é a assinatura
+
+**Data**: 2026-08-22
+**Contexto**: varredura dos `PARTIAL`.
+
+**Onde**: `internal/wa-headless/probe_chatstate_test.go` (novo), linha
+`sendStateRecording`.
+
+**A hipótese**: a linha diz que a prova ao vivo esbarra no bloqueio da observação
+de presença, e a H144 transformou esse bloqueio em causa medida — a assinatura
+exige vínculo de AGENDA, que se cria no telefone, e o par de laboratório não o
+tem (`isMyContact:false` nos dois).
+
+Mas isso é afirmação sobre `presence.Observe`, **não necessariamente sobre o
+estado de conversa**. A H150 mediu `typing` disparando no modelo da própria
+sessão que age, o que diz que o campo existe e se move. Se o estado chegasse ao
+modelo do PAR por outro caminho, a linha fecharia sem depender da assinatura.
+
+**Medição**, conta-A anuncia gravação e conta-B lê o modelo de presença cru:
+
+```
+BEFORE: {found:true, hasChatstate:true, type:"",  typing:-1}
+AFTER : {found:true, hasChatstate:true, type:"",  typing:-1}   (45s)
+```
+
+Nada se moveu. O `type:""` é coerente com a H94, que já tinha medido
+`chatstate.type` como indefinido neste build.
+
+**Status**: não corrigido. A linha continua `PARTIAL`, e a causa passa de
+*"esbarra no bloqueio de presença"* — que era referência a outra linha — para
+**dependência de agenda medida por dois caminhos independentes**: a assinatura
+(H144) e o modelo cru (aqui).
+
+**Lição**: *herdar um bloqueio de uma linha vizinha é uma hipótese, não um
+diagnóstico.* Custou uma sonda descobrir que a herança estava certa — e teria
+custado o mesmo descobrir que estava errada, que foi o que aconteceu com o `pin`
+na H162. A diferença entre as duas é só a medição.
+
+---
+
+## H171 — `attachEventListeners` é um agregado, e dizer isso encerra a varredura dos `PARTIAL`
+
+**Data**: 2026-08-22
+**Contexto**: última linha `PARTIAL` sem causa registrada.
+
+**Onde**: linha `attachEventListeners` do `LEDGER-WWEBJS.md`.
+
+**A nota — "dois fluxos de 31 eventos" — descrevia o que temos e não o que
+falta**, que é a única coisa que uma varredura precisa saber.
+
+Lendo a referência: `attachEventListeners` é uma função que instala **25**
+ouvintes via `exposeFunctionIfAbsent`, um por evento. Não é uma capacidade: é o
+ato de ligar as outras. O nosso equivalente é o ingresso mais os ouvintes de
+capacidade.
+
+**Não há aqui nada próprio a provar.** O estado desta linha é a conjunção das
+linhas de evento, e ela fecha quando elas fecharem. Registrar isso vale porque
+impede a próxima varredura de gastar uma sonda procurando o que medir — que foi
+exatamente o que eu ia fazer.
+
+**Status**: não corrigido, e agora com o motivo certo escrito.
+
+### O estado da varredura, para quem vier depois
+
+Com esta entrada, **todas as 34 linhas `PARTIAL` têm causa registrada**. A
+distribuição:
+
+| categoria | o que significa |
+|---|---|
+| **dependência humana** | presença e estado de conversa (agenda no telefone, H144/H170); foto de perfil e status (visíveis a 944 contatos, decisão 61) |
+| **sombra de linha `BLOCKED`** | `description` (H145/H163) |
+| **mundo vazio** | broadcasts/status — coleção sincronizada e ninguém postou (H158) |
+| **limite do build** | confirmação só entre sessões: participantes (H58/H65) e `pin` (H162) |
+| **agregado** | `attachEventListeners` (esta entrada) |
+| **herança** | delegações que herdam pares abertos — a enquete que não sai (H98) e o recibo não observado (H159) |
+| **vocabulário deliberado** | `DISCONNECTED`, `STATE_CHANGED` — o nosso é transição de liveness com classe anexada, não o vocabulário do upstream |
+
+**O que sobra de genuinamente acionável por este módulo, sozinho, é zero.** Isso
+não é o mesmo que dizer que a Fase 1 fechou: as linhas de *vocabulário
+deliberado* são candidatas a `INTENTIONAL_DIFFERENCE` em vez de `PARTIAL`, e essa
+reclassificação muda o placar — é decisão de critério, não medição, e o critério
+é da orquestração (decisões 52/60/62). **A decisão 64 foi pedida e não voltou.**
+
+**Lição**: *uma varredura termina quando toda linha sabe por que está onde está,
+não quando não há mais linhas.* O valor do dia não foi só as linhas fechadas —
+foi que nenhuma das restantes precisa ser reinvestigada do zero.
+
+---
+
+## H172 / H173 — a decisão 64 chegou, e a condição dela pegou duas justificativas podres
+
+**Data**: 2026-08-22
+**Contexto**: a orquestração respondeu a decisão 64 — *"Escolha b, reclassifique
+diferenças deliberadas e então encerre a Fase 1 com os BLOCKED devidamente
+justificados"*. A segunda metade dessa frase é que produziu esta entrada.
+
+### Primeiro: por que a 64 demorou, e não era demora dela
+
+O pedido foi ao mailbox do ORCA e **nunca chegou**. Conferido o inbox: em quatro
+runs independentes, **toda** mensagem substantiva está com `delivered_at` nulo;
+só os heartbeats `alive` entregam. Aberta a thread do ChatGPT, a última mensagem
+era a resposta 60–63 — a pergunta nunca tinha sido feita ali. Reenviada pelo
+canal que funciona, a resposta veio em segundos.
+
+**Registrado como fato operacional**: o mailbox do ORCA não é o canal de decisão;
+a thread do ChatGPT é. Um `orchestration send` que retorna `ok` com
+`delivered_at: null` **não** entregou.
+
+### A reclassificação (64 b)
+
+`DISCONNECTED` e `STATE_CHANGED` foram para `INTENTIONAL_DIFFERENCE`: a
+capacidade É entregue, por desenho próprio e registrado — transição de liveness
+com a classe da página anexada, vocabulário nosso, e o motivo escrito
+("repetir 'ainda vivo' a cada tique é heartbeat vestido de evento").
+
+**`MEDIA_UPLOADED` e `vote` NÃO foram movidos**, e a recusa é o conteúdo da
+decisão: o primeiro é limite do build (não existe momento distinto de "upload
+concluído"), o segundo herda a enquete que não sai. Nenhum dos dois é escolha
+nossa, e alargar a categoria para caber neles a esvaziaria.
+
+### A auditoria dos `BLOCKED` — e as duas que não sobreviveram
+
+Dos 47, **duas tinham justificativa refutada pelo trabalho desta mesma semana**:
+
+**H172 — `unpin`.** Dizia *"idem `pin` — chamada aceita, nada desfixado (H81)"*,
+e a H162 mostrou que a H81 media o pin do lado cego. Remedido, e o resultado é
+uma assimetria fina:
+
+```
+conta-A fixa    → conta-B (aberta) VÊ            0 → 1
+conta-A desfixa → conta-B (aberta) continua vendo por 5 MINUTOS
+                → conta-B RECÉM-ABERTA lê 0 logo depois
+```
+
+O unpin chega ao **servidor** e não ao modelo de sessão já aberta. Sai de
+`BLOCKED` para `PARTIAL`, pela convenção do `addParticipants`/`pin`.
+
+**Uma correção minha no caminho**: a primeira medição deu 60 s e concluiu
+bloqueio; minutos depois uma leitura independente mostrou 0. **O prazo era o
+instrumento**, e um prazo curto demais produz o mesmo texto que um bloqueio de
+verdade. Foi preciso separar "não propagou" de "não propagou AINDA", e o que
+separou foi a sessão fresca.
+
+**H173 — `CHAT_REMOVED`.** Dizia que provar exigiria apagar uma conversa e
+destruir o fixture — e a H166 apagou uma, num grupo descartável. Remedido: o
+apagamento produzia **14 `chat.changed`** e nada dizendo que a conversa sumiu,
+porque o ingresso abria só a porta `change` da `ChatCollection`. Aberta a porta
+`remove` — o mesmo que a H143 fez para mensagens — o apagamento emite
+`chat.removed` uma vez. Linha para `PROVEN`.
+
+**Status**: `PROVEN 134 (61%)`, `PARTIAL 33`, `BLOCKED 45`,
+`INTENTIONAL_DIFFERENCE 8`, `MISSING 0`.
+
+**Lição**: *"devidamente justificados" é uma condição com dentes.* A tentação era
+ler a frase como formalidade e declarar o encerramento. Auditar de verdade custou
+duas remedições — e as duas justificativas podres eram podres **por causa do
+trabalho de hoje**, o que significa que um dia produtivo envelhece as próprias
+notas mais depressa do que se atualiza. Toda linha que herda veredito de outra
+("idem X") é dívida esperando o X mudar.
+
+---
+
+## H174 — Fase 2 abre com a linha de base de teardown, e o instrumento falhou primeiro
+
+**Data**: 2026-08-22
+**Contexto**: primeira medição da Fase 2 (decisão 65). O enunciado pede provar
+"sem leaks/orphans/races", e a regra do projeto manda medir ANTES de projetar.
+
+**Onde**: `internal/wa-headless/probe_teardown_test.go` (novo).
+
+**A lacuna que abriu esta entrada**: `NumGoroutine` aparece em **zero** testes
+deste módulo. A suíte de shutdown prova o CAMINHO do protocolo — que `CleanStop`
+sinaliza, espera e rotula uma recusa — e não diz nada sobre **o que sobra depois**.
+
+**Medição**, três ciclos de boot/stop contra o SPA real:
+
+```
+BASELINE:  goroutines=2   chromes(perfil)=0
+ciclo 1    LIVE 13 / 9     AFTER 2 / 0    (stop via browser.close)
+ciclo 2    LIVE 13 / 9     AFTER 2 / 0
+ciclo 3    LIVE 13 / 9     AFTER 2 / 0
+```
+
+**Sem vazamento e sem órfão.** As 13 goroutines vivas voltam a 2 — o valor da
+linha de base — e os 9 processos de Chrome do perfil são todos ceifados. Três
+ciclos idênticos separam vazamento de aquecimento de runtime, que uma medição
+única não distingue.
+
+**Duas decisões de instrumento que valeram:**
+
+1. **Contar Chrome só DESTE PERFIL.** Contar todo Chrome da máquina mediria o
+   navegador do usuário — erro que quase cometi hoje ao investigar carga, e que
+   só não virou dano porque conferi antes de matar processo.
+2. **Deixar o runtime assentar antes de contar.** Ler `NumGoroutine` logo após um
+   `Stop` conta as que ainda estão morrendo, e isso produz um "vazamento" que
+   some sozinho.
+
+**E o instrumento falhou antes de acertar, pela armadilha que este repositório já
+tem catalogada.** A primeira versão contava com `grep -c`, que **sai com código 1
+quando conta zero** — e zero é justamente a resposta que o teste precisa poder
+ler. Todo teardown devolveu `-1`, e eu quase li isso como "não deu para medir"
+quando era o resultado certo com o instrumento errado. Trocado por `grep -F | wc -l`.
+
+**Status**: linha de base estabelecida. Nenhum defeito encontrado — o que é
+resultado, não ausência dele: agora existe número contra o qual comparar quando
+reconexão, multi-sessão e carga entrarem.
+
+**Lição**: *a primeira medição de uma fase mede o instrumento tanto quanto o
+sistema.* Duas das três decisões acima existem porque a versão ingênua teria
+mentido, e a terceira porque ela mentiu.
+
+---
+
+## Decisões 66 e 67 da orquestração — 2026-08-22
+
+Pedidas como primeira parada da Fase 2 (as dívidas internas acionáveis), ambas
+mudanças de CONTRATO e por isso não decididas aqui.
+
+> **66: Escolha b; identidade não resolvida deve falhar explicitamente, sem rede
+> oculta nem regras duplicadas.**
+
+Ou seja: leitores que recebem `@c.us` num build LID-first **recusam** com erro
+próprio, em vez de (a) resolver internamente — que esconderia ida à rede dentro
+de um leitor — ou (c) aceitar as duas formas — que duplicaria a regra de
+identidade em cada leitor. Aplica-se a `addressbook.DeviceCount`, `chats.ByJID` e
+`chats.MarkUnread` (H148, H151).
+
+> **67: Escolha a; Clear deve provar redução e falhar quando a pós-condição não
+> ocorrer.**
+
+`chats.Clear` ganha `MessagesAfter` e recusa quando não diminuir — com a
+notificação de sistema (`e2e_notification`) tratada como sobrevivente legítima,
+senão a nova pós-condição falharia sempre (H166).
+
+---
+
+## H175 — decisão 67 aplicada: `Clear` prova redução, e a borda foi MEDIDA antes de virar regra
+
+**Data**: 2026-08-22
+**Contexto**: primeira dívida interna da Fase 2, decidida pela orquestração
+(*"67: Escolha a; Clear deve provar redução e falhar quando a pós-condição não
+ocorrer"*).
+
+**Onde**: `internal/wa-headless/capabilities/chats/lifecycle.go`
+(`Emptied.MessagesAfter`, `ErrNotEmptied`, `residualKind`, o passo de verificação
+do `lifecycleScript`), `probe_clearedge_test.go` (novo).
+
+**O comentário que segurava o defeito**, no próprio script:
+
+> COUNTED BEFORE, because after is meaningless: the point of both acts is that
+> there is nothing left to count.
+
+É **falso**, e foi essa frase que manteve a capacidade sem pós-condição por
+meses — um `Clear` que não apagasse nada devolvia exatamente o mesmo valor de
+sucesso.
+
+**A regra óbvia — `after < before` — está errada, e medir mostrou por quê.** Três
+clears no mesmo grupo descartável:
+
+```
+A) grupo virgem     2 (e2e_notification, gp2)   -> 1 (e2e_notification)
+B) com 2 mensagens  3 (e2e_notification, chat)  -> 1 (e2e_notification)
+C) já limpo         1 (e2e_notification)        -> 1 (e2e_notification)
+```
+
+O caso **C** é a borda: limpar o que já está limpo remove zero, **corretamente**,
+e `after < before` chamaria isso de falha. A decisão 67 teria virado um defeito.
+
+O caso **A** matou a outra hipótese que eu carregava: eu esperava que um chat só
+com sistema não reduzisse — reduziu, porque o `gp2` **é** limpo. Só o
+`e2e_notification` sobrevive, nos três.
+
+**A regra encodada**: *não sobrou nada LIMPÁVEL*, com `residualKind` nomeando o
+tipo medido. Se um build futuro deixar outro tipo para trás, isto **falha alto**
+em vez de passar quieto — a direção que faz alguém remedir.
+
+**Assimetria deliberada**: `Delete` **não** ganha essa verificação. Ele remove a
+conversa, então recontar mensagens dela não tem o que ler; a pós-condição dele é
+o chat sair da coleção, provada na H166. Um teste trava a assimetria.
+
+**Status**: corrigido. Cinco controles negativos, todos compilando e falhando:
+remover a pós-condição; exigir zero total (o resíduo viraria falha); usar
+"diminuiu" em vez de "não sobrou limpável" (quebra o caso C); verificar ANTES de
+aplicar (teste de ORDEM); e fazer o `Delete` verificar também.
+
+Prova em SPA real: os três casos passam pela capacidade — `2->1`, `3->1`, `1->1`.
+
+**Um detalhe do dublê que virou comentário**: os testes antigos de `Clear`
+continuaram verdes porque o dublê não declarava `clearable`, e zero é o caso de
+sucesso. Isso é correto para eles e seria armadilha se não estivesse dito — o
+campo agora tem comentário avisando que **um teste que quer exercitar a
+pós-condição TEM de declará-lo**.
+
+**Lição**: *a borda decide a forma da regra, e só a medição conhece a borda.* Eu
+tinha DUAS hipóteses sobre o caso difícil — "chat só com sistema não reduz" e
+"limpar duas vezes não reduz" — e a medição derrubou a primeira e confirmou a
+segunda. Encodar qualquer uma delas sem medir teria produzido uma pós-condição
+que falha em uso normal, que é pior que não ter pós-condição nenhuma.
+
+---
+
+## H176 — decisão 66 aplicada, e o quarto leitor foi POUPADO por medição
+
+**Data**: 2026-08-22
+**Contexto**: segunda dívida interna da Fase 2 (*"66: Escolha b; identidade não
+resolvida deve falhar explicitamente, sem rede oculta nem regras duplicadas"*).
+
+**Onde**: `internal/wa-headless/spa/jid.go` (novo, `IsUnresolvedIdentity`),
+`capabilities/chats/chats.go` e `markunread.go`,
+`capabilities/addressbook/addressbook.go`, `probe_identity66_test.go` e
+`probe_markread66_test.go` (novos).
+
+**A regra mora em UM lugar**, que é metade da decisão: `spa.IsUnresolvedIdentity`.
+Três cópias de uma função de três linhas seriam exatamente as "regras
+duplicadas" que a 66 proíbe — e a primeira a divergir seria a que ninguém releu.
+
+**O erro é próprio e distinguível**, que é a outra metade. `ErrUnresolvedIdentity`
+NÃO é `ErrNoChat` nem `ErrDevices`: responder *"no conversation for that jid (384
+in this session)"* sobre alguém com quem a sessão fala todo dia é honesto sobre a
+COLEÇÃO e falso sobre o MUNDO, e a mensagem antiga não dizia qual dos dois.
+
+**E a recusa vem ANTES do trabalho.** O `ByJID` lê as 384 conversas para
+responder sobre uma; gastar isso para devolver uma resposta que ele não sabe dar
+é desperdício em cima de resposta errada. Um controle negativo trava a ordem.
+
+### O quarto leitor: medido, e POUPADO
+
+`chats.MarkRead` tem a MESMA FORMA dos três — procura a conversa na coleção — e
+**não foi alterado**, porque inferir por forma é precisamente o que produziu esta
+dívida.
+
+A primeira medição foi **inconclusiva** e quase me convenceu: as duas formas
+devolveram `before=0`, porque a conversa não tinha não-lidas. *Sem não-lida,
+no-op e falha silenciosa são indistinguíveis.* (E o meu comparador ainda incluía
+`waited`, que difere por 1 ms — bug meu, não do sistema.)
+
+Com a não-lida PRODUZIDA por conta-B, e o telefone testado **primeiro** para que
+a ordem fosse o experimento:
+
+```
+MarkRead(phone) = before=1 after=0 changed=true
+MarkRead(lid)   = before=0 after=0 changed=false   (já não havia o que fazer)
+```
+
+**O jid de telefone FUNCIONA.** `MarkRead` resolve por um caminho que os outros
+três não usam. Estendê-lo a recusa teria quebrado uma capacidade que funciona.
+
+**Status**: corrigido. Quatro controles negativos, todos compilando e falhando —
+incluindo o de ORDEM e o que faz grupos serem recusados (que morde em dois
+pacotes).
+
+**Quebra de chamador, aceita pela decisão**: seis testes quebraram porque usavam
+`@c.us` como fixture INCIDENTAL — mediam outra coisa e o jid era enfeite. Trocados
+para `@lid`, o que eles medem continua medido. Um deles, o
+`TestAnUnknownUserIsNotZeroDevices`, é justamente o que separa "sem registro" de
+"zero dispositivos" — a distinção que tornou a H148 diagnosticável.
+
+**Lição**: *a regra certa não é "todo leitor recusa", é "responda se puder, recuse
+explicitamente se não puder, nunca responda errado".* Essas duas formulações
+parecem a mesma até você medir o quarto caso. A primeira teria custado uma
+capacidade funcional; a segunda é uma regra só, e os leitores diferem apenas em
+qual metade dela se aplica.
+
+---
+
+## H177 — SEVERIDADE ALTA: duas leituras concorrentes trocavam de resposta
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "concorrência/multi-sessão". Primeiro defeito real da
+fase, e o mais grave achado neste módulo desde que o ledger existe.
+
+**Onde**: `internal/wa-headless/capabilities/message/message.go`
+(`stateKeyPrefix`, `nextStateKey`, `parked`), `script.go` (os sete scripts),
+`probe_concurrency_test.go` (novo).
+
+**O defeito**: todo leitor de `capabilities/message` estacionava a resposta no
+MESMO global de página — `__waHeadlessMessage`. Duas chamadas concorrentes na
+mesma sessão escreviam a mesma variável, e cada uma consultava até ela ficar
+não-vazia. Quem consultasse primeiro levava a resposta da OUTRA.
+
+**Medição**, contra o build real, com duas mensagens de CONVERSAS DIFERENTES —
+o chat de cada uma é a etiqueta que denuncia a troca:
+
+```
+12 rodadas concorrentes: 12 respostas TROCADAS de 24, 0 erros
+```
+
+**Cinquenta por cento, e todas as rodadas.** Não é uma corrida rara: é o
+comportamento normal de duas leituras simultâneas.
+
+**E a resposta errada era BEM FORMADA**, que é por que nada pegou. Um `OriginOf`
+devolvia um chat, um remetente e um timestamp perfeitamente válidos — de outra
+mensagem. Nenhum teste podia notar, porque todos chamavam uma capacidade por vez.
+
+**Por que isto é da Fase 2 e não da Fase 1**: toda prova de paridade chamou uma
+capacidade de cada vez, que é o cenário em que o mecanismo PAGA. A regra do
+projeto escrita depois do pool da F86 manda medir onde ele COBRA — e para um
+global compartilhado, cobrar são dois chamadores.
+
+**Correção**: a chave vira PREFIXO, e cada leitura recebe a sua, de um contador
+atômico. O nonce vem do Go e não da página: `Math.random` ou `Date.now` lá dentro
+poriam uma decisão — e um relógio — onde a invariante 6 proíbe.
+
+**A chave é LIBERADA assim que a resposta é tomada**, e isso não é zelo: sem
+isso, a correção trocaria uma resposta cruzada por um global de página POR
+LEITURA, que uma sessão longa acumula. Trocar um defeito por outro é o que a
+Regra 4 do `CLAUDE.md` manda verificar, e um teste trava a liberação.
+
+**Status**: corrigido em `capabilities/message`. Três controles negativos, todos
+compilando e falhando: voltar a chave única, o script ignorar a chave e escrever
+o global, e não liberar. Prova em SPA real: **80 leituras concorrentes, 0
+trocas**, onde antes eram 12 de 12.
+
+### O que NÃO está corrigido, e é o mesmo defeito
+
+**Vinte e três capacidades declaram um `stateKey` único**, com o mesmo padrão
+estacionar-e-consultar: `addressbook`, `avatar`, `block`, `catalog`, `channel`,
+`call`, `chatstate`, `edit`, `forward`, `lookup`, `pin`, entre outras. A troca
+não foi MEDIDA nelas, mas a estrutura é idêntica e a de `message` foi medida em
+50% — presumir que as outras estão a salvo seria a inferência por forma que este
+mesmo dia já derrubou duas vezes.
+
+`lookup` merece nota: ele é chamado DE DENTRO de outras capacidades, então uma
+resolução de identidade concorrente com uma leitura é o padrão de produção mais
+provável de todos.
+
+**Isto é achado acionável de severidade alta em aberto**, e o critério de
+encerramento da Fase 2 (decisão 65) exige zero deles.
+
+**Lição**: *um teste que só chama uma coisa por vez não testa um recurso
+compartilhado — testa a ausência de concorrência.* O padrão estacionar-e-consultar
+foi escrito para respeitar a invariante 6 (o relógio fica no Go) e resolveu esse
+problema bem; ninguém perguntou o que ele faz quando há dois. A pergunta da Fase
+2 — *qual entrada faz esta proteção virar o problema?* — respondeu em uma sonda.
+
+---
+
+## H178 — a correção da H177 estendida a mais três, e a varredura mecânica REVERTIDA
+
+**Data**: 2026-08-22
+**Contexto**: propagar a correção da H177 (chave por chamada) para as 23
+capacidades restantes.
+
+**Onde**: `capabilities/lookup`, `capabilities/catalog`, `capabilities/phone`,
+`capabilities/search`.
+
+**Corrigidas e provadas: 5 de 24** — `message` (H177), mais `lookup`, `catalog`,
+`phone` e `search`.
+
+`lookup` foi primeiro por um motivo registrado na H177: ele roda **dentro** de
+outras capacidades, então uma resolução de identidade concorrente com uma leitura
+é o padrão de produção mais provável, não uma corrida artificial. Três controles
+negativos, todos compilando e falhando.
+
+### A varredura mecânica foi tentada e revertida — e isso é o achado
+
+Os 23 restantes parecem uniformes: `window.` + stateKey para estacionar, um
+`parked(ctx, kick, label)` para consultar. Escrevi um transform e apliquei a sete
+de uma vez. **Quatro quebraram o build**, e as causas foram todas de forma:
+
+- `call` e `settings` têm um `const prelude` que embute a chave; um `const` não
+  pode receber parâmetro, então ele tem de virar função — e com ele todos os
+  `const xxxScript` que o usam.
+- `status` tem a mesma forma.
+- `groupreq` declara a chave dentro de um bloco `const (...)`, que o meu regex
+  não via.
+
+Revertidos os quatro, o build voltou. **Mantive apenas o que está verde e
+verificado**, porque meia-correção espalhada por sete pacotes é pior que nenhuma:
+o build quebrado é visível, mas um pacote parcialmente convertido que compila não
+é.
+
+**Dois erros meus no caminho, os dois de ferramenta:**
+
+1. **`zsh` não divide `$var` em palavras.** O `set -- $spec` passou
+   `"addressbook m"` como argumento único, e os transforms falharam sem tocar
+   arquivo nenhum — barulho, não dano, e só porque olhei a saída.
+2. **Ordem de substituição no meu próprio script**: um `replace` genérico rodou
+   depois de um específico e produziu `stateKeyPrefixPrefix`. O compilador pegou.
+
+**Status**: 5 de 24 corrigidas. **19 continuam com o defeito da H177**, que segue
+sendo achado acionável de severidade alta em aberto — o critério de encerramento
+da Fase 2 exige zero.
+
+**Lição**: *"os arquivos parecem iguais" é uma hipótese sobre a forma, e forma se
+mede lendo, não olhando.* Cinco pacotes seguiram o molde e quatro não, com quatro
+motivos diferentes. O transform economizou tempo nos cinco e o teria custado com
+juros se eu tivesse confiado nele sem construir depois de cada um — que é a mesma
+regra que este repositório aplica a dublês e a controles negativos, agora aplicada
+à ferramenta que escreve o código.
+
+---
+
+## H179 — 16 de 24 corrigidas, e o molde parou de servir duas vezes
+
+**Data**: 2026-08-22
+**Contexto**: propagar a chave por chamada (H177) ao resto do módulo.
+
+**Corrigidas e travadas: 16 de 24.** `message`, `lookup`, `catalog`, `phone`,
+`search`, `call`, `settings`, `status`, `groupreq`, `block`, `avatar`, `edit`,
+`forward`, `chatstate`, `mute`, `profile`. Cada uma com uma guarda
+(`conckey_test.go`) que falha se duas chamadas voltarem a compartilhar chave.
+
+**Restam 8**: `addressbook`, `channel`, `media`, `messagemeta`, `pin`, `poll`,
+`presence`, `react`, `revoke`, `star`.
+
+### As formas que o molde não cobriu
+
+Duas conversões diferentes tiveram de ser escritas, e nenhuma serviu ao resto:
+
+**Forma B** (`window.` + stateKey): resolvida para nove pacotes. Três deles —
+`call`, `status`, `groupreq` — tinham um `const prelude` embutindo a chave; um
+`const` não aceita parâmetro, então virou função, e com ele todos os
+`const xxxScript` que o usavam.
+
+**`settings` foi o caso mais instrutivo**: ele montava o script ANTES de a chave
+existir. Inverti para o `write` receber um CONSTRUTOR `func(key string) string`.
+A alternativa — o chamador gerar a chave e passá-la duas vezes — é convite a
+passar chaves diferentes, o que reintroduziria o defeito de forma mais difícil de
+ver que a original.
+
+**Forma A** (`window[strconv.Quote(stateKey)]` + um `resultScript` const):
+resolvida para seis. Aplicada a doze de uma vez, **nove quebraram o build** —
+`avatar` chama o seu de `pollScript`, e os outros têm variações próprias.
+
+**Revertidos os nove, mantidos os dois verdes**, pela regra que a H178 já custou:
+meia-correção espalhada é pior que nenhuma, porque o build quebrado é visível e
+um pacote parcialmente convertido que COMPILA não é.
+
+### Um erro meu que sete pacotes esconderam
+
+Ao ensinar os dublês sobre a chave nova, pus a liberação **no mesmo ramo da
+leitura**. Ela passou a contar como leitura, e o `groupreq` — o único com teste
+que afere o NÚMERO DE VOLTAS do laço — falhou com "4 reads".
+
+Os outros seis estavam verdes **pelo motivo errado**. Na forma A o erro era pior:
+sem ramo próprio, a liberação caía no `default` e virava `lastScript`, de modo que
+todo teste que afirma sobre o script passava a inspecionar o script de limpeza.
+
+**É a armadilha do dublê permissivo do `ARMADILHAS.md`**, cometida por mim,
+minutos depois de escrever a correção que ela deveria proteger. Sete dublês
+corrigidos com ramo próprio, e um comentário em cada dizendo por quê.
+
+**Status**: `make check` verde sobre as 16; 35 pacotes de capacidade passam.
+**As 8 restantes continuam com o defeito da H177** — achado acionável de
+severidade alta em aberto, e a decisão 65 exige zero.
+
+**Lição**: *um transform é uma hipótese sobre a forma, e como toda hipótese ele
+precisa de controle.* O controle aqui é o build depois de CADA pacote, não
+depois do lote — foi o que separou 16 corrigidas de 24 quebradas, duas vezes.
+
+---
+
+## H180 — 19 de 26, e a contagem original estava errada
+
+**Data**: 2026-08-22
+**Contexto**: continuação da H179.
+
+**Primeiro, uma correção de número**: a H177 disse "23 capacidades restantes" e a
+H179 disse "24 no total". **São 26.** A contagem original veio de um `grep` por
+`const stateKey = "` que não via as declarações dentro de blocos `const (...)` —
+o mesmo motivo que fez o `groupreq` escapar do primeiro transform. Um número
+errado num achado de severidade alta é pior que nenhum, porque dá a impressão de
+que o fim está mais perto do que está.
+
+**Corrigidas e travadas: 19 de 26.** Somam-se às 16 da H179: `poll`,
+`addressbook` e `channel`.
+
+- **`addressbook`** trouxe um caso novo: `nameStateScript` NÃO estaciona — devolve
+  o JSON direto — mas usa o `prelude` pelos helpers, e o prelude **cria o global
+  mesmo assim**. A chave é gerada e liberada ali, senão a correção deixaria um
+  órfão por chamada num caminho que nem consulta o estacionado.
+- **`channel`** tem DOIS laços de espera, em `channel.go` e `owner.go`, cada um
+  com o seu conjunto de chamadores.
+
+**Restam 7**: `media`, `messagemeta`, `pin`, `presence`, `react`, `revoke`,
+`star`.
+
+### Por que os 7 pararam, e o que aprendi ao insistir
+
+Tentei convertê-los com os transforms já validados e eles **colidiram entre si**:
+o de forma A já acrescentava `(key)` ao `resultScript`, e o de sítios extras
+acrescentava outro — `too many arguments`. Cada um desses pacotes tem chamadas de
+script FORA do sítio do kick, e o número e a forma delas variam.
+
+Revertidos os 7, o build voltou e os 35 pacotes de capacidade passam.
+
+**Um resíduo que quase escapou**: a reversão devolveu o código, mas os arquivos de
+guarda (`conckey_test.go`) que eu tinha criado ficaram para trás, referindo
+símbolos que já não existiam. **Dois pacotes ficaram sem compilar por causa da
+minha limpeza, não da minha mudança** — e o gate que eu rodei em cima disso falhou
+em `cmd/core` por essa razão, não por defeito real. Removidos os órfãos.
+
+**Status**: 19 de 26. **7 continuam com o defeito da H177** — achado acionável de
+severidade alta em aberto.
+
+**Lição**: *reverter não é desfazer.* Um `git checkout` devolve os arquivos
+rastreados e deixa os que você CRIOU, e o que sobra costuma referir o que sumiu.
+A verificação depois de reverter tem de ser a mesma que depois de mudar — build e
+teste —, e eu só a fiz porque o `go test` reclamou; se tivesse confiado no
+`checkout`, teria commitado uma árvore que não compila em dois pacotes.
+
+---
+
+## H181 — 25 de 26, e a 26ª está fora POR DESENHO
+
+**Data**: 2026-08-22
+**Contexto**: fechamento do defeito de severidade alta da H177.
+
+**Corrigidas e travadas: 25 de 26.** As sete últimas — `star`, `revoke`, `media`,
+`pin`, `presence`, `react` e `messagemeta` — feitas à mão, lendo cada arquivo,
+depois de os transforms terem falhado três vezes na cauda.
+
+### A 26ª não é dívida: `messagemeta` fica com chave única, de propósito
+
+**A diferença é O QUE A CHAVE GUARDA.** Nas 25, ela guarda a RESPOSTA de uma
+chamada, e duas chamadas concorrentes escreviam a mesma variável — 12 cruzamentos
+em 12 rodadas. No `messagemeta` ela guarda uma **ASSINATURA** de longa duração:
+`installScript` instala uma vez (e sai cedo se já estiver instalada) e
+`drainScript` esvazia o buffer. **Há uma assinatura por sessão por desenho**, e
+dar-lhe chave por chamada quebraria exatamente isso — o install escreveria uma
+chave e o drain leria outra.
+
+Registrado no próprio arquivo, para que a próxima varredura não o "conserte".
+
+### O que a cauda ensinou, caso por caso
+
+- **`revoke`**: o `loadedScript` — que eu mesmo escrevi na H143 — **não estaciona**,
+  devolve JSON direto. O transform deu-lhe chave só por casar `\w+Script`.
+  Assinatura revertida. Mesmo caso em `pin.pinnedInScript` e `react.readScript`.
+- **`presence`**: mesma forma do `settings` — `run` gerava a chave e o script vinha
+  pronto do chamador. Invertido para construtor.
+- **`addressbook`** (H180): script que não estaciona mas usa o `prelude` pelos
+  helpers, e o prelude cria o global mesmo assim.
+
+**Três dessas correções foram REVERSÕES de algo que o transform tinha feito.** Um
+nome terminado em `Script` não diz se a função estaciona; só o corpo diz.
+
+### Um dublê que escondia o erro em dois de três
+
+O `revoke` tem **três** dublês e o meu ajuste entrou só no primeiro. O
+`TestTheLocalDeleteDoesNotConsultTheRevokeEntitlement` falhou porque a liberação
+virou `lastScript` no `localDouble`. Corrigido para percorrer TODOS os dublês de
+cada arquivo.
+
+**Status**: `make check` verde, 35 pacotes de capacidade passam, e a sonda de
+concorrência contra o build real segue com **0 respostas trocadas**. O achado de
+severidade alta da H177 está **fechado**.
+
+**Lição**: *automação cobre o meio da distribuição e a cauda é onde a decisão
+mora.* Os transforms fizeram 19 de 26 e falharam em todas as sete restantes, cada
+uma por um motivo distinto — e três delas precisavam do OPOSTO do que o transform
+fazia. O tempo que economizaram foi real; o tempo que teriam custado se eu tivesse
+insistido também.
+
+---
+
+## H182 — a chamada em voo quando o navegador morre: medida, e o erro que ela devolve merece uma decisão
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "reconexão / recuperação determinística".
+
+**Onde**: `internal/wa-headless/runtime/inflight_test.go` (novo).
+
+**A lacuna**: o contrato do `Holder` para sessão morta está documentado e testado
+— `ErrSessionDied`, e ele recusa rebootar em vez de esconder um navegador que
+morre sempre. O que nada media é a chamada **já em voo** quando o processo some.
+Duas falhas são possíveis e só uma é aceitável: voltar classificada dentro do
+prazo, ou pendurar.
+
+**A escolha de fixture é parte do achado.** O teste usa perfil TEMPORÁRIO e página
+local, não o de laboratório: `SIGKILL` contra um perfil **pareado** arrisca
+corrompê-lo, e repareamento exige um humano com o telefone — custo que esta
+medição não tem direito de gastar. O mecanismo sob teste (`Runner.Do`, o
+transporte CDP, o prazo) é o mesmo; muda só a credencial em risco.
+
+**Medição**, com uma avaliação que ocupa a página por 120 s e o `SIGKILL` chegando
+aos 2 s:
+
+```
+a chamada em voo voltou em 2.027s com err=context canceled
+goroutines: 15 antes, 3 depois
+Session() seguinte: ErrSessionDied
+```
+
+**Não pendura, não vaza, e a sessão seguinte diz que morreu.** A recuperação é
+determinística. Esta é a linha de base do item.
+
+### O que sobra, e é decisão e não defeito
+
+O erro é **`context canceled`** — o vocabulário de um cancelamento pedido pelo
+CHAMADOR —, e o contexto do chamador aqui era `context.Background()`, que ninguém
+cancelou. Quem receber isso não tem, na mensagem, nada que diga "o navegador
+morreu".
+
+**E isso é consistente com um princípio já escrito no `Runner`**: *"o contexto é
+consultado, não o erro: um driver é livre para reportar um prazo estourado como o
+erro que quiser, e confiar na redação dele põe a classificação nas mãos de
+outro"*. O `Runner` deliberadamente NÃO interpreta erro de driver, e por isso o
+`context canceled` do chromedp passa cru.
+
+Um chamador PODE distinguir — se o próprio contexto não está encerrado e mesmo
+assim veio `context canceled`, não foi ele. Mas isso é implícito, e o módulo tem
+precedente para tornar explícito: o `TimeoutError` existe exatamente para que
+"não respondeu" não se confunda com "respondeu com erro".
+
+**Registrado como pergunta de desenho, não como defeito**, porque mexer nisso
+contraria uma razão que já está escrita — e trocar um princípio por outro é
+decisão de contrato. Opções: (a) deixar como está e documentar a discriminação
+implícita; (b) o `Runner` passar a classificar "alvo sumiu" quando o processo já
+não existe, o que exige consultar o PID e não a mensagem; (c) o `Holder` expor um
+sinal que o chamador consulta ao ver erro inesperado.
+
+**Status**: linha de base estabelecida, sem defeito encontrado. Uma pergunta de
+contrato aberta.
+
+**Lição**: *"não encontrei defeito" só é resultado se a medição podia tê-lo
+encontrado.* Este teste falha se a chamada pendurar, se voltar dizendo sucesso, se
+deixar goroutine, ou se a sessão seguinte rebootar em silêncio — quatro modos, e
+por isso o verde significa alguma coisa.
+
+---
+
+## H183 — decisões 68 e 69 aplicadas, e a sonda de vida deadlockou duas vezes antes de acertar
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2. A orquestração respondeu as duas perguntas que a H182
+deixou abertas.
+
+> **68: Escolha b e registre a recuperação ponta a ponta como bloqueada por
+> exigir risco humano no fixture pareado.**
+>
+> **69: Escolha b; classifique alvo desaparecido estruturalmente pelo estado do
+> processo, nunca pela mensagem do driver.**
+
+**Onde**: `engine/runner.go` (`TargetGoneError`, `Runner.TargetAlive`),
+`engine/browser.go` (`Browser.Exited`), `runtime/holder.go` (`browserGone`,
+`targetGoneGrace`), `runtime/inflight_test.go`.
+
+### Carga, antes das decisões
+
+1000 chamadas concorrentes numa sessão: **1,553 s, p50 40 ms, p95 233 ms, pior
+451 ms, zero erros**, com os globais `__waHeadless*` em **0 antes e 0 depois** e
+goroutines 12 → 12. A liberação de chave da H177 aguenta volume — e a primeira
+medição, 72 chamadas em 110 ms, era amostra e não carga; foi refeita por isso.
+
+### A sonda de vida: dois deadlocks e uma corrida
+
+A 69 pede o estado do PROCESSO, nunca a mensagem. Chegar lá custou três versões:
+
+1. **Pegava `h.mu`.** `Session()` segura esse lock durante TODO o boot, e o boot
+   usa o Runner — a sonda travaria a si mesma.
+2. **Chamava `sess.ProcessAlive`**, que pega o lock da SESSÃO. Quando o navegador
+   morre alguém já o está segurando: **o teste pendurou por 3 minutos**.
+3. **Consultava o SO com `ProcessAlive(pid)`** e dizia "vivo": um processo morto
+   há um instante é **ZUMBI** até o pai ceifá-lo, e **sinal 0 a um zumbi
+   SUCEDE**.
+
+**A regra que sobra vale além daqui: uma sonda de vida não pode compartilhar lock
+com aquilo cuja vida ela reporta.**
+
+O sinal autoritativo é o canal que o reaper fecha, exposto como `Browser.Exited`
+— sem lock, e muda exatamente uma vez. Mas mesmo ele perdia a corrida: a chamada
+volta **2,015 s** depois de um kill agendado para 2 s, ou seja no instante exato,
+e o reaper ainda não rodou. Daí `targetGoneGrace`, uma janela de 500 ms que vive
+**só no caminho de erro** — o Runner consulta a sonda apenas quando a operação já
+falhou e nenhum dos dois prazos explica. Chamada saudável não paga nada.
+
+**Resultado**: `engine: the browser is gone (StateProbe inflight/kill)`, em 2,017 s,
+sem vazamento, e a `Session()` seguinte continua dando `ErrSessionDied`.
+
+### Quatro controles negativos, e TRÊS não morderam de primeira
+
+- **Classificar pela mensagem**: o teste usava um erro qualquer, que a redação
+  nunca acusaria. Refeito com `context.Canceled` — a entrada que a mensagem
+  ACUSARIA —, e aí mordeu.
+- **Acusar sem sonda**: o teste usava `errors.Is`, e `TargetGoneError` desembrulha
+  para a causa, então passava. A asserção tem de ser sobre o TIPO.
+- **Reclassificar antes do prazo**: a ordem está protegida em DOIS lugares — a
+  posição do bloco e o `!timedOut` na condição. Quebrar um só não muda nada;
+  quebrando os dois, o teste falha.
+
+**Os três eram testes fracos meus, não controles ruins** — que é exatamente o que
+a H168 já tinha registrado sobre controles que não mordem.
+
+### 68: registrado como bloqueado
+
+Recuperação de perfil sujo ponta a ponta (marcador suspeito → verificação →
+ready) **fica sem medição**, por decisão: produzi-la exige matar o navegador num
+perfil PAREADO, e o pior caso é repareamento por um humano com o telefone. O que
+foi medido usa perfil temporário e mede o mecanismo, não o caminho completo.
+
+**Lição**: *o instante em que uma coisa morre não é o instante em que o sistema
+sabe disso.* Três camadas discordaram por centenas de milissegundos — o driver, o
+sistema operacional e o reaper —, e a correta é a que muda uma vez só.
+
+---
+
+## H184 — auditoria de sucesso silencioso: nenhuma escrita mente, e há DOIS padrões de honestidade
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "observabilidade sem sucesso silencioso".
+
+**A pergunta**: existe alguma escrita que devolve sucesso sem ter lido nada de
+volta? Foi o defeito da H175 (`chats.Clear`) e o da H155 (`react.Remove`), os dois
+já corrigidos — e a pergunta é se sobrou mais algum.
+
+**Resultado: nenhum.** Das 49 escritas exportadas, zero devolvem sucesso sem
+poder justificá-lo.
+
+### O instrumento errou primeiro, e foi corrigido antes de virar achado
+
+A primeira varredura acusou **35 de 49**. Estava errada: quase todas são
+invólucros de uma linha que delegam a um helper que VERIFICA — `block.Block` tem
+39 bytes e é `return b.set(...)`. Reportar isso teria produzido 35 falsos
+positivos, que é exatamente a classe de achado que este repositório chama de pior
+que nenhum. Corrigido para **seguir a delegação** até três níveis.
+
+**E o instrumento foi validado por dois casos discriminantes**, escolhidos porque
+eu sabia a resposta:
+
+- `chatstate.SetArchived` → delega para `set`, que relê e **falha** com
+  `ErrUnchanged` quando o campo não mexeu. Auditor certo.
+- `group.Promote` → delega para `setAdmin`, que devolve `Verified: false` para
+  mudança real, porque este build não confirma na mesma sessão (H65). Auditor
+  certo de novo, e este era o caso capaz de desmenti-lo.
+
+Sem esses dois, a auditoria seria um regex opinando.
+
+### Os dois padrões, e a diferença que importa
+
+| padrão | pacotes | o que faz |
+|---|---|---|
+| **erro** | `block`, `channel`, `chats`, `chatstate`, `edit`, `revoke` | recusa quando a pós-condição não ocorre; o chamador **tem** de tratar |
+| **sinalizador** | `channel`, `chats`, `group`, `pin`, `react` | devolve `Verified: false`; o chamador **pode** ignorar |
+
+O sinalizador é usado exatamente onde verificar é impossível — confirmação só
+entre sessões (H58, H65, H162) —, e nesses casos ele é a resposta honesta: erro
+seria mentir sobre uma operação que provavelmente funcionou.
+
+**Mas a honestidade do sinalizador é DISPONÍVEL, não IMPOSTA.** Um chamador que
+não lê o campo recebe um sucesso indistinguível de um verificado. Do lado dele, é
+sucesso silencioso outra vez — só que a culpa mudou de lugar.
+
+**Registrado como observação de desenho, não como defeito**: a escolha entre os
+dois padrões está correta caso a caso, e transformar sinalizador em erro faria
+capacidades que funcionam passarem a falhar. Se a Fase 2 quiser fechar essa
+brecha, o caminho não é o tipo de retorno — é um teste de fronteira no `pkg/` que
+recuse ignorar o campo.
+
+**Status**: item medido, nenhum defeito. Uma brecha de contrato descrita.
+
+**Lição**: *uma auditoria por padrão textual precisa de dois casos cuja resposta
+você já sabe — um de cada lado.* Eu tinha os dois de graça, do trabalho da própria
+Fase 1, e sem eles teria publicado 35 falsos positivos ou confiado num verde que
+não medi.
+
+---
+
+## H185 — long-running e memória: nove minutos, e a memória DESCE
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, itens "long-running" e "limites de CPU/RAM".
+
+**Onde**: `internal/wa-headless/probe_longrun_test.go` (novo).
+
+**A pergunta que a linha de base de teardown NÃO responde**: a H174 mediu que uma
+sessão que ACABA não deixa nada. Se uma sessão que FICA cresce enquanto fica é
+outra coisa, e o enunciado pede as duas.
+
+**Medição**, uma sessão sob trabalho constante por nove minutos, amostrando a cada
+10 s:
+
+```
+RSS médio (terço inicial → terço final):  727088KB → 638168KB   (-12%)
+goroutines:                                10 → 10, constante
+globais __waHeadless*:                     0 em todas as amostras
+latência:                                  6ms a 60ms, quase toda abaixo de 20ms
+```
+
+**A memória DESCE.** O RSS oscila entre ~590MB e ~675MB e termina 12% abaixo de
+onde começou — a queda é a hidratação inicial sendo devolvida, não um efeito da
+carga. Goroutines não se movem. Globais ficam em zero, o que confirma sob duração
+o que a carga já confirmara sob volume (H183): a liberação de chave da H177
+aguenta.
+
+**Número para capacidade, que é o item de RAM**: uma sessão custa da ordem de
+**600–700MB de RSS** somando toda a árvore de processos do Chrome. Quem
+dimensionar quantas sessões cabem numa máquina precisa desse número, e ele não
+existia escrito em lugar nenhum.
+
+**Duas decisões de instrumento, e as duas mudam a resposta:**
+
+1. **O RSS soma a ÁRVORE, não o processo pai.** O Chrome é multiprocesso; medir
+   só o pai reportaria estabilidade enquanto um renderer cresce — exatamente o
+   vazamento que este teste existe para pegar.
+2. **A comparação é entre TERÇOS, não entre extremos.** O primeiro minuto ainda
+   tem aquecimento e uma amostra final isolada é ruído. Vazamento é tendência, e
+   tendência não se lê em dois pontos.
+
+**E a medição rodou sozinha.** Nada pesado em paralelo, de propósito: contenção
+falsearia o número, que é o erro que a própria Fase 2 já cometeu hoje quando 72
+chamadas em 110 ms se passaram por carga.
+
+**Status**: os dois itens medidos, nenhum defeito. O teste falha se as goroutines
+crescerem, se o RSS subir mais de 50%, ou se sobrar qualquer global — três modos,
+para que o verde signifique algo.
+
+**Lição**: *uma métrica que só sobe é fácil de julgar; uma que oscila precisa de
+uma regra de leitura decidida ANTES de olhar.* Terços e árvore de processos foram
+escolhidos antes da primeira amostra. Escolhidos depois, seriam a mesma coisa que
+escolher a conclusão.
+
+---
+
+## H186 — CPU: ociosa custa 6% de um núcleo, e a carga é limitada pela conexão, não pelo processador
+
+**Data**: 2026-08-22
+**Contexto**: Fase 2, item "limites de CPU". Último item mensurável do enunciado.
+
+**Onde**: `internal/wa-headless/probe_cpu_test.go` (novo).
+
+**A suspeita por trás do item**, que é o que o tornava vale a pena: toda
+capacidade usa estacionar-e-consultar — a página estaciona a resposta e o Go
+CONSULTA, porque `Evaluate` não aguarda promessa (invariante 6). Consultar é um
+laço, e muitas chamadas concorrentes são muitos laços. Se o custo por chamada
+crescesse com a concorrência, apareceria aqui.
+
+**Medição**, duas janelas de 30 s do mesmo tamanho:
+
+```
+ocioso   1.69s de CPU em 30.2s de relógio    (6% de um núcleo)
+carga   52.75s de CPU em 30.1s de relógio   (176% de um núcleo)
+razão   31.3x
+```
+
+**O número que decide capacidade é o OCIOSO.** Uma sessão parada custa 6% de um
+núcleo — cerca de dezesseis sessões ociosas por núcleo. É ele que multiplica por
+sessão numa máquina, não o pico; e por isso é ele que o teste afere, com teto em
+25%.
+
+**E o pico é SUB-LINEAR, o que é a informação interessante.** Doze trabalhadores
+em laço contínuo produziram 1,76 núcleo, não doze. O gargalo não é o processador:
+é a **conexão CDP única**, que serializa. Isso explica também a latência da carga
+da H183 (p95 de 233 ms com 40 trabalhadores) — a fila é da conexão. Quem quiser
+mais vazão por máquina precisa de mais SESSÕES, não de mais concorrência dentro
+de uma.
+
+**Duas decisões de instrumento:**
+
+1. **CPU como DELTA de tempo acumulado, não `%cpu`.** A coluna `%cpu` do `ps` é
+   média desde que o processo NASCEU; numa sessão de minutos ela achataria
+   exatamente a rajada que este teste quer ver.
+2. **A janela ociosa tem o mesmo tamanho da janela de carga.** Comparar 5 s de
+   ocioso com 30 s de carga compararia janelas, não estados.
+
+**Uma ressalva dita, não escondida**: a carga aqui é SATURANTE — doze
+trabalhadores em laço sem pausa. É o teto, não um perfil de produção. O número
+serve para dimensionar o pior caso, e chamá-lo de "uso típico" seria mentir sobre
+o que foi medido.
+
+**Status**: item medido, nenhum defeito.
+
+**Lição**: *quando um número cresce menos do que devia, a explicação é tão útil
+quanto o número.* 1,76 núcleo para doze trabalhadores parece bom até se perguntar
+por quê — e a resposta (uma conexão serializa) muda a recomendação de capacidade
+de "adicione concorrência" para "adicione sessões".
+
+## F101 — `ParseJID("")` faz panic, e a lista de participantes chega até ele sem validação de elemento
+
+**Data**: 2026-08-22.
+**Contexto**: achado incidental na Fase 3 do `internal/wa-headless` (decisão 72),
+ao medir o comportamento do `JIDResolver` do `wa-noise` antes de extrair a regra
+pura para um pacote compartilhado. Não faz parte do escopo da Fase 3.
+
+**Onde**: `pkg/infra/wa-noise/mapping/jid/parse.go:12-13`
+
+```go
+func ParseJID(arg string) (types.JID, bool) {
+	if arg[0] == '+' {      // <-- index out of range quando arg == ""
+```
+
+**Problema**: `arg[0]` numa string vazia entra em pânico. O porto
+`appport.JIDResolver` expõe isso: `JIDResolverAdapter.ResolveJID(ctx, "")`
+morre em vez de devolver erro — apesar de a assinatura prometer `(domain.JID, error)`.
+
+Evidência MEDIDA (sonda descartável, removida após a medição):
+
+```
+panic: runtime error: index out of range [0] with length 0
+wa-api/pkg/infra/wa-noise/mapping/jid.ParseJID(...)
+	pkg/infra/wa-noise/mapping/jid/parse.go:13
+wa-api/pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveJID(...)
+	pkg/infra/wa-noise/mapping/jid/resolver.go:22
+```
+
+Alcançabilidade — os 11 chamadores de `ResolveJID` foram enumerados um a um:
+
+| chamador | protegido por |
+| --- | --- |
+| `get_avatar.go:35` | `len(req.Phone) < 1` |
+| `get_group_info.go:36`, `get_group_invite_link.go:36` | validação de campo |
+| `subscribe_presence.go:34`, `chat_presence.go:38`, `react.go:40` | validação de campo |
+| `mark_read.go:35,49` | `len(...) > 0` / `!= ""` |
+| `react.go:65` | `req.Participant != ""` |
+| `get_user_profile.go:85` | **nada no use case** — protegido pela FORMA da rota (`/user/profile/{jid}`: segmento vazio não casa) |
+| `group_management.go:37` (via `parseJIDs`, linha 48) | **nada** |
+
+O caminho aberto, LIDO no código (não medido ponta a ponta):
+`handler_group_mgmt.go:95` valida `len(req.Participants) < 1` — o TAMANHO da
+lista, não os ELEMENTOS. Então `POST /group/create` com
+`{"name":"x","participants":[""]}` desce por `CreateGroup → parseJIDs →
+parseJID → ResolveJID → ParseJID("")` e entra em pânico. O middleware de
+`recover` (`pkg/bootstrap/router.go:149,184`) transforma isso em 500, então o
+processo não morre — mas o erro é 500 onde deveria ser 400, e a rota
+`/group/updateparticipants` tem a mesma forma de validação.
+
+**Correção sugerida**: guardar na origem da regra, não em cada chamador —
+`if arg == "" { return types.JID{}, false }` no topo de `ParseJID`. Isso já
+transforma o panic no erro que o porto promete. Separadamente, validar
+elemento vazio em `parseJIDs` com o índice (a mensagem de log ali já expõe
+`index`, então a informação existe) para que a resposta seja 400 com a posição.
+
+**Anti-regressão exigida** (política do projeto): teste que chama
+`ResolveJID(ctx, "")` e exige `error` (hoje ele entra em pânico — o controle
+negativo é remover a guarda e ver o panic voltar), mais teste pela ROTA
+registrada `/group/create` com `participants:[""]` exigindo 400.
+
+**Status**: **CORRIGIDO** nesta sessão, por decisão 73 da orquestração
+("corrija o F101 antes da extração, com erro explícito para JID vazio e teste
+da rota exigindo 400, depois mova a regra já saneada"). A correção precede a
+extração da decisão 72 justamente para não dar duas casas ao mesmo defeito.
+
+Três guardas, e a primeira é a que trava a CAUSA:
+
+1. `pkg/infra/wa-noise/mapping/jid/parse.go` — `if arg == "" { return types.JID{}, false }`
+   no topo de `ParseJID`, na ORIGEM da regra e não nos onze chamadores.
+2. `handler_group_mgmt.go` — `firstEmpty()` + `rejectEmptyElement()` nas duas
+   rotas com lista (`/group/create`, `/group/updateparticipants`), com o ÍNDICE
+   da entrada reprovada, para que a resposta seja 400 e diga qual falhou.
+3. `handler_group_mgmt.go` — `req.GroupJID == ""` em
+   `handleUpdateGroupParticipants`, que nunca validou esse campo.
+
+**Testes que travam o achado**:
+
+- `pkg/infra/wa-noise/mapping/jid/parse_empty_test.go` — a CAUSA, pelo
+  adaptador REAL: `TestParseJIDRejectsEmptyInsteadOfPanicking`,
+  `TestResolveJIDOnEmptyReturnsErrorNotPanic` e
+  `TestResolveJIDStillAcceptsBareNumber` (o caminho de SUCESSO, para que a
+  guarda não atropele o número nu que `/user/profile` promete aceitar).
+- `pkg/presentation/http/handlers/handler_group_mgmt_test.go` — o SINTOMA,
+  pela rota, em 4 casos novos na tabela `missing`. Um deles põe o vazio na
+  SEGUNDA posição (`"empty participants at index 1"`), porque um índice
+  constante zero passaria no caso trivial.
+
+**Controles negativos EXECUTADOS** (três, um por guarda):
+
+```
+CONTROLE 1 — guarda removida do ParseJID
+--- FAIL: TestParseJIDRejectsEmptyInsteadOfPanicking (0.00s)
+panic: runtime error: index out of range [0] with length 0 [recovered, repanicked]
+	pkg/infra/wa-noise/mapping/jid/parse.go:16
+
+CONTROLE 2 — guardas do handler removidas
+--- FAIL: .../CreateGroup/participante_vazio: status: got 200, want 400
+--- FAIL: .../CreateGroup/participante_vazio_no_meio: status: got 200, want 400
+--- FAIL: .../UpdateGroupParticipants/sem_GroupJID: status: got 200, want 400
+
+CONTROLE 3 — guarda de elemento de Phone removida
+--- FAIL: .../UpdateGroupParticipants/phone_vazio: status: got 200, want 400
+```
+
+**O que o controle 2 revelou, e vale mais que o próprio teste**: sem a guarda o
+handler responde **200**, não 500. O `contractsfake.JIDResolver` aceita a
+string vazia de bom grado, então o teste de fronteira NUNCA veria o panic —
+é a armadilha nº 1 do `ARMADILHAS.md` (dublê mais permissivo que a produção)
+acontecendo outra vez, e é a prova de que o teste no porto real não era
+redundante com o teste de rota. Os dois travam coisas diferentes: remover a
+guarda de `ParseJID` deixa a suíte de rota inteiramente verde.
+
+**Relação com a decisão 72**: este defeito é exatamente o que a extração da
+regra pura para um pacote compartilhado propagaria em silêncio para o segundo
+adaptador. Corrigido ANTES da extração, o que se move é a regra já saneada —
+que é a ordem que a decisão 73 impôs.
+
+## F102 — a Fase 3 precisa de N browsers, e o launcher exige uma porta que ele não precisaria exigir
+
+**Data**: 2026-08-22.
+**Contexto**: Fase 3 (decisão 71), ao projetar o registry que mapeia `txtID` →
+sessão headless. Não é defeito em produção: nada em produção fia o
+`wa-headless` ainda — é exatamente isso que a Fase 3 vai fazer. Fica
+registrado porque a fiação passaria por cima do problema sem vê-lo.
+
+**Onde**: `internal/wa-headless/engine/flags.go:133-136` e
+`internal/wa-headless/engine/launcher.go:113-140`
+
+**Problema, em duas metades.**
+
+*Metade 1 — a porta é obrigatória sem precisar ser.*
+
+```go
+if cfg.DebuggingPort <= 0 {
+    return nil, fmt.Errorf("launch: DebuggingPort is required; without it there is "+
+        "no CDP endpoint and no way to stop the browser cleanly (%s)", flagRemotePort)
+}
+```
+
+A justificativa está errada, e isso foi MEDIDO, não deduzido. Com
+`--remote-debugging-port=0` o Chromium sobe, escolhe porta efêmera e escreve
+`<ProfileDir>/DevToolsActivePort` com DUAS linhas: a porta real e o caminho ws
+do browser.
+
+Medido em 2026-08-22, Google Chrome 151.0.7922.170, macOS 15.6, com perfil
+temporário descartado depois (nunca o perfil pareado):
+
+```
+=== DevToolsActivePort existe? ===
+SIM. conteudo:
+55077
+/devtools/browser/954157ae-38a1-4ef0-b7d5-f03f3c1f7d03
+```
+
+Ou seja: existe endpoint CDP sem o chamador escolher porta nenhuma.
+
+*Metade 2 — e por isso o `awaitEndpoint` confia em quem atender.*
+
+```go
+url := fmt.Sprintf("http://%s:%d%s", localEndpointHost, port, versionEndpoint)
+```
+
+Ele faz GET em `127.0.0.1:PORT/json/version` e aceita QUALQUER browser que
+responda. Não há verificação de identidade — nada amarra o endpoint ao processo
+que acabamos de lançar nem ao `ProfileDir` que pedimos.
+
+Hoje isso é inofensivo porque só um browser sobe por vez e a porta vem de
+`freePort(t)` nos testes. Com N sessões, deixa de ser: `freePort` é
+bind-`:0`-e-fecha (`integration_test.go:60-70`), TOCTOU clássico, e duas
+sessões arrancando ao mesmo tempo podem receber a mesma porta. O modo de falha
+não é "falha ao subir" — é a **sessão B anexar-se ao browser da sessão A**,
+dirigindo a conta errada em silêncio. Num stack cujo escopo são duas contas de
+WhatsApp distintas, isso é troca de conta, não erro de infraestrutura.
+
+**Correção sugerida**: parar de escolher porta. Lançar com
+`--remote-debugging-port=0` e ler `<ProfileDir>/DevToolsActivePort` para
+descobrir a porta e o caminho ws. Isso resolve as duas metades de uma vez: não
+há porta para colidir, e o endpoint fica amarrado ao NOSSO `ProfileDir`, que é
+justamente a identidade que falta hoje. `DebuggingPort` continua útil como
+override explícito, mas deixa de ser obrigatório.
+
+É também o que a referência faz: puppeteer (e portanto o whatsapp-web.js) lê o
+`DevToolsActivePort` do user-data-dir em vez de confiar na porta pedida. O
+ENTENDIMENTO veio de lá; o comportamento foi medido aqui, porque este projeto
+já teve quatro nomes de módulo do wwebjs que não existiam no nosso build.
+
+**Anti-regressão exigida**: teste que sobe com porta 0 e prova que o endpoint
+sai do arquivo, mais teste da metade 2 — dois perfis, e o segundo NÃO pode
+terminar apontando para o ws do primeiro. O controle negativo é reintroduzir a
+leitura por porta fixa e ver o segundo anexar-se ao primeiro.
+
+**Status**: **CORRIGIDO** nesta sessão, por decisão 75 ("troque agora para
+porta 0 mais DevToolsActivePort, mantendo DebuggingPort apenas como override
+explícito e validando que o endpoint pertence ao ProfileDir lançado").
+
+O que mudou:
+
+1. `flags.go` — `DebuggingPort == 0` deixa de ser erro e passa a ser o caso
+   NORMAL; positivo continua override explícito; negativo continua erro, com
+   mensagem que diz as três coisas.
+2. `launcher.go` — `awaitEndpoint` passa a ter DOIS caminhos, e qual existe
+   não é preferência nossa: é decidido pelo Chromium, e foi medido.
+
+   **CORREÇÃO DE UMA MEDIÇÃO MINHA INCOMPLETA.** A primeira medição usou porta
+   0 e concluiu "o Chromium publica o arquivo". Ao rodar a suíte, oito testes
+   de integração falharam — eles fixam porta. Fui medir o caso fixado, com o
+   conjunto canônico completo de flags:
+
+   | `--remote-debugging-port` | escreve `DevToolsActivePort`? | responde HTTP? |
+   | --- | --- | --- |
+   | `0` | **sim** | sim |
+   | fixada | **NÃO** | sim |
+
+   Com porta explícita o Chromium **não escreve o arquivo de todo**. Logo o
+   override só pode ser servido por HTTP, e o caminho do perfil só existe no
+   caso efêmero. A assimetria é a razão de preferir porta 0 — e é a razão de
+   o registry preferir. Fixar porta passa a ser o chamador assumindo o risco
+   explicitamente, que é o que um override deve ser.
+
+   Descartei junto o teste que eu havia escrito para "porta fixada discorda do
+   arquivo": é um estado que o Chrome real nunca produz, e travá-lo seria a
+   armadilha nº 1 do `ARMADILHAS.md` — dublê que inventa uma forma que a
+   produção não tem.
+3. `launcher.go` — o arquivo é APAGADO antes do arranque. Sem isso, um
+   `DevToolsActivePort` deixado por um browser que morreu reproduziria o
+   próprio defeito que a mudança remove.
+4. A discordância entre porta fixada e porta publicada vira ERRO, e não uma
+   preferência silenciosa por uma das duas.
+5. O caminho HTTP morto (`readEndpoint`, `versionEndpoint`, o campo
+   `HTTPClient` e o dublê `devToolsServer`) foi removido: deixá-lo daria a
+   impressão de que o launcher ainda fala HTTP.
+
+**Testes que travam o achado** (`engine/launcher_test.go`, `engine/flags_test.go`):
+
+- `TestLaunchIgnoresAStaleEndpointFileFromAPreviousRun` — o caso de identidade.
+- `TestLaunchUsesTheHTTPEndpointWhenThePortIsPinned` — o caminho de override,
+  que também exige que NADA seja escrito no perfil, porque o Chromium real não
+  escreve.
+- `TestLaunchWaitsThroughAHalfWrittenEndpointFile` — substitui o antigo teste
+  do "ws vazio" pela corrida REAL: o leitor chega no meio da escrita.
+- `TestBuildFlagsAcceptsAnEphemeralPort`, `TestBuildFlagsKeepsAPinnedPort`,
+  `TestBuildFlagsRefusesANegativePort` — substituem
+  `TestBuildFlagsRequiresADebuggingPort`, que travava a regra ANTIGA.
+
+O dublê passou a PUBLICAR o endpoint no perfil, no formato medido contra o
+Chrome real (duas linhas, porta e caminho ws). Um dublê que publicasse outra
+forma provaria só que o parser lê o que o dublê escreve.
+
+**Controles negativos EXECUTADOS** (dois, depois de a medição corrigida descartar o terceiro):
+
+```
+CONTROLE 1 — não apaga o arquivo obsoleto
+WebSocketURL = "ws://127.0.0.1:40001/devtools/browser/STALE",
+          want "ws://127.0.0.1:55080/devtools/browser/fresh" — the stale file was believed
+
+CONTROLE 3 — aceita arquivo pela metade
+WebSocketURL = "ws://127.0.0.1:55079/devtools/browser/guessed",
+          want "ws://127.0.0.1:55079/devtools/browser/late" — the half-written file was accepted
+```
+
+O controle 1 não é uma asserção sobre a correção: ele **demonstra a falha**. O
+launcher, sem a limpeza, conecta-se ao endpoint de outra execução — que é o
+"dirigir o browser errado" descrito acima, acontecendo num teste.
+
+## F103 — a suíte vaza browsers, e o vazamento se auto-amplifica até derrubar o gate
+
+**Data**: 2026-08-22.
+**Contexto**: achado ao investigar uma falha do `make check` na decisão 77. Não
+é da decisão 77, e provavelmente não é de hoje.
+
+**Sintoma medido**: o gate falhou em
+
+```
+--- FAIL: TestHolder_ConcurrentFirstUseBootsExactlyOneSession (181.67s)
+    core: boot failed at open_tab (stopped_via=DIRTY_signal_close_refused pid=69278):
+    core: opening tab: Boot(open_tab/prime): deadline of 2m30s exceeded
+```
+
+O MESMO teste, isolado, passa em **2,4 s**. Fator de 75×, o que não é ruído.
+
+**Causa medida**: havia **28 processos Chrome órfãos** vivos na máquina, todos
+com perfil temporário de teste:
+
+```
+--user-data-dir=/var/folders/…/T/TestHolder_ConcurrentFirstUseBootsExactlyOneSession340446440/001
+--user-data-dir=/var/folders/…/T/TestLifecycle_ObserverMayCallBackIntoTheSession3814543593/001
+```
+
+**41 deles com mais de uma hora de idade, e dois com mais de um dia** — ou seja,
+sobreviventes de execuções anteriores, anteriores às mudanças desta sessão.
+`load average` estava em 9,25; após terminá-los, caiu para 3,88.
+
+**O mecanismo, e ele é o que torna isto grave.** Os testes FAZEM
+`defer h.Stop(...)` — não é esquecimento. O vazamento acontece no caminho de
+FALHA: quando o arranque estoura o prazo, o `CleanStop` sinaliza, o browser
+recusa fechar (`DIRTY_signal_close_refused`) e o processo sobrevive à execução.
+
+E daí em diante o defeito se **auto-amplifica**: cada browser vazado sobe a
+carga da máquina, o que torna o próximo arranque mais lento, o que torna o
+próximo estouro mais provável, o que vaza mais um. O gate fica
+progressivamente mais frágil a cada execução, sem que nada no repositório mude.
+
+**A CAUSA RAIZ, medida depois e mais grave que o vazamento.** Ao repetir o gate
+numa máquina limpa, medi durante a execução:
+
+```
+browsers de teste vivos ao mesmo tempo: 24
+binários de teste em execução:           4
+CPUs da máquina:                        10
+load average:                        59,58
+```
+
+O `go test` paraleliza PACOTES até ao número de CPUs, e vários pacotes desta
+árvore lançam browsers. **Ninguém coordena isso.** Vinte e quatro Chromes em dez
+CPUs é saturação, e um arranque de SPA sob saturação estoura o prazo de 2m30.
+
+Isto inverte o diagnóstico da primeira metade desta entrada: o vazamento não é a
+causa da saturação, é **consequência** dela. A cadeia é:
+
+1. o gate lança pacotes de browser em paralelo, sem teto;
+2. a máquina satura;
+3. um arranque estoura o prazo;
+4. o `CleanStop` sinaliza, o browser recusa fechar, e o processo VAZA;
+5. o vazado soma-se à carga da próxima execução — e aí sim, auto-amplifica.
+
+> **CORREÇÃO 2026-08-22, e o erro de diagnóstico é meu (decisões 84 e 85).**
+>
+> Depois da serialização da 79 eu voltei a encontrar "dez órfãos com mais de uma
+> hora" e concluí que o vazamento continuava. **Estava errado.** Fui verificar o
+> processo em vez de confiar na contagem, e ele era `Google Chrome for Testing`
+> de `~/.agent-browser/browsers/`, com `--user-data-dir=…/T/agent-browser-chrome-<uuid>`
+> — o browser da FERRAMENTA MCP do agente, cujo servidor se desconectou a meio da
+> sessão. Os dez eram UMA instância dela mais os nove auxiliares.
+>
+> Como o erro aconteceu: um comando contou tudo com `user-data-dir` sob
+> `/var/folders`, que apanha as duas coisas; outro procurou `T/Test` e achou um
+> `TestHolder_…` que era um browser LEGÍTIMO em voo, da fase serial do gate a
+> correr naquele instante. Juntei os dois resultados e li como um conjunto só.
+>
+> Medido com o recorte certo: **zero** browsers de teste do wa-api sobreviventes.
+>
+> O que fica de pé: o achado ORIGINAL desta entrada continua válido — os 28
+> órfãos daquela ocasião tinham caminhos `T/TestHolder_` e `T/TestLifecycle_`
+> explícitos. O que NÃO está provado é que o vazamento persista depois da 79.
+>
+> Por isso a decisão 85 recusou a escalada do `CleanStop`: **sem reproduzir
+> vazamento real, não se mexe no caminho de desligamento**. Ficou só a varredura.
+
+**Relação com a F100** (o gate é sensível à CARGA da máquina, quatro falsas
+falhas num dia): é quase certamente a MESMA causa. A F100 atribuiu as falhas a
+carga externa; o gate produz a sua própria carga, e depois deixa parte dela para
+trás. Vale reabrir a F100 com esta medição antes de continuar a tratar as falhas
+como ambientais.
+
+**Correção sugerida para a causa raiz**: os pacotes que lançam browser precisam
+de um teto GLOBAL, e não por pacote — `-p 1` para eles, ou um semáforo entre
+processos (trava de arquivo), porque o paralelismo do `go test` é entre
+processos e um semáforo em memória não o vê. Escolher o número exige medir, e a
+medição da decisão 76 já dá o ponto de partida: ~650 MB por browser, e o
+arranque só degrada quando a máquina satura.
+
+**Correção sugerida**, em duas partes:
+
+1. **Varredura antes do gate**: terminar processos Chrome cujo `--user-data-dir`
+   esteja sob `/var/folders/*/T/Test*`. O recorte é essencial — perfil de teste
+   é descartável, e `SIGKILL` contra um perfil PAREADO arrisca corrompê-lo, o
+   que exigiria um humano com o telefone para reparear.
+2. **Escalada no `CleanStop` para browser de teste**: um `DIRTY_signal_close_refused`
+   hoje termina em desistência. Para perfil temporário, desistir é deixar lixo;
+   escalar para `SIGKILL` no grupo de processos é seguro e é o que o próprio
+   `reapBrowser` dos testes do `engine` já faz.
+
+**Anti-regressão exigida**: teste que, após um arranque que estoure o prazo,
+exija que nenhum processo com aquele `ProfileDir` sobreviva. O controle negativo
+é remover a escalada e ver o processo sobreviver.
+
+**Dado que separa "sabemos" de "achamos"**: repetido o gate com a máquina limpa
+e SEM nenhuma outra mudança, ele passou (`exit=0`). Ou seja, a limpeza sozinha
+recupera — mas a carga voltou a 59,58 durante essa mesma execução, então passou
+perto. O teto do paralelismo é prevenção justificada, não teoria: sem ele, a
+aprovação depende de a máquina estar limpa naquele instante.
+
+**CORRIGIDO EM PARTE, por decisão 79** ("ponha teto agora nos pacotes que lançam
+browser, preferindo serialização explícita no gate, e corrija a F100 para esta
+causa medida").
+
+O que foi feito:
+
+1. **Serialização explícita no gate.** `BROWSER_PKGS` nomeia os quatro pacotes
+   que sobem Chrome, e eles correm num `go test` próprio com `-p 1`. O `-p 1`
+   BASTA, e isso foi medido em vez de suposto: os quatro têm ZERO chamadas a
+   `t.Parallel()`, logo os testes dentro de cada um já eram sequenciais e toda a
+   concorrência era entre pacotes. A trava de arquivo que o paralelismo entre
+   processos exigiria seria complexidade sem problema a resolver.
+
+2. **Guarda contra o modo de falha silencioso** (`test-split-check`). O
+   `$(filter)` do make descarta em SILÊNCIO o que não casa: um typo em
+   `BROWSER_PKGS` devolveria o pacote ao grupo paralelo e a proteção sumiria sem
+   aviso. A guarda falha se algum nome não casar, e também se a soma dos dois
+   grupos não bater com `TEST_PKGS` — um pacote perdido na divisão não é
+   testado. Dois controles negativos executados, ambos com mensagem que diz o
+   que corrigir.
+
+3. **A SEGUNDA causa, que só apareceu depois de serializar.** Com a carga já em
+   9,63, um teste do `core` ainda estourou 2m30. Não era saturação: o helper
+   `freePort` é bind-`:0`-e-fecha, TOCTOU, e a porta reservada foi tomada antes
+   de o Chromium se ligar a ela — a colisão ficou visível no log como um
+   `httptest.Server` ainda a segurá-la. **A serialização não escondeu esse
+   defeito: expô-lo.**
+
+   Os 185 sítios passaram a usar `ephemeralPort`, que devolve 0. O nome antigo
+   mentia — `freePort` devolvia uma porta que podia não estar livre no instante
+   que importava. Porta 0 não tem alocação para disputar, e é o caminho que a
+   produção usa (decisão 75), então a suíte passou a exercitar o MESMO caminho.
+
+**Resultado medido**, mesma máquina, antes e depois:
+
+| | browsers simultâneos | pico de carga | órfãos após | `runtime` |
+| --- | --- | --- | --- | --- |
+| antes | 24 | 59,58 | 28 | 220 s (com falha) |
+| depois | 8 | 9,63 | **0** | **30,8 s** |
+
+E a serialização NÃO custou tempo: o pacote raiz manteve os mesmos ~100 s. O
+gargalo nunca foi paralelismo útil — era contenção.
+
+**F100 atualizada** com esta causa, como a decisão 79 pediu.
+
+**Varredura acrescentada (decisão 84/85)**: `scripts/orphan-browser-check.sh`,
+ligada ao alvo `test` do Makefile. Ela **FALHA** em vez de limpar, e isso é a
+decisão: limpar em silêncio esconderia o vazamento — que foi exatamente o erro
+cometido ao ler a serialização da 79 como se tivesse removido o problema.
+
+O recorte é estrito: só `--user-data-dir` sob `/var/folders/*/T/Test*`. Por
+construção não apanha o browser do agent-browser nem um perfil PAREADO — e o
+segundo importa, porque `SIGKILL` contra perfil pareado arrisca corrompê-lo e
+reparear exige um humano com o telefone.
+
+Controle negativo EXECUTADO: com um órfão de teste vivo, `make orphan-browser-check`
+sai com **2**; depois de terminado, **0**. A primeira medição do controle deu
+`exit=0` enganosamente porque eu tinha canalizado a saída por `head` — a
+armadilha "gate dentro de pipe não é gate", que também está catalogada.
+
+**Status**: o que continua PENDENTE é o item 2 da correção sugerida original —
+a escalada no `CleanStop` para browser de perfil temporário, agora RECUSADA por
+falta de evidência (decisão 85) e não por falta de tempo. Com as duas causas
+removidas os estouros pararam, e sem estouro não há vazamento; mas a defesa em
+profundidade continua a faltar, e um estouro por outra razão voltaria a deixar
+lixo. Não foi feito aqui porque mexer no `CleanStop` é mexer no caminho de
+desligamento, que tem invariante própria (invariante 3), e mexer no
+`CleanStop` é mexer no caminho de desligamento, que tem invariantes próprias
+(invariante 3: nada de parada por sinal vinda de fora do caminho de shutdown).
+Os 28 órfãos foram terminados nesta sessão para desbloquear o gate, e isso está
+registrado aqui para que a limpeza não seja confundida com correção.
+
+## H141 — número escrito à mão ao lado de número medido deriva
+
+**Data**: 2026-08-23. **Contexto**: fase 3, ao fechar o port `GroupRequests`.
+
+**Onde**: `internal/wa-headless/ESTADO.md` (seções de `GroupDirectory` e
+`GroupLifecycle`) e as mensagens dos commits `a7d29fb` e `7294701`, contra
+`pkg/infra/wa-headless/phase3_inventory_test.go:45-51`.
+
+**Problema**: a prosa vinha **+1** sobre a medição, por pelo menos dois commits.
+
+```
+$ git show 7294701:pkg/.../phase3_inventory_test.go | grep -c 'satisfeito: true'
+14          # a prosa do mesmo commit diz "15 de 22"
+$ git show a7d29fb:pkg/.../phase3_inventory_test.go | grep -c 'satisfeito: true'
+13          # a prosa do mesmo commit diz "14 de 22"
+```
+
+O teste `TestOTotalDePortsEOMedidoENaoOAnunciado` foi escrito exatamente para o
+número ser lido do código e não anunciado — e o anúncio voltou a existir do
+lado dele, em texto. **Duas fontes de verdade para o mesmo número derivam;** a
+única pergunta é quando.
+
+**Correção sugerida**: não repetir em prosa nenhum número que um teste imprime.
+Onde o texto precisar do valor, citar o teste que o produz e o comando que o lê
+(`go test ./pkg/infra/wa-headless/ -run Total -v`), em vez do dígito. Aplicável
+a qualquer contagem futura (ports, capabilities, itens do LEDGER).
+
+**Status**: corrigido nesta sessão para o valor corrente (15/5/2, soma 22), com
+a correção registrada na seção do `GroupRequests` do ESTADO.md em vez de
+reescrita silenciosa das seções antigas — commit passado não se reescreve, e
+apagar o erro apagaria a evidência de que a duplicação deriva.
+
+**Sem teste que o trave**, e dito em voz alta: um gate que proibisse dígitos em
+prosa daria falso positivo em toda citação legítima de medição. O que trava
+metade disto já existe — o teste de inventário falha se a tabela ficar atrás do
+código. O que não está travado é a prosa, e a mitigação é a regra acima.
+
+## H142 — o teste do logcov está a 86% do timeout, e falharia como travamento
+
+**Data**: 2026-08-23. **Contexto**: fase 3, ao diagnosticar um gate lento.
+
+**Onde**: `cmd/logcov` sob `make test`, que corre com `-race -timeout=20m`
+(`Makefile:137` e o alvo paralelo).
+
+**Problema**: a duração do pacote sob `-race` cresceu muito entre execuções da
+mesma sessão, medida nos logs do gate:
+
+```
+/tmp/check98.log :  ok  wa-api/cmd/logcov   357.053s
+/tmp/check102.log:  ok  wa-api/cmd/logcov  1037.425s   <- 86% do timeout de 1200s
+/tmp/check103.log:  FAIL wa-api/cmd/logcov  533.335s   (falhou por golden, nao por tempo)
+```
+
+A dispersão é grande e depende de carga (a máquina esteve com load 12–20). O
+pacote analisa a árvore inteira, então cresce com o repositório: cada capability
+ligada acrescenta pacotes ao universo.
+
+**Por que importa mais do que parece**: se ele estourar, o modo de falha é
+`panic: test timed out`, que se lê como travamento e manda quem investiga
+procurar deadlock — não teste lento. Foi exatamente essa a leitura errada que
+custou tempo nesta sessão quando o gate parou de imprimir por sete minutos: a
+suspeita imediata foi processo morto, e a resposta era `logcov.test` a 218% de
+CPU, trabalhando.
+
+**Correção sugerida**: dar timeout próprio ao pacote (`-timeout` maior só para
+ele, via um alvo separado), ou medir e reduzir o custo de `Analyze` — hoje ele
+recarrega e reanalisa tudo por teste que chame `measure`. A segunda é a boa; a
+primeira compra tempo.
+
+**Status**: não corrigido — está fora do escopo da fatia (o gate reprovou por
+golden, não por tempo) e mexer no timeout durante uma correção de métrica
+misturaria duas mudanças no mesmo diff. Registado para decisão.
+
+## H143 — `pkg/bootstrap/config.go` está fora do gofmt
+
+**Data**: 2026-08-23. **Contexto**: ao formatar arquivos novos da decisão 94,
+`gofmt -l pkg/bootstrap/` acusou um arquivo que eu não tinha tocado.
+
+**Onde**: `pkg/bootstrap/config.go:39-40`.
+
+**Problema**: um comentário inserido no meio do bloco `var` quebrou o grupo de
+alinhamento, e o gofmt quer reencostar as duas declarações acima dele:
+
+```
+-	webhookRetryEnabled      = flag.Bool("webhookretry", true, ...)
+-	webhookRetryCount        = flag.Int("retrycount", 5, ...)
++	webhookRetryEnabled = flag.Bool("webhookretry", true, ...)
++	webhookRetryCount   = flag.Int("retrycount", 5, ...)
+```
+
+`git status` confirma o arquivo intocado nesta sessão, então é anterior.
+
+**Por que passou**: o `make check` roda `lint` como INFORMATIVO, e nenhum alvo
+roda `gofmt -l` como trava. Um repositório que passasse a exigir formatação
+falharia no primeiro dia por um arquivo que ninguém mexeu.
+
+**Correção sugerida**: `gofmt -w pkg/bootstrap/config.go`, e — a parte que vale
+mais — acrescentar `gofmt -l` ao gate, falhando se a saída não for vazia. Sem
+isso o próximo desalinhamento entra do mesmo jeito.
+
+**Status**: NÃO corrigido. É cosmético e fora do escopo da fatia, e a regra
+deste repositório é registrar em vez de consertar de graça. Pergunta ao usuário
+em aberto: conserto agora junto com a trava, ou fica pendente?
 **Status**: **corrigido**. `CategoryConflict` existe e mapeia para
 409 (`codes.go`), e os dois sites migrados:
 

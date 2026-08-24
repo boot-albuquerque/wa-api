@@ -13,8 +13,19 @@ import (
 )
 
 func main() {
-	routes := bootstrap.Routes(bootstrap.Deps{})
+	for _, line := range renderLines(bootstrap.Routes(bootstrap.Deps{})) {
+		fmt.Println(line)
+	}
+}
 
+// renderLines is separated from main so the property the golden-file harness
+// actually depends on can be asserted: the output is SORTED and stable.
+//
+// A harness that diffs this output against a golden file cannot tell "a route
+// changed" from "the order changed", and map iteration in Go is randomised by
+// design — so an unsorted rendering would produce spurious diffs that teach
+// people to ignore the diff.
+func renderLines(routes []bootstrap.RouteInfo) []string {
 	lines := make([]string, 0, len(routes)*2)
 	for _, r := range routes {
 		for _, method := range r.Methods {
@@ -22,8 +33,5 @@ func main() {
 		}
 	}
 	sort.Strings(lines)
-
-	for _, line := range lines {
-		fmt.Println(line)
-	}
+	return lines
 }

@@ -1188,11 +1188,39 @@ rules_frozen=true
 #     main, nao da closure).
 # covered SOBE 468->469 (+1: trimMessageSecrets). Denominador sobe 625->627
 # (+2). Razao: 469/627=74.80% -> 748 decimos.
+# --- FUSAO feature/wa-noise <- feature/wa-headless-foundation (2026-08-23) ---
+#
+# Os tres numeros abaixo caem, e a causa e' DILUICAO, nao regressao: nenhum sitio
+# que logava deixou de logar. A fusao trouxe a arvore headless inteira para
+# dentro do denominador — eligible 631 -> 921, +290.
+#
+# O que dilui, medido e ja' documentado em cmd/logcov/METRIC.md: os adaptadores
+# de pkg/infra/wa-headless sao tradutores finos que chamam a capability por uma
+# INTERFACE local, e L1-e nao credita delegacao atraves de interface porque qual
+# implementacao la' vai parar decide-se no ponto de montagem. Nao e' defeito do
+# instrumento; e' limite dele, e um limite escreve-se em vez de se contornar.
+#
+# O CONSERTO melhor existe e tem precedente NESTE arquivo: a fachada
+# pkg/infra/wa-noise/client saiu do denominador pela F204 com a mesma razao —
+# "nao e' ponto de instrumentacao, e' delegacao". Aplicar isso aos adaptadores
+# headless e' decisao de arquitetura, nao de merge, e fazer as duas coisas no
+# mesmo diff impediria a revisao de separar uma da outra.
+#
+# Entao: reconciliado para a medicao da arvore fundida, com o conserto nomeado.
+
+# CAP-48 + SendPollVote na headless (2026-08-23, remedido): a fusao do CAP-48
+# entrou DEPOIS da fusao grande, e o ChatMessenger ganhou SendPollVote. O
+# adaptador headless passou a implementa-lo sobre capabilities/poll.Vote, entao
+# os numeros abaixo sao a medicao da arvore com as DUAS coisas dentro — nao a
+# soma aritmetica das duas notas acima, que descrevem cada metade isolada.
+min_func_coverage=585
+#
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
 #   handlers.SendPollVoteHandler.ServeHTTP (coberta por hlog). covered SOBE
 #   472->474 (+2). eligible SOBE 631->633 (+2). Ambas elegiveis nascem
 #   cobertas; func_coverage sobe porque covered/eligible aumenta.
+# (linha duplicada removida na composicao das duas notas: min_func_coverage=749)
 # CAP-49 (2026-08-23): func_coverage SOBE 749->750 (+1). ENTRAM (2):
 #   message.SendForwardUseCase.Execute (coberta por logger.Warn/Error/Info) e
 #   handlers.SendForwardHandler.ServeHTTP (coberta por hlog). covered SOBE
@@ -1419,6 +1447,8 @@ min_func_coverage=751
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
+min_errpath_coverage=783
+#
 # CAP-48 (2026-08-23): errpath DESCE 870->868 (1138/1308 -> 1150/1325).
 # +17 caminhos de saida no denominador, +12 cobertos. O percentual cai porque
 # os 5 caminhos de validacao do use case (missing_phone, missing_poll_message_id,
@@ -1428,6 +1458,7 @@ min_func_coverage=751
 # estruturado e o handler loga a rejeicao via hlog. Nao e' regressao de
 # cobertura: nenhum caminho existente perdeu log; os 5 novos caminhos seguem
 # a convencao do projeto, e o handler os cobre.
+# (linha duplicada removida na composicao das duas notas: min_errpath_coverage=868)
 min_errpath_coverage=869
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
@@ -1666,12 +1697,15 @@ min_errpath_coverage=869
 # min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
 # ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
 # statements e caminho de erro, Main.func3 tem defers e caminho de erro.
+min_eligible=930
+#
 # CAP-48 (2026-08-23): min_eligible SOBE 631->633 (+2). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute e
 #   handlers.SendPollVoteHandler.ServeHTTP — ambas elegiveis de verdade
 #   (multiplos statements e caminhos de saida de tipo error). O adapter
 #   ChatMessengerAdapter.SendPollVote nao entra: adapters/ esta em
 #   .logcov-exclude (F193).
+# (linha duplicada removida na composicao das duas notas: min_eligible=633)
 # CAP-49 (2026-08-23): min_eligible SOBE 633->635 (+2). ENTRAM (2):
 #   message.SendForwardUseCase.Execute e
 #   handlers.SendForwardHandler.ServeHTTP — ambas elegiveis de verdade

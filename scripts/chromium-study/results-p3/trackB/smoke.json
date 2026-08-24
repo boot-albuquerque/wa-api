@@ -1,0 +1,524 @@
+{
+  "meta": {
+    "base_concurrency": 4,
+    "canonical_flags": [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--disable-background-networking",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-breakpad",
+      "--disable-client-side-phishing-detection",
+      "--disable-default-apps",
+      "--disable-extensions",
+      "--disable-component-extensions-with-background-pages",
+      "--disable-hang-monitor",
+      "--disable-ipc-flooding-protection",
+      "--disable-popup-blocking",
+      "--disable-prompt-on-repost",
+      "--disable-sync",
+      "--metrics-recording-only",
+      "--disable-features=site-per-process,Translate,TranslateUI,BlinkGenPropertyTrees,AcceptCHFrame,MediaRouter,OptimizationHints",
+      "--disable-site-isolation-trials",
+      "--force-color-profile=srgb",
+      "--window-size=1280,800",
+      "--lang=en-US",
+      "--remote-debugging-address=0.0.0.0"
+    ],
+    "connection_policy": "one CDP websocket per concurrent slot (Track A result held constant)",
+    "cpu_max": "300000 100000",
+    "goarch": "arm64",
+    "iters_per_topology": 24,
+    "memory_max": "4294967296",
+    "num_cpu": 10,
+    "started_utc": "2026-08-09T05:03:04Z",
+    "warmup": 2
+  },
+  "results": [
+    {
+      "spec": {
+        "name": "T1-1b-default-1slot",
+        "browsers": 1,
+        "contexts_per_browser": 0,
+        "concurrent_slots": 1,
+        "note": "serial reference"
+      },
+      "jobs": 23,
+      "correct_jobs": 23,
+      "false_successes": 0,
+      "failures": 1,
+      "wall_ms": 11052,
+      "jobs_per_sec": 2.0810043447110087,
+      "correct_jobs_per_sec": 2.0810043447110087,
+      "job_total": {
+        "max_ms": 1412.775,
+        "mean_ms": 454.0778695652174,
+        "n": 23,
+        "p50_ms": 386.033,
+        "p95_ms": 808.989,
+        "p99_ms": 1412.775,
+        "stddev_ms": 254.14598136577786
+      },
+      "ops": {
+        "click": {
+          "max_ms": 123.827,
+          "mean_ms": 31.355791666666665,
+          "n": 24,
+          "p50_ms": 21.068,
+          "p95_ms": 73.539,
+          "p99_ms": 123.827,
+          "stddev_ms": 25.442978219244115
+        },
+        "fill": {
+          "max_ms": 141.592,
+          "mean_ms": 73.75166666666668,
+          "n": 24,
+          "p50_ms": 70.955,
+          "p95_ms": 133.567,
+          "p99_ms": 141.592,
+          "stddev_ms": 32.42972610978322
+        },
+        "navigate": {
+          "max_ms": 622.034,
+          "mean_ms": 246.27254166666663,
+          "n": 24,
+          "p50_ms": 173.651,
+          "p95_ms": 583.133,
+          "p99_ms": 622.034,
+          "stddev_ms": 145.51592155928597
+        },
+        "verify": {
+          "max_ms": 77.722,
+          "mean_ms": 9.79886956521739,
+          "n": 23,
+          "p50_ms": 6.093,
+          "p95_ms": 19.019,
+          "p99_ms": 77.722,
+          "stddev_ms": 15.247424921019194
+        },
+        "wait_ready": {
+          "max_ms": 39.1,
+          "mean_ms": 19.81008333333333,
+          "n": 24,
+          "p50_ms": 16.963,
+          "p95_ms": 34.163,
+          "p99_ms": 39.1,
+          "stddev_ms": 7.29299735429283
+        },
+        "wait_result": {
+          "max_ms": 409.207,
+          "mean_ms": 76.72778260869565,
+          "n": 23,
+          "p50_ms": 60.306,
+          "p95_ms": 76.616,
+          "p99_ms": 409.207,
+          "stddev_ms": 71.17518969963359
+        }
+      },
+      "cpu_core_seconds": 18.365911,
+      "cpu_user_seconds": 13.515023,
+      "cpu_system_seconds": 4.850889,
+      "nr_throttled": 5,
+      "nr_periods": 111,
+      "throttled_seconds": 0.573571,
+      "memory_current_mb": 284.23828125,
+      "memory_peak_mb": 288.16796875,
+      "memory_idle_floor_mb": 264.80859375,
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_stat": {
+        "anon": 220946432,
+        "file": 47370240,
+        "kernel_stack": 1916928,
+        "shmem": 0,
+        "slab": 6930080,
+        "sock": 12288
+      },
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 3,
+        "total": 11,
+        "utility": 2,
+        "zygote": 2
+      },
+      "goroutines": 11,
+      "os_threads": 6,
+      "open_fds": 13,
+      "correct_jobs_per_core_hour": 4508.352457985885,
+      "correct_jobs_per_gib_hour": 26989.37800568572,
+      "cdp_connections": 1
+    },
+    {
+      "spec": {
+        "name": "T2-1b-default-Nslot",
+        "browsers": 1,
+        "contexts_per_browser": 0,
+        "concurrent_slots": 4,
+        "note": "one browser, one context, N pages"
+      },
+      "jobs": 22,
+      "correct_jobs": 22,
+      "false_successes": 0,
+      "failures": 2,
+      "wall_ms": 3462,
+      "jobs_per_sec": 6.353053626471037,
+      "correct_jobs_per_sec": 6.353053626471037,
+      "job_total": {
+        "max_ms": 1058.514,
+        "mean_ms": 564.295,
+        "n": 22,
+        "p50_ms": 541.132,
+        "p95_ms": 1002.609,
+        "p99_ms": 1058.514,
+        "stddev_ms": 214.18597310812098
+      },
+      "ops": {
+        "click": {
+          "max_ms": 242.38,
+          "mean_ms": 37.00825,
+          "n": 24,
+          "p50_ms": 17.679,
+          "p95_ms": 151.675,
+          "p99_ms": 242.38,
+          "stddev_ms": 52.8484218672059
+        },
+        "fill": {
+          "max_ms": 339.747,
+          "mean_ms": 107.60458333333332,
+          "n": 24,
+          "p50_ms": 111.5,
+          "p95_ms": 281.419,
+          "p99_ms": 339.747,
+          "stddev_ms": 82.42680671456175
+        },
+        "navigate": {
+          "max_ms": 561.124,
+          "mean_ms": 305.5152083333333,
+          "n": 24,
+          "p50_ms": 263.716,
+          "p95_ms": 561.1,
+          "p99_ms": 561.124,
+          "stddev_ms": 120.51655250454851
+        },
+        "verify": {
+          "max_ms": 53.557,
+          "mean_ms": 9.28509090909091,
+          "n": 22,
+          "p50_ms": 2.492,
+          "p95_ms": 52.022,
+          "p99_ms": 53.557,
+          "stddev_ms": 14.889360624617748
+        },
+        "wait_ready": {
+          "max_ms": 232.924,
+          "mean_ms": 50.21741666666666,
+          "n": 24,
+          "p50_ms": 34.864,
+          "p95_ms": 184.616,
+          "p99_ms": 232.924,
+          "stddev_ms": 51.97069639944279
+        },
+        "wait_result": {
+          "max_ms": 191.622,
+          "mean_ms": 65.93959090909091,
+          "n": 22,
+          "p50_ms": 56.524,
+          "p95_ms": 99.609,
+          "p99_ms": 191.622,
+          "stddev_ms": 29.892172439466933
+        }
+      },
+      "cpu_core_seconds": 9.421576,
+      "cpu_user_seconds": 6.837466,
+      "cpu_system_seconds": 2.584111,
+      "nr_throttled": 19,
+      "nr_periods": 35,
+      "throttled_seconds": 1.440054,
+      "memory_current_mb": 351.8125,
+      "memory_peak_mb": 377.4140625,
+      "memory_idle_floor_mb": 288.31640625,
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_stat": {
+        "anon": 273121280,
+        "file": 51777536,
+        "kernel_stack": 2654208,
+        "shmem": 0,
+        "slab": 9591632,
+        "sock": 20480
+      },
+      "chromium_procs": {
+        "browser": 3,
+        "gpu": 1,
+        "renderer": 8,
+        "total": 16,
+        "utility": 2,
+        "zygote": 2
+      },
+      "goroutines": 34,
+      "os_threads": 6,
+      "open_fds": 18,
+      "correct_jobs_per_core_hour": 8406.236918324494,
+      "correct_jobs_per_gib_hour": 66569.2574556698,
+      "cdp_connections": 4
+    },
+    {
+      "spec": {
+        "name": "T4-2b-default",
+        "browsers": 2,
+        "contexts_per_browser": 0,
+        "concurrent_slots": 4,
+        "note": "two browsers, default contexts"
+      },
+      "jobs": 24,
+      "correct_jobs": 24,
+      "false_successes": 0,
+      "failures": 0,
+      "wall_ms": 10729,
+      "jobs_per_sec": 2.236827461830484,
+      "correct_jobs_per_sec": 2.236827461830484,
+      "job_total": {
+        "max_ms": 4036.927,
+        "mean_ms": 1760.104916666667,
+        "n": 24,
+        "p50_ms": 1134.282,
+        "p95_ms": 3931.913,
+        "p99_ms": 4036.927,
+        "stddev_ms": 1097.154733903409
+      },
+      "ops": {
+        "click": {
+          "max_ms": 649.134,
+          "mean_ms": 78.46633333333334,
+          "n": 24,
+          "p50_ms": 51.933,
+          "p95_ms": 109.277,
+          "p99_ms": 649.134,
+          "stddev_ms": 123.16360491492156
+        },
+        "fill": {
+          "max_ms": 471.316,
+          "mean_ms": 176.22479166666665,
+          "n": 24,
+          "p50_ms": 140.173,
+          "p95_ms": 384.192,
+          "p99_ms": 471.316,
+          "stddev_ms": 120.98486657532115
+        },
+        "navigate": {
+          "max_ms": 3472.028,
+          "mean_ms": 1244.2576666666666,
+          "n": 24,
+          "p50_ms": 802.761,
+          "p95_ms": 3463.12,
+          "p99_ms": 3472.028,
+          "stddev_ms": 1031.05480395514
+        },
+        "verify": {
+          "max_ms": 148.836,
+          "mean_ms": 24.65120833333334,
+          "n": 24,
+          "p50_ms": 13.174,
+          "p95_ms": 72.763,
+          "p99_ms": 148.836,
+          "stddev_ms": 31.335498230147824
+        },
+        "wait_ready": {
+          "max_ms": 261.117,
+          "mean_ms": 80.48445833333334,
+          "n": 24,
+          "p50_ms": 57.523,
+          "p95_ms": 237.706,
+          "p99_ms": 261.117,
+          "stddev_ms": 73.83286943325623
+        },
+        "wait_result": {
+          "max_ms": 314.071,
+          "mean_ms": 117.04641666666664,
+          "n": 24,
+          "p50_ms": 76.544,
+          "p95_ms": 272.347,
+          "p99_ms": 314.071,
+          "stddev_ms": 80.24734641506673
+        }
+      },
+      "cpu_core_seconds": 29.810386,
+      "cpu_user_seconds": 21.146823,
+      "cpu_system_seconds": 8.663563,
+      "nr_throttled": 70,
+      "nr_periods": 108,
+      "throttled_seconds": 12.108862,
+      "memory_current_mb": 560.89453125,
+      "memory_peak_mb": 600.58984375,
+      "memory_idle_floor_mb": 534.3203125,
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_stat": {
+        "anon": 447311872,
+        "file": 93806592,
+        "kernel_stack": 4046848,
+        "shmem": 0,
+        "slab": 14336928,
+        "sock": 24576
+      },
+      "chromium_procs": {
+        "browser": 6,
+        "gpu": 2,
+        "renderer": 8,
+        "total": 24,
+        "utility": 4,
+        "zygote": 4
+      },
+      "goroutines": 34,
+      "os_threads": 6,
+      "open_fds": 20,
+      "correct_jobs_per_core_hour": 2898.318726902765,
+      "correct_jobs_per_gib_hour": 14701.232220815838,
+      "cdp_connections": 4
+    },
+    {
+      "spec": {
+        "name": "T5-Nb-1slot-each",
+        "browsers": 4,
+        "contexts_per_browser": 0,
+        "concurrent_slots": 4,
+        "note": "one browser per slot"
+      },
+      "jobs": 20,
+      "correct_jobs": 20,
+      "false_successes": 0,
+      "failures": 4,
+      "wall_ms": 63218,
+      "jobs_per_sec": 0.3163633005836245,
+      "correct_jobs_per_sec": 0.3163633005836245,
+      "job_total": {
+        "max_ms": 2437.39,
+        "mean_ms": 618.1428,
+        "n": 20,
+        "p50_ms": 340.798,
+        "p95_ms": 2231.361,
+        "p99_ms": 2437.39,
+        "stddev_ms": 608.1854297974096
+      },
+      "ops": {
+        "click": {
+          "max_ms": 108.748,
+          "mean_ms": 33.635083333333334,
+          "n": 24,
+          "p50_ms": 15.409,
+          "p95_ms": 96.924,
+          "p99_ms": 108.748,
+          "stddev_ms": 31.13639861683411
+        },
+        "fill": {
+          "max_ms": 209.516,
+          "mean_ms": 79.76595833333333,
+          "n": 24,
+          "p50_ms": 57.58,
+          "p95_ms": 198.179,
+          "p99_ms": 209.516,
+          "stddev_ms": 55.05404738563669
+        },
+        "navigate": {
+          "max_ms": 1833.109,
+          "mean_ms": 575.8396666666666,
+          "n": 24,
+          "p50_ms": 217.283,
+          "p95_ms": 1832.403,
+          "p99_ms": 1833.109,
+          "stddev_ms": 599.233931341416
+        },
+        "verify": {
+          "max_ms": 73.166,
+          "mean_ms": 7.1912,
+          "n": 20,
+          "p50_ms": 2.321,
+          "p95_ms": 21.163,
+          "p99_ms": 73.166,
+          "stddev_ms": 15.784913118544555
+        },
+        "wait_ready": {
+          "max_ms": 79.821,
+          "mean_ms": 23.450791666666664,
+          "n": 24,
+          "p50_ms": 15.27,
+          "p95_ms": 69.405,
+          "p99_ms": 79.821,
+          "stddev_ms": 18.8257280137652
+        },
+        "wait_result": {
+          "max_ms": 60007.349,
+          "mean_ms": 5519.560045454546,
+          "n": 22,
+          "p50_ms": 59.848,
+          "p95_ms": 60004.379,
+          "p99_ms": 60007.349,
+          "stddev_ms": 17230.099905047493
+        }
+      },
+      "cpu_core_seconds": 52.234228,
+      "cpu_user_seconds": 38.231883,
+      "cpu_system_seconds": 14.002346,
+      "nr_throttled": 58,
+      "nr_periods": 632,
+      "throttled_seconds": 14.483016,
+      "memory_current_mb": 983.9375,
+      "memory_peak_mb": 1049.6875,
+      "memory_idle_floor_mb": 979.95703125,
+      "memory_events": {
+        "high": 0,
+        "low": 0,
+        "max": 0,
+        "oom": 0,
+        "oom_group_kill": 0,
+        "oom_kill": 0
+      },
+      "memory_stat": {
+        "anon": 782557184,
+        "file": 164691968,
+        "kernel_stack": 7520256,
+        "shmem": 0,
+        "slab": 23990536,
+        "sock": 45056
+      },
+      "chromium_procs": {
+        "browser": 12,
+        "gpu": 4,
+        "renderer": 12,
+        "total": 44,
+        "utility": 8,
+        "zygote": 8
+      },
+      "goroutines": 38,
+      "os_threads": 6,
+      "open_fds": 28,
+      "correct_jobs_per_core_hour": 1378.406511531098,
+      "correct_jobs_per_gib_hour": 1185.2802350469144,
+      "cdp_connections": 4
+    }
+  ]
+}

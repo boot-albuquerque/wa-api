@@ -1,0 +1,234 @@
+{
+  "browser_ui_closed": 2,
+  "cpu_stat": {
+    "nr_periods": 44,
+    "nr_throttled": 2,
+    "system_usec": 660492,
+    "throttled_usec": 114227,
+    "usage_usec": 1891126,
+    "user_usec": 1230634
+  },
+  "experiment": "h1-target-census-boot",
+  "extra_flags": [
+    "--disable-features=site-per-process,Translate,TranslateUI,BlinkGenPropertyTrees,AcceptCHFrame,MediaRouter,OptimizationHints,SpareRendererForSitePerProcess"
+  ],
+  "pss_kib": 390246,
+  "renderers": 2,
+  "stages": [
+    {
+      "stage": "boot",
+      "targets": [
+        {
+          "id": "965085E8F7B8A47C393F8B379DA6B359",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/",
+          "attached": false
+        },
+        {
+          "id": "C005684168F596D8A0CDE148A801D285",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+          "attached": false
+        },
+        {
+          "id": "05DDD986AF89A61203A4E03577F92192",
+          "type": "page",
+          "url": "about:blank",
+          "attached": false
+        }
+      ],
+      "procs": [
+        {
+          "pid": 100,
+          "type": "utility",
+          "pss_kib": 9859,
+          "rss_kib": 39044,
+          "marker": "--utility-sub-type --service-sandbox-type --shared-files"
+        },
+        {
+          "pid": 129,
+          "type": "renderer",
+          "pss_kib": 153202,
+          "rss_kib": 208116,
+          "marker": "--renderer-client-id --shared-files"
+        },
+        {
+          "pid": 138,
+          "type": "renderer",
+          "pss_kib": 29457,
+          "rss_kib": 80352,
+          "marker": "--renderer-client-id --shared-files"
+        },
+        {
+          "pid": 36,
+          "type": "browser",
+          "pss_kib": 102444,
+          "rss_kib": 150888
+        },
+        {
+          "pid": 51,
+          "type": "browser",
+          "pss_kib": 1529,
+          "rss_kib": 3248
+        },
+        {
+          "pid": 53,
+          "type": "zygote",
+          "pss_kib": 12450,
+          "rss_kib": 39260
+        },
+        {
+          "pid": 54,
+          "type": "zygote",
+          "pss_kib": 8741,
+          "rss_kib": 39432
+        },
+        {
+          "pid": 56,
+          "type": "browser",
+          "pss_kib": 1294,
+          "rss_kib": 3004
+        },
+        {
+          "pid": 77,
+          "type": "gpu-process",
+          "pss_kib": 41031,
+          "rss_kib": 73008,
+          "marker": "--shared-files"
+        },
+        {
+          "pid": 80,
+          "type": "utility",
+          "pss_kib": 30239,
+          "rss_kib": 64732,
+          "marker": "--utility-sub-type --service-sandbox-type --shared-files"
+        }
+      ],
+      "procs_by_type": {
+        "browser": 3,
+        "gpu-process": 1,
+        "renderer": 2,
+        "utility": 2,
+        "zygote": 2
+      },
+      "pss_kib_by_type": {
+        "browser": 105267,
+        "gpu-process": 41031,
+        "renderer": 182659,
+        "utility": 40098,
+        "zygote": 21191
+      },
+      "total_pss_kib": 390246,
+      "cgroup_current_mb": 302.19921875,
+      "elapsed_sec": 0.022015333
+    },
+    {
+      "stage": "after_ui_close",
+      "targets": [
+        {
+          "id": "965085E8F7B8A47C393F8B379DA6B359",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/",
+          "attached": false
+        },
+        {
+          "id": "C005684168F596D8A0CDE148A801D285",
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+          "attached": false
+        },
+        {
+          "id": "05DDD986AF89A61203A4E03577F92192",
+          "type": "page",
+          "url": "about:blank",
+          "attached": false
+        }
+      ],
+      "procs": [
+        {
+          "pid": 100,
+          "type": "utility",
+          "pss_kib": 9837,
+          "rss_kib": 38916,
+          "marker": "--utility-sub-type --service-sandbox-type --shared-files"
+        },
+        {
+          "pid": 129,
+          "type": "renderer",
+          "pss_kib": 153855,
+          "rss_kib": 207892,
+          "marker": "--renderer-client-id --shared-files"
+        },
+        {
+          "pid": 138,
+          "type": "renderer",
+          "pss_kib": 28990,
+          "rss_kib": 78816,
+          "marker": "--renderer-client-id --shared-files"
+        },
+        {
+          "pid": 36,
+          "type": "browser",
+          "pss_kib": 105906,
+          "rss_kib": 154880
+        },
+        {
+          "pid": 51,
+          "type": "browser",
+          "pss_kib": 1525,
+          "rss_kib": 3248
+        },
+        {
+          "pid": 53,
+          "type": "zygote",
+          "pss_kib": 12391,
+          "rss_kib": 39260
+        },
+        {
+          "pid": 54,
+          "type": "zygote",
+          "pss_kib": 8728,
+          "rss_kib": 39432
+        },
+        {
+          "pid": 56,
+          "type": "browser",
+          "pss_kib": 1294,
+          "rss_kib": 3004
+        },
+        {
+          "pid": 77,
+          "type": "gpu-process",
+          "pss_kib": 41036,
+          "rss_kib": 73008,
+          "marker": "--shared-files"
+        },
+        {
+          "pid": 80,
+          "type": "utility",
+          "pss_kib": 32298,
+          "rss_kib": 67928,
+          "marker": "--utility-sub-type --service-sandbox-type --shared-files"
+        }
+      ],
+      "procs_by_type": {
+        "browser": 3,
+        "gpu-process": 1,
+        "renderer": 2,
+        "utility": 2,
+        "zygote": 2
+      },
+      "pss_kib_by_type": {
+        "browser": 108725,
+        "gpu-process": 41036,
+        "renderer": 182845,
+        "utility": 42135,
+        "zygote": 21119
+      },
+      "total_pss_kib": 395860,
+      "cgroup_current_mb": 312.421875,
+      "elapsed_sec": 2.041539167
+    }
+  ],
+  "started_utc": "2026-08-10T17:03:28Z"
+}

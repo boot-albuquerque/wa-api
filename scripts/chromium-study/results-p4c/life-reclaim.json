@@ -1,0 +1,152 @@
+{
+  "experiment": "session-lifecycle-vs-reclaim",
+  "first_degradation": 2,
+  "healthy_iterations": 1,
+  "iterations": [
+    {
+      "iteration": 1,
+      "class": "APP_READY",
+      "app_ready_sec": 10.053991713,
+      "profile_bytes": 129414588,
+      "singletons_present_before_boot": 3
+    },
+    {
+      "iteration": 2,
+      "class": "UNRESPONSIVE",
+      "app_ready_sec": 7.542716628,
+      "profile_bytes": 123827168,
+      "singletons_present_before_boot": 3,
+      "note": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "iteration": 3,
+      "class": "OTHER",
+      "app_ready_sec": 16.126583715,
+      "profile_bytes": 124260929,
+      "singletons_present_before_boot": 3,
+      "note": "Query(life3/ready): deadline of 15s exceeded"
+    },
+    {
+      "iteration": 4,
+      "class": "LOGIN_REQUIRED",
+      "app_ready_sec": 15.852081882,
+      "profile_bytes": 124348221,
+      "singletons_present_before_boot": 3
+    }
+  ],
+  "iterations_run": 4,
+  "logout_at_iteration": 4,
+  "max_iterations": 20,
+  "operations": [
+    {
+      "operation": "Navigate",
+      "label": "life1/navigate",
+      "start_ms": 2408,
+      "duration_ms": 1063,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life1/ready",
+      "start_ms": 3471,
+      "duration_ms": 8850,
+      "deadline_ms": 15000,
+      "result": "ok"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life1/state",
+      "start_ms": 12322,
+      "duration_ms": 11,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life2/navigate",
+      "start_ms": 17030,
+      "duration_ms": 651,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life2/ready",
+      "start_ms": 17681,
+      "duration_ms": 6778,
+      "deadline_ms": 15000,
+      "result": "error",
+      "error": "Inspected target navigated or closed (-32000)"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life2/state",
+      "start_ms": 24461,
+      "duration_ms": 942,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life3/navigate",
+      "start_ms": 29993,
+      "duration_ms": 1017,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life3/ready",
+      "start_ms": 31011,
+      "duration_ms": 15007,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life3/state",
+      "start_ms": 46019,
+      "duration_ms": 44,
+      "deadline_ms": 5000,
+      "result": "ok"
+    },
+    {
+      "operation": "Navigate",
+      "label": "life4/navigate",
+      "start_ms": 50689,
+      "duration_ms": 736,
+      "deadline_ms": 30000,
+      "result": "ok"
+    },
+    {
+      "operation": "Query",
+      "label": "life4/ready",
+      "start_ms": 51425,
+      "duration_ms": 15007,
+      "deadline_ms": 15000,
+      "result": "deadline_exceeded",
+      "error": "context deadline exceeded"
+    },
+    {
+      "operation": "StateProbe",
+      "label": "life4/state",
+      "start_ms": 66433,
+      "duration_ms": 9,
+      "deadline_ms": 5000,
+      "result": "ok"
+    }
+  ],
+  "reclaim_singletons": true,
+  "started_utc": "2026-08-09T15:39:58Z",
+  "stop_mode": "graceful",
+  "watchdog": {
+    "budget_sec": 1920,
+    "deadline_exceeded": 2,
+    "elapsed_sec": 66.609036821,
+    "experiment": "session-lifecycle",
+    "operations": 12,
+    "status": "COMPLETED"
+  }
+}

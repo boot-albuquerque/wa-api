@@ -1,0 +1,30 @@
+{
+  "experiment": "session-lifecycle-vs-reclaim",
+  "first_degradation": 0,
+  "healthy_iterations": 0,
+  "iterations": [
+    {
+      "iteration": 1,
+      "class": "LAUNCH_ERROR",
+      "app_ready_sec": 0,
+      "profile_bytes": 0,
+      "singletons_present_before_boot": 3,
+      "note": "chromium 0 never answered CDP on 9980"
+    }
+  ],
+  "iterations_run": 1,
+  "logout_at_iteration": 0,
+  "max_iterations": 20,
+  "operations": [],
+  "reclaim_singletons": false,
+  "started_utc": "2026-08-09T15:38:17Z",
+  "stop_mode": "graceful",
+  "watchdog": {
+    "budget_sec": 1920,
+    "deadline_exceeded": 0,
+    "elapsed_sec": 45.103311229,
+    "experiment": "session-lifecycle",
+    "operations": 0,
+    "status": "COMPLETED"
+  }
+}

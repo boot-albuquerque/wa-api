@@ -1,5 +1,6 @@
-// Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
+
+import "errors"
 
 // ListGroupsRequest representa a requisição para listar grupos
 type ListGroupsRequest struct {
@@ -181,3 +182,46 @@ const (
 	// RequestReject rejeita a solicitação.
 	RequestReject RequestAction = "reject"
 )
+
+// ParticipantsUpdate é o desfecho de mudar participantes de um grupo.
+//
+// # Por que carrega uma confirmação em vez de só o resultado
+//
+// A invariante 14 do stack headless exige que nenhuma escrita devolva sucesso
+// silencioso: quem escreve lê a pós-condição de volta. As operações de
+// participante são o único lugar onde isso É IMPOSSÍVEL para quem age, e não por
+// falta de esforço — foi MEDIDO (H58 para adicionar e remover, H65 para promover
+// e rebaixar): a mudança CHEGA ao servidor, e a sessão que agiu não a vê. A
+// confirmação só aparece em OUTRA sessão.
+//
+// Havia três saídas e duas eram ruins. Devolver sucesso sem pós-condição abriria
+// exceção à invariante, que existe justamente contra isso. Ler de volta assim
+// mesmo reportaria FALHA para uma mudança bem-sucedida, que é pior que não ler.
+//
+// A terceira, que é esta: o "não confirmável" deixa de ser silêncio e passa a ser
+// um DESFECHO RELATADO. A invariante sobrevive porque ela proíbe o sucesso mudo,
+// não a incerteza declarada.
+//
+// E o campo serve aos dois transportes: dá ao socket um lugar para dizer quando
+// ELE não conseguiu confirmar — o que hoje não tem onde ser dito.
+type ParticipantsUpdate struct {
+	// Result é o que o transporte devolveu, como antes.
+	Result any
+	// Confirmed diz que a sessão que agiu LEU a mudança de volta.
+	Confirmed bool
+	// Reason explica por que não, e é obrigatória quando Confirmed é falso.
+	// Vazia com Confirmed falso seria o sucesso silencioso de volta, agora
+	// disfarçado de estrutura.
+	Reason string
+}
+
+// Valida recusa o desfecho que traria o sucesso silencioso de volta.
+//
+// Vive como método, e não como comentário, para que quem escreva um adaptador
+// novo o ENCONTRE — um comentário depende de alguém o ler antes de errar.
+func (u ParticipantsUpdate) Valida() error {
+	if !u.Confirmed && u.Reason == "" {
+		return errors.New("domain: participantes atualizados sem confirmação e sem motivo escrito")
+	}
+	return nil
+}

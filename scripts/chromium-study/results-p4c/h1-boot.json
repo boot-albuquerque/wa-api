@@ -1,0 +1,118 @@
+{
+  "cpu_stat": {
+    "nr_periods": 16,
+    "nr_throttled": 1,
+    "system_usec": 362407,
+    "throttled_usec": 134647,
+    "usage_usec": 963026,
+    "user_usec": 600619
+  },
+  "experiment": "h1-target-census-boot",
+  "extra_flags": [
+    "--disable-features=site-per-process,Translate,TranslateUI,BlinkGenPropertyTrees,AcceptCHFrame,MediaRouter,OptimizationHints,PreloadTopChromeWebUI"
+  ],
+  "pss_kib": 363779,
+  "renderers": 2,
+  "stages": [
+    {
+      "stage": "boot",
+      "targets": [
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/",
+          "attached": false
+        },
+        {
+          "type": "browser_ui",
+          "url": "chrome://omnibox-popup.top-chrome/omnibox_popup_aim.html",
+          "attached": false
+        },
+        {
+          "type": "page",
+          "url": "about:blank",
+          "attached": false
+        }
+      ],
+      "procs": [
+        {
+          "pid": 106,
+          "type": "utility",
+          "pss_kib": 11383,
+          "rss_kib": 47552
+        },
+        {
+          "pid": 128,
+          "type": "renderer",
+          "pss_kib": 75180,
+          "rss_kib": 145044
+        },
+        {
+          "pid": 137,
+          "type": "renderer",
+          "pss_kib": 36494,
+          "rss_kib": 102828
+        },
+        {
+          "pid": 36,
+          "type": "browser",
+          "pss_kib": 120848,
+          "rss_kib": 201092
+        },
+        {
+          "pid": 51,
+          "type": "browser",
+          "pss_kib": 1558,
+          "rss_kib": 3176
+        },
+        {
+          "pid": 53,
+          "type": "browser",
+          "pss_kib": 1286,
+          "rss_kib": 3020
+        },
+        {
+          "pid": 56,
+          "type": "zygote",
+          "pss_kib": 18807,
+          "rss_kib": 67088
+        },
+        {
+          "pid": 57,
+          "type": "zygote",
+          "pss_kib": 15087,
+          "rss_kib": 66948
+        },
+        {
+          "pid": 76,
+          "type": "gpu-process",
+          "pss_kib": 44273,
+          "rss_kib": 86200
+        },
+        {
+          "pid": 96,
+          "type": "utility",
+          "pss_kib": 38863,
+          "rss_kib": 100496
+        }
+      ],
+      "procs_by_type": {
+        "browser": 3,
+        "gpu-process": 1,
+        "renderer": 2,
+        "utility": 2,
+        "zygote": 2
+      },
+      "pss_kib_by_type": {
+        "browser": 123692,
+        "gpu-process": 44273,
+        "renderer": 111674,
+        "utility": 50246,
+        "zygote": 33894
+      },
+      "total_pss_kib": 363779,
+      "cgroup_current_mb": 165.59765625,
+      "elapsed_sec": 0.014374375
+    }
+  ],
+  "started_utc": "2026-08-10T17:01:05Z"
+}

@@ -33,9 +33,14 @@ const (
 // and a handler slot for 75 seconds on input we could reject in microseconds.
 // Repeated, it is a cheap denial of service that costs the caller nothing.
 func ParseJID(arg string) (types.JID, bool) {
-	// Empty first: `arg[0]` below PANICS on "", and the only reason production
-	// never saw it is that the use cases happen to guard. A parser that panics
-	// on empty input is one careless caller away from taking the process down.
+	// Empty first: `arg[0]` below PANICS on "" (F101), and the port promises
+	// (JID, error) — it delivered a crash instead. The only reason production
+	// never saw it is that the use cases happen to guard, which is one careless
+	// caller away from taking the process down. The guard belongs at the SOURCE
+	// of the rule, not in each of the eleven callers.
+	//
+	// Achado duas vezes, por caminhos independentes (feature/wa-noise e
+	// feature/wa-headless-foundation), e as duas notas estao fundidas aqui.
 	if arg == "" {
 		return types.JID{}, false
 	}

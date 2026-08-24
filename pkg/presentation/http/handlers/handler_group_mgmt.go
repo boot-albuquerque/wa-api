@@ -74,6 +74,25 @@ func decodeAndRespond(w http.ResponseWriter, r *http.Request, v interface{}) boo
 // rejectMissingField e' o caminho de saida 400 compartilhado pelas validacoes
 // de campo obrigatorio deste arquivo: loga a causa (S-http) e responde com o
 // MESMO erro que foi logado — nao ha' divergencia possivel entre os dois.
+// rejectEmptyElement rejects a list whose LENGTH passed but whose CONTENT
+// carries an empty entry. F101: validating only len(list) let participants:[""]
+// reach the JID parser, which crashed on it; the index says WHICH entry failed.
+func rejectEmptyElement(w http.ResponseWriter, r *http.Request, field string, index int, logMsg string) {
+	err := fmt.Errorf("empty %s at index %d", field, index)
+	hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg(logMsg)
+	customhttp.RespondJSON(w, 400, nil, err)
+}
+
+// firstEmpty reports the index of the first empty entry, or -1 when there is none.
+func firstEmpty(in []string) int {
+	for i, v := range in {
+		if v == "" {
+			return i
+		}
+	}
+	return -1
+}
+
 func rejectMissingField(w http.ResponseWriter, r *http.Request, field, logMsg string) {
 	err := fmt.Errorf("missing %s", field)
 	hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg(logMsg)
@@ -94,6 +113,10 @@ func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, 
 	}
 	if len(req.Participants) < 1 {
 		rejectMissingField(w, r, "participants", "create group request rejected")
+		return
+	}
+	if i := firstEmpty(req.Participants); i >= 0 {
+		rejectEmptyElement(w, r, "participants", i, "create group request rejected")
 		return
 	}
 	rsp, err := uc.CreateGroup(r.Context(), id, req.Name, req.Participants)
@@ -267,8 +290,18 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 		rejectMissingField(w, r, "phones", "update group participants request rejected")
 		return
 	}
+	if i := firstEmpty(req.Phone); i >= 0 {
+		rejectEmptyElement(w, r, "phones", i, "update group participants request rejected")
+		return
+	}
 	if req.Action == "" {
 		rejectMissingField(w, r, "action", "update group participants request rejected")
+		return
+	}
+	// GroupJID was never validated here, so an absent field also reached the
+	// JID parser (F101).
+	if req.GroupJID == "" {
+		rejectMissingField(w, r, "groupjid", "update group participants request rejected")
 		return
 	}
 	_, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)

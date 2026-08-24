@@ -11,18 +11,18 @@ import (
 )
 
 // UpdateGroupParticipants adiciona ou remove participantes.
-func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (any, error) {
+func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jid, err := wajid.ToJID(group)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jids, err := wajid.ToJIDs(participants)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 
 	// O upstream tratava qualquer ação diferente de "add" como remoção;
@@ -31,7 +31,13 @@ func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string
 	if action == domain.ParticipantAdd {
 		change = wa.ParticipantChangeAdd
 	}
-	return client.UpdateGroupParticipants(ctx, jid, jids, change)
+	res, err := client.UpdateGroupParticipants(ctx, jid, jids, change)
+	if err != nil {
+		return domain.ParticipantsUpdate{}, err
+	}
+	// Confirmado: o protocolo devolve a lista resultante na mesma resposta, e é
+	// ela que volta aqui. Este transporte lê a pós-condição na própria chamada.
+	return domain.ParticipantsUpdate{Result: res, Confirmed: true}, nil
 }
 
 // GetRequestParticipants lista quem solicitou entrar no grupo.

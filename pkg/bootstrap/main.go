@@ -50,6 +50,17 @@ type server struct {
 	// so' nao ha posse a coordenar, e a trava de instancia do D1 ja' garante
 	// exclusividade. Ver buildLeaseManager.
 	Leases *leaseManager
+
+	// Engines diz qual transporte serve cada sessao (decisao 94). Nunca e'
+	// zero depois do arranque: setupEngineSelection ou a preenche ou mata o
+	// processo, porque servir pelo transporte errado em silencio e' pior que
+	// nao arrancar.
+	Engines EngineSelection
+
+	// Headless e' a configuracao zero quando nenhuma sessao usa esse engine, e
+	// nesse caso nenhum caminho de execucao a consulta. Ver
+	// headlessConfigConfigurada.
+	Headless HeadlessConfig
 }
 
 const version = Version
@@ -426,6 +437,7 @@ func Main() {
 	// A posse tem de existir ANTES do connectOnStartup: e' ela que decide
 	// quais sessoes este processo pode assumir (ADR-0005 D2).
 	setupSessionOwnership(s)
+	setupEngineSelection(s)
 
 	s.connectOnStartup()
 

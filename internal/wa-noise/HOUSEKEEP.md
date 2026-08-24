@@ -23,6 +23,28 @@ para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
 
 ## Convenção de status
 
+
+Achados da aplicação moram na raiz: `HOUSEKEEP.md`. A separação não é
+organizacional — o que está aqui acompanha o upstream e é candidato a virar
+patch ou a sumir num rebase; o que está lá é nosso e só nós corrigimos.
+
+Um achado que atravessa a fronteira fica no arquivo de quem CAUSA o problema,
+com referência cruzada no outro.
+
+O formato de cada entrada, e a política anti-regressão que rege a passagem
+para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
+
+> **Nota de procedência (2026-08-08):** este arquivo nasceu da divisão do
+> antigo `internal/wa-noise/HOUSEKEEP.md`, que registrava o repositório
+> inteiro. O índice que ele mantinha no topo foi descartado na divisão — ele
+> já trazia uma correção admitindo estar desatualizado em relação às próprias
+> entradas, e um índice que mente é pior que a ausência dele. As entradas
+> vieram integralmente; nenhuma foi perdida.
+
+
+
+## Convenção de status
+
 Toda entrada termina com um `**Status**:` cujo **veredito vem em negrito**,
 para que uma varredura mecânica o encontre. Ele pode estar no início da linha
 ou como item de lista (`- **Status**: ...`) — os dois layouts convivem no
@@ -2386,6 +2408,9 @@ faltava. Os dois pontos de escrita (`newNoiseSocket` e `NoiseSocket.Stop`, este
 tome `fs.lock`), e fazer `Close` ler o campo ainda sob o lock que ele já segura.
 É correção local ao pacote `socket/`, sem efeito na API do fork.
 
+**Status**: **não corrigido**. Fora do escopo do lote 10 (que não tocou `socket/`), e
+a regra do projeto proíbe corrigir de graça bug pré-existente fora do escopo.
+Registrado para decisão do usuário.
 **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
 texto obsoleto de uma versão anterior desta entrada — escrito quando o achado
 ainda estava fora de escopo do lote 10, antes de o lote B efetivamente aplicar
@@ -2699,6 +2724,24 @@ separadamente sobre os 60s do primeiro código.
 **Confirmação independente (2026-08-08)**: a divergência foi RE-MEDIDA, agora
 contra a nossa própria implementação num pareamento real, e não só lida no
 código. Rotação observada no log:
+
+```
+23:52:32  1º código   (expiresAt 23:53:32)  -> 60s
+23:53:32  2º código                          -> 20s
+23:53:52  3º código                          -> 20s
+23:54:12  4º código                          -> 20s
+23:54:32  5º código                          -> 20s
+```
+
+Isto CONFIRMA o item 2 em vez de resolvê-lo, e refina o alcance: a
+divergência existe **só na primeira exibição**. Do segundo código em diante
+somos idênticos ao oficial.
+
+**Status**: **item 1 (comentário invertido) corrigido** (2026-08-07).
+**item 2 (a validade de 60s do primeiro código) ABERTO** — é decisão de
+segurança, não de implementação, e a medição de 2026-08-08 mostra que o
+custo de decidir é menor do que parecia: afeta um código, não a janela toda.
+
 
 ```
 23:52:32  1º código   (expiresAt 23:53:32)  -> 60s

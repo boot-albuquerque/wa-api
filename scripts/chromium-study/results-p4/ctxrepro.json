@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "browser": "Chromium 151.0.7922.108 --headless=new",
+    "question": "which connection-level setup makes createTarget(browserContextId) fail",
+    "started_utc": "2026-08-09T06:15:24Z"
+  },
+  "steps": [
+    {
+      "name": "raw, no setup",
+      "setup_command": "",
+      "setup_ok": true,
+      "create_context_ok": true,
+      "create_target_ok": true
+    },
+    {
+      "name": "after setDiscoverTargets",
+      "setup_command": "Target.setDiscoverTargets",
+      "setup_ok": true,
+      "create_context_ok": true,
+      "create_target_ok": true
+    },
+    {
+      "name": "after setAutoAttach(flatten)",
+      "setup_command": "Target.setAutoAttach",
+      "setup_ok": true,
+      "create_context_ok": true,
+      "create_target_ok": true
+    },
+    {
+      "name": "after setAutoAttach(no flatten)",
+      "setup_command": "Target.setAutoAttach",
+      "setup_ok": false,
+      "create_context_ok": true,
+      "create_target_ok": true
+    }
+  ]
+}

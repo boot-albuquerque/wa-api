@@ -25,16 +25,27 @@ jobs:
       # would make the count drift with no code change — either a false-red
       # gate, or a real regression masked by a linter that stopped firing.
       # Bump this version and .golangci-baseline together, in the same PR.
+      # A versao vive no Makefile (GOLANGCI_VERSION), num lugar so'.
       #
-      # Instalado direto pelo script oficial, nao pela golangci-lint-action:
-      # a action roda `golangci-lint run` com o exit code dela mesma assim
-      # que a instala (o antigo input `install-only` nao existe mais em
-      # v6/v7), o que faz TODO achado falhar o job — inclusive os que
-      # `make lint` trata como informativos. `make check` e' quem decide o
-      # que trava, via .golangci-baseline.
-      - name: install golangci-lint
+      # COMPILADO da versao fixada, nao baixado pronto. O golangci-lint carrega
+      # o go/types da versao de Go com que o BINARIO foi compilado, e recusa
+      # qualquer pacote que declare um Go mais novo. Nenhuma release publicada
+      # e' compilada com 1.26 — nem a v2.12.2, cujo proprio go.mod declara
+      # `go 1.25.0` — e este modulo esta em 1.26 por exigencia do chromedp
+      # v0.16.0. O binario pronto nao consegue nem carregar os pacotes.
+      #
+      # `make lint-tool` compila com `go env GOVERSION`, que e' o Go que o
+      # setup-go acima ja' escolheu a partir do go.mod. Local e CI usam o mesmo
+      # alvo, entao rodam o mesmo linter compilado do mesmo jeito.
+      #
+      # Nao usamos a golangci-lint-action: ela roda `golangci-lint run` com o
+      # exit code dela mesma assim que instala (o antigo `install-only` nao
+      # existe mais em v6/v7), o que faz TODO achado falhar o job — inclusive
+      # os que `make lint` trata como informativos. `make check` e' quem decide
+      # o que trava, via .golangci-baseline.
+      - name: build golangci-lint from the pinned version
         run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.5.0
+          make lint-tool
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: golangci-lint config verify

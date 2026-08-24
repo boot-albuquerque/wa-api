@@ -57,6 +57,33 @@ ALL_PKGS := $(shell $(GOCMD) list ./...)
 # pacote em subpacotes: `go test -race` passa em toda a árvore, e a exclusão
 # saiu — manter uma trava que não trava é pior que não ter trava.
 TEST_PKGS := $(COVER_PKGS)
+
+# Os pacotes que LANCAM BROWSER correm SERIALIZADOS (decisao 79, F103).
+#
+# O `go test` paraleliza PACOTES ate' ao numero de CPUs, e quatro pacotes desta
+# arvore sobem Chrome. Medido durante uma execucao do gate: 24 processos de
+# browser vivos ao mesmo tempo, 4 binarios de teste, numa maquina de 10 CPUs,
+# com load average em 59,58. Sob essa saturacao um arranque de SPA estoura o
+# prazo de 2m30 — o MESMO teste que, isolado, passa em 2,4s.
+#
+# E o estouro nao fica por ali: o CleanStop sinaliza, o browser recusa fechar
+# (DIRTY_signal_close_refused) e o processo SOBREVIVE a execucao. Foram
+# encontrados 28 orfaos, dois com mais de um dia. Cada um soma-se a carga da
+# proxima corrida, entao o gate fica progressivamente mais fragil sem que nada
+# no repositorio mude.
+#
+# `-p 1` basta, e isso foi MEDIDO em vez de suposto: os quatro pacotes tem ZERO
+# chamadas a t.Parallel(), logo os testes DENTRO de cada um ja sao sequenciais e
+# toda a concorrencia era entre pacotes. Uma trava de arquivo — que o
+# paralelismo entre processos do `go test` exigiria — seria complexidade sem
+# problema a resolver.
+BROWSER_PKGS := \
+	wa-api/internal/wa-headless \
+	wa-api/internal/wa-headless/core \
+	wa-api/internal/wa-headless/engine \
+	wa-api/internal/wa-headless/runtime
+SERIAL_TEST_PKGS := $(filter $(BROWSER_PKGS),$(TEST_PKGS))
+PARALLEL_TEST_PKGS := $(filter-out $(BROWSER_PKGS),$(TEST_PKGS))
 VET_TARGETS := $(ALL_PKGS)
 
 # Lint
@@ -66,6 +93,34 @@ VET_TARGETS := $(ALL_PKGS)
 LINT          := golangci-lint
 LINT_TARGETS  := $(shell $(GOCMD) list ./... | sed 's|^wa-api/|./|')
 BASELINE_FILE := .golangci-baseline
+
+# O linter e' COMPILADO a partir da versao fixada, com o Go DESTE repositorio,
+# em vez de baixado como binario pronto.
+#
+# O motivo e' medido, nao preferencia. O golangci-lint carrega um go/types
+# proprio, o da versao de Go com que o BINARIO foi compilado, e ele recusa
+# qualquer pacote que declare um Go mais novo:
+#
+#   Error: can't load config: the Go language version (go1.25) used to build
+#   golangci-lint is lower than the targeted Go version (1.26)
+#
+# Nenhuma release resolve isso: ate a v2.12.2 (a mais nova em 2026-05) declara
+# `go 1.25.0` no proprio go.mod, e os binarios publicados sao compilados com
+# 1.25.x. Como este modulo esta em Go 1.26 (exigencia do chromedp v0.16.0, o
+# motor do internal/wa-headless/), o binario pronto nao consegue nem carregar
+# o pacote — o type checker panica dentro da dependencia.
+#
+# GOTOOLCHAIN e' obrigatorio aqui: o go.mod do golangci-lint traz um
+# `toolchain go1.25.12`, e sem sobrepo-lo o `go install` baixa 1.25.12 e
+# reproduz exatamente a incompatibilidade. `go env GOVERSION` devolve o Go que
+# ESTE repositorio ja' selecionou a partir do seu proprio go.mod, entao local e
+# CI compilam o mesmo linter com o mesmo Go, sem repetir o numero da versao.
+#
+# A VERSAO do linter continua fixada: .golangci-baseline e' uma contagem
+# absoluta de issues, atada a esta release. Subir GOLANGCI_VERSION e atualizar
+# o baseline sao a mesma mudanca, no mesmo PR.
+GOLANGCI_VERSION := v2.12.2
+GOLANGCI_PKG     := github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
 # Coverage ratchet
 COVERAGE_BASELINE_FILE := .coverage-baseline
@@ -142,8 +197,20 @@ docker: ## Build Docker image
 
 ##@ Test
 
-test: ## Run unit tests with race detection
-	$(GOTEST) -race -count=1 -timeout=20m $(TEST_PKGS)
+# test-split-check falha se a divisao perder ou soltar um pacote.
+#
+# $(filter …) descarta em SILENCIO o que nao casa: um typo em BROWSER_PKGS faria
+# o pacote voltar ao grupo paralelo e a protecao sumiria sem nenhum aviso. Uma
+# trava que pode desaparecer por engano de digitacao nao e' trava.
+test-split-check:
+	@serial=$$(echo $(SERIAL_TEST_PKGS) | wc -w); 	declared=$$(echo $(BROWSER_PKGS) | wc -w); 	if [ "$$serial" -ne "$$declared" ]; then 		echo "test-split: $$serial de $$declared pacotes de browser casaram com TEST_PKGS;" >&2; 		echo "  um nome em BROWSER_PKGS nao existe, e esse pacote correria em PARALELO." >&2; 		exit 1; 	fi; 	total=$$(echo $(TEST_PKGS) | wc -w); 	soma=$$(( $$(echo $(PARALLEL_TEST_PKGS) | wc -w) + serial )); 	if [ "$$total" -ne "$$soma" ]; then 		echo "test-split: $$soma pacotes na divisao contra $$total em TEST_PKGS;" >&2; 		echo "  a divisao perdeu ou duplicou pacote, e um pacote perdido nao e' testado." >&2; 		exit 1; 	fi
+
+orphan-browser-check: ## Falha se browsers de TESTE sobreviveram a execucoes anteriores
+	@./scripts/orphan-browser-check.sh
+
+test: test-split-check orphan-browser-check ## Run unit tests with race detection
+	$(GOTEST) -race -count=1 -timeout=20m $(PARALLEL_TEST_PKGS)
+	$(GOTEST) -race -count=1 -timeout=20m -p 1 $(SERIAL_TEST_PKGS)
 
 test-verbose: ## Run unit tests with verbose output
 	$(GOTEST) -race -count=1 -v -timeout=20m $(TEST_PKGS)
@@ -182,6 +249,16 @@ coverage-domain: ## Show domain + application coverage
 	$(GOCMD) tool cover -func=$(COVERAGE_OUT) | grep -E "^total:|domain|usecase"
 
 coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
+# O stdout vai para um ARQUIVO, nao para /dev/null, e so' e' impresso quando o
+# passo FALHA (F99).
+#
+# O silencio existia para nao poluir o caminho feliz — e apagava exatamente a
+# evidencia necessaria no caminho de falha. Custou duas investigacoes cegas em
+# 2026-08-20: o alvo reprovava e o log mostrava apenas
+# "make: *** [coverage-gate] Error 1", sem nome de pacote, sem linha de teste,
+# sem nada. Numa delas isso me levou a escrever num commit que o gate estava
+# verde tendo lido so' a AUSENCIA de linhas FAIL — ausencia que este redirect
+# garantia mesmo havendo falha.
 	@$(GOTEST) -count=1 $(COVER_PKGS) -coverpkg=$(shell echo $(COVER_PKGS) | tr ' ' ',') -coverprofile=$(COVERAGE_OUT) > $(COVERAGE_OUT).log 2>&1 || { \
 	   echo "FALHA: os testes do coverage-gate falharam. Saida abaixo (F110):"; \
 	   grep -E '^(--- FAIL|FAIL|panic:)' $(COVERAGE_OUT).log || cat $(COVERAGE_OUT).log; \
@@ -214,6 +291,10 @@ coverage-gate: ## Cobertura contra o piso declarado: falha se o numero CAIR
 	 fi
 
 ##@ Quality
+
+lint-tool: ## Compila o golangci-lint fixado com o Go deste repositorio
+	GOTOOLCHAIN=$(shell $(GOCMD) env GOVERSION) $(GOCMD) install $(GOLANGCI_PKG)@$(GOLANGCI_VERSION)
+	@$$($(GOCMD) env GOPATH)/bin/golangci-lint --version
 
 lint: ## Lint contra o baseline declarado: falha se o numero SUBIR
 	@# F220: a cache do golangci-lint retem resultados de OUTRAS worktrees e

@@ -12,22 +12,41 @@ import (
 
 // GroupManagementUseCase bundles group write operations (create, join, leave,
 // settings) that share the same session dependency.
+//
+// As quatro portas de escrita entram SEPARADAS, e o número de parâmetros é o
+// preço consciente (decisões 87 e 92): um transporte que só serve parte delas
+// deixa de compilar no ponto de montagem, em vez de falhar quando alguém
+// chamar. Uma dependência larga demais desaparece no meio do código.
 type GroupManagementUseCase struct {
 	lifecycle appport.GroupLifecycle
-	settings  appport.GroupSettings
+	info      appport.GroupInfoSettings
+	parts     appport.GroupParticipants
+	photo     appport.GroupPhotoSetter
+	ephemeral appport.GroupEphemeralSetter
 	jids      appport.JIDResolver
 	logger    appport.Logger
 }
 
-func NewGroupManagementUseCase(gl appport.GroupLifecycle, gs appport.GroupSettings, jr appport.JIDResolver, l appport.Logger) *GroupManagementUseCase {
-	return &GroupManagementUseCase{lifecycle: gl, settings: gs, jids: jr, logger: l}
+func NewGroupManagementUseCase(
+	gl appport.GroupLifecycle,
+	info appport.GroupInfoSettings,
+	parts appport.GroupParticipants,
+	photo appport.GroupPhotoSetter,
+	ephemeral appport.GroupEphemeralSetter,
+	jr appport.JIDResolver,
+	l appport.Logger,
+) *GroupManagementUseCase {
+	return &GroupManagementUseCase{
+		lifecycle: gl, info: info, parts: parts, photo: photo,
+		ephemeral: ephemeral, jids: jr, logger: l,
+	}
 }
 
 // ensure mantém a guarda de sessão que o antigo helper client() aplicava
 // antes de cada operação, com a mesma mensagem de erro que os handlers já
 // recebiam.
 func (uc *GroupManagementUseCase) ensure(ctx context.Context, txtID string) error {
-	if err := uc.settings.EnsureSession(ctx, txtID); err != nil {
+	if err := uc.info.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
 		return err
 	}
@@ -114,7 +133,7 @@ func (uc *GroupManagementUseCase) SetGroupName(ctx context.Context, txtID, group
 	if err != nil {
 		return err
 	}
-	if err := uc.settings.SetGroupName(ctx, txtID, jid, name); err != nil {
+	if err := uc.info.SetGroupName(ctx, txtID, jid, name); err != nil {
 		uc.logger.Error(ctx, "failed to set group name", "txtID", txtID, "groupJID", groupJID, "error", err)
 		return err
 	}
@@ -130,7 +149,7 @@ func (uc *GroupManagementUseCase) SetGroupTopic(ctx context.Context, txtID, grou
 	if err != nil {
 		return err
 	}
-	if err := uc.settings.SetGroupTopic(ctx, txtID, jid, topic); err != nil {
+	if err := uc.info.SetGroupTopic(ctx, txtID, jid, topic); err != nil {
 		uc.logger.Error(ctx, "failed to set group topic", "txtID", txtID, "groupJID", groupJID, "error", err)
 		return err
 	}
@@ -146,7 +165,7 @@ func (uc *GroupManagementUseCase) SetGroupPhoto(ctx context.Context, txtID, grou
 	if err != nil {
 		return err
 	}
-	if err := uc.settings.SetGroupPhoto(ctx, txtID, jid, photoData); err != nil {
+	if err := uc.photo.SetGroupPhoto(ctx, txtID, jid, photoData); err != nil {
 		uc.logger.Error(ctx, "failed to set group photo", "txtID", txtID, "groupJID", groupJID, "bytes", len(photoData), "error", err)
 		return err
 	}
@@ -162,7 +181,7 @@ func (uc *GroupManagementUseCase) RemoveGroupPhoto(ctx context.Context, txtID, g
 	if err != nil {
 		return err
 	}
-	if err := uc.settings.SetGroupPhoto(ctx, txtID, jid, nil); err != nil {
+	if err := uc.photo.SetGroupPhoto(ctx, txtID, jid, nil); err != nil {
 		uc.logger.Error(ctx, "failed to remove group photo", "txtID", txtID, "groupJID", groupJID, "error", err)
 		return err
 	}
@@ -178,7 +197,7 @@ func (uc *GroupManagementUseCase) SetGroupAnnounce(ctx context.Context, txtID, g
 	if err != nil {
 		return err
 	}
-	if err := uc.settings.SetGroupAnnounce(ctx, txtID, jid, announce); err != nil {
+	if err := uc.info.SetGroupAnnounce(ctx, txtID, jid, announce); err != nil {
 		uc.logger.Error(ctx, "failed to set group announce", "txtID", txtID, "groupJID", groupJID, "announce", announce, "error", err)
 		return err
 	}
@@ -194,7 +213,7 @@ func (uc *GroupManagementUseCase) SetGroupLocked(ctx context.Context, txtID, gro
 	if err != nil {
 		return err
 	}
-	if err := uc.settings.SetGroupLocked(ctx, txtID, jid, locked); err != nil {
+	if err := uc.info.SetGroupLocked(ctx, txtID, jid, locked); err != nil {
 		uc.logger.Error(ctx, "failed to set group locked", "txtID", txtID, "groupJID", groupJID, "locked", locked, "error", err)
 		return err
 	}
@@ -224,7 +243,7 @@ func (uc *GroupManagementUseCase) SetDisappearingTimer(ctx context.Context, txtI
 		uc.logger.Warn(ctx, "unrecognized disappearing timer duration, disabling", "txtID", txtID, "groupJID", groupJID, "duration", duration)
 		d = 0
 	}
-	if err := uc.settings.SetDisappearingTimer(ctx, txtID, jid, d, time.Now()); err != nil {
+	if err := uc.ephemeral.SetDisappearingTimer(ctx, txtID, jid, d, time.Now()); err != nil {
 		uc.logger.Error(ctx, "failed to set disappearing timer", "txtID", txtID, "groupJID", groupJID, "duration", duration, "error", err)
 		return err
 	}
@@ -232,17 +251,22 @@ func (uc *GroupManagementUseCase) SetDisappearingTimer(ctx context.Context, txtI
 }
 
 // UpdateGroupParticipants adds or removes participants from a group.
-func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, txtID, groupJID, action string, phones []string) (interface{}, error) {
+// UpdateGroupParticipants devolve o desfecho TIPADO, e nao um `any`.
+//
+// O tipo carrega se a sessao que agiu conseguiu CONFIRMAR a mudanca (decisao
+// 86). Achatar aqui anularia o proposito: o handler perderia a unica informacao
+// que distingue "aplicado e verificado" de "enviado e nao observavel".
+func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, txtID, groupJID, action string, phones []string) (domain.ParticipantsUpdate, error) {
 	if err := uc.ensure(ctx, txtID); err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jid, err := uc.parseJID(ctx, groupJID)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jids, err := uc.parseJIDs(ctx, phones)
 	if err != nil {
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
 	}
 
 	// Qualquer ação diferente de "add" é remoção — regra preservada do
@@ -251,10 +275,19 @@ func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, t
 	if action == "add" {
 		participantAction = domain.ParticipantAdd
 	}
-	res, err := uc.settings.UpdateGroupParticipants(ctx, txtID, jid, jids, participantAction)
+	res, err := uc.parts.UpdateGroupParticipants(ctx, txtID, jid, jids, participantAction)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to update group participants", "txtID", txtID, "groupJID", groupJID, "action", action, "participants", len(jids), "error", err)
-		return nil, err
+		return domain.ParticipantsUpdate{}, err
+	}
+	// Uma mudança que o transporte NAO conseguiu confirmar e' registrada em
+	// Warn, com o motivo que ele deu. E' a unica forma de a incerteza chegar a
+	// quem opera: o chamador HTTP recebe 200, porque a operacao foi de facto
+	// enviada, e o log e' onde fica escrito que ninguem a verificou.
+	if !res.Confirmed {
+		uc.logger.Warn(ctx, "group participants updated WITHOUT confirmation",
+			"txtID", txtID, "groupJID", groupJID, "action", action,
+			"participants", len(jids), "reason", res.Reason)
 	}
 	return res, nil
 }

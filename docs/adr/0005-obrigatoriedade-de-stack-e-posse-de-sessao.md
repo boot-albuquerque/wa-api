@@ -1,5 +1,6 @@
 # ADR-0005: obrigatoriedade de stack, posse de sessão e degradação por capacidade
 
+- **Status**: proposed
 - **Status**: **accepted, parcialmente implementado (2026-08-10)** — D1, D2, D3
   e D6 entraram e estão em uso; D5 (roteamento por dono) e D7 (relatório de
   capacidades) não. Ver "Fechamento" no fim deste documento.
@@ -38,6 +39,11 @@ Três consequências que o desenho tem de absorver:
    fica com o processo vivo, HTTP respondendo e liveness verde — e a sessão
    morta, sem nunca tentar reconectar. O banco continua afirmando
    `connected=1`.
+3. **Degradação silenciosa já mordeu.** A instância de produção roda em SQLite
+   por causa do fallback automático de `pkg/infra/db/connection.go:81`, que
+   dispara quando as variáveis de Postgres estão PARCIALMENTE definidas. Ela
+   registra um `warn` e segue. Em multi-pod isso seria cada réplica com um
+   banco próprio, todas se achando donas de tudo.
 3. ~~**Degradação silenciosa já mordeu.** A instância de produção roda em
    SQLite por causa do fallback automático de `pkg/infra/db/connection.go:81`,
    que dispara quando as variáveis de Postgres estão PARCIALMENTE definidas.~~

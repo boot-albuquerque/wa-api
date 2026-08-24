@@ -18,14 +18,14 @@ import (
 // normalizar (degrada, não falha).
 type GetContactsLastActivityUseCase struct {
 	activity appport.ChatActivityReader
-	contacts appport.ContactDirectory
+	contacts appport.IdentityResolver
 	logger   appport.Logger
 }
 
 // NewGetContactsLastActivityUseCase creates a new instance.
 func NewGetContactsLastActivityUseCase(
 	ar appport.ChatActivityReader,
-	cd appport.ContactDirectory,
+	cd appport.IdentityResolver,
 	logger appport.Logger,
 ) *GetContactsLastActivityUseCase {
 	return &GetContactsLastActivityUseCase{activity: ar, contacts: cd, logger: logger}
@@ -65,7 +65,7 @@ func (uc *GetContactsLastActivityUseCase) Execute(ctx context.Context, userID st
 // duplicar justamente a parte cuja sutileza custou a F65 a ser descoberta.
 func normalizeToLID(
 	ctx context.Context,
-	contacts appport.ContactDirectory,
+	contacts appport.IdentityResolver,
 	logger appport.Logger,
 	userID string,
 	raw map[string]time.Time,

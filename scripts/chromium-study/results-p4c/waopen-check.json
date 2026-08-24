@@ -1,0 +1,11 @@
+{
+  "state": {
+    "state": "qr",
+    "matched_by": "canvas[aria-label*=\"Scan\"]",
+    "qr_selectors_present": [
+      "canvas[aria-label*=\"Scan\"]",
+      "div[data-ref] canvas",
+      "div[data-ref]"
+    ]
+  }
+}
