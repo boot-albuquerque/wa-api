@@ -15,6 +15,10 @@ import (
 // nenhum teste conseguia alcançá-lo. Foi extraído para
 // `resolveGlobalHMACKey`/`generateGlobalHMACKey` em global_hmac_key.go
 // exatamente para que estas asserções existam.
+//
+// Com o fail-closed (F156, opção 1), resolveGlobalHMACKey já não chama
+// generateGlobalHMACKey. Os testes do gerador ficam porque travam propriedades
+// reais da função que ainda existe (ver comentário em global_hmac_key.go).
 
 // chaveDeEncriptacaoDeTeste tem 32 bytes porque o AES de auth.EncryptHMACKey
 // aceita 16, 24 ou 32.
@@ -24,31 +28,22 @@ const chaveDeEncriptacaoDeTeste = "0123456789abcdef0123456789abcdef"
 // se ele aparecer lá, o caminho "configurada" virou o novo vazamento.
 const valorConfiguradoDeTeste = "chave-hmac-do-operador-nao-pode-vazar"
 
-// TestF156_ChaveGeradaNaoApareceNoLog é o teste do defeito.
-//
-// A asserção é sobre a LINHA INTEIRA capturada, não sobre o campo
-// `global_hmac_key` que existia antes: mover o segredo para outro campo, ou
-// para dentro da mensagem, continua sendo vazamento e continua sendo pego.
+// TestF156_ChaveGeradaNaoApareceNoLog tests that generateGlobalHMACKey does
+// not leak the key value into any log line. The function has no production
+// caller since the fail-closed change (F156), but the property is still worth
+// locking because the function is kept for its other tests.
 func TestF156_ChaveGeradaNaoApareceNoLog(t *testing.T) {
 	captura := captureLogInto(t)
 
-	chave, origem, err := resolveGlobalHMACKey("", "")
+	chave, err := generateGlobalHMACKey()
 	if err != nil {
-		t.Fatalf("resolveGlobalHMACKey devolveu erro: %v", err)
-	}
-	if origem != hmacKeyGenerated {
-		t.Fatalf("origem = %v, esperada %v", origem, hmacKeyGenerated)
+		t.Fatalf("generateGlobalHMACKey returned error: %v", err)
 	}
 
 	saida := captura.String()
-	if saida == "" {
-		t.Fatal("nada foi capturado: sem registro de log a asserção não mede nada")
-	}
 	if strings.Contains(saida, chave) {
 		t.Errorf("a chave HMAC gerada aparece no log:\n%s", saida)
 	}
-	// O tamanho em caracteres do segredo também não: é informação sobre a
-	// chave, e a mensagem foi escrita para não ter nenhuma.
 	for _, pedaco := range []string{chave[:8], chave[len(chave)-8:]} {
 		if strings.Contains(saida, pedaco) {
 			t.Errorf("um prefixo/sufixo da chave gerada aparece no log (%q):\n%s", pedaco, saida)
@@ -186,4 +181,95 @@ func TestF156_GeradorEhCriptografico(t *testing.T) {
 				arquivoDoGerador, proibido)
 		}
 	}
+}
+
+// --- F156 fail-closed tests -------------------------------------------------
+
+// TestF156_FailClosed_SemFlagSemAmbienteDevolvErro is the primary assertion
+// for the fail-closed decision: without flag and without environment,
+// resolveGlobalHMACKey returns an error — not an empty string, not a generated
+// value.
+func TestF156_FailClosed_SemFlagSemAmbienteDevolvErro(t *testing.T) {
+	captureLogInto(t)
+
+	chave, _, err := resolveGlobalHMACKey("", "")
+	if err == nil {
+		t.Fatal("resolveGlobalHMACKey(\"\", \"\") did not return an error: the fail-closed path is broken")
+	}
+	if chave != "" {
+		t.Errorf("resolveGlobalHMACKey returned a non-empty key %q alongside the error", chave)
+	}
+}
+
+// TestF156_FailClosed_MensagemEhAcionavel asserts that the error message names
+// both the environment variable and the flag — an error that does not say what
+// to set forces the operator to read source code.
+func TestF156_FailClosed_MensagemEhAcionavel(t *testing.T) {
+	captureLogInto(t)
+
+	_, _, err := resolveGlobalHMACKey("", "")
+	if err == nil {
+		t.Fatal("resolveGlobalHMACKey(\"\", \"\") did not return an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, envGlobalHMACKey) {
+		t.Errorf("the error does not mention the environment variable %q:\n%s",
+			envGlobalHMACKey, msg)
+	}
+	if !strings.Contains(msg, flagGlobalHMACKey) {
+		t.Errorf("the error does not mention the flag %q:\n%s",
+			flagGlobalHMACKey, msg)
+	}
+}
+
+// TestF156_FailClosed_CaminhosConfiguradosNaoRegredem asserts that the flag
+// and environment paths still work and that the flag takes precedence — the
+// fail-closed change must not break existing deployments that already set
+// the variable.
+func TestF156_FailClosed_CaminhosConfiguradosNaoRegredem(t *testing.T) {
+	captureLogInto(t)
+
+	const (
+		fromEnv  = "env-key-for-precedence-test"
+		fromFlag = "flag-key-for-precedence-test"
+	)
+
+	t.Run("env_only", func(t *testing.T) {
+		chave, origem, err := resolveGlobalHMACKey("", fromEnv)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chave != fromEnv {
+			t.Errorf("key = %q, want %q", chave, fromEnv)
+		}
+		if origem != hmacKeyFromEnv {
+			t.Errorf("source = %v, want %v", origem, hmacKeyFromEnv)
+		}
+	})
+
+	t.Run("flag_only", func(t *testing.T) {
+		chave, origem, err := resolveGlobalHMACKey(fromFlag, "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chave != fromFlag {
+			t.Errorf("key = %q, want %q", chave, fromFlag)
+		}
+		if origem != hmacKeyFromFlag {
+			t.Errorf("source = %v, want %v", origem, hmacKeyFromFlag)
+		}
+	})
+
+	t.Run("flag_beats_env", func(t *testing.T) {
+		chave, origem, err := resolveGlobalHMACKey(fromFlag, fromEnv)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if chave != fromFlag {
+			t.Errorf("key = %q, want flag %q (flag must take precedence)", chave, fromFlag)
+		}
+		if origem != hmacKeyFromFlag {
+			t.Errorf("source = %v, want %v", origem, hmacKeyFromFlag)
+		}
+	})
 }

@@ -30,6 +30,10 @@ const (
 	// operator-supplied global HMAC key.
 	envGlobalHMACKey = "WA_API_GLOBAL_HMAC_KEY"
 
+	// flagGlobalHMACKey is the command-line equivalent, named here so the
+	// startup error can point at both channels without repeating a literal.
+	flagGlobalHMACKey = "-globalhmackey"
+
 	// hmacKeyCharset is the alphabet a generated key is drawn from. It is kept
 	// alphanumeric so the value survives every transport an operator may paste
 	// it through (.env file, shell, container manifest) without quoting.
@@ -69,6 +73,12 @@ func (s hmacKeySource) String() string {
 
 // generateGlobalHMACKey draws a key from crypto/rand.
 //
+// No production caller: resolveGlobalHMACKey no longer generates a key (F156
+// fail-closed). This function is kept because three tests lock real properties
+// of the generator (format, uniqueness, crypto/rand source) that would be lost
+// if it were deleted — and the structural test TestF156_GeradorEhCriptografico
+// asserts that THIS FILE uses crypto/rand, which requires the import to exist.
+//
 // The draw uses rejection sampling rather than `b % len(charset)`: 256 is not a
 // multiple of the 62-character alphabet, so a plain modulo would make the first
 // 256%62 == 8 letters measurably likelier than the rest. Bytes at or above the
@@ -102,8 +112,8 @@ func generateGlobalHMACKey() (string, error) {
 }
 
 // resolveGlobalHMACKey decides which global HMAC key the process will use:
-// the command-line flag when set, else the environment variable, else a freshly
-// generated one. It preserves the precedence the inline block in Main() had.
+// the command-line flag when set, else the environment variable. When neither
+// is set it returns an error and the process must NOT start.
 //
 // It is a function of its two inputs precisely so it can be tested — the block
 // it replaced lived inside Main() and read package-level flag pointers, so no
@@ -118,16 +128,10 @@ func resolveGlobalHMACKey(flagValue, envValue string) (string, hmacKeySource, er
 		return envValue, hmacKeyFromEnv, nil
 	}
 
-	key, err := generateGlobalHMACKey()
-	if err != nil {
-		return "", hmacKeyGenerated, err
-	}
-	// The value is deliberately absent, and so is anything that would narrow it
-	// down (prefix, length in characters, hash). See the file header.
-	log.Warn().Str("source", hmacKeyGenerated.String()).
-		Msg("No " + envGlobalHMACKey + " provided, generated a random one. " +
-			"Its value is not logged, so no webhook consumer can learn it: set " +
-			envGlobalHMACKey + " to a key the consumer also knows if you need " +
-			"the global webhook signatures to be verifiable")
-	return key, hmacKeyGenerated, nil
+	return "", hmacKeyFromEnv, fmt.Errorf(
+		"%s is not set and is never generated: a key generated at startup would not be verifiable "+
+			"by webhook consumers (the value is never logged and changes on every restart), "+
+			"so signing with it is security theater — the recipient has no way to check the signature: "+
+			"set %s (or %s) to a key the webhook consumer also knows",
+		envGlobalHMACKey, envGlobalHMACKey, flagGlobalHMACKey)
 }

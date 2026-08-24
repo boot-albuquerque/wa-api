@@ -276,12 +276,12 @@ func Main() {
 		log.Info().Str("global_webhook", *globalWebhook).Msg("Global webhook configured from command line")
 	}
 
-	// Global HMAC key: flag, else environment, else generated. The rules — and
-	// why the value never reaches a log line — live in global_hmac_key.go.
+	// Global HMAC key: flag, else environment, else the process REFUSES to
+	// start. Why it is not generated — and why signing with an unverifiable
+	// key is worse than failing — lives in global_hmac_key.go.
 	resolvedHMACKey, _, errHMAC := resolveGlobalHMACKey(*globalHMACKey, os.Getenv(envGlobalHMACKey))
 	if errHMAC != nil {
-		log.Fatal().Err(errHMAC).
-			Msg("could not resolve the global HMAC key: the entropy source failed")
+		log.Fatal().Err(errHMAC).Msg("could not resolve the global HMAC key")
 	}
 	*globalHMACKey = resolvedHMACKey
 
@@ -298,20 +298,10 @@ func Main() {
 
 	// Falha aqui é FATAL, e não um Error que se ignora (F67 item 2).
 	//
-	// Com a chave vazia, callHookWithHmac pula a assinatura em silêncio —
-	// `if len(encryptedHmacKey) > 0` (dispatch_callhook.go:80) — e todo
-	// webhook global sai SEM assinatura. O operador que configurou uma chave
-	// HMAC fez isso justamente para que fossem assinados; entregar sem
-	// assinatura acreditando que estão assinados é rebaixamento silencioso de
-	// segurança, e o receptor não tem como perceber a diferença.
-	//
-	// Não há caso legítimo de seguir adiante: *globalHMACKey nunca chega aqui
-	// vazio (resolveGlobalHMACKey gera uma quando nenhuma é fornecida),
-	// então a assinatura é sempre pretendida. A única falha possível é
-	// WA_API_GLOBAL_ENCRYPTION_KEY inválida — configuração, corrigível, e que
-	// o operador precisa ver antes de o serviço atender requisição.
-	//
-	// Mesmo tratamento que os.Executable() logo abaixo já recebia.
+	// resolveGlobalHMACKey already refused to start without a configured key
+	// (F156 fail-closed), so *globalHMACKey is never empty here. The only
+	// failure possible is WA_API_GLOBAL_ENCRYPTION_KEY being invalid for AES
+	// — a configuration error the operator must see before serving requests.
 	globalHMACKeyEncrypted, err = encryptHMACKey(*globalHMACKey)
 	if err != nil {
 		log.Fatal().Err(err).

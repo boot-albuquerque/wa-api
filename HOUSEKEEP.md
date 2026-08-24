@@ -15106,11 +15106,74 @@ decorativa" (chave que ninguém consegue verificar, porque muda a cada restart
 e não é publicada) é o argumento forte para a decisão, e já está registada
 na secção acima.
 
-**Status**: **corrigido nas duas metades de segurança** (vazamento em log e
-gerador não-criptográfico). **Não fechável**: o fail-closed é decisão de
-contrato operacional pendente, não bug de implementação.
+### Fechamento (2026-08-24) — fail-closed implementado (opção 1 de três)
 
-<!-- f-status: aberto -->
+**Decisão do dono do repositório**: opção (1) — exigir a variável e falhar
+fechado. A opção (2) (gerar e persistir em ficheiro restrito) foi considerada e
+recusada. A (3) (não assinar) já estava descartada pela F67.
+
+**O que foi feito.**
+
+1. `resolveGlobalHMACKey` (`global_hmac_key.go`) passa a devolver erro quando
+   flag e ambiente estão vazios, em vez de gerar. A mensagem diz o QUE falta
+   (`WA_API_GLOBAL_HMAC_KEY`), PORQUÊ não é gerada (chave gerada não seria
+   verificável — assinatura decorativa), e o QUE fazer (definir a variável ou a
+   flag `-globalhmackey`). Espelha a forma de `resolveGlobalEncryptionKey`
+   (`startup_secrets.go`).
+2. `main.go` trata o erro como `log.Fatal`, como já fazia para a encriptação.
+   O comentário do bloco `encryptHMACKey` foi atualizado — a premissa de que
+   `*globalHMACKey` nunca chega vazio agora é verdadeira por ERRO, não por
+   geração.
+3. Constante `flagGlobalHMACKey = "-globalhmackey"` adicionada em
+   `global_hmac_key.go` para a mensagem de erro poder nomear os dois canais.
+
+**Decisão sobre `generateGlobalHMACKey`.** Mantida sem chamador de produção.
+Custo de manter: código sem uso de produção, que o lint pode marcar. Custo de
+apagar: perder três testes que travam propriedades reais do gerador
+(`TestF156_DuasGeracoesProduzemChavesDiferentes`,
+`TestF156_ChaveGeradaTemFormatoUtilizavel`,
+`TestF156_GeradorEhCriptografico`) — e o teste ESTRUTURAL precisa que
+`crypto/rand` seja importado NESTE FICHEIRO. Comentário no código explica
+porquê existe.
+
+**Testes que travam a correção** (9 no total, 6 existentes + 3 novos):
+
+| teste | o que trava |
+|---|---|
+| `TestF156_FailClosed_SemFlagSemAmbienteDevolvErro` | **NOVO** — sem flag e sem ambiente, `resolveGlobalHMACKey` devolve ERRO (não string vazia, não valor gerado) |
+| `TestF156_FailClosed_MensagemEhAcionavel` | **NOVO** — a mensagem de erro contém o nome da variável de ambiente E o da flag |
+| `TestF156_FailClosed_CaminhosConfiguradosNaoRegredem` | **NOVO** — flag e ambiente continuam a funcionar, com precedência da flag |
+| `TestF156_ChaveGeradaNaoApareceNoLog` | adaptado — testa `generateGlobalHMACKey` directamente (a função já não é chamada por `resolveGlobalHMACKey`) |
+| `TestF156_DuasGeracoesProduzemChavesDiferentes` | inalterado |
+| `TestF156_ChaveGeradaTemFormatoUtilizavel` | inalterado |
+| `TestF156_ChaveDoAmbienteEUsadaENaoEcoada` | inalterado |
+| `TestF156_ChaveDaLinhaDeComandoEUsadaENaoEcoada` | inalterado |
+| `TestF156_GeradorEhCriptografico` | inalterado |
+
+**Controles negativos EXECUTADOS.**
+
+(a) Reintroduzir a geração em `resolveGlobalHMACKey` (repor a chamada a
+`generateGlobalHMACKey` quando ambos os inputs estão vazios):
+
+```
+--- FAIL: TestF156_FailClosed_SemFlagSemAmbienteDevolvErro (0.00s)
+    global_hmac_key_test.go:197: resolveGlobalHMACKey("", "") did not return an error: the fail-closed path is broken
+--- FAIL: TestF156_FailClosed_MensagemEhAcionavel (0.00s)
+    global_hmac_key_test.go:212: resolveGlobalHMACKey("", "") did not return an error
+```
+
+**Documentação atualizada**: `README.md` (secção "Credenciais" e "Segurança de
+Webhooks"), `.env.sample`, `.env.example` — todos declaram a variável como
+obrigatória, com a razão.
+
+**Nota sobre [[F169]]**: a mudança não afecta `admin_token` nem
+`global_encryption_key` — os dois já tinham o tratamento correcto (F169).
+
+**Status**: **corrigido** — fail-closed por decisão do dono do repositório
+(opção 1 de três). Travado pelos 9 testes acima, com controlo negativo
+executado.
+
+<!-- f-status: corrigido -->
 
 ## F157
 

@@ -2726,7 +2726,7 @@ pkg/bootstrap.KillChannel.Delete	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Get	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Set	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Signal	ELIGIBLE	uncovered:L1
-pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:321)
+pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:311)
 pkg/bootstrap.Main.func1	EXCLUDED	X6
 pkg/bootstrap.Main.func2	ELIGIBLE	covered
 pkg/bootstrap.MetricasRetry	EXCLUDED	X1
@@ -2940,7 +2940,7 @@ pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:216)
 pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
-pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	covered
+pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	uncovered:L2(S-ret,global_hmac_key.go:131)
 pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:87)
 pkg/bootstrap.resolveTokenCacheTTL	ELIGIBLE	uncovered:L1
 pkg/bootstrap.resolverChaveHMAC	ELIGIBLE	covered
@@ -2984,7 +2984,7 @@ pkg/bootstrap.setupWebhookOutbox	ELIGIBLE	covered
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:490);uncovered:L3(zerolog,main.go:507)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:480);uncovered:L3(zerolog,main.go:497)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
 pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
@@ -2993,7 +2993,7 @@ pkg/bootstrap.startOutboxSweeper	EXCLUDED	X1
 pkg/bootstrap.startOutboxSweeper.func1	EXCLUDED	X6
 pkg/bootstrap.startSessionEventQueue	ELIGIBLE	uncovered:L1
 pkg/bootstrap.startSessionEventQueue.func1	EXCLUDED	X6
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:543)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:533)
 pkg/bootstrap.stopSessionEventQueue	ELIGIBLE	covered
 pkg/bootstrap.stopSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.sweepOutboxOnce	ELIGIBLE	covered

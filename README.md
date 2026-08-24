@@ -136,8 +136,9 @@ WA_API_ADMIN_TOKEN=seu_admin_token_aqui
 
 #### Configurações de Segurança
 
-`WA_API_GLOBAL_ENCRYPTION_KEY` é **obrigatória**: sem ela o processo recusa
-subir. Ver "Credenciais" abaixo para o porquê.
+`WA_API_GLOBAL_ENCRYPTION_KEY` e `WA_API_GLOBAL_HMAC_KEY` são **obrigatórias**:
+sem qualquer delas o processo recusa subir. Ver "Credenciais" abaixo para o
+porquê de cada uma.
 
 ```
 WA_API_GLOBAL_ENCRYPTION_KEY=sua_chave_32_bytes_aqui
@@ -169,6 +170,12 @@ WEBHOOK_ERROR_QUEUE_NAME=disparazapi_dead_letter_webhooks
   como inválido e exige reconfiguração. Ou seja, gerar aqui não é conveniência:
   é perda de dado silenciosa a cada `restart`. Defina-a com um valor que você
   guarda (16, 24 ou 32 **bytes** — o AES não aceita outro tamanho).
+* `WA_API_GLOBAL_HMAC_KEY` — **obrigatória. Sem ela o processo NÃO SOBE**,
+  e nunca é gerada automaticamente (F156). Uma chave gerada no arranque não é
+  verificável por quem recebe o webhook: o valor nunca vai para o log e muda a
+  cada reinício, então o receptor não tem com o quê conferir a assinatura —
+  assinar com um segredo que ninguém pode conhecer é teatro de segurança.
+  Defina-a com um valor que o consumidor de webhooks também conheça.
 * `WA_API_ADMIN_TOKEN` — opcional. Quando ausente, um token aleatório de 32
   caracteres é gerado com `crypto/rand` e gravado no arquivo `admin_token`
   dentro do diretório de dados, com permissão `0600`. O **valor não vai para o
@@ -178,7 +185,7 @@ WEBHOOK_ERROR_QUEUE_NAME=disparazapi_dead_letter_webhooks
   continua sendo gerado e a chave de encriptação não.
 
 #### Segurança de Webhooks
-* `WA_API_GLOBAL_HMAC_KEY`: Chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)
+* `WA_API_GLOBAL_HMAC_KEY`: **obrigatória** — chave HMAC global para assinatura de webhooks (mínimo 32 caracteres)
 
 **Breaking change:** o envio de webhooks agora verifica o certificado TLS do destino por padrão (antes a verificação era sempre desabilitada). Se o seu receptor de webhook usa certificado self-signed, defina `WA_API_WEBHOOK_TLS_SKIP_VERIFY=true` para restaurar o comportamento antigo — um aviso é registrado no log de boot quando habilitado. Padrão: `false`.
 

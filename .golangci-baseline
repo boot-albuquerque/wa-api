@@ -74,7 +74,7 @@ max_complexity=50
 # `(*historySpy).RequestHistorySync` em handler_boundary_test.go marcadas
 # como unused — pre-existentes, reveladas pela mudanca de assinatura de
 # SendText que obrigou a tocar no ficheiro. max_complexity inalterado em 50.
-count=358
+count=575
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
