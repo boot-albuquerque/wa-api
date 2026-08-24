@@ -303,6 +303,7 @@ func initCustomHandlers(s *server) {
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
 	requestUnavailableMessageUC := chat.NewRequestUnavailableMessageUseCase(miscAdapter, jidResolver, logger)
 	archiveChatUC := chat.NewArchiveChatUseCase(miscAdapter, jidResolver, logger)
+	starMessageUC := chat.NewStarMessageUseCase(miscAdapter, jidResolver, logger)
 	setDisappearingTimerUC := chat.NewSetDisappearingTimerUseCase(miscAdapter, jidResolver, logger)
 	setDefaultDisappearingTimerUC := chat.NewSetDefaultDisappearingTimerUseCase(miscAdapter, logger)
 
@@ -329,6 +330,7 @@ func initCustomHandlers(s *server) {
 		ArchiveChat:                 handlers.NewArchiveChatHandler(archiveChatUC),
 		SetDisappearingTimer:        handlers.NewSetDisappearingTimerHandler(setDisappearingTimerUC),
 		SetDefaultDisappearingTimer: handlers.NewSetDefaultDisappearingTimerHandler(setDefaultDisappearingTimerUC),
+		StarMessage:                 handlers.NewStarMessageHandler(starMessageUC),
 	}
 
 	// Storage UseCases

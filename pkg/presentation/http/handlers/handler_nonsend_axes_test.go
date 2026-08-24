@@ -293,6 +293,22 @@ func nonSendAxisCases() []nonSendAxisCase {
 			},
 		},
 		{
+			nome:        "StarMessage",
+			rota:        "/message/star",
+			validBody:   `{"chat":"120363111111111111@g.us","sender":"5511999999999@s.whatsapp.net","message_id":"ABCDE12345","from_me":false,"star":true}`,
+			decodeCause: nonSendAxisDecodeCauseSentinel,
+			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
+				ms := &contractsfake.MessageStarrer{}
+				h := NewStarMessageHandler(chat.NewStarMessageUseCase(ms, &contractsfake.JIDResolver{}, silentLogger{}))
+				rec, recs := nonSendAxisServe(t, nonSendAxisRouter("/message/star", h), "/message/star", body, mut)
+				out := nonSendAxisOutcome{rec: rec, recs: recs, portCalls: len(ms.StarMessageCalls)}
+				if out.portCalls > 0 {
+					out.portTxtID = ms.StarMessageCalls[0].TxtID
+				}
+				return out
+			},
+		},
+		{
 			// POST /user/privacy chega pelo mesmo HandlerFunc que
 			// wiring_routes.go:161-167 registra para GET e POST; o
 			// roteador do caso reproduz esse desvio por metodo em vez de
@@ -347,14 +363,14 @@ func nonSendAxisCases() []nonSendAxisCase {
 }
 
 // nonSendAxisCasesChecked devolve a tabela depois de verificar que ela ainda
-// cobre as CATORZE capabilities do CAP-19, na ordem, por NOME. Uma capability
+// cobre as capabilities do CAP-19+, na ordem, por NOME. Uma capability
 // removida em silencio levaria os cinco eixos junto, sem nenhuma falha.
 func nonSendAxisCasesChecked(t *testing.T) []nonSendAxisCase {
 	t.Helper()
 	casos := nonSendAxisCases()
 	want := []string{
 		"SendPresence", "SubscribePresence", "ChatPresence", "MarkRead", "React",
-		"RejectCall", "RequestUnavailableMessage", "ArchiveChat", "SetPrivacySetting",
+		"RejectCall", "RequestUnavailableMessage", "ArchiveChat", "StarMessage", "SetPrivacySetting",
 		"DownloadImage", "DownloadVideo", "DownloadAudio", "DownloadDocument", "DownloadSticker",
 	}
 	if len(casos) != len(want) {

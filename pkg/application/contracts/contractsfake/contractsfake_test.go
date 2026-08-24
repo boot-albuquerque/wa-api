@@ -1132,3 +1132,24 @@ func TestProfileAccessProvider(t *testing.T) {
 		t.Errorf("calls = %+v", f.ProfileAccessCalls)
 	}
 }
+
+func TestMessageStarrer(t *testing.T) {
+	f := &contractsfake.MessageStarrer{}
+	ctx := context.Background()
+
+	if err := f.StarMessage(ctx, "u1", "c@g.us", "s@s.whatsapp.net", "msg1", false, true); err != nil {
+		t.Errorf("StarMessage = %v", err)
+	}
+	if len(f.StarMessageCalls) != 1 {
+		t.Fatalf("StarMessageCalls = %d, want 1", len(f.StarMessageCalls))
+	}
+	c := f.StarMessageCalls[0]
+	if c.Chat != "c@g.us" || c.Sender != "s@s.whatsapp.net" || c.MessageID != "msg1" || c.FromMe != false || c.Star != true {
+		t.Errorf("StarMessageCalls[0] = %+v", c)
+	}
+
+	f.StarMessageFunc = func(context.Context, string, domain.JID, domain.JID, string, bool, bool) error { return errBoom }
+	if err := f.StarMessage(ctx, "u1", "", "", "", false, false); !errors.Is(err, errBoom) {
+		t.Errorf("StarMessageFunc = %v", err)
+	}
+}

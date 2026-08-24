@@ -184,6 +184,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/chat/ephemeral", customChain.Then(ch.Misc.SetDisappearingTimer), "POST")
 	registry.Register("/chat/ephemeral/default", customChain.Then(ch.Misc.SetDefaultDisappearingTimer), "POST")
 	registry.Register("/chat/request-unavailable-message", customChain.Then(ch.Misc.RequestUnavailableMessage), "POST")
+	registry.Register("/message/star", customChain.Then(ch.Misc.StarMessage), "POST")
 	registry.Register("/user/privacy", customChain.Then(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
 			ch.Misc.GetPrivacySettings.ServeHTTP(w, r)

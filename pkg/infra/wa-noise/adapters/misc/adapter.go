@@ -57,6 +57,27 @@ func (a *MiscAdapter) ArchiveChat(ctx context.Context, txtID string, chat domain
 	return client.SendAppState(ctxWithTimeout, appstate.BuildArchive(jid, archive, time.Time{}, nil))
 }
 
+// StarMessage stars or unstars a message via app-state patch.
+func (a *MiscAdapter) StarMessage(ctx context.Context, txtID string, chat, sender domain.JID, messageID string, fromMe, star bool) error {
+	client, err := a.Client(txtID)
+	if err != nil {
+		return err
+	}
+	chatJID, err := wajid.ToJID(chat)
+	if err != nil {
+		return err
+	}
+	senderJID, err := wajid.ToJID(sender)
+	if err != nil {
+		return err
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+
+	return client.SendAppState(ctxWithTimeout, appstate.BuildStar(chatJID, senderJID, types.MessageID(messageID), fromMe, star))
+}
+
 // RejectCall rejeita uma chamada recebida.
 func (a *MiscAdapter) RejectCall(ctx context.Context, txtID string, from domain.JID, callID string) error {
 	client, err := a.Client(txtID)
@@ -178,6 +199,7 @@ var (
 	_ appport.NewsletterReader               = (*MiscAdapter)(nil)
 	_ appport.AppStateSyncer                 = (*MiscAdapter)(nil)
 	_ appport.DefaultDisappearingTimerSetter = (*MiscAdapter)(nil)
+	_ appport.MessageStarrer                 = (*MiscAdapter)(nil)
 )
 
 // --- Newsletters -------------------------------------------------------------

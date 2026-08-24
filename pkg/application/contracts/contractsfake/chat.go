@@ -608,3 +608,38 @@ func (f *NewsletterReader) SubscribeNewsletterLiveUpdates(ctx context.Context, t
 	}
 	return 0, nil
 }
+
+// --- MessageStarrer -------------------------------------------------------
+
+// MessageStarrerStarMessageCall records a call to StarMessage.
+type MessageStarrerStarMessageCall struct {
+	Ctx       context.Context
+	TxtID     string
+	Chat      domain.JID
+	Sender    domain.JID
+	MessageID string
+	FromMe    bool
+	Star      bool
+}
+
+// MessageStarrer is the fake of port.MessageStarrer.
+type MessageStarrer struct {
+	SessionGuard
+
+	StarMessageFunc  func(ctx context.Context, txtID string, chat, sender domain.JID, messageID string, fromMe, star bool) error
+	StarMessageCalls []MessageStarrerStarMessageCall
+}
+
+var _ port.MessageStarrer = (*MessageStarrer)(nil)
+
+// StarMessage implements port.MessageStarrer.
+func (f *MessageStarrer) StarMessage(ctx context.Context, txtID string, chat, sender domain.JID, messageID string, fromMe, star bool) error {
+	f.StarMessageCalls = append(f.StarMessageCalls, MessageStarrerStarMessageCall{
+		Ctx: ctx, TxtID: txtID, Chat: chat, Sender: sender,
+		MessageID: messageID, FromMe: fromMe, Star: star,
+	})
+	if f.StarMessageFunc != nil {
+		return f.StarMessageFunc(ctx, txtID, chat, sender, messageID, fromMe, star)
+	}
+	return nil
+}

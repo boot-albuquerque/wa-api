@@ -27,6 +27,7 @@ type MiscHandlers struct {
 	ArchiveChat                 *ArchiveChatHandler
 	SetDisappearingTimer        *SetDisappearingTimerHandler
 	SetDefaultDisappearingTimer *SetDefaultDisappearingTimerHandler
+	StarMessage                 *StarMessageHandler
 }
 
 // GetHealthHandler handles GET /health

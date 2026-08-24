@@ -196,6 +196,15 @@ type HistorySyncRequester interface {
 	RequestHistorySync(ctx context.Context, txtID string, anchor HistoryAnchor, count int) (string, error)
 }
 
+// MessageStarrer stars or unstars a message via app-state patch.
+type MessageStarrer interface {
+	SessionGuard
+
+	// StarMessage stars or unstars a single message identified by chat,
+	// sender, messageID and fromMe.
+	StarMessage(ctx context.Context, txtID string, chat, sender domain.JID, messageID string, fromMe, star bool) error
+}
+
 // HistoryAnchor identifica a mensagem a partir da qual se pede para trás.
 type HistoryAnchor struct {
 	ChatJID   domain.JID

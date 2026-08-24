@@ -34,6 +34,7 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.request-unavailable-message": {httpMethod: "POST", httpPath: "/chat/request-unavailable-message"},
 	"chat.ephemeral":                   {httpMethod: "POST", httpPath: "/chat/ephemeral"},
 	"chat.ephemeral.default":           {httpMethod: "POST", httpPath: "/chat/ephemeral/default"},
+	"message.star":                     {httpMethod: "POST", httpPath: "/message/star"},
 
 	"chat.download.image":    {httpMethod: "POST", httpPath: "/chat/downloadimage"},
 	"chat.download.video":    {httpMethod: "POST", httpPath: "/chat/downloadvideo"},
