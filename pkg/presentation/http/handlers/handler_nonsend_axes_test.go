@@ -395,15 +395,15 @@ func nonSendAxisCases() []nonSendAxisCase {
 }
 
 // nonSendAxisCasesChecked devolve a tabela depois de verificar que ela ainda
-// cobre as DEZASSEIS capabilities non-send, na ordem, por NOME. Uma capability
+// cobre as DEZASSETE capabilities non-send, na ordem, por NOME. Uma capability
 // removida em silencio levaria os cinco eixos junto, sem nenhuma falha.
 func nonSendAxisCasesChecked(t *testing.T) []nonSendAxisCase {
 	t.Helper()
 	casos := nonSendAxisCases()
 	want := []string{
 		"SendPresence", "SubscribePresence", "ChatPresence", "MarkRead", "React",
-		"RejectCall", "RequestUnavailableMessage", "MuteChat", "ArchiveChat", "StarMessage", "SetPrivacySetting",
-		"RejectCall", "RequestUnavailableMessage", "ArchiveChat", "PinChat", "SetPrivacySetting",
+		"RejectCall", "RequestUnavailableMessage", "MuteChat", "ArchiveChat", "StarMessage",
+		"PinChat", "SetPrivacySetting",
 		"DownloadImage", "DownloadVideo", "DownloadAudio", "DownloadDocument", "DownloadSticker",
 	}
 	if len(casos) != len(want) {
