@@ -655,3 +655,28 @@ func TestMuteChat(t *testing.T) {
 		}
 	})
 }
+
+// TestPinChat_DesafixarChegaAoAdapter trava a METADE que faltava.
+//
+// Descoberto por controlo negativo ao integrar a CAP-53: fixar `pin` em `true`
+// dentro do adapter — ou seja, tornar impossível desafixar — não fazia falhar
+// teste nenhum. A suíte só exercitava o caminho de fixar, e "desafixar" é
+// metade da capability.
+//
+// É o mesmo defeito que o CLAUDE.md descreve: três achados deste repositório
+// viviam atrás de suítes que só testavam um lado.
+func TestPinChat_DesafixarChegaAoAdapter(t *testing.T) {
+	cp := &contractsfake.ChatPinner{}
+
+	_, err := chat.NewPinChatUseCase(cp, &contractsfake.JIDResolver{}, &contractsfake.Logger{}).
+		Execute(context.Background(), userID, domain.PinChatRequest{Jid: "c@s.whatsapp.net", Pin: false})
+	if err != nil {
+		t.Fatalf("desafixar devolveu erro: %v", err)
+	}
+	if len(cp.PinChatCalls) != 1 {
+		t.Fatalf("PinChat chamada %d vez(es), quero 1", len(cp.PinChatCalls))
+	}
+	if got := cp.PinChatCalls[0].Pin; got != false {
+		t.Errorf("Pin = %v, quero false — desafixar não chega ao adapter", got)
+	}
+}
