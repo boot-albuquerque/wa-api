@@ -28,6 +28,12 @@ func (j JID) IsLID() bool { return hasSuffix(string(j), ServerLID) }
 // para o caminho de resolução de contacto.
 func (j JID) IsPN() bool { return hasSuffix(string(j), ServerPN) }
 
+// StatusBroadcastJID is the well-known destination for ephemeral status
+// stories (image, video, audio). Sending a message to this JID triggers
+// the broadcast-list resolution inside wa-noise (core/broadcast.go),
+// which fans the message out to contacts according to privacy settings.
+const StatusBroadcastJID JID = "status@broadcast"
+
 // hasSuffix evita importar "strings" no domínio por uma única chamada.
 func hasSuffix(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix

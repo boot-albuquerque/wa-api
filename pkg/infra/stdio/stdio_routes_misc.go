@@ -4,10 +4,13 @@ package stdio
 // seria pior do que juntá-los aqui.
 
 var miscStaticRoutes = map[string]staticRoute{
-	"health":          {httpMethod: "GET", httpPath: "/health"},
-	"status.set.text": {httpMethod: "POST", httpPath: "/status/set/text"},
-	"call.reject":     {httpMethod: "POST", httpPath: "/call/reject"},
-	"newsletter.list": {httpMethod: "GET", httpPath: "/newsletter/list"},
+	"health":           {httpMethod: "GET", httpPath: "/health"},
+	"status.set.text":  {httpMethod: "POST", httpPath: "/status/set/text"},
+	"status.set.image": {httpMethod: "POST", httpPath: "/status/set/image"},
+	"status.set.video": {httpMethod: "POST", httpPath: "/status/set/video"},
+	"status.set.audio": {httpMethod: "POST", httpPath: "/status/set/audio"},
+	"call.reject":      {httpMethod: "POST", httpPath: "/call/reject"},
+	"newsletter.list":  {httpMethod: "GET", httpPath: "/newsletter/list"},
 
 	// As onze operações de newsletter acrescentadas em 2026-08-20. Ficam aqui,
 	// e não num ficheiro próprio, porque partilham o use case e a forma do

@@ -30,6 +30,7 @@ import (
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/application/usecase/profile"
 	"wa-api/pkg/application/usecase/session"
+	statusuc "wa-api/pkg/application/usecase/status"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/application/usecase/user"
 )
@@ -64,6 +65,9 @@ type SessionHandlers struct {
 	PairPhone          *handlers.PairPhoneHandler
 	GetStatus          *handlers.GetStatusHandler
 	SetStatusMessage   *handlers.SetStatusMessageHandler
+	PublishStatusImage *handlers.PublishStatusImageHandler
+	PublishStatusVideo *handlers.PublishStatusVideoHandler
+	PublishStatusAudio *handlers.PublishStatusAudioHandler
 	RequestHistorySync *handlers.RequestHistorySyncHandler
 	// SyncContactRoster is additive: a genuinely separate capability from
 	// RequestHistorySync — see handler_session.go.
@@ -182,6 +186,11 @@ func initCustomHandlers(s *server) {
 	sendEditMessageUC := message.NewSendEditMessageUseCase(chatMessenger, jidResolver, logger)
 	sendTemplateUC := message.NewSendTemplateUseCase(chatMessenger, jidResolver, logger)
 
+	// Status media UseCases
+	publishStatusImageUC := statusuc.NewPublishStatusImageUseCase(chatMessenger, mediaFetcher, logger)
+	publishStatusVideoUC := statusuc.NewPublishStatusVideoUseCase(chatMessenger, mediaFetcher, logger)
+	publishStatusAudioUC := statusuc.NewPublishStatusAudioUseCase(chatMessenger, mediaFetcher, logger)
+
 	// Handlers
 	profileHandler := customhttp.NewProfileHandler(getProfileUC)
 	// userAdapter satisfaz ContactDirectory E PrivacyManager; e' o mesmo
@@ -215,6 +224,9 @@ func initCustomHandlers(s *server) {
 		PairPhone:          handlers.NewPairPhoneHandler(pairPhoneUC),
 		GetStatus:          handlers.NewGetStatusHandler(getStatusUC),
 		SetStatusMessage:   handlers.NewSetStatusMessageHandler(setStatusMessageUC),
+		PublishStatusImage: handlers.NewPublishStatusImageHandler(publishStatusImageUC),
+		PublishStatusVideo: handlers.NewPublishStatusVideoHandler(publishStatusVideoUC),
+		PublishStatusAudio: handlers.NewPublishStatusAudioHandler(publishStatusAudioUC),
 		RequestHistorySync: handlers.NewRequestHistorySyncHandler(requestHistorySyncUC),
 		SyncContactRoster:  handlers.NewSyncContactRosterHandler(syncContactRosterUC),
 		WS:                 handlers.NewWSHandler(clientManager),

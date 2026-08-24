@@ -78,6 +78,55 @@ type SetStatusMessageResult struct {
 	Details string `json:"details"`
 }
 
+// PublishStatusImageRequest is the payload for POST /status/set/image.
+// Image is the same union as SendImageRequest.Image: data URI or http(s) URL.
+type PublishStatusImageRequest struct {
+	Image         string `json:"Image"`
+	Caption       string `json:"Caption,omitempty"`
+	ID            string `json:"Id,omitempty"`
+	MimeType      string `json:"MimeType,omitempty"`
+	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
+}
+
+// PublishStatusImageResult is the result of POST /status/set/image.
+type PublishStatusImageResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}
+
+// PublishStatusVideoRequest is the payload for POST /status/set/video.
+// Video is the same union as SendVideoRequest.Video: data URI or http(s) URL.
+type PublishStatusVideoRequest struct {
+	Video         string `json:"Video"`
+	Caption       string `json:"Caption,omitempty"`
+	ID            string `json:"Id,omitempty"`
+	MimeType      string `json:"MimeType,omitempty"`
+	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
+}
+
+// PublishStatusVideoResult is the result of POST /status/set/video.
+type PublishStatusVideoResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}
+
+// PublishStatusAudioRequest is the payload for POST /status/set/audio.
+// Audio is the same union as SendAudioRequest.Audio: data URI or http(s) URL.
+type PublishStatusAudioRequest struct {
+	Audio    string `json:"Audio"`
+	ID       string `json:"Id,omitempty"`
+	MimeType string `json:"mimetype,omitempty"`
+}
+
+// PublishStatusAudioResult is the result of POST /status/set/audio.
+type PublishStatusAudioResult struct {
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp,omitempty"`
+	Status    string `json:"status"`
+}
+
 // RequestHistorySyncRequest representa o payload de requisição de sincronização de histórico.
 type RequestHistorySyncRequest struct {
 	Count              int    `json:"count,omitempty"`

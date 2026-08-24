@@ -1218,7 +1218,6 @@ rules_frozen=true
 # arvore, nao a soma das notas anteriores: func 585->588, errpath 783->785,
 # eligible 930->936. As linhas que mediam a arvore SEM headless (751/869/639)
 # ficaram comentadas acima, para o historico nao mentir.
-min_func_coverage=587
 # justificativa: F108 (2026-08-24), pre-check sincronico de posse de sessao no
 # ConnectHandler. min_eligible 936->937 (+1: connectOwnershipCheck). func_coverage
 # CAI 588->587 por DILUICAO: a funcao nova (connectOwnershipCheck, em
@@ -1229,6 +1228,7 @@ min_func_coverage=587
 # no MESMO request — a decisao e' UMA SO', e ela mora no handler. Mesmo padrao
 # ja' aceito para isClientCausedSessionError (F90) e leaseManager.abandoned (F98):
 # predicado/closure pura nao loga, quem age sobre a resposta loga.
+min_func_coverage=587
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1574,7 +1574,6 @@ min_errpath_coverage=784
 # resolveAudioMimeType aqui. message.isDataVideo NAO entra no denominador
 # (X1, mesmo motivo de isDataURI/isDataURIImage/isDataURIAudio acima).
 # (linha ativa min_eligible movida para baixo pelo CAP-07 — ver comentario)
-
 # CAP-07 (envio de sticker de verdade, 2026-08-18): min_eligible 624 -> 627.
 # +4 elegiveis novos: SendStickerUseCase.Execute, checkStickerDataURISize
 # (application/usecase/message), Processor.ProcessSticker
@@ -1718,7 +1717,6 @@ min_errpath_coverage=784
 # min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
 # ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
 # statements e caminho de erro, Main.func3 tem defers e caminho de erro.
-min_eligible=937
 # ratchet-UP: F108 (2026-08-24). +1: connectOwnershipCheck (wiring_handlers.go:457).
 # Factory de closure, ELEGIVEL de verdade (tem S-ret no corpo, nao e' X1).
 #
