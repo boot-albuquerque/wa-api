@@ -30,6 +30,7 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.react":                       {httpMethod: "POST", httpPath: "/chat/react"},
 	"chat.archive":                     {httpMethod: "POST", httpPath: "/chat/archive"},
 	"chat.pin":                         {httpMethod: "POST", httpPath: "/chat/pin"},
+	"chat.mute":                        {httpMethod: "POST", httpPath: "/chat/mute"},
 	"chat.presence":                    {httpMethod: "POST", httpPath: "/chat/presence"},
 	"chat.markread":                    {httpMethod: "POST", httpPath: "/chat/markread"},
 	"chat.request-unavailable-message": {httpMethod: "POST", httpPath: "/chat/request-unavailable-message"},
