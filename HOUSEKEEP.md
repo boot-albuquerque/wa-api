@@ -24783,4 +24783,49 @@ ver se um `FetchAppState` forçado converge, e se o `mismatching LTHash` vem
 de patch que nós escrevemos ou de estado pré-existente. Não se toca sem medir
 primeiro.
 
+
+### Parte (2) CORRIGIDA e VERIFICADA EM CAMPO 2026-08-24
+
+`pkg/infra/wa-noise/errmap/appstate.go`, `ClassifyAppState`. **Dois guardas**,
+não um: `errors.Is(err, appstatesync.ErrUpdate)` restringe a erros de
+app-state, e só então o `code="409"` decide. A comparação de texto decide
+apenas o CÓDIGO, nunca se é erro de app-state.
+
+O comentário da função diz de onde a substring nasce
+(`appstatesync/send.go:handleSendError`, via `waBinary.Node.XMLString()`), que
+é frágil por construção, e qual a alternativa descartada — exportar sentinela
+do fork, recusada pelo ADR-001.
+
+**Verificação em campo**, mesmo servidor, três rotas em sequência:
+
+```
+mute   500 -> 409   {"code":"app_state_conflict",
+                     "message":"app state conflict: the local state is out of sync with the server"}
+star   500 -> 409   idem
+pin    200 -> 200   {"success":true,"message":"Chat unpinned"}
+```
+
+O `pin` não regrediu, e o `pin:false` desafixou — a metade que nenhum teste
+cobria até esta série.
+
+**Controlo negativo EXECUTADO** por mim ao integrar, sobre o modo de falha mais
+provável desta correção (tudo virar 409):
+
+```
+--- FAIL: TestClassifyAppState_NonConflictStaysUnchanged
+    a non-conflict app state error was classified as AppError (conflict):
+    only the 409 conflict should be translated
+--- FAIL: TestClassifyAppState_BareErrUpdateIsNotConflict
+```
+
+### O que CONTINUA aberto — parte (1)
+
+A dessincronização do `regular_high`: `failed to verify patch v64: mismatching
+LTHash`. O 409 agora é reportado com honestidade, **mas o conflito continua a
+acontecer** — `mute` e `star` seguem sem funcionar nestas duas sessões.
+
+Próximo passo, quando for a vez: medir se um `FetchAppState` forçado converge,
+e se o hash divergente vem de patch que NÓS escrevemos ou de estado
+pré-existente. Não implementar reconciliação nova antes de saber isso.
+
 <!-- f-status: aberto -->
