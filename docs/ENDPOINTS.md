@@ -230,26 +230,23 @@ API oficial. Quem precisa de bot em grupo não tem alternativa oficial.
 
 ---
 
-## O que falta
+## O que falta — a lista completa
 
-### Falta a rota, o protocolo já suporta
+Seis itens, e mais nada. Todo o resto da superfície está entregue.
 
-Nada. As três lacunas identificadas no `CAPACIDADES.md` foram fechadas nas
-CAP-48, CAP-49, CAP-50 e CAP-51.
+### Falta no próprio protocolo (4)
 
-### Falta no próprio protocolo (fork)
+Nenhum destes existe em `internal/wa-noise/core`. Não é lacuna de rota: o fork
+não tem o primitivo, e implementá-los é trabalho de protocolo.
 
-Nenhum destes existe em `internal/wa-noise/core`; teriam de ser implementados
-de raiz:
+| capacidade | símbolo ausente | nota |
+|---|---|---|
+| **Fixar mensagem** | `PinInChat` | Baileys tem; nós teríamos de construir |
+| **Favoritar (star)** | `StarMessage` | é estado local do cliente; confirmar se viaja no wire |
+| **Silenciar conversa** | `MuteChat` | provavelmente app-state, não mensagem — outro mecanismo |
+| **Comunidades** | uma única menção no fork | praticamente ausente; exige levantamento próprio |
 
-| capacidade | símbolo ausente |
-|---|---|
-| Fixar mensagem | `PinInChat` |
-| Favoritar (star) | `StarMessage` |
-| Silenciar conversa | `MuteChat` |
-| Comunidades | uma única menção no fork |
-
-Reproduzir:
+Reproduzir a ausência:
 
 ```
 for k in PinInChat StarMessage MuteChat Community; do
@@ -257,31 +254,42 @@ for k in PinInChat StarMessage MuteChat Community; do
 done
 ```
 
-### Decidido não fazer
+### Decidido não fazer, com medição em campo (2)
 
 | item | veredito |
 |---|---|
-| `ALBUM_IMAGE` | F221 — três variantes recusadas pelo cliente; o álbum é `MessageAssociation`/`MEDIA_ALBUM`, outro mecanismo |
-| PIX / pagamento | F213 — `pix_static_code` recusado pelo cliente, e mesmo a renderizar **não processa pagamento** |
-| Catálogo, produtos, Flows | superfície exclusiva da Cloud API com WABA |
+| **`ALBUM_IMAGE`** (F221) | três variantes enviadas — com botões, sem botões, `messageVersion=2` — **todas recusadas pelo cliente** nos dois lados. Não é um enum de carrossel: o álbum é `MessageAssociation` com `MEDIA_ALBUM` e `albumParentKey`, mensagens separadas ligadas por chave de pai. Outro mecanismo. |
+| **PIX / pagamento** (F213) | `payment_info` + `pix_static_code` **recusado pelo cliente** em conta pessoal. E mesmo a renderizar, `pix_static_code` **não processa pagamento** — mostra os dados e a pessoa paga à mão. Confirmação automática só na Cloud API com WABA. |
 
----
+Os dois foram refutados por **medição em campo com fotografia**, não por leitura.
+Reabrir só com dado novo.
+
+### Fora de alcance
+
+Catálogo, produtos e Flows são superfície exclusiva da Cloud API com WABA.
 
 ## Verificação em campo
 
 Rota registada e gate verde **não provam** que o cliente desenha a mensagem.
-Neste projeto, três capabilities devolveram `200` com `message_id` e só duas
-renderizaram (carrossel sim, álbum não, PIX não).
+Neste projeto isso divergiu três vezes: carrossel, álbum e PIX devolveram todos
+`200` com `message_id`, e só o carrossel renderizou.
 
-| capability | gates | fotografado |
+| capability | gates | funcional |
 |---|---|---|
-| Botões, lista | ✅ | ✅ |
-| Carrossel HSCROLL | ✅ | ✅ 6 direções, iOS e Android |
-| Reply-to | ✅ | ✅ |
-| Menções | ✅ | ❌ sondas enviadas, sem foto |
-| Encaminhar | ✅ | ❌ |
-| Votar em enquete | ✅ | ❌ |
-| Mensagens temporárias | ✅ | ❌ |
-| Status com média | ✅ | ❌ |
+| Botões, lista | ✅ | ✅ fotografado |
+| Carrossel HSCROLL | ✅ | ✅ fotografado, 6 direções, iOS e Android |
+| Reply-to | ✅ | ✅ fotografado, com par de controlo (F222) |
+| Menções | ✅ | ✅ confirmado pelo utilizador |
+| Encaminhar | ✅ | ✅ confirmado pelo utilizador |
+| Votar em enquete | ✅ | ✅ confirmado pelo utilizador |
+| Mensagens temporárias | ✅ | ✅ confirmado pelo utilizador |
+| Status com média | ✅ | ✅ confirmado pelo utilizador |
 
-**Cinco capabilities integradas sem prova de renderização.**
+**Toda a superfície de envio está funcional.**
+
+Nota de proveniência, porque a distinção custou caro a este projeto: as três
+primeiras linhas foram medidas por fotografia do telemóvel durante a
+implementação, com par de controlo onde havia hipótese a refutar. As cinco
+últimas são **confirmação do utilizador** (2026-08-24), não medição minha —
+registado assim para que ninguém as leia como prova de campo que eu não
+recolhi.

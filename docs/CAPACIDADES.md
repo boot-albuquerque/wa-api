@@ -2,6 +2,14 @@
 
 **Data do levantamento**: 2026-08-23, contra `feature/wa-noise` em `4ea73be`.
 
+
+> **DESATUALIZADO desde 2026-08-24.** As lacunas que este documento lista como
+> "falta a rota, o protocolo já suporta" foram todas fechadas (CAP-48 voto em
+> enquete, CAP-49 encaminhar, CAP-50 mensagens temporárias, CAP-51 status com
+> média). O inventário atual, com os 115 endpoints e a lista definitiva do que
+> falta, está em **`docs/ENDPOINTS.md`**. Este ficheiro fica pelo registo do
+> método e das medições que o produziram.
+
 ## Como ler este documento
 
 As colunas **wa-api** e **protocolo** são MEDIDAS: vêm de contar rotas
