@@ -23919,7 +23919,55 @@ sintoma voltar, o log dará o `from <LID>:<dispositivo>`, que é suficiente para
 comparar com os nossos dispositivos e decidir; a instrumentação só seria
 precisa se essa comparação ficasse ambígua.
 
-<!-- f-status: aberto -->
+### CORREÇÃO 2026-08-24
+
+Duas alterações em `pkg/bootstrap/eventhandler_message.go:582`
+(`handleUndecryptableMessage`):
+
+**1. Observabilidade permanente.** O log passou de `Str("info", SourceString())`
+para incluir `is_from_me`, `sender`, `is_unavailable` e `decrypt_fail_mode`.
+Isto não é instrumentação temporária — é contexto que devia existir. Um
+`UndecryptableMessage` sem estes campos é um evento inútil no webhook: não
+permite classificar a ocorrência sem reproduzir.
+
+**2. Filtro conservador por `IsFromMe`.** Se `evt.Info.IsFromMe` for true, o
+handler retorna antes de pôr `st.dowebhook = 1`. O filtro é conservador por
+desenho: se a hipótese estiver errada e os ecos falhados NÃO tiverem
+`IsFromMe == true`, o filtro não apanha nada — e isso é o comportamento SEGURO,
+porque nenhum sinal legítimo de terceiro é silenciado.
+
+**Testes que travam** (`eventhandler_undecryptable_test.go`):
+
+- `TestUndecryptable_ThirdPartyReachesWebhook`: um `UndecryptableMessage` com
+  `IsFromMe == false` (baseado no contra-exemplo real de campo —
+  `96465066184854@lid` em `status@broadcast`, erro de sender key) TEM de chegar
+  ao webhook (`dowebhook == 1`).
+- `TestUndecryptable_SelfEchoSuppressed`: um `UndecryptableMessage` com
+  `IsFromMe == true` NÃO dispara webhook (`dowebhook == 0`).
+
+**Controlo negativo EXECUTADO** — invertido o filtro (`!evt.Info.IsFromMe`):
+
+```
+--- FAIL: TestUndecryptable_ThirdPartyReachesWebhook (0.00s)
+    eventhandler_undecryptable_test.go:38: dowebhook = 0, want 1 — third-party UndecryptableMessage must reach the webhook (F215)
+--- FAIL: TestUndecryptable_SelfEchoSuppressed (0.00s)
+    eventhandler_undecryptable_test.go:63: dowebhook = 1, want 0 — self-echo UndecryptableMessage must NOT reach the webhook (F215)
+```
+
+Os dois falham com o filtro invertido: o de terceiro porque é silenciado, o de
+eco próprio porque chega ao webhook. A inversão é exactamente o que o filtro
+existe para impedir.
+
+**O que ficou PROVADO e o que NÃO**: o filtro está implementado e testado, mas a
+hipótese de que ele apanha o caso real (que os ecos falhados medidos em campo
+têm `IsFromMe == true`) continua por confirmar até o sintoma reaparecer. A
+observabilidade acrescentada permitirá classificar a próxima ocorrência sem
+reproduzir.
+
+**Status**: corrigido — filtro defensivo e observabilidade aplicados. A eficácia
+em campo depende da confirmação da hipótese `IsFromMe`, que permanece aberta.
+
+<!-- f-status: corrigido -->
 
 ## F217 — iOS NÃO desenha o `Header.Title` do cartão de carrossel; Android desenha
 

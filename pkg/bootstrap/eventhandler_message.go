@@ -581,8 +581,25 @@ func (evh *UserEventHandler) handleReceipt(evt *events.Receipt, st *eventState) 
 
 func (evh *UserEventHandler) handleUndecryptableMessage(evt *events.UndecryptableMessage, st *eventState) {
 	st.postmap["type"] = "UndecryptableMessage"
+
+	log.Warn().
+		Str("info", evt.Info.SourceString()).
+		Bool("is_from_me", evt.Info.IsFromMe).
+		Str("sender", evt.Info.Sender.String()).
+		Bool("is_unavailable", evt.IsUnavailable).
+		Str("decrypt_fail_mode", string(evt.DecryptFailMode)).
+		Msg("Undecryptable message received")
+
+	// F215: a device never holds a Signal session with itself, so our own
+	// echoes always fail to decrypt. Filtering only IsFromMe is conservative
+	// by design — if the hypothesis is wrong and self-echoes do NOT carry
+	// IsFromMe, this filter catches nothing, which is the SAFE outcome:
+	// no legitimate third-party signal is ever silenced.
+	if evt.Info.IsFromMe {
+		return
+	}
+
 	st.dowebhook = 1
-	log.Warn().Str("info", evt.Info.SourceString()).Msg("Undecryptable message received")
 }
 
 func (evh *UserEventHandler) handleMediaRetry(evt *events.MediaRetry, st *eventState) {
