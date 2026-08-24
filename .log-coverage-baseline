@@ -1213,7 +1213,12 @@ rules_frozen=true
 # adaptador headless passou a implementa-lo sobre capabilities/poll.Vote, entao
 # os numeros abaixo sao a medicao da arvore com as DUAS coisas dentro — nao a
 # soma aritmetica das duas notas acima, que descrevem cada metade isolada.
-min_func_coverage=585
+# FUSAO 2026-08-24: paridade wa-noise <-> macbook-lucas. A arvore passou a ter
+# a stack headless E as CAP-49/50. Os tres numeros abaixo sao a MEDICAO desta
+# arvore, nao a soma das notas anteriores: func 585->588, errpath 783->785,
+# eligible 930->936. As linhas que mediam a arvore SEM headless (751/869/639)
+# ficaram comentadas acima, para o historico nao mentir.
+min_func_coverage=588
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1226,7 +1231,7 @@ min_func_coverage=585
 #   handlers.SendForwardHandler.ServeHTTP (coberta por hlog). covered SOBE
 #   474->476 (+2). eligible SOBE 633->635 (+2). Ambas elegiveis nascem
 #   cobertas; func_coverage sobe porque covered/eligible aumenta.
-min_func_coverage=751
+# (removida na fusao: media a arvore SEM a stack headless) min_func_coverage=751
 # justificativa: ADR-0005 D2, guarda de posse no caminho de EXECUCAO
 # (2026-08-08). Fecha um buraco achado por MEDICAO, nao por revisao: o filtro
 # cobria so' o connectOnStartup, entao sessao conectada pela API — o
@@ -1447,7 +1452,7 @@ min_func_coverage=751
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=783
+min_errpath_coverage=785
 #
 # CAP-48 (2026-08-23): errpath DESCE 870->868 (1138/1308 -> 1150/1325).
 # +17 caminhos de saida no denominador, +12 cobertos. O percentual cai porque
@@ -1459,7 +1464,7 @@ min_errpath_coverage=783
 # cobertura: nenhum caminho existente perdeu log; os 5 novos caminhos seguem
 # a convencao do projeto, e o handler os cobre.
 # (linha duplicada removida na composicao das duas notas: min_errpath_coverage=868)
-min_errpath_coverage=869
+# (removida na fusao: media a arvore SEM a stack headless) min_errpath_coverage=869
 # +1 (539->540): aliasarParaLID, na correcao da F84 pos-pareamento. Loga em
 # Warn quando o mapa LID nao vem e degrada para a tabela original.
 # +2 (540->542): dispatchLimiter.Go e dispatchConcurrencyConfigurada, o teto
@@ -1697,7 +1702,7 @@ min_errpath_coverage=869
 # min_func_coverage acima: trimMessageSecrets e Main.func3. Ambas sao
 # ELEGIVEIS de verdade (nao so' "novas"): trimMessageSecrets tem 8
 # statements e caminho de erro, Main.func3 tem defers e caminho de erro.
-min_eligible=930
+min_eligible=936
 #
 # CAP-48 (2026-08-23): min_eligible SOBE 631->633 (+2). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute e
@@ -1711,7 +1716,7 @@ min_eligible=930
 #   handlers.SendForwardHandler.ServeHTTP — ambas elegiveis de verdade
 #   (multiplos statements e caminhos de saida de tipo error). O adapter
 #   SendText ja existia; nenhuma funcao nova nele.
-min_eligible=639
+# (removida na fusao: media a arvore SEM a stack headless) min_eligible=639
 # F187/F184 (2026-08-20): max_exempt_annotations 0 -> 1. O eligible NAO muda:
 # a isencao TIRA classifyMessage do conjunto elegivel, entao o total volta ao que
 # era. Eu tinha subido para 677 antes de medir, e o gate corrigiu-me.
