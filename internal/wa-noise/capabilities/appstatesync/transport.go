@@ -69,6 +69,8 @@ type Transport interface {
 	EmitEventsOnFullSync() bool
 	// DebugLogs espelha Client.AppStateDebugLogs.
 	DebugLogs() bool
+	// StrictSnapshotMAC espelha Client.StrictAppStateSnapshotMAC.
+	StrictSnapshotMAC() bool
 	// StoreNCTSalt persiste o salt de NCT vindo de uma mutacao.
 	StoreNCTSalt(ctx context.Context, salt []byte) error
 	// ClearNCTSalt apaga o salt de NCT.

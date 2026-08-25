@@ -24,8 +24,9 @@ type fakeTransport struct {
 	proc  *appstate.Processor
 	state State
 
-	emitOnFullSync bool
-	debugLogs      bool
+	emitOnFullSync    bool
+	debugLogs         bool
+	strictSnapshotMAC bool
 
 	// iq responde a cada SendIQ. Se iqErr for nao-nil, e' devolvido no lugar.
 	iq     *waBinary.Node
@@ -62,6 +63,7 @@ func (f *fakeTransport) State() *State              { return &f.state }
 func (f *fakeTransport) Log() waLog.Logger          { return waLog.Noop }
 func (f *fakeTransport) EmitEventsOnFullSync() bool { return f.emitOnFullSync }
 func (f *fakeTransport) DebugLogs() bool            { return f.debugLogs }
+func (f *fakeTransport) StrictSnapshotMAC() bool    { return f.strictSnapshotMAC }
 
 func (f *fakeTransport) DispatchEvent(evt any) bool {
 	f.mu.Lock()

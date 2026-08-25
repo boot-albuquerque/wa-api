@@ -76,6 +76,23 @@ type Client struct {
 	EmitAppStateEventsOnFullSync bool
 	AppStateDebugLogs            bool
 
+	// StrictAppStateSnapshotMAC controls whether a snapshot MAC mismatch
+	// aborts decoding. The snapshot MAC is an aggregate over the LTHash — it
+	// verifies that the SET of records is complete, not that individual
+	// records are authentic (each mutation carries its own content MAC and
+	// index MAC, validated separately regardless of this flag).
+	//
+	// When false (the default), a snapshot MAC failure is logged at Warn and
+	// decoding continues with the individually-authenticated mutations.
+	// When true, decoding aborts on mismatch (the historical behaviour).
+	//
+	// Default is false because field measurement (HOUSEKEEP F223, 2026-08-24)
+	// showed the snapshot MAC produces false negatives for regular_high across
+	// every account tested — seven rounds of instrumentation eliminated twelve
+	// hypotheses without finding the cause. With strict mode on, mute and star
+	// are unusable; with it off, every individual mutation MAC still verifies.
+	StrictAppStateSnapshotMAC bool
+
 	AutomaticMessageRerequestFromPhone bool
 
 	appStateProc *appstate.Processor

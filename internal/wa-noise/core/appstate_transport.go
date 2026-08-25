@@ -86,6 +86,10 @@ func (t appStateTransport) DebugLogs() bool {
 	return t.cli.AppStateDebugLogs
 }
 
+func (t appStateTransport) StrictSnapshotMAC() bool {
+	return t.cli.StrictAppStateSnapshotMAC
+}
+
 func (t appStateTransport) StoreNCTSalt(ctx context.Context, salt []byte) error {
 	return t.cli.storeNCTSalt(ctx, salt)
 }

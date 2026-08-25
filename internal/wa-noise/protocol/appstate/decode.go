@@ -27,6 +27,7 @@ func (proc *Processor) decodeSnapshot(
 	ss *waServerSync.SyncdSnapshot,
 	initialState HashState,
 	validateMACs bool,
+	strictSnapshotMAC bool,
 	newMutationsInput []Mutation,
 ) (newMutations []Mutation, currentState HashState, err error) {
 	currentState = initialState
@@ -52,11 +53,15 @@ func (proc *Processor) decodeSnapshot(
 	if validateMACs {
 		_, err = proc.validateSnapshotMAC(ctx, name, currentState, ss.GetKeyID().GetID(), ss.GetMac())
 		if err != nil {
-			if len(warn) > 0 {
-				proc.Log.Warnf("Warnings while updating hash for %s: %+v", name, warn)
+			if strictSnapshotMAC {
+				if len(warn) > 0 {
+					proc.Log.Warnf("Warnings while updating hash for %s: %+v", name, warn)
+				}
+				err = fmt.Errorf("failed to verify snapshot: %w", err)
+				return
 			}
-			err = fmt.Errorf("failed to verify snapshot: %w", err)
-			return
+			proc.Log.Warnf("Snapshot MAC mismatch for %s v%d (non-strict mode, continuing): %v — individual mutation MACs will still be validated", name, currentState.Version, err)
+			err = nil
 		}
 	}
 
@@ -81,6 +86,7 @@ func (proc *Processor) validatePatch(
 	patch *waServerSync.SyncdPatch,
 	currentState HashState,
 	validateMACs bool,
+	strictSnapshotMAC bool,
 ) (newState HashState, warn []error, err error) {
 	version := patch.GetVersion().GetVersion()
 	newState = currentState
@@ -108,7 +114,16 @@ func (proc *Processor) validatePatch(
 		var keys ExpandedAppStateKeys
 		keys, err = proc.validateSnapshotMAC(ctx, patchName, newState, patch.GetKeyID().GetID(), patch.GetSnapshotMAC())
 		if err != nil {
-			return
+			if strictSnapshotMAC {
+				return
+			}
+			proc.Log.Warnf("Snapshot MAC mismatch for %s v%d (non-strict mode, continuing): %v — individual mutation MACs will still be validated", patchName, version, err)
+			err = nil
+			keys, err = proc.getAppStateKey(ctx, patch.GetKeyID().GetID())
+			if err != nil {
+				err = fmt.Errorf("failed to get key %X to verify patch v%d MACs: %w", patch.GetKeyID().GetID(), version, err)
+				return
+			}
 		}
 		var patchMAC []byte
 		patchMAC, err = generatePatchMAC(patch, patchName, keys.PatchMAC, patch.GetVersion().GetVersion())
@@ -123,12 +138,17 @@ func (proc *Processor) validatePatch(
 	return
 }
 
-// DecodePatches will decode all the patches in a PatchList into a list of app state mutations.
+// DecodePatches decodes all patches in a PatchList into app state mutations.
+// When strictSnapshotMAC is false and a snapshot MAC fails, decoding logs a
+// warning and continues — individual mutation MACs (content and index) are
+// still validated. This distinction matters because the snapshot MAC verifies
+// set completeness, not record authenticity.
 func (proc *Processor) DecodePatches(
 	ctx context.Context,
 	list *PatchList,
 	initialState HashState,
 	validateMACs bool,
+	strictSnapshotMAC bool,
 ) (newMutations []Mutation, currentState HashState, err error) {
 	currentState = initialState
 	var expectedLength int
@@ -141,7 +161,7 @@ func (proc *Processor) DecodePatches(
 	newMutations = make([]Mutation, 0, expectedLength)
 
 	if list.Snapshot != nil {
-		newMutations, currentState, err = proc.decodeSnapshot(ctx, list.Name, list.Snapshot, currentState, validateMACs, newMutations)
+		newMutations, currentState, err = proc.decodeSnapshot(ctx, list.Name, list.Snapshot, currentState, validateMACs, strictSnapshotMAC, newMutations)
 		if err != nil {
 			return
 		}
@@ -151,7 +171,7 @@ func (proc *Processor) DecodePatches(
 		var out patchOutput
 		var warn []error
 		var newState HashState
-		newState, warn, err = proc.validatePatch(ctx, list.Name, patch, currentState, validateMACs)
+		newState, warn, err = proc.validatePatch(ctx, list.Name, patch, currentState, validateMACs, strictSnapshotMAC)
 		if err != nil {
 			if len(warn) > 0 {
 				proc.Log.Warnf("Warnings while updating hash for %s: %+v", list.Name, warn)

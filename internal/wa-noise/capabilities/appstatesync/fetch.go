@@ -84,7 +84,7 @@ func ApplyPatches(
 	fullSync bool,
 	eventsToDispatch *[]any,
 ) (appstate.HashState, error) {
-	mutations, newState, err := t.Proc().DecodePatches(ctx, patches, state, true)
+	mutations, newState, err := t.Proc().DecodePatches(ctx, patches, state, true, t.StrictSnapshotMAC())
 	if err != nil {
 		if errors.Is(err, appstate.ErrKeyNotFound) {
 			go RequestMissingKeys(context.WithoutCancel(ctx), t, patches)

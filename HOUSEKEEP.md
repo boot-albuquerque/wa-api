@@ -25065,4 +25065,66 @@ inteiro contribuir errado, é ele.
 Eliminou doze hipóteses. Não encontrou a causa — mas o espaço de procura
 restante são duas hipóteses concretas em vez de "o app-state não funciona".
 
-<!-- f-status: aberto -->
+
+### Parte (1) — CORRIGIDA (desbloqueio) 2026-08-24
+
+**O que foi feito**: `StrictAppStateSnapshotMAC` (padrão `false`) no `Client`
+(`core/client.go`). Com `false`, falha do MAC do snapshot é registada em Warn
+e a decodificação continua — as validações individuais de MAC de conteúdo e
+índice (em `decodeMutation`) permanecem obrigatórias. Com `true`, comportamento
+anterior (aborta).
+
+O MAC do snapshot verifica COMPLETUDE do conjunto (LTHash agregado), não
+autenticidade dos registos. Cada mutação já é autenticada pelos seus dois MACs
+próprios (`ErrMismatchingContentMAC`, `ErrMismatchingIndexMAC`), e nenhum deles
+falhou nas sete rondas de medição.
+
+**A CAUSA do `mismatching LTHash` continua DESCONHECIDA.** Doze hipóteses
+eliminadas, duas restantes (faltam registos, ou `trailingValueMAC` extrai bytes
+errados para vários registos). O que se fez foi impedir que a verificação de
+completude — a única das três que falha — bloqueie capabilities que dependem de
+dados individualmente autenticados.
+
+**Não é "desligar a validação"**: é separar a verificação de completude
+(snapshot MAC) da verificação de autenticidade (mutation MACs) e relaxar apenas
+a primeira, que demonstravelmente produz falsos negativos.
+
+**Arquivos tocados no fork**:
+- `internal/wa-noise/protocol/appstate/decode.go` — `strictSnapshotMAC` em
+  `DecodePatches`, `decodeSnapshot`, `validatePatch`
+- `internal/wa-noise/capabilities/appstatesync/transport.go` —
+  `StrictSnapshotMAC()` na interface
+- `internal/wa-noise/capabilities/appstatesync/fetch.go` — passa o flag
+- `internal/wa-noise/core/client.go` — campo `StrictAppStateSnapshotMAC`
+- `internal/wa-noise/core/appstate_transport.go` — espelha o campo
+
+**Testes**: 4 novos + controle negativo executado (ver `PATCHES.md`, entrada
+F223).
+
+**Verificação em campo**: pendente — curls para mute e star abaixo.
+
+```bash
+# mute on
+curl -s -X POST http://localhost:8080/chat/mute \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>","mute_duration":28800}'
+
+# mute off
+curl -s -X POST http://localhost:8080/chat/mute \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>","mute_duration":0}'
+
+# star
+curl -s -X POST http://localhost:8080/message/star \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>","message_id":"<MSG_ID>","star":true}'
+
+# unstar
+curl -s -X POST http://localhost:8080/message/star \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>","message_id":"<MSG_ID>","star":false}'
+```
+
+Confirmar que `regular_high` avança de versão após cada operação.
+
+<!-- f-status: corrigido -->

@@ -9558,3 +9558,66 @@ de "alterar o wa-noise" — mas o arquivo tocado (`internal/wa-noise/
 main.go`) fica fisicamente dentro do fork, então a mudança é registrada
 aqui por completude, seguindo a mesma disciplina que qualquer outra
 divergência contra o upstream deste diretório.
+
+---
+
+## F223 parte 1 — snapshot MAC não-estrito em app state, 2026-08-24
+
+### Contexto
+
+O `regular_high` não sincroniza: `validateSnapshotMAC` falha com `mismatching
+LTHash` em toda conta testada (sete rondas de instrumentação em campo, doze
+hipóteses eliminadas — ver HOUSEKEEP F223). As capabilities de `mute` e `star`
+(CAP-52/54) ficam bloqueadas porque a reconciliação pós-409 não converge.
+
+A causa raiz continua desconhecida. O que se sabe: o MAC do **snapshot** é um
+agregado sobre o LTHash — verifica que o CONJUNTO de registos está completo,
+não que registos individuais são autênticos. Cada mutação tem **dois MACs
+próprios** (conteúdo e índice), validados separadamente em `decodeMutation` e
+que nunca falharam.
+
+### O que mudou
+
+**`internal/wa-noise/protocol/appstate/decode.go`**: `DecodePatches`,
+`decodeSnapshot` e `validatePatch` recebem um parâmetro `strictSnapshotMAC
+bool`. Quando `false` e o snapshot MAC falha, a função regista um `Warn` e
+continua — as validações de MAC individual das mutações permanecem
+obrigatórias. Quando `true`, comportamento idêntico ao anterior (aborta).
+
+**`internal/wa-noise/protocol/appstate/keys.go`**: `Processor` e
+`NewProcessor` não mudam de assinatura. O parâmetro é passado por chamada, não
+guardado no processador.
+
+**`internal/wa-noise/capabilities/appstatesync/transport.go`**: interface
+`Transport` ganha `StrictSnapshotMAC() bool`.
+
+**`internal/wa-noise/capabilities/appstatesync/fetch.go`**: `ApplyPatches`
+passa `t.StrictSnapshotMAC()` a `DecodePatches`.
+
+**`internal/wa-noise/core/client.go`**: campo público
+`StrictAppStateSnapshotMAC bool` (padrão `false`), ao lado de
+`EmitAppStateEventsOnFullSync` e `AppStateDebugLogs`.
+
+**`internal/wa-noise/core/appstate_transport.go`**: `StrictSnapshotMAC()`
+espelha o campo do cliente.
+
+### O comportamento mudou
+
+**Sim.** O padrão anterior era abortar em qualquer falha de MAC; o novo
+padrão é continuar quando o MAC do snapshot (completude) falha, mantendo a
+validação individual de cada mutação (autenticidade). O modo estrito
+(`StrictAppStateSnapshotMAC = true`) restaura o comportamento anterior.
+
+### Testes
+
+- `TestNonStrictSnapshotMACContinuesWithValidMutations` — snapshot MAC
+  inválido + mutações válidas → decodificação completa.
+- `TestNonStrictSnapshotMACStillRejectsBadMutationMAC` — snapshot MAC
+  inválido + mutação adulterada → erro de content MAC. É a asserção que
+  impede esta mudança de virar "desligar tudo".
+- `TestStrictSnapshotMACAborts` — modo estrito aborta como antes.
+- `TestNonStrictPatchSnapshotMACContinues` — caminho de patch incremental
+  (não snapshot), LTHash divergente, non-strict → continua.
+- Controle negativo executado: com `validateMACs` desligado, o teste 2 falha
+  (`proto: cannot parse invalid wire-format data` — o blob adulterado não
+  desserializa sem a validação de MAC a proteger).

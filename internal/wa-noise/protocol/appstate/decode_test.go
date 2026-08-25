@@ -31,7 +31,7 @@ func TestDecodePatchesRoundTripsEncodePatch(t *testing.T) {
 	patch := encodePatchForTest(t, proc, HashState{Version: 0}, info)
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{patch}}
-	mutations, state, err := proc.DecodePatches(ctx, list, HashState{}, true)
+	mutations, state, err := proc.DecodePatches(ctx, list, HashState{}, true, true)
 	if err != nil {
 		t.Fatalf("DecodePatches: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestDecodePatchesDetectsTamperedPatchMAC(t *testing.T) {
 	patch.PatchMAC[0] ^= 0xFF
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{patch}}
-	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true)
+	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true, true)
 	if !errors.Is(err, ErrMismatchingPatchMAC) {
 		t.Errorf("err = %v, esperado ErrMismatchingPatchMAC", err)
 	}
@@ -86,7 +86,7 @@ func TestDecodePatchesDetectsTamperedSnapshotMAC(t *testing.T) {
 	patch.SnapshotMAC[0] ^= 0xFF
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{patch}}
-	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true)
+	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true, true)
 	if !errors.Is(err, ErrMismatchingLTHash) {
 		t.Errorf("err = %v, esperado ErrMismatchingLTHash", err)
 	}
@@ -99,7 +99,7 @@ func TestDecodePatchesSkipsValidationWhenDisabled(t *testing.T) {
 	patch.SnapshotMAC[0] ^= 0xFF
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{patch}}
-	mutations, _, err := proc.DecodePatches(context.Background(), list, HashState{}, false)
+	mutations, _, err := proc.DecodePatches(context.Background(), list, HashState{}, false, false)
 	if err != nil {
 		t.Fatalf("DecodePatches com validateMACs=false: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestDecodePatchesSkipsValidationWhenDisabled(t *testing.T) {
 func TestDecodePatchesWithEmptyListIsNoop(t *testing.T) {
 	proc, mem := newTestProcessor(t)
 	initial := HashState{Version: 7}
-	mutations, state, err := proc.DecodePatches(context.Background(), &PatchList{Name: WAPatchRegular}, initial, true)
+	mutations, state, err := proc.DecodePatches(context.Background(), &PatchList{Name: WAPatchRegular}, initial, true, true)
 	if err != nil {
 		t.Fatalf("DecodePatches: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestDecodePatchesAppliesMultiplePatchesInOrder(t *testing.T) {
 	second := encodePatchForTest(t, proc, stateAfterFirst, BuildLabelEdit("1", "urgente", 3, false))
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{first, second}}
-	mutations, state, err := proc.DecodePatches(context.Background(), list, HashState{}, false)
+	mutations, state, err := proc.DecodePatches(context.Background(), list, HashState{}, false, false)
 	if err != nil {
 		t.Fatalf("DecodePatches: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestDecodePatchesPropagatesStoreWriteError(t *testing.T) {
 
 	patch := encodePatchForTest(t, proc, HashState{}, BuildSettingPushName("a"))
 	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{patch}}
-	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, false)
+	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, false, false)
 	if !errors.Is(err, writeErr) {
 		t.Errorf("err = %v, esperado %v", err, writeErr)
 	}
@@ -189,7 +189,7 @@ func TestDecodePatchesDecodesSnapshot(t *testing.T) {
 	}
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Snapshot: snapshot}
-	mutations, state, err := proc.DecodePatches(ctx, list, HashState{}, false)
+	mutations, state, err := proc.DecodePatches(ctx, list, HashState{}, false, false)
 	if err != nil {
 		t.Fatalf("DecodePatches: %v", err)
 	}
@@ -215,8 +215,124 @@ func TestDecodePatchesDetectsTamperedSnapshot(t *testing.T) {
 	}
 
 	list := &PatchList{Name: WAPatchCriticalBlock, Snapshot: snapshot}
-	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true)
+	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true, true)
 	if !errors.Is(err, ErrMismatchingLTHash) {
 		t.Errorf("err = %v, esperado ErrMismatchingLTHash", err)
+	}
+}
+
+// --- F223: StrictAppStateSnapshotMAC toggle ---
+//
+// The snapshot MAC is an aggregate over the LTHash — it verifies that the SET
+// of records is complete, not that individual records are authentic. Each
+// mutation carries its own content MAC and index MAC, validated separately in
+// decodeMutation. When StrictAppStateSnapshotMAC is false (the default), a
+// snapshot MAC mismatch is logged and decoding continues; individual mutation
+// MACs still gate every record.
+
+// snapshotWithBadMAC builds a snapshot with valid records but an invalid
+// aggregate MAC. The records are individually valid (produced by EncodePatch
+// with the test key), so mutation-level MACs pass.
+func snapshotWithBadMAC(t *testing.T, proc *Processor) (*PatchList, int) {
+	t.Helper()
+	patch := encodePatchForTest(t, proc, HashState{}, BuildSettingPushName("snap"))
+	snapshot := &waServerSync.SyncdSnapshot{
+		Version: &waServerSync.SyncdVersion{Version: proto.Uint64(1)},
+		Records: []*waServerSync.SyncdRecord{patch.GetMutations()[0].GetRecord()},
+		KeyID:   &waServerSync.KeyId{ID: testKeyID},
+		Mac:     fillBytes(macLength, 0xAB),
+	}
+	return &PatchList{Name: WAPatchCriticalBlock, Snapshot: snapshot}, len(snapshot.Records)
+}
+
+func TestNonStrictSnapshotMACContinuesWithValidMutations(t *testing.T) {
+	proc, _ := newTestProcessor(t)
+	list, nRecords := snapshotWithBadMAC(t, proc)
+
+	mutations, state, err := proc.DecodePatches(context.Background(), list, HashState{}, true, false)
+	if err != nil {
+		t.Fatalf("DecodePatches with non-strict snapshot MAC should succeed, got: %v", err)
+	}
+	if len(mutations) != nRecords {
+		t.Fatalf("len(mutations) = %d, expected %d", len(mutations), nRecords)
+	}
+	if mutations[0].Action.GetPushNameSetting().GetName() != "snap" {
+		t.Errorf("push name = %q, expected 'snap'", mutations[0].Action.GetPushNameSetting().GetName())
+	}
+	if state.Version != 1 {
+		t.Errorf("state.Version = %d, expected 1", state.Version)
+	}
+}
+
+func TestNonStrictSnapshotMACStillRejectsBadMutationMAC(t *testing.T) {
+	proc, _ := newTestProcessor(t)
+	patch := encodePatchForTest(t, proc, HashState{}, BuildSettingPushName("snap"))
+	record := patch.GetMutations()[0].GetRecord()
+	record.GetValue().Blob[0] ^= 0xFF
+	snapshot := &waServerSync.SyncdSnapshot{
+		Version: &waServerSync.SyncdVersion{Version: proto.Uint64(1)},
+		Records: []*waServerSync.SyncdRecord{record},
+		KeyID:   &waServerSync.KeyId{ID: testKeyID},
+		Mac:     fillBytes(macLength, 0xAB),
+	}
+	list := &PatchList{Name: WAPatchCriticalBlock, Snapshot: snapshot}
+
+	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true, false)
+	if err == nil {
+		t.Fatal("expected error for tampered mutation content MAC, got nil")
+	}
+	if !errors.Is(err, ErrMismatchingContentMAC) {
+		t.Errorf("err = %v, expected ErrMismatchingContentMAC", err)
+	}
+}
+
+func TestStrictSnapshotMACAborts(t *testing.T) {
+	proc, _ := newTestProcessor(t)
+	list, _ := snapshotWithBadMAC(t, proc)
+
+	_, _, err := proc.DecodePatches(context.Background(), list, HashState{}, true, true)
+	if !errors.Is(err, ErrMismatchingLTHash) {
+		t.Errorf("strict mode should abort on snapshot MAC mismatch: err = %v, expected ErrMismatchingLTHash", err)
+	}
+}
+
+// TestNonStrictPatchSnapshotMACContinues exercises the validatePatch path
+// (incremental patches, not full snapshot) with a snapshot MAC mismatch in
+// non-strict mode. The scenario mirrors F223: the patch is internally
+// consistent (its SnapshotMAC and PatchMAC agree), but the caller's LTHash
+// state diverges from what the patch expects. We simulate this by feeding a
+// non-zero initial hash, which makes validateSnapshotMAC fail while the
+// patch's own PatchMAC remains valid.
+func TestNonStrictPatchSnapshotMACContinues(t *testing.T) {
+	proc, _ := newTestProcessor(t)
+	patch := encodePatchForTest(t, proc, HashState{Version: 0}, BuildSettingPushName("incr"))
+
+	// Divergent initial state: the hash is non-zero, so the LTHash after
+	// applying the patch differs from what the patch was built against. This
+	// makes validateSnapshotMAC fail while the patch MAC (which hashes the
+	// server's SnapshotMAC, not our computed one) stays valid.
+	var divergentHash [128]byte
+	divergentHash[0] = 0xFF
+	divergentInitial := HashState{Version: 0, Hash: divergentHash}
+
+	list := &PatchList{Name: WAPatchCriticalBlock, Patches: []*waServerSync.SyncdPatch{patch}}
+	mutations, state, err := proc.DecodePatches(context.Background(), list, divergentInitial, true, false)
+	if err != nil {
+		t.Fatalf("non-strict patch snapshot MAC should not abort: %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("len(mutations) = %d, expected 1", len(mutations))
+	}
+	if mutations[0].Action.GetPushNameSetting().GetName() != "incr" {
+		t.Errorf("push name = %q", mutations[0].Action.GetPushNameSetting().GetName())
+	}
+	if state.Version != 1 {
+		t.Errorf("state.Version = %d, expected 1", state.Version)
+	}
+
+	// Strict mode with the same input must abort.
+	_, _, err = proc.DecodePatches(context.Background(), list, divergentInitial, true, true)
+	if !errors.Is(err, ErrMismatchingLTHash) {
+		t.Errorf("strict mode should abort: err = %v, expected ErrMismatchingLTHash", err)
 	}
 }

@@ -1496,6 +1496,7 @@ internal/wa-noise/core.appStateTransport.SendPeerMessage	EXCLUDED	X5
 internal/wa-noise/core.appStateTransport.State	EXCLUDED	X5
 internal/wa-noise/core.appStateTransport.Store	EXCLUDED	X5
 internal/wa-noise/core.appStateTransport.StoreNCTSalt	EXCLUDED	X5
+internal/wa-noise/core.appStateTransport.StrictSnapshotMAC	EXCLUDED	X5
 internal/wa-noise/core.applyBotMessageHKDF	EXCLUDED	X5
 internal/wa-noise/core.buildBaseReceipt	EXCLUDED	X5
 internal/wa-noise/core.copyAttrs	EXCLUDED	X5

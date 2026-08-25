@@ -53,6 +53,13 @@ func TestAppStateTransportEspelhaOCliente(t *testing.T) {
 	if !tp.EmitEventsOnFullSync() || !tp.DebugLogs() {
 		t.Error("as flags do cliente nao chegaram no adaptador")
 	}
+	if tp.StrictSnapshotMAC() {
+		t.Error("StrictSnapshotMAC deveria ser false por padrao")
+	}
+	cli.StrictAppStateSnapshotMAC = true
+	if !tp.StrictSnapshotMAC() {
+		t.Error("StrictSnapshotMAC nao espelhou a mudanca no cliente")
+	}
 	if tp.Log() != cli.Log {
 		t.Error("Log() deveria devolver o logger do cliente")
 	}
