@@ -27071,3 +27071,80 @@ indefensável.
 **Status**: não corrigido.
 
 <!-- f-status: aberto -->
+
+## F243 — pontos de atenção: o que esta sessão ensinou sobre MEDIR
+
+Consolidado aqui porque cada um destes custou tempo real e vai voltar a
+custar. Não são princípios abstratos: cada linha tem um caso concreto.
+
+### 1. O `200` mentiu quatro vezes
+
+| caso | o `200` dizia | a realidade |
+|---|---|---|
+| F227 | mensagem enviada | não foi guardada no histórico |
+| F228 | voto despachado | não foi contabilizado (MAC falhava) |
+| F229 | status publicado | alterou o Recado do perfil |
+| F240 | mídia enviada | blob inválido, aceite sem validação |
+
+**Regra**: o código de saída da nossa API descreve o despacho, não o efeito.
+Verificar o efeito onde ele é visível — interface, base de dados, link público.
+
+### 2. Uma só superfície não decide
+
+Concluí que carrossel, lista e sticker estavam partidos por lê-los no
+**WhatsApp Web**. As capturas do **telemóvel** mostraram-nos completos e
+interativos — a própria mensagem do Web dizia *"Use seu celular para
+acessá-la"*.
+
+**Regra**: o Web é cliente empobrecido para tipos interativos. Antes de
+declarar "não funciona", confirmar noutro cliente.
+
+### 3. O instrumento engana mais que o código
+
+Três vezes num dia:
+
+- **imagem expirada** — encaminhei uma foto de 2024 cujos bytes já não existiam
+  no CDN, e quase reportei o `forward` como quebrado. Só a comparação com a
+  ORIGINAL revelou;
+- **binário errado** — o `pkill` não matou o processo antigo (`\|` não é
+  alternância no `pkill`), medi o código anterior e ia dá-lo por verificado. A
+  guarda de cluster (ADR-0005 D1) é que me apanhou;
+- **uma amostra de latência** — reportei "+18%" a partir de uma ronda; três
+  rondas mostraram que a variância entre execuções do mesmo binário era maior
+  que a diferença entre binários.
+
+**Regra**: antes de medir, confirmar que o instrumento é o que se pensa —
+`lsof` na porta, timestamps do conteúdo, três repetições.
+
+### 4. Payload vazio não é teste
+
+A primeira bateria chamou 103 rotas com `{}` e produziu 75 `400`. Isso mede se
+a guarda existe, não se a rota funciona. A bateria com payloads REAIS, na
+mesma superfície, encontrou três defeitos (F240, F241, F242).
+
+**Regra**: bateria de contrato serve para triagem; só a chamada com dados reais
+e verificação do efeito diz alguma coisa.
+
+### 5. Erro do chamador a virar `500`
+
+Três rotas (F241) devolvem `500` para entrada malformada ou recurso alheio.
+Quem monitorizar por taxa de `5xx` vê alarme onde há pedidos maus de clientes.
+
+**Regra**: `4xx` é do chamador, `5xx` é nosso. Confundir apaga o sinal.
+
+### 6. Sucesso vazio é pior que erro
+
+`/user/info` com número simples devolve `200 {"users":{}}` (F242). Quem o
+receber conclui que o utilizador não existe. Não há nada a investigar.
+
+### 7. As afirmações dos workers sobre gates
+
+Três workers declararam `make check` com `exit 0`. O valor real foi `exit 2`
+nas três — a falha aparece no MEIO da saída, e qualquer leitura por `tail` a
+perde.
+
+**Regra**: medir o código de saída, não ler o fim do log.
+
+**Status**: nota permanente de método, não defeito.
+
+<!-- f-status: nao-se-faz -->
