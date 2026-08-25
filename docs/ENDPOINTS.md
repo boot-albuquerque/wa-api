@@ -470,3 +470,14 @@ implementação, com par de controlo onde havia hipótese a refutar. As cinco
 últimas são **confirmação do utilizador** (2026-08-24), não medição minha —
 registado assim para que ninguém as leia como prova de campo que eu não
 recolhi.
+
+> **AVISO — `demote`, `change-owner` e `delete` NÃO FUNCIONAM hoje**
+> (HOUSEKEEP F233 parte b, medido 2026-08-25). As rotas existem e validam o
+> payload, mas o servidor do WhatsApp responde
+> `graphql error: 400 Bad Request` às duas primeiras: os query IDs foram
+> extraídos do Baileys, que usa uma geração diferente da API. O `delete` tem a
+> mesma origem suspeita e está travado por confirmação obrigatória
+> (`confirmJID` tem de igualar o JID do canal).
+>
+> Não as use em produção até os query IDs da nossa geração serem encontrados e
+> verificados em campo.
