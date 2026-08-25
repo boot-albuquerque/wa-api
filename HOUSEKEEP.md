@@ -24940,4 +24940,65 @@ Parte (1) — o `mismatching LTHash` — **medida, diagnosticada até à frontei
 fork, e deliberadamente NÃO corrigida**. Fechada por agora por decisão do dono
 do repositório.
 
+
+### INVESTIGAÇÃO 2026-08-24 — o que foi eliminado, e o que sobra
+
+Sondas descartáveis instrumentaram `validateSnapshotMAC` e `decodeSnapshot`
+(`internal/wa-noise/protocol/appstate/decode.go`), e expuseram `FetchAppState`
+por rota para disparar os dois tipos. Tudo revertido depois de medir.
+
+**Comparação lado a lado, MESMA sessão, MESMO código, no mesmo instante:**
+
+| tipo | versão | registos | hash inicial | resultado |
+|---|---|---|---|---|
+| `regular_low` | 183 | 156 | zero | **MAC verifica, HTTP 200** |
+| `regular_high` | 305 | 66 | zero | **MAC falha, HTTP 500** |
+
+Dados da falha:
+
+```
+PROBE-F223 name=regular_high version=305 keyID=000000006A4E
+           hash=B420829A0EB0CC4DAB6610D80BF0C7A2
+           calculado=B007AFBF18A2088CF46AAB7ADCAE7C46
+           esperado=0167025638D9E06D1D322E70D6563D5A
+```
+
+**ELIMINADO por medição** — cada um destes era hipótese plausível e caiu:
+
+1. **Cópia local corrompida** — `fullSync` apaga o estado (verificado: a linha
+   desaparece da tabela) e falha na mesma, agora a verificar o SNAPSHOT do
+   servidor.
+2. **Hash inicial herdado** — medido: `hashANTES` é zero nos DOIS tipos.
+3. **Chave em falta ou errada** — `000000006A4E` existe, 32 bytes, do JID
+   certo, **sem duplicados de ID** em 155 chaves.
+4. **Remoção ignorada** (`ErrMissingPreviousSetValueOperation`) — o caminho
+   existe e tem um `TODO` a admitir incerteza (`hash.go:52-57`), mas **zero
+   ocorrências** nos logs, e os avisos SÃO registados quando a validação falha
+   (`decode.go:55-57`).
+5. **Volume** — o `regular_low` tem 156 registos e funciona; o `regular_high`
+   tem 66 e falha.
+6. **Truncagem silenciosa de blob** — `trailingValueMAC`
+   (`mutation_blob.go:19-24`) valida o tamanho e falha alto.
+7. **Idade da conta** — falha em conta com histórico (v301) e em conta pareada
+   há minutos (v63).
+8. **Aritmética do LTHash** — `SubtractThenAddInPlace` é o mesmo código para os
+   dois tipos, e um verifica.
+
+**O que sobra**, e é onde a próxima sessão deve começar: os quatro inputs do
+MAC (`HMAC(key, hash ‖ version ‖ name)`) foram todos verificados isoladamente e
+estão corretos; a fórmula está certa porque o `regular_low` valida com ela. Logo
+a divergência tem de estar em **como os 66 registos do `regular_high` são
+transformados em MACs antes de entrarem no LTHash** — `trailingValueMAC` sobre
+cada blob.
+
+**Hipótese NÃO medida, para a próxima sessão**: algum registo do `regular_high`
+tem estrutura que o `trailingValueMAC` interpreta de forma diferente do
+servidor — por exemplo blob com padding, ou versão de mutação que este fork não
+conhece. O caminho é imprimir, registo a registo, o tamanho do blob e o MAC
+extraído, e comparar com o que a referência produziria.
+
+**Custo desta investigação**: quatro rondas de instrumentação e medição em
+campo. Eliminou oito hipóteses e não encontrou a causa — mas quem retomar não
+volta a gastar tempo nas oito.
+
 <!-- f-status: aberto -->
