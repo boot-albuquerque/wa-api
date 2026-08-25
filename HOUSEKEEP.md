@@ -27137,7 +27137,59 @@ Quem monitorizar por taxa de `5xx` vê alarme onde há pedidos maus de clientes.
 `/user/info` com número simples devolve `200 {"users":{}}` (F242). Quem o
 receber conclui que o utilizador não existe. Não há nada a investigar.
 
-### 7. As afirmações dos workers sobre gates
+### 7. Quatro rotas apontadas ao handler ERRADO
+
+O mesmo defeito estrutural, quatro vezes, e três delas descobertas na bateria
+real:
+
+| rota | aponta para | consequência |
+|---|---|---|
+| `/status/set/text` (F229) | handler do Recado | alterava o perfil |
+| `/group/joinapprovalmode` (F246) | `SetGroupLocked` | **desbloqueia o grupo** |
+| `/group/updaterequestparticipants` (F247) | `UpdateGroupParticipants` | **remove o membro** |
+| `/chat/delete` (F257) | `DeleteMessage` | nome mente, efeito certo |
+
+**Regra**: duas rotas registadas com o MESMO handler é sinal, não coincidência.
+`grep -c` pelo nome do handler em `wiring_routes.go` encontra a família toda em
+segundos — e nenhuma delas era visível pela resposta HTTP.
+
+### 8. O registo de sistema do GRUPO é o melhor instrumento que temos
+
+Três achados (F246, F247, F248) foram resolvidos ou agravados só por ele
+existir. O WhatsApp mantém, por grupo, o histórico de quem mudou o quê:
+
+```
+Você mudou ... TODOS os membros editem     <- revelou a F246
+Você removeu ~AulaPrática                  <- revelou a F247
+Você apagou a imagem deste grupo           <- revelou a F248
+```
+
+Nenhum aparecia na nossa API: o `group_info` não expõe histórico, e as
+respostas eram todas `200`.
+
+**Regra**: para escrita em grupo, verificar no registo do grupo. A resposta
+HTTP não serve.
+
+### 9. Ler o comentário no ponto de registo, ANTES de acusar
+
+A F245 foi retirada no mesmo dia. Declarei que `/health` autenticado o
+inutilizava como sonda; o comentário **duas linhas acima** da linha que eu
+próprio tinha aberto dizia que existe `/livez` público para isso.
+
+Este repositório documenta decisões no ponto de uso — o `Makefile`, o
+`queryids.go`, o `EncryptPollVote` e o `wiring_routes.go` responderam a
+perguntas minhas ao longo da sessão pelo mesmo mecanismo.
+
+### 10. O gate do HOUSEKEEP apanhou-me três vezes
+
+Marca a mais na F232, marca em falta na F253, marca colada à F258 — todas por
+eu acrescentar secções de notas com `f-status` ou sem ele. O gate existe
+porque "duas marcas são duas fontes de verdade", e funcionou.
+
+**Regra**: nota consolidada também precisa de número e de uma marca própria,
+ou cola-se ao achado anterior.
+
+### 11. As afirmações dos workers sobre gates
 
 Três workers declararam `make check` com `exit 0`. O valor real foi `exit 2`
 nas três — a falha aparece no MEIO da saída, e qualquer leitura por `tail` a
