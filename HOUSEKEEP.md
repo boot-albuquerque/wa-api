@@ -25212,6 +25212,23 @@ categoria `validation` e código `missing_chat`, no molde do que
 `pkg/domain/star.go` já produz. Verificar se há outros `simpleErr` no pacote
 de handlers pelo mesmo motivo.
 
+**Como as referências resolvem** (medido 2026-08-25):
+
+A Evolution API valida cada rota contra um **JSON Schema declarado**
+(`sendMessage.router.ts` passa `textMessageSchema`, `pollMessageSchema`, etc.
+ao `routerPath`). A mensagem de erro nomeia o campo automaticamente, porque
+vem do validador e não de um `if` escrito à mão em cada handler. É exatamente
+a classe de defeito que desaparece quando a validação é declarativa: não há
+onde esquecer o código do erro.
+
+Nós temos o mecanismo equivalente (`apperr`) e ele funciona — o
+`/message/star` prova. O defeito é este handler ter contornado o mecanismo
+com um `simpleErr` local.
+
+**Correção sugerida (revista)**: além de trocar pelo `apperr`, vale procurar
+os outros `simpleErr` do pacote. Um `if` manual por handler é o formato em que
+este defeito se repete.
+
 **Status**: não corrigido — fora do escopo da F223. Não toquei por causa da
 regra de não corrigir de graça bug pré-existente sem perguntar.
 
@@ -25240,9 +25257,51 @@ Uma enquete enviada para conversa individual passa pelo campo `Group`. O nome
 mente sobre o domínio do valor, e quem lê o payload conclui que a rota exige
 grupo — conclusão errada que nem o `ENDPOINTS.md` desfaz.
 
-**Correção sugerida**: aceitar `chat` como alias em `SendPollRequest`,
-mantendo `Group` a funcionar para não quebrar consumidor existente, e uniformizar
-a documentação. A alternativa (renomear já) é quebra de contrato.
+**A medição completa** (2026-08-25) — o problema é MAIOR que três rotas. São
+**oito** nomes para o campo de destino, contados sobre `pkg/domain/*.go`:
+
+| tag JSON | nº de tipos |
+|---|---|
+| `Phone` | 24 |
+| `groupJID` | 12 |
+| `phone` | 3 |
+| `jid` | 3 |
+| `groupjid` | 2 |
+| `chat` | 2 |
+| `Chat` | 1 |
+| `Group` | 1 |
+
+Note `Phone`/`phone`, `groupJID`/`groupjid` e `Chat`/`chat`: **JSON é sensível
+a maiúsculas**, então não são variações estilísticas — são chaves diferentes.
+Um consumidor que acerte em `/chat/send/text` (`Phone`) erra em
+`/session/logout` (`phone`).
+
+**Como as referências resolvem** (medido):
+
+A Evolution API declara UMA classe base e herda-a em todas as rotas de envio
+(`src/api/dto/sendMessage.dto.ts`):
+
+```ts
+export class Metadata {
+  number: string;
+  delay?: number;
+  quoted?: Quoted;
+  ...
+}
+export class SendTextDto extends Metadata { text: string }
+export class SendPollDto extends Metadata { ... }
+```
+
+O campo de destino chama-se `number` em TODAS, e não pode divergir por rota
+porque não é escolhido por rota. É solução estrutural, não convenção: o
+`extends` torna a divergência impossível de escrever.
+
+Nós escolhemos o nome struct a struct, e por isso divergimos oito vezes.
+
+**Correção sugerida (revista)**: embutir uma struct base (`domain.Destination`
+com `Chat string \`json:"chat"\``) nos requests, aceitando os nomes antigos como
+alias durante um período, em vez de corrigir rota a rota. Corrigir só o
+`SendPollRequest` deixaria as outras sete divergências de pé.
 
 **Status**: não corrigido — decisão de contrato, precisa de aval.
 
@@ -25278,11 +25337,67 @@ regra do projeto é que divergir das referências é aceitável **desde que
 consciente e escrito**. Hoje um leitor do `ENDPOINTS.md` conclui que temos
 forward no sentido usual.
 
-**Correção sugerida**: decidir e registar. Ou (a) documentar explicitamente
-que é "marcar como encaminhado" e renomear na documentação, ou (b) implementar
-o encaminhamento real por chave de mensagem, que é o que os concorrentes
-oferecem. Medir antes o que a SPA/protocolo exige para reenviar mídia sem
-reupload.
+**Como as três referências resolvem** (medido 2026-08-25). As respostas
+DIVERGEM entre si, e duas delas são NEGATIVAS — o que é informação, pela regra
+do projeto:
+
+**whatsmeow** (o nosso upstream) — **não resolve**. `grep -riE "func.*[Ff]orward"`
+sobre `internal/wa-noise/` fora de `proto/` devolve **zero** funções. A
+biblioteca só expõe os campos `ContextInfo.IsForwarded` e
+`ContextInfo.ForwardingScore` (`waE2E/...pb.go:9022-9023`). Quem quiser
+encaminhar monta a mensagem e marca o contexto.
+
+Isto é importante: significa que a NOSSA forma é idiomática face ao upstream.
+O que o upstream permite e nós não é reenviar QUALQUER conteúdo — lá tem-se a
+struct `*waE2E.Message` inteira; a nossa API só aceita `Body` de texto. **A
+limitação a texto é nossa, da camada HTTP, não da biblioteca.**
+
+**Baileys** — resolve, e é a referência real:
+
+```ts
+export const generateForwardMessageContent = (message: WAMessage, forceForward?: boolean)
+```
+
+Recebe a `WAMessage` EXISTENTE. Lê `contextInfo?.forwardingScore`, **incrementa
+em 1** (salvo mensagem própria sem `forceForward`), e põe `isForwarded: true`
+quando o score passa de zero. A mídia é copiada por round-trip de protobuf —
+uma "hacky copy" nas palavras do próprio código — preservando URL e chaves de
+encriptação, **sem reupload**. O tipo é detetado por `Object.keys(content)[0]`,
+com `conversation` convertido em `extendedTextMessage`.
+
+**Evolution API** — **não tem endpoint de encaminhar**. Medido no
+`sendMessage.router.ts`: treze rotas (`sendText`, `sendMedia`, `sendPtv`,
+`sendWhatsAppAudio`, `sendStatus`, `sendSticker`, `sendLocation`, `sendContact`,
+`sendReaction`, `sendPoll`, `sendList`, `sendButtons`, `sendTemplate`), nenhuma
+é forward; zero ocorrências de "Forward" no router e no DTO.
+
+Ela USA o `forward:` do Baileys, mas como caminho GENÉRICO de envio para tudo
+que não seja texto/áudio/enquete/sticker, com chave sintética
+(`whatsapp.baileys.service.ts:2214`):
+
+```ts
+forward: { key: { remoteJid: this.instance.wuid, fromMe: true }, message }
+```
+
+Ou seja: usa o mecanismo de encaminhar para INJETAR mensagem já montada, não
+para encaminhar. Copiar a Evolution aqui não teria dado a funcionalidade.
+
+**As duas diferenças concretas face ao Baileys**:
+
+1. **O score.** No Baileys é DERIVADO (lê o do original e incrementa); no nosso
+   é FORNECIDO pelo cliente. Um cliente não tem como saber o score de uma
+   mensagem que recebeu, a menos que o exponhamos no webhook — então o nosso
+   `ForwardingScore` é, na prática, ou `1` ou um palpite.
+2. **A mídia.** O Baileys copia o proto e reaproveita URL e chaves; nós
+   reenviamos do zero e só texto.
+
+**Correção sugerida (revista)**: (b) implementar por chave de mensagem, com o
+entendimento do Baileys — ler a mensagem guardada, copiar o conteúdo,
+incrementar o score lido em vez de aceitar um do cliente. A parte de "sem
+reupload" depende de termos a mensagem original guardada com os campos de
+mídia; medir isso ANTES de prometer. Se ficarmos por (a), a documentação tem de
+dizer "marca como encaminhado", e o campo `ForwardingScore` devia deixar de ser
+público.
 
 **Status**: não corrigido — precisa de decisão de produto.
 
