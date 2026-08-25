@@ -25513,6 +25513,36 @@ O `OutgoingRecorder.Record` é síncrono e bloqueante. Detentores:
   DELETE. O trim deleta no máximo `count - limit` linhas. Com limit=1 e 1000
   mensagens acumuladas, o primeiro envio deleta 999 linhas — O(n) pontual,
   depois O(1) por envio. Não é detentor longo — não ocupa slot limitado.
+
+**Regra 2 — medição do cenário que PIORA (feita 2026-08-25, não deduzida).**
+A entrada dizia apenas "O(1) por envio", que é afirmação de complexidade, não
+número. O custo real foi medido A/B na mesma máquina, alternando o binário
+dentro da mesma sessão, 8–10 envios reais por perna:
+
+| ronda | antes (sem F227) | depois (com F227) | delta |
+|---|---|---|---|
+| 1 | 453,5 ms | 535,8 ms | +82 |
+| 2 | **1078,5 ms** | 427,5 ms | **−651** |
+| 3 | 539,5 ms | 433,7 ms | −106 |
+
+**Conclusão: o custo não é detetável.** A variância ENTRE execuções do mesmo
+binário (453 → 1078 ms no "antes") é muito maior que qualquer diferença entre
+binários. O caminho é dominado pelo round-trip de rede com o WhatsApp; a
+escrita em SQLite desaparece nesse ruído.
+
+**Registo do erro de método, porque é o que dá valor a esta entrada**: a
+primeira ronda, isolada, deu +82 ms e o mínimo subiu 88 ms. Eu ia reportar
+"+18% de latência em todos os envios", com o argumento de que um piso
+deslocado não é ruído. Era uma única amostra de cada lado. As rondas 2 e 3
+inverteram o sinal.
+
+É a regra do `CLAUDE.md` a funcionar: *uma amostra não distingue efeito de
+ruído; três rodadas já mostram se os números são estáveis.*
+
+**Limite honesto desta medição**: ela mede o efeito PONTA A PONTA e conclui
+que é indistinguível do ruído. NÃO isola o custo do `INSERT` + `trim`. Quem
+precisar do número do componente tem de medi-lo diretamente, com o recorder
+contra uma cópia da base — não o deduza daqui.
 - A chamada é síncrona no handler de envio mas NÃO bloqueia o caller em
   caso de falha — falha é logada e ignorada.
 
@@ -25733,5 +25763,58 @@ nisto: comparar via `GetUserInfo` do fork em vez da interface.
 
 **Status**: não corrigido — precisa de decisão de contrato (remover rota é
 quebra).
+
+<!-- f-status: aberto -->
+
+## F230 — `history` trava o tempo real mas NÃO a sincronização: 20 mil linhas gravadas com a definição a 0
+
+**Data/contexto**: 2026-08-25, ao verificar em campo a correção da F227. O
+teste de payoff (enviar e depois encaminhar por chave) falhou com `404`, apesar
+de 12 testes unitários verdes.
+
+**Onde**:
+- `pkg/infra/history/outgoing.go:63` — `limit := r.limitFn(userID); if limit <= 0 { return }`
+- `pkg/bootstrap/eventhandler_message.go:284-291` — mesmo critério no tempo real
+- `pkg/bootstrap/eventhandler_history.go:81` — `persistHistorySyncMessage`, o caminho de sincronização
+
+**Problema**: a coluna `users.history` vale `0` para as duas sessões vivas —
+
+```
+sqlite> select name, history from users;
+lucas|0
+filarapida|0
+```
+
+— e mesmo assim há **20.755** linhas em `message_history` para o `lucas`. Elas
+vieram do caminho de SINCRONIZAÇÃO, que não aplica a mesma trava que o caminho
+de tempo real.
+
+A bandeira significa coisas diferentes conforme quem a lê. Consequência
+concreta: um operador que veja 20 mil mensagens guardadas conclui,
+razoavelmente, que o histórico está LIGADO — e não está. Foi exatamente a
+conclusão que eu tirei ao investigar a F227, e foi errada.
+
+**Como se manifestou**: a correção da F227 está certa e respeita a definição
+(o packet exigia "`historyLimit` a 0 não grava"). Mas fica INERTE por omissão,
+e com ela ficam inertes duas capabilities:
+
+- encaminhar por chave uma mensagem que a API enviou (CAP-55) → `404`
+- o caminho 1 de resolução de identidade do voto (F228) → cai sempre no
+  fallback
+
+**Verificado**: com `POST /session/history {"history":100}`, a mesma sequência
+passa a funcionar — mensagem gravada (`datajson` de 1050 bytes) e forward da
+própria mensagem devolve `200`, confirmado visualmente na conversa
+(`↗ Encaminhada`).
+
+**Correção sugerida**: decidir o que `history` significa e aplicá-lo nos DOIS
+caminhos. Duas fontes de verdade para a mesma bandeira divergem — é o mesmo
+padrão da F187, onde havia duas cadeias de classificação e o comentário do
+código conclui que "a única saída é não haver duas".
+
+Enquanto não se decidir, o `ENDPOINTS.md` tem de dizer que o forward por chave
+de mensagem PRÓPRIA exige `POST /session/history` com valor > 0.
+
+**Status**: não corrigido — precisa de decisão sobre a semântica da bandeira.
 
 <!-- f-status: aberto -->
