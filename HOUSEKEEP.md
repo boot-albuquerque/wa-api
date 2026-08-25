@@ -27796,3 +27796,93 @@ sucesso.
 **Status**: não corrigido — causa por apurar, e não a vou adivinhar.
 
 <!-- f-status: aberto -->
+
+## F257 — `/chat/delete` é a MESMA rota que `/chat/delete/message`; não existe apagar conversa
+
+**Data/contexto**: 2026-08-25, últimas rotas destrutivas da bateria.
+
+`wiring_routes.go`:
+
+```go
+registry.Register("/chat/delete/message", customChain.Then(ch.Message.DeleteMessage), "POST")  // :80
+registry.Register("/chat/delete",         customChain.Then(ch.Message.DeleteMessage), "POST")  // :236
+```
+
+**Quarta ocorrência do padrão** — depois de `/status/set/text` (F229),
+`/group/joinapprovalmode` (F246) e `/group/updaterequestparticipants` (F247).
+
+**Medido**:
+
+```
+POST /chat/delete {"Phone":"…","Id":"3EB0AFAE…"}  -> 200 {"status":"deleted"}
+POST /chat/delete {"Phone":"…"}                    -> 400 missing_id
+```
+
+Exige `Id` de MENSAGEM. Se apagasse conversas, o segundo payload seria o
+natural e seria aceite.
+
+**Confirmado na interface**: `Mensagem apagada` às 19:46 na conversa, e **a
+conversa continua na lista**. Apagou a mensagem, não o chat.
+
+**Diferença face às outras três**: esta não é perigosa — as duas rotas fazem a
+mesma coisa e a coisa certa. O defeito é de nomenclatura: `/chat/delete`
+promete apagar a conversa e apaga uma mensagem.
+
+**Consequência**: quem quiser apagar uma conversa não tem rota, e o nome
+sugere que tem. Vai chamar `/chat/delete`, receber `400 missing_id`, e concluir
+que falta um parâmetro em vez de concluir que a capability não existe.
+
+**Correção sugerida**: remover o registo de `/chat/delete` (como se fez na
+F229) ou, se apagar conversa for para existir, implementá-la — o `wa-noise`
+tem primitivas de chat na lista da F237 que valeria verificar.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F258 — envelope de resposta com aninhamento DUPLO
+
+**Data/contexto**: 2026-08-25, bateria.
+
+`DELETE /admin/users/{id}/full` devolve:
+
+```json
+{"code":200,"data":{"code":200,"data":{"id":"…","name":"full-delete-probe","jid":""},"success":true},"success":true}
+```
+
+O envelope está dentro do envelope. Um cliente que leia `data.id` recebe
+`undefined` — tem de ler `data.data.id`.
+
+Já tinha visto o mesmo em `POST /newsletter/create`
+(`{"code":200,"data":{"data":{…}}}`) e anotado de passagem sem registar.
+São duas famílias diferentes, o que sugere que o handler devolve um objeto que
+o `RespondJSON` volta a embrulhar.
+
+**Não levantei a varredura completa** — o padrão pode existir noutras rotas, e
+a bateria não o procurava.
+
+**Correção sugerida**: procurar handlers que passem ao `RespondJSON` um valor
+já embrulhado. Um teste de contrato que rejeite `data.data` no corpo apanharia
+a família toda de uma vez.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F259 — bateria REAL: encerramento em 126 de 133
+
+**Exercitadas com payload real e verificação de efeito**: 126.
+
+**Não exercitadas — 7, todas de ciclo de vida de sessão**:
+`GET /session/connect`, `/session/disconnect`, `/session/qr`, `/session/ws`,
+`POST /session/logout`, `/session/pairphone`, `/session/proxy`.
+
+Derrubariam ou re-pareariam a sessão que serve toda a bateria, e a
+`filarapida` está ligada ao telemóvel do utilizador. Não corridas por decisão,
+com aval por pedir.
+
+**Achados da bateria real**: F238, F240 a F244, F246 a F258 — mais as correções
+das minhas próprias conclusões erradas (F240 sobre o carrossel, F249 sobre a
+adição de participante, F245 retirada por inteiro).
+
+<!-- f-status: nao-se-faz -->
