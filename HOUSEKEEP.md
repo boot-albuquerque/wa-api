@@ -27148,3 +27148,35 @@ perde.
 **Status**: nota permanente de método, não defeito.
 
 <!-- f-status: nao-se-faz -->
+
+## F244 — `GET /group/requestparticipants` exige CORPO JSON
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+**Medido**:
+
+```
+GET /group/requestparticipants?group_jid=…        -> 400 {"error":"bad request"}
+GET /group/requestparticipants  (corpo {"groupjid":…})  -> 200 {"data":[]}
+```
+
+A rota está registada como `GET` (`wiring_routes.go:101`) mas o handler
+descodifica um payload JSON do CORPO
+(`handler_group.go`, `could not decode group request participants payload`).
+
+**Problema**: um `GET` com corpo obrigatório é inchamável a partir de um
+browser, de um link, de `curl` sem `-X GET -d`, e de vários clientes HTTP que
+descartam o corpo em `GET`. Não é proibido pelo protocolo, mas é surpreendente
+e sem ganho — a informação cabia num parâmetro de query.
+
+**Agravante**: o erro é `{"error":"bad request"}` em string, sem código (F236),
+portanto quem chamar com query string não recebe pista nenhuma de que o
+problema é o corpo.
+
+**Correção sugerida**: aceitar `group_jid` (ou `chat`, F225) por query string,
+mantendo o corpo a funcionar. Se houver outras rotas `GET` a descodificar
+corpo, tratá-las no mesmo passo — vale uma varredura.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
