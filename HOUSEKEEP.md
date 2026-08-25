@@ -25284,6 +25284,25 @@ aqui como achado, não como pendência desta entrada.
 **Status**: **corrigido** — testes acima. Verificação em campo pendente
 (curls entregues ao coordenador).
 
+
+### Verificação em campo — 2026-08-25
+
+```
+sem chat         -> 400 missing_chat      "missing chat in payload"
+duração "3h"     -> 400 invalid_duration  "duration must be one of: 0, 24h, 7d, 90d"
+caminho feliz    -> 200
+```
+
+O `invalid_duration` enumera o conjunto válido, o que é melhor do que o pedido.
+
+**Caminho de SUCESSO confirmado na interface** (ARMADILHAS.md #2 — três
+defeitos deste repositório viviam atrás de suítes que só exercitavam a guarda):
+a conversa mostra *"Você ativou as mensagens temporárias"* com o ícone de
+relógio.
+
+Os `simpleErr` restantes ficaram por corrigir, com justificação, e estão
+registados em **F236** — não foram esquecidos.
+
 <!-- f-status: corrigido -->
 
 ## F225 — rotas de chat com nomes de campo de GRUPO: `Group` e `groupjid` onde o destino é 1:1
@@ -26561,3 +26580,47 @@ qualquer outro continua `500`.
 **Status**: corrigido — F235, 2026-08-25.
 
 <!-- f-status: corrigido -->
+
+## F236 — a API tem DOIS formatos de erro: os de fronteira continuam sem código
+
+**Data/contexto**: 2026-08-25, ao verificar a correção da F224.
+
+**Onde**: `pkg/presentation/http/handlers/errors.go:7-13`
+
+```go
+errUnauthorized     = &simpleErr{"unauthorized"}
+errMissingSessionID = &simpleErr{"missing session id"}
+errMissingID        = &simpleErr{"missing ID"}
+errDecodePayload    = &simpleErr{"could not decode payload"}
+errMissingJID       = &simpleErr{"missing jid in path"}
+```
+
+**Problema**: a F224 corrigiu a validação de campos, e bem. Medido depois dela,
+no mesmo endpoint:
+
+```
+sem chat        -> {"code":400,"error":{"code":"missing_chat","message":"missing chat in payload"}}
+duração inválida-> {"code":400,"error":{"code":"invalid_duration","message":"duration must be one of: 0, 24h, 7d, 90d"}}
+token inválido  -> {"code":401,"error":"unauthorized"}
+```
+
+As duas primeiras trazem objeto com `code`; a terceira traz uma string. **Um
+cliente que analise `error` tem de aceitar dois tipos para o mesmo campo.**
+
+O worker da F224 fez a varredura que lhe foi pedida e justificou o recorte: os
+sentinels restantes não são validação de campo, são fronteira (autenticação,
+descodificação, parâmetro de rota). É recorte defensável — mas o efeito no
+consumidor é o mesmo da F224, e por isso fica registado em vez de dado por
+resolvido.
+
+**Escala**: 244 usos dos cinco sentinels fora de `errors.go`. Não é edição de
+um handler.
+
+**Correção sugerida**: dar `code` aos cinco, mantendo texto e status atuais. É
+mecânico e não muda comportamento — só acrescenta o campo que falta. Fazer
+isso ANTES de alguém escrever um cliente que dependa da forma string.
+
+**Status**: não corrigido — descoberto ao verificar a F224, e fora do âmbito
+dela.
+
+<!-- f-status: aberto -->
