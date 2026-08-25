@@ -9618,6 +9618,20 @@ validação individual de cada mutação (autenticidade). O modo estrito
 - `TestStrictSnapshotMACAborts` — modo estrito aborta como antes.
 - `TestNonStrictPatchSnapshotMACContinues` — caminho de patch incremental
   (não snapshot), LTHash divergente, non-strict → continua.
-- Controle negativo executado: com `validateMACs` desligado, o teste 2 falha
-  (`proto: cannot parse invalid wire-format data` — o blob adulterado não
-  desserializa sem a validação de MAC a proteger).
+- **Controle negativo EXECUTADO** (refeito 2026-08-24 — o primeiro desligava
+  `validateMACs` inteiro, o que faz o teste falhar por razão INCIDENTAL: o
+  blob adulterado deixa de desserializar. Isso não prova que o teste morde na
+  verificação de content MAC). A mutação certa é remover SÓ a comparação de
+  content MAC em `decode_mutation.go:60-66`, mantendo `validateMACs`:
+
+  ```
+  --- FAIL: TestNonStrictSnapshotMACStillRejectsBadMutationMAC (0.00s)
+      decode_test.go:285: err = failed to decode snapshot of v1: failed to
+        unmarshal mutation #1: proto: cannot parse invalid wire-format data,
+        expected ErrMismatchingContentMAC
+  FAIL	wa-api/internal/wa-noise/protocol/appstate	0.188s
+  ```
+
+  A asserção que apanha é a de TIPO (`errors.Is(err, ErrMismatchingContentMAC)`),
+  não a de "houve erro" — e se o blob adulterado desencriptasse limpo, o
+  `t.Fatal("expected error ... got nil")` disparava. Os dois caminhos fechados.

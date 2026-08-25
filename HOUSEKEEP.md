@@ -25101,30 +25101,74 @@ a primeira, que demonstravelmente produz falsos negativos.
 **Testes**: 4 novos + controle negativo executado (ver `PATCHES.md`, entrada
 F223).
 
-**Verificação em campo**: pendente — curls para mute e star abaixo.
+**Verificação em campo**: FEITA 2026-08-24, contra as duas sessões pareadas
+(`lucas` 554192421234:41, `filarapida` 5516981818244:25), com o binário do
+merge e o datadir vivo `/Users/albuquerque/wa-live-data`.
 
-```bash
-# mute on
-curl -s -X POST http://localhost:8080/chat/mute \
-  -H 'Content-Type: application/json' \
-  -d '{"jid":"<JID>","mute_duration":28800}'
+**Linha de base**: a tabela `wanoise_app_state_version` NÃO tinha linha
+`regular_high` para nenhum dos dois JIDs — nunca chegara a persistir, porque o
+decode abortava sempre. Isto é, a ausência da linha era o próprio sintoma.
 
-# mute off
-curl -s -X POST http://localhost:8080/chat/mute \
-  -H 'Content-Type: application/json' \
-  -d '{"jid":"<JID>","mute_duration":0}'
+Oito operações, todas `HTTP 200`:
 
-# star
-curl -s -X POST http://localhost:8080/message/star \
-  -H 'Content-Type: application/json' \
-  -d '{"jid":"<JID>","message_id":"<MSG_ID>","star":true}'
+| operação | conta | resultado |
+|---|---|---|
+| mute 8h / unmute | lucas → filarapida | 200 / 200 |
+| pin / unpin | lucas → filarapida | 200 / 200 |
+| star / unstar | lucas → filarapida | 200 / 200 |
+| mute 8h / unmute | filarapida → lucas | 200 / 200 |
 
-# unstar
-curl -s -X POST http://localhost:8080/message/star \
-  -H 'Content-Type: application/json' \
-  -d '{"jid":"<JID>","message_id":"<MSG_ID>","star":false}'
+Versão `regular_high` depois: `lucas` 310 → **313**, `filarapida` 63 → **66**.
+Ambas as linhas passaram a existir.
+
+**A linha que torna a medição conclusiva** — do lado da `filarapida`, uma única
+vez:
+
+```
+WARN Snapshot MAC mismatch for regular_high v64 (non-strict mode, continuing):
+     failed to verify patch v64: mismatching LTHash
+     — individual mutation MACs will still be validated
 ```
 
-Confirmar que `regular_high` avança de versão após cada operação.
+Ela separa duas explicações que dariam o mesmo verde. Se o MAC do snapshot
+tivesse simplesmente passado a verificar, esta linha não existiria e os oito
+`200` não diriam nada sobre a correção. Ela existe: logo a falha CONTINUA a
+acontecer, a causa continua desconhecida, e o que mudou é só ter deixado de
+bloquear. **Um teste de campo sem esta linha não teria provado nada** — vale
+como regra para a próxima correção deste tipo.
+
+Nenhuma mutação individual falhou em nenhuma das oito operações.
+
+Os `curl`s, com os nomes de campo REAIS (ver `pkg/domain/mute.go`,
+`pkg/domain/pin.go`, `pkg/domain/star.go` — a primeira tentativa usou
+`messageId`/`mute_duration` e levou `400 missing_message_id`):
+
+```bash
+# mute on / off  — duration do conjunto fechado: "0" (para sempre), "8h", "168h"
+curl -s -X POST http://localhost:8080/chat/mute -H 'token: <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>@s.whatsapp.net","mute":true,"duration":"8h"}'
+curl -s -X POST http://localhost:8080/chat/mute -H 'token: <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>@s.whatsapp.net","mute":false}'
+
+# pin on / off
+curl -s -X POST http://localhost:8080/chat/pin -H 'token: <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"jid":"<JID>@s.whatsapp.net","pin":true}'
+
+# star on / off — snake_case, e exige chat + sender + from_me
+curl -s -X POST http://localhost:8080/message/star -H 'token: <TOKEN>' \
+  -H 'Content-Type: application/json' \
+  -d '{"chat":"<DEST>@s.whatsapp.net","sender":"<MEU>@s.whatsapp.net",
+       "message_id":"<MSG_ID>","from_me":true,"star":true}'
+```
+
+Conferir depois com:
+
+```bash
+sqlite3 <datadir>/dbdata/main.db \
+  "select jid,name,version from wanoise_app_state_version where name='regular_high';"
+```
 
 <!-- f-status: corrigido -->
