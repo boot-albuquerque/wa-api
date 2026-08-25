@@ -26107,4 +26107,37 @@ valem mais, mas custam mais.
 Relatório completo da via pública guardado em
 `/Users/albuquerque/wa-live-data/analise-405-unfollow.md`, com as fontes.
 
+
+## Parte (a) — CORRIGIDA 2026-08-25, verificada em campo
+
+`pkg/infra/wa-noise/errmap/newsletter.go` classifica o `405` do GraphQL como
+`CategoryForbidden`, com código `newsletter_admin_cannot_unfollow`.
+
+**Melhor que o precedente da F223**: casa por CAMPO TIPADO
+(`errors.As` sobre `GraphQLError.Extensions.ErrorCode != 405`), não por
+substring. O `ClassifyAppState` teve de casar `code="409"` em XML embutido e
+documentar a fragilidade como dívida consciente; aqui havia campo estruturado
+e foi usado. O `errmap` deixa de ser um padrão frágil replicado.
+
+**Estreita de propósito**: só o `405` muda de categoria. Rede, codificação e
+sessão em falta continuam `500` — não foram inventados mapeamentos para
+códigos que nunca observámos.
+
+**Campo** (canal `120363425486344523@newsletter`, conta dona, token `tok_fila`):
+
+```
+antes:  500  {"code":"newsletter_failed","message":"newsletter operation failed"}
+depois: 403  {"code":"newsletter_admin_cannot_unfollow",
+              "message":"channel admins cannot unfollow their own channel;
+                         dismiss yourself as admin first"}
+```
+
+A mensagem diz o que FAZER, não só que falhou.
+
+**Nota de método**: antes de medir, confirmei que a porta 8080 era servida pelo
+binário acabado de compilar (`lsof -nP -iTCP:8080` → `wa-f233a`). Sem essa
+confirmação eu já tinha medido código antigo uma vez hoje — ver a nota na F232.
+
+A parte **(b)** continua ABERTA: faltam `delete`, `change owner` e `demote`.
+
 <!-- f-status: aberto -->
