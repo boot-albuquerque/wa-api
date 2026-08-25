@@ -26780,3 +26780,72 @@ isso ANTES de alguém escrever um cliente que dependa da forma string.
 dela.
 
 <!-- f-status: aberto -->
+
+## F237 — 62 dos 136 métodos do wa-noise nunca são chamados, e entre eles estão as COMUNIDADES
+
+**Data/contexto**: 2026-08-25, medição da superfície da biblioteca a pedido do
+utilizador ("medir todos os noise").
+
+**Método**: enumerar os métodos públicos de `*Client` em
+`internal/wa-noise/core/`, e para cada um procurar chamada em `pkg/`.
+
+```
+136 métodos públicos
+ 74 chamados por pkg/
+ 62 NUNCA chamados        (46% da superfície)
+```
+
+## Os 62, agrupados
+
+| grupo | nº | exemplos |
+|---|---|---|
+| mídia / download | 11 | `DownloadThumbnail`, `DownloadHistorySync`, `DownloadAny`, `SetMediaHTTPClient` |
+| mensagem | 9 | `BuildReaction`, `GenerateMessageID`, `ParseWebMessage`, `SendProtocolMessageReceipt` |
+| perfil / contactos | 8 | `GetBusinessProfile`, `GetContactQRLink`, `GetStatusPrivacy`, `GetUserDevices` |
+| **grupos** | **8** | **`LinkGroup`, `UnlinkGroup`, `GetSubGroups`, `GetLinkedGroupsParticipants`**, `JoinGroupWithInvite`, `SetGroupDescription` |
+| ligação / sessão | 6 | `ResetConnection`, `WaitForConnection`, `LastSuccessfulConnect` |
+| cifra / decifra | 5 | `DecryptReaction`, `DecryptComment`, `EncryptComment` |
+| newsletter | 2 | `UploadNewsletter`, `UploadNewsletterReader` |
+| outros | 11 | `FetchStickerPack`, `StoreLIDPNMapping`, `AcceptTOSNotice` |
+
+## A correção de rumo: COMUNIDADES não estão em falta, estão POR EXPOR
+
+Eu reportei comunidades como capability inexistente. **Estava errado.** A
+biblioteca tem as primitivas, e os nomes não deixam margem:
+
+```go
+func (cli *Client) GetSubGroups(ctx, community types.JID) ([]*types.GroupLinkTarget, error)
+func (cli *Client) GetLinkedGroupsParticipants(ctx, community types.JID) ([]types.JID, error)
+func (cli *Client) LinkGroup(ctx, parent, child types.JID) error
+func (cli *Client) UnlinkGroup(ctx, parent, child types.JID) error
+```
+
+O tipo `types.GroupInfo` tem `IsParent` e `GroupLinkedParent{LinkedParentJID,
+IsDefaultSubGroup}`, e o comentário do `CreateGroup` diz:
+
+> To create a new group within a community, set `LinkedParentJID` in the
+> CreateGroup request.
+
+Ou seja: **criar comunidade, criar subgrupo dentro dela, ligar e desligar
+grupos, e listar subgrupos e participantes — tudo já existe.** `grep` por
+`community|SubGroup|LinkGroup` em `pkg/` devolve **zero**.
+
+A distinção importa para o planeamento: "falta implementar contra o protocolo"
+é trabalho de semanas e risco alto; "falta expor" é trabalho de rotas, portas e
+adaptador, no molde que já repetimos várias vezes esta sessão.
+
+## Ressalva sobre o número
+
+Os 62 **não são 62 capabilities perdidas**. Muitos são infraestrutura
+(`SetWebsocketHTTPClient`, `DangerousInternals`, `AddEventHandlerWithSuccessStatus`)
+ou variantes de algo que já usamos (`DownloadToFile` ao lado de `Download`).
+O número mede superfície não tocada, não valor por colher — e eu não classifiquei
+um a um.
+
+O que está classificado com confiança é o grupo das comunidades, porque fui
+ler as assinaturas.
+
+**Status**: inventário, não defeito. Comunidades ficam como candidato de
+trabalho concreto.
+
+<!-- f-status: aberto -->
