@@ -25852,9 +25852,34 @@ renomear para `duration_ns`. A primeira é a que respeita o contrato publicado.
 Procurar outros `time.Duration` com tag JSON no repositório — o defeito
 repete-se onde o padrão se repetir.
 
-**Status**: não corrigido — fora do escopo da sessão de testes.
+**Varredura de irmãos**: `time.Duration` com tag JSON no repositório:
+- `internal/wa-headless/engine/deadline.go` — config interno, nomes não
+  mentem sobre unidade; é consumido por código que sabe que é nanosegundos.
+- `pkg/domain/mute.go:16` — `MuteDuration *time.Duration` com tag
+  `mute_duration` — campo de ENTRADA (request), nome não anuncia segundos.
+  Candidato a investigação separada se houver consumidor que interprete
+  como segundos, mas fora do escopo desta correção.
 
-<!-- f-status: aberto -->
+**Status**: **corrigido**. `DurationSeconds int64` com `int64(dur.Seconds())`
+em `newsletter_ops.go:81,116`. O contrato JSON (`duration_seconds`) mantém-se
+inalterado.
+
+Testes que travam:
+- `TestNewsletterOps_Execute_DurationInSeconds` — 90s pela porta → 90 no
+  resultado (pela rota de Execute, não pelo struct direto).
+- `TestNewsletterResult_DurationSeconds_SerializesAsSeconds` — JSON output = 90.
+- `TestNewsletterResult_ZeroDuration_OmittedFromJSON` — `omitempty` com int64
+  omite zero (decisão: zero = sem duração, correto para operações que não
+  são subscribe).
+
+Controlo negativo executado — mutar `int64(dur.Seconds())` para `int64(dur)`:
+```
+=== RUN   TestNewsletterOps_Execute_DurationInSeconds
+    newsletter_ops_test.go:92: DurationSeconds = 90000000000, want 90 (got nanoseconds?)
+--- FAIL: TestNewsletterOps_Execute_DurationInSeconds (0.00s)
+```
+
+<!-- f-status: corrigido -->
 
 ## F232 — os 11 métodos de newsletter não têm prazo, e `/newsletter/updates` fica pendurado até o cliente desistir
 
@@ -25918,6 +25943,20 @@ porque `500` sugere defeito nosso quando pode ser recusa legítima — devia ser
 do ficheiro já faz. Um teste que percorra os métodos do adaptador e falhe se
 algum não puser prazo evita que o próximo nasça igual.
 
-**Status**: não corrigido — descoberto nos testes, fora do escopo.
+**Status**: **corrigido**. `context.WithTimeout(ctx, waclient.RequestTimeout)` +
+`defer cancel()` aplicado aos onze métodos de newsletter em
+`pkg/infra/wa-noise/adapters/misc/adapter.go`.
 
-<!-- f-status: aberto -->
+Testes que travam:
+- `TestNewsletterAdapter_DeadlineAppliedToAllEleven` — asserção anti-regressão
+  que percorre as onze operações e falha se QUALQUER uma não puser prazo no
+  contexto passado ao SDK. Cada fake verifica `ctx.Deadline()`.
+
+Controlo negativo executado — remover WithTimeout de FollowNewsletter:
+```
+=== RUN   TestNewsletterAdapter_DeadlineAppliedToAllEleven
+    adapter_newsletter_test.go:331: follow: context passed to SDK has NO deadline — missing WithTimeout
+--- FAIL: TestNewsletterAdapter_DeadlineAppliedToAllEleven (0.00s)
+```
+
+<!-- f-status: corrigido -->

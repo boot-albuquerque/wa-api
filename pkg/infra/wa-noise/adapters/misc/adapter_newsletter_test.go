@@ -232,6 +232,107 @@ func TestNewsletterAdapter_CaminhoDeSucessoDasOnze(t *testing.T) {
 	}
 }
 
+// F232: every newsletter method must apply a deadline to the context it
+// passes to the SDK. The anti-regression assertion: each fake records
+// whether ctx.Deadline() was set when the SDK was called, and the test
+// fails if ANY of the eleven is missing a deadline.
+//
+// The check is ctx.Deadline() — the exact mechanism the adapter uses
+// (context.WithTimeout). A method that passes the parent context through
+// unchanged would fail here because Background() has no deadline.
+func TestNewsletterAdapter_DeadlineAppliedToAllEleven(t *testing.T) {
+	ctx := context.Background()
+	deadlines := make(map[string]bool)
+
+	checkDeadline := func(ctx context.Context, name string) {
+		_, ok := ctx.Deadline()
+		deadlines[name] = ok
+	}
+
+	fake := &testkit.Fake{
+		CreateNewsletterFn: func(ctx context.Context, _ wanoise.CreateNewsletterParams) (*types.NewsletterMetadata, error) {
+			checkDeadline(ctx, "create")
+			return nil, nil
+		},
+		GetNewsletterInfoFn: func(ctx context.Context, _ types.JID) (*types.NewsletterMetadata, error) {
+			checkDeadline(ctx, "info")
+			return nil, nil
+		},
+		GetNewsletterInfoWithInviteFn: func(ctx context.Context, _ string) (*types.NewsletterMetadata, error) {
+			checkDeadline(ctx, "invite")
+			return nil, nil
+		},
+		FollowNewsletterFn: func(ctx context.Context, _ types.JID) error {
+			checkDeadline(ctx, "follow")
+			return nil
+		},
+		UnfollowNewsletterFn: func(ctx context.Context, _ types.JID) error {
+			checkDeadline(ctx, "unfollow")
+			return nil
+		},
+		NewsletterToggleMuteFn: func(ctx context.Context, _ types.JID, _ bool) error {
+			checkDeadline(ctx, "mute")
+			return nil
+		},
+		GetNewsletterMessagesFn: func(ctx context.Context, _ types.JID, _ *wanoise.GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error) {
+			checkDeadline(ctx, "messages")
+			return nil, nil
+		},
+		GetNewsletterMessageUpdatesFn: func(ctx context.Context, _ types.JID, _ *wanoise.GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error) {
+			checkDeadline(ctx, "updates")
+			return nil, nil
+		},
+		NewsletterMarkViewedFn: func(ctx context.Context, _ types.JID, _ []types.MessageServerID) error {
+			checkDeadline(ctx, "markviewed")
+			return nil
+		},
+		NewsletterSendReactionFn: func(ctx context.Context, _ types.JID, _ types.MessageServerID, _ string, _ types.MessageID) error {
+			checkDeadline(ctx, "react")
+			return nil
+		},
+		NewsletterSubscribeLiveUpdatesFn: func(ctx context.Context, _ types.JID) (time.Duration, error) {
+			checkDeadline(ctx, "subscribe")
+			return 42 * time.Second, nil
+		},
+	}
+	a := comCliente(fake)
+
+	calls := []struct {
+		name   string
+		invoke func() error
+	}{
+		{"create", func() error { _, err := a.CreateNewsletter(ctx, "u1", "n", "d", nil); return err }},
+		{"info", func() error { _, err := a.NewsletterInfo(ctx, "u1", canalJID); return err }},
+		{"invite", func() error { _, err := a.NewsletterInfoWithInvite(ctx, "u1", "k"); return err }},
+		{"follow", func() error { return a.FollowNewsletter(ctx, "u1", canalJID) }},
+		{"unfollow", func() error { return a.UnfollowNewsletter(ctx, "u1", canalJID) }},
+		{"mute", func() error { return a.ToggleNewsletterMute(ctx, "u1", canalJID, true) }},
+		{"messages", func() error { _, err := a.NewsletterMessages(ctx, "u1", canalJID, 3, "1"); return err }},
+		{"updates", func() error {
+			_, err := a.NewsletterMessageUpdates(ctx, "u1", canalJID, 3, time.Unix(0, 0), "2")
+			return err
+		}},
+		{"markviewed", func() error { return a.MarkNewsletterViewed(ctx, "u1", canalJID, []int{1, 2}) }},
+		{"react", func() error { return a.SendNewsletterReaction(ctx, "u1", canalJID, 3, "👍", "m1") }},
+		{"subscribe", func() error { _, err := a.SubscribeNewsletterLiveUpdates(ctx, "u1", canalJID); return err }},
+	}
+	if len(calls) != 11 {
+		t.Fatalf("family has 11 ops, table has %d", len(calls))
+	}
+
+	for _, c := range calls {
+		if err := c.invoke(); err != nil {
+			t.Fatalf("%s = %v, want success", c.name, err)
+		}
+	}
+
+	for _, c := range calls {
+		if !deadlines[c.name] {
+			t.Errorf("%s: context passed to SDK has NO deadline — missing WithTimeout", c.name)
+		}
+	}
+}
+
 // TestNewsletterAdapter_SubscribeDevolveADuracao trava o único retorno que não
 // é dado nem erro: a duração da subscrição. Perdê-la faria o chamador achar
 // que a subscrição é instantânea.
