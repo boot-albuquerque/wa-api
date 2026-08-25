@@ -25921,3 +25921,85 @@ algum não puser prazo evita que o próximo nasça igual.
 **Status**: não corrigido — descoberto nos testes, fora do escopo.
 
 <!-- f-status: aberto -->
+
+## F233 — o `405` do `unfollow` é regra de negócio do WhatsApp, e faltam-nos as operações que o dono precisa
+
+**Data/contexto**: 2026-08-25. O `POST /newsletter/unfollow` devolveu `500` nos
+testes em produção (ver F232). Investigado por três workers em paralelo, com
+vias independentes: código local + fork, referências (Baileys/Evolution), e
+relatos públicos.
+
+**A causa, com fonte oficial** — documentação do WhatsApp:
+
+> Channel admins can't "unfollow" a channel they manage. To unfollow the
+> channel, first dismiss yourself as an admin.
+>
+> https://faq.whatsapp.com/284188487298437/
+
+O dono é, por definição, admin. Logo **não pode** deixar de seguir o próprio
+canal, e o `405 Not Allowed` é o servidor a aplicar essa regra. **Não é defeito
+nosso.**
+
+Nenhuma das referências (Baileys, whatsmeow, wwebjs) faz guarda de `role` antes
+de enviar — todas mandam e deixam o servidor recusar. A nossa implementação faz
+o mesmo, e nisso está correta.
+
+**As três hipóteses que foram consideradas, e o que as separou**:
+
+1. *recusa legítima ao dono* — **CONFIRMADA** pela FAQ oficial.
+2. *query ID retirado* — enfraquecida: os nossos IDs diferem TODOS dos do
+   Baileys (16 dígitos contra 17, gerações diferentes), mas `create`, `follow`,
+   `mute` e `info` respondem `200`. Não há relato público de retirada seletiva.
+3. *mutação errada* — descartada. Eu próprio a levantei a meio, ao ler
+   fragmentos onde `xwa2_newsletter_leave_v2` aparecia em três sítios, e
+   concluí cedo demais que enviávamos a operação errada. É apenas o NOME do
+   caminho que o Baileys usa no seu unfollow.
+
+**Armadilha evitada, que vale registar**: há relatos públicos abundantes de
+`405` em WhatsApp — mas de **CONEXÃO** (cliente desatualizado, o WebSocket a
+rejeitar a versão). É problema completamente diferente do `405` vindo de
+`data.errors[0].extensions.error_code` numa mutação GraphQL. Pesquisar "405
+whatsapp" e ler os primeiros resultados teria produzido o diagnóstico errado
+com aparência de confirmado.
+
+## O que FALTA, e isso sim é nosso
+
+O dono fica sem saída pela nossa API. Comparação das mutações disponíveis:
+
+| operação | Baileys | nosso fork |
+|---|---|---|
+| create, follow, unfollow, mute, unmute, update | sim | **sim** |
+| **delete** (`xwa2_newsletter_delete_v2`) | sim | **não** |
+| **change owner** | sim | **não** |
+| **demote admin** | sim | **não** |
+| metadata, subscribers, admin count | sim | parcial |
+
+Segundo a FAQ, o dono que queira sair tem exatamente dois caminhos, e **não
+temos nenhum**:
+
+1. transferir a posse e depois demitir-se de admin
+2. apagar o canal (destrutivo, irreversível — só o dono pode)
+
+Não existe "o dono abandona sem apagar e sem transferir". É regra do produto,
+não lacuna nossa.
+
+**Correção sugerida, em duas partes independentes**:
+
+**(a) O erro** — o `500 newsletter_failed` tem de virar `4xx` com motivo. O
+`an-local` localizou a causa: o caso de uso embrulha TODO erro como
+`CategoryInternal` sem inspecionar o `GraphQLError`. O `405` vem em
+`data.errors[0].extensions.error_code` e está disponível. Mesma família da
+**F224** — e aqui é pior, porque `500` acusa o nosso código de um defeito que
+é do chamador.
+
+**(b) As operações em falta** — expor `delete` no mínimo, que é a única saída
+completa do dono. `change owner` e `demote` são o caminho não-destrutivo e
+valem mais, mas custam mais.
+
+Relatório completo da via pública guardado em
+`/Users/albuquerque/wa-live-data/analise-405-unfollow.md`, com as fontes.
+
+**Status**: diagnosticado, não corrigido. (a) é mecânico; (b) é decisão de
+produto.
+
+<!-- f-status: aberto -->
