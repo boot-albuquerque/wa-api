@@ -27512,3 +27512,80 @@ duas, separar como já se fez para o `GET`.
 **Status**: não corrigido — precisa de decisão.
 
 <!-- f-status: aberto -->
+
+## F253 — cobertura REAL da bateria: 102 de 133 rotas, e o que ficou de fora
+
+**Data/contexto**: 2026-08-25. Contagem honesta depois de o utilizador
+perguntar se tudo tinha sido testado. **Não tinha.**
+
+| grupo | nº | estado |
+|---|---|---|
+| exercitadas com payload real e verificação de efeito | **102** | feito |
+| `/session/*` | 18 | excluídas pela instrução do utilizador |
+| destrutivas | 13 | excluídas por decisão minha, registada |
+| **total** | **133** | |
+
+**As 13 destrutivas não testadas, por decisão**: `DELETE /admin/users/{id}` e
+`/full`, `DELETE /hmac/config`, `DELETE /s3/config`, `DELETE /webhook`,
+`DELETE /session/hmac/config`, `DELETE /session/s3/config`,
+`POST /group/leave`, `POST /group/photo/remove`, `POST /user/block`,
+`POST /user/unblock`, `POST /chat/delete`, `POST /session/logout`.
+
+Chamá-las com payload sintético destruiria configuração, sessões ou relações
+reais. É decisão, não esquecimento — e fica escrito para não parecer o
+contrário.
+
+## Últimas rotas exercitadas nesta ronda
+
+| rota | resultado |
+|---|---|
+| `GET /health/live`, `/health/ready` | `200` — o `ready` traz `checks.database` e `capabilities` |
+| `GET /labels`, `/labels/{id}/chats` | `200` |
+| `POST /user/presence` | `200` — campo é `type`, não `presence` |
+| `POST /user/presence/subscribe` | `200` |
+| `POST /user/privacy` | `200` — campos `privacy_setting` + `value` |
+| `POST /user/contacts/sync` | `200` — `mode` ∈ {`if_unsynced`, `incremental`, `full`} |
+| `POST /user/history/sync` | `400` — exige `oldest_msg_id` |
+| `POST /chat/ephemeral/default` | `200` |
+| `POST /call/reject` | `200` — campos `call_from` + `call_id` |
+| `POST /proxy/set` | `400 proxy_while_connected` — recusa correta com sessão ligada |
+| `POST /chat/downloadimage`, `video`, `document`, `sticker` | `200` com base64 |
+| `POST /chat/downloadaudio` | `500` — ver abaixo |
+
+**Nota de qualidade**: as mensagens de erro desta família são das melhores do
+repositório. `invalid presence type. Allowed values: 'available',
+'unavailable'` e `mode must be one of: if_unsynced, incremental, full`
+enumeram o conjunto válido. É o padrão que a F224 introduziu, e aqui já
+existia.
+
+**Status**: inventário de cobertura.
+
+<!-- f-status: nao-se-faz -->
+
+## F254 — `403` do CDN do WhatsApp vira `500` nosso
+
+**Medido**: `POST /chat/downloadaudio` com os parâmetros de um áudio real do
+histórico devolve `500 media_download_failed`. O log dá a causa:
+
+```
+error="failed to download media: download failed with status code 403"
+```
+
+**A rota não está partida** — `downloadimage`, `video`, `document` e `sticker`
+devolveram `200` com os bytes, usando o mesmo caminho. O que falha é aquela
+mídia específica, cujo blob já não existe no CDN (mesmo fenómeno da imagem de
+2024 que quase me fez reportar o `forward` como quebrado).
+
+**O defeito é a classificação**: mídia expirada no servidor do WhatsApp não é
+falha nossa. `410 Gone` ou `404` descreveriam o que aconteceu; `500` diz que o
+nosso código falhou.
+
+É a mesma família da **F241**, e eleva o padrão a quatro rotas conhecidas.
+
+**Correção sugerida**: mapear o `403`/`404` do CDN para `4xx` com código
+próprio (`media_expired` ou `media_unavailable`), no molde do `errmap` que a
+F233(a) criou para o GraphQL.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
