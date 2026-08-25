@@ -9636,30 +9636,38 @@ validação individual de cada mutação (autenticidade). O modo estrito
   não a de "houve erro" — e se o blob adulterado desencriptasse limpo, o
   `t.Fatal("expected error ... got nil")` disparava. Os dois caminhos fechados.
 
-## F233b — newsletter admin operations (demote, change_owner, delete), 2026-08-25
+## F233b/c — newsletter admin operations (demote, change_owner, delete), 2026-08-25
 
 ### Contexto
 
 As três operações de gestão de admin de canais (newsletter) que faltavam:
 despromover admin, transferir posse e apagar canal. Nenhuma existia no
-upstream whatsmeow; os query IDs foram extraídos do Baileys.
+upstream whatsmeow.
+
+A F233b usou query IDs do Baileys, que eram de uma geração antiga e falharam
+em campo com `400 Bad Request (CRITICAL)`. A F233c substituiu-os pelos IDs
+reais extraídos do bundle JS do WhatsApp Web autenticado (2026-08-25). O
+`delete` já estava correto — coincidência entre Baileys e bundle.
 
 ### O que mudou
 
-**`internal/wa-noise/capabilities/newsletter/queryids.go`**: três novos
-query IDs de mutation, com comentário indicando a origem (Baileys) e a
-necessidade de verificação em campo:
+**`internal/wa-noise/capabilities/newsletter/queryids.go`**: três query IDs
+de mutation. Origem: bundle JS de `web.whatsapp.com` (sessão autenticada),
+procurando `WAWebMex*Newsletter*Mutation.graphql` e lendo o ID numérico
+adjacente. Método documentado em `wa-poc/notas/01-resultado.md`.
 
-- `mutationDemoteAdmin` = `"6551828931592903"` (16 dígitos)
-- `mutationChangeOwner` = `"7341777602580933"` (16 dígitos)
-- `mutationDeleteNewsletter` = `"30062808666639665"` (17 dígitos)
+- `mutationDemoteAdmin` = `"9880997548630971"`
+  (`WAWebMexDemoteNewsletterAdminJobMutation`)
+- `mutationChangeOwner` = `"9546742745432473"`
+  (`WAWebMexChangeNewsletterOwnerJobMutation`)
+- `mutationDeleteNewsletter` = `"30062808666639665"`
+  (`WAWebMexDeleteNewsletterJobMutation` — já correto desde F233b)
 
-Os IDs existentes no nosso fork são de geração DIFERENTE dos do Baileys
-(ex: CREATE nosso = `6234210096708695`, Baileys = `8823471724422422`),
-portanto estes podem precisar de substituição após verificação em campo.
+O comentário no código indica a origem, a data, e o método de reextração
+para quando o WhatsApp rotar os IDs.
 
 **`internal/wa-noise/capabilities/newsletter/actions.go`**: três funções
-novas seguindo o padrão exato de `Follow`/`Unfollow`:
+seguindo o padrão exato de `Follow`/`Unfollow`:
 
 - `DemoteAdmin(ctx, t, channelJID, userJID)` — `SendMexIQ` com
   `newsletter_id` e `user_id`
@@ -9669,10 +9677,17 @@ novas seguindo o padrão exato de `Follow`/`Unfollow`:
 **`internal/wa-noise/core/newsletter.go`**: três métodos de fachada com
 guarda de nil-receiver, seguindo o padrão dos 12 existentes.
 
+### Divergência do upstream
+
+O whatsmeow **não implementa** `demote`, `change_owner` nem `delete` para
+newsletters. Os query IDs e as funções são nossos. Divergência consciente e
+necessária — sem elas o dono do canal não tem saída pela nossa API.
+
 ### O comportamento mudou
 
-**Não.** São três capacidades novas; nenhum comportamento existente foi
-alterado. Os query IDs existentes não foram tocados.
+**Sim (F233c).** `demote` e `change_owner` passam de sempre-falhar
+(`400 Bad Request (CRITICAL)`) para funcionais, com os IDs que o cliente
+oficial do WhatsApp Web usa. `delete` não mudou (já estava correto).
 
 ### Testes
 
@@ -9683,9 +9698,9 @@ alterado. Os query IDs existentes não foram tocados.
 - `TestDeleteSendsCorrectMutation` — verifica query ID e payload
 - `TestDeletePropagatesError` — erro propaga
 - `TestConvertQueryIDEIdentidadeParaQualquerPayload` — tabela `todasAsQueryIDs`
-  atualizada para incluir os três novos IDs
+  atualizada para incluir os três IDs
 
-**Controles negativos EXECUTADOS**:
+**Controles negativos EXECUTADOS (F233b)**:
 
 ```
 --- FAIL: TestDemoteAdminSendsCorrectMutation (0.00s)

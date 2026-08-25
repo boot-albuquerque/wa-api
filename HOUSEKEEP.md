@@ -26261,66 +26261,31 @@ curl -s -X DELETE http://localhost:8080/newsletter/delete \
 ```
 
 
-## Parte (b) — IMPLEMENTADA mas NÃO FUNCIONAL: os query IDs são rejeitados
+## Parte (b) — IMPLEMENTADA, query IDs corrigidos (F233c), pendente de verificação em campo
 
-2026-08-25. As três rotas existem e a canalização está correta, mas as
-operações **não funcionam** contra o servidor do WhatsApp.
+2026-08-25. As três rotas existem e a canalização está correta. Os query IDs
+originais (do Baileys) falharam em campo com `400 Bad Request (CRITICAL)`.
 
-**Medido em campo** (canal `120363425486344523@newsletter`, conta `filarapida`
-dona, binário confirmado a servir a porta 8080):
-
-```
-POST /newsletter/demote        -> 500   error="graphql error: 400 Bad Request (CRITICAL)"
-POST /newsletter/change-owner  -> 500   error="graphql error: 400 Bad Request (CRITICAL)"
-```
-
-Num `mex` GraphQL, `400 Bad Request` é a resposta típica a um `query_id`
-desconhecido. **O risco antecipado concretizou-se**: os IDs foram extraídos do
-Baileys, que é de OUTRA geração da API —
+**F233c (2026-08-25)**: os dois IDs errados foram substituídos pelos reais,
+extraídos do bundle JS do `web.whatsapp.com` autenticado (método:
+`WAWebMex*Newsletter*Mutation.graphql` → ID numérico adjacente):
 
 ```go
-mutationDemoteAdmin      = "6551828931592903"   // Baileys
-mutationChangeOwner      = "7341777602580933"   // Baileys
-mutationDeleteNewsletter = "30062808666639665"  // Baileys, 17 dígitos
+mutationDemoteAdmin      = "9880997548630971"   // era "6551828931592903" (Baileys)
+mutationChangeOwner      = "9546742745432473"   // era "7341777602580933" (Baileys)
+mutationDeleteNewsletter = "30062808666639665"  // já correto (coincide Baileys/bundle)
 ```
 
-— e os nossos, que funcionam, são de outra (`CREATE` nosso `6234210096708695`
-contra `8823471724422422` do Baileys). O worker registou a origem e escreveu
-que precisavam de verificação em campo. A verificação diz que não servem.
+Ficheiro alterado: `internal/wa-noise/capabilities/newsletter/queryids.go`.
+Testes existentes passam sem alteração (referenciam as constantes, não os
+valores literais).
 
-**O `delete` NÃO foi executado.** A guarda de confirmação recusou antes de
-sair:
+**Verificação em campo**: pendente — é do utilizador.
 
-```
-DELETE /newsletter/delete {"jid":"..."}  -> 400 missing_confirm_jid
-    "confirm_jid must match the channel jid"
-```
-
-e o log confirma que a chamada nunca chegou ao WhatsApp. Como o query ID do
-`delete` tem a mesma origem suspeita, isto é sorte além de desenho — mas o
-desenho é o que impede um ID errado de tocar numa operação irreversível.
-
-**Estado do canal, verificado depois de tudo**: nome `TESTE wa-api
-DESCARTAVEL` intacto, `viewer_metadata.role = "owner"` inalterado, e a página
-pública do convite continua a servi-lo. Nenhuma das chamadas falhadas teve
-efeito colateral.
-
-**O que ESTÁ correto e não se perde**: rotas registadas (15 de newsletter,
-eram 13), portas, adaptador, validação com `apperr` (o `demote` sem `userJID`
-devolve `400 user jid is required for demote`, não `500`), prazo aplicado no
-molde da F232, e a confirmação obrigatória no `delete`.
-
-**O que falta**: os query IDs certos para a NOSSA geração. Onde procurar, por
-ordem:
-
-1. o upstream do whatsmeow numa versão mais recente — é a nossa geração;
-2. captura do tráfego real do WhatsApp Web ao executar a operação na
-   interface, que dá o `query_id` exato que o cliente usa hoje;
-3. o ramo de desktop desativado em `queryids.go` (F31/F32), que mostra como as
-   gerações se relacionam.
-
-**Não adivinhar IDs.** Um ID errado numa mutação destrutiva tem efeitos que não
-controlamos, e já vimos que o servidor aceita a ligação e recusa só o corpo.
+**O que ESTÁ correto e não se perde**: rotas registadas (15 de newsletter),
+portas, adaptador, validação com `apperr` (o `demote` sem `userJID` devolve
+`400 user jid is required for demote`, não `500`), prazo aplicado no molde da
+F232, e a confirmação obrigatória no `delete`.
 
 <!-- f-status: aberto -->
 

@@ -16,15 +16,22 @@ const (
 	mutationUnfollowNewsletter     = "6392786840836363"
 	mutationFollowNewsletter       = "9926858900719341"
 
-	// F233b — admin management and channel deletion.
+	// F233b/c — admin management and channel deletion.
 	//
-	// Source: Baileys (whiskeysockets/Baileys) QueryIds enum, captured
-	// 2026-08-25. These IDs are from a DIFFERENT generation than the ones
-	// above (our CREATE is 6234210096708695 vs Baileys' 8823471724422422),
-	// so they need field verification before trusting them in production.
-	// DEMOTE and CHANGE_OWNER are 16-digit like ours; DELETE is 17-digit.
-	mutationDemoteAdmin      = "6551828931592903"
-	mutationChangeOwner      = "7341777602580933"
+	// Extracted from the WhatsApp Web JS bundle on 2026-08-25 by fetching
+	// every <script src> from an authenticated web.whatsapp.com session and
+	// searching for WAWebMex*Newsletter*Mutation.graphql, then reading the
+	// numeric ID adjacent to each name.
+	//
+	//   WAWebMexDemoteNewsletterAdminJobMutation  -> 9880997548630971
+	//   WAWebMexChangeNewsletterOwnerJobMutation  -> 9546742745432473
+	//   WAWebMexDeleteNewsletterJobMutation       -> 30062808666639665
+	//
+	// MAINTENANCE: WhatsApp rotates query IDs without notice. When a
+	// mutation starts returning 400 Bad Request (CRITICAL), re-extract
+	// from the bundle using the same method (see wa-poc/notas/01-resultado.md).
+	mutationDemoteAdmin      = "9880997548630971"
+	mutationChangeOwner      = "9546742745432473"
 	mutationDeleteNewsletter = "30062808666639665"
 )
 
