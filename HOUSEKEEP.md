@@ -27537,9 +27537,26 @@ GET  /hmac/config    -> 200        POST /hmac/config    -> 404
 Ler é `/config`, escrever é `/configure`. Nada indica isso na resposta: o
 `404 page not found` é o padrão do router, sem corpo JSON e sem pista.
 
-Existem ainda duplicados sob `/session/` (`/session/s3/config`,
-`/session/hmac/config`, `/session/s3/test`), aparentemente legado — **não
-verifiquei se divergem em comportamento**, e não vou afirmar que são iguais.
+### Os duplicados sob `/session/` DIVERGEM — medido 2026-08-25
+
+Eu tinha registado que não sabia se divergiam. Divergem, e no ponto exato:
+
+| operação | caminho sem `/session/` | caminho com `/session/` |
+|---|---|---|
+| ler | `GET /hmac/config` → `200` | `GET /session/hmac/config` → `200` |
+| **escrever** | `POST /hmac/config` → **`404`** | `POST /session/hmac/config` → **`200`** |
+| escrever (alternativo) | `POST /hmac/configure` → `200` | — |
+
+Ou seja: o par `/session/` aceita escrita em `/config`; o par sem `/session/`
+exige `/configure`. **A mesma operação, dois contratos, e nada o indica.**
+
+Um consumidor que descubra `/session/hmac/config` a funcionar e conclua que
+`/hmac/config` também aceita `POST` recebe `404 page not found` — sem corpo
+JSON e sem pista, porque é o `404` do router e não da aplicação.
+
+O mesmo vale para `s3`: `POST /session/s3/config` é aceite (devolveu
+`400 invalid_s3_endpoint`, ou seja, chegou à validação), e
+`POST /s3/config` dá `404`.
 
 **A validação em si é boa**, e vale registá-lo porque contrasta com os outros
 achados: `POST /s3/configure` devolve `400 invalid_s3_endpoint` e
