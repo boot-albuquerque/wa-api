@@ -26141,3 +26141,51 @@ confirmação eu já tinha medido código antigo uma vez hoje — ver a nota na 
 A parte **(b)** continua ABERTA: faltam `delete`, `change owner` e `demote`.
 
 <!-- f-status: aberto -->
+
+## F234 — `TestStartSession_SessionOutlivesItsBootContext` falha sob carga: 1,87 s isolado, 30 s no `make check`
+
+**Data/contexto**: 2026-08-25, `make check` depois do merge da F233(a).
+
+**Onde**: `internal/wa-headless/core`, `session_test.go:831`.
+
+**Problema**: o teste falhou no `make check` completo com
+
+```
+--- FAIL: TestStartSession_SessionOutlivesItsBootContext (30.00s)
+    StartSession: core: boot failed at launch: launch: no endpoint for the
+    profile we launched (stopped_via=browser.close_unconfirmed):
+    Boot(launch/await-endpoint): the CALLER's context ended first
+    (context deadline exceeded); the target was not asked
+2026/08/25 12:39:44 httptest.Server blocked in Close after 5 seconds
+FAIL	wa-api/internal/wa-headless/core	172.589s
+```
+
+Corrido **isolado**, no mesmo commit e na mesma máquina:
+
+```
+ok  	wa-api/internal/wa-headless/core	1.870s
+```
+
+1,87 s contra 30,00 s de prazo esgotado. **Não é regressão** — é fome de
+recursos: `-race` sobre a árvore toda com `GOMAXPROCS=2`, mais um servidor da
+API a correr ao lado, e o arranque do browser não obtém endpoint a tempo.
+
+Nenhuma alteração desta sessão toca em lançamento de browser (as mudanças
+foram em `wa-noise`, `pkg/infra/history`, `errmap` e adaptadores).
+
+**Porque importa mesmo assim**: um teste que depende de arrancar um browser
+dentro de um prazo fixo falha aleatoriamente em CI, e um vermelho intermitente
+ensina a equipa a ignorar vermelhos. É a pior consequência possível de um
+gate — pior que não o ter.
+
+**Correção sugerida**: dar ao arranque do browser um prazo proporcional à
+carga, ou marcar o teste para não correr em paralelo com a suíte pesada. Medir
+primeiro qual dos dois: o número acima (1,87 vs 30) sugere que o prazo é
+generoso em repouso e insuficiente sob contenção.
+
+**Nota**: o `internal/wa-headless` está fora do âmbito desta sessão por decisão
+do utilizador. Registado por ter aparecido, não para ser corrigido agora.
+
+**Status**: não corrigido — fora do âmbito, e é do `wa-headless`.
+
+<!-- f-status: aberto -->
