@@ -245,7 +245,9 @@ func (a *MiscAdapter) CreateNewsletter(ctx context.Context, txtID, name, descrip
 	if err != nil {
 		return nil, err
 	}
-	return client.CreateNewsletter(ctx, wa.CreateNewsletterParams{
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.CreateNewsletter(ctxWithTimeout, wa.CreateNewsletterParams{
 		Name: name, Description: description, Picture: picture,
 	})
 }
@@ -256,7 +258,9 @@ func (a *MiscAdapter) NewsletterInfo(ctx context.Context, txtID string, jid doma
 	if err != nil {
 		return nil, err
 	}
-	return client.GetNewsletterInfo(ctx, parsed)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.GetNewsletterInfo(ctxWithTimeout, parsed)
 }
 
 // NewsletterInfoWithInvite devolve os metadados pelo CÓDIGO de convite.
@@ -270,7 +274,9 @@ func (a *MiscAdapter) NewsletterInfoWithInvite(ctx context.Context, txtID, invit
 	if err != nil {
 		return nil, err
 	}
-	return client.GetNewsletterInfoWithInvite(ctx, inviteKey)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.GetNewsletterInfoWithInvite(ctxWithTimeout, inviteKey)
 }
 
 // FollowNewsletter passa a seguir o canal.
@@ -279,7 +285,9 @@ func (a *MiscAdapter) FollowNewsletter(ctx context.Context, txtID string, jid do
 	if err != nil {
 		return err
 	}
-	if err := client.FollowNewsletter(ctx, parsed); err != nil {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	if err := client.FollowNewsletter(ctxWithTimeout, parsed); err != nil {
 		return err
 	}
 	return nil
@@ -291,7 +299,9 @@ func (a *MiscAdapter) UnfollowNewsletter(ctx context.Context, txtID string, jid 
 	if err != nil {
 		return err
 	}
-	if err := client.UnfollowNewsletter(ctx, parsed); err != nil {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	if err := client.UnfollowNewsletter(ctxWithTimeout, parsed); err != nil {
 		return err
 	}
 	return nil
@@ -303,7 +313,9 @@ func (a *MiscAdapter) ToggleNewsletterMute(ctx context.Context, txtID string, ji
 	if err != nil {
 		return err
 	}
-	if err := client.NewsletterToggleMute(ctx, parsed, mute); err != nil {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	if err := client.NewsletterToggleMute(ctxWithTimeout, parsed, mute); err != nil {
 		return err
 	}
 	return nil
@@ -321,7 +333,9 @@ func (a *MiscAdapter) NewsletterMessages(ctx context.Context, txtID string, jid 
 	if err != nil {
 		return nil, err
 	}
-	return client.GetNewsletterMessages(ctx, parsed, &wa.GetNewsletterMessagesParams{
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.GetNewsletterMessages(ctxWithTimeout, parsed, &wa.GetNewsletterMessagesParams{
 		Count: count, Before: types.MessageServerID(serverIDFromText(before)),
 	})
 }
@@ -332,7 +346,9 @@ func (a *MiscAdapter) NewsletterMessageUpdates(ctx context.Context, txtID string
 	if err != nil {
 		return nil, err
 	}
-	return client.GetNewsletterMessageUpdates(ctx, parsed, &wa.GetNewsletterUpdatesParams{
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.GetNewsletterMessageUpdates(ctxWithTimeout, parsed, &wa.GetNewsletterUpdatesParams{
 		Count: count, Since: since, After: types.MessageServerID(serverIDFromText(after)),
 	})
 }
@@ -347,7 +363,9 @@ func (a *MiscAdapter) MarkNewsletterViewed(ctx context.Context, txtID string, ji
 	for _, id := range serverIDs {
 		ids = append(ids, types.MessageServerID(id))
 	}
-	if err := client.NewsletterMarkViewed(ctx, parsed, ids); err != nil {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	if err := client.NewsletterMarkViewed(ctxWithTimeout, parsed, ids); err != nil {
 		return err
 	}
 	return nil
@@ -359,7 +377,9 @@ func (a *MiscAdapter) SendNewsletterReaction(ctx context.Context, txtID string, 
 	if err != nil {
 		return err
 	}
-	if err := client.NewsletterSendReaction(ctx, parsed, types.MessageServerID(serverID), reaction, types.MessageID(messageID)); err != nil {
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	if err := client.NewsletterSendReaction(ctxWithTimeout, parsed, types.MessageServerID(serverID), reaction, types.MessageID(messageID)); err != nil {
 		return err
 	}
 	return nil
@@ -371,7 +391,9 @@ func (a *MiscAdapter) SubscribeNewsletterLiveUpdates(ctx context.Context, txtID 
 	if err != nil {
 		return 0, err
 	}
-	return client.NewsletterSubscribeLiveUpdates(ctx, parsed)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterSubscribeLiveUpdates(ctxWithTimeout, parsed)
 }
 
 // clientAndJID resolve o cliente da sessão e o JID de uma vez.

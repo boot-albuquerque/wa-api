@@ -77,9 +77,9 @@ type NewsletterRequest struct {
 // `Duration` existe separado porque só o subscribe devolve tempo, e enfiá-lo
 // em Data faria o cliente ter de adivinhar quando olhar para lá.
 type NewsletterResult struct {
-	Data     any           `json:"data,omitempty"`
-	Duration time.Duration `json:"duration_seconds,omitempty"`
-	Status   string        `json:"status"`
+	Data            any    `json:"data,omitempty"`
+	DurationSeconds int64  `json:"duration_seconds,omitempty"`
+	Status          string `json:"status"`
 }
 
 // NewsletterOpsUseCase executa as onze operações.
@@ -113,7 +113,7 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 	}
 
 	uc.logger.Info(ctx, "newsletter operation done", "user_id", userID, "op", string(req.Op))
-	return &NewsletterResult{Data: data, Duration: dur, Status: domain.StatusSent}, nil
+	return &NewsletterResult{Data: data, DurationSeconds: int64(dur.Seconds()), Status: domain.StatusSent}, nil
 }
 
 // dispatch chama a porta. Separado do Execute para que a guarda de sessão, a
