@@ -25959,6 +25959,40 @@ Controlo negativo executado — remover WithTimeout de FollowNewsletter:
 --- FAIL: TestNewsletterAdapter_DeadlineAppliedToAllEleven (0.00s)
 ```
 
+
+## Verificação em campo — 2026-08-25, com o binário do merge
+
+**F231**: `POST /newsletter/subscribe` devolve `{"duration_seconds":90}`, onde
+antes vinha `90000000000`.
+
+**F232**: `POST /newsletter/updates` falha aos **30,002 s** com `context
+deadline exceeded`. A diferença face ao antes é qualitativa:
+
+| | erro | duração |
+|---|---|---|
+| antes | `context canceled` | igual ao prazo do CLIENTE (30004 / 60005) |
+| depois | `context deadline exceeded` | **30002** — o nosso prazo, independente do cliente |
+
+Quem termina o pedido passou a ser o servidor. É essa a asserção, não "a rota
+passou a responder 200" — o servidor do WhatsApp continua a não responder a
+esta consulta, e isso está fora do nosso alcance.
+
+**Erro de método na primeira tentativa, registado porque quase passou**: medi
+primeiro contra o binário ERRADO. O `pkill -f "wa-f22\|wa-f231bin"` não matou
+nada — `\|` não é alternância no regex estendido do `pkill` — e o processo
+antigo continuou a servir a porta 8080. As respostas que obtive (`200` e um
+`500` aos 75 s) eram do código velho.
+
+Quem apanhou o erro foi a nossa própria guarda de cluster (ADR-0005 D1): o
+binário novo recusou-se a arrancar com
+
+```
+FATAL another process is already using the data directory
+```
+
+Sem esse `flock`, os dois processos teriam coexistido e eu teria reportado a
+correção como verificada tendo medido o código anterior.
+
 <!-- f-status: corrigido -->
 
 ## F233 — o `405` do `unfollow` é regra de negócio do WhatsApp, e faltam-nos as operações que o dono precisa
