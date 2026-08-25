@@ -26953,9 +26953,35 @@ conta `+55 16 98181-8244` para `+55 41 9242-1234`, com verificação visual no
 | `/chat/send/edit` | o texto original aparece editado |
 | `/chat/react` | reação aplicada |
 
-**NÃO renderizam** — três bolhas, uma vazia e duas com *"Não foi possível
-carregar a mensagem. Use seu celular para acessá-la."*: `sticker`, `video`, e
-uma de `carousel`/`template`.
+**Aparentemente falhadas no WhatsApp WEB** — três bolhas, uma vazia e duas com
+*"Não foi possível carregar a mensagem. Use seu celular para acessá-la."*
+
+### CORREÇÃO, 2026-08-25 — a leitura estava errada
+
+O utilizador enviou captura do TELEMÓVEL, e ela desmente a conclusão:
+
+- **`carousel` RENDERIZA COMPLETO** — `Cartao 1 / corpo 1 / Abrir` **e**
+  `Cartao 2 / corpo 2` lado a lado, com deslize horizontal. Os dois cartões,
+  com os seus botões.
+- **os botões FUNCIONAM de ponta a ponta** — as respostas `Sim` e `Não` às
+  18:49 são resultado de os terem tocado. O percurso completo (enviar →
+  renderizar → tocar → resposta chegar ao remetente) está provado.
+- **a lista é interativa a sério** — tocar em `Ver` abre a folha com a secção
+  `S1`, a linha `Op1` e *"Toque para selecionar um item"*.
+- o `teste.pdf` aparece com botão de descarga (`0,07 KB • pdf`).
+
+A frase do Web diz **"Use seu celular para acessá-la"**. Li-a como falha da
+mensagem; é limitação de renderização do cliente Web para tipos interativos.
+
+**A lição de método**: uma só superfície não decide. O Web é cliente
+empobrecido face ao telemóvel para mensagens interativas, e concluir "não
+funciona" a partir dele é o mesmo erro de instrumento que já cometi hoje com a
+imagem expirada e com o binário errado.
+
+**Continua por determinar**: o estado real de `sticker` e `video`, que levaram
+mídia sintética inválida. Na captura do telemóvel não os identifiquei com
+confiança. O que se mantém como achado é apenas o ponto seguinte — a API não
+valida a mídia — e esse não depende de renderização.
 
 ## O achado, e a parte que é minha
 
@@ -26963,7 +26989,9 @@ As três receberam **`200`**. O `sticker` e o `video` foram enviados com mídia
 **sintética que eu próprio fabriquei** — um cabeçalho WebP truncado e um MP4 de
 32 bytes sem faixas. Não são ficheiros válidos.
 
-**A culpa do conteúdo é do meu teste. O achado é que a API aceitou.**
+**A culpa do conteúdo é do meu teste. O achado é que a API aceitou** — e este
+achado SOBREVIVE à correção acima, porque não depende de a mensagem renderizar:
+a API carregou um blob que não é do tipo declarado e devolveu sucesso.
 
 Ela carregou o blob, devolveu `message_id` e `status: sent`, e o destinatário
 recebeu algo que não abre. Não há validação de mídia à entrada: `200` significa
