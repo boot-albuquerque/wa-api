@@ -27227,3 +27227,60 @@ defeito de desenho — e não o vou promover a achado sem saber se é deliberado
 **Status**: retirada — não era defeito.
 
 <!-- f-status: nao-se-faz -->
+
+## F246 — `/group/joinapprovalmode` está ligado ao handler ERRADO e corrompe o estado do lock
+
+**Data/contexto**: 2026-08-25, bateria real com escrita em grupo criado para o
+efeito (`120363411836468296@g.us`).
+
+**Onde**: `pkg/bootstrap/wiring_routes.go:116` e `:120`
+
+```go
+registry.Register("/group/locked",           customChain.Then(ch.GroupMgmt.SetGroupLocked), "POST")
+registry.Register("/group/joinapprovalmode", customChain.Then(ch.GroupMgmt.SetGroupLocked), "POST")
+```
+
+**Duas rotas, um handler.** O `handleSetGroupLocked`
+(`handler_group_mgmt.go:269-285`) lê um campo `Locked bool` e chama
+`uc.SetGroupLocked`. Não existe caminho nenhum para modo de aprovação.
+
+**Reproduzido em campo, passo a passo**:
+
+| passo | `IsLocked` | `IsJoinApprovalRequired` |
+|---|---|---|
+| inicial | `False` | `False` |
+| `POST /group/locked {"Locked":true}` | **`True`** | `False` |
+| `POST /group/joinapprovalmode {"Mode":true}` | **`False`** | `False` |
+
+**Três defeitos numa só rota**:
+
+1. **Não faz o que o nome diz.** Nunca configura aprovação de entrada.
+2. **Tem efeito colateral destrutivo.** Como o handler lê `Locked` e o payload
+   de `joinapprovalmode` não o traz, o campo fica `false` por omissão do Go — e
+   a chamada **DESBLOQUEIA** um grupo que estava bloqueado. Quem chamar
+   `joinapprovalmode` numa comunidade fechada abre-a sem saber.
+3. **Devolve `200` e a mensagem `"Group lock updated"`** — que descreve a
+   operação errada, e é a única pista de que algo está trocado.
+
+É a mesma família da **F229** (`/status/set/text` a apontar ao handler do
+Recado), mas pior: a F229 fazia a coisa errada; esta **desfaz uma configuração
+de segurança** do grupo.
+
+**Sexta vez nesta sessão que o `200` mente** — depois de F227, F228, F229, F240
+e das duas rotas de admin de canal.
+
+**Correção sugerida**: decidir e implementar.
+
+- Se o modo de aprovação for para existir, precisa de handler próprio e de
+  caminho no caso de uso — verificar primeiro se o `wa-noise` o expõe
+  (`SetGroupJoinApprovalMode` aparece na lista da F237 como método existente,
+  o que sugere que sim).
+- Se não for, **remover a rota**, como se fez na F229. Servir uma rota que
+  corrompe estado alheio é pior do que não a ter.
+
+Enquanto não se decidir, o `ENDPOINTS.md` tem de avisar que a rota é
+destrutiva.
+
+**Status**: não corrigido — precisa de decisão, e é a mais grave da bateria.
+
+<!-- f-status: aberto -->
