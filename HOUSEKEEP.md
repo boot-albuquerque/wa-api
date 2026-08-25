@@ -27418,8 +27418,24 @@ o campo "alternativo" é o único que funciona na escrita.
 
 **Oitava vez nesta sessão que o `200` diz menos do que aparenta.**
 
-**Correção sugerida**: aceitar os dois nomes na escrita (é a decisão que já se
-tomou na F225 para o destino), e devolver o mesmo nome que se aceita.
+### Agravamento medido depois: depende do MÉTODO
+
+`POST` e `PUT` sobre o MESMO recurso leem campos DIFERENTES:
+
+| método | campo que define a URL | fonte |
+|---|---|---|
+| `POST /webhook` | **`webhookurl`** | medido |
+| `PUT /webhook` | **`webhook`** | `handler_webhook.go:216` — `WebhookURL string \`json:"webhook"\`` |
+| `GET /webhook` | devolve `webhook` | medido |
+
+Confirmado em campo: `PUT {"webhook":"https://example.com/put-ok"}` →
+`200` e a URL fica; `PUT {"webhookurl":...}` → `200` e a URL fica **vazia**.
+
+São três comportamentos para um campo num só recurso. Não é escolha entre dois
+nomes — é ter de saber qual método se está a usar para saber que nome usar.
+
+**Correção sugerida**: aceitar os dois nomes em `POST` e `PUT`, e devolver
+sempre o mesmo. É a decisão que já se tomou na F225 para o campo de destino.
 
 **Status**: não corrigido.
 
@@ -27452,5 +27468,47 @@ at least 32 characters long"*. Códigos nomeados e mensagem acionável.
 escrita, mantendo `/configure`. Documentar o par no `ENDPOINTS.md`.
 
 **Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F252 — `POST /webhook/history` altera o limite de histórico de MENSAGENS
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+**Medido**: `POST /webhook/history {"history":50}` devolveu `200 "History
+configured successfully"`, e a coluna `users.history` passou de **100 para
+50** — a mesma coluna que a **F230** provou governar a gravação em
+`message_history`.
+
+**Onde**: `wiring_routes.go:131` e `:206` apontam ao MESMO handler:
+
+```go
+registry.Register("/webhook/history", customChain.Then(ch.Storage.SetHistory), "POST")
+registry.Register("/session/history", customChain.Then(ch.Storage.SetHistory), "POST")
+```
+
+**Contexto que li antes de chamar defeito** (lição da F245): há um comentário
+deliberado em `wiring_routes.go:229-234` a distinguir `/chat/history` (lê o
+histórico de MENSAGENS) de `/webhook/history` (configuração), com um teste
+dedicado — `TestChatHistoryAndWebhookHistoryAreDistinctHandlers` — criado por
+causa da F124.
+
+**Mas a distinção protegida é entre os GET.** Os POST de `/webhook/history` e
+`/session/history` continuam a ser o mesmo handler, e o que ele configura é o
+limite de histórico de mensagens — não uma definição de webhook.
+
+Ou seja: o nome `/webhook/history` sugere "histórico de entregas de webhook",
+e o efeito é sobre mensagens. Quem chamar para limitar o log do webhook está a
+mexer, sem saber, no que a F227 e a F230 governam.
+
+**Não determinei** se isto é intencional (uma só definição a servir os dois
+propósitos) ou herança de uma separação incompleta. O teste da F124 protege
+metade do problema, o que sugere que a outra metade passou despercebida.
+
+**Correção sugerida**: decidir o que `/webhook/history` significa. Se for a
+mesma definição, documentá-lo e apontar `GET`/`POST` coerentemente; se forem
+duas, separar como já se fez para o `GET`.
+
+**Status**: não corrigido — precisa de decisão.
 
 <!-- f-status: aberto -->
