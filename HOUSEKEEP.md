@@ -27312,14 +27312,54 @@ ligação errada:
 `{"Action":"approve"}` devolve `200 "Participants updated"`. A ação `approve`
 foi entregue a um caminho que só conhece `add`/`remove`/`promote`/`demote`.
 
-**Não determinei o que acontece a jusante** com uma ação desconhecida — pode
-ser ignorada em silêncio ou mapeada para outra coisa. Não vou adivinhar; o que
-está provado é que a rota não chama a operação que o nome promete.
+### DETERMINADO — e é pior: qualquer ação ≠ `"add"` REMOVE
 
-**Correção sugerida**: ligar ao `UpdateGroupRequestParticipants`, usando os
-tipos `RequestAction` que já existem. Ambas as pontas estão feitas.
+`pkg/application/usecase/group/group_management.go:272-277`:
 
-**Status**: não corrigido.
+```go
+// Qualquer ação diferente de "add" é remoção — regra preservada do
+// upstream, que não validava o valor recebido.
+participantAction := domain.ParticipantRemove
+if action == "add" {
+    participantAction = domain.ParticipantAdd
+}
+```
+
+**Não há validação da ação.** Tudo o que não for a string exata `"add"` cai em
+remoção — incluindo `"approve"`, `"reject"`, `"promote"`, `"demote"`, `"Add"`
+com maiúscula, ou um erro de escrita.
+
+**Provado na interface do WhatsApp**, no registo do grupo de teste:
+
+```
+Você adicionou ~AulaPrática      ← POST /group/updateparticipants   {"Action":"add"}
+Você removeu ~AulaPrática        ← POST /group/updaterequestparticipants {"Action":"approve"}
+```
+
+Duas chamadas, e a segunda — cujo nome é *aprovar pedido de entrada* —
+**expulsou** a pessoa.
+
+Isto explica também a F249: a adição TINHA funcionado. Eu vi 2 participantes
+porque a chamada seguinte removeu o terceiro. Sem o registo do grupo eu teria
+continuado a acreditar que o `add` falhara.
+
+**A combinação é o defeito**: rota no handler errado (esta entrada) + ação não
+validada (o bloco acima) = a rota de aprovar pedidos remove membros, e devolve
+`200`.
+
+**Correção sugerida, agora em duas partes**:
+
+1. **Validar a ação** contra o conjunto conhecido e recusar o resto com `400`.
+   O comentário diz que a regra vem do upstream, que "não validava o valor
+   recebido" — preservar a ausência de validação preserva o defeito. É
+   exatamente o caso em que divergir do upstream é a decisão certa, e o
+   ADR-0004 permite-o desde que registado.
+2. Ligar `/group/updaterequestparticipants` ao
+   `UpdateGroupRequestParticipants`, com os tipos `RequestAction` que já
+   existem.
+
+**Status**: não corrigido — é dos mais graves da sessão, porque remove pessoas
+de grupos sem que o chamador o peça.
 
 <!-- f-status: aberto -->
 
@@ -27401,9 +27441,24 @@ quando as definições de privacidade do alvo impedem adição direta).
 "Participants updated"`. O `group_info` mostra **2 participantes** — o número
 não entrou.
 
-**Não sei se falhou ou se virou convite. Não posso saber: descartamos a
-informação que o diria.** É esse o defeito, e é mais grave que o sintoma —
-qualquer diagnóstico futuro desta família esbarra no mesmo muro.
+**Não sei se falhou ou se virou convite. Não posso saber pela API: descartamos
+a informação que o diria.**
+
+### Resolvido pela interface, e corrige a minha leitura
+
+O registo do grupo mostra `Você adicionou ~AulaPrática`. **A adição funcionou.**
+Os 2 participantes que eu vi eram consequência da chamada SEGUINTE, que removeu
+o terceiro (ver F247).
+
+O defeito de descartar o resultado por participante **mantém-se** — foi
+precisamente ele que me impediu de ver que o `add` correra bem. Mas o sintoma
+que eu lhe atribuí era de outro achado.
+
+**Nota**: o código documenta a escolha do `200` sem confirmação
+(`group_management.go:283-287`): *"o chamador HTTP recebe 200, porque a
+operação foi de facto enviada, e o log é onde fica escrito que ninguém a
+verificou"*. É trade-off consciente, não descuido — o que falta é o resultado
+por participante chegar ao corpo da resposta.
 
 **Sétima vez nesta sessão que o `200` diz menos do que aparenta.**
 
@@ -27616,3 +27671,60 @@ F233(a) criou para o GraphQL.
 **Status**: não corrigido.
 
 <!-- f-status: aberto -->
+
+## F255 — as 13 rotas destrutivas, exercitadas e confirmadas na interface
+
+**Data/contexto**: 2026-08-25. Depois de o utilizador perguntar se tudo tinha
+sido testado, exercitei as destrutivas sobre recursos que EU tinha criado.
+
+| rota | resultado | confirmação |
+|---|---|---|
+| `DELETE /webhook` | `200` | config vazia |
+| `DELETE /hmac/config` | `200` | idem |
+| `DELETE /s3/config` | `200` | idem |
+| `POST /group/photo/remove` | `200` | mensagem de sistema no grupo |
+| `POST /user/block` | **`422 upstream_rejected`** | ver nota |
+| `POST /user/unblock` | `422 upstream_rejected` | blocklist vazia |
+| `DELETE /admin/users/{id}` | `200` | lista volta a `lucas`+`filarapida` |
+| `POST /group/leave` | `200` | **"Você não pode enviar mensagens para o grupo porque não participa mais dele"** |
+
+**Não exercitadas, e porquê**: `POST /chat/delete` (apagaria uma conversa
+real), `POST /session/logout` e as `DELETE /session/*` (derrubariam a sessão
+que serve toda a bateria).
+
+**Nota sobre o `422`**: `/user/block` devolve
+
+> WhatsApp refused this request; repeating it unchanged will not help
+
+É a melhor mensagem de erro que encontrei no repositório: diz que a recusa é do
+par, e diz explicitamente que **repetir não adianta**. Um cliente com retry
+automático sabe parar. Vale como molde para os `500` das F241 e F254.
+
+## O registo do grupo como instrumento de verificação
+
+A interface do WhatsApp mantém um histórico de sistema por grupo, e ele provou
+ser o melhor instrumento desta sessão. Do grupo de teste, em ordem:
+
+```
+Você mudou a descrição do grupo                          <- /group/topic
+Você definiu que somente admins podem enviar mensagens   <- /group/announce
+Você mudou ... somente admins editem as configurações    <- /group/locked
+Você ativou as mensagens temporárias ... 24 horas        <- /group/ephemeral
+Você mudou ... TODOS os membros editem                   <- /group/joinapprovalmode  (F246)
+Você adicionou ~AulaPrática                              <- /group/updateparticipants
+Você removeu ~AulaPrática                                <- /group/updaterequestparticipants (F247)
+Você apagou a imagem deste grupo  (×2)                   <- /group/photo (F248)
+Você não pode enviar mensagens ... não participa mais    <- /group/leave
+```
+
+**Três achados foram resolvidos ou agravados só por este registo existir**:
+a F246 (o desbloqueio), a F247 (a remoção silenciosa) e a F248 (a foto
+apagada). Nenhum deles era visível pela nossa API — o `group_info` não expõe
+histórico, e as respostas eram todas `200`.
+
+**Regra**: para qualquer operação de escrita em grupo, o registo de sistema do
+grupo é a fonte de verdade. Verificar aí, não na resposta HTTP.
+
+**Status**: inventário de cobertura.
+
+<!-- f-status: nao-se-faz -->
