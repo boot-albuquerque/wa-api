@@ -25437,3 +25437,60 @@ REAL de `/Users/albuquerque/wa-live-data/dbdata/users.db`.
 - NC3 (CategoryNotFound→CategoryValidation): `status = 400, want 404` ✓
 
 <!-- f-status: corrigido -->
+
+## F227 — mensagem enviada pela API nunca entra no histórico, e o teste que "prova" o contrário cobre código morto
+
+**Data/contexto**: 2026-08-25, ao verificar em campo o CAP-55 (forward real por
+chave de mensagem). Fui procurar a mensagem encaminhada no histórico para
+comparar o `mediaKey` com o do original, e ela não estava lá — nem ela, nem
+nenhuma das oito que enviei hoje.
+
+**Onde**: `pkg/infra/history/sync.go:106-107`
+
+```go
+// SaveOutgoingMessageToHistory persists a sent message and trims history.
+func SaveOutgoingMessageToHistory(db *sqlx.DB, saveFn SaveMessageFunc, trimFn TrimMessageFunc,
+    userID, chatJID, messageID, messageType, textContent, mediaLink string, historyLimit int) {
+```
+
+**Problema**: a função **não tem um único chamador em produção**. Medido:
+
+```
+$ grep -rn "SaveOutgoingMessageToHistory" --include="*.go" . | grep -v sync.go:10[67]
+pkg/infra/history/sync_test.go:316:func TestSaveOutgoingMessageToHistory(t *testing.T) {
+```
+
+O único uso é o teste. Consequência medida contra a base viva
+(`/Users/albuquerque/wa-live-data/dbdata/users.db`), sessão `lucas`:
+
+| | |
+|---|---|
+| total no histórico | 20.755 |
+| enviadas pelo próprio `lucas` | 3.321 (vieram da sincronização inicial) |
+| das 8 que enviei hoje pela API | **0** |
+
+Ou seja: o histórico tem mensagens nossas, mas só as que o WhatsApp
+sincronizou. Tudo o que sai pela API é invisível para ele.
+
+**Isto é a ARMADILHA #1 na sua forma mais cara**: `TestSaveOutgoingMessageToHistory`
+passa verde, e passaria verde para sempre. Um teste que exercita uma função que
+ninguém chama não mede nada — ABENÇOA CÓDIGO MORTO. Quem ler a suíte conclui
+que mensagens enviadas são persistidas; quem ler a base descobre que não.
+
+**Consequência funcional (CAP-55)**: não se pode encaminhar uma mensagem que a
+própria API enviou, porque ela nunca foi guardada. Só se encaminha o que foi
+recebido ou sincronizado. Isto NÃO é defeito do CAP-55 — é anterior a ele — mas
+limita-o, e tem de estar no `ENDPOINTS.md`.
+
+**Correção sugerida**: ligar `SaveOutgoingMessageToHistory` ao caminho de envio
+(o sítio natural é onde as capabilities devolvem `MessageSendResult`), OU
+apagar a função e o teste. As duas são defensáveis; o que não é defensável é o
+estado atual, em que existe teste verde para funcionalidade ausente.
+
+Se for ligada, o teste que a trava tem de ser pela ROTA, verificando que a
+linha aparece na tabela — não pela função, que é o que já se faz e não mordeu.
+
+**Status**: não corrigido — pré-existente, fora do escopo do CAP-55, e a regra
+proíbe corrigir de graça sem perguntar.
+
+<!-- f-status: aberto -->

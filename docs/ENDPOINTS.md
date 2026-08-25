@@ -55,6 +55,13 @@ ignorado; o score é lido do `ContextInfo` da mensagem original e incrementado
 em 1, como o Baileys faz. `Chat` é opcional (reservado para disambiguação
 futura). Se a mensagem não existir no histórico, devolve 404.
 
+> **Limitação medida (HOUSEKEEP F227)**: só é possível encaminhar mensagens
+> **recebidas ou sincronizadas**. As mensagens que a própria API envia nunca
+> entram no `message_history` — `SaveOutgoingMessageToHistory` existe mas não
+> tem chamador em produção. Encaminhar por chave uma mensagem que você acabou
+> de enviar por esta API devolve `404 message_not_found`. É defeito anterior
+> ao CAP-55, não dele.
+
 Todas as rotas de envio aceitam **reply-to** (`ReplyTo`) desde a CAP-46; as
 oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 
