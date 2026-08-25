@@ -26929,3 +26929,117 @@ Para as restantes ~85, o estado funcional é **desconhecido** — e dizê-lo é 
 **Status**: inventário.
 
 <!-- f-status: aberto -->
+
+## F240 — bateria REAL (filarapida → lucas): 13 envios, 3 não renderizam, e a API não valida mídia
+
+**Data/contexto**: 2026-08-25. A pedido do utilizador, substituída a bateria de
+payload vazio — que não testa nada — por chamadas com **payloads reais** da
+conta `+55 16 98181-8244` para `+55 41 9242-1234`, com verificação visual no
+`web.whatsapp.com`.
+
+## Envio — 13 rotas, todas `200`
+
+**Confirmadas a renderizar na interface do destinatário**:
+
+| rota | evidência visual |
+|---|---|
+| `/chat/send/text` | bolha de texto |
+| `/chat/send/image` | imagem + legenda "bateria real: imagem" |
+| `/chat/send/location` | **mapa renderizado**, rótulo "Curitiba" |
+| `/chat/send/contact` | cartão "Contacto Teste" |
+| `/chat/send/document` | `teste.pdf • PDF • 68 B` |
+| `/chat/send/buttons` | botões `Sim`/`Não` interativos |
+| `/chat/send/list` | botão `Ver` |
+| `/chat/send/edit` | o texto original aparece editado |
+| `/chat/react` | reação aplicada |
+
+**NÃO renderizam** — três bolhas, uma vazia e duas com *"Não foi possível
+carregar a mensagem. Use seu celular para acessá-la."*: `sticker`, `video`, e
+uma de `carousel`/`template`.
+
+## O achado, e a parte que é minha
+
+As três receberam **`200`**. O `sticker` e o `video` foram enviados com mídia
+**sintética que eu próprio fabriquei** — um cabeçalho WebP truncado e um MP4 de
+32 bytes sem faixas. Não são ficheiros válidos.
+
+**A culpa do conteúdo é do meu teste. O achado é que a API aceitou.**
+
+Ela carregou o blob, devolveu `message_id` e `status: sent`, e o destinatário
+recebeu algo que não abre. Não há validação de mídia à entrada: `200` significa
+"enviado", não "reproduzível".
+
+Isto é a quarta vez nesta sessão que o `200` diz menos do que aparenta — depois
+da F227 (enviada mas não guardada), F228 (voto não contado) e F229 (perfil
+alterado em vez de status publicado).
+
+**Correção sugerida**: validar cabeçalho e estrutura mínima da mídia antes de
+carregar, devolvendo `400` com código próprio. Não é validação profunda —
+basta rejeitar o que claramente não é do tipo declarado.
+
+**Por separar**: não determinei se o `carousel`/`template` falha pelo mesmo
+motivo ou por o WhatsApp Web não renderizar aquele tipo interativo. São
+hipóteses diferentes e não medi qual.
+
+## Outras rotas exercitadas com dados reais
+
+| rota | resultado |
+|---|---|
+| `/user/check`, `/user/privacy`, `/user/blocklist`, `/user/profile/{jid}` | `200` com dados |
+| `/user/avatar` | `403` — avatar oculto por privacidade, **correto** |
+| `/chat/list`, `/chat/archive` (on/off), `/chat/presence`, `/chat/markread` | `200` |
+| `/group/list`, `/group/info`, `/group/invitelink` (grupo próprio) | `200` |
+| `/message/star` | `200` |
+| `/chat/history` | `200` com mensagens — exige `chat_jid`, não `jid` |
+
+<!-- f-status: aberto -->
+
+## F241 — erro do CHAMADOR a virar `500` em três rotas
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+Medido:
+
+| rota | entrada | resposta | devia ser |
+|---|---|---|---|
+| `GET /user/profile/{jid}` | JID malformado | **`500`** | `400 invalid_jid` |
+| `POST /group/info` | grupo de que não é membro | **`500`** | `403` ou `404` |
+| `POST /group/invitelink` | idem | **`500`** | `403` ou `404` |
+
+As mesmas rotas com entrada válida devolvem `200` — **são funcionais**. O
+defeito é de classificação, e é sistemático o suficiente para não ser
+coincidência: três rotas, dois ficheiros diferentes.
+
+Todas devolvem `{"error":"internal server error"}` em **string**, sem código —
+ver F236.
+
+Consequência: quem monitorizar a API por taxa de `5xx` vê alarme onde há
+pedidos malformados de clientes.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F242 — `/user/info` devolve `200` com resultado VAZIO quando o formato está errado
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+```
+POST /user/info {"Phone":["554192421234"]}                   -> 200 {"users":{}}
+POST /user/info {"Phone":["554192421234@s.whatsapp.net"]}    -> 200 com os dados completos
+```
+
+O primeiro é o formato que TODAS as rotas de envio aceitam (`Phone` como número
+simples). Aqui exige JID completo, e quando não o recebe **não falha — devolve
+sucesso vazio**.
+
+Um consumidor que passe o número simples conclui que o utilizador não existe.
+É pior que um erro, porque não há nada a investigar.
+
+**Correção sugerida**: aceitar as duas formas, como o resto da API faz desde a
+F225; ou recusar com `400` explicando. Devolver `200` vazio é a única opção
+indefensável.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
