@@ -24843,9 +24843,8 @@ nos modos `full` e `incremental`, nas duas sessões. Revertida depois de medir.
 
 **Quatro conclusões, e a primeira derruba a hipótese óbvia:**
 
-1. **`fullSync` não resolve.** Com `fullSync=true` o estado local é descartado
-   e tudo é re-obtido do servidor — e falha na mesma, no patch SEGUINTE à
-   versão local. Portanto **não é a nossa cópia que está corrompida**.
+1. **`fullSync` não resolve.** Ver a CORREÇÃO abaixo: a primeira medição
+   desta conclusão estava mal feita, e a refeita torna-a MAIS forte.
 
 2. **A chave de app-state está correta.** O erro vem de
    `validateSnapshotMAC` (`appstate/decode.go:19`) DEPOIS de
@@ -24882,3 +24881,64 @@ mesmo código.
 verificada; a parte (1) está MEDIDA mas não resolvida, e a correção é no fork.
 
 <!-- f-status: aberto -->
+
+### CORREÇÃO DA MEDIÇÃO 2026-08-24 — eu li a base no momento errado
+
+**O que afirmei**: que o `fullSync` não repunha o estado local, porque a versão
+continuava em 301 depois da sonda.
+
+**Estava errado, e a causa é banal**: li `wanoise_app_state_version` DEPOIS de
+ter corrido outras duas sondas, que repopularam a versão. A leitura não media o
+que eu pensava.
+
+**Refeita com leitura imediata a seguir à sonda**:
+
+```
+ANTES:  301
+POST /user/contacts/sync {"mode":"probe_rh_full"}  -> HTTP 500
+DEPOIS: (linha inexistente)
+```
+
+O `fullSync` **apaga mesmo** o estado (`appstatesync/fetch.go:24-29`,
+`DeleteAppStateVersion` ANTES do fetch). E a mensagem de erro muda:
+
+```
+antes (com estado local):  failed to verify patch v302: mismatching LTHash
+depois (estado apagado):   failed to verify SNAPSHOT: failed to verify patch v305: mismatching LTHash
+```
+
+**Isto torna a conclusão MAIS forte, não menos.** Com o estado local apagado, o
+cliente pede o snapshot completo e **não consegue verificar o MAC do snapshot
+que o próprio servidor enviou**. Não há cópia nossa na equação: o cálculo do
+MAC diverge sobre dados do servidor.
+
+Lição para a próxima medição deste tipo: **ler o estado no mesmo comando que
+dispara a sonda**. Uma leitura depois de outras operações mede outra coisa —
+foi o mesmo erro de método que o `CLAUDE.md` regista em "comparar no mesmo
+instante e na mesma máquina".
+
+### DECISÃO 2026-08-24 — fica aberto, com as saídas enumeradas
+
+Três saídas, e a escolha foi a terceira:
+
+| saída | avaliação |
+|---|---|
+| **(1) corrigir o MAC no fork** | a correta. Exige investigação com medição em `internal/wa-noise/protocol/appstate/`, não uma sessão de implementação. |
+| **(2) desligar `validateMACs` para `regular_high`** | **recusada.** O parâmetro existe (`decode.go:29`) e está fixo em `true` (`fetch.go:87`), logo era fácil. Mas a verificação existe para detetar exatamente isto: desligá-la troca um erro visível por corrupção silenciosa do estado local. |
+| **(3) aceitar e documentar** | **escolhida agora.** `mute` e `star` ficam indisponíveis, com 409 honesto; `pin` funciona. |
+
+**A pista para quem retomar** — a mais forte que temos, e ainda por explorar:
+`regular_low` funciona com o MESMO código, mesma função de MAC, mesmo LTHash.
+Quatro tipos de patch verificam (`critical_block` 61, `critical_unblock_low` 75,
+`regular` 87, `regular_low` 183); só o `regular_high` falha. A diferença tem de
+estar em algo específico dele — ordenação de mutações, tamanho, ou um campo que
+só ele usa.
+
+**Não adivinhar.** Qualquer correção antes de responder a "por que só o
+`regular_high`" seria palpite, e este achado já custou duas medições mal feitas.
+
+**Status**: parte (2) — classificação 409 — **corrigida e verificada em campo**.
+Parte (1) — o `mismatching LTHash` — **medida, diagnosticada até à fronteira do
+fork, e deliberadamente NÃO corrigida**. Fechada por agora por decisão do dono
+do repositório.
+
