@@ -9635,3 +9635,65 @@ validação individual de cada mutação (autenticidade). O modo estrito
   A asserção que apanha é a de TIPO (`errors.Is(err, ErrMismatchingContentMAC)`),
   não a de "houve erro" — e se o blob adulterado desencriptasse limpo, o
   `t.Fatal("expected error ... got nil")` disparava. Os dois caminhos fechados.
+
+## F233b — newsletter admin operations (demote, change_owner, delete), 2026-08-25
+
+### Contexto
+
+As três operações de gestão de admin de canais (newsletter) que faltavam:
+despromover admin, transferir posse e apagar canal. Nenhuma existia no
+upstream whatsmeow; os query IDs foram extraídos do Baileys.
+
+### O que mudou
+
+**`internal/wa-noise/capabilities/newsletter/queryids.go`**: três novos
+query IDs de mutation, com comentário indicando a origem (Baileys) e a
+necessidade de verificação em campo:
+
+- `mutationDemoteAdmin` = `"6551828931592903"` (16 dígitos)
+- `mutationChangeOwner` = `"7341777602580933"` (16 dígitos)
+- `mutationDeleteNewsletter` = `"30062808666639665"` (17 dígitos)
+
+Os IDs existentes no nosso fork são de geração DIFERENTE dos do Baileys
+(ex: CREATE nosso = `6234210096708695`, Baileys = `8823471724422422`),
+portanto estes podem precisar de substituição após verificação em campo.
+
+**`internal/wa-noise/capabilities/newsletter/actions.go`**: três funções
+novas seguindo o padrão exato de `Follow`/`Unfollow`:
+
+- `DemoteAdmin(ctx, t, channelJID, userJID)` — `SendMexIQ` com
+  `newsletter_id` e `user_id`
+- `ChangeOwner(ctx, t, channelJID, newOwnerJID)` — idem
+- `Delete(ctx, t, channelJID)` — `SendMexIQ` só com `newsletter_id`
+
+**`internal/wa-noise/core/newsletter.go`**: três métodos de fachada com
+guarda de nil-receiver, seguindo o padrão dos 12 existentes.
+
+### O comportamento mudou
+
+**Não.** São três capacidades novas; nenhum comportamento existente foi
+alterado. Os query IDs existentes não foram tocados.
+
+### Testes
+
+- `TestDemoteAdminSendsCorrectMutation` — verifica query ID e payload
+- `TestDemoteAdminPropagatesError` — erro do transport propaga
+- `TestChangeOwnerSendsCorrectMutation` — verifica query ID e payload
+- `TestChangeOwnerPropagatesError` — erro propaga
+- `TestDeleteSendsCorrectMutation` — verifica query ID e payload
+- `TestDeletePropagatesError` — erro propaga
+- `TestConvertQueryIDEIdentidadeParaQualquerPayload` — tabela `todasAsQueryIDs`
+  atualizada para incluir os três novos IDs
+
+**Controles negativos EXECUTADOS**:
+
+```
+--- FAIL: TestDemoteAdminSendsCorrectMutation (0.00s)
+    actions_test.go:419: DemoteAdmin used query ID "9926858900719341", want "6551828931592903"
+
+--- FAIL: TestChangeOwnerSendsCorrectMutation (0.00s)
+    actions_test.go:451: ChangeOwner used query ID "6551828931592903", want "7341777602580933"
+
+--- FAIL: TestDeleteSendsCorrectMutation (0.00s)
+    actions_test.go:482: Delete used query ID "7341777602580933", want "30062808666639665"
+```

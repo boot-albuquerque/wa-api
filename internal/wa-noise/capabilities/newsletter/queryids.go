@@ -15,6 +15,17 @@ const (
 	mutationCreateNewsletter       = "6234210096708695"
 	mutationUnfollowNewsletter     = "6392786840836363"
 	mutationFollowNewsletter       = "9926858900719341"
+
+	// F233b — admin management and channel deletion.
+	//
+	// Source: Baileys (whiskeysockets/Baileys) QueryIds enum, captured
+	// 2026-08-25. These IDs are from a DIFFERENT generation than the ones
+	// above (our CREATE is 6234210096708695 vs Baileys' 8823471724422422),
+	// so they need field verification before trusting them in production.
+	// DEMOTE and CHANGE_OWNER are 16-digit like ours; DELETE is 17-digit.
+	mutationDemoteAdmin      = "6551828931592903"
+	mutationChangeOwner      = "7341777602580933"
+	mutationDeleteNewsletter = "30062808666639665"
 )
 
 // ---------------------------------------------------------------------------

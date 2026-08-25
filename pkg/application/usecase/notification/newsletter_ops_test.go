@@ -104,3 +104,92 @@ func TestNewsletterOps_Execute_DurationInSeconds(t *testing.T) {
 		t.Fatalf("wire duration_seconds = %v, want 90", wire["duration_seconds"])
 	}
 }
+
+// ---------------------------------------------------------------------------
+// F233b — demote, change_owner, delete validation
+// ---------------------------------------------------------------------------
+
+func TestNewsletterOps_Demote_RequiresJIDAndUserJID(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	nr.SessionGuard = contractsfake.FailSession(nil)
+	uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op: NewsletterOpDemote,
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing jid")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:  NewsletterOpDemote,
+		JID: "120363000000000000@newsletter",
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing userJID")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:      NewsletterOpDemote,
+		JID:     "120363000000000000@newsletter",
+		UserJID: "5516900000000@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("demote with valid fields failed: %v", err)
+	}
+}
+
+func TestNewsletterOps_ChangeOwner_RequiresJIDAndUserJID(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	nr.SessionGuard = contractsfake.FailSession(nil)
+	uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:  NewsletterOpChangeOwner,
+		JID: "120363000000000000@newsletter",
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing userJID")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:      NewsletterOpChangeOwner,
+		JID:     "120363000000000000@newsletter",
+		UserJID: "5516900000000@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("change_owner with valid fields failed: %v", err)
+	}
+}
+
+func TestNewsletterOps_Delete_RequiresJIDAndConfirmJID(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	nr.SessionGuard = contractsfake.FailSession(nil)
+	uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:  NewsletterOpDelete,
+		JID: "120363000000000000@newsletter",
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing confirmJID")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:         NewsletterOpDelete,
+		JID:        "120363000000000000@newsletter",
+		ConfirmJID: "999999@newsletter",
+	})
+	if err == nil {
+		t.Fatal("expected validation error for mismatched confirmJID")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:         NewsletterOpDelete,
+		JID:        "120363000000000000@newsletter",
+		ConfirmJID: "120363000000000000@newsletter",
+	})
+	if err != nil {
+		t.Fatalf("delete with matching confirmJID failed: %v", err)
+	}
+}

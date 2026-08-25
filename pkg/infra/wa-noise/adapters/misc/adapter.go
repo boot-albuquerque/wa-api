@@ -396,6 +396,47 @@ func (a *MiscAdapter) SubscribeNewsletterLiveUpdates(ctx context.Context, txtID 
 	return client.NewsletterSubscribeLiveUpdates(ctxWithTimeout, parsed)
 }
 
+// DemoteNewsletterAdmin demotes a channel admin to subscriber.
+func (a *MiscAdapter) DemoteNewsletterAdmin(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+	client, parsedChannel, err := a.clientAndJID(txtID, channelJID)
+	if err != nil {
+		return err
+	}
+	parsedUser, err := wajid.ToJID(userJID)
+	if err != nil {
+		return err
+	}
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterDemoteAdmin(ctxWithTimeout, parsedChannel, parsedUser)
+}
+
+// ChangeNewsletterOwner transfers channel ownership.
+func (a *MiscAdapter) ChangeNewsletterOwner(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error {
+	client, parsedChannel, err := a.clientAndJID(txtID, channelJID)
+	if err != nil {
+		return err
+	}
+	parsedOwner, err := wajid.ToJID(newOwnerJID)
+	if err != nil {
+		return err
+	}
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterChangeOwner(ctxWithTimeout, parsedChannel, parsedOwner)
+}
+
+// DeleteNewsletter permanently deletes a channel (IRREVERSIBLE).
+func (a *MiscAdapter) DeleteNewsletter(ctx context.Context, txtID string, channelJID domain.JID) error {
+	client, parsed, err := a.clientAndJID(txtID, channelJID)
+	if err != nil {
+		return err
+	}
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterDelete(ctxWithTimeout, parsed)
+}
+
 // clientAndJID resolve o cliente da sessão e o JID de uma vez.
 //
 // Existe porque onze métodos acima começavam com as mesmas seis linhas, e a

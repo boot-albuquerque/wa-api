@@ -175,6 +175,11 @@ type Client interface {
 	NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error
 	NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID) (time.Duration, error)
 
+	// F233b — admin management and channel deletion.
+	NewsletterDemoteAdmin(ctx context.Context, channelJID, userJID types.JID) error
+	NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error
+	NewsletterDelete(ctx context.Context, channelJID types.JID) error
+
 	// Família de sessão (controle)
 
 	// PairPhone pede ao servidor do WhatsApp o codigo de pareamento por

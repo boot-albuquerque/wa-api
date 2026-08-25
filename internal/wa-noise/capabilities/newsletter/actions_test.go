@@ -397,3 +397,103 @@ func TestFollowEUnfollowPropagamErro(t *testing.T) {
 		t.Fatalf("Unfollow: err = %v, esperava %v", err, sentinel)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// F233b — DemoteAdmin, ChangeOwner, Delete
+// ---------------------------------------------------------------------------
+
+func testUserJID() types.JID {
+	return types.NewJID("5516900000000", types.DefaultUserServer)
+}
+
+func TestDemoteAdminSendsCorrectMutation(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{}}`)
+	channelJID := testJID()
+	userJID := testUserJID()
+
+	if err := DemoteAdmin(context.Background(), f, channelJID, userJID); err != nil {
+		t.Fatalf("DemoteAdmin: %v", err)
+	}
+	if got := mutationQueryID(t, f); got != mutationDemoteAdmin {
+		t.Errorf("DemoteAdmin used query ID %q, want %q", got, mutationDemoteAdmin)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	payload := string(nodes[0].Content.([]byte))
+	if !strings.Contains(payload, `"newsletter_id":"`+channelJID.String()+`"`) {
+		t.Errorf("payload missing newsletter_id: %s", payload)
+	}
+	if !strings.Contains(payload, `"user_id":"`+userJID.String()+`"`) {
+		t.Errorf("payload missing user_id: %s", payload)
+	}
+}
+
+func TestDemoteAdminPropagatesError(t *testing.T) {
+	f := newFakeTransport()
+	sentinel := errors.New("boom")
+	f.iqErr = sentinel
+
+	if err := DemoteAdmin(context.Background(), f, testJID(), testUserJID()); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+}
+
+func TestChangeOwnerSendsCorrectMutation(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{}}`)
+	channelJID := testJID()
+	newOwner := testUserJID()
+
+	if err := ChangeOwner(context.Background(), f, channelJID, newOwner); err != nil {
+		t.Fatalf("ChangeOwner: %v", err)
+	}
+	if got := mutationQueryID(t, f); got != mutationChangeOwner {
+		t.Errorf("ChangeOwner used query ID %q, want %q", got, mutationChangeOwner)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	payload := string(nodes[0].Content.([]byte))
+	if !strings.Contains(payload, `"newsletter_id":"`+channelJID.String()+`"`) {
+		t.Errorf("payload missing newsletter_id: %s", payload)
+	}
+	if !strings.Contains(payload, `"user_id":"`+newOwner.String()+`"`) {
+		t.Errorf("payload missing user_id: %s", payload)
+	}
+}
+
+func TestChangeOwnerPropagatesError(t *testing.T) {
+	f := newFakeTransport()
+	sentinel := errors.New("boom")
+	f.iqErr = sentinel
+
+	if err := ChangeOwner(context.Background(), f, testJID(), testUserJID()); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+}
+
+func TestDeleteSendsCorrectMutation(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{}}`)
+	channelJID := testJID()
+
+	if err := Delete(context.Background(), f, channelJID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if got := mutationQueryID(t, f); got != mutationDeleteNewsletter {
+		t.Errorf("Delete used query ID %q, want %q", got, mutationDeleteNewsletter)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	payload := string(nodes[0].Content.([]byte))
+	if !strings.Contains(payload, `"newsletter_id":"`+channelJID.String()+`"`) {
+		t.Errorf("payload missing newsletter_id: %s", payload)
+	}
+}
+
+func TestDeletePropagatesError(t *testing.T) {
+	f := newFakeTransport()
+	sentinel := errors.New("boom")
+	f.iqErr = sentinel
+
+	if err := Delete(context.Background(), f, testJID()); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+}

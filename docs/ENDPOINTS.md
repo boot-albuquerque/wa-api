@@ -1,7 +1,7 @@
 # Endpoints do wa-api — inventário e comparação
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
-**Total**: 117 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
+**Total**: 120 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
 
 Reproduzir a lista:
 
@@ -190,7 +190,7 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 
 ---
 
-## newsletter (canais) — 12 rotas
+## newsletter (canais) — 15 rotas
 
 | método | rota | o que faz |
 |---|---|---|
@@ -206,6 +206,40 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/newsletter/mark-viewed` | marcar como visto |
 | POST | `/newsletter/react` | reagir a mensagem do canal |
 | POST | `/newsletter/mute` | silenciar |
+| POST | `/newsletter/demote` | despromover admin a assinante (F233b) |
+| POST | `/newsletter/change-owner` | transferir posse do canal (F233b) |
+| DELETE | `/newsletter/delete` | **apagar canal — IRREVERSÍVEL** (F233b) |
+
+#### `/newsletter/demote` — despromover admin
+
+Corpo: `{"jid": "<canal>", "userJID": "<admin-a-despromover>"}`.
+
+Transforma um administrador do canal em assinante simples. Exige que o
+chamador seja dono do canal.
+
+#### `/newsletter/change-owner` — transferir posse
+
+Corpo: `{"jid": "<canal>", "userJID": "<novo-dono>"}`.
+
+Transfere a posse do canal para outro utilizador. O chamador perde a posse;
+o alvo torna-se o novo dono. **Irreversível sem a cooperação do novo dono.**
+
+#### `/newsletter/delete` — apagar canal
+
+Método: **DELETE** (não POST).
+Corpo: `{"jid": "<canal>", "confirmJID": "<canal>"}`.
+
+Apaga permanentemente o canal. **IRREVERSÍVEL — o canal e todo o conteúdo
+são destruídos.** A confirmação explícita é obrigatória: `confirmJID` tem
+de ser idêntico a `jid`. Corpo sem `confirmJID`, ou com valor diferente de
+`jid`, devolve 400.
+
+**Aviso sobre os query IDs (F233b)**: os três novos query IDs foram
+extraídos do Baileys (whiskeysockets/Baileys) e ainda **não foram verificados
+em campo**. As operações existentes usam IDs de geração diferente dos do
+Baileys (ex: o nosso CREATE usa `6234210096708695`, o do Baileys usa
+`8823471724422422`), portanto os três novos podem precisar de substituição
+após a verificação.
 
 ### Erros específicos de newsletter
 
@@ -261,7 +295,7 @@ projeto sem medir (F222).
 
 | | natureza | acesso |
 |---|---|---|
-| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 117 rotas REST |
+| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 120 rotas REST |
 | **Evolution API** | serviço HTTP sobre Baileys | REST + webhooks |
 | **Baileys** | **biblioteca** TypeScript | API de programa, não HTTP |
 | **Open WA** | automação de **Puppeteer** sobre a SPA do WhatsApp Web | REST (EASY API) ou biblioteca |
@@ -306,7 +340,7 @@ existe, não se há endpoint.
 | capacidade | wa-api | Evolution | Baileys | Open WA |
 |---|---|---|---|---|
 | **grupos** | ✅ 18 rotas | ✅ | ✅ | ✅ |
-| **canais (newsletter)** | ✅ 12 rotas | ⚠️ parcial | ✅ | ❌ |
+| **canais (newsletter)** | ✅ 15 rotas | ⚠️ parcial | ✅ | ❌ |
 | **comunidades** | ❌ | ⚠️ | ⚠️ | ⚠️ |
 | contactos, bloqueio, privacidade | ✅ | ✅ | ✅ | ✅ |
 | **status / stories** | ✅ 4 tipos | ✅ | ✅ | ✅ |

@@ -518,6 +518,10 @@ type NewsletterReader struct {
 	ReactFunc            func(ctx context.Context, txtID string, jid domain.JID, serverID int, reaction, messageID string) error
 	SubscribeLiveFunc    func(ctx context.Context, txtID string, jid domain.JID) (time.Duration, error)
 
+	DemoteFunc      func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	ChangeOwnerFunc func(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error
+	DeleteFunc      func(ctx context.Context, txtID string, channelJID domain.JID) error
+
 	// NewsletterCalls regista TODA chamada da família, com o método e o
 	// identificador. Uma lista só serve para asserir que a rota certa chamou o
 	// método certo com o argumento certo — que é o que os testes precisam.
@@ -678,6 +682,33 @@ func (f *NewsletterReader) SubscribeNewsletterLiveUpdates(ctx context.Context, t
 		return f.SubscribeLiveFunc(ctx, txtID, jid)
 	}
 	return 0, nil
+}
+
+// DemoteNewsletterAdmin implementa port.NewsletterReader.
+func (f *NewsletterReader) DemoteNewsletterAdmin(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+	f.record("DemoteNewsletterAdmin", txtID, channelJID, string(userJID))
+	if f.DemoteFunc != nil {
+		return f.DemoteFunc(ctx, txtID, channelJID, userJID)
+	}
+	return nil
+}
+
+// ChangeNewsletterOwner implementa port.NewsletterReader.
+func (f *NewsletterReader) ChangeNewsletterOwner(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error {
+	f.record("ChangeNewsletterOwner", txtID, channelJID, string(newOwnerJID))
+	if f.ChangeOwnerFunc != nil {
+		return f.ChangeOwnerFunc(ctx, txtID, channelJID, newOwnerJID)
+	}
+	return nil
+}
+
+// DeleteNewsletter implementa port.NewsletterReader.
+func (f *NewsletterReader) DeleteNewsletter(ctx context.Context, txtID string, channelJID domain.JID) error {
+	f.record("DeleteNewsletter", txtID, channelJID, "")
+	if f.DeleteFunc != nil {
+		return f.DeleteFunc(ctx, txtID, channelJID)
+	}
+	return nil
 }
 
 // --- MessageStarrer -------------------------------------------------------

@@ -270,6 +270,18 @@ func (r RealClient) NewsletterSubscribeLiveUpdates(ctx context.Context, jid type
 	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
 }
 
+func (r RealClient) NewsletterDemoteAdmin(ctx context.Context, channelJID, userJID types.JID) error {
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterDemoteAdmin(ctx, channelJID, userJID)))
+}
+
+func (r RealClient) NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error {
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterChangeOwner(ctx, channelJID, newOwnerJID)))
+}
+
+func (r RealClient) NewsletterDelete(ctx context.Context, channelJID types.JID) error {
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterDelete(ctx, channelJID)))
+}
+
 func (r RealClient) PairPhone(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error) {
 	v0, err := r.Client.PairPhone(ctx, phone, showPushNotification, clientType, clientDisplayName)
 	return v0, errmap.ClassifyIQ(err)
