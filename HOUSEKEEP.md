@@ -27388,3 +27388,69 @@ updated"` liso.
 **Status**: não corrigido.
 
 <!-- f-status: aberto -->
+
+## F250 — `POST /webhook` define por `webhookurl` mas devolve por `webhook`, e ignora `webhook` em silêncio
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+**Medido**:
+
+```
+POST /webhook {"webhook":"https://example.com/hook","events":["Message"]}
+  -> 200 {"webhook":""}                          ← a URL NÃO ficou; os events ficaram
+POST /webhook {"webhookurl":"https://example.com/hook","events":["Message"]}
+  -> 200 {"webhook":"https://example.com/hook"}  ← ficou
+GET  /webhook
+  -> {"subscribe":["Message"],"webhook":"https://example.com/hook"}
+```
+
+**Dois defeitos**:
+
+1. **Assimetria**: define-se com `webhookurl`, lê-se com `webhook`. Quem fizer
+   GET, alterar o valor e devolver o mesmo objeto por POST — o ciclo mais
+   natural que existe — **não altera nada**.
+2. **Silêncio**: usar `webhook` no POST devolve `200` e aplica os `events`,
+   ignorando a URL. Parcialmente aplicado, sem aviso.
+
+O domínio conhece as duas formas (`pkg/domain/webhook.go:5-6`), e o comentário
+diz `// Alternativa usada em SetWebhook` — ou seja, a duplicação é conhecida e
+o campo "alternativo" é o único que funciona na escrita.
+
+**Oitava vez nesta sessão que o `200` diz menos do que aparenta.**
+
+**Correção sugerida**: aceitar os dois nomes na escrita (é a decisão que já se
+tomou na F225 para o destino), e devolver o mesmo nome que se aceita.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F251 — ler e escrever configuração usam CAMINHOS diferentes
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+```
+GET  /s3/config      -> 200        POST /s3/config      -> 404
+GET  /hmac/config    -> 200        POST /hmac/config    -> 404
+                                   POST /s3/configure   -> a rota de escrita
+                                   POST /hmac/configure -> idem
+```
+
+Ler é `/config`, escrever é `/configure`. Nada indica isso na resposta: o
+`404 page not found` é o padrão do router, sem corpo JSON e sem pista.
+
+Existem ainda duplicados sob `/session/` (`/session/s3/config`,
+`/session/hmac/config`, `/session/s3/test`), aparentemente legado — **não
+verifiquei se divergem em comportamento**, e não vou afirmar que são iguais.
+
+**A validação em si é boa**, e vale registá-lo porque contrasta com os outros
+achados: `POST /s3/configure` devolve `400 invalid_s3_endpoint` e
+`POST /hmac/configure` devolve `400 hmac_key_too_short` com *"HMAC key must be
+at least 32 characters long"*. Códigos nomeados e mensagem acionável.
+
+**Correção sugerida**: aceitar `POST /s3/config` e `/hmac/config` como alias da
+escrita, mantendo `/configure`. Documentar o par no `ENDPOINTS.md`.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
