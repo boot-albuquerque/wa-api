@@ -26380,6 +26380,39 @@ inutilizável de ponta a ponta. Um cliente que só use a nossa API não consegue
 levar um canal do estado "criado" ao estado "com segundo admin" — e portanto
 não consegue transferir posse nem sair sem apagar.
 
+
+### `delete` VERIFICADO ponta a ponta — 2026-08-25
+
+Executado pela nossa API sobre o canal real `TESTE wa-api DESCARTAVEL`
+(`120363425486344523@newsletter`), com autorização explícita do utilizador.
+
+**As guardas primeiro** — ambas recusaram antes de contactar o WhatsApp:
+
+```
+DELETE sem confirmJID                     -> 400 missing_confirm_jid
+DELETE com confirmJID de OUTRO canal      -> 400 missing_confirm_jid
+DELETE com confirmJID igual ao jid        -> 200
+```
+
+**Linha de base antes**: `state: active`, `role: owner`, 1 canal na lista.
+
+**Depois, confirmado por TRÊS vias independentes**:
+
+| via | antes | depois |
+|---|---|---|
+| `GET /newsletter/list` | 1 canal | **0 canais** |
+| `POST /newsletter/info` | `active` / `owner` | **`non_existing`** / `viewer_metadata: null` |
+| link público de convite | página do canal | **`Link de convite inválido`** |
+
+A terceira é a que importa: as duas primeiras são a nossa própria API a
+responder sobre si mesma. O link público é servido pelo WhatsApp a qualquer
+pessoa, e é a prova de que o canal deixou de existir para o mundo, não só para
+a conta.
+
+**O query ID do `delete` (`30062808666639665`) fica assim confirmado em campo**
+— era o único dos três que viera do Baileys e estava certo, e agora não é
+suposição.
+
 <!-- f-status: aberto -->
 
 ## F234 — `TestStartSession_SessionOutlivesItsBootContext` falha sob carga: 1,87 s isolado, 30 s no `make check`

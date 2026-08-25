@@ -226,6 +226,11 @@ o alvo torna-se o novo dono. **Irreversível sem a cooperação do novo dono.**
 
 #### `/newsletter/delete` — apagar canal
 
+**Verificado ponta a ponta em 2026-08-25**: canal real apagado pela API, e a
+remoção confirmada por três vias independentes — a lista de canais passou de 1
+para 0, o `info` passou a `state: non_existing`, e o link público de convite
+passou a `Link de convite inválido`.
+
 Método: **DELETE** (não POST).
 Corpo: `{"jid": "<canal>", "confirmJID": "<canal>"}`.
 
@@ -234,12 +239,17 @@ são destruídos.** A confirmação explícita é obrigatória: `confirmJID` tem
 de ser idêntico a `jid`. Corpo sem `confirmJID`, ou com valor diferente de
 `jid`, devolve 400.
 
-**Aviso sobre os query IDs (F233b)**: os três novos query IDs foram
-extraídos do Baileys (whiskeysockets/Baileys) e ainda **não foram verificados
-em campo**. As operações existentes usam IDs de geração diferente dos do
-Baileys (ex: o nosso CREATE usa `6234210096708695`, o do Baileys usa
-`8823471724422422`), portanto os três novos podem precisar de substituição
-após a verificação.
+**Query IDs (F233b/c)**: os IDs iniciais vieram do Baileys e **estavam
+errados** para `demote` e `change-owner` — davam `400 Bad Request`. Foram
+substituídos pelos reais, extraídos do bundle JS do WhatsApp Web
+(`WAWebMexDemoteNewsletterAdminJobMutation` → `9880997548630971`,
+`WAWebMexChangeNewsletterOwnerJobMutation` → `9546742745432473`); o do
+`delete` que veio do Baileys já estava correto.
+
+O WhatsApp **roda estes IDs sem aviso**. Quando uma operação começar a
+responder `400 Bad Request (CRITICAL)` e as vizinhas continuarem a funcionar,
+reextraia com `scripts/mex-query-ids/` — o README explica o método e as
+armadilhas.
 
 ### Erros específicos de newsletter
 
@@ -471,13 +481,37 @@ implementação, com par de controlo onde havia hipótese a refutar. As cinco
 registado assim para que ninguém as leia como prova de campo que eu não
 recolhi.
 
-> **AVISO — `demote`, `change-owner` e `delete` NÃO FUNCIONAM hoje**
-> (HOUSEKEEP F233 parte b, medido 2026-08-25). As rotas existem e validam o
-> payload, mas o servidor do WhatsApp responde
-> `graphql error: 400 Bad Request` às duas primeiras: os query IDs foram
-> extraídos do Baileys, que usa uma geração diferente da API. O `delete` tem a
-> mesma origem suspeita e está travado por confirmação obrigatória
-> (`confirmJID` tem de igualar o JID do canal).
+> **Estado das três rotas de administração de canal** (medido 2026-08-25):
 >
-> Não as use em produção até os query IDs da nossa geração serem encontrados e
-> verificados em campo.
+> | rota | estado |
+> |---|---|
+> | `DELETE /newsletter/delete` | **funcional, verificado ponta a ponta** |
+> | `POST /newsletter/change-owner` | implementada; devolve `403 newsletter_new_owner_not_admin` porque o novo dono tem de já ser admin — e **não expomos o fluxo de convite de admin** (ver abaixo) |
+> | `POST /newsletter/demote` | implementada; devolve `403 newsletter_cannot_demote_owner` ao apontar ao dono. Não verificada sobre um admin não-dono, pela mesma razão |
+>
+> O `userJID` pode vir em PN ou LID — o servidor resolve PN→LID antes de enviar
+> (HOUSEKEEP F233c). Enviar PN sem essa resolução produzia `400 Bad Request`.
+>
+> **Lacuna conhecida**: a interface do WhatsApp oferece **Convidar admins**, e
+> nós não. Sem isso, um cliente que use só esta API não consegue levar um canal
+> de "criado" a "com segundo admin" — logo não consegue transferir posse nem
+> sair sem apagar (HOUSEKEEP F233).
+
+### `DELETE /newsletter/delete` — irreversível
+
+Exige `confirmJID` **igual** ao `jid` do canal. Sem ele, ou com valor
+diferente, devolve `400 missing_confirm_jid` e **não contacta o WhatsApp**.
+
+```bash
+curl -X DELETE http://localhost:8080/newsletter/delete \
+  -H 'token: <TOKEN>' -H 'Content-Type: application/json' \
+  -d '{"jid":"1203…@newsletter","confirmJID":"1203…@newsletter"}'
+```
+
+Só o dono pode apagar. Depois de apagado:
+
+- `GET /newsletter/list` deixa de o listar;
+- `POST /newsletter/info` devolve `state: non_existing` e `viewer_metadata: null`;
+- o link público de convite passa a `Link de convite inválido`.
+
+Não há como desfazer.
