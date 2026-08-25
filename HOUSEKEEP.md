@@ -24880,8 +24880,6 @@ mesmo código.
 **Status**: não corrigido. A parte (2) (classificação 409) está fechada e
 verificada; a parte (1) está MEDIDA mas não resolvida, e a correção é no fork.
 
-<!-- f-status: aberto -->
-
 ### CORREÇÃO DA MEDIÇÃO 2026-08-24 — eu li a base no momento errado
 
 **O que afirmei**: que o `fullSync` não repunha o estado local, porque a versão
@@ -24942,3 +24940,4 @@ Parte (1) — o `mismatching LTHash` — **medida, diagnosticada até à frontei
 fork, e deliberadamente NÃO corrigida**. Fechada por agora por decisão do dono
 do repositório.
 
+<!-- f-status: aberto -->
