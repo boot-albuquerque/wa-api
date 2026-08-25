@@ -25494,3 +25494,60 @@ linha aparece na tabela — não pela função, que é o que já se faz e não m
 proíbe corrigir de graça sem perguntar.
 
 <!-- f-status: aberto -->
+
+## F228 — `/chat/send/pollvote` devolve 200 mas o voto NÃO conta: falha de autenticação na desencriptação
+
+**Data/contexto**: 2026-08-25, validando as capabilities pela interface do
+`web.whatsapp.com` na conta `lucas`, a pedido do utilizador. A enquete
+renderiza, o voto devolve `200`, e as duas opções continuam com **0 votos** —
+o botão `Mostrar votos` fica inativo.
+
+**Onde**: caminho de `POST /chat/send/pollvote`; a falha é observada na
+desencriptação do eco, em `DecryptPollVote`.
+
+**Problema**: o voto é despachado com sucesso e o MAC falha do outro lado.
+Evidência medida (log do servidor, 05:37:44):
+
+```
+INF  poll vote sent  msgID=3EB09118C2625DC1AC6652  status=200
+WARN DecryptPollVote failed error="failed to decrypt poll vote: failed to
+     decrypt secret message: cipher: message authentication failed
+     (sender: 29343770251463:25@lid,
+      orig sender: 554192421234@s.whatsapp.net and 90937376170214@lid)"
+     pollMsgID=3EB0190BDBF710DBA4B34E
+```
+
+Confirmado na interface: enquete `F223 voto` (enviada por `lucas`, votada por
+`filarapida`) mostra `Sim 0` / `Não 0` depois do voto.
+
+**O `200` é falso positivo.** Ele diz "despachado", não "contabilizado" — e
+não há nada na resposta que distinga os dois casos. Foi assim que eu próprio
+registei esta capability como validada numa medição anterior: o código HTTP
+mentiu, e eu não fui à interface confirmar.
+
+**Hipótese de causa (NÃO confirmada)**: identidade LID/PN. O MAC do voto cobre
+o JID de quem vota. O log mostra o votante como LID puro
+(`29343770251463:25@lid`) e o autor da enquete resolvido em DUAS formas
+(`554192421234@s.whatsapp.net` **e** `90937376170214@lid`). Se a chave for
+derivada de uma forma e verificada com a outra, o MAC falha exatamente assim.
+
+Isto é a classe de problema que o `CLAUDE.md` manda tratar consultando o
+Baileys primeiro — ele mantém `LIDMappingStore` com fallback para USync
+precisamente porque as duas formas coexistem.
+
+**A investigar antes de corrigir**:
+1. Qual JID o `SendPollVote` usa para derivar a chave, e qual o WhatsApp
+   espera. Medir, não deduzir.
+2. Se o campo `Sender` do payload (hoje o autor da enquete) está a ser usado
+   onde devia estar o votante, ou vice-versa.
+3. Se a enquete criada por outro cliente (telemóvel) e votada pela API tem o
+   mesmo defeito — isso separaria "defeito no envio do voto" de "defeito na
+   criação da enquete".
+
+**Correção mínima independente da causa**: a rota não pode devolver `200` liso
+quando o voto pode não contar. Ou o resultado distingue os casos, ou a
+documentação diz que `200` é só despacho.
+
+**Status**: não corrigido — descoberto na validação, fora do escopo do CAP-55.
+
+<!-- f-status: aberto -->
