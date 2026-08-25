@@ -25229,10 +25229,62 @@ com um `simpleErr` local.
 os outros `simpleErr` do pacote. Um `if` manual por handler é o formato em que
 este defeito se repete.
 
-**Status**: não corrigido — fora do escopo da F223. Não toquei por causa da
-regra de não corrigir de graça bug pré-existente sem perguntar.
+**Correção aplicada** (2026-08-25, branch `boot-albuquerque/wa-f224`):
 
-<!-- f-status: aberto -->
+Três `simpleErr` no handler trocados por `apperr.New` com categoria
+`validation`:
+
+- `missing chat` → `apperr.New("missing_chat", ...)` — código reutilizado
+  de `pkg/application/usecase/chat/star_message.go:32`
+- `missing duration` (×2, `/chat/ephemeral` e `/chat/ephemeral/default`) →
+  `apperr.New("missing_duration", ...)`
+
+O use case já devolvia `"invalid_duration"` e `"invalid_jid"` via `apperr`;
+o defeito era só o handler contornar a taxonomia na validação de presença.
+
+**Testes que travam a correção**:
+
+- `TestSetDisappearingTimer_MissingChat` — `assertAppErrCode(t, rec, "missing_chat")`
+- `TestSetDisappearingTimer_MissingDuration` — `assertAppErrCode(t, rec, "missing_duration")`
+- `TestSetDisappearingTimer_InvalidDuration` — `assertAppErrCode(t, rec, "invalid_duration")`
+- `TestSetDefaultDisappearingTimer_MissingDuration` — idem
+- `TestSetDefaultDisappearingTimer_InvalidDuration` — idem
+- Todos servidos via `mux.Router` (rota registada).
+- Caminho de sucesso exercitado para todos os 5 valores aceites (0, off, 24h,
+  7d, 90d) em ambos os handlers.
+
+**Controlo negativo executado**: com `simpleErr` restaurado, o teste
+`TestSetDisappearingTimer_MissingChat` falha com:
+
+```
+handler_disappearing_test.go:115: error field is not a structured apperr
+object: json: cannot unmarshal string into Go value of type struct
+{ Code string "json:\"code\""; Message string "json:\"message\"" }
+(raw: "bad request")
+```
+
+A mutação compila e falha com mensagem — o teste morde.
+
+**Outros `simpleErr` no pacote** (varredura de `grep -rn "simpleErr" pkg/`):
+
+| Sítio | Finalidade | Toque nesta sessão |
+|---|---|---|
+| `errors.go:7` `errUnauthorized` | Sentinel de autenticação | Não — caminho de auth, não de validação |
+| `errors.go:8` `errMissingSessionID` | Sentinel de sessão | Não — idem |
+| `errors.go:9` `errMissingID` | Sentinel genérico de ID | Não — idem |
+| `errors.go:10` `errDecodePayload` | Sentinel de parse JSON | Não — idem |
+| `errors.go:13` `errMissingJID` | Caminho de URL param | Não — idem |
+| `errors_test.go:59,70` | Teste unitário do próprio `simpleErr` | Não — teste, não produção |
+
+Nenhum dos sentinels restantes é validação de campo de corpo; são fronteiras
+de autenticação, sessão ou parse. Migrá-los para `apperr` é trabalho
+legítimo mas de escopo diferente — são cinco rotas, não uma. Registados
+aqui como achado, não como pendência desta entrada.
+
+**Status**: **corrigido** — testes acima. Verificação em campo pendente
+(curls entregues ao coordenador).
+
+<!-- f-status: corrigido -->
 
 ## F225 — rotas de chat com nomes de campo de GRUPO: `Group` e `groupjid` onde o destino é 1:1
 

@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gorilla/mux"
 
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/chat"
@@ -25,12 +28,38 @@ func disappearingHandler(ops *contractsfake.ChatOperations, jids *contractsfake.
 		chat.NewSetDisappearingTimerUseCase(ops, jids, logger))
 }
 
+func disappearingRouter(h http.Handler) *mux.Router {
+	r := mux.NewRouter()
+	r.Handle("/chat/ephemeral", h).Methods("POST")
+	return r
+}
+
 func serveDisappearing(ops *contractsfake.ChatOperations, jids *contractsfake.JIDResolver, logger *contractsfake.Logger, body string) (*httptest.ResponseRecorder, *logCapture) {
 	h, capture := logassert.Wrap(disappearingHandler(ops, jids, logger))
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/chat/ephemeral", strings.NewReader(body))
-	h.ServeHTTP(rec, withUser(r, "user-1"))
+	disappearingRouter(h).ServeHTTP(rec, withUser(r, "user-1"))
 	return rec, capture
+}
+
+// assertAppErrCode decodes the error field of the ADR-002 envelope and
+// asserts the apperr code matches wantCode.
+func assertAppErrCode(t *testing.T, rec *httptest.ResponseRecorder, wantCode string) {
+	t.Helper()
+	env := decodeEnvelope(t, rec)
+	var errObj struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(env.Error, &errObj); err != nil {
+		t.Fatalf("error field is not a structured apperr object: %v (raw: %s)", err, env.Error)
+	}
+	if errObj.Code != wantCode {
+		t.Fatalf("error.code: got %q, want %q", errObj.Code, wantCode)
+	}
+	if errObj.Message == "" {
+		t.Fatal("error.message is empty")
+	}
 }
 
 func TestSetDisappearingTimer_Success(t *testing.T) {
@@ -83,6 +112,7 @@ func TestSetDisappearingTimer_MissingChat(t *testing.T) {
 	rec, capture := serveDisappearing(ops, jids, logger, `{"duration":"24h"}`)
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	assertAppErrCode(t, rec, "missing_chat")
 	got := logassert.OutcomeLogged(t, capture.Records(t), "missing chat")
 	if got.str("level") != "warn" {
 		t.Fatalf("level: got %q, want warn", got.str("level"))
@@ -97,6 +127,7 @@ func TestSetDisappearingTimer_MissingDuration(t *testing.T) {
 	rec, capture := serveDisappearing(ops, jids, logger, `{"chat":"5511999999999@s.whatsapp.net"}`)
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	assertAppErrCode(t, rec, "missing_duration")
 	got := logassert.OutcomeLogged(t, capture.Records(t), "missing duration")
 	if got.str("level") != "warn" {
 		t.Fatalf("level: got %q, want warn", got.str("level"))
@@ -127,6 +158,7 @@ func TestSetDisappearingTimer_ZeroVsAbsent(t *testing.T) {
 		rec, _ := serveDisappearing(ops, jids, logger, `{"chat":"5511999999999@s.whatsapp.net","duration":null}`)
 
 		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		assertAppErrCode(t, rec, "missing_duration")
 		if len(ops.SetDisappearingTimerCalls) != 0 {
 			t.Fatal("null duration reached the port")
 		}
@@ -137,6 +169,7 @@ func TestSetDisappearingTimer_ZeroVsAbsent(t *testing.T) {
 		rec, _ := serveDisappearing(ops, jids, logger, `{"chat":"5511999999999@s.whatsapp.net"}`)
 
 		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		assertAppErrCode(t, rec, "missing_duration")
 		if len(ops.SetDisappearingTimerCalls) != 0 {
 			t.Fatal("omitted duration reached the port")
 		}
@@ -148,6 +181,7 @@ func TestSetDisappearingTimer_InvalidDuration(t *testing.T) {
 	rec, _ := serveDisappearing(ops, jids, logger, `{"chat":"5511999999999@s.whatsapp.net","duration":"30d"}`)
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	assertAppErrCode(t, rec, "invalid_duration")
 	if len(ops.SetDisappearingTimerCalls) != 0 {
 		t.Fatal("invalid duration reached the port")
 	}
@@ -190,11 +224,17 @@ func defaultDisappearingHandler(setter *contractsfake.DefaultDisappearingTimerSe
 		chat.NewSetDefaultDisappearingTimerUseCase(setter, logger))
 }
 
+func defaultDisappearingRouter(h http.Handler) *mux.Router {
+	r := mux.NewRouter()
+	r.Handle("/chat/ephemeral/default", h).Methods("POST")
+	return r
+}
+
 func serveDefaultDisappearing(setter *contractsfake.DefaultDisappearingTimerSetter, logger *contractsfake.Logger, body string) (*httptest.ResponseRecorder, *logCapture) {
 	h, capture := logassert.Wrap(defaultDisappearingHandler(setter, logger))
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/chat/ephemeral/default", strings.NewReader(body))
-	h.ServeHTTP(rec, withUser(r, "user-1"))
+	defaultDisappearingRouter(h).ServeHTTP(rec, withUser(r, "user-1"))
 	return rec, capture
 }
 
@@ -244,6 +284,7 @@ func TestSetDefaultDisappearingTimer_MissingDuration(t *testing.T) {
 	rec, capture := serveDefaultDisappearing(setter, logger, `{}`)
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	assertAppErrCode(t, rec, "missing_duration")
 	logassert.OutcomeLogged(t, capture.Records(t), "missing duration")
 	if len(setter.SetDefaultDisappearingTimerCalls) != 0 {
 		t.Fatal("missing duration reached the port")
@@ -271,6 +312,7 @@ func TestSetDefaultDisappearingTimer_ZeroVsAbsent(t *testing.T) {
 		rec, _ := serveDefaultDisappearing(setter, logger, `{"duration":null}`)
 
 		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		assertAppErrCode(t, rec, "missing_duration")
 		if len(setter.SetDefaultDisappearingTimerCalls) != 0 {
 			t.Fatal("null duration reached the port")
 		}
@@ -281,6 +323,7 @@ func TestSetDefaultDisappearingTimer_ZeroVsAbsent(t *testing.T) {
 		rec, _ := serveDefaultDisappearing(setter, logger, `{}`)
 
 		assertErrorEnvelope(t, rec, http.StatusBadRequest)
+		assertAppErrCode(t, rec, "missing_duration")
 		if len(setter.SetDefaultDisappearingTimerCalls) != 0 {
 			t.Fatal("omitted duration reached the port")
 		}
@@ -292,6 +335,7 @@ func TestSetDefaultDisappearingTimer_InvalidDuration(t *testing.T) {
 	rec, _ := serveDefaultDisappearing(setter, logger, `{"duration":"30d"}`)
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	assertAppErrCode(t, rec, "invalid_duration")
 	if len(setter.SetDefaultDisappearingTimerCalls) != 0 {
 		t.Fatal("invalid duration reached the port")
 	}

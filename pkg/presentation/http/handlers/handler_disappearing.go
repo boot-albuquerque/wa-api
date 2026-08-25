@@ -6,9 +6,9 @@ import (
 
 	"github.com/rs/zerolog/hlog"
 
-	customhttp "wa-api/pkg/presentation/http"
-
 	"wa-api/pkg/application/usecase/chat"
+	"wa-api/pkg/domain/apperr"
+	customhttp "wa-api/pkg/presentation/http"
 )
 
 // SetDisappearingTimerHandler handles POST /chat/ephemeral.
@@ -37,13 +37,13 @@ func (h *SetDisappearingTimerHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 	if req.Chat == "" {
-		err := &simpleErr{"missing chat"}
+		err := apperr.New("missing_chat", apperr.CategoryValidation, "missing chat in payload", false, nil)
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, err)
 		return
 	}
 	if req.Duration == nil {
-		err := &simpleErr{"missing duration"}
+		err := apperr.New("missing_duration", apperr.CategoryValidation, "missing duration in payload", false, nil)
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, err)
 		return
@@ -82,7 +82,7 @@ func (h *SetDefaultDisappearingTimerHandler) ServeHTTP(w http.ResponseWriter, r 
 		return
 	}
 	if req.Duration == nil {
-		err := &simpleErr{"missing duration"}
+		err := apperr.New("missing_duration", apperr.CategoryValidation, "missing duration in payload", false, nil)
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, err)
 		return
