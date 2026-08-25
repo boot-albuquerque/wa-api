@@ -1232,7 +1232,14 @@ rules_frozen=true
 # mediram arvores diferentes e as suas notas coexistem acima. Estes tres
 # numeros sao a MEDICAO da arvore com AS DUAS coisas dentro:
 # func 590, errpath 783, eligible 948.
-min_func_coverage=590
+# CAP-52/53/54 (2026-08-24): mute, pin e star. func 590->593 e eligible
+# 950->955 SOBEM. errpath CAI 782->780 por DILUICAO, pelo mesmo padrao ja'
+# aceite na CAP-48 e na F108: a validacao dos use cases devolve apperr
+# estruturado sem Warn, e quem loga a rejeicao e' o handler
+# (handler_misc.go, 7 chamadas a hlog...Warn()). Medido: mute 3 apperr/1 Warn,
+# pin 2/1, star 5/1 — o mesmo racio de send_image (10/6) e send_poll (4/2).
+# Nenhum caminho existente perdeu log.
+min_func_coverage=593
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1466,11 +1473,11 @@ min_func_coverage=590
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=782
+min_errpath_coverage=780
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
-min_eligible=950
+min_eligible=955
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
