@@ -25818,3 +25818,106 @@ de mensagem PRÓPRIA exige `POST /session/history` com valor > 0.
 **Status**: não corrigido — precisa de decisão sobre a semântica da bandeira.
 
 <!-- f-status: aberto -->
+
+## F231 — `duration_seconds` reporta NANOSSEGUNDOS: erra por mil milhões de vezes
+
+**Data/contexto**: 2026-08-25, testes em produção da superfície de newsletter
+pela conta `filarapida`, com canal de teste criado para o efeito.
+
+**Onde**: `pkg/application/usecase/notification/newsletter_ops.go:81`
+
+```go
+Duration time.Duration `json:"duration_seconds,omitempty"`
+```
+
+**Problema**: o `encoding/json` serializa `time.Duration` como o inteiro
+subjacente, que são **nanossegundos**. O campo anuncia segundos.
+
+Medido — `POST /newsletter/subscribe` devolveu:
+
+```json
+{"code":200,"data":{"duration_seconds":90000000000,"status":"sent"}}
+```
+
+Lido como segundos, isso são **2854 anos**. O valor real é `90000000000 ns`
+= **90 segundos**. Um consumidor que agende a renovação da subscrição pelo
+campo nunca renova.
+
+O valor até é plausível o suficiente para não levantar suspeita — é positivo,
+é grande, e "subscrição longa" não é absurdo. Foi preciso dividir por 1e9 para
+o número fazer sentido.
+
+**Correção sugerida**: ou converter (`int64(d.Seconds())`) mantendo o nome, ou
+renomear para `duration_ns`. A primeira é a que respeita o contrato publicado.
+Procurar outros `time.Duration` com tag JSON no repositório — o defeito
+repete-se onde o padrão se repetir.
+
+**Status**: não corrigido — fora do escopo da sessão de testes.
+
+<!-- f-status: aberto -->
+
+## F232 — os 11 métodos de newsletter não têm prazo, e `/newsletter/updates` fica pendurado até o cliente desistir
+
+**Data/contexto**: 2026-08-25, mesma sessão de testes.
+
+**Onde**: `pkg/infra/wa-noise/adapters/misc/adapter.go` — todos os métodos de
+newsletter.
+
+**Problema**: o `MiscAdapter` usa
+`context.WithTimeout(ctx, waclient.RequestTimeout)` nos seus outros métodos
+(ex.: linha 54, `ArchiveChat`). **Nenhum** dos onze métodos de newsletter o
+faz:
+
+```
+CreateNewsletter, NewsletterInfo, NewsletterInfoWithInvite, FollowNewsletter,
+UnfollowNewsletter, ToggleNewsletterMute, NewsletterMessages,
+NewsletterMessageUpdates, MarkNewsletterViewed, SendNewsletterReaction,
+SubscribeNewsletterLiveUpdates
+```
+
+Onze de onze. Não é um esquecimento pontual — é uma família inteira fora da
+convenção do próprio ficheiro.
+
+**Evidência de que isso morde**: `POST /newsletter/updates` nunca responde.
+Medido com dois prazos de cliente diferentes:
+
+```
+duration_ms=30004.9  status=500  error="context canceled"   (curl -m 30)
+duration_ms=60005.6  status=500  error="context canceled"   (curl -m 60)
+```
+
+A duração do lado do servidor iguala EXATAMENTE o prazo do cliente, e o erro é
+`context canceled`. Ou seja: o servidor não tem prazo nenhum — quem termina o
+pedido é o cliente ao desligar. Um cliente que não desligue segura o pedido
+indefinidamente.
+
+**Isto viola a invariante escrita no `CLAUDE.md`**: *nada que espere por
+relógio ou por par morto pode ocupar slot limitado*. As outras dez rotas só
+parecem sãs porque o servidor do WhatsApp responde depressa — o
+comportamento é o mesmo, e a diferença é sorte.
+
+**Nota sobre o resto da superfície** (medido no mesmo canal de teste): `list`,
+`info`, `info-invite`, `mute` on/off, `messages`, `subscribe`, `mark-viewed`,
+`react` e `follow` devolvem `200`. `unfollow` devolve `500 newsletter_failed`.
+
+O motivo real está no log e **não** na resposta:
+
+```
+ERR newsletter operation failed op=unfollow
+    error="graphql error: 405 Not Allowed (CRITICAL)"
+```
+
+É recusa do servidor do WhatsApp — plausivelmente porque o dono não pode
+deixar de seguir o próprio canal, o que seria comportamento correto. Mas o
+cliente recebe um `newsletter_failed` genérico e não tem como saber. Mesma
+família da **F224**: o servidor sabe a causa e não a transmite. Aqui é pior,
+porque `500` sugere defeito nosso quando pode ser recusa legítima — devia ser
+`4xx` com o motivo.
+
+**Correção sugerida**: aplicar `waclient.RequestTimeout` aos onze, como o resto
+do ficheiro já faz. Um teste que percorra os métodos do adaptador e falhe se
+algum não puser prazo evita que o próximo nasça igual.
+
+**Status**: não corrigido — descoberto nos testes, fora do escopo.
+
+<!-- f-status: aberto -->
