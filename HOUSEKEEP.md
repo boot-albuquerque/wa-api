@@ -26352,6 +26352,34 @@ CONCLUIR com `200`. `403` é a recusa correta para os cenários montáveis. Um
 sucesso exigiria um segundo admin no canal, e promover alguém depende do fluxo
 de convite de admin que descobrimos no bundle e não implementamos.
 
+
+### Confirmação visual da superfície de administração — 2026-08-25
+
+Com a `filarapida` (dona) autenticada no `web.whatsapp.com`, o painel `Dados do
+canal` mostra exatamente três acções de administração:
+
+| na interface | equivalente na nossa API |
+|---|---|
+| **Convidar admins** | **NÃO EXISTE** |
+| **Transferir a propriedade** | `POST /newsletter/change-owner` |
+| **Apagar canal** | `DELETE /newsletter/delete` |
+
+Isto fecha o modelo: as duas saídas do dono são as que a FAQ descreve, e ambas
+estão implementadas. **O que falta é a porta de entrada** — sem convidar um
+admin, `change-owner` nunca pode devolver `200`, porque o novo dono tem de já
+ser admin (medido: `401 newsletter_new_owner_not_admin`).
+
+Ou seja, a lacuna deixou de ser hipótese: é uma funcionalidade que o WhatsApp
+expõe na interface, cujo query ID já temos extraído
+(`CreateNewsletterAdminInvite = 9387141988078609`,
+`AcceptNewsletterAdminInvite = 9580828702035549`,
+`RevokeNewsletterAdminInvite = 9656078347839416`), e que não expomos.
+
+**Consequência prática**: a nossa superfície de administração de canais é
+inutilizável de ponta a ponta. Um cliente que só use a nossa API não consegue
+levar um canal do estado "criado" ao estado "com segundo admin" — e portanto
+não consegue transferir posse nem sair sem apagar.
+
 <!-- f-status: aberto -->
 
 ## F234 — `TestStartSession_SessionOutlivesItsBootContext` falha sob carga: 1,87 s isolado, 30 s no `make check`
