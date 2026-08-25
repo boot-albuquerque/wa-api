@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	"wa-api/pkg/application/usecase/group"
+	"wa-api/pkg/domain"
 )
 
 // GroupManagementHandlers groups all group write-operation handlers.
@@ -63,7 +63,7 @@ func NewGroupManagementHandlers(uc *group.GroupManagementUseCase) *GroupManageme
 }
 
 func decodeAndRespond(w http.ResponseWriter, r *http.Request, v interface{}) bool {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+	if err := domain.DecodeRequest(r.Body, v); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode group management payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return false
@@ -150,11 +150,13 @@ func handleGroupJoin(uc *group.GroupManagementUseCase, w http.ResponseWriter, r 
 
 func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		GroupJID string `json:"groupJID"`
+		GroupJID  string `json:"groupJID"`
+		ChatAlias string `json:"chat"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.GroupJID == "" {
 		rejectMissingField(w, r, "groupJID", "leave group request rejected")
 		return
@@ -168,10 +170,15 @@ func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r
 }
 
 func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct{ GroupJID, Name string }
+	var req struct {
+		GroupJID  string `json:"GroupJID"`
+		Name      string `json:"Name"`
+		ChatAlias string `json:"chat"`
+	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Name == "" {
 		rejectMissingField(w, r, "name", "set group name request rejected")
 		return
@@ -185,10 +192,15 @@ func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter,
 }
 
 func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct{ GroupJID, Topic string }
+	var req struct {
+		GroupJID  string `json:"GroupJID"`
+		Topic     string `json:"Topic"`
+		ChatAlias string `json:"chat"`
+	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Topic == "" {
 		rejectMissingField(w, r, "topic", "set group topic request rejected")
 		return
@@ -202,10 +214,15 @@ func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter
 }
 
 func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct{ GroupJID, Photo string }
+	var req struct {
+		GroupJID  string `json:"GroupJID"`
+		Photo     string `json:"Photo"`
+		ChatAlias string `json:"chat"`
+	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetGroupPhoto(r.Context(), id, req.GroupJID, []byte(req.Photo)); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group photo failed")
 		customhttp.RespondJSON(w, 500, nil, err)
@@ -216,11 +233,13 @@ func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter
 
 func handleRemoveGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		GroupJID string `json:"groupjid"`
+		GroupJID  string `json:"groupjid"`
+		ChatAlias string `json:"chat"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.RemoveGroupPhoto(r.Context(), id, req.GroupJID); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("remove group photo failed")
 		customhttp.RespondJSON(w, 500, nil, err)
@@ -231,12 +250,14 @@ func handleRemoveGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWri
 
 func handleSetGroupAnnounce(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		GroupJID string
-		Announce bool
+		GroupJID  string
+		Announce  bool
+		ChatAlias string `json:"chat"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetGroupAnnounce(r.Context(), id, req.GroupJID, req.Announce); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group announce failed")
 		customhttp.RespondJSON(w, 500, nil, err)
@@ -247,12 +268,14 @@ func handleSetGroupAnnounce(uc *group.GroupManagementUseCase, w http.ResponseWri
 
 func handleSetGroupLocked(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		GroupJID string
-		Locked   bool
+		GroupJID  string
+		Locked    bool
+		ChatAlias string `json:"chat"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetGroupLocked(r.Context(), id, req.GroupJID, req.Locked); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group locked failed")
 		customhttp.RespondJSON(w, 500, nil, err)
@@ -263,12 +286,14 @@ func handleSetGroupLocked(uc *group.GroupManagementUseCase, w http.ResponseWrite
 
 func handleSetDisappearingTimer(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		GroupJID string `json:"groupjid"`
-		Duration string `json:"duration"`
+		GroupJID  string `json:"groupjid"`
+		Duration  string `json:"duration"`
+		ChatAlias string `json:"chat"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetDisappearingTimer(r.Context(), id, req.GroupJID, req.Duration); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set disappearing timer failed")
 		customhttp.RespondJSON(w, 500, nil, err)
@@ -279,13 +304,15 @@ func handleSetDisappearingTimer(uc *group.GroupManagementUseCase, w http.Respons
 
 func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		GroupJID string
-		Phone    []string
-		Action   string
+		GroupJID  string
+		Phone     []string
+		Action    string
+		ChatAlias string `json:"chat"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
+	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if len(req.Phone) < 1 {
 		rejectMissingField(w, r, "phones", "update group participants request rejected")
 		return
@@ -298,8 +325,6 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 		rejectMissingField(w, r, "action", "update group participants request rejected")
 		return
 	}
-	// GroupJID was never validated here, so an absent field also reached the
-	// JID parser (F101).
 	if req.GroupJID == "" {
 		rejectMissingField(w, r, "groupjid", "update group participants request rejected")
 		return

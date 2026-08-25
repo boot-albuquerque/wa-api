@@ -12,9 +12,12 @@ package domain
 // automatically." A caller that pins and then archives ends with an unpinned
 // chat, and nothing in this API reports that.
 type PinChatRequest struct {
+	ChatTarget
 	Jid string `json:"jid"`
 	Pin bool   `json:"pin"`
 }
+
+func (r *PinChatRequest) ResolveChat() { ResolveChatField(&r.Jid, r.ChatAlias) }
 
 // PinChatResult represents the result of pinning/unpinning a chat.
 type PinChatResult struct {

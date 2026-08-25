@@ -11,10 +11,13 @@ import "time"
 //
 // When Mute is false, MuteDuration is ignored (unmute is immediate).
 type MuteChatRequest struct {
+	ChatTarget
 	Jid          string         `json:"jid"`
 	Mute         bool           `json:"mute"`
 	MuteDuration *time.Duration `json:"mute_duration,omitempty"`
 }
+
+func (r *MuteChatRequest) ResolveChat() { ResolveChatField(&r.Jid, r.ChatAlias) }
 
 // MuteChatResult represents the result of muting/unmuting a chat.
 type MuteChatResult struct {

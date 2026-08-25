@@ -9,23 +9,32 @@ type SendPresenceRequest struct {
 
 // SubscribePresenceRequest para POST /chat/presence/subscribe
 type SubscribePresenceRequest struct {
+	ChatTarget
 	Phone string `json:"Phone"`
 }
 
+func (r *SubscribePresenceRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
+
 // ChatPresenceRequest para POST /chat/presence/chat
 type ChatPresenceRequest struct {
+	ChatTarget
 	Phone string `json:"Phone"`
 	State string `json:"State"` // "typing", "paused", "recording"
 	Media string `json:"Media"` // optional media type
 }
 
+func (r *ChatPresenceRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
+
 // ReactRequest para POST /chat/react
 type ReactRequest struct {
+	ChatTarget
 	Phone       string `json:"Phone"`
 	Body        string `json:"Body"`        // emoji or "remove"
 	Id          string `json:"Id"`          // message ID
 	Participant string `json:"Participant"` // optional participant JID
 }
+
+func (r *ReactRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // MarkReadRequest para POST /chat/markread
 type MarkReadRequest struct {

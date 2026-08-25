@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
@@ -41,7 +40,7 @@ func (h *SendImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendImageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -84,7 +83,7 @@ func (h *SendDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req domain.SendDocumentRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -127,7 +126,7 @@ func (h *SendAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendAudioRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return

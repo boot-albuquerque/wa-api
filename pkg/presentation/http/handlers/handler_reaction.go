@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"wa-api/pkg/domain"
@@ -25,7 +24,7 @@ func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.ReactRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return

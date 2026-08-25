@@ -21,6 +21,31 @@ As colunas do **wa-api** são medidas (rota registada = existe). Mas existir nã
 
 ---
 
+## Campo de destino: `chat` como nome universal (F225)
+
+Todas as rotas que recebem um destinatário no corpo JSON aceitam **`"chat"`**
+como nome do campo de destino. O nome legado da rota (`Phone`, `groupJID`,
+`jid`, `Group`, `groupjid`, `Chat`, `phone`) continua a funcionar — nada
+quebra. Quando **ambos** estiverem presentes no payload, o nome legado ganha.
+
+Exemplos equivalentes:
+
+```bash
+# antes (nome específico da rota)
+curl -X POST .../chat/send/text -d '{"Phone":"55...@s.whatsapp.net","Body":"oi"}'
+
+# agora (nome universal)
+curl -X POST .../chat/send/text -d '{"chat":"55...@s.whatsapp.net","Body":"oi"}'
+```
+
+O campo `chat` aceita qualquer JID válido — individual (`@s.whatsapp.net`) ou
+grupo (`@g.us`) — conforme a rota espere.
+
+Os nomes antigos **não estão deprecados**. Payloads existentes continuam a
+funcionar sem alteração.
+
+---
+
 ## chat — 34 rotas
 
 ### Envio (15)

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
@@ -55,7 +54,7 @@ func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendListRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("route", route).
 			Str("user_id", txtID).

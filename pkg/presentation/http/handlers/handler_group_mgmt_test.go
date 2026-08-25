@@ -371,6 +371,97 @@ func TestGroupMgmtHandlers_NeverLogSecrets(t *testing.T) {
 	}
 }
 
+// F225: chat alias for anonymous structs that carry GroupJID.
+// These handlers use manual ChatAlias resolution (not ChatResolver interface).
+
+type grpMgmtChatAliasCase struct {
+	name     string
+	chatBody string
+	pick     func(*GroupManagementHandlers) http.Handler
+}
+
+func grpMgmtChatAliasCases() []grpMgmtChatAliasCase {
+	return []grpMgmtChatAliasCase{
+		{
+			name:     "GroupLeave",
+			chatBody: `{"chat":"` + grpMgmtJID + `"}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.GroupLeave },
+		},
+		{
+			name:     "SetGroupName",
+			chatBody: `{"chat":"` + grpMgmtJID + `","Name":"squad"}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupName },
+		},
+		{
+			name:     "SetGroupTopic",
+			chatBody: `{"chat":"` + grpMgmtJID + `","Topic":"assunto"}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupTopic },
+		},
+		{
+			name:     "RemoveGroupPhoto",
+			chatBody: `{"chat":"` + grpMgmtJID + `"}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.RemoveGroupPhoto },
+		},
+		{
+			name:     "SetGroupAnnounce",
+			chatBody: `{"chat":"` + grpMgmtJID + `","Announce":true}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupAnnounce },
+		},
+		{
+			name:     "SetGroupLocked",
+			chatBody: `{"chat":"` + grpMgmtJID + `","Locked":true}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupLocked },
+		},
+		{
+			name:     "SetDisappearingTimer",
+			chatBody: `{"chat":"` + grpMgmtJID + `","duration":"24h"}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetDisappearingTimer },
+		},
+		{
+			name:     "UpdateGroupParticipants",
+			chatBody: `{"chat":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`,
+			pick:     func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
+		},
+	}
+}
+
+func TestGroupMgmtHandlers_ChatAlias_Success(t *testing.T) {
+	for _, tc := range grpMgmtChatAliasCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newGrpMgmtFakes()
+			h, _ := logassert.Wrap(tc.pick(f.handlers()))
+			rec := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/group/test", strings.NewReader(tc.chatBody))
+			h.ServeHTTP(rec, withUser(r, "user-1"))
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("chat alias produced status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestGroupMgmtHandlers_ChatAlias_LegacyWins(t *testing.T) {
+	f := newGrpMgmtFakes()
+	var captured string
+	f.lifecycle.LeaveGroupFunc = func(_ context.Context, _ string, jid domain.JID) error {
+		captured = string(jid)
+		return nil
+	}
+	body := `{"groupJID":"legacy@g.us","chat":"alias@g.us"}`
+	h, _ := logassert.Wrap(f.handlers().GroupLeave)
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/group/leave", strings.NewReader(body))
+	h.ServeHTTP(rec, withUser(r, "user-1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.HasPrefix(captured, "legacy") {
+		t.Fatalf("legacy field should win: got %q", captured)
+	}
+}
+
 // TestGroupMgmtHandlers_RejectWithoutSession: mesma guarda, sobre o
 // groupHandler generico que as onze operacoes compartilham.
 func TestGroupMgmtHandlers_RejectWithoutSession(t *testing.T) {

@@ -31,6 +31,7 @@ type ReplyContext struct {
 // SendMessageRequest representa o payload de envio de mensagem de texto.
 // Corresponde ao struct textStruct em handlers.go:SendMessage().
 type SendMessageRequest struct {
+	ChatTarget
 	Phone        string        `json:"Phone"`
 	Body         string        `json:"Body"`
 	LinkPreview  bool          `json:"LinkPreview,omitempty"`
@@ -38,6 +39,8 @@ type SendMessageRequest struct {
 	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
 	MentionedJID []string      `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendMessageResult representa o resultado do envio de mensagem.
 type SendMessageResult struct {
@@ -92,6 +95,7 @@ const StatusDeleted = "deleted"
 // dois casos, herdado de handlers.go pré-refactor (ver
 // `git show 41bc8e2^:handlers.go`).
 type SendImageRequest struct {
+	ChatTarget
 	Phone         string        `json:"Phone"`
 	Image         string        `json:"Image"`
 	Caption       string        `json:"Caption,omitempty"`
@@ -101,6 +105,8 @@ type SendImageRequest struct {
 	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
 	MentionedJID  []string      `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendImageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendImageResult representa o resultado do envio de imagem.
 type SendImageResult struct {
@@ -133,6 +139,7 @@ type MediaPayload struct {
 // mesmo racional de SendImageRequest (CAP-02/CAP-03) — ver
 // `git show 41bc8e2^:handlers.go`, em torno da linha 900.
 type SendDocumentRequest struct {
+	ChatTarget
 	Phone        string        `json:"Phone"`
 	Document     string        `json:"Document"`
 	FileName     string        `json:"FileName"`
@@ -142,6 +149,8 @@ type SendDocumentRequest struct {
 	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
 	MentionedJID []string      `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendDocumentRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendDocumentResult representa o resultado do envio de documento.
 type SendDocumentResult struct {
@@ -170,6 +179,7 @@ type SendDocumentResult struct {
 // CAP-05, reportado — não implementado por conta própria (decisão de
 // contrato não é do executor).
 type SendAudioRequest struct {
+	ChatTarget
 	Phone    string        `json:"Phone"`
 	Audio    string        `json:"Audio"`
 	Caption  string        `json:"Caption,omitempty"`
@@ -180,6 +190,8 @@ type SendAudioRequest struct {
 	Waveform []byte        `json:"Waveform,omitempty"`
 	ReplyTo  *ReplyContext `json:"ReplyTo,omitempty"`
 }
+
+func (r *SendAudioRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendAudioResult representa o resultado do envio de áudio.
 type SendAudioResult struct {
@@ -223,6 +235,7 @@ type AudioPayload struct {
 
 // SendStickerRequest representa o payload de envio de sticker.
 type SendStickerRequest struct {
+	ChatTarget
 	Phone         string        `json:"Phone"`
 	Sticker       string        `json:"Sticker"`
 	ID            string        `json:"Id,omitempty"`
@@ -234,6 +247,8 @@ type SendStickerRequest struct {
 	Emojis        []string      `json:"Emojis,omitempty"`
 	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
 }
+
+func (r *SendStickerRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendStickerResult representa o resultado do envio de sticker.
 type SendStickerResult struct {
@@ -250,6 +265,7 @@ type SendStickerResult struct {
 // nem "data:" (como Document) — ver `git show 41bc8e2^:handlers.go`, em
 // torno da linha 1583, e isDataVideo em send_video.go.
 type SendVideoRequest struct {
+	ChatTarget
 	Phone         string        `json:"Phone"`
 	Video         string        `json:"Video"`
 	Caption       string        `json:"Caption,omitempty"`
@@ -260,6 +276,8 @@ type SendVideoRequest struct {
 	MentionedJID  []string      `json:"MentionedJid,omitempty"`
 }
 
+func (r *SendVideoRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
+
 // SendVideoResult representa o resultado do envio de vídeo.
 type SendVideoResult struct {
 	MessageID string `json:"message_id"`
@@ -269,12 +287,15 @@ type SendVideoResult struct {
 
 // SendContactRequest representa o payload de envio de contato.
 type SendContactRequest struct {
+	ChatTarget
 	Phone   string        `json:"Phone"`
 	Name    string        `json:"Name"`
 	Vcard   string        `json:"Vcard"`
 	ID      string        `json:"Id,omitempty"`
 	ReplyTo *ReplyContext `json:"ReplyTo,omitempty"`
 }
+
+func (r *SendContactRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendContactResult representa o resultado do envio de contato.
 type SendContactResult struct {
@@ -285,6 +306,7 @@ type SendContactResult struct {
 
 // SendLocationRequest representa o payload de envio de localização.
 type SendLocationRequest struct {
+	ChatTarget
 	Phone string `json:"Phone"`
 	Name  string `json:"Name,omitempty"`
 	// PONTEIRO, e não float64, para separar "não informado" de "zero" (F121).
@@ -301,6 +323,8 @@ type SendLocationRequest struct {
 	ID        string        `json:"Id,omitempty"`
 	ReplyTo   *ReplyContext `json:"ReplyTo,omitempty"`
 }
+
+func (r *SendLocationRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendLocationResult representa o resultado do envio de localização.
 type SendLocationResult struct {
@@ -391,6 +415,7 @@ type InteractiveButton struct {
 // Text é o fallback de Body (`body <- Body <- Text`, na ordem do histórico),
 // e não um campo com significado próprio.
 type SendButtonsRequest struct {
+	ChatTarget
 	Phone        string              `json:"Phone"`
 	Body         string              `json:"Body"`
 	Text         string              `json:"text"`
@@ -402,6 +427,8 @@ type SendButtonsRequest struct {
 	ReplyTo      *ReplyContext       `json:"ReplyTo,omitempty"`
 	MentionedJID []string            `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendButtonsRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendButtonsResult representa o resultado do envio de botões.
 //
@@ -485,6 +512,7 @@ type ListSection struct {
 // dívida separada (F134/F148), decisão do Orchestrator não reaberta aqui
 // (HOUSEKEEP F149).
 type SendListRequest struct {
+	ChatTarget
 	Phone        string        `json:"Phone"`
 	ButtonText   string        `json:"ButtonText"` // rótulo do botão que abre a lista; default "Select"
 	Desc         string        `json:"Desc"`       // corpo principal. Fallback: Body, body, text
@@ -499,6 +527,8 @@ type SendListRequest struct {
 	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
 	MentionedJID []string      `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendListRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendListResult representa o resultado do envio de lista.
 //
@@ -531,12 +561,15 @@ type ListPayload struct {
 
 // SendPollRequest representa o payload de envio de enquete.
 type SendPollRequest struct {
+	ChatTarget
 	Group   string        `json:"Group"`
 	Header  string        `json:"Header"`
 	Options []string      `json:"Options"`
 	ID      string        `json:"Id,omitempty"`
 	ReplyTo *ReplyContext `json:"ReplyTo,omitempty"`
 }
+
+func (r *SendPollRequest) ResolveChat() { ResolveChatField(&r.Group, r.ChatAlias) }
 
 // SendPollResult representa o resultado do envio de enquete.
 //
@@ -579,6 +612,7 @@ type PollPayload struct {
 // silently when the history was pruned. With (a), the caller always knows
 // exactly what it passed, and the error is always about what it passed.
 type SendPollVoteRequest struct {
+	ChatTarget
 	Phone                string   `json:"Phone"`
 	Sender               string   `json:"Sender"`
 	PollMessageID        string   `json:"PollMessageId"`
@@ -586,6 +620,8 @@ type SendPollVoteRequest struct {
 	Options              []string `json:"Options"`
 	ID                   string   `json:"Id,omitempty"`
 }
+
+func (r *SendPollVoteRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendPollVoteResult represents the response for POST /chat/send/pollvote.
 // Same shape as every other send capability: {message_id, timestamp, status}.
@@ -635,6 +671,7 @@ type ForwardContext struct {
 // When MessageID is present, Body is ignored and ForwardingScore is ignored.
 // When MessageID is absent, Body is required (backward compat with CAP-49).
 type SendForwardRequest struct {
+	ChatTarget
 	Phone           string        `json:"Phone"`
 	Body            string        `json:"Body"`
 	ForwardingScore *uint32       `json:"ForwardingScore,omitempty"`
@@ -644,6 +681,8 @@ type SendForwardRequest struct {
 	MessageID       string        `json:"MessageID,omitempty"`
 	Chat            string        `json:"Chat,omitempty"`
 }
+
+func (r *SendForwardRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // StoredMessageData is the application-boundary representation of a message
 // retrieved from message_history for forwarding (CAP-55). It carries the raw
@@ -666,9 +705,12 @@ type SendForwardResult struct {
 
 // DeleteMessageRequest representa o payload de exclusão de mensagem.
 type DeleteMessageRequest struct {
+	ChatTarget
 	Phone string `json:"Phone"`
 	ID    string `json:"Id"`
 }
+
+func (r *DeleteMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // DeleteMessageResult representa o resultado da exclusão de mensagem.
 //
@@ -686,6 +728,7 @@ type DeleteMessageResult struct {
 
 // SendEditMessageRequest representa o payload de edição de mensagem.
 type SendEditMessageRequest struct {
+	ChatTarget
 	Phone        string   `json:"Phone"`
 	Body         string   `json:"Body"`
 	ID           string   `json:"Id"`
@@ -693,6 +736,8 @@ type SendEditMessageRequest struct {
 	Participant  *string  `json:"Participant,omitempty"`
 	MentionedJID []string `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendEditMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // EditContextInfo carries the optional ContextInfo fields for EditMessage,
 // restoring the contract the historical handlers.go accepted (F134).
@@ -770,6 +815,7 @@ type TemplateButton struct {
 // mensagem de texto com rodapé. O acréscimo é aditivo, mas é mudança de
 // contrato, e não só reconexão de fiação como nos blocos anteriores.
 type SendTemplateRequest struct {
+	ChatTarget
 	Phone        string           `json:"Phone"`
 	Content      string           `json:"Content"`
 	Footer       string           `json:"Footer"`
@@ -778,6 +824,8 @@ type SendTemplateRequest struct {
 	ReplyTo      *ReplyContext    `json:"ReplyTo,omitempty"`
 	MentionedJID []string         `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendTemplateRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendTemplateResult representa o resultado do envio de template.
 //
@@ -863,6 +911,7 @@ type CarouselPayload struct {
 // current WhatsApp clients and is intentionally excluded from this surface
 // (HOUSEKEEP F211).
 type SendCarouselRequest struct {
+	ChatTarget
 	Phone string `json:"Phone"`
 	Body  string `json:"Body"`
 	// Footer is the carousel-level footer, below all cards.
@@ -872,6 +921,8 @@ type SendCarouselRequest struct {
 	ReplyTo      *ReplyContext             `json:"ReplyTo,omitempty"`
 	MentionedJID []string                  `json:"MentionedJid,omitempty"`
 }
+
+func (r *SendCarouselRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // SendCarouselCardRequest is one card in a SendCarouselRequest.
 type SendCarouselCardRequest struct {

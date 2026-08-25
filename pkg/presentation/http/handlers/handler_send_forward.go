@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
@@ -43,7 +42,7 @@ func (h *SendForwardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendForwardRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return

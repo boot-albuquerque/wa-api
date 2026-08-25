@@ -25374,9 +25374,22 @@ com `Chat string \`json:"chat"\``) nos requests, aceitando os nomes antigos como
 alias durante um período, em vez de corrigir rota a rota. Corrigir só o
 `SendPollRequest` deixaria as outras sete divergências de pé.
 
-**Status**: não corrigido — decisão de contrato, precisa de aval.
+**Status**: corrigido na F225. Mecanismo estrutural: `domain.ChatTarget`
+(struct embutida com `json:"chat"`) + `domain.ChatResolver` (interface com
+`ResolveChat()`) + `domain.DecodeRequest` (decode + hook automático).
+Precedência: campo legado ganha quando ambos presentes. Tipos com anonymous
+struct (`handler_group_mgmt.go`) usam resolução manual via
+`domain.ResolveChatField`. Tipos que já usavam `json:"chat"`
+(`StarMessageRequest`, `RequestUnavailableMessageRequest`,
+`handler_disappearing.go`) não foram tocados — já aceitam o nome universal.
 
-<!-- f-status: aberto -->
+**Testes**: `pkg/domain/chat_target_test.go` (5 cenários × 10 famílias de
+tipo: alias sozinho, legado sozinho, ambos presentes → legado ganha,
+nenhum → campo vazio, controle negativo sem ChatTarget) e
+`handler_group_mgmt_test.go` (`TestGroupMgmtHandlers_ChatAlias_Success` — 8
+handlers anônimos, `TestGroupMgmtHandlers_ChatAlias_LegacyWins`).
+
+<!-- f-status: corrigido -->
 
 ## F226 — `/chat/send/forward` não encaminha mensagem nenhuma: envia texto MARCADO como encaminhado
 

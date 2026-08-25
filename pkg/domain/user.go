@@ -126,15 +126,21 @@ type GetUserLIDRequest struct {
 
 // BlockUserRequest é o request para bloquear um usuário
 type BlockUserRequest struct {
+	ChatTarget
 	Phone string `json:"Phone,omitempty"`
 	JID   string `json:"JID,omitempty"`
 }
 
+func (r *BlockUserRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
+
 // UnblockUserRequest é o request para desbloquear um usuário
 type UnblockUserRequest struct {
+	ChatTarget
 	Phone string `json:"Phone,omitempty"`
 	JID   string `json:"JID,omitempty"`
 }
+
+func (r *UnblockUserRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // ProxyConfig representa a configuração de proxy
 type ProxyConfig struct {

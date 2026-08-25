@@ -4,9 +4,12 @@ import "errors"
 
 // GetAvatarRequest para POST /user/avatar
 type GetAvatarRequest struct {
+	ChatTarget
 	Phone   string `json:"Phone"`
 	Preview bool   `json:"Preview"`
 }
+
+func (r *GetAvatarRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // ErrAvatarNotFound é devolvido quando o contato simplesmente não tem foto de
 // perfil pública — o caso comum (maioria dos contatos não tem foto pública),

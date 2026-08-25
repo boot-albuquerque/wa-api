@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
@@ -45,7 +44,7 @@ func (h *SendEditMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	var req domain.SendEditMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := domain.DecodeRequest(r.Body, &req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("path", r.URL.Path).
 			Str("user_id", txtID).

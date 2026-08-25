@@ -3,7 +3,12 @@ package domain
 
 // GetGroupRequestParticipantsRequest representa a requisição para listar participantes que solicitaram entrar
 type GetGroupRequestParticipantsRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
+}
+
+func (r *GetGroupRequestParticipantsRequest) ResolveChat() {
+	ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
 // GetGroupRequestParticipantsResult representa o resultado da listagem de participantes que solicitaram entrar
@@ -15,9 +20,14 @@ type GetGroupRequestParticipantsResult struct {
 
 // UpdateGroupRequestParticipantsRequest representa a requisição para aprovar ou rejeitar participantes
 type UpdateGroupRequestParticipantsRequest struct {
+	ChatTarget
 	GroupJID string   `json:"groupJID"`
 	Phone    []string `json:"Phone"`
 	Action   string   `json:"Action"` // approve, reject
+}
+
+func (r *UpdateGroupRequestParticipantsRequest) ResolveChat() {
+	ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
 // UpdateGroupRequestParticipantsResult representa o resultado da atualização de participantes
@@ -27,8 +37,13 @@ type UpdateGroupRequestParticipantsResult struct {
 
 // SetGroupJoinApprovalModeRequest representa a requisição para definir modo de aprovação
 type SetGroupJoinApprovalModeRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupjid"`
 	Mode     bool   `json:"mode"`
+}
+
+func (r *SetGroupJoinApprovalModeRequest) ResolveChat() {
+	ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
 // SetGroupJoinApprovalModeResult representa o resultado da definição do modo de aprovação

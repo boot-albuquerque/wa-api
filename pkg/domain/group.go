@@ -14,8 +14,11 @@ type ListGroupsResult struct {
 
 // GetGroupInfoRequest representa a requisição para obter informações de um grupo
 type GetGroupInfoRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 }
+
+func (r *GetGroupInfoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // GetGroupInfoResult representa o resultado da obtenção de informações de grupo
 type GetGroupInfoResult struct {
@@ -24,8 +27,11 @@ type GetGroupInfoResult struct {
 
 // GetGroupInviteLinkRequest representa a requisição para obter link de convite do grupo
 type GetGroupInviteLinkRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 }
+
+func (r *GetGroupInviteLinkRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // GetGroupInviteLinkResult representa o resultado da obtenção do link de convite
 type GetGroupInviteLinkResult struct {
@@ -55,8 +61,11 @@ type GroupJoinResult struct {
 
 // GroupLeaveRequest representa a requisição para sair de um grupo
 type GroupLeaveRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 }
+
+func (r *GroupLeaveRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // GroupLeaveResult representa o resultado de saída do grupo
 type GroupLeaveResult struct {
@@ -76,10 +85,13 @@ type CreateGroupResult struct {
 
 // UpdateGroupParticipantsRequest representa a requisição para atualizar participantes
 type UpdateGroupParticipantsRequest struct {
+	ChatTarget
 	GroupJID string   `json:"groupJID"`
 	Phone    []string `json:"Phone"`
 	Action   string   `json:"Action"` // "add" or "remove"
 }
+
+func (r *UpdateGroupParticipantsRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // UpdateGroupParticipantsResult representa o resultado da atualização de participantes
 type UpdateGroupParticipantsResult struct {
@@ -88,9 +100,12 @@ type UpdateGroupParticipantsResult struct {
 
 // SetGroupLockedRequest representa a requisição para bloquear/desbloquear grupo
 type SetGroupLockedRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 	Locked   bool   `json:"locked"`
 }
+
+func (r *SetGroupLockedRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // SetGroupLockedResult representa o resultado do bloqueio/desbloqueio
 type SetGroupLockedResult struct {
@@ -99,9 +114,12 @@ type SetGroupLockedResult struct {
 
 // SetGroupAnnounceRequest representa a requisição para definir modo de anúncio
 type SetGroupAnnounceRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 	Announce bool   `json:"announce"`
 }
+
+func (r *SetGroupAnnounceRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // SetGroupAnnounceResult representa o resultado da definição do modo de anúncio
 type SetGroupAnnounceResult struct {
@@ -110,9 +128,12 @@ type SetGroupAnnounceResult struct {
 
 // SetGroupNameRequest representa a requisição para renomear grupo
 type SetGroupNameRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 	Name     string `json:"name"`
 }
+
+func (r *SetGroupNameRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // SetGroupNameResult representa o resultado da renomeação
 type SetGroupNameResult struct {
@@ -121,9 +142,12 @@ type SetGroupNameResult struct {
 
 // SetGroupTopicRequest representa a requisição para definir descrição do grupo
 type SetGroupTopicRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 	Topic    string `json:"topic"`
 }
+
+func (r *SetGroupTopicRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // SetGroupTopicResult representa o resultado da definição de descrição
 type SetGroupTopicResult struct {
@@ -132,9 +156,12 @@ type SetGroupTopicResult struct {
 
 // SetGroupPhotoRequest representa a requisição para definir foto do grupo
 type SetGroupPhotoRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 	Photo    string `json:"photo"`
 }
+
+func (r *SetGroupPhotoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // SetGroupPhotoResult representa o resultado da definição de foto
 type SetGroupPhotoResult struct {
@@ -143,8 +170,11 @@ type SetGroupPhotoResult struct {
 
 // RemoveGroupPhotoRequest representa a requisição para remover foto do grupo
 type RemoveGroupPhotoRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupJID"`
 }
+
+func (r *RemoveGroupPhotoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // RemoveGroupPhotoResult representa o resultado da remoção de foto
 type RemoveGroupPhotoResult struct {
@@ -153,9 +183,12 @@ type RemoveGroupPhotoResult struct {
 
 // SetDisappearingTimerRequest representa a requisição para definir timer de desaparecimento
 type SetDisappearingTimerRequest struct {
+	ChatTarget
 	GroupJID string `json:"groupjid"`
 	Duration string `json:"duration"` // "24h", "7d", "90d", "off"
 }
+
+func (r *SetDisappearingTimerRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // SetDisappearingTimerResult representa o resultado da definição do timer
 type SetDisappearingTimerResult struct {
