@@ -217,69 +217,69 @@ func (r RealClient) FetchAppState(ctx context.Context, name appstate.WAPatchName
 
 func (r RealClient) GetSubscribedNewsletters(ctx context.Context) ([]*types.NewsletterMetadata, error) {
 	v0, err := r.Client.GetSubscribedNewsletters(ctx)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) CreateNewsletter(ctx context.Context, params wanoise.CreateNewsletterParams) (*types.NewsletterMetadata, error) {
 	v0, err := r.Client.CreateNewsletter(ctx, params)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error) {
 	v0, err := r.Client.GetNewsletterInfo(ctx, jid)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) GetNewsletterInfoWithInvite(ctx context.Context, key string) (*types.NewsletterMetadata, error) {
 	v0, err := r.Client.GetNewsletterInfoWithInvite(ctx, key)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) FollowNewsletter(ctx context.Context, jid types.JID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.FollowNewsletter(ctx, jid)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.FollowNewsletter(ctx, jid)), "")
 }
 
 func (r RealClient) UnfollowNewsletter(ctx context.Context, jid types.JID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.UnfollowNewsletter(ctx, jid)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.UnfollowNewsletter(ctx, jid)), errmap.OpNewsletterUnfollow)
 }
 
 func (r RealClient) NewsletterToggleMute(ctx context.Context, jid types.JID, mute bool) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterToggleMute(ctx, jid, mute)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterToggleMute(ctx, jid, mute)), "")
 }
 
 func (r RealClient) GetNewsletterMessages(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterMessagesParams) ([]*types.NewsletterMessage, error) {
 	v0, err := r.Client.GetNewsletterMessages(ctx, jid, params)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) GetNewsletterMessageUpdates(ctx context.Context, jid types.JID, params *wanoise.GetNewsletterUpdatesParams) ([]*types.NewsletterMessage, error) {
 	v0, err := r.Client.GetNewsletterMessageUpdates(ctx, jid, params)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) NewsletterMarkViewed(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterMarkViewed(ctx, jid, serverIDs)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterMarkViewed(ctx, jid, serverIDs)), "")
 }
 
 func (r RealClient) NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterSendReaction(ctx, jid, serverID, reaction, messageID)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterSendReaction(ctx, jid, serverID, reaction, messageID)), "")
 }
 
 func (r RealClient) NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID) (time.Duration, error) {
 	v0, err := r.Client.NewsletterSubscribeLiveUpdates(ctx, jid)
-	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err))
+	return v0, errmap.ClassifyNewsletter(errmap.ClassifyIQ(err), "")
 }
 
 func (r RealClient) NewsletterDemoteAdmin(ctx context.Context, channelJID, userJID types.JID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterDemoteAdmin(ctx, channelJID, userJID)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterDemoteAdmin(ctx, channelJID, userJID)), errmap.OpNewsletterDemote)
 }
 
 func (r RealClient) NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterChangeOwner(ctx, channelJID, newOwnerJID)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterChangeOwner(ctx, channelJID, newOwnerJID)), errmap.OpNewsletterChangeOwner)
 }
 
 func (r RealClient) NewsletterDelete(ctx context.Context, channelJID types.JID) error {
-	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterDelete(ctx, channelJID)))
+	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterDelete(ctx, channelJID)), "")
 }
 
 func (r RealClient) PairPhone(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error) {

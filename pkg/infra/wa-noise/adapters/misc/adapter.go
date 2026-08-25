@@ -11,6 +11,8 @@ import (
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
+	"github.com/rs/zerolog/log"
+
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
@@ -406,6 +408,7 @@ func (a *MiscAdapter) DemoteNewsletterAdmin(ctx context.Context, txtID string, c
 	if err != nil {
 		return err
 	}
+	parsedUser = resolveToLID(ctx, client, parsedUser, "demote")
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 	return client.NewsletterDemoteAdmin(ctxWithTimeout, parsedChannel, parsedUser)
@@ -421,6 +424,7 @@ func (a *MiscAdapter) ChangeNewsletterOwner(ctx context.Context, txtID string, c
 	if err != nil {
 		return err
 	}
+	parsedOwner = resolveToLID(ctx, client, parsedOwner, "change_owner")
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 	return client.NewsletterChangeOwner(ctxWithTimeout, parsedChannel, parsedOwner)
@@ -435,6 +439,42 @@ func (a *MiscAdapter) DeleteNewsletter(ctx context.Context, txtID string, channe
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 	return client.NewsletterDelete(ctxWithTimeout, parsed)
+}
+
+// resolveToLID converts a PN JID to its LID form via the client's store.
+// DIRECTIONAL: only converts PN→LID. If the JID is already LID, it is
+// returned unchanged — converting LID→PN would break the request (F228,
+// F233c: measured 2026-08-25).
+//
+// If the store has no mapping, the original JID is kept and a warning is
+// logged. The caller can proceed — the server will reject with a meaningful
+// error instead of a silent failure.
+func resolveToLID(ctx context.Context, client waclient.Client, jid types.JID, operation string) types.JID {
+	if jid.Server != types.DefaultUserServer {
+		return jid
+	}
+	st := client.Store()
+	if st == nil {
+		log.Warn().
+			Str("jid", jid.String()).
+			Str("operation", operation).
+			Msg("no store available; cannot resolve PN to LID")
+		return jid
+	}
+	alt, err := st.GetAltJID(ctx, jid)
+	if err != nil || alt.IsEmpty() {
+		log.Warn().
+			Str("jid", jid.String()).
+			Str("operation", operation).
+			Msg("PN could not be resolved to LID; sending as-is")
+		return jid
+	}
+	log.Info().
+		Str("original", jid.String()).
+		Str("resolved", alt.String()).
+		Str("operation", operation).
+		Msg("resolved PN to LID for newsletter admin operation")
+	return alt
 }
 
 // clientAndJID resolve o cliente da sessão e o JID de uma vez.

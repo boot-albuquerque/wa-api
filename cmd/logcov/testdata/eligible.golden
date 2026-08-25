@@ -3517,6 +3517,7 @@ pkg/infra/wa-noise/adapters/misc.MiscAdapter.ToggleNewsletterMute	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.UnfollowNewsletter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.MiscAdapter.clientAndJID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.NewMiscAdapter	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/misc.resolveToLID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.serverIDFromText	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/pairing.NewPhonePairerAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.IsPaired	EXCLUDED	X5
@@ -3693,6 +3694,7 @@ pkg/infra/wa-noise/errmap.ClassifyNewsletter	ELIGIBLE	covered
 pkg/infra/wa-noise/errmap.classifyIQCode	EXCLUDED	X1
 pkg/infra/wa-noise/errmap.iqMessage	EXCLUDED	X1
 pkg/infra/wa-noise/errmap.isAppStateConflict	EXCLUDED	X1
+pkg/infra/wa-noise/errmap.newsletterRefusal	EXCLUDED	X1
 pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,resolver.go:24)
 pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveQualifiedJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,resolver.go:43)
 pkg/infra/wa-noise/mapping/jid.NewJIDResolverAdapter	EXCLUDED	X1

@@ -29,24 +29,19 @@ func graphqlError(code int, message, severity string) error {
 	return fmt.Errorf("graphql error: %w", gqlErrors)
 }
 
-// The MEASURED case: POST /newsletter/unfollow on a channel whose owner is the
-// caller. The server answered 405 Not Allowed (CRITICAL), and we answered 500
-// "internal server error" — "we broke" — for a business rule refusal that is
-// NOT our fault (F233, 2026-08-25).
-//
-// The error shape is the one observed in the production log, built by
-// decodeGraphQLResult wrapping GraphQLErrors{GraphQLError{ErrorCode:405, ...}}.
-func TestClassifyNewsletter_405BecomesA403(t *testing.T) {
+// --- 405 on unfollow (original F233 case, preserved) ---
+
+func TestClassifyNewsletter_405OnUnfollow(t *testing.T) {
 	measured := graphqlError(405, "Not Allowed", "CRITICAL")
 
-	got := errmap.ClassifyNewsletter(measured)
+	got := errmap.ClassifyNewsletter(measured, errmap.OpNewsletterUnfollow)
 
 	var app *apperr.AppError
 	if !errors.As(got, &app) {
 		t.Fatalf("the 405 was not translated to AppError: %T (%v)", got, got)
 	}
 	if s := app.Category.HTTPStatus(); s != http.StatusForbidden {
-		t.Errorf("status = %d, want 403: a 405 admin refusal must not become a 500 from us", s)
+		t.Errorf("status = %d, want 403", s)
 	}
 	if app.Code != errmap.CodeNewsletterAdminCannotUnfollow {
 		t.Errorf("code = %q, want %q", app.Code, errmap.CodeNewsletterAdminCannotUnfollow)
@@ -55,47 +50,89 @@ func TestClassifyNewsletter_405BecomesA403(t *testing.T) {
 		t.Error("retryable = true: an admin refusal is not recoverable by retry")
 	}
 	if !errors.Is(got, measured) {
-		t.Error("the original error is no longer reachable via errors.Is: the log loses the cause")
+		t.Error("the original error is no longer reachable via errors.Is")
 	}
 }
 
-// The COMPLEMENT: a non-405 GraphQL error must stay as-is. Turning everything
-// into 403 would trade one lie for another — the most likely failure mode of
-// this fix.
+// --- 405 on demote (F235: must NOT say "unfollow") ---
+
+func TestClassifyNewsletter_405OnDemote(t *testing.T) {
+	measured := graphqlError(405, "Not Allowed", "CRITICAL")
+
+	got := errmap.ClassifyNewsletter(measured, errmap.OpNewsletterDemote)
+
+	var app *apperr.AppError
+	if !errors.As(got, &app) {
+		t.Fatalf("the 405 was not translated to AppError: %T (%v)", got, got)
+	}
+	if s := app.Category.HTTPStatus(); s != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", s)
+	}
+	if app.Code != errmap.CodeNewsletterCannotDemoteOwner {
+		t.Errorf("code = %q, want %q", app.Code, errmap.CodeNewsletterCannotDemoteOwner)
+	}
+	if app.Code == errmap.CodeNewsletterAdminCannotUnfollow {
+		t.Error("demote must NOT use the unfollow error code — this is the F235 regression")
+	}
+	if !errors.Is(got, measured) {
+		t.Error("the original error is no longer reachable via errors.Is")
+	}
+}
+
+// --- 401 on change_owner (measured: new owner is not admin) ---
+
+func TestClassifyNewsletter_401OnChangeOwner(t *testing.T) {
+	measured := graphqlError(401, "Not Authorized", "CRITICAL")
+
+	got := errmap.ClassifyNewsletter(measured, errmap.OpNewsletterChangeOwner)
+
+	var app *apperr.AppError
+	if !errors.As(got, &app) {
+		t.Fatalf("the 401 was not translated to AppError: %T (%v)", got, got)
+	}
+	if s := app.Category.HTTPStatus(); s != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", s)
+	}
+	if app.Code != errmap.CodeNewsletterNewOwnerNotAdmin {
+		t.Errorf("code = %q, want %q", app.Code, errmap.CodeNewsletterNewOwnerNotAdmin)
+	}
+	if !errors.Is(got, measured) {
+		t.Error("the original error is no longer reachable via errors.Is")
+	}
+}
+
+// --- Passthrough: non-mapped combinations stay untouched ---
+
 func TestClassifyNewsletter_NonForbiddenStaysUnchanged(t *testing.T) {
 	serverError := graphqlError(500, "Internal Server Error", "CRITICAL")
 
-	got := errmap.ClassifyNewsletter(serverError)
+	got := errmap.ClassifyNewsletter(serverError, errmap.OpNewsletterUnfollow)
 
 	var app *apperr.AppError
 	if errors.As(got, &app) {
-		t.Fatalf("a non-405 GraphQL error was classified as AppError (%s): "+
-			"only the 405 should be translated", app.Category)
+		t.Fatalf("a non-mapped GraphQL error was classified as AppError (%s): "+
+			"only observed (code, operation) pairs should be translated", app.Category)
 	}
 	if got != serverError {
 		t.Errorf("the error was modified: want the original back unchanged")
 	}
 }
 
-// Nil and non-GraphQL errors must pass through untouched.
 func TestClassifyNewsletter_PassthroughCases(t *testing.T) {
-	if got := errmap.ClassifyNewsletter(nil); got != nil {
+	if got := errmap.ClassifyNewsletter(nil, ""); got != nil {
 		t.Errorf("nil turned into %v", got)
 	}
 
 	other := errors.New("dial tcp: connection refused")
-	if got := errmap.ClassifyNewsletter(other); got != other {
+	if got := errmap.ClassifyNewsletter(other, ""); got != other {
 		t.Errorf("unrelated error was modified: %v", got)
 	}
 }
 
-// An error that happens to contain "405" as TEXT but is NOT a GraphQLError
-// must NOT be classified. Without the typed check, a random error string
-// could be misinterpreted.
 func TestClassifyNewsletter_Text405WithoutGraphQLErrorIsIgnored(t *testing.T) {
 	fake := errors.New("some other problem with 405 in it")
 
-	got := errmap.ClassifyNewsletter(fake)
+	got := errmap.ClassifyNewsletter(fake, errmap.OpNewsletterUnfollow)
 
 	var app *apperr.AppError
 	if errors.As(got, &app) {
@@ -106,14 +143,60 @@ func TestClassifyNewsletter_Text405WithoutGraphQLErrorIsIgnored(t *testing.T) {
 	}
 }
 
-// A GraphQL error with code 0 (the zero value) must NOT be classified.
 func TestClassifyNewsletter_ZeroCodeIsIgnored(t *testing.T) {
 	zeroCode := graphqlError(0, "Unknown error", "WARNING")
 
-	got := errmap.ClassifyNewsletter(zeroCode)
+	got := errmap.ClassifyNewsletter(zeroCode, errmap.OpNewsletterUnfollow)
 
 	var app *apperr.AppError
 	if errors.As(got, &app) {
 		t.Fatalf("zero-code GraphQL error was classified: %v", got)
+	}
+}
+
+// --- 405 on empty operation stays untouched (no mapping for generic calls) ---
+
+func TestClassifyNewsletter_405OnEmptyOperationPassesThrough(t *testing.T) {
+	err := graphqlError(405, "Not Allowed", "CRITICAL")
+
+	got := errmap.ClassifyNewsletter(err, "")
+
+	var app *apperr.AppError
+	if errors.As(got, &app) {
+		t.Fatalf("a 405 with no operation should NOT be classified — got code %q", app.Code)
+	}
+}
+
+// --- 500 on any operation continues as 500 (the HOUSEKEEP rule) ---
+
+func TestClassifyNewsletter_500OnDemoteContinuesAs500(t *testing.T) {
+	err := graphqlError(500, "Internal Server Error", "CRITICAL")
+
+	got := errmap.ClassifyNewsletter(err, errmap.OpNewsletterDemote)
+
+	var app *apperr.AppError
+	if errors.As(got, &app) {
+		t.Fatalf("500 on demote should not be translated: %v", got)
+	}
+}
+
+// --- Control negative: removing operation guard from 405 must break ---
+
+func TestClassifyNewsletter_ControlNegative_405OnDemoteMustNotBeUnfollow(t *testing.T) {
+	measured := graphqlError(405, "Not Allowed", "CRITICAL")
+
+	gotDemote := errmap.ClassifyNewsletter(measured, errmap.OpNewsletterDemote)
+	gotUnfollow := errmap.ClassifyNewsletter(measured, errmap.OpNewsletterUnfollow)
+
+	var demoteApp, unfollowApp *apperr.AppError
+	if !errors.As(gotDemote, &demoteApp) {
+		t.Fatal("demote 405 was not classified")
+	}
+	if !errors.As(gotUnfollow, &unfollowApp) {
+		t.Fatal("unfollow 405 was not classified")
+	}
+	if demoteApp.Code == unfollowApp.Code {
+		t.Errorf("demote and unfollow produced the same code %q — "+
+			"the operation guard is not working (F235 regression)", demoteApp.Code)
 	}
 }
