@@ -26287,6 +26287,49 @@ portas, adaptador, validação com `apperr` (o `demote` sem `userJID` devolve
 `400 user jid is required for demote`, não `500`), prazo aplicado no molde da
 F232, e a confirmação obrigatória no `delete`.
 
+
+## Parte (c) — a causa REAL: `user_id` tem de ser LID, não PN
+
+2026-08-25, depois de trocar os query IDs pelos reais do bundle do WhatsApp Web
+(`9880997548630971` demote, `9546742745432473` change owner). **O `400 Bad
+Request` persistiu** — logo os IDs velhos não eram a causa, ou não a única.
+
+O que resolveu foi a FORMA DA IDENTIDADE. Medido no mesmo canal, mesma
+operação, alterando só o JID:
+
+| `userJID` enviado | resposta do WhatsApp |
+|---|---|
+| `5516981818244@s.whatsapp.net` (PN do dono) | `400 Bad Request` |
+| `29343770251463@lid` (LID do MESMO dono) | **`405 Not Allowed`** |
+| `90937376170214@lid` (LID do lucas, não-admin) | **`401 Not Authorized`** |
+
+Com PN, o servidor não percebe o pedido. Com LID, percebe-o e aplica regras de
+negócio distintas e coerentes: `405` ao tentar rebaixar o dono, `401` ao tentar
+transferir posse para quem não é admin.
+
+**A implementação está funcional.** O que faltava era a forma do JID.
+
+**É a mesma família da F228** (voto em enquete), onde o MAC falhava por se
+derivar a chave com PN quando a linha usava LID. Duas superfícies diferentes,
+a mesma causa: **identidade LID/PN não é detalhe de formatação, é entrada
+semântica** — e o `CLAUDE.md` já manda tratá-la assim.
+
+**Falsificação registada**: a hipótese "IDs atados ao cliente" e a hipótese
+"IDs velhos" foram AMBAS refutadas por medição. A primeira caiu porque o ID do
+`delete` coincide entre Baileys e WhatsApp Web; a segunda porque trocar pelos
+IDs reais não mudou o resultado. Só a terceira sobreviveu.
+
+**Por verificar, e não vou fingir que verifiquei**: nenhuma das duas operações
+foi vista a CONCLUIR com sucesso. `405` e `401` são recusas corretas para os
+cenários que consegui montar. Para ver um `200` seria preciso um segundo admin
+no canal — e promover alguém exige o fluxo de convite de admin
+(`CreateNewsletterAdminInvite` / `AcceptNewsletterAdminInvite`), que
+descobrimos no bundle e **não implementamos**.
+
+**Correção pendente**: resolver PN→LID no adaptador antes de enviar, no molde
+do que a F228 fez em `resolvePollSender` — direcional, sem converter LID para
+PN.
+
 <!-- f-status: aberto -->
 
 ## F234 — `TestStartSession_SessionOutlivesItsBootContext` falha sob carga: 1,87 s isolado, 30 s no `make check`
@@ -26334,5 +26377,37 @@ generoso em repouso e insuficiente sob contenção.
 do utilizador. Registado por ter aparecido, não para ser corrigido agora.
 
 **Status**: não corrigido — fora do âmbito, e é do `wa-headless`.
+
+<!-- f-status: aberto -->
+
+
+## F235 — a mensagem do `405` fala em "unfollow" mesmo num `demote`
+
+**Data/contexto**: 2026-08-25, ao testar `demote` com o LID do dono.
+
+**Onde**: `pkg/infra/wa-noise/errmap/newsletter.go` — `ClassifyNewsletter`.
+
+**Problema**: a classificação é por CÓDIGO, não por operação. Qualquer `405` de
+newsletter recebe a mensagem escrita para o `unfollow`:
+
+```
+POST /newsletter/demote  ->  403
+  "channel admins cannot unfollow their own channel; dismiss yourself as admin first"
+```
+
+O utilizador pediu para rebaixar um admin e a API responde a falar de unfollow.
+A causa real (`não se pode rebaixar o dono`) fica escondida atrás de uma
+mensagem sobre outra coisa.
+
+Isto é regressão de UTILIDADE introduzida pela própria F233(a): antes a
+mensagem era genérica e inútil; agora é específica e ERRADA, que é pior —
+manda o leitor investigar na direção errada.
+
+**Correção sugerida**: a classificação tem de receber a operação em curso e
+escolher a mensagem. O código `newsletter_admin_cannot_unfollow` só se aplica
+ao unfollow; `demote` sobre o dono merece código e mensagem próprios. Manter o
+`403` (a categoria está certa).
+
+**Status**: não corrigido — descoberto na verificação da parte (c).
 
 <!-- f-status: aberto -->
