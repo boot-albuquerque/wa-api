@@ -26776,7 +26776,31 @@ um handler.
 mecânico e não muda comportamento — só acrescenta o campo que falta. Fazer
 isso ANTES de alguém escrever um cliente que dependa da forma string.
 
-**Status**: não corrigido — descoberto ao verificar a F224, e fora do âmbito
-dela.
+**Correção aplicada (F236)**: os cinco sentinels foram convertidos de
+`*simpleErr` para `*apperr.AppError` no ponto de DEFINIÇÃO
+(`pkg/presentation/http/handlers/errors.go`). Como `RespondJSON` já trata
+`*apperr.AppError` com o envelope estruturado, os 244 chamadores não
+precisaram de mudar — zero edições fora de `errors.go` e dos testes.
 
-<!-- f-status: aberto -->
+Códigos atribuídos: `unauthorized`, `missing_session_id`, `missing_id`,
+`decode_payload_failed`, `missing_jid`.
+
+**Testes**:
+- `TestSentinelErrors_AreAppError` — cada sentinela é `*apperr.AppError`
+- `TestSentinelErrors_StructuredEnvelope` — cada um devolve envelope
+  `{"code":..., "error":{"code":..., "message":...}}` com o status HTTP
+  correcto
+- `TestSentinelErrors_CategoryMapsToCorrectStatus` — a categoria mapeia
+  para o status que o handler antigo passava (401 / 400)
+- `TestExistingApperrErrors_StillStructured` — erros F224 continuam iguais
+- Controlo negativo executado (reverter `errUnauthorized` para `simpleErr`):
+  `TestSentinelErrors_AreAppError` falha com `errUnauthorized is not
+  *apperr.AppError`; `TestSentinelErrors_StructuredEnvelope/unauthorized`
+  falha com `HTTP status: got 999, want 401`;
+  `TestSentinelErrors_CategoryMapsToCorrectStatus/unauthorized` falha com
+  `unauthorized is not *apperr.AppError — reclassification impossible to
+  verify`.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->

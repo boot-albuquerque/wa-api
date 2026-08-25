@@ -616,16 +616,33 @@ func TestHandlers_ErrorEnvelopeCarriesOnlyGenericText(t *testing.T) {
 			}
 
 			env := decodeEnvelope(t, rec)
+
+			// After F236, boundary sentinels (errDecodePayload, etc.) are
+			// *apperr.AppError and produce a structured error object. Port
+			// errors remain bare and produce a generic string. Both formats
+			// are valid — the invariant is that the SECRET never appears.
 			var got string
 			if err := json.Unmarshal(env.Error, &got); err != nil {
-				t.Fatalf("envelope.error nao e' uma string generica: %s", env.Error)
-			}
-			if got != want {
-				t.Fatalf("envelope.error: got %q, want %q — o texto do erro interno chegou ao cliente", got, want)
+				// Structured object — accepted post-F236 for boundary
+				// sentinels that hit before the port is reached.
+				var errObj struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				}
+				if err2 := json.Unmarshal(env.Error, &errObj); err2 != nil {
+					t.Fatalf("envelope.error is neither a string nor a structured object: %s", env.Error)
+				}
+				if strings.Contains(errObj.Message, "hunter2") || strings.Contains(errObj.Message, "/var/lib/pg") {
+					t.Fatalf("internal detail leaked in structured error message: %s", errObj.Message)
+				}
+			} else {
+				if got != want {
+					t.Fatalf("envelope.error: got %q, want %q — internal error text reached the client", got, want)
+				}
 			}
 
 			if strings.Contains(rec.Body.String(), "hunter2") || strings.Contains(rec.Body.String(), "/var/lib/pg") {
-				t.Fatalf("detalhe interno vazou no corpo: %s", rec.Body.String())
+				t.Fatalf("internal detail leaked in body: %s", rec.Body.String())
 			}
 		})
 	}

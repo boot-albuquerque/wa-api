@@ -21,6 +21,51 @@ As colunas do **wa-api** são medidas (rota registada = existe). Mas existir nã
 
 ---
 
+## Envelope de erro (F236)
+
+Toda resposta de erro segue o formato:
+
+```json
+{
+  "code": 400,
+  "error": {
+    "code": "missing_chat",
+    "message": "missing chat in payload"
+  },
+  "success": false
+}
+```
+
+- `code` (topo): status HTTP, espelhado no header.
+- `error.code`: código estável, legível por máquina, em `snake_case`.
+- `error.message`: descrição legível por humano, segura para mostrar ao utilizador.
+- `success`: `false` em todo erro, `true` em sucesso. Campo legado — será removido.
+
+### Códigos de erro de fronteira
+
+Estes cinco são guardas que o handler aplica ANTES de chamar o use case. Se um
+deles responder, o WhatsApp nem foi contactado.
+
+| HTTP | error.code | error.message | quando |
+|---|---|---|---|
+| 401 | `unauthorized` | unauthorized | token ausente ou inválido |
+| 400 | `missing_session_id` | missing session id | userinfo sem Id (sessão não criada) |
+| 400 | `missing_id` | missing ID | parâmetro de caminho `{id}` ausente |
+| 400 | `decode_payload_failed` | could not decode payload | corpo JSON malformado ou ilegível |
+| 400 | `missing_jid` | missing jid in path | parâmetro de caminho `{jid}` ausente |
+
+### Códigos de erro de validação
+
+Campos presentes no corpo mas com valor inválido ou ausente. O use case
+devolve `*apperr.AppError` com `CategoryValidation`, que a fronteira
+traduz em 400.
+
+Os códigos variam por rota — ver os testes de cada handler para a lista
+completa. Exemplos comuns: `missing_chat`, `invalid_duration`,
+`invalid_limit`.
+
+---
+
 ## Campo de destino: `chat` como nome universal (F225)
 
 Todas as rotas que recebem um destinatário no corpo JSON aceitam **`"chat"`**
