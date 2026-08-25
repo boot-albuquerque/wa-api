@@ -25389,6 +25389,43 @@ nenhum → campo vazio, controle negativo sem ChatTarget) e
 `handler_group_mgmt_test.go` (`TestGroupMgmtHandlers_ChatAlias_Success` — 8
 handlers anônimos, `TestGroupMgmtHandlers_ChatAlias_LegacyWins`).
 
+
+## Corrigida 2026-08-25 — `chat` como alias universal, verificada em campo
+
+**Abordagem estrutural, não lista de nomes**: `pkg/domain/chat_target.go` traz
+um `ChatTarget` com `ChatAlias string \`json:"chat"\`` embutido nos tipos de
+pedido, mais `ResolveChatField` para preencher o campo específico. Nove
+ficheiros de domínio e um handler — não 48 edições à mão.
+
+É a lição da Evolution aplicada: o mecanismo que torna a PRÓXIMA rota correta
+por omissão, em vez de corrigir as existentes uma a uma.
+
+**Campo — três metades, e as três importam**:
+
+| | resultado |
+|---|---|
+| `chat` em `/chat/send/text` (era `Phone`) | **200** |
+| `chat` em `/chat/mute` (era `jid`) | **200** |
+| `chat` em `/chat/send/poll` (era `Group`) | **200** |
+| `Phone` em `/chat/send/text` | **200** — não quebrou |
+| `jid` em `/chat/mute` | **200** — não quebrou |
+| `Group` em `/chat/send/poll` | **200** — não quebrou |
+| nenhum dos dois | `400 missing_phone` |
+
+A segunda metade é a que prova a decisão tomada (alias, sem quebrar nada).
+Testar só a primeira teria deixado a quebra invisível.
+
+**Aresta conhecida, não corrigida**: sem destino nenhum, a mensagem de erro
+diz `missing Phone in payload` numa rota que agora também aceita `chat`. Nomeia
+só a forma antiga. É cosmético e não afeta comportamento, mas confunde quem
+seguiu a documentação nova. Fica anotado aqui em vez de corrigido de passagem.
+
+**Nota de recorte**: o worker separou campos que são DESTINO DE ENVIO de
+campos que apenas contêm um JID com outra semântica (entidades, dados de
+webhook, participantes). A minha contagem original de oito nomes veio de um
+filtro por nome de campo e era mais larga do que devia.
+
+**Status**: corrigido — F225, 2026-08-25.
 <!-- f-status: corrigido -->
 
 ## F226 — `/chat/send/forward` não encaminha mensagem nenhuma: envia texto MARCADO como encaminhado
