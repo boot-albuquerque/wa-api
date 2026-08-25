@@ -1,7 +1,7 @@
 # Endpoints do wa-api — inventário e comparação
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
-**Total**: 120 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
+**Total**: 121 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
 
 Reproduzir a lista:
 
@@ -259,14 +259,21 @@ armadilhas.
 
 ---
 
-## status (stories) — 4 rotas
+## status (stories) — 3 rotas
 
 | método | rota | o que faz |
 |---|---|---|
-| POST | `/status/set/text` | publicar status de texto |
 | POST | `/status/set/image` | publicar status com imagem (CAP-51) |
 | POST | `/status/set/video` | publicar status com vídeo (CAP-51) |
 | POST | `/status/set/audio` | publicar status com áudio (CAP-51) |
+
+### Quebra de contrato (F229, 2026-08-25)
+
+`POST /status/set/text` foi **removida**. A rota apontava para o mesmo handler
+de `POST /user/status` (define o "Recado"/About do perfil) e **não publicava
+status nenhum** — quem a chamava julgava publicar uma story de texto e estava
+a alterar o perfil. Para definir o recado do perfil, use `POST /user/status`.
+Publicar texto como story (status efémero) não é uma capability existente.
 
 ---
 
@@ -305,7 +312,7 @@ projeto sem medir (F222).
 
 | | natureza | acesso |
 |---|---|---|
-| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 120 rotas REST |
+| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 121 rotas REST |
 | **Evolution API** | serviço HTTP sobre Baileys | REST + webhooks |
 | **Baileys** | **biblioteca** TypeScript | API de programa, não HTTP |
 | **Open WA** | automação de **Puppeteer** sobre a SPA do WhatsApp Web | REST (EASY API) ou biblioteca |
@@ -353,7 +360,7 @@ existe, não se há endpoint.
 | **canais (newsletter)** | ✅ 15 rotas | ⚠️ parcial | ✅ | ❌ |
 | **comunidades** | ❌ | ⚠️ | ⚠️ | ⚠️ |
 | contactos, bloqueio, privacidade | ✅ | ✅ | ✅ | ✅ |
-| **status / stories** | ✅ 4 tipos | ✅ | ✅ | ✅ |
+| **status / stories** | ✅ 3 tipos (F229: texto removido) | ✅ | ✅ | ✅ |
 | perfil próprio | ✅ | ✅ | ✅ | ✅ |
 | rejeitar chamada | ✅ | ⚠️ | ✅ | ⚠️ |
 

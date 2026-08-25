@@ -234,7 +234,6 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	// would have caught it.
 	registry.Register("/chat/history", customChain.Then(ch.ChatHistory.GetChatHistory), "GET")
 	registry.Register("/chat/delete", customChain.Then(ch.Message.DeleteMessage), "POST")
-	registry.Register("/status/set/text", customChain.Then(ch.Session.SetStatusMessage), "POST")
 	registry.Register("/status/set/image", customChain.Then(ch.Session.PublishStatusImage), "POST")
 	registry.Register("/status/set/video", customChain.Then(ch.Session.PublishStatusVideo), "POST")
 	registry.Register("/status/set/audio", customChain.Then(ch.Session.PublishStatusAudio), "POST")

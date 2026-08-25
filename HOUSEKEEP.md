@@ -25832,10 +25832,26 @@ nisto: comparar via `GetUserInfo` do fork em vez da interface.
    `ExtendedTextMessage` para `StatusBroadcastJID`, como as outras três fazem.
 3. `docs/ENDPOINTS.md` tem de separar as duas coisas.
 
-**Status**: não corrigido — precisa de decisão de contrato (remover rota é
-quebra).
+**Status**: corrigido (2026-08-25). Rota `/status/set/text` removida de
+`pkg/bootstrap/wiring_routes.go` e de `pkg/infra/stdio/stdio_routes_misc.go`.
+`/user/status` continua a funcionar. Quebra de contrato documentada em
+`docs/ENDPOINTS.md`.
 
-<!-- f-status: aberto -->
+Testes que travam:
+- `TestStatusSetTextRouteRemoved` — confirma 404 pela rota registada.
+- `TestUserStatusRouteStillExists` — `/user/status` continua a casar.
+- `TestStatusStoryRoutesIntact` — as três rotas de story (`image`, `video`,
+  `audio`) continuam registadas.
+- `TestStdioRoutesMatchRegisteredHTTPRoutes` + `TestRegisteredHTTPRoutesHaveStdioEntry`
+  — gate de consistência HTTP/stdio, verde.
+
+Controlo negativo executado: reintroduzir o registo de `/status/set/text` faz
+`TestStatusSetTextRouteRemoved` falhar com:
+```
+status_set_text_removal_test.go:21: /status/set/text still matches a registered route — it should have been removed (F229)
+```
+
+<!-- f-status: corrigido -->
 
 ## F230 — `history` trava o tempo real mas NÃO a sincronização: 20 mil linhas gravadas com a definição a 0
 

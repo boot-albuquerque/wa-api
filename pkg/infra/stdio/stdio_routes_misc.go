@@ -5,7 +5,6 @@ package stdio
 
 var miscStaticRoutes = map[string]staticRoute{
 	"health":           {httpMethod: "GET", httpPath: "/health"},
-	"status.set.text":  {httpMethod: "POST", httpPath: "/status/set/text"},
 	"status.set.image": {httpMethod: "POST", httpPath: "/status/set/image"},
 	"status.set.video": {httpMethod: "POST", httpPath: "/status/set/video"},
 	"status.set.audio": {httpMethod: "POST", httpPath: "/status/set/audio"},
