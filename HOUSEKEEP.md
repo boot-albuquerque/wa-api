@@ -27343,12 +27343,39 @@ possíveis, e não as separei:
 2. o envio funcionou e o que falha é a leitura do `picture ID` na resposta —
    nesse caso o `500` seria erro de parsing sobre uma operação bem-sucedida.
 
-A ausência de foto no `group_info` favorece a primeira, mas o `group_info`
-pode não expor a chave de todo (nenhuma das chaves de foto aparece, nem
-vazia). **Medir antes de corrigir**: comparar com a foto definida pela
-interface no mesmo grupo.
+### RESOLVIDO pela verificação visual — a operação APAGA
 
-**Status**: não corrigido — precisa da medição acima.
+A interface do WhatsApp mostra, no grupo, a mensagem de sistema:
+
+> **Você apagou a imagem deste grupo**
+
+Ou seja, a chamada não falhou de forma inócua: **executou uma remoção**. A
+leitura (1) estava certa quanto ao "não definiu", e errada quanto a ser
+inofensiva.
+
+**Isto agrava o achado.** Num grupo que já tenha foto, `POST /group/photo` com
+uma imagem válida:
+
+1. **apaga a foto existente**;
+2. não define a nova;
+3. devolve `500 internal server error`.
+
+O chamador vê um erro de servidor e conclui que nada aconteceu. Perdeu a foto.
+
+**É a terceira rota desta sessão com efeito colateral destrutivo silencioso** —
+depois da F246 (`joinapprovalmode` a desbloquear o grupo) e da F229
+(`/status/set/text` a alterar o perfil).
+
+**Nota de método**: eu tinha registado duas hipóteses e a medição para as
+separar. Quem as separou foi a INTERFACE, não a API — o `group_info` não expõe
+chave de foto nenhuma, portanto nenhuma consulta nossa teria revelado a
+remoção. Sem olhar para o cliente, este achado ficaria pela metade.
+
+**Correção sugerida**: não apagar antes de ter a nova imagem aceite; e mapear a
+falha de leitura do `picture ID` para um erro que não seja `500` se a operação
+tiver, de facto, mudado estado.
+
+**Status**: não corrigido — e passa a ser dos mais graves, por destruir dados.
 
 <!-- f-status: aberto -->
 
