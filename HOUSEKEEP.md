@@ -25172,3 +25172,118 @@ sqlite3 <datadir>/dbdata/main.db \
 ```
 
 <!-- f-status: corrigido -->
+
+## F224 — `/chat/ephemeral` devolve `400` sem código: o servidor sabe qual campo falta e não o diz
+
+**Data/contexto**: 2026-08-25, ao fotografar em campo as cinco capabilities
+que estavam marcadas "confirmado pelo utilizador" mas nunca medidas por mim.
+
+**Onde**: `pkg/presentation/http/handlers/handler_disappearing.go:30-41`
+
+```go
+var req struct {
+    Chat     string  `json:"chat"`
+    Duration *string `json:"duration"`
+}
+...
+err := &simpleErr{"missing chat"}
+```
+
+**Problema**: o corpo devolvido não tem código de erro, ao contrário do resto
+da API. Medido lado a lado no mesmo servidor:
+
+```
+POST /message/star   sem message_id  -> {"code":400,"error":{"code":"missing_message_id",
+                                          "message":"missing message_id in payload"}}
+POST /chat/ephemeral sem chat        -> {"code":400,"error":"bad request"}
+```
+
+O log do servidor SABE o que falta — `WRN request rejected error="missing chat"
+route=/chat/ephemeral` — mas o cliente recebe `"bad request"` e não tem como
+descobrir qual campo corrigir. O `simpleErr` local contorna a taxonomia do
+`apperr`, que é o mecanismo que produz o `{"code": ...}` nas outras rotas.
+
+Custou-me três tentativas às cegas com nomes de campo errados (`jid`,
+`groupjid`) antes de eu ir ler o log do servidor. Um consumidor externo não
+tem o log.
+
+**Correção sugerida**: trocar `simpleErr` por um erro do `apperr` com
+categoria `validation` e código `missing_chat`, no molde do que
+`pkg/domain/star.go` já produz. Verificar se há outros `simpleErr` no pacote
+de handlers pelo mesmo motivo.
+
+**Status**: não corrigido — fora do escopo da F223. Não toquei por causa da
+regra de não corrigir de graça bug pré-existente sem perguntar.
+
+<!-- f-status: aberto -->
+
+## F225 — rotas de chat com nomes de campo de GRUPO: `Group` e `groupjid` onde o destino é 1:1
+
+**Data/contexto**: 2026-08-25, mesma sessão de medição da F224.
+
+**Onde**:
+- `pkg/domain/message.go:533-539` — `SendPollRequest.Group` (`json:"Group"`)
+- `pkg/domain/group.go:155-158` — `SetDisappearingTimerRequest.GroupJID`
+  (`json:"groupjid"`)
+- `pkg/presentation/http/handlers/handler_disappearing.go:31` — `chat`
+
+**Problema**: três rotas, três convenções, e duas delas nomeiam "grupo" um
+campo que aceita JID de conversa individual. Medido:
+
+| rota | campo | aceita 1:1? |
+|---|---|---|
+| `POST /chat/send/poll` | `Group` | **sim** — testado com `5516981818244@s.whatsapp.net`, HTTP 200 |
+| `POST /chat/ephemeral` | `chat` | sim |
+| `POST /group/ephemeral` | `groupjid` | (grupo) |
+
+Uma enquete enviada para conversa individual passa pelo campo `Group`. O nome
+mente sobre o domínio do valor, e quem lê o payload conclui que a rota exige
+grupo — conclusão errada que nem o `ENDPOINTS.md` desfaz.
+
+**Correção sugerida**: aceitar `chat` como alias em `SendPollRequest`,
+mantendo `Group` a funcionar para não quebrar consumidor existente, e uniformizar
+a documentação. A alternativa (renomear já) é quebra de contrato.
+
+**Status**: não corrigido — decisão de contrato, precisa de aval.
+
+<!-- f-status: aberto -->
+
+## F226 — `/chat/send/forward` não encaminha mensagem nenhuma: envia texto MARCADO como encaminhado
+
+**Data/contexto**: 2026-08-25, mesma sessão.
+
+**Onde**: `pkg/domain/message.go:633-640`
+
+```go
+type SendForwardRequest struct {
+	Phone           string  `json:"Phone"`
+	Body            string  `json:"Body"`
+	ForwardingScore *uint32 `json:"ForwardingScore,omitempty"`
+	...
+}
+```
+
+**Problema**: não há campo para identificar a mensagem de origem. A capability
+recebe TEXTO e um `ForwardingScore`, e produz uma mensagem nova com a marca de
+encaminhada. Medido: enviar com `MessageID`/`Chat` devolve
+`400 missing_body`; com `Body` devolve 200.
+
+Isto DIVERGE do que Evolution API e Baileys chamam forward, onde se passa a
+chave da mensagem original e o servidor reenvia o conteúdo (inclusive mídia,
+sem reupload). Consequências práticas da nossa forma: não encaminha imagem,
+áudio, documento nem enquete — só texto —, e o conteúdo é reenviado do zero.
+
+A divergência pode ser deliberada, mas não está registada em lado nenhum, e a
+regra do projeto é que divergir das referências é aceitável **desde que
+consciente e escrito**. Hoje um leitor do `ENDPOINTS.md` conclui que temos
+forward no sentido usual.
+
+**Correção sugerida**: decidir e registar. Ou (a) documentar explicitamente
+que é "marcar como encaminhado" e renomear na documentação, ou (b) implementar
+o encaminhamento real por chave de mensagem, que é o que os concorrentes
+oferecem. Medir antes o que a SPA/protocolo exige para reenviar mídia sem
+reupload.
+
+**Status**: não corrigido — precisa de decisão de produto.
+
+<!-- f-status: aberto -->
