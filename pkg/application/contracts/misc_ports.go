@@ -175,6 +175,11 @@ type NewsletterReader interface {
 	// por quanto tempo elas valem — a duração é do servidor, não escolha
 	// nossa, e o chamador precisa dela para saber quando repetir.
 	SubscribeNewsletterLiveUpdates(ctx context.Context, txtID string, jid domain.JID) (time.Duration, error)
+
+	// F233b — admin management and channel deletion.
+	DemoteNewsletterAdmin(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	ChangeNewsletterOwner(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error
+	DeleteNewsletter(ctx context.Context, txtID string, channelJID domain.JID) error
 }
 
 // AppStateSyncer força o pull de um patch de app-state do servidor WhatsApp.

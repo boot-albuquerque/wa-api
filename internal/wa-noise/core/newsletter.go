@@ -115,6 +115,31 @@ func (cli *Client) UnfollowNewsletter(ctx context.Context, jid types.JID) error 
 	return newsletter.Unfollow(ctx, cli.newsletterT(), jid)
 }
 
+// NewsletterDemoteAdmin demotes an admin of a channel to subscriber.
+func (cli *Client) NewsletterDemoteAdmin(ctx context.Context, channelJID, userJID types.JID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.DemoteAdmin(ctx, cli.newsletterT(), channelJID, userJID)
+}
+
+// NewsletterChangeOwner transfers ownership of a channel to another user.
+func (cli *Client) NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.ChangeOwner(ctx, cli.newsletterT(), channelJID, newOwnerJID)
+}
+
+// NewsletterDelete permanently deletes a channel. This is IRREVERSIBLE —
+// once deleted, the channel and all its messages are gone.
+func (cli *Client) NewsletterDelete(ctx context.Context, channelJID types.JID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.Delete(ctx, cli.newsletterT(), channelJID)
+}
+
 // GetNewsletterInfo gets the info of a newsletter that you're joined to.
 func (cli *Client) GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error) {
 	return cli.getNewsletterInfo(ctx, newsletter.JIDInput(jid), true)

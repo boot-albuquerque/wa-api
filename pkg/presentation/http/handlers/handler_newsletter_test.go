@@ -66,10 +66,19 @@ func TestNewsletter_CadaRotaChamaOMetodoCerto(t *testing.T) {
 			"SendNewsletterReaction", canalDeTeste, "👍"},
 		{"/newsletter/subscribe", func(h *NewsletterHandlers) http.Handler { return h.Subscribe },
 			`{"jid":"` + canalDeTeste + `"}`, "SubscribeNewsletterLiveUpdates", canalDeTeste, ""},
+		{"/newsletter/demote", func(h *NewsletterHandlers) http.Handler { return h.Demote },
+			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			"DemoteNewsletterAdmin", canalDeTeste, "5516900000000@s.whatsapp.net"},
+		{"/newsletter/change-owner", func(h *NewsletterHandlers) http.Handler { return h.ChangeOwner },
+			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			"ChangeNewsletterOwner", canalDeTeste, "5516900000000@s.whatsapp.net"},
+		{"/newsletter/delete", func(h *NewsletterHandlers) http.Handler { return h.Delete },
+			`{"jid":"` + canalDeTeste + `","confirmJID":"` + canalDeTeste + `"}`,
+			"DeleteNewsletter", canalDeTeste, ""},
 	}
 
-	if len(casos) != 11 {
-		t.Fatalf("a familia tem 11 operacoes, a tabela tem %d", len(casos))
+	if len(casos) != 14 {
+		t.Fatalf("a familia tem 14 operacoes, a tabela tem %d", len(casos))
 	}
 
 	for _, c := range casos {
@@ -240,6 +249,97 @@ func TestNewsletter_NonGraphQLError_Returns500(t *testing.T) {
 
 	rec, _ := ipmServe(t, newsletterOps(nr).Unfollow, http.MethodPost, "/newsletter/unfollow",
 		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+// ---------------------------------------------------------------------------
+// F233b — demote, change_owner, delete validation and success paths
+// ---------------------------------------------------------------------------
+
+func TestNewsletter_DemoteSemUserJID_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).Demote, http.MethodPost, "/newsletter/demote",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("demote without userJID reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_ChangeOwnerSemUserJID_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).ChangeOwner, http.MethodPost, "/newsletter/change-owner",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("change_owner without userJID reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_DeleteSemConfirmJID_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("delete without confirmJID reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_DeleteConfirmJIDMismatch_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
+		`{"jid":"`+canalDeTeste+`","confirmJID":"999999999@newsletter"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("delete with mismatched confirmJID reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_DemoteFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		DemoteFunc: func(_ context.Context, _ string, _, _ domain.JID) error {
+			return errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).Demote, http.MethodPost, "/newsletter/demote",
+		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+func TestNewsletter_ChangeOwnerFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		ChangeOwnerFunc: func(_ context.Context, _ string, _, _ domain.JID) error {
+			return errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).ChangeOwner, http.MethodPost, "/newsletter/change-owner",
+		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+func TestNewsletter_DeleteFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		DeleteFunc: func(_ context.Context, _ string, _ domain.JID) error {
+			return errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
+		`{"jid":"`+canalDeTeste+`","confirmJID":"`+canalDeTeste+`"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)

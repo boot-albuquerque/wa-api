@@ -29,17 +29,20 @@ type NewsletterOp string
 // fronteira HTTP: o handler recebe o nome da rota e escolhe uma destas
 // (ADR-0004).
 const (
-	NewsletterOpCreate     NewsletterOp = "create"
-	NewsletterOpInfo       NewsletterOp = "info"
-	NewsletterOpInfoInvite NewsletterOp = "info_invite"
-	NewsletterOpFollow     NewsletterOp = "follow"
-	NewsletterOpUnfollow   NewsletterOp = "unfollow"
-	NewsletterOpMute       NewsletterOp = "mute"
-	NewsletterOpMessages   NewsletterOp = "messages"
-	NewsletterOpUpdates    NewsletterOp = "updates"
-	NewsletterOpMarkViewed NewsletterOp = "mark_viewed"
-	NewsletterOpReact      NewsletterOp = "react"
-	NewsletterOpSubscribe  NewsletterOp = "subscribe"
+	NewsletterOpCreate      NewsletterOp = "create"
+	NewsletterOpInfo        NewsletterOp = "info"
+	NewsletterOpInfoInvite  NewsletterOp = "info_invite"
+	NewsletterOpFollow      NewsletterOp = "follow"
+	NewsletterOpUnfollow    NewsletterOp = "unfollow"
+	NewsletterOpMute        NewsletterOp = "mute"
+	NewsletterOpMessages    NewsletterOp = "messages"
+	NewsletterOpUpdates     NewsletterOp = "updates"
+	NewsletterOpMarkViewed  NewsletterOp = "mark_viewed"
+	NewsletterOpReact       NewsletterOp = "react"
+	NewsletterOpSubscribe   NewsletterOp = "subscribe"
+	NewsletterOpDemote      NewsletterOp = "demote"
+	NewsletterOpChangeOwner NewsletterOp = "change_owner"
+	NewsletterOpDelete      NewsletterOp = "delete"
 )
 
 // NewsletterRequest é o pedido de qualquer uma das onze.
@@ -69,6 +72,9 @@ type NewsletterRequest struct {
 	ServerID  int    // react
 	Reaction  string // react — vazio REMOVE a reação
 	MessageID string // react
+
+	UserJID    domain.JID // demote, change_owner — the target user
+	ConfirmJID domain.JID // delete — must match JID as explicit confirmation
 }
 
 // NewsletterResult carrega o que a operação devolveu.
@@ -162,6 +168,15 @@ func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req
 	case NewsletterOpSubscribe:
 		dur, err := n.SubscribeNewsletterLiveUpdates(ctx, userID, req.JID)
 		return nil, dur, err
+	case NewsletterOpDemote:
+		err := n.DemoteNewsletterAdmin(ctx, userID, req.JID, req.UserJID)
+		return nil, 0, err
+	case NewsletterOpChangeOwner:
+		err := n.ChangeNewsletterOwner(ctx, userID, req.JID, req.UserJID)
+		return nil, 0, err
+	case NewsletterOpDelete:
+		err := n.DeleteNewsletter(ctx, userID, req.JID)
+		return nil, 0, err
 	}
 	// Inalcançável enquanto validateNewsletter correr primeiro. Fica como erro
 	// e não como panic porque uma operação nova acrescentada ao switch da
@@ -223,6 +238,21 @@ var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 	NewsletterOpMessages:  {requireJID},
 	NewsletterOpUpdates:   {requireJID},
 	NewsletterOpSubscribe: {requireJID},
+	NewsletterOpDemote: {requireJID, {
+		code:    "missing_user_jid",
+		message: "user jid is required for demote",
+		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
+	}},
+	NewsletterOpChangeOwner: {requireJID, {
+		code:    "missing_user_jid",
+		message: "new owner jid is required",
+		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
+	}},
+	NewsletterOpDelete: {requireJID, {
+		code:    "missing_confirm_jid",
+		message: "confirm_jid must match the channel jid",
+		missing: func(r NewsletterRequest) bool { return r.ConfirmJID == "" || r.ConfirmJID != r.JID },
+	}},
 }
 
 // validateNewsletter exige o que CADA operação precisa.

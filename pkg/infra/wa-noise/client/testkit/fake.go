@@ -79,6 +79,9 @@ type Fake struct {
 	NewsletterMarkViewedFn           func(ctx context.Context, jid types.JID, serverIDs []types.MessageServerID) error
 	NewsletterSendReactionFn         func(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error
 	NewsletterSubscribeLiveUpdatesFn func(ctx context.Context, jid types.JID) (time.Duration, error)
+	NewsletterDemoteAdminFn          func(ctx context.Context, channelJID, userJID types.JID) error
+	NewsletterChangeOwnerFn          func(ctx context.Context, channelJID, newOwnerJID types.JID) error
+	NewsletterDeleteFn               func(ctx context.Context, channelJID types.JID) error
 	PairPhoneFn                      func(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
 	IsConnectedFn                    func() bool
 	IsLoggedInFn                     func() bool

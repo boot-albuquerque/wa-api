@@ -184,3 +184,29 @@ func Unfollow(ctx context.Context, t Transport, jid types.JID) error {
 	})
 	return err
 }
+
+// DemoteAdmin demotes an admin of a channel to subscriber.
+func DemoteAdmin(ctx context.Context, t Transport, channelJID types.JID, userJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationDemoteAdmin, map[string]any{
+		"newsletter_id": channelJID.String(),
+		"user_id":       userJID.String(),
+	})
+	return err
+}
+
+// ChangeOwner transfers ownership of a channel to another user.
+func ChangeOwner(ctx context.Context, t Transport, channelJID types.JID, newOwnerJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationChangeOwner, map[string]any{
+		"newsletter_id": channelJID.String(),
+		"user_id":       newOwnerJID.String(),
+	})
+	return err
+}
+
+// Delete permanently deletes a channel. This is IRREVERSIBLE.
+func Delete(ctx context.Context, t Transport, channelJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationDeleteNewsletter, map[string]any{
+		"newsletter_id": channelJID.String(),
+	})
+	return err
+}

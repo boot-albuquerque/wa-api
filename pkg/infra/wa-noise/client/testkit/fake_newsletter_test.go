@@ -38,11 +38,14 @@ func TestFakeNewsletter_SemFuncaoInjetadaDevolveZeroSemPanico(t *testing.T) {
 		"NewsletterMarkViewed":           func() error { return f.NewsletterMarkViewed(ctx, jidVazio(), nil) },
 		"NewsletterSendReaction":         func() error { return f.NewsletterSendReaction(ctx, jidVazio(), 1, "x", "m") },
 		"NewsletterSubscribeLiveUpdates": func() error { _, err := f.NewsletterSubscribeLiveUpdates(ctx, jidVazio()); return err },
+		"NewsletterDemoteAdmin":          func() error { return f.NewsletterDemoteAdmin(ctx, jidVazio(), jidVazio()) },
+		"NewsletterChangeOwner":          func() error { return f.NewsletterChangeOwner(ctx, jidVazio(), jidVazio()) },
+		"NewsletterDelete":               func() error { return f.NewsletterDelete(ctx, jidVazio()) },
 		"SetStatusMessage":               func() error { return f.SetStatusMessage(ctx, "olá") },
 		"SendPeerMessage":                func() error { _, err := f.SendPeerMessage(ctx, nil); return err },
 	}
-	if len(casos) != 13 {
-		t.Fatalf("a família são 13 métodos, a tabela tem %d", len(casos))
+	if len(casos) != 16 {
+		t.Fatalf("a família são 16 métodos, a tabela tem %d", len(casos))
 	}
 
 	for nome, chamar := range casos {

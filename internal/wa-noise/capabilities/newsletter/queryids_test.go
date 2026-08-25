@@ -36,6 +36,9 @@ func todasAsQueryIDs() []string {
 		mutationCreateNewsletter,
 		mutationUnfollowNewsletter,
 		mutationFollowNewsletter,
+		mutationDemoteAdmin,
+		mutationChangeOwner,
+		mutationDeleteNewsletter,
 	}
 }
 

@@ -88,3 +88,24 @@ func (f *Fake) NewsletterSubscribeLiveUpdates(ctx context.Context, jid types.JID
 	}
 	return 0, nil
 }
+
+func (f *Fake) NewsletterDemoteAdmin(ctx context.Context, channelJID, userJID types.JID) error {
+	if f.NewsletterDemoteAdminFn != nil {
+		return f.NewsletterDemoteAdminFn(ctx, channelJID, userJID)
+	}
+	return nil
+}
+
+func (f *Fake) NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error {
+	if f.NewsletterChangeOwnerFn != nil {
+		return f.NewsletterChangeOwnerFn(ctx, channelJID, newOwnerJID)
+	}
+	return nil
+}
+
+func (f *Fake) NewsletterDelete(ctx context.Context, channelJID types.JID) error {
+	if f.NewsletterDeleteFn != nil {
+		return f.NewsletterDeleteFn(ctx, channelJID)
+	}
+	return nil
+}

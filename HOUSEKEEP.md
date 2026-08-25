@@ -26102,7 +26102,7 @@ não lacuna nossa.
 completa do dono. `change owner` e `demote` são o caminho não-destrutivo e
 valem mais, mas custam mais.
 
-- **Status (b)**: **não corrigido** — decisão de produto, noutra worktree.
+- **Status (b)**: **corrigido** (2026-08-25). Ver "Parte (b)" abaixo.
 
 Relatório completo da via pública guardado em
 `/Users/albuquerque/wa-live-data/analise-405-unfollow.md`, com as fontes.
@@ -26138,6 +26138,126 @@ A mensagem diz o que FAZER, não só que falhou.
 binário acabado de compilar (`lsof -nP -iTCP:8080` → `wa-f233a`). Sem essa
 confirmação eu já tinha medido código antigo uma vez hoje — ver a nota na F232.
 
-A parte **(b)** continua ABERTA: faltam `delete`, `change owner` e `demote`.
+## Parte (b) — CORRIGIDA 2026-08-25, pendente de verificação em campo
 
-<!-- f-status: aberto -->
+Implementadas as três operações que faltavam ao dono do canal:
+`demote`, `change_owner` e `delete`. Pilha completa: capability →
+fachada → interface de cliente → RealClient wrapper → adaptador →
+use case → handler → rota.
+
+### Query IDs — origem e risco
+
+Os três IDs foram extraídos do Baileys (`QueryIds` enum):
+
+| operação | query ID | dígitos |
+|---|---|---|
+| demote | `6551828931592903` | 16 |
+| change_owner | `7341777602580933` | 16 |
+| delete | `30062808666639665` | 17 |
+
+**Risco**: os IDs que partilhamos com o Baileys são TODOS de gerações
+diferentes (ex: CREATE nosso = `6234210096708695`, Baileys =
+`8823471724422422`). Não há garantia de que os IDs do Baileys funcionem no
+nosso fork sem verificação em campo. Se falharem, a substituição é uma
+linha em `queryids.go`.
+
+### Segurança do delete
+
+O delete exige confirmação explícita: o corpo deve incluir `confirmJID`
+idêntico ao `jid`. A validação rejeita com 400 se estiver ausente ou
+diferente. A rota usa `DELETE` (não POST) e está documentada em
+`ENDPOINTS.md` com aviso de irreversibilidade.
+
+### Testes que travam as três operações
+
+**Camada de capability** (`internal/wa-noise/capabilities/newsletter/`):
+- `TestDemoteAdminSendsCorrectMutation` — query ID + payload
+- `TestDemoteAdminPropagatesError` — erro propaga
+- `TestChangeOwnerSendsCorrectMutation` — query ID + payload
+- `TestChangeOwnerPropagatesError` — erro propaga
+- `TestDeleteSendsCorrectMutation` — query ID + payload
+- `TestDeletePropagatesError` — erro propaga
+
+**Camada de handler** (`pkg/presentation/http/handlers/`):
+- `TestNewsletter_CadaRotaChamaOMetodoCerto` — tabela atualizada para 14
+  rotas, incluindo as três novas
+- `TestNewsletter_DemoteSemUserJID_E400` — validação de campo obrigatório
+- `TestNewsletter_ChangeOwnerSemUserJID_E400` — idem
+- `TestNewsletter_DeleteSemConfirmJID_E400` — idem
+- `TestNewsletter_DeleteConfirmJIDMismatch_E400` — confirmação não bate
+- `TestNewsletter_DemoteFalhaDaPortaE500` — erro da porta → 500
+- `TestNewsletter_ChangeOwnerFalhaDaPortaE500` — idem
+- `TestNewsletter_DeleteFalhaDaPortaE500` — idem
+
+**Camada de use case** (`pkg/application/usecase/notification/`):
+- `TestNewsletterOps_Demote_RequiresJIDAndUserJID`
+- `TestNewsletterOps_ChangeOwner_RequiresJIDAndUserJID`
+- `TestNewsletterOps_Delete_RequiresJIDAndConfirmJID`
+
+**Camada de fake** (`pkg/infra/wa-noise/client/testkit/`):
+- Tabela de `TestFakeNewsletter_SemFuncaoInjetadaDevolveZeroSemPanico`
+  atualizada para 16 métodos
+
+### Controlos negativos EXECUTADOS
+
+**CN1 — DemoteAdmin com query ID errado:**
+```
+--- FAIL: TestDemoteAdminSendsCorrectMutation (0.00s)
+    actions_test.go:419: DemoteAdmin used query ID "9926858900719341", want "6551828931592903"
+```
+
+**CN2 — ChangeOwner com query ID errado:**
+```
+--- FAIL: TestChangeOwnerSendsCorrectMutation (0.00s)
+    actions_test.go:451: ChangeOwner used query ID "6551828931592903", want "7341777602580933"
+```
+
+**CN3 — Delete com query ID errado:**
+```
+--- FAIL: TestDeleteSendsCorrectMutation (0.00s)
+    actions_test.go:482: Delete used query ID "7341777602580933", want "30062808666639665"
+```
+
+**CN4 — Delete sem verificação de mismatch do confirmJID:**
+```
+--- FAIL: TestNewsletterOps_Delete_RequiresJIDAndConfirmJID (0.00s)
+    newsletter_ops_test.go:184: expected validation error for mismatched confirmJID
+```
+
+**CN5 — Handler demote ligado à operação errada (change_owner):**
+```
+--- FAIL: TestNewsletter_CadaRotaChamaOMetodoCerto//newsletter/demote (0.00s)
+    handler_newsletter_test.go:98: metodo "ChangeNewsletterOwner", quero "DemoteNewsletterAdmin"
+```
+
+### Verificação em campo
+
+**Pendente.** Os query IDs são do Baileys e precisam de verificação em campo
+antes de se considerar as operações produtivas. Curls preparados abaixo
+(canal `120363425486344523@newsletter`, token `tok_fila`).
+
+Demote:
+```bash
+curl -s -X POST http://localhost:8080/newsletter/demote \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer tok_fila' \
+  -d '{"jid":"120363425486344523@newsletter","userJID":"<ADMIN_JID_AQUI>@s.whatsapp.net"}'
+```
+
+Change owner:
+```bash
+curl -s -X POST http://localhost:8080/newsletter/change-owner \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer tok_fila' \
+  -d '{"jid":"120363425486344523@newsletter","userJID":"<NOVO_DONO_JID>@s.whatsapp.net"}'
+```
+
+Delete (**NÃO EXECUTAR sem autorização — IRREVERSÍVEL**):
+```bash
+curl -s -X DELETE http://localhost:8080/newsletter/delete \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer tok_fila' \
+  -d '{"jid":"120363425486344523@newsletter","confirmJID":"120363425486344523@newsletter"}'
+```
+
+<!-- f-status: corrigido -->
