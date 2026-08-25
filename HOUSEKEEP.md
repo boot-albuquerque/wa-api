@@ -27728,3 +27728,54 @@ grupo é a fonte de verdade. Verificar aí, não na resposta HTTP.
 **Status**: inventário de cobertura.
 
 <!-- f-status: nao-se-faz -->
+
+## F256 — status publicado pela `filarapida` devolve `200` e NÃO existe
+
+**Data/contexto**: 2026-08-25, últimas duas rotas da bateria
+(`/status/set/audio` e `/status/set/video`), com confirmação visual exigida
+pelo utilizador.
+
+**Medido**, três chamadas seguidas pela conta `filarapida`:
+
+```
+POST /status/set/audio -> 200 {"message_id":"3EB01671E10F412B3DF41C","status":"sent"}
+POST /status/set/video -> 200 {"message_id":"3EB0C8877B176B85F162E2","status":"sent"}
+POST /status/set/image -> 200 {"message_id":"3EB0890CAD5493C9B10E75","status":"sent"}
+log: INF status image published msgID=3EB0890CAD5493C9B10E75
+```
+
+**Na interface, depois de recarga completa da página**:
+
+> Meu status — *Clique para atualizar seu status*
+
+Zero status. Não é atraso de sincronização: recarreguei e reconfirmei.
+
+**O que discrimina**: a MESMA rota, no MESMO binário, publicou com sucesso pela
+conta `lucas` — verificado visualmente mais cedo hoje (a imagem 1×1 vermelha
+com legenda `status F223`, visível em `Meu status — Hoje às 05:38`).
+
+Logo **não é a rota, não é a mídia, e não é o código**. É específico da conta.
+
+**Duas hipóteses que NÃO consegui separar**:
+
+1. contas **WhatsApp Business** não publicam status por este caminho, ou
+   exigem algo que não enviamos;
+2. algo no estado da `filarapida` (461 contactos, privacidade de status em
+   `contacts`) faz a lista de destinatários resolver-se vazia.
+
+Contra a segunda: `getStatusBroadcastRecipients` acrescenta o próprio JID
+quando não está na lista (`core/broadcast.go:32-36`), portanto mesmo uma lista
+vazia deveria produzir um status visível para si mesmo.
+
+**O achado, independentemente da causa**: a API devolve `200` com `message_id`,
+e o log escreve `published`, para um status que não existe. **Nona vez nesta
+sessão que o `200` diz menos do que aparenta.**
+
+**Correção sugerida**: apurar a causa antes de mexer no código. Se for
+limitação de contas Business, o `ENDPOINTS.md` tem de a documentar; se for
+lista de destinatários vazia, a rota deve recusar com `4xx` em vez de reportar
+sucesso.
+
+**Status**: não corrigido — causa por apurar, e não a vou adivinhar.
+
+<!-- f-status: aberto -->
