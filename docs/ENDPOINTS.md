@@ -206,35 +206,96 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 
 ## Comparação
 
-| capacidade | wa-api | Cloud API | Evolution | Baileys |
+**Aviso de proveniência, repetido porque importa**: a coluna **wa-api** é
+MEDIDA (contagem de rotas registadas, com o comando no topo deste documento).
+As colunas dos concorrentes são **conhecimento geral, não medição** — não corri
+Evolution, Baileys nem Open WA. Onde a diferença decidir alguma coisa, meça
+antes de agir. Este projeto já se enganou por acreditar numa issue de outro
+projeto sem medir (F222).
+
+**O que cada um é**, porque comparar sem isto produz tabelas enganadoras:
+
+| | natureza | acesso |
+|---|---|---|
+| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 117 rotas REST |
+| **Evolution API** | serviço HTTP sobre Baileys | REST + webhooks |
+| **Baileys** | **biblioteca** TypeScript | API de programa, não HTTP |
+| **Open WA** | automação de **Puppeteer** sobre a SPA do WhatsApp Web | REST (EASY API) ou biblioteca |
+
+A diferença de natureza tem consequência prática: o **Open WA dirige um browser
+real**, portanto carrega Chrome e é sensível a mudanças de DOM da SPA. Nós e a
+Evolution falamos o protocolo diretamente. O Baileys é biblioteca — comparar
+"rotas" com ele é comparar coisas diferentes; a coluna diz se a capacidade
+existe, não se há endpoint.
+
+### Envio de mensagem
+
+| capacidade | wa-api | Evolution | Baileys | Open WA |
 |---|---|---|---|---|
-| Envio de texto e média | ✅ | ✅ | ✅ | ✅ |
-| Botões e lista | ✅ | ⚠️ só via template aprovado | ✅ | ✅ |
-| **Carrossel** | ✅ provado em campo | ❌ | ⚠️ | ⚠️ proto cru |
-| **Reply-to e menções** | ✅ | ✅ | ✅ | ✅ |
-| **Encaminhar** | ✅ | ⚠️ | ✅ | ✅ |
-| **Votar em enquete** | ✅ | ❌ | ⚠️ | ✅ |
-| Editar / apagar / reagir | ✅ | ⚠️ parcial | ✅ | ✅ |
-| **Grupos** (18 rotas) | ✅ | ❌ **não existe** | ✅ | ✅ |
-| **Canais** (12 rotas) | ✅ | ❌ | ⚠️ parcial | ✅ |
-| **Status / stories** | ✅ 4 tipos | ❌ | ⚠️ | ✅ |
-| Contactos, bloqueio, privacidade | ✅ | ❌ | ✅ | ✅ |
-| Presença e recibos | ✅ | ⚠️ limitado | ✅ | ✅ |
-| Mensagens temporárias | ✅ conversa + padrão | ⚠️ | ⚠️ | ✅ |
-| **Fixar conversa** | ✅ | ❌ | ⚠️ | ✅ |
-| **Silenciar conversa** | ⚠️ bloqueado (F223) | ❌ | ⚠️ | ✅ |
-| **Favoritar mensagem** | ⚠️ bloqueado (F223) | ❌ | ⚠️ | ✅ |
-| Etiquetas | ✅ | ❌ | ⚠️ | ✅ |
-| Rejeitar chamada | ✅ | ❌ | ⚠️ | ✅ |
-| Webhook, S3, HMAC, proxy | ✅ | ✅ só webhook | ✅ | ➖ é biblioteca |
-| Catálogo / produtos | ❌ | ✅ | ⚠️ | ⚠️ |
-| Flows | ❌ | ✅ | ❌ | ❌ |
-| Pagamento | ❌ | ✅ WABA | ❌ | ❌ |
+| texto, imagem, vídeo, áudio, documento, sticker | ✅ | ✅ | ✅ | ✅ |
+| localização, contacto | ✅ | ✅ | ✅ | ✅ |
+| enquete (criar) | ✅ | ✅ | ✅ | ✅ |
+| **votar em enquete** | ✅ | ⚠️ | ✅ | ⚠️ |
+| botões, lista | ✅ | ✅ | ✅ | ⚠️ descontinuado |
+| **carrossel** | ✅ provado em campo | ⚠️ | ⚠️ proto cru | ❌ |
+| template | ✅ | ✅ | ✅ | ⚠️ |
+| **reply-to (citar)** | ✅ 15 rotas | ✅ | ✅ | ✅ |
+| **menções (@)** | ✅ 8 rotas com texto | ✅ | ✅ | ✅ |
+| **encaminhar** | ✅ | ✅ | ✅ | ✅ |
+| editar, apagar, reagir | ✅ | ✅ | ✅ | ✅ |
 
-**A vantagem estrutural sobre a Cloud API são grupos e canais**: não existem na
-API oficial. Quem precisa de bot em grupo não tem alternativa oficial.
+### Conversa e mensagem
 
----
+| capacidade | wa-api | Evolution | Baileys | Open WA |
+|---|---|---|---|---|
+| listar conversas, histórico | ✅ | ✅ | ✅ | ✅ |
+| arquivar, marcar lida, presença | ✅ | ✅ | ✅ | ✅ |
+| **fixar conversa** | ✅ | ⚠️ | ✅ | ✅ |
+| **silenciar conversa** | ⚠️ **bloqueado (F223)** | ⚠️ | ✅ | ✅ |
+| **favoritar mensagem** | ⚠️ **bloqueado (F223)** | ⚠️ | ✅ | ✅ |
+| mensagens temporárias | ✅ conversa + padrão | ⚠️ | ✅ | ⚠️ |
+| descarga de média (5 tipos) | ✅ | ✅ | ✅ | ✅ |
+| etiquetas (labels) | ✅ | ✅ | ✅ | ✅ |
+
+### Grupos, canais e conta
+
+| capacidade | wa-api | Evolution | Baileys | Open WA |
+|---|---|---|---|---|
+| **grupos** | ✅ 18 rotas | ✅ | ✅ | ✅ |
+| **canais (newsletter)** | ✅ 12 rotas | ⚠️ parcial | ✅ | ❌ |
+| **comunidades** | ❌ | ⚠️ | ⚠️ | ⚠️ |
+| contactos, bloqueio, privacidade | ✅ | ✅ | ✅ | ✅ |
+| **status / stories** | ✅ 4 tipos | ✅ | ✅ | ✅ |
+| perfil próprio | ✅ | ✅ | ✅ | ✅ |
+| rejeitar chamada | ✅ | ⚠️ | ✅ | ⚠️ |
+
+### Operação
+
+| capacidade | wa-api | Evolution | Baileys | Open WA |
+|---|---|---|---|---|
+| webhook por sessão | ✅ | ✅ | ➖ é lib | ✅ |
+| **assinatura HMAC do webhook** | ✅ 3 rotas | ⚠️ | ➖ | ⚠️ |
+| **S3 por sessão** | ✅ 4 rotas | ✅ | ➖ | ⚠️ |
+| proxy por sessão | ✅ | ✅ | ✅ | ✅ |
+| multi-sessão | ✅ | ✅ | manual | ✅ |
+| WebSocket de eventos | ✅ | ✅ | ➖ | ✅ |
+| RabbitMQ / SQS | ❌ | ✅ | ❌ | ❌ |
+| integrações (Chatwoot, Typebot) | ❌ | ✅ | ❌ | ❌ |
+
+### Leitura honesta desta tabela
+
+**Onde estamos à frente**: canais (12 rotas contra parcial/nenhum), HMAC de
+webhook, e o carrossel provado em campo. As mensagens temporárias com
+temporizador de conversa E padrão de conta também são mais completas que a
+média.
+
+**Onde estamos atrás**: integrações prontas (Chatwoot, Typebot, RabbitMQ) — a
+Evolution vive disso e nós não temos nenhuma. E **duas capacidades que os
+outros três têm e nós entregámos bloqueadas**: silenciar e favoritar (F223).
+
+**Onde a comparação engana**: o Baileys tem quase tudo porque é biblioteca —
+quem o usa escreve o serviço à volta. A comparação justa com ele não é de
+funcionalidades, é de esforço para chegar a um serviço operável.
 
 ## O que falta — a lista completa
 
