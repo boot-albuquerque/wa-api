@@ -25631,3 +25631,61 @@ teste próprio para ele.
 **Status**: corrigido — F228, 2026-08-25.
 
 <!-- f-status: corrigido -->
+
+## F229 — `POST /status/set/text` NÃO publica status: define o "Recado" (About) do perfil
+
+**Data/contexto**: 2026-08-25, testes em produção pela conta `filarapida`
+(+55 16 98181-8244), a pedido do utilizador.
+
+**Onde**:
+- `pkg/bootstrap/wiring_routes.go:58` — `/user/status` → `ch.Session.SetStatusMessage`
+- `pkg/bootstrap/wiring_routes.go:234` — `/status/set/text` → **o mesmo handler**
+- `pkg/infra/wa-noise/adapters/misc/adapter.go:408-413` — "publishes the account status ("about") text"
+- `internal/wa-noise/core/user.go:61-63` — o upstream é explícito:
+
+```go
+// SetStatusMessage updates the current user's status text, which is shown in
+// the "About" section in the user profile.
+//
+// This is different from the ephemeral status broadcast messages. Use
+// SendMessage to types.StatusBroadcastJID to send such messages.
+```
+
+**Problema**: das quatro rotas `/status/set/*`, **três publicam status efémero**
+(story) e **uma altera o perfil**:
+
+| rota | destino | efeito | resposta |
+|---|---|---|---|
+| `/status/set/image` | `StatusBroadcastJID` | story | `{message_id, timestamp, status}` |
+| `/status/set/video` | `StatusBroadcastJID` | story | `{message_id, timestamp, status}` |
+| `/status/set/audio` | `StatusBroadcastJID` | story | `{message_id, timestamp, status}` |
+| **`/status/set/text`** | — | **"Recado"/About do perfil** | `{details}` — sem `message_id` |
+
+Quem lê o conjunto conclui, razoavelmente, que as quatro publicam status. A
+diferença de forma da resposta é o único sinal, e é fácil de não ver.
+
+A mesma capability está exposta em `/user/status`, com nome honesto. São duas
+rotas para o mesmo handler, uma delas mal colocada.
+
+**Consequência medida**: eu registei "status texto → 200" como validação de
+publicação de status, em duas contas. Não era. O `200` confirmava uma
+alteração de PERFIL. Publicar texto como story não é uma capability que
+tenhamos — e estava a ser contada como tendo.
+
+**Observação não explicada**: depois das chamadas, o "Recado" da `lucas`
+mostra `What's happening?` (o texto por omissão), não o que foi enviado.
+Ou a alteração não pegou, ou a interface serve valor em cache. Não medi o
+suficiente para decidir, e não registo diagnóstico adivinhado. Quem pegar
+nisto: comparar via `GetUserInfo` do fork em vez da interface.
+
+**Correção sugerida**:
+1. Remover o registo em `/status/set/text` (fica `/user/status`, que é o nome
+   correto), OU renomear para `/user/about`.
+2. Se publicar TEXTO como story for desejado, é capability NOVA: enviar
+   `ExtendedTextMessage` para `StatusBroadcastJID`, como as outras três fazem.
+3. `docs/ENDPOINTS.md` tem de separar as duas coisas.
+
+**Status**: não corrigido — precisa de decisão de contrato (remover rota é
+quebra).
+
+<!-- f-status: aberto -->
