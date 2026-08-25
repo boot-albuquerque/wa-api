@@ -25001,4 +25001,68 @@ extraído, e comparar com o que a referência produziria.
 campo. Eliminou oito hipóteses e não encontrou a causa — mas quem retomar não
 volta a gastar tempo nas oito.
 
+
+### VARREDURA REGISTO A REGISTO 2026-08-24 — os quatro inputs do MAC estão certos
+
+O MAC é `HMAC(chaveSnapshot, LTHash ‖ versão ‖ nome)`. Varri **todos** os
+inputs por força bruta, com sondas no fork revertidas depois.
+
+**Estrutura, lado a lado** (mesma sessão, mesmo instante):
+
+```
+PROBE-LISTA regular_low:  snapshot=true registos=156 patches=0  -> HTTP 200
+PROBE-LISTA regular_high: snapshot=true registos=66  patches=0  -> HTTP 500
+```
+
+Os dois são snapshot puro, **zero patches por aplicar**. O `regular_low` tem
+MAIS do dobro dos registos e verifica.
+
+**Varreduras, todas NEGATIVAS:**
+
+| input | espaço varrido | resultado |
+|---|---|---|
+| **registo** | subtrair cada um dos 66 do LTHash (é aditivo) e testar | nenhum faz bater |
+| **versão** | 0 a 399 | nenhuma faz bater |
+| **nome** | os 5 `WAPatchName` | nenhum faz bater |
+| **chave** | as 141 chaves do JID | nenhuma faz bater |
+
+**Estrutura dos registos** — nada os distingue de forma útil:
+
+```
+regular_low  valLen: 640(x65) 176(x27) 128(x27) 96(x11) 144(x10) 112(x7)
+regular_high valLen: 128(x31) 144(x22) 112(x8) 160(x2) 96(x1) 320(x1) 192(x1)
+```
+
+Os dois têm prefixos de `keyID` mistos (`0000`, `004C`, e um terceiro), e o
+`regular_low` funciona com essa mistura. O registo #61 do `regular_high` é o
+único com `valLen=192` e `keyID=0026...` — mas **essa chave existe no store** e
+excluí-lo não faz o MAC bater.
+
+**O que isto estabelece**: chave, versão e nome estão corretos, e a fórmula está
+certa porque o `regular_low` valida com ela. Logo **o LTHash que calculamos para
+o `regular_high` diverge do do servidor**, e **não por causa de um só registo** —
+a exclusão individual de qualquer um dos 66 não converge.
+
+**As duas hipóteses que sobram, nenhuma medida:**
+
+1. **Faltam-nos registos.** O servidor calculou o MAC sobre um conjunto MAIOR
+   do que o que nos enviou (ou do que conseguimos ler). A varredura só testou
+   SUBTRAIR; testar ADICIONAR exige saber o que adicionar. Sinal a procurar:
+   comparar a contagem de registos com o que o cliente oficial vê para a mesma
+   conta.
+
+2. **O `trailingValueMAC` extrai bytes errados para VÁRIOS registos.**
+   `mutation_blob.go:23` devolve `blob[len(blob)-32:]`. Se algum tipo de
+   mutação do `regular_high` tiver o MAC noutra posição, todos os desse tipo
+   contribuem errado — o que explica a exclusão individual não convergir.
+
+**Onde a próxima sessão deve começar**: hipótese (2), porque é testável sem
+saber o que falta. Agrupar os 66 registos por `valLen` e por tipo de mutação
+decodificada, e ver se a divergência correlaciona com um grupo. Se um grupo
+inteiro contribuir errado, é ele.
+
+**Custo total desta investigação**: sete rondas de instrumentação em campo.
+Eliminou doze hipóteses. Não encontrou a causa — mas o espaço de procura
+restante são duas hipóteses concretas em vez de "o app-state não funciona".
+
 <!-- f-status: aberto -->
