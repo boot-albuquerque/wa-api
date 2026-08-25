@@ -26330,6 +26330,28 @@ descobrimos no bundle e **não implementamos**.
 do que a F228 fez em `resolvePollSender` — direcional, sem converter LID para
 PN.
 
+
+### Verificação em campo da parte (c) — 2026-08-25
+
+Com a resolução PN→LID no adaptador, enviando **PN** (a forma que dava `400`):
+
+| operação | antes | depois |
+|---|---|---|
+| `demote` (PN do dono) | `500` / `400 Bad Request` | **`403 newsletter_cannot_demote_owner`** |
+| `change-owner` (PN do lucas) | `500` / `400 Bad Request` | **`403 newsletter_new_owner_not_admin`** |
+| `unfollow` | `403 newsletter_admin_cannot_unfollow` | inalterado |
+
+Log confirma `resolved PN to LID` nas duas operações que levam `user_id`.
+
+O que isto prova: a canalização, os query IDs e o formato do payload estão
+todos corretos. **A única coisa que faltava era a forma do JID**, e é agora
+resolvida pelo servidor em vez de exigida ao chamador.
+
+O que continua por provar, e não o disfarço: nenhuma das duas foi vista a
+CONCLUIR com `200`. `403` é a recusa correta para os cenários montáveis. Um
+sucesso exigiria um segundo admin no canal, e promover alguém depende do fluxo
+de convite de admin que descobrimos no bundle e não implementamos.
+
 <!-- f-status: aberto -->
 
 ## F234 — `TestStartSession_SessionOutlivesItsBootContext` falha sob carga: 1,87 s isolado, 30 s no `make check`
@@ -26408,6 +26430,21 @@ escolher a mensagem. O código `newsletter_admin_cannot_unfollow` só se aplica
 ao unfollow; `demote` sobre o dono merece código e mensagem próprios. Manter o
 `403` (a categoria está certa).
 
-**Status**: não corrigido — descoberto na verificação da parte (c).
+## Corrigida 2026-08-25, verificada em campo
 
-<!-- f-status: aberto -->
+A classificação passou a receber a operação em curso. Medido:
+
+| operação | código | mensagem |
+|---|---|---|
+| `demote` | `newsletter_cannot_demote_owner` | the channel owner cannot be demoted; transfer ownership first |
+| `change-owner` | `newsletter_new_owner_not_admin` | the new owner must already be a channel admin |
+| `unfollow` | `newsletter_admin_cannot_unfollow` | (inalterada) |
+
+Cada uma nomeia a causa DA SUA operação e diz o passo seguinte. Mantido o
+princípio de não inventar mapeamentos: só os três códigos observados em campo
+(405 no unfollow, 405 no demote, 401 no change-owner) mudam de categoria;
+qualquer outro continua `500`.
+
+**Status**: corrigido — F235, 2026-08-25.
+
+<!-- f-status: corrigido -->
