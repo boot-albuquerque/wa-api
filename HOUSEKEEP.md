@@ -25961,6 +25961,39 @@ com parâmetros opcionais de âncora. Verificação em campo: a cargo do utiliza
 
 - **Status**: **corrigido**
 
+
+## Corrigida 2026-08-25 — uma fonte de verdade, verificada em campo
+
+A trava passou a existir no caminho de sincronização
+(`eventhandler_history.go:47`), extraída para `historyLimitForUser` e
+partilhada com o tempo real. Uma fonte, não duas — o mesmo princípio que o
+comentário da F187 enuncia no `message_classify.go`.
+
+**Campo**, numa só medição, com as duas bandeiras em estados opostos:
+
+| conta | `history` | antes | depois |
+|---|---|---|---|
+| `lucas` (envia) | **0** | 20 755 | **20 755** — não guardou |
+| `filarapida` (recebe) | **100** | 679 | **680** — guardou |
+
+A mesma mensagem, no mesmo instante, resultado oposto conforme a bandeira. A
+variável alterna dentro da execução, que é a forma que este projeto exige para
+o "depois" significar alguma coisa.
+
+**O que NÃO foi verificado em campo, e é preciso dizê-lo**: o caminho de
+SINCRONIZAÇÃO. Ele só dispara em pareamento ou reconexão, e não consegui
+provocá-lo sem re-parear uma conta. Está coberto por teste unitário
+(`TestHistorySync_FlagZero_DoesNotSave` e `FlagPositive_Saves`), e a trava é a
+mesma função partilhada que o tempo real usa — mas isso é argumento, não
+medição. Quem re-parear uma conta deve confirmar e anotar aqui.
+
+**A consequência assumida**: com `history = 0` por omissão, deixa de se guardar
+seja o que for. As 20 755 linhas do `lucas` continuam lá — o que muda é que
+param de crescer. Instalações novas não acumulam histórico até alguém chamar
+`POST /session/history {"history": N}`, e até lá o forward por chave de
+mensagem PRÓPRIA (CAP-55) e o caminho 1 da F228 ficam inertes.
+
+**Status**: corrigido — F230, 2026-08-25.
 <!-- f-status: corrigido -->
 
 ## F231 — `duration_seconds` reporta NANOSSEGUNDOS: erra por mil milhões de vezes
