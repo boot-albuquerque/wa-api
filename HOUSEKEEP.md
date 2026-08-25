@@ -27181,43 +27181,49 @@ corpo, tratá-las no mesmo passo — vale uma varredura.
 
 <!-- f-status: aberto -->
 
-## F245 — `/health` exige autenticação de utilizador, o que o inutiliza como sonda
+## F245 — RETIRADA: `/health` autenticado é desenho deliberado, e existe `/livez` público
 
-**Data/contexto**: 2026-08-25, bateria real.
+**Data/contexto**: 2026-08-25, bateria real. **Achado retirado no mesmo dia,
+antes de gerar trabalho.**
 
-**Medido**:
+Registei que `/health` exigir token o inutilizava como sonda:
 
 ```
-GET /health  sem token                -> 401 unauthorized
-GET /health  com token de UTILIZADOR  -> 200 {"status":"ok","uptime":...,"active_connections":2,...}
-GET /health  com token de ADMIN       -> 401 unauthorized
+GET /health sem token              -> 401
+GET /health com token utilizador   -> 200 com uptime, active_connections
+GET /health com token de admin     -> 401
 ```
 
-**Problema**: um endpoint de saúde serve para ser sondado por quem **não tem
-credenciais** — balanceador, Kubernetes, Docker `HEALTHCHECK`, monitorização
-externa. Exigir token de utilizador significa que:
+**A premissa estava errada.** O comentário imediatamente acima do registo
+(`wiring_routes.go:200-202`) diz:
 
-1. a sonda precisa de um token de sessão real, que é credencial de acesso a
-   dados, só para saber se o processo está vivo;
-2. se a sessão desse token expirar ou for removida, a sonda passa a reportar
-   o serviço como **doente** quando ele está são — e o orquestrador reinicia
-   um processo saudável;
-3. o token de ADMIN, que seria a credencial natural para operação, **não
-   serve** — o que é incoerente.
+> Health route via internal handler — behind auth (chain c), unlike the
+> unauthenticated container liveness probe `/livez` (router_setup.go).
 
-O registo é em `wiring_routes.go:203`, dentro da cadeia autenticada (`c.Then`).
+Verificado:
 
-**Nota sobre o que expõe**: a resposta traz `uptime` e `active_connections`.
-Isso é informação de operação, e é argumento legítimo para não a abrir a toda a
-gente. Mas a solução usual é separar: `/health` mínimo e público (vivo/morto),
-`/health/detail` autenticado. Hoje temos o pior dos dois — fechado a quem
-precisa e aberto a qualquer sessão de utilizador.
+```
+GET /livez sem token  ->  200 {"status":"ok"}
+```
 
-**Correção sugerida**: registar `/health` fora da cadeia autenticada,
-devolvendo apenas estado e timestamp; manter os detalhes atrás de autenticação
-noutro caminho. Decidir também se o token de admin deve passar a servir.
+O desenho é o que eu ia recomendar: sonda pública mínima, detalhe atrás de
+autenticação. Já estava feito.
 
-**Status**: não corrigido — precisa de decisão sobre o que expor sem
-credenciais.
+**O que fica desta entrada** — a lição, não o defeito:
 
-<!-- f-status: aberto -->
+Declarei defeito de desenho sem ler o comentário que estava **duas linhas
+acima** da linha que eu próprio tinha aberto para citar. O `grep` mostrou-me a
+linha do registo; a explicação estava no contexto imediato.
+
+**Regra**: antes de chamar defeito a uma decisão de arquitetura, ler o que está
+à volta do sítio onde ela é tomada. Este repositório documenta as decisões no
+ponto de uso — o `Makefile`, o `queryids.go` e o `EncryptPollVote` fizeram o
+mesmo ao longo desta sessão, e nos três casos o comentário respondeu à pergunta.
+
+**Aresta menor, essa sim real**: o token de ADMIN não serve para `/health`, só
+o de utilizador. Para uma rota de operação isso é invulgar, mas é detalhe, não
+defeito de desenho — e não o vou promover a achado sem saber se é deliberado.
+
+**Status**: retirada — não era defeito.
+
+<!-- f-status: nao-se-faz -->
