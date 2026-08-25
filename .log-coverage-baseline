@@ -1239,7 +1239,13 @@ rules_frozen=true
 # (handler_misc.go, 7 chamadas a hlog...Warn()). Medido: mute 3 apperr/1 Warn,
 # pin 2/1, star 5/1 — o mesmo racio de send_image (10/6) e send_poll (4/2).
 # Nenhum caminho existente perdeu log.
-min_func_coverage=593
+# F227 (2026-08-25): func_coverage SOBE 593->594 (+1). ENTRA (1):
+# OutgoingRecorder.Record (pkg/infra/history/outgoing.go) — coberta por
+# log.Error em dois caminhos (save failure, trim failure).
+# buildOutgoingDataJSON e' elegivel mas NAO coberta: o unico log.Error
+# nela e' o marshal failure, que logcov nao conta como cobertura de
+# funcao porque so' atinge um ramo de erro — covered/eligible sobe 1/2.
+min_func_coverage=594
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1492,7 +1498,13 @@ min_errpath_coverage=781
 # StoredMessageRepository.GetPollSenderJID (leitura de sender_jid do historico
 # para resolver a identidade do criador da enquete). WithPollSenderLookup e
 # resolvePollSender sao EXCLUIDOS (metodos privados/de configuracao sem log).
-min_eligible=959
+# F227 (2026-08-25): min_eligible SOBE 959->961 (+2, ratchet-UP honesto). ENTRAM (2):
+# OutgoingRecorder.Record (pkg/infra/history/outgoing.go) — tem log.Error
+# em save failure e trim failure.
+# buildOutgoingDataJSON (pkg/infra/history/outgoing.go) — tem log.Error
+# em marshal failure. Ambas sao funcoes publicas/exportadas com log.
+# NewOutgoingRecorder e' EXCLUIDO (construtor sem log).
+min_eligible=961
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

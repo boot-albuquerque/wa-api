@@ -97,6 +97,7 @@ func (a *ChatMessengerAdapter) SendCarousel(ctx context.Context, txtID string, t
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "buttons", payload.Body, msg, resp.Timestamp)
 	return domain.MessageSendResult{ID: string(resp.ID), Timestamp: resp.Timestamp}, nil
 }
 

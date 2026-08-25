@@ -2849,7 +2849,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:483)
+pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:499)
 pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -2888,6 +2888,7 @@ pkg/bootstrap.init	EXCLUDED	X3
 pkg/bootstrap.initConnectHandler	EXCLUDED	X1
 pkg/bootstrap.initCustomHandlers	ELIGIBLE	covered
 pkg/bootstrap.initCustomHandlers.func1	EXCLUDED	X6
+pkg/bootstrap.initCustomHandlers.func2	EXCLUDED	X6
 pkg/bootstrap.innerRecoverMiddleware	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func1	EXCLUDED	X1
 pkg/bootstrap.innerRecoverMiddleware.func2	EXCLUDED	X1
@@ -3170,8 +3171,11 @@ pkg/infra/enginerouter.GroupInfo.SetGroupName	ELIGIBLE	uncovered:L1;uncovered:L2
 pkg/infra/enginerouter.GroupInfo.SetGroupTopic	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,groupinfo.go:93)
 pkg/infra/enginerouter.GroupInfo.alvo	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,groupinfo.go:62)
 pkg/infra/enginerouter.NewGroupInfo	EXCLUDED	X1
+pkg/infra/history.NewOutgoingRecorder	EXCLUDED	X1
+pkg/infra/history.OutgoingRecorder.Record	ELIGIBLE	covered
 pkg/infra/history.SaveOutgoingMessageToHistory	ELIGIBLE	covered
 pkg/infra/history.SyncHistoryForChat	ELIGIBLE	uncovered:L2(S-ret,sync.go:87);uncovered:L2(S-ret,sync.go:93)
+pkg/infra/history.buildOutgoingDataJSON	ELIGIBLE	covered
 pkg/infra/media.FileToBase64	ELIGIBLE	covered
 pkg/infra/media.ProcessMedia	ELIGIBLE	covered
 pkg/infra/media.ProcessMedia.func1	ELIGIBLE	covered
@@ -3430,9 +3434,11 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendSticker	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithHistoryRecorder	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollSenderLookup	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.buildCarouselCard	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.recordOutgoing	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.resolvePollSender	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ForwardedMessageAdapter.SendForwardedMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	EXCLUDED	X5
@@ -3448,6 +3454,7 @@ pkg/infra/wa-noise/adapters/chat.listBizNodes	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listRows	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listSections	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.nativeFlowButtons	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ownJIDString	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.replyContextInfo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.templateButtons	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/group.GroupAdapter.CreateGroup	EXCLUDED	X5

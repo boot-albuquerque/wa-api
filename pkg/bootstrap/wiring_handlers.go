@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"slices"
+	"strconv"
+
 	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
 	wagroup "wa-api/pkg/infra/wa-noise/adapters/group"
 	wamisc "wa-api/pkg/infra/wa-noise/adapters/misc"
@@ -13,6 +15,7 @@ import (
 	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/egress"
+	wahistory "wa-api/pkg/infra/history"
 	"wa-api/pkg/infra/media/opengraph"
 	"wa-api/pkg/infra/media/sticker"
 	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
@@ -131,9 +134,22 @@ func initCustomHandlers(s *server) {
 	// proposito — enquete criada com voto ilegivel e' pior que enquete nao
 	// criada.
 	pollSenderRepo := db.NewStoredMessageRepository(s.DB)
+	outgoingRecorder := wahistory.NewOutgoingRecorder(
+		s.DB, s.StoreDB,
+		db.SaveMessageToHistory, db.TrimMessageHistory,
+		func(userID string) int {
+			info, found := appCtx.UserInfoCache.Get(userID)
+			if !found {
+				return 0
+			}
+			limit, _ := strconv.Atoi(info.(Values).Get("History"))
+			return limit
+		},
+	)
 	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup).
 		WithPollOptions(clientManager).
-		WithPollSenderLookup(pollSenderRepo)
+		WithPollSenderLookup(pollSenderRepo).
+		WithHistoryRecorder(outgoingRecorder)
 	mediaDownloader := wachat.NewMediaDownloaderAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)
