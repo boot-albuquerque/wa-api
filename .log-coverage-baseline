@@ -1488,7 +1488,11 @@ min_errpath_coverage=781
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
-min_eligible=958
+# F228 (2026-08-25): min_eligible SOBE 958->959 (+1, ratchet-UP honesto). ENTRA (1):
+# StoredMessageRepository.GetPollSenderJID (leitura de sender_jid do historico
+# para resolver a identidade do criador da enquete). WithPollSenderLookup e
+# resolvePollSender sao EXCLUIDOS (metodos privados/de configuracao sem log).
+min_eligible=959
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

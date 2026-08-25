@@ -2849,7 +2849,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:480)
+pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:483)
 pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -3121,6 +3121,7 @@ pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-c
 pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:131)
 pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:115)
 pkg/infra/db.SetDisconnectedState	ELIGIBLE	covered
+pkg/infra/db.StoredMessageRepository.GetPollSenderJID	ELIGIBLE	covered
 pkg/infra/db.StoredMessageRepository.GetStoredMessage	ELIGIBLE	uncovered:L2(S-ret,stored_message_repository.go:59)
 pkg/infra/db.TrimMessageHistory	ELIGIBLE	covered
 pkg/infra/db.UserRepository.CreateUser	ELIGIBLE	covered
@@ -3430,7 +3431,9 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollSenderLookup	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.buildCarouselCard	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.resolvePollSender	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ForwardedMessageAdapter.SendForwardedMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X5

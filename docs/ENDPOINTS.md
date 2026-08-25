@@ -36,7 +36,7 @@ As colunas do **wa-api** são medidas (rota registada = existe). Mas existir nã
 | POST | `/chat/send/location` | localização; latitude/longitude são ponteiros (F121) |
 | POST | `/chat/send/contact` | cartão de contacto |
 | POST | `/chat/send/poll` | criar enquete |
-| POST | `/chat/send/pollvote` | **votar** numa enquete (CAP-48) |
+| POST | `/chat/send/pollvote` | **votar** numa enquete (CAP-48, F228) |
 | POST | `/chat/send/buttons` | botões interativos (fluxo nativo) |
 | POST | `/chat/send/list` | lista de seleção |
 | POST | `/chat/send/carousel` | carrossel HSCROLL_CARDS (CAP-46) |
@@ -61,6 +61,19 @@ futura). Se a mensagem não existir no histórico, devolve 404.
 > tem chamador em produção. Encaminhar por chave uma mensagem que você acabou
 > de enviar por esta API devolve `404 message_not_found`. É defeito anterior
 > ao CAP-55, não dele.
+
+**`/chat/send/pollvote`** — notas (F228):
+
+- O campo `Sender` do payload (JID do criador da enquete) é **resolvido pelo
+  servidor** para a forma de identidade correcta (PN ou LID) antes de encriptar
+  o voto. O cliente pode enviar qualquer das duas formas; a resolução é:
+  1. Histórico (`message_history.sender_jid`) — forma do wire, autoritativa.
+  2. Mapeamento PN→LID via store — caminho primário para enquetes criadas pela
+     API (ausentes do histórico, F227). **Só converte PN→LID, nunca LID→PN.**
+  3. Payload tal qual — com warning se for PN (pode falhar MAC).
+- O `200` significa **despacho** (o voto foi enviado ao servidor do WhatsApp),
+  **não confirmação de contagem**. Não há como distinguir despacho de
+  contabilização na resposta — confirmar na interface do WhatsApp.
 
 Todas as rotas de envio aceitam **reply-to** (`ReplyTo`) desde a CAP-46; as
 oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.

@@ -70,3 +70,23 @@ func (r *StoredMessageRepository) GetStoredMessage(ctx context.Context, userID, 
 		ChatJID:  chatJID,
 	}, nil
 }
+
+// GetPollSenderJID reads the sender_jid from message_history for a given poll
+// message. This is the wire form of the poll creator's JID — the authoritative
+// source for key derivation in EncryptPollVote (F228).
+func (r *StoredMessageRepository) GetPollSenderJID(ctx context.Context, userID, messageID string) (string, error) {
+	query := r.db.Rebind(`SELECT sender_jid FROM message_history WHERE user_id = ? AND message_id = ? LIMIT 1`)
+
+	var senderJID string
+	err := r.db.QueryRowContext(ctx, query, userID, messageID).Scan(&senderJID)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("poll message %s not found in history", messageID)
+	case err != nil:
+		log.Error().Err(err).Str("user_id", userID).Str("message_id", messageID).
+			Msg("failed to look up poll sender")
+		return "", fmt.Errorf("failed to look up poll sender: %w", err)
+	}
+
+	return senderJID, nil
+}

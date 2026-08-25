@@ -130,7 +130,10 @@ func initCustomHandlers(s *server) {
 	// (eventhandler_message.go:130). Sem ele SendPoll RECUSA-SE a enviar, de
 	// proposito — enquete criada com voto ilegivel e' pior que enquete nao
 	// criada.
-	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup).WithPollOptions(clientManager)
+	pollSenderRepo := db.NewStoredMessageRepository(s.DB)
+	chatMessenger := wachat.NewChatMessengerAdapter(waClientLookup).
+		WithPollOptions(clientManager).
+		WithPollSenderLookup(pollSenderRepo)
 	mediaDownloader := wachat.NewMediaDownloaderAdapter(waClientLookup)
 	jidResolver := wajid.NewJIDResolverAdapter()
 	groupAdapter := wagroup.NewGroupAdapter(waClientLookup)

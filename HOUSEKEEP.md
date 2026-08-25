@@ -25525,29 +25525,61 @@ não há nada na resposta que distinga os dois casos. Foi assim que eu próprio
 registei esta capability como validada numa medição anterior: o código HTTP
 mentiu, e eu não fui à interface confirmar.
 
-**Hipótese de causa (NÃO confirmada)**: identidade LID/PN. O MAC do voto cobre
-o JID de quem vota. O log mostra o votante como LID puro
-(`29343770251463:25@lid`) e o autor da enquete resolvido em DUAS formas
-(`554192421234@s.whatsapp.net` **e** `90937376170214@lid`). Se a chave for
-derivada de uma forma e verificada com a outra, o MAC falha exatamente assim.
+**Causa confirmada (2026-08-25)**: identidade LID/PN. `EncryptPollVote`
+(`poll.go:97-100`) escolhe entre `OwnLID()` e `OwnID()` com base no
+`pollInfo.Sender.Server`. `DecryptPollVote` usa `msg.Info.Sender` (a forma do
+wire). Se o payload diz `@s.whatsapp.net` mas o wire espera `@lid`, a chave
+derivada difere e o MAC falha.
 
-Isto é a classe de problema que o `CLAUDE.md` manda tratar consultando o
-Baileys primeiro — ele mantém `LIDMappingStore` com fallback para USync
-precisamente porque as duas formas coexistem.
+**Correção aplicada**: `resolvePollSender` em
+`pkg/infra/wa-noise/adapters/chat/messenger.go` — resolução em 3 caminhos:
 
-**A investigar antes de corrigir**:
-1. Qual JID o `SendPollVote` usa para derivar a chave, e qual o WhatsApp
-   espera. Medir, não deduzir.
-2. Se o campo `Sender` do payload (hoje o autor da enquete) está a ser usado
-   onde devia estar o votante, ou vice-versa.
-3. Se a enquete criada por outro cliente (telemóvel) e votada pela API tem o
-   mesmo defeito — isso separaria "defeito no envio do voto" de "defeito na
-   criação da enquete".
+1. **History lookup** — lê `sender_jid` da `message_history` (forma do wire,
+   autoritativa). Funciona para enquetes RECEBIDAS.
+2. **PN→LID mapping** — `Store().GetAltJID(payloadSender)`, DIRECIONAL: só
+   converte PN→LID, nunca LID→PN. Se o payload já é LID, mantém (medido
+   2026-08-25: `Sender='90937376170214@lid'` faz o voto contar). Caminho
+   primário para enquetes CRIADAS pela API (F227: ausentes do histórico).
+3. **Payload as-is** — quando não há resolução, mantém e loga warning.
 
-**Correção mínima independente da causa**: a rota não pode devolver `200` liso
-quando o voto pode não contar. Ou o resultado distingue os casos, ou a
-documentação diz que `200` é só despacho.
+Wiring: `StoredMessageRepository.GetPollSenderJID` (`pkg/infra/db/stored_message_repository.go`)
+injetado via `WithPollSenderLookup` em `pkg/bootstrap/wiring_handlers.go`.
 
-**Status**: não corrigido — descoberto na validação, fora do escopo do CAP-55.
+**A documentação (ENDPOINTS.md) agora diz que o `200` é despacho, não
+confirmação de contagem.**
 
-<!-- f-status: aberto -->
+**Testes que travam esta correção**
+(`pkg/infra/wa-noise/adapters/chat/messenger_poll_vote_sender_test.go`):
+
+| # | Teste | O que trava |
+|---|---|---|
+| 1 | `TestSendPollVote_SenderResolvedFromHistory` | History LID sobrepõe payload PN |
+| 2 | `TestSendPollVote_SenderResolvedFromLIDMapping` | PN→LID via store quando history indisponível (F227) |
+| 3 | `TestSendPollVote_PNConversationKeepsPNSender` | History PN mantém PN — previne "forçar LID sempre" |
+| 4 | `TestSendPollVote_NoResolution_PayloadUsedAsIs` | Sem resolução → payload mantido com warning |
+| 5 | `TestSendPollVote_NoPollSenderLookup_UsesLIDMapping` | Lookup nil → fallback para LID mapping |
+| 6 | `TestSendPollVote_LIDPayloadStaysLID` | Payload já em LID nunca é convertido para PN |
+| CN-6 | `TestSendPollVote_ControlNegative_UnconditionalGetAltJIDBreaksLID` | Prova que `GetAltJID` bidirecional quebraria LID |
+| CN-1 | `TestSendPollVote_ControlNegative_WithoutResolution_PNPassedThrough` | Sem resolução, PN passa — caso do MAC fail |
+| CN-3 | `TestSendPollVote_ControlNegative_ForceLIDBreaksPNConversation` | "Forçar LID" quebraria conversa PN |
+
+**Controlo negativo — saída do CN-6** (reintroduzindo a chamada incondicional a
+`GetAltJID`):
+```
+=== RUN   TestSendPollVote_ControlNegative_UnconditionalGetAltJIDBreaksLID
+--- PASS: TestSendPollVote_ControlNegative_UnconditionalGetAltJIDBreaksLID (0.00s)
+    messenger_poll_vote_sender_test.go: GetAltJID(LID) returns PN — proving
+    the bidirectional behavior that the directional guard protects against.
+```
+
+**Controlo negativo — saída do CN-1** (sem resolução, PN passa direto):
+```
+=== RUN   TestSendPollVote_ControlNegative_WithoutResolution_PNPassedThrough
+    {"level":"warn","poll_id":"3EB0POLL1","sender":"554192421234@s.whatsapp.net",
+     "message":"poll vote sender could not be resolved to LID; using payload form — vote may fail MAC"}
+--- PASS: TestSendPollVote_ControlNegative_WithoutResolution_PNPassedThrough (0.00s)
+```
+
+**Status**: corrigido — F228, 2026-08-25.
+
+<!-- f-status: corrigido -->

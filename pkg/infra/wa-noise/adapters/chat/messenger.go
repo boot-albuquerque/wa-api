@@ -40,11 +40,25 @@ type PollOptionRecorder interface {
 	SetPollOptions(userID, msgID string, options []string)
 }
 
+// PollSenderLookup retrieves the sender JID of a stored poll message from
+// message_history. The returned string is the raw sender_jid column — the JID
+// as it arrived from the wire, in whichever form the server used (PN or LID).
+//
+// This is the FIRST source of truth for resolving the poll creator's identity
+// form in SendPollVote (F228). When the poll was RECEIVED, the wire sender is
+// exactly what EncryptPollVote needs. When the poll was SENT by this API, the
+// message is absent from history (F227) and this returns an error — the
+// adapter then falls back to the LID mapping store.
+type PollSenderLookup interface {
+	GetPollSenderJID(ctx context.Context, userID, messageID string) (string, error)
+}
+
 // ChatMessengerAdapter implementa appport.ChatMessenger.
 type ChatMessengerAdapter struct {
 	*wasession.SessionGuardAdapter
 
-	polls PollOptionRecorder
+	polls       PollOptionRecorder
+	pollSenders PollSenderLookup
 }
 
 // NewChatMessengerAdapter cria o adapter com a função de lookup.
@@ -62,6 +76,15 @@ func NewChatMessengerAdapter(getClient waclient.Getter) *ChatMessengerAdapter {
 // mente.
 func (a *ChatMessengerAdapter) WithPollOptions(rec PollOptionRecorder) *ChatMessengerAdapter {
 	a.polls = rec
+	return a
+}
+
+// WithPollSenderLookup enables sender-identity resolution for poll votes
+// (F228). Without it, SendPollVote still works but uses the payload sender
+// as-is — which may be in the wrong form and cause a MAC failure on the
+// receiving side.
+func (a *ChatMessengerAdapter) WithPollSenderLookup(ps PollSenderLookup) *ChatMessengerAdapter {
+	a.pollSenders = ps
 	return a
 }
 
@@ -647,6 +670,15 @@ func (a *ChatMessengerAdapter) SendPoll(ctx context.Context, txtID string, targe
 // PollUpdateMessage via client.SendMessage. The target of SendMessage is the
 // CHAT of the original poll, not the sender — the protocol delivers the vote
 // to the chat, not to the poll creator.
+//
+// F228: the Sender JID form (PN vs LID) is an INPUT to key derivation in
+// EncryptPollVote (poll.go:97-100). The caller cannot know the correct form,
+// so the adapter resolves it before building pollInfo. Resolution order:
+//  1. message_history.sender_jid — the wire form, authoritative for received
+//     polls.
+//  2. Store().GetAltJID — LID/PN mapping, the primary path for API-created
+//     polls (F227: outgoing messages are absent from history).
+//  3. Payload as-is — last resort, with a warning log.
 func (a *ChatMessengerAdapter) SendPollVote(ctx context.Context, txtID string, target domain.JID, payload domain.PollVotePayload, id string) (domain.MessageSendResult, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
@@ -667,10 +699,12 @@ func (a *ChatMessengerAdapter) SendPollVote(ctx context.Context, txtID string, t
 		return domain.MessageSendResult{}, err
 	}
 
+	resolvedSender := a.resolvePollSender(ctx, client, txtID, payload.PollMessageID, pollSenderJID)
+
 	pollInfo := &types.MessageInfo{
 		MessageSource: types.MessageSource{
 			Chat:    pollChatJID,
-			Sender:  pollSenderJID,
+			Sender:  resolvedSender,
 			IsGroup: pollChatJID.Server == types.GroupServer,
 		},
 		ID:        types.MessageID(payload.PollMessageID),
@@ -692,6 +726,68 @@ func (a *ChatMessengerAdapter) SendPollVote(ctx context.Context, txtID string, t
 		return domain.MessageSendResult{}, err
 	}
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
+}
+
+// resolvePollSender determines the correct JID form for the poll creator.
+//
+// EncryptPollVote (poll.go:97-100) chooses between OwnLID() and OwnID() based
+// on pollInfo.Sender.Server. DecryptPollVote uses msg.Info.Sender (the wire
+// sender). For the MAC to match, pollInfo.Sender must be in the same form as
+// the poll creator's JID on the wire.
+//
+// Resolution:
+//  1. History lookup — reads sender_jid from message_history, which is the
+//     wire form as received. Authoritative when present.
+//  2. PN→LID mapping — Store().GetAltJID converts PN to LID. DIRECTIONAL:
+//     only converts PN→LID, never LID→PN. If the payload is already LID, it
+//     is already in the wire form and works (measured 2026-08-25). Primary
+//     path for API-created polls absent from history (F227).
+//  3. Payload as-is — when the payload is LID (no conversion needed) or
+//     when PN→LID mapping fails, the original JID is kept. A warning is
+//     logged only for PN payloads that could not be resolved.
+func (a *ChatMessengerAdapter) resolvePollSender(ctx context.Context, client waclient.Client, txtID, pollMessageID string, payloadSender types.JID) types.JID {
+	// Path 1: history lookup.
+	if a.pollSenders != nil {
+		raw, err := a.pollSenders.GetPollSenderJID(ctx, txtID, pollMessageID)
+		if err == nil && raw != "" {
+			parsed, ok := wajid.ParseJID(raw)
+			if ok {
+				if parsed != payloadSender {
+					log.Info().
+						Str("poll_id", pollMessageID).
+						Str("payload_sender", payloadSender.String()).
+						Str("resolved_sender", parsed.String()).
+						Msg("poll vote sender resolved from history")
+				}
+				return parsed
+			}
+		}
+	}
+
+	// Path 2: PN→LID mapping via the client store.
+	// DIRECTIONAL: only convert PN→LID. If the payload is already LID, it is
+	// the wire form and works — converting LID→PN breaks MAC (measured 2026-08-25).
+	if payloadSender.Server == types.DefaultUserServer {
+		st := client.Store()
+		if st != nil {
+			alt, err := st.GetAltJID(ctx, payloadSender)
+			if err == nil && !alt.IsEmpty() {
+				log.Info().
+					Str("poll_id", pollMessageID).
+					Str("payload_sender", payloadSender.String()).
+					Str("resolved_sender", alt.String()).
+					Msg("poll vote sender resolved from LID mapping (PN→LID)")
+				return alt
+			}
+		}
+
+		log.Warn().
+			Str("poll_id", pollMessageID).
+			Str("sender", payloadSender.String()).
+			Msg("poll vote sender could not be resolved to LID; using payload form — vote may fail MAC")
+	}
+
+	return payloadSender
 }
 
 // hydratedTemplateID é o TemplateId de HydratedFourRowTemplate. O histórico
