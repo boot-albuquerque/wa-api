@@ -27180,3 +27180,44 @@ corpo, tratá-las no mesmo passo — vale uma varredura.
 **Status**: não corrigido.
 
 <!-- f-status: aberto -->
+
+## F245 — `/health` exige autenticação de utilizador, o que o inutiliza como sonda
+
+**Data/contexto**: 2026-08-25, bateria real.
+
+**Medido**:
+
+```
+GET /health  sem token                -> 401 unauthorized
+GET /health  com token de UTILIZADOR  -> 200 {"status":"ok","uptime":...,"active_connections":2,...}
+GET /health  com token de ADMIN       -> 401 unauthorized
+```
+
+**Problema**: um endpoint de saúde serve para ser sondado por quem **não tem
+credenciais** — balanceador, Kubernetes, Docker `HEALTHCHECK`, monitorização
+externa. Exigir token de utilizador significa que:
+
+1. a sonda precisa de um token de sessão real, que é credencial de acesso a
+   dados, só para saber se o processo está vivo;
+2. se a sessão desse token expirar ou for removida, a sonda passa a reportar
+   o serviço como **doente** quando ele está são — e o orquestrador reinicia
+   um processo saudável;
+3. o token de ADMIN, que seria a credencial natural para operação, **não
+   serve** — o que é incoerente.
+
+O registo é em `wiring_routes.go:203`, dentro da cadeia autenticada (`c.Then`).
+
+**Nota sobre o que expõe**: a resposta traz `uptime` e `active_connections`.
+Isso é informação de operação, e é argumento legítimo para não a abrir a toda a
+gente. Mas a solução usual é separar: `/health` mínimo e público (vivo/morto),
+`/health/detail` autenticado. Hoje temos o pior dos dois — fechado a quem
+precisa e aberto a qualquer sessão de utilizador.
+
+**Correção sugerida**: registar `/health` fora da cadeia autenticada,
+devolvendo apenas estado e timestamp; manter os detalhes atrás de autenticação
+noutro caminho. Decidir também se o token de admin deve passar a servir.
+
+**Status**: não corrigido — precisa de decisão sobre o que expor sem
+credenciais.
+
+<!-- f-status: aberto -->
