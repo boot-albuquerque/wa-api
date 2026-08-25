@@ -207,6 +207,12 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/newsletter/react` | reagir a mensagem do canal |
 | POST | `/newsletter/mute` | silenciar |
 
+### Erros específicos de newsletter
+
+| HTTP | error.code | quando | o que fazer |
+|---|---|---|---|
+| 403 | `newsletter_admin_cannot_unfollow` | `POST /newsletter/unfollow` quando o chamador é admin/dono do canal | demitir-se de admin antes de deixar de seguir (FAQ WhatsApp: https://faq.whatsapp.com/284188487298437/) |
+
 ---
 
 ## status (stories) — 4 rotas

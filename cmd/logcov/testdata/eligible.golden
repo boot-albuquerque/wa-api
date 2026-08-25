@@ -2600,13 +2600,13 @@ pkg/application/usecase/notification.NewGetHealthUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewListNewsletterUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewNewsletterOpsUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewsletterOpsUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/notification.NewsletterOpsUseCase.dispatch	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:162)
+pkg/application/usecase/notification.NewsletterOpsUseCase.dispatch	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:169)
 pkg/application/usecase/notification.newsletterRequirements.func1	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func2	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func3	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func4	EXCLUDED	X6
 pkg/application/usecase/notification.requireJID.func1	EXCLUDED	X6
-pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:230);uncovered:L2(S-ret,newsletter_ops.go:235)
+pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:237);uncovered:L2(S-ret,newsletter_ops.go:242)
 pkg/application/usecase/profile.GetProfileFullUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherPrivacidade	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherUserInfo	ELIGIBLE	covered
@@ -3668,6 +3668,7 @@ pkg/infra/wa-noise/client/testkit.GetterWith	EXCLUDED	X5
 pkg/infra/wa-noise/client/testkit.GetterWith.func1	EXCLUDED	X6
 pkg/infra/wa-noise/errmap.ClassifyAppState	ELIGIBLE	covered
 pkg/infra/wa-noise/errmap.ClassifyIQ	ELIGIBLE	covered
+pkg/infra/wa-noise/errmap.ClassifyNewsletter	ELIGIBLE	covered
 pkg/infra/wa-noise/errmap.classifyIQCode	EXCLUDED	X1
 pkg/infra/wa-noise/errmap.iqMessage	EXCLUDED	X1
 pkg/infra/wa-noise/errmap.isAppStateConflict	EXCLUDED	X1

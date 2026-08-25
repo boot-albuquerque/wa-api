@@ -2,12 +2,18 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
+	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/infra/wa-noise/errmap"
 )
 
 // As onze rotas de newsletter. O que estes testes travam NAO e' "o handler
@@ -145,6 +151,94 @@ func TestNewsletter_FalhaDaPortaE500(t *testing.T) {
 	}
 
 	rec, _ := ipmServe(t, newsletterOps(nr).Follow, http.MethodPost, "/newsletter/follow",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+// ---------------------------------------------------------------------------
+// F233 — GraphQL 405 from the WhatsApp server on unfollow must be 403
+// with code "newsletter_admin_cannot_unfollow", not 500.
+// ---------------------------------------------------------------------------
+
+// newsletterAdminRefusalError builds the *apperr.AppError that
+// errmap.ClassifyNewsletter produces for the measured 405 case.
+//
+// Source: errmap.ClassifyNewsletter, which wraps the GraphQLError chain.
+func newsletterAdminRefusalError() *apperr.AppError {
+	return apperr.New(
+		errmap.CodeNewsletterAdminCannotUnfollow,
+		apperr.CategoryForbidden,
+		"channel admins cannot unfollow their own channel; dismiss yourself as admin first",
+		false,
+		nil,
+	)
+}
+
+// Requirement 1: GraphQL 405 on unfollow → 403 with the named code.
+func TestNewsletter_GraphQL405_Returns403WithCode(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		UnfollowFunc: func(_ context.Context, _ string, _ domain.JID) error {
+			return newsletterAdminRefusalError()
+		},
+	}
+
+	rec, _ := ipmServe(t, newsletterOps(nr).Unfollow, http.MethodPost, "/newsletter/unfollow",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusForbidden)
+
+	var env struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("unmarshal = %v", err)
+	}
+	if env.Error.Code != errmap.CodeNewsletterAdminCannotUnfollow {
+		t.Errorf("error.code = %q, want %q", env.Error.Code, errmap.CodeNewsletterAdminCannotUnfollow)
+	}
+	if env.Error.Message == "" {
+		t.Error("error.message is empty: the client needs to know what to do")
+	}
+}
+
+// Requirement 2: non-405 GraphQL error → still 500.
+func TestNewsletter_GraphQLNon405_Returns500(t *testing.T) {
+	gqlErr := fmt.Errorf("graphql error: %w", types.GraphQLErrors{{
+		Extensions: types.GraphQLErrorExtensions{
+			ErrorCode: 500,
+			Severity:  "CRITICAL",
+		},
+		Message: "Internal Server Error",
+	}})
+
+	nr := &contractsfake.NewsletterReader{
+		UnfollowFunc: func(_ context.Context, _ string, _ domain.JID) error {
+			return gqlErr
+		},
+	}
+
+	rec, _ := ipmServe(t, newsletterOps(nr).Unfollow, http.MethodPost, "/newsletter/unfollow",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+// Requirement 3: non-GraphQL error (network, missing session) → still 500.
+func TestNewsletter_NonGraphQLError_Returns500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		UnfollowFunc: func(_ context.Context, _ string, _ domain.JID) error {
+			return errors.New("dial tcp: connection refused")
+		},
+	}
+
+	rec, _ := ipmServe(t, newsletterOps(nr).Unfollow, http.MethodPost, "/newsletter/unfollow",
 		`{"jid":"`+canalDeTeste+`"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 

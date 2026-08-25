@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	appport "wa-api/pkg/application/contracts"
@@ -107,6 +108,12 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 
 	data, dur, err := uc.dispatch(ctx, userID, req)
 	if err != nil {
+		var appErr *apperr.AppError
+		if errors.As(err, &appErr) {
+			uc.logger.Warn(ctx, "newsletter operation refused", "error", err,
+				"user_id", userID, "op", string(req.Op), "code", appErr.Code)
+			return nil, err
+		}
 		uc.logger.Error(ctx, "newsletter operation failed", "error", err, "user_id", userID, "op", string(req.Op))
 		return nil, apperr.New("newsletter_failed", apperr.CategoryInternal,
 			"newsletter operation failed", true, err)

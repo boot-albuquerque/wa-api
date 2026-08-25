@@ -26065,14 +26065,46 @@ não lacuna nossa.
 **F224** — e aqui é pior, porque `500` acusa o nosso código de um defeito que
 é do chamador.
 
+- **Status (a)**: **corrigido** (2026-08-25). O `GraphQLError` com código 405 é
+  classificado como `CategoryForbidden` (HTTP 403) com código
+  `newsletter_admin_cannot_unfollow` pelo `errmap.ClassifyNewsletter`. A cadeia:
+  adaptador → `ClassifyNewsletter` → use case (passa AppError sem re-embrulhar)
+  → handler → `RespondJSON` → 403. O precedente é `errmap.ClassifyAppState`
+  (F223): tipado (via `errors.As(err, &gqlErr)`) e não por texto, porque o fork
+  expõe `types.GraphQLError` com `Is()` por `ErrorCode`. Apenas o 405 é
+  classificado; qualquer outro código continua 500.
+
+  Testes que o travam:
+  - `errmap.TestClassifyNewsletter_405BecomesA403` — o caso medido: 405 → 403.
+  - `errmap.TestClassifyNewsletter_NonForbiddenStaysUnchanged` — complemento:
+    código diferente de 405 NÃO vira 403.
+  - `errmap.TestClassifyNewsletter_PassthroughCases` — nil e não-GraphQL passam.
+  - `errmap.TestClassifyNewsletter_Text405WithoutGraphQLErrorIsIgnored` — texto
+    com "405" mas sem `GraphQLError` tipado não é classificado.
+  - `errmap.TestClassifyNewsletter_ZeroCodeIsIgnored` — código zero não
+    classifica.
+  - `handlers.TestNewsletter_GraphQL405_Returns403WithCode` — pela rota, com
+    envelope: status 403, error.code = `newsletter_admin_cannot_unfollow`.
+  - `handlers.TestNewsletter_GraphQLNon405_Returns500` — GraphQL com outro
+    código → continua 500.
+  - `handlers.TestNewsletter_NonGraphQLError_Returns500` — erro de rede →
+    continua 500.
+
+  Controlos negativos executados:
+  - Reintroduzir o defeito (use case volta a embrulhar como `CategoryInternal`):
+    `TestNewsletter_GraphQL405_Returns403WithCode` falha com
+    `status: got 500, want 403`.
+  - Alargar o classificador (classificar TODOS os códigos, não só o 405):
+    `TestClassifyNewsletter_NonForbiddenStaysUnchanged` falha com
+    `a non-405 GraphQL error was classified as AppError (forbidden)`.
+
 **(b) As operações em falta** — expor `delete` no mínimo, que é a única saída
 completa do dono. `change owner` e `demote` são o caminho não-destrutivo e
 valem mais, mas custam mais.
 
+- **Status (b)**: **não corrigido** — decisão de produto, noutra worktree.
+
 Relatório completo da via pública guardado em
 `/Users/albuquerque/wa-live-data/analise-405-unfollow.md`, com as fontes.
-
-**Status**: diagnosticado, não corrigido. (a) é mecânico; (b) é decisão de
-produto.
 
 <!-- f-status: aberto -->
