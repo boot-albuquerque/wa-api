@@ -55,12 +55,10 @@ ignorado; o score é lido do `ContextInfo` da mensagem original e incrementado
 em 1, como o Baileys faz. `Chat` é opcional (reservado para disambiguação
 futura). Se a mensagem não existir no histórico, devolve 404.
 
-> **Limitação medida (HOUSEKEEP F227)**: só é possível encaminhar mensagens
-> **recebidas ou sincronizadas**. As mensagens que a própria API envia nunca
-> entram no `message_history` — `SaveOutgoingMessageToHistory` existe mas não
-> tem chamador em produção. Encaminhar por chave uma mensagem que você acabou
-> de enviar por esta API devolve `404 message_not_found`. É defeito anterior
-> ao CAP-55, não dele.
+> **Limitação anterior removida (F227, corrigida 2026-08-25)**: mensagens
+> enviadas pela API agora são persistidas no `message_history` com `datajson`
+> completo. É possível encaminhar por chave uma mensagem que a API acabou de
+> enviar — desde que o utilizador tenha `history > 0` na configuração.
 
 **`/chat/send/pollvote`** — notas (F228):
 
@@ -68,8 +66,8 @@ futura). Se a mensagem não existir no histórico, devolve 404.
   servidor** para a forma de identidade correcta (PN ou LID) antes de encriptar
   o voto. O cliente pode enviar qualquer das duas formas; a resolução é:
   1. Histórico (`message_history.sender_jid`) — forma do wire, autoritativa.
-  2. Mapeamento PN→LID via store — caminho primário para enquetes criadas pela
-     API (ausentes do histórico, F227). **Só converte PN→LID, nunca LID→PN.**
+  2. Mapeamento PN→LID via store — fallback quando o histórico não tem a
+     mensagem. **Só converte PN→LID, nunca LID→PN.**
   3. Payload tal qual — com warning se for PN (pode falhar MAC).
 - O `200` significa **despacho** (o voto foi enviado ao servidor do WhatsApp),
   **não confirmação de contagem**. Não há como distinguir despacho de

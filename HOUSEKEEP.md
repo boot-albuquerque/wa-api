@@ -25490,10 +25490,55 @@ estado atual, em que existe teste verde para funcionalidade ausente.
 Se for ligada, o teste que a trava tem de ser pela ROTA, verificando que a
 linha aparece na tabela — não pela função, que é o que já se faz e não mordeu.
 
-**Status**: não corrigido — pré-existente, fora do escopo do CAP-55, e a regra
-proíbe corrigir de graça sem perguntar.
+**Correção aplicada (2026-08-25)**: `OutgoingRecorder` em
+`pkg/infra/history/outgoing.go` — chamado pelo `ChatMessengerAdapter` após
+cada `SendMessage` bem-sucedido, em todos os 12 métodos de envio (text, image,
+document, audio, video, sticker, location, contact, poll, buttons, list,
+carousel). Diferenças em relação ao antigo `SaveOutgoingMessageToHistory`:
 
-<!-- f-status: aberto -->
+1. **sender_jid**: o JID real do utilizador (LID preferencial, PN como
+   fallback), não `"me"`. É o que `GetPollSenderJID` (F228) precisa.
+2. **datajson**: envelope `events.Message` completo (Info + Message proto +
+   Is\* flags), não string vazia. É o que `SendForwardedMessage` (CAP-55)
+   precisa.
+3. **wiring**: ligado via `WithHistoryRecorder` no `wiring_handlers.go`,
+   padrão idêntico ao de `WithPollOptions` e `WithPollSenderLookup`.
+
+**Inventário de detentores do recurso limitado (historyLimit)**:
+O `OutgoingRecorder.Record` é síncrono e bloqueante. Detentores:
+- `db.SaveMessageToHistory`: 1 INSERT com ON CONFLICT DO UPDATE — O(1).
+- `db.TrimMessageHistory`: 1 DELETE (oldest beyond limit) + 1 DELETE em
+  `wanoise_message_secrets` — O(n) no número de mensagens eliminadas.
+- Pior caso: `historyLimit=1` com chat ativo. Cada envio faz 1 INSERT + 1
+  DELETE. O trim deleta no máximo `count - limit` linhas. Com limit=1 e 1000
+  mensagens acumuladas, o primeiro envio deleta 999 linhas — O(n) pontual,
+  depois O(1) por envio. Não é detentor longo — não ocupa slot limitado.
+- A chamada é síncrona no handler de envio mas NÃO bloqueia o caller em
+  caso de falha — falha é logada e ignorada.
+
+**Testes que travam esta correção**
+(`pkg/infra/history/outgoing_test.go`):
+
+| # | Teste | O que trava |
+|---|---|---|
+| T1 | `TestOutgoingRecorder_PersistsUsableDataJSON` | sender\_jid é wire form, datajson deserializa em events.Message com proto |
+| T2 | `TestOutgoingRecorder_ForwardRoundTrip` | datajson produzido sobrevive ao mesmo Unmarshal de forward.go |
+| T2b | `TestOutgoingRecorder_PollRoundTrip` | proto poll + sender\_jid para F228 |
+| T3 | `TestOutgoingRecorder_LimitZeroDoesNotSave` | limit=0 não persiste |
+| T3b | `TestOutgoingRecorder_LimitNegativeDoesNotSave` | limit negativo não persiste |
+| T4 | `TestOutgoingRecorder_TrimKeepsLimitMessages` | trim mantém só limit mensagens |
+| T5 | `TestOutgoingRecorder_SaveFailureDoesNotPanic` | falha de BD não propaga |
+| T5b | `TestOutgoingRecorder_TrimFailureDoesNotPanic` | falha de trim não impede save |
+| T6 | `TestOutgoingRecorder_NegativeControl_SenderNotMe` | sender\_jid ≠ "me" |
+| T6b | `TestOutgoingRecorder_NegativeControl_DataJSONNotEmpty` | datajson ≠ "" |
+| T6c | `TestOutgoingRecorder_NegativeControl_DefectDetected` | defeito injetado ("me") é detectado |
+| T6d | `TestOutgoingRecorder_NegativeControl_EmptyDataJSONDetected` | defeito injetado (datajson vazio) é detectado |
+
+**Status**: **corrigido** nesta sessão (2026-08-25). A função antiga
+`SaveOutgoingMessageToHistory` (`sync.go:106`) permanece como código morto —
+não foi removida para não misturar remoção com adição no mesmo diff.
+
+<!-- f-status: corrigido -->
 
 ## F228 — `/chat/send/pollvote` devolve 200 mas o voto NÃO conta: falha de autenticação na desencriptação
 
@@ -25539,7 +25584,8 @@ derivada difere e o MAC falha.
 2. **PN→LID mapping** — `Store().GetAltJID(payloadSender)`, DIRECIONAL: só
    converte PN→LID, nunca LID→PN. Se o payload já é LID, mantém (medido
    2026-08-25: `Sender='90937376170214@lid'` faz o voto contar). Caminho
-   primário para enquetes CRIADAS pela API (F227: ausentes do histórico).
+   primário para enquetes CRIADAS pela API (F227: ausentes do histórico —
+   **corrigido 2026-08-25**, agora o caminho 1 também funciona para estas).
 3. **Payload as-is** — quando não há resolução, mantém e loga warning.
 
 Wiring: `StoredMessageRepository.GetPollSenderJID` (`pkg/infra/db/stored_message_repository.go`)

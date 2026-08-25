@@ -46,11 +46,18 @@ type PollOptionRecorder interface {
 //
 // This is the FIRST source of truth for resolving the poll creator's identity
 // form in SendPollVote (F228). When the poll was RECEIVED, the wire sender is
-// exactly what EncryptPollVote needs. When the poll was SENT by this API, the
-// message is absent from history (F227) and this returns an error — the
-// adapter then falls back to the LID mapping store.
+// exactly what EncryptPollVote needs. When the poll was SENT by this API and
+// persisted to history (F227), this also returns the correct JID form.
 type PollSenderLookup interface {
 	GetPollSenderJID(ctx context.Context, userID, messageID string) (string, error)
+}
+
+// OutgoingMessageRecorder persists a message sent by the API into
+// message_history (F227). Called AFTER a successful send — a persistence
+// failure must never propagate to the caller. The adapter provides the proto,
+// metadata and the user's own JID (for sender_jid).
+type OutgoingMessageRecorder interface {
+	Record(userID, chatJID, senderJID, messageID, messageType, textContent string, msg *waE2E.Message, ts time.Time)
 }
 
 // ChatMessengerAdapter implementa appport.ChatMessenger.
@@ -59,6 +66,7 @@ type ChatMessengerAdapter struct {
 
 	polls       PollOptionRecorder
 	pollSenders PollSenderLookup
+	history     OutgoingMessageRecorder
 }
 
 // NewChatMessengerAdapter cria o adapter com a função de lookup.
@@ -86,6 +94,42 @@ func (a *ChatMessengerAdapter) WithPollOptions(rec PollOptionRecorder) *ChatMess
 func (a *ChatMessengerAdapter) WithPollSenderLookup(ps PollSenderLookup) *ChatMessengerAdapter {
 	a.pollSenders = ps
 	return a
+}
+
+// WithHistoryRecorder enables persistence of outgoing messages (F227).
+// Without it, messages sent by the API are not saved to history — forward by
+// key (CAP-55) returns 404 and poll sender resolution (F228) falls back to
+// the LID mapping store.
+func (a *ChatMessengerAdapter) WithHistoryRecorder(rec OutgoingMessageRecorder) *ChatMessengerAdapter {
+	a.history = rec
+	return a
+}
+
+// recordOutgoing persists a sent message to history if the recorder is wired.
+// Failures are logged inside the recorder, never propagated.
+func (a *ChatMessengerAdapter) recordOutgoing(client waclient.Client, txtID, chatJID, messageID, messageType, textContent string, msg *waE2E.Message, ts time.Time) {
+	if a.history == nil {
+		return
+	}
+	senderJID := ownJIDString(client)
+	a.history.Record(txtID, chatJID, senderJID, messageID, messageType, textContent, msg, ts)
+}
+
+// ownJIDString returns the user's own JID as a string suitable for sender_jid.
+// Prefers the LID form (which is what the wire uses for outgoing messages)
+// and falls back to the PN form.
+func ownJIDString(client waclient.Client) string {
+	st := client.Store()
+	if st == nil {
+		return ""
+	}
+	if !st.LID.IsEmpty() {
+		return st.LID.String()
+	}
+	if st.ID != nil {
+		return st.ID.ToNonAD().String()
+	}
+	return ""
 }
 
 // MarkRead confirma a leitura das mensagens ids.
@@ -259,6 +303,7 @@ func (a *ChatMessengerAdapter) SendText(ctx context.Context, txtID string, targe
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "text", text, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -309,6 +354,7 @@ func (a *ChatMessengerAdapter) SendImage(ctx context.Context, txtID string, targ
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "image", payload.Caption, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -359,6 +405,7 @@ func (a *ChatMessengerAdapter) SendDocument(ctx context.Context, txtID string, t
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "document", payload.Caption, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -411,6 +458,7 @@ func (a *ChatMessengerAdapter) SendAudio(ctx context.Context, txtID string, targ
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "audio", "", msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -463,6 +511,7 @@ func (a *ChatMessengerAdapter) SendVideo(ctx context.Context, txtID string, targ
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "video", payload.Caption, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -518,6 +567,7 @@ func (a *ChatMessengerAdapter) SendSticker(ctx context.Context, txtID string, ta
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "sticker", "", msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -559,6 +609,7 @@ func (a *ChatMessengerAdapter) SendLocation(ctx context.Context, txtID string, t
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "location", payload.Name, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -597,6 +648,7 @@ func (a *ChatMessengerAdapter) SendContact(ctx context.Context, txtID string, ta
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "contact", payload.Name, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 
@@ -656,6 +708,7 @@ func (a *ChatMessengerAdapter) SendPoll(ctx context.Context, txtID string, targe
 	}
 
 	a.polls.SetPollOptions(txtID, string(resp.ID), payload.Options)
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "poll", payload.Name, msg, resp.Timestamp)
 
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
@@ -904,6 +957,7 @@ func (a *ChatMessengerAdapter) SendTemplate(ctx context.Context, txtID string, t
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "template", payload.Content, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
 

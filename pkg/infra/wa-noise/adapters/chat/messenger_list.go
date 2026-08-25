@@ -132,5 +132,6 @@ func (a *ChatMessengerAdapter) SendList(ctx context.Context, txtID string, targe
 	if err != nil {
 		return domain.MessageSendResult{}, err
 	}
+	a.recordOutgoing(client, txtID, recipient.String(), string(resp.ID), "list", payload.Body, msg, resp.Timestamp)
 	return domain.MessageSendResult{Timestamp: resp.Timestamp, ID: string(resp.ID)}, nil
 }
