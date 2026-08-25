@@ -25580,6 +25580,54 @@ confirmação de contagem.**
 --- PASS: TestSendPollVote_ControlNegative_WithoutResolution_PNPassedThrough (0.00s)
 ```
 
+## Verificação em campo — critério VISUAL, 2026-08-25
+
+Validada pela interface do `web.whatsapp.com`, conversa com `+55 16 98181-8244`
+(`FilaRápida`). Duas enquetes, uma por forma de JID:
+
+| enquete | `Sender` enviado | opção votada | mostrado na interface |
+|---|---|---|---|
+| `F228 fix PN` | `554192421234@s.whatsapp.net` (**PN**) | `Sim` | **Sim: 1** |
+| `F228 fix LID` | `90937376170214@lid` (**LID**) | `Não` | **Não: 1** |
+
+Zero `DecryptPollVote failed` nas duas. O log regista a conversão só no caso PN:
+
+```
+INF poll vote sender resolved from LID mapping (PN→LID)
+    payload_sender=554192421234@s.whatsapp.net
+    resolved_sender=90937376170214@lid
+```
+
+A correspondência é EXATA — a opção votada é a que aparece contada em cada
+enquete, não apenas "algum voto registou".
+
+## A regressão que esta correção QUASE introduziu
+
+O primeiro desenho chamava `st.GetAltJID(payloadSender)` **sem guarda de
+direção** e devolvia o resultado incondicionalmente. Isso não força LID: força
+A OUTRA FORMA.
+
+| payload | resultado | efeito |
+|---|---|---|
+| PN | LID | corrige o caso partido |
+| **LID** | **PN** | **quebra o caso já medido a funcionar** |
+
+**O teste de campo especificado no packet usava PN** — teria passado verde por
+cima da regressão, e a suíte também, porque ambos só exercitavam a perna onde o
+mecanismo ajuda. Regra 2 do `CLAUDE.md` na prática: a pergunta que fez o cenário
+aparecer foi *qual entrada faz esta proteção virar o problema?*, e a resposta
+era o payload que já vinha correto.
+
+Por isso a verificação de campo passou a testar AS DUAS formas, e não só a que
+estava partida.
+
+**Nota de dependência**: o caminho 1 (ler o `Info.Sender` do histórico) não é
+exercitado por enquete criada pela própria API, porque a F227 impede que ela
+seja guardada. O caminho que produção usa hoje é o 2 — foi por isso que exigi
+teste próprio para ele.
+
+**Continua verdade**: o `200` significa DESPACHO, não contabilização.
+
 **Status**: corrigido — F228, 2026-08-25.
 
 <!-- f-status: corrigido -->
