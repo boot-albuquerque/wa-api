@@ -59,6 +59,14 @@ futura). Se a mensagem não existir no histórico, devolve 404.
 > enviadas pela API agora são persistidas no `message_history` com `datajson`
 > completo. É possível encaminhar por chave uma mensagem que a API acabou de
 > enviar — desde que o utilizador tenha `history > 0` na configuração.
+>
+> **`history` NÃO vem ligado por omissão.** Ligue com
+> `POST /session/history {"history": 100}` antes de contar com isto.
+>
+> Cuidado ao diagnosticar (F230): a tabela pode ter dezenas de milhares de
+> linhas vindas da SINCRONIZAÇÃO mesmo com `history = 0`, porque esse caminho
+> não aplica a mesma trava. **Histórico cheio não significa histórico ligado** —
+> foi essa a conclusão errada que atrasou o diagnóstico da F227.
 
 **`/chat/send/pollvote`** — notas (F228):
 
