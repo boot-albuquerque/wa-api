@@ -24828,4 +24828,57 @@ Próximo passo, quando for a vez: medir se um `FetchAppState` forçado converge,
 e se o hash divergente vem de patch que NÓS escrevemos ou de estado
 pré-existente. Não implementar reconciliação nova antes de saber isso.
 
+
+### Parte (1) — MEDIDA 2026-08-24. O `fullSync` NÃO converge.
+
+Sonda descartável: expus `FetchAppState(WAPatchRegularHigh, ...)` pela rota
+`/user/contacts/sync` (que já usa o mesmo método para `critical_unblock_low`),
+nos modos `full` e `incremental`, nas duas sessões. Revertida depois de medir.
+
+| sessão | versão local | modo | resultado |
+|---|---|---|---|
+| lucas | 301 | `fullSync=true` | `failed to verify patch v302: mismatching LTHash` |
+| lucas | 301 | `fullSync=false` | `failed to verify patch v302: mismatching LTHash` |
+| filarapida | 63 | `fullSync=true` | `failed to verify patch v64: mismatching LTHash` |
+
+**Quatro conclusões, e a primeira derruba a hipótese óbvia:**
+
+1. **`fullSync` não resolve.** Com `fullSync=true` o estado local é descartado
+   e tudo é re-obtido do servidor — e falha na mesma, no patch SEGUINTE à
+   versão local. Portanto **não é a nossa cópia que está corrompida**.
+
+2. **A chave de app-state está correta.** O erro vem de
+   `validateSnapshotMAC` (`appstate/decode.go:19`) DEPOIS de
+   `getAppStateKey` ter tido sucesso — não há "failed to get key" em lado
+   nenhum do log, e há 155 chaves sincronizadas. O que falha é o
+   `hmac.Equal` entre o MAC que calculamos e o que o servidor enviou.
+
+3. **Falha sempre no patch v(local+1).** 301→302 numa conta com histórico,
+   63→64 numa conta nova pareada há minutos. **A idade da conta não explica**;
+   é o PRIMEIRO patch por aplicar que não verifica, seja qual for o número.
+
+4. **Nada foi corrompido.** A versão local continua 301 e 63 depois das três
+   sondas — a falha acontece antes da gravação. E o `regular_low` subiu 182→183
+   com o nosso `pin`, o que prova que o caminho de escrita funciona quando o
+   MAC verifica.
+
+**O que isto elimina**: cópia local corrompida, chave em falta, conta com
+histórico grande, e "basta forçar um full sync".
+
+**O que resta como hipótese, NÃO medido**: o cálculo do `generateSnapshotMAC`
+diverge do que o servidor espera para este tipo de patch — na ordenação das
+mutações, no LTHash acumulado, ou na composição do MAC. Isso é defeito do
+FORK, não da nossa camada, e cai em `internal/wa-noise/protocol/appstate/`.
+
+**Próximo passo, quando for a vez**: comparar a implementação de
+`generateSnapshotMAC` e do LTHash com a referência (Baileys tem o equivalente
+em `WAUSync`/`app-state`), e verificar se o `regular_high` tem alguma
+particularidade — é o único tipo que falha, e o `regular_low` funciona com o
+mesmo código.
+
+**Essa assimetria é a pista mais forte que temos e ainda não foi explorada.**
+
+**Status**: não corrigido. A parte (2) (classificação 409) está fechada e
+verificada; a parte (1) está MEDIDA mas não resolvida, e a correção é no fork.
+
 <!-- f-status: aberto -->
