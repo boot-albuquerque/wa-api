@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
@@ -277,17 +276,7 @@ func (evh *UserEventHandler) processMessageMedia(evt *events.Message, s3Config m
 }
 
 func (evh *UserEventHandler) saveMessageHistory(evt *events.Message, st *eventState) {
-	// Get user's history setting from cache
-	var historyLimit int
-	userinfo, found := appCtx.UserInfoCache.Get(evh.UserID)
-	if found {
-		historyStr := userinfo.(Values).Get("History")
-		historyLimit, _ = strconv.Atoi(historyStr)
-	} else {
-		log.Warn().Str("userID", evh.UserID).Msg("User info not found in cache, skipping history")
-		historyLimit = 0
-	}
-
+	historyLimit := historyLimitForUser(evh.UserID)
 	if historyLimit <= 0 {
 		return
 	}

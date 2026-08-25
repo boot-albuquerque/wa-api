@@ -62,11 +62,9 @@ futura). Se a mensagem não existir no histórico, devolve 404.
 >
 > **`history` NÃO vem ligado por omissão.** Ligue com
 > `POST /session/history {"history": 100}` antes de contar com isto.
->
-> Cuidado ao diagnosticar (F230): a tabela pode ter dezenas de milhares de
-> linhas vindas da SINCRONIZAÇÃO mesmo com `history = 0`, porque esse caminho
-> não aplica a mesma trava. **Histórico cheio não significa histórico ligado** —
-> foi essa a conclusão errada que atrasou o diagnóstico da F227.
+> Com `history = 0` (o valor por omissão), **nenhum** dos dois caminhos —
+> tempo real e sincronização — grava em `message_history` (F230, corrigida
+> 2026-08-25). Instalações novas não acumulam histórico até a chamada acima.
 
 **`/chat/send/pollvote`** — notas (F228):
 

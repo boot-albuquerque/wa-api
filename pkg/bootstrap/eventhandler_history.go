@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
@@ -11,6 +12,18 @@ import (
 
 	"github.com/rs/zerolog/log"
 )
+
+// historyLimitForUser reads the history limit from the user-info cache.
+// Returns 0 when the user is absent from the cache or has no limit set,
+// which callers treat as "history disabled".
+func historyLimitForUser(userID string) int {
+	info, found := appCtx.UserInfoCache.Get(userID)
+	if !found {
+		return 0
+	}
+	limit, _ := strconv.Atoi(info.(Values).Get("History"))
+	return limit
+}
 
 // Eventos de sincronização de histórico: o blob de conversas antigas que o
 // telefone envia depois do pareamento, e os avisos de fim de sincronização
@@ -31,6 +44,13 @@ func (evh *UserEventHandler) handleHistorySync(evt *events.HistorySync, st *even
 // `go evh.persistHistorySync(...)` — e a única coisa que a closure
 // capturava além de evh, evt.Data.Conversations, virou parâmetro.
 func (evh *UserEventHandler) persistHistorySync(conversations []*waHistorySync.Conversation) {
+	if historyLimitForUser(evh.UserID) <= 0 {
+		log.Info().
+			Str("userID", evh.UserID).
+			Msg("history disabled, skipping history sync persistence")
+		return
+	}
+
 	// Get the account owner's JID for messages sent by the instance
 	accountOwnerJID := ""
 	if evh.WAClient.Store != nil && evh.WAClient.Store.ID != nil {

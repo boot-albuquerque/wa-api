@@ -25929,9 +25929,39 @@ código conclui que "a única saída é não haver duas".
 Enquanto não se decidir, o `ENDPOINTS.md` tem de dizer que o forward por chave
 de mensagem PRÓPRIA exige `POST /session/history` com valor > 0.
 
-**Status**: não corrigido — precisa de decisão sobre a semântica da bandeira.
+**Correção aplicada (2026-08-25)**:
 
-<!-- f-status: aberto -->
+A leitura do limite de histórico foi extraída para `historyLimitForUser`
+(`eventhandler_history.go`), usada pelos dois caminhos. `persistHistorySync`
+passa a verificar o limite antes de iterar conversas — `history <= 0` retorna
+imediatamente, sem gravar linha nenhuma.
+
+**Consequência registada**: com `history = 0` por omissão, NADA é guardado em
+`message_history` — nem tempo real, nem sincronização. Isto é opt-in coerente:
+instalações novas não acumulam histórico até chamar
+`POST /session/history {"history": N}` com N > 0. O forward por chave de
+mensagem própria (CAP-55) e o caminho 1 da F228 continuam inertes enquanto
+`history` não for ligado — já documentado, agora é a regra e não o acidente.
+
+**Verificação sobre como forçar sincronização sem re-parear**:
+`POST /user/history/sync` envia um pedido de sincronização ao dispositivo
+(`RequestHistorySync`). Payload: `{"count": 100}` (número de mensagens a pedir)
+com parâmetros opcionais de âncora. Verificação em campo: a cargo do utilizador.
+
+**Testes que travam a correção**
+(`pkg/bootstrap/eventhandler_history_flag_test.go`):
+
+- `TestHistorySync_FlagZero_DoesNotSave` — history = 0, sync NÃO grava.
+  Controlo negativo: remover a guarda de `persistHistorySync` faz o teste
+  falhar com `history = 0 but sync saved 1 rows; want 0 (F230)`.
+- `TestHistorySync_FlagPositive_Saves` — history = 100, sync grava como antes.
+- `TestRealTime_FlagZero_DoesNotSave` — history = 0, tempo real NÃO grava
+  (guarda de regressão; o comportamento já existia).
+- `TestRealTime_FlagPositive_Saves` — history = 50, tempo real grava.
+
+- **Status**: **corrigido**
+
+<!-- f-status: corrigido -->
 
 ## F231 — `duration_seconds` reporta NANOSSEGUNDOS: erra por mil milhões de vezes
 
