@@ -2279,6 +2279,7 @@ pkg/application/contracts/contractsfake.DeleteUserProvider.GetS3Enabled	EXCLUDED
 pkg/application/contracts/contractsfake.DeleteUserProvider.GetUserInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.FailSession	EXCLUDED	X5
 pkg/application/contracts/contractsfake.FailSession.func1	EXCLUDED	X6
+pkg/application/contracts/contractsfake.ForwardedMessageSender.SendForwardedMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupDirectory.GetGroupInfo	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupDirectory.GetGroupInfoFromLink	EXCLUDED	X5
 pkg/application/contracts/contractsfake.GroupDirectory.GetGroupInviteLink	EXCLUDED	X5
@@ -2411,6 +2412,7 @@ pkg/application/contracts/contractsfake.StickerProcessor.ProcessSticker	EXCLUDED
 pkg/application/contracts/contractsfake.StoragePort.GetS3Config	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.ProcessMedia	EXCLUDED	X5
 pkg/application/contracts/contractsfake.StoragePort.UploadFile	EXCLUDED	X5
+pkg/application/contracts/contractsfake.StoredMessageReader.GetStoredMessage	EXCLUDED	X5
 pkg/application/contracts/contractsfake.TextMessenger.SendText	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserInfoHmacCache.SetHmacKey	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserInfoRepublisher.RepublishUser	EXCLUDED	X5
@@ -2553,7 +2555,9 @@ pkg/application/usecase/message.SendContactUseCase.Execute	ELIGIBLE	uncovered:L2
 pkg/application/usecase/message.SendDocumentUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_document.go:76);uncovered:L2(S-ret,send_document.go:79);uncovered:L2(S-ret,send_document.go:82);uncovered:L2(S-ret,send_document.go:137);uncovered:L2(S-ret,send_document.go:142)
 pkg/application/usecase/message.SendDocumentUseCase.decodeDataURIDocument	ELIGIBLE	covered
 pkg/application/usecase/message.SendEditMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_edit_message.go:45);uncovered:L2(S-ret,send_edit_message.go:48);uncovered:L2(S-ret,send_edit_message.go:63)
-pkg/application/usecase/message.SendForwardUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_forward.go:31);uncovered:L2(S-ret,send_forward.go:34)
+pkg/application/usecase/message.SendForwardUseCase.Execute	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,send_forward.go:48)
+pkg/application/usecase/message.SendForwardUseCase.forwardByContent	ELIGIBLE	uncovered:L2(S-ret,send_forward.go:60)
+pkg/application/usecase/message.SendForwardUseCase.forwardByKey	ELIGIBLE	covered
 pkg/application/usecase/message.SendImageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_image.go:74);uncovered:L2(S-ret,send_image.go:77);uncovered:L2(S-ret,send_image.go:126);uncovered:L2(S-ret,send_image.go:131);uncovered:L2(S-ret,send_image.go:134)
 pkg/application/usecase/message.SendImageUseCase.decodeDataURIImage	ELIGIBLE	covered
 pkg/application/usecase/message.SendListUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_list.go:81);uncovered:L2(S-ret,send_list.go:84);uncovered:L2(S-ret,send_list.go:87);uncovered:L2(S-ret,send_list.go:108)
@@ -2845,7 +2849,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:478)
+pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:480)
 pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -3101,6 +3105,7 @@ pkg/infra/db.NewLabelRepository	EXCLUDED	X1
 pkg/infra/db.NewS3ConfigRepository	EXCLUDED	X1
 pkg/infra/db.NewSessionConfigRepository	EXCLUDED	X1
 pkg/infra/db.NewSessionLeaseRepository	EXCLUDED	X1
+pkg/infra/db.NewStoredMessageRepository	EXCLUDED	X1
 pkg/infra/db.NewUserRepository	EXCLUDED	X1
 pkg/infra/db.NewWebhookOutboxRepository	EXCLUDED	X1
 pkg/infra/db.S3ConfigRepository.DeleteS3Config	ELIGIBLE	covered
@@ -3116,6 +3121,7 @@ pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-c
 pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:131)
 pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:115)
 pkg/infra/db.SetDisconnectedState	ELIGIBLE	covered
+pkg/infra/db.StoredMessageRepository.GetStoredMessage	ELIGIBLE	uncovered:L2(S-ret,stored_message_repository.go:59)
 pkg/infra/db.TrimMessageHistory	ELIGIBLE	covered
 pkg/infra/db.UserRepository.CreateUser	ELIGIBLE	covered
 pkg/infra/db.UserRepository.DeleteUser	ELIGIBLE	covered
@@ -3425,12 +3431,16 @@ pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendText	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendVideo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.WithPollOptions	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.buildCarouselCard	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.ForwardedMessageAdapter.SendForwardedMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewChatMessengerAdapter	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.NewForwardedMessageAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.applyForwardContext	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.bizNativeFlowNodes	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.buildContextInfo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.downloadableFor	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/chat.getOrCreateContextInfo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listBizNodes	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listRows	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.listSections	EXCLUDED	X5

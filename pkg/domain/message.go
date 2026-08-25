@@ -621,15 +621,19 @@ type ForwardContext struct {
 
 // SendForwardRequest represents the HTTP payload for POST /chat/send/forward.
 //
-// Design choice (a): by content, stateless. The caller provides the text body
-// and the API marks it as forwarded. The alternative (b) — looking up the
-// original message from message_history — would depend on retention and fail
-// silently when the history was pruned. This is the same reasoning as CAP-48
-// (pollvote): the caller always knows what it passed, and errors are always
-// about what it passed.
+// Two forms:
 //
-// Media forwarding is out of scope for CAP-49. Start with text; media
-// forwarding gets its own CAP if the plumbing cost is non-trivial.
+//	(a) By content (CAP-49): Phone + Body are required, the API creates a new
+//	    text message marked as forwarded. ForwardingScore is caller-supplied.
+//
+//	(b) By key (CAP-55): Phone + MessageID + Chat are required. The API looks
+//	    up the original message from message_history and re-sends it with
+//	    forwarding context applied — including media, without re-upload.
+//	    ForwardingScore is DERIVED from the stored message (incremented by 1)
+//	    and any caller-supplied value is IGNORED.
+//
+// When MessageID is present, Body is ignored and ForwardingScore is ignored.
+// When MessageID is absent, Body is required (backward compat with CAP-49).
 type SendForwardRequest struct {
 	Phone           string        `json:"Phone"`
 	Body            string        `json:"Body"`
@@ -637,6 +641,19 @@ type SendForwardRequest struct {
 	ID              string        `json:"Id,omitempty"`
 	ReplyTo         *ReplyContext `json:"ReplyTo,omitempty"`
 	MentionedJID    []string      `json:"MentionedJid,omitempty"`
+	MessageID       string        `json:"MessageID,omitempty"`
+	Chat            string        `json:"Chat,omitempty"`
+}
+
+// StoredMessageData is the application-boundary representation of a message
+// retrieved from message_history for forwarding (CAP-55). It carries the raw
+// datajson blob (which the adapter deserializes into the wire proto) and the
+// chat where the message was originally received. The forwarding score is
+// extracted by the adapter at send time, not here — it requires proto
+// deserialization that belongs in the wa-noise layer.
+type StoredMessageData struct {
+	DataJSON string
+	ChatJID  string
 }
 
 // SendForwardResult represents the response for POST /chat/send/forward.

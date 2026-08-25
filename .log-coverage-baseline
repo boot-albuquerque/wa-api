@@ -1473,11 +1473,22 @@ min_func_coverage=593
 # para mover o numero, pendurar uma isencao, ou reconhecer que a fusao nao e'
 # operacao independente. Escolhi a terceira: baixar o piso teria sido tratar o
 # gate como obstaculo em vez de o ouvir.
-min_errpath_coverage=780
+# CAP-55 (2026-08-25): errpath SOBE 780->781. O use case SendForwardUseCase
+# foi partido em forwardByContent (CAP-49 existente) e forwardByKey (CAP-55
+# novo). forwardByKey nasce COBERTA — loga em Warn a falha de sessao, de
+# resolucao de JID e de lookup de mensagem, e em Error a falha de envio, com
+# Info no sucesso. forwardByContent preserva todos os logs existentes de
+# Execute. Execute virou dispatcher puro (uncovered:L1, sem decisao) — quem
+# decide loga.
+# StoredMessageRepository.GetStoredMessage (pkg/infra/db) nasce ELIGIBLE e
+# uncovered:L2 (S-ret) — adapter delegante, padrao aceito neste repo.
+# min_eligible SOBE 955->958 (+3: forwardByContent, forwardByKey,
+# StoredMessageRepository.GetStoredMessage). func_coverage fica em 593.
+min_errpath_coverage=781
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
-min_eligible=955
+min_eligible=958
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

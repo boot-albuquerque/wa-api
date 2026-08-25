@@ -180,6 +180,12 @@ var inventarioFase3 = map[string]portStatus{
 
 	"MessageStarrer": {motivo: "PENDENTE. Port NOVO, chegou com a CAP-54 (2026-08-24): favoritar mensagem por app-state. Herda o veredito do ChatMuter acima e pela mesma razao — e' app-state, nao mensagem, e a emissao pela pagina nao esta medida."},
 
+	"ForwardedMessageSender": {motivo: "PENDENTE. Port NOVO, chegou com a CAP-55 (2026-08-25): " +
+		"reenvio real por chave de mensagem (datajson → proto → wire). A implementação wa-noise " +
+		"desserializa o proto e reenvia pelo socket — a headless precisaria de caminho pela SPA, " +
+		"e.g. encontrar a mensagem no DOM e acionar o forward nativo da página. Não está medido " +
+		"se a página expõe essa ação de forma programática."},
+
 	"DefaultDisappearingTimerSetter": {motivo: "PENDENTE. Port NOVO, chegou com a CAP-50 (2026-08-24): o temporizador PADRÃO de mensagens temporárias da conta, irmão do por-conversa. Herda o veredito do `GroupEphemeralSetter` acima e pela mesma evidência: a varredura de bundles de 2026-08-23 achou `WAWebChangeEphemeralDurationChatAction` e `WAWebEphemeralIsDurationAllowed`, logo o build TEM os módulos da família. O que falta é o mesmo passo: carregar o módulo com sessão pareada e medir a FORMA — o padrão de conta pode não usar a mesma ação que o de conversa, e nome em bundle NÃO é prova de módulo carregável. Classificar como recusa aqui seria inventar uma ausência que ninguém mediu."},
 
 	"PrivacyManager": {motivo: "PENDENTE, e agora MEDIDO: o build TEM os módulos, o que " +

@@ -15,6 +15,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 const sendForwardSentinelToken = "send-forward-sentinel-cause-a9c2e4"
@@ -24,7 +25,13 @@ const sendForwardBody = `{"Phone":"5511999999999","Body":"forwarded text"}`
 var errSendForwardSentinel = errors.New(sendForwardSentinelToken)
 
 func sendForwardRouter(tm *contractsfake.TextMessenger, jr *contractsfake.JIDResolver) http.Handler {
-	uc := message.NewSendForwardUseCase(tm, jr, silentLogger{})
+	uc := message.NewSendForwardUseCase(
+		tm,
+		&contractsfake.ForwardedMessageSender{},
+		&contractsfake.StoredMessageReader{},
+		jr,
+		silentLogger{},
+	)
 	h := NewSendForwardHandler(uc)
 
 	r := mux.NewRouter()
@@ -275,5 +282,133 @@ func TestSendForward_CustomForwardingScore(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// --- CAP-55: Forward by key, via registered route ---
+
+func sendForwardByKeyRouter(fwd *contractsfake.ForwardedMessageSender, smr *contractsfake.StoredMessageReader, jr *contractsfake.JIDResolver) http.Handler {
+	uc := message.NewSendForwardUseCase(
+		&contractsfake.TextMessenger{},
+		fwd,
+		smr,
+		jr,
+		silentLogger{},
+	)
+	h := NewSendForwardHandler(uc)
+
+	r := mux.NewRouter()
+	r.Handle("/chat/send/forward", h).Methods(http.MethodPost)
+	return r
+}
+
+func sendForwardByKeyServe(t *testing.T, fwd *contractsfake.ForwardedMessageSender, smr *contractsfake.StoredMessageReader, jr *contractsfake.JIDResolver, body string, mut func(*http.Request) *http.Request) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/chat/send/forward", strings.NewReader(body))
+	sendForwardByKeyRouter(fwd, smr, jr).ServeHTTP(rec, mut(req))
+	return rec
+}
+
+func TestSendForwardByKey_Success_ViaRegisteredRoute(t *testing.T) {
+	sentAt := int64(1756137600)
+	fakeJSON := `{"Message":{"extendedTextMessage":{"text":"hello"}}}`
+
+	fwd := &contractsfake.ForwardedMessageSender{
+		SendForwardedMessageFunc: func(_ context.Context, _ string, target domain.JID, gotJSON string, _ string) (domain.MessageSendResult, error) {
+			if target != "5511999999999@s.whatsapp.net" {
+				t.Errorf("target: got %q", target)
+			}
+			if gotJSON != fakeJSON {
+				t.Error("dataJSON mismatch")
+			}
+			return domain.MessageSendResult{ID: "wire-fwd-bykey", Timestamp: time.Unix(sentAt, 0)}, nil
+		},
+	}
+	smr := &contractsfake.StoredMessageReader{
+		GetStoredMessageFunc: func(_ context.Context, _, messageID string) (*domain.StoredMessageData, error) {
+			if messageID != "MSG_ABC" {
+				t.Errorf("messageID: got %q, want MSG_ABC", messageID)
+			}
+			return &domain.StoredMessageData{DataJSON: fakeJSON, ChatJID: "chat@g.us"}, nil
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+
+	body := `{"Phone":"5511999999999","MessageID":"MSG_ABC"}`
+	rec := sendForwardByKeyServe(t, fwd, smr, jr, body, msgAuthed)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	env := decodeEnvelope(t, rec)
+	var got sendForwardResultBody
+	if err := json.Unmarshal(env.Data, &got); err != nil {
+		t.Fatalf("decode data: %v", err)
+	}
+	if got.MessageID != "wire-fwd-bykey" {
+		t.Errorf("message_id: got %q, want wire-fwd-bykey", got.MessageID)
+	}
+	if got.Timestamp != sentAt {
+		t.Errorf("timestamp: got %d, want %d", got.Timestamp, sentAt)
+	}
+	if got.Status != domain.StatusSent {
+		t.Errorf("status: got %q, want %q", got.Status, domain.StatusSent)
+	}
+}
+
+func TestSendForwardByKey_MessageNotFound_Returns404(t *testing.T) {
+	fwd := &contractsfake.ForwardedMessageSender{}
+	smr := &contractsfake.StoredMessageReader{
+		GetStoredMessageFunc: func(_ context.Context, _, _ string) (*domain.StoredMessageData, error) {
+			return nil, apperr.New("message_not_found", apperr.CategoryNotFound, "message not found in history", false, nil)
+		},
+	}
+	jr := &contractsfake.JIDResolver{}
+
+	body := `{"Phone":"5511999999999","MessageID":"NONEXISTENT"}`
+	rec := sendForwardByKeyServe(t, fwd, smr, jr, body, msgAuthed)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if n := len(fwd.SendForwardedMessageCalls); n != 0 {
+		t.Fatalf("not found but SendForwardedMessage called %d time(s)", n)
+	}
+}
+
+func TestSendForwardByKey_BackwardCompat_BodyWithoutMessageID(t *testing.T) {
+	tm := &contractsfake.TextMessenger{
+		SendTextFunc: func(_ context.Context, _ string, _ domain.JID, text string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, _ []string, fwd *domain.ForwardContext, _ string) (domain.MessageSendResult, error) {
+			if text != "old style text" {
+				t.Errorf("text: got %q", text)
+			}
+			if fwd == nil || fwd.ForwardingScore != 1 {
+				t.Errorf("expected default score 1")
+			}
+			return domain.MessageSendResult{ID: "wire-compat"}, nil
+		},
+	}
+	fwd := &contractsfake.ForwardedMessageSender{}
+	smr := &contractsfake.StoredMessageReader{}
+	jr := &contractsfake.JIDResolver{}
+
+	uc := message.NewSendForwardUseCase(tm, fwd, smr, jr, silentLogger{})
+	h := NewSendForwardHandler(uc)
+
+	r := mux.NewRouter()
+	r.Handle("/chat/send/forward", h).Methods(http.MethodPost)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/chat/send/forward",
+		strings.NewReader(`{"Phone":"5511999999999","Body":"old style text"}`))
+	r.ServeHTTP(rec, msgAuthed(req))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if n := len(fwd.SendForwardedMessageCalls); n != 0 {
+		t.Fatalf("by-content path should NOT call SendForwardedMessage, called %d", n)
 	}
 }

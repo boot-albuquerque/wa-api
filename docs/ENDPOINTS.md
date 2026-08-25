@@ -41,7 +41,19 @@ As colunas do **wa-api** são medidas (rota registada = existe). Mas existir nã
 | POST | `/chat/send/list` | lista de seleção |
 | POST | `/chat/send/carousel` | carrossel HSCROLL_CARDS (CAP-46) |
 | POST | `/chat/send/template` | mensagem de template |
-| POST | `/chat/send/forward` | encaminhar, com `IsForwarded`/`ForwardingScore` (CAP-49) |
+| POST | `/chat/send/forward` | encaminhar — por conteúdo (CAP-49) ou por chave de mensagem (CAP-55) |
+
+**`/chat/send/forward`** aceita duas formas de payload (CAP-55):
+
+| forma | campos obrigatórios | ForwardingScore | o que acontece |
+|---|---|---|---|
+| por conteúdo | `Phone` + `Body` | aceite do payload (default 1) | envia texto novo marcado como encaminhado (CAP-49) |
+| por chave | `Phone` + `MessageID` | **IGNORADO** — derivado da mensagem original (+1) | reenvia a mensagem guardada (incluindo mídia, sem re-upload) |
+
+Quando `MessageID` está presente, o campo `ForwardingScore` do payload é
+ignorado; o score é lido do `ContextInfo` da mensagem original e incrementado
+em 1, como o Baileys faz. `Chat` é opcional (reservado para disambiguação
+futura). Se a mensagem não existir no histórico, devolve 404.
 
 Todas as rotas de envio aceitam **reply-to** (`ReplyTo`) desde a CAP-46; as
 oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.

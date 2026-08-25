@@ -25399,6 +25399,41 @@ mídia; medir isso ANTES de prometer. Se ficarmos por (a), a documentação tem 
 dizer "marca como encaminhado", e o campo `ForwardingScore` devia deixar de ser
 público.
 
-**Status**: não corrigido — precisa de decisão de produto.
+**Status**: corrigido — CAP-55 (2026-08-25).
 
-<!-- f-status: aberto -->
+**Correção aplicada**: implementado o caminho (b). O endpoint aceita agora
+`{"Phone", "MessageID"}` para reenviar uma mensagem guardada (incluindo mídia,
+sem re-upload). O `ForwardingScore` é DERIVADO da mensagem original
+(incrementado em 1, como o Baileys) e IGNORADO do payload quando `MessageID`
+estiver presente. Mensagens `Conversation` (texto puro) são convertidas em
+`ExtendedTextMessage` para suportar `ContextInfo`.
+
+O caminho original (Phone+Body, CAP-49) continua a funcionar sem alteração —
+compatibilidade retroativa testada.
+
+**Medição do round-trip** (antes de implementar): os 7 campos de mídia
+(`MediaKey`, `FileEncSHA256`, `FileSHA256`, `URL`, `DirectPath`, `Mimetype`,
+`FileLength`) sobrevivem IDÊNTICOS ao round-trip
+`json.Marshal(events.Message)` → `json.Unmarshal` — medido contra uma linha
+REAL de `/Users/albuquerque/wa-live-data/dbdata/users.db`.
+
+**Testes que travam**:
+- `TestApplyForwardContext_TextNoScore` — conversão Conversation→ETM, score=1
+- `TestApplyForwardContext_ScoreIncremented` — score 3→4 (incremento)
+- `TestApplyForwardContext_ImageMediaPreserved` — 7 campos de mídia sobrevivem
+- `TestApplyForwardContext_JSONRoundTrip` — caminho real datajson→proto→forward
+- `TestApplyForwardContext_DocumentPreserved` — campos de documento sobrevivem
+- `TestApplyForwardContext_AudioPreserved` — campos de áudio sobrevivem
+- `TestSendForwardByKey_Success_ScoreDerived` — score DERIVADO no use case
+- `TestSendForwardByKey_ScoreIgnoresPayload` — ForwardingScore do payload IGNORADO
+- `TestSendForwardByKey_MessageNotFound` — apperr CategoryNotFound
+- `TestSendForwardByKey_Success_ViaRegisteredRoute` — handler via mux, 200
+- `TestSendForwardByKey_MessageNotFound_Returns404` — handler via mux, 404
+- `TestSendForwardByKey_BackwardCompat_BodyWithoutMessageID` — CAP-49 intacto
+
+**Controlos negativos executados**:
+- NC1 (score mutation: fixo 99): `ForwardingScore: got 99, want 4 (3+1)` ✓
+- NC2 (skip Conversation→ETM): `Conversation should be nil after conversion` ✓
+- NC3 (CategoryNotFound→CategoryValidation): `status = 400, want 404` ✓
+
+<!-- f-status: corrigido -->
