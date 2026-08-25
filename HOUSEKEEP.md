@@ -26849,3 +26849,83 @@ ler as assinaturas.
 trabalho concreto.
 
 <!-- f-status: aberto -->
+
+## F238 — `GET /user/profile/{jid}` devolve `500` para JID malformado
+
+**Data/contexto**: 2026-08-25, bateria de contrato sobre 103 rotas (todas menos
+`/session/*` e 13 destrutivas).
+
+**Medido**, com o mesmo endpoint e três entradas:
+
+| `{jid}` | resposta |
+|---|---|
+| `00000000…` (malformado) | **`500 {"error":"internal server error"}`** |
+| `554192421234@s.whatsapp.net` (válido) | `200` com perfil |
+| `5511999999999@s.whatsapp.net` (bem formado, inexistente) | `200` + `"no avatar found"` |
+
+**A rota é funcional.** O defeito é de classificação: JID inválido é erro do
+CHAMADOR e deve ser `400` com código, não `500`. O `500` acusa o nosso código de
+uma falha que é do pedido — mesma família da F233(a), e a segunda vez que
+aparece nesta sessão.
+
+Repare que a terceira linha é o comportamento correto: número que não existe
+devolve `200` com explicação. Ou seja, a rota já sabe lidar com ausência; o que
+não sabe é lidar com sintaxe.
+
+**Correção sugerida**: validar o JID à entrada, no molde do `apperr` que a F224
+introduziu, com código `invalid_jid`. Procurar outras rotas com parâmetro de
+caminho que façam o mesmo — a bateria só apanhou esta porque foi a única com
+`{jid}` a ser exercitada com valor sintético.
+
+**Status**: não corrigido — descoberto na bateria.
+
+<!-- f-status: aberto -->
+
+## F239 — mapa de estado funcional das rotas wa-noise (inventário, 2026-08-25)
+
+Bateria de contrato: **103 rotas** chamadas com payload vazio, medindo status,
+código de erro e latência. Excluídas `/session/*` (18) e 13 destrutivas ou de
+configuração (`DELETE /admin/users`, `DELETE /webhook`, `POST /group/leave`,
+`POST /user/block`, …) — estas ficam por testar POR DESENHO, e é decisão, não
+esquecimento.
+
+| status | nº | leitura |
+|---|---|---|
+| `400` | 75 | validação — esperado com payload vazio |
+| `200` | 23 | rotas sem campo obrigatório (GETs, listagens) |
+| `401` | 4 | as quatro de `/admin/*` — exigem token de admin, **não é defeito** |
+| `500` | 1 | `GET /user/profile/{jid}` — ver **F238** |
+
+Latência máxima 365 ms (`/chat/list`). Nenhuma rota pendurou.
+
+## NÃO FUNCIONAIS — verificadas em campo
+
+| rota | estado | causa |
+|---|---|---|
+| `POST /newsletter/updates` | **não responde** | o servidor do WhatsApp não responde a esta consulta; desde a F232 falha por prazo nosso aos 30 s em vez de pendurar |
+| `POST /newsletter/demote` | bloqueada | precisa de um admin não-dono; falta o fluxo de convite (F233) |
+| `POST /newsletter/change-owner` | bloqueada | idem — `403 newsletter_new_owner_not_admin` |
+| `POST /newsletter/unfollow` | recusa correta para o DONO | regra do WhatsApp; **por testar** com não-dono |
+
+## O QUE ESTA BATERIA NÃO PROVA
+
+Ela mede o **contrato de entrada**, não o efeito. Um `400 missing_x` limpo é
+perfeitamente compatível com a rota estar partida a jusante.
+
+Isto não é cautela retórica: nesta sessão o `200` mentiu três vezes — mensagem
+enviada mas não guardada (F227), voto despachado mas não contado (F228), perfil
+alterado quando se julgava publicar status (F229). Nos três casos a resposta
+HTTP estava correta e o efeito não.
+
+**Rotas com efeito verificado em campo até hoje** (subconjunto pequeno):
+envio de texto/imagem/enquete, voto, encaminhar (as duas formas), silenciar,
+fixar, favoritar, efémeras, status por imagem, e a superfície de newsletter
+(criar, listar, info, convite, silenciar, mensagens, subscrever, marcar visto,
+reagir, seguir, apagar).
+
+Para as restantes ~85, o estado funcional é **desconhecido** — e dizê-lo é mais
+útil do que um verde de bateria a sugerir o contrário.
+
+**Status**: inventário.
+
+<!-- f-status: aberto -->
