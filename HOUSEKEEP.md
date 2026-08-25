@@ -25851,6 +25851,33 @@ Controlo negativo executado: reintroduzir o registo de `/status/set/text` faz
 status_set_text_removal_test.go:21: /status/set/text still matches a registered route — it should have been removed (F229)
 ```
 
+
+## Corrigida 2026-08-25 — rota removida, verificada em campo
+
+A rota foi removida do HTTP **e** da superfície `stdio`
+(`pkg/infra/stdio/stdio_routes_misc.go`), que a espelhava. O packet só falava
+do `wiring_routes.go`; remover de um lado teria deixado a mesma mentira viva no
+outro.
+
+Medido:
+
+```
+POST /status/set/text   -> 404   (removida)
+POST /user/status       -> 200   (mantém o contrato)
+POST /status/set/image  -> 400   (validação — a rota de story continua registada)
+```
+
+O `400` do `image` é a asserção que importa: prova que a remoção não arrastou
+as vizinhas, porque a rota respondeu com erro de PAYLOAD e não com `404`.
+
+**Quebra de contrato assumida.** Quem chamava `/status/set/text` julgava
+publicar status e estava a alterar o Recado do perfil. Servir a rota era manter
+a mentira.
+
+**Publicar TEXTO como story continua a não existir** — é capability nova, não
+foi feita aqui, e o `ENDPOINTS.md` di-lo.
+
+**Status**: corrigido — F229, 2026-08-25.
 <!-- f-status: corrigido -->
 
 ## F230 — `history` trava o tempo real mas NÃO a sincronização: 20 mil linhas gravadas com a definição a 0
