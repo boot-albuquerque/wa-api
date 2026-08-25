@@ -27,7 +27,8 @@ const (
 	//   WAWebMexChangeNewsletterOwnerJobMutation  -> 9546742745432473
 	//   WAWebMexDeleteNewsletterJobMutation       -> 30062808666639665
 	//
-	// MAINTENANCE: WhatsApp rotates query IDs without notice. When a
+	// MAINTENANCE: re-extract with scripts/mex-query-ids/ (see its README).
+	// WhatsApp rotates query IDs without notice. When a
 	// mutation starts returning 400 Bad Request (CRITICAL), re-extract
 	// from the bundle using the same method (see wa-poc/notas/01-resultado.md).
 	mutationDemoteAdmin      = "9880997548630971"
