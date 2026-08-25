@@ -27284,3 +27284,107 @@ destrutiva.
 **Status**: não corrigido — precisa de decisão, e é a mais grave da bateria.
 
 <!-- f-status: aberto -->
+
+## F247 — `/group/updaterequestparticipants` também está no handler errado
+
+**Data/contexto**: 2026-08-25, bateria real. Irmão da **F246**.
+
+`wiring_routes.go:118-119`:
+
+```go
+registry.Register("/group/updateparticipants",        ...ch.GroupMgmt.UpdateGroupParticipants, "POST")
+registry.Register("/group/updaterequestparticipants", ...ch.GroupMgmt.UpdateGroupParticipants, "POST")
+```
+
+Duas rotas, um handler — e o handler é o de **adicionar/remover participantes**,
+não o de aprovar/rejeitar pedidos de entrada.
+
+**A operação certa existe dos dois lados**, o que torna isto puramente uma
+ligação errada:
+
+- na biblioteca: `internal/wa-noise/core/group_participants.go:48-49`
+  > `UpdateGroupRequestParticipants` can be used to approve or reject requests
+  > to join the group.
+- no nosso domínio: `pkg/domain/group.go:214-216` já define
+  `RequestApprove` / `RequestReject`.
+
+**Medido**: `POST /group/updaterequestparticipants` com
+`{"Action":"approve"}` devolve `200 "Participants updated"`. A ação `approve`
+foi entregue a um caminho que só conhece `add`/`remove`/`promote`/`demote`.
+
+**Não determinei o que acontece a jusante** com uma ação desconhecida — pode
+ser ignorada em silêncio ou mapeada para outra coisa. Não vou adivinhar; o que
+está provado é que a rota não chama a operação que o nome promete.
+
+**Correção sugerida**: ligar ao `UpdateGroupRequestParticipants`, usando os
+tipos `RequestAction` que já existem. Ambas as pontas estão feitas.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F248 — `POST /group/photo` devolve `500` e a foto NÃO é definida
+
+**Data/contexto**: 2026-08-25, bateria real, com PNG 64×64 válido (gerado com
+cabeçalho, `IDAT` comprimido e `IEND`).
+
+```
+POST /group/photo -> 500 {"error":"internal server error"}
+log: error="didn't find picture ID in response"
+```
+
+Verificado depois: o `group_info` não traz nenhuma chave de foto — **a imagem
+não ficou**.
+
+O erro vem do `wa-noise` ao interpretar a resposta do servidor. Duas leituras
+possíveis, e não as separei:
+
+1. o envio falhou e a mensagem é o sintoma;
+2. o envio funcionou e o que falha é a leitura do `picture ID` na resposta —
+   nesse caso o `500` seria erro de parsing sobre uma operação bem-sucedida.
+
+A ausência de foto no `group_info` favorece a primeira, mas o `group_info`
+pode não expor a chave de todo (nenhuma das chaves de foto aparece, nem
+vazia). **Medir antes de corrigir**: comparar com a foto definida pela
+interface no mesmo grupo.
+
+**Status**: não corrigido — precisa da medição acima.
+
+<!-- f-status: aberto -->
+
+## F249 — o resultado POR PARTICIPANTE é descartado, e por isso não sabemos o que aconteceu
+
+**Data/contexto**: 2026-08-25, bateria real. É a causa de eu não conseguir
+fechar a F247 nem explicar a adição falhada.
+
+**Onde**: `pkg/presentation/http/handlers/handler_group_mgmt.go`
+
+```go
+_, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)
+...
+customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Participants updated"}, nil)
+```
+
+**O primeiro valor de retorno é deitado fora.** O `wa-noise` devolve
+`[]types.GroupParticipant` — o resultado de CADA participante, que distingue
+entrou / falhou / recebeu convite em vez de ser adicionado (o WhatsApp faz isso
+quando as definições de privacidade do alvo impedem adição direta).
+
+**Medido**: adicionei `5516988263575` a um grupo novo. Resposta `200
+"Participants updated"`. O `group_info` mostra **2 participantes** — o número
+não entrou.
+
+**Não sei se falhou ou se virou convite. Não posso saber: descartamos a
+informação que o diria.** É esse o defeito, e é mais grave que o sintoma —
+qualquer diagnóstico futuro desta família esbarra no mesmo muro.
+
+**Sétima vez nesta sessão que o `200` diz menos do que aparenta.**
+
+**Correção sugerida**: devolver o resultado por participante no corpo, no molde
+que o `wa-noise` já entrega. Se algum participante falhar, o status deve
+refleti-lo — `207` ou `200` com lista de falhas, mas nunca um `"Participants
+updated"` liso.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
