@@ -1,7 +1,7 @@
 # Endpoints do wa-api — inventário e comparação
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
-**Total**: 115 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
+**Total**: 117 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
 
 Reproduzir a lista:
 
@@ -21,7 +21,7 @@ As colunas do **wa-api** são medidas (rota registada = existe). Mas existir nã
 
 ---
 
-## chat — 32 rotas
+## chat — 34 rotas
 
 ### Envio (15)
 
@@ -46,12 +46,13 @@ As colunas do **wa-api** são medidas (rota registada = existe). Mas existir nã
 Todas as rotas de envio aceitam **reply-to** (`ReplyTo`) desde a CAP-46; as
 oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 
-### Edição e remoção (2)
+### Ações sobre mensagem (3)
 
 | método | rota | o que faz |
 |---|---|---|
 | POST | `/chat/send/edit` | editar mensagem enviada |
 | POST | `/chat/delete/message` | revogar mensagem enviada |
+| POST | `/message/star` | favoritar / desfavoritar mensagem (CAP-54) — **ver F223** |
 
 ### Descarga de média (5)
 
@@ -63,14 +64,14 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/chat/downloaddocument` | idem, documento |
 | POST | `/chat/downloadsticker` | idem, autocolante |
 
-### Gestão de conversa (10)
+### Gestão de conversa (12)
 
 | método | rota | o que faz |
 |---|---|---|
 | GET | `/chat/list` | lista as conversas |
 | GET | `/chat/history` | histórico de mensagens de uma conversa |
 | POST | `/chat/archive` | arquivar / desarquivar |
-| POST | `/chat/mute` | silenciar / dessilenciar (8h, 1 semana, sempre) (CAP-52) |
+| POST | `/chat/mute` | silenciar / dessilenciar: 8h, 1 semana, sempre (CAP-52) — **bloqueado, ver F223** |
 | POST | `/chat/delete` | apagar conversa |
 | POST | `/chat/markread` | marcar como lida |
 | POST | `/chat/presence` | "a escrever" / "a gravar" |
@@ -78,6 +79,7 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/chat/ephemeral` | temporizador de mensagens temporárias da conversa (CAP-50) |
 | POST | `/chat/ephemeral/default` | temporizador padrão da conta (CAP-50) |
 | POST | `/chat/request-unavailable-message` | pedir reenvio de mensagem indisponível |
+| POST | `/chat/pin` | fixar / desafixar conversa no topo (CAP-53) |
 
 ---
 
@@ -219,6 +221,9 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | Contactos, bloqueio, privacidade | ✅ | ❌ | ✅ | ✅ |
 | Presença e recibos | ✅ | ⚠️ limitado | ✅ | ✅ |
 | Mensagens temporárias | ✅ conversa + padrão | ⚠️ | ⚠️ | ✅ |
+| **Fixar conversa** | ✅ | ❌ | ⚠️ | ✅ |
+| **Silenciar conversa** | ⚠️ bloqueado (F223) | ❌ | ⚠️ | ✅ |
+| **Favoritar mensagem** | ⚠️ bloqueado (F223) | ❌ | ⚠️ | ✅ |
 | Etiquetas | ✅ | ❌ | ⚠️ | ✅ |
 | Rejeitar chamada | ✅ | ❌ | ⚠️ | ✅ |
 | Webhook, S3, HMAC, proxy | ✅ | ✅ só webhook | ✅ | ➖ é biblioteca |
@@ -233,27 +238,55 @@ API oficial. Quem precisa de bot em grupo não tem alternativa oficial.
 
 ## O que falta — a lista completa
 
-Seis itens, e mais nada. Todo o resto da superfície está entregue.
+**Três itens.** Todo o resto da superfície está entregue.
 
-### Falta no próprio protocolo (4)
+### CORREÇÃO 2026-08-24 — três "faltas de protocolo" não eram faltas
 
-Nenhum destes existe em `internal/wa-noise/core`. Não é lacuna de rota: o fork
-não tem o primitivo, e implementá-los é trabalho de protocolo.
+Este documento afirmava que **fixar conversa, favoritar e silenciar** faltavam
+no protocolo e exigiriam trabalho de raiz. **Estava errado.**
 
-| capacidade | símbolo ausente | nota |
+O erro de método: procurei pelos nomes dos MÉTODOS do cliente (`MuteChat`,
+`PinInChat`, `StarMessage`) em `internal/wa-noise/core`. O app-state não vive
+lá — vive nos construtores de patch, e os três já existiam:
+
+```
+appstate/patch_builders_chat.go:16     BuildMute / BuildMuteAbs
+appstate/patch_builders_chat.go:57     BuildPin
+appstate/patch_builders_message.go:43  BuildStar
+```
+
+Nenhum tinha consumidor. Eram **falta de rota**, não falta de protocolo — a
+mesma classe do voto em enquete. Entregues nas CAP-52, CAP-53 e CAP-54.
+
+**Lição, porque é reutilizável**: confirmar no código antes de concluir que
+algo não existe, e procurar pelo MECANISMO (app-state, mensagem, IQ), não pelo
+nome que a capacidade teria.
+
+### Falta no próprio protocolo (1)
+
+| capacidade | estado | nota |
 |---|---|---|
-| **Fixar mensagem** | `PinInChat` | Baileys tem; nós teríamos de construir |
-| **Favoritar (star)** | `StarMessage` | é estado local do cliente; confirmar se viaja no wire |
-| **Silenciar conversa** | `MuteChat` | provavelmente app-state, não mensagem — outro mecanismo |
-| **Comunidades** | uma única menção no fork | praticamente ausente; exige levantamento próprio |
+| **Comunidades** | uma única menção no fork | praticamente ausente; exige levantamento próprio antes de estimar |
 
-Reproduzir a ausência:
+### Bloqueado por defeito do fork (2)
 
-```
-for k in PinInChat StarMessage MuteChat Community; do
-  echo -n "$k: "; grep -rl "$k" internal/wa-noise/core/*.go | wc -l
-done
-```
+Existem, estão implementadas e testadas, mas **não funcionam em campo**:
+
+| rota | estado |
+|---|---|
+| `POST /chat/mute` | 409 `app_state_conflict` |
+| `POST /message/star` | 409 `app_state_conflict` |
+
+**F223**: patches `regular_high` falham com `mismatching LTHash`. Medido em duas
+sessões, com `fullSync` e incremental. Com o estado local apagado, nem o
+snapshot do próprio servidor verifica — não é a nossa cópia.
+
+O `POST /chat/pin` funciona porque usa `regular_low`. Quatro tipos de patch
+verificam; só o `regular_high` falha, com o mesmo código. **Essa assimetria é a
+pista por explorar.**
+
+A resposta é honesta — 409 diz "conflito de estado", não "a API rebentou" —
+mas a capability está indisponível.
 
 ### Decidido não fazer, com medição em campo (2)
 
@@ -285,8 +318,12 @@ Neste projeto isso divergiu três vezes: carrossel, álbum e PIX devolveram todo
 | Votar em enquete | ✅ | ✅ confirmado pelo utilizador |
 | Mensagens temporárias | ✅ | ✅ confirmado pelo utilizador |
 | Status com média | ✅ | ✅ confirmado pelo utilizador |
+| Fixar conversa | ✅ | ✅ **200 em campo** (`pin` e `unpin`) |
+| Silenciar conversa | ✅ | ❌ **409 em campo** — F223 |
+| Favoritar mensagem | ✅ | ❌ **409 em campo** — F223 |
 
-**Toda a superfície de envio está funcional.**
+**Toda a superfície de ENVIO está funcional.** Das três capabilities de
+app-state, só o `pin` funciona — as outras duas estão bloqueadas pela F223.
 
 Nota de proveniência, porque a distinção custou caro a este projeto: as três
 primeiras linhas foram medidas por fotografia do telemóvel durante a
