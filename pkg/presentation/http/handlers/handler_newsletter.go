@@ -30,9 +30,12 @@ type NewsletterHandlers struct {
 	MarkViewed  *newsletterOpHandler
 	React       *newsletterOpHandler
 	Subscribe   *newsletterOpHandler
-	Demote      *newsletterOpHandler
-	ChangeOwner *newsletterOpHandler
-	Delete      *newsletterOpHandler
+	Demote            *newsletterOpHandler
+	ChangeOwner       *newsletterOpHandler
+	Delete            *newsletterOpHandler
+	AdminInvite       *newsletterOpHandler
+	AdminInviteAccept *newsletterOpHandler
+	AdminInviteRevoke *newsletterOpHandler
 }
 
 // newsletterBody is the wire shape shared by the eleven routes. Each operation
@@ -86,9 +89,12 @@ func NewNewsletterHandlers(uc *notification.NewsletterOpsUseCase) *NewsletterHan
 		MarkViewed:  newNewsletterOpHandler(uc, notification.NewsletterOpMarkViewed),
 		React:       newNewsletterOpHandler(uc, notification.NewsletterOpReact),
 		Subscribe:   newNewsletterOpHandler(uc, notification.NewsletterOpSubscribe),
-		Demote:      newNewsletterOpHandler(uc, notification.NewsletterOpDemote),
-		ChangeOwner: newNewsletterOpHandler(uc, notification.NewsletterOpChangeOwner),
-		Delete:      newNewsletterOpHandler(uc, notification.NewsletterOpDelete),
+		Demote:            newNewsletterOpHandler(uc, notification.NewsletterOpDemote),
+		ChangeOwner:       newNewsletterOpHandler(uc, notification.NewsletterOpChangeOwner),
+		Delete:            newNewsletterOpHandler(uc, notification.NewsletterOpDelete),
+		AdminInvite:       newNewsletterOpHandler(uc, notification.NewsletterOpAdminInvite),
+		AdminInviteAccept: newNewsletterOpHandler(uc, notification.NewsletterOpAdminInviteAccept),
+		AdminInviteRevoke: newNewsletterOpHandler(uc, notification.NewsletterOpAdminInviteRevoke),
 	}
 }
 

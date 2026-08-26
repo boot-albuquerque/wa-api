@@ -43,6 +43,10 @@ const (
 	NewsletterOpDemote      NewsletterOp = "demote"
 	NewsletterOpChangeOwner NewsletterOp = "change_owner"
 	NewsletterOpDelete      NewsletterOp = "delete"
+
+	NewsletterOpAdminInvite       NewsletterOp = "admin_invite"
+	NewsletterOpAdminInviteAccept NewsletterOp = "admin_invite_accept"
+	NewsletterOpAdminInviteRevoke NewsletterOp = "admin_invite_revoke"
 )
 
 // NewsletterRequest é o pedido de qualquer uma das onze.
@@ -177,6 +181,15 @@ func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req
 	case NewsletterOpDelete:
 		err := n.DeleteNewsletter(ctx, userID, req.JID)
 		return nil, 0, err
+	case NewsletterOpAdminInvite:
+		err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		return nil, 0, err
+	case NewsletterOpAdminInviteAccept:
+		err := n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
+		return nil, 0, err
+	case NewsletterOpAdminInviteRevoke:
+		err := n.RevokeNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		return nil, 0, err
 	}
 	// Inalcançável enquanto validateNewsletter correr primeiro. Fica como erro
 	// e não como panic porque uma operação nova acrescentada ao switch da
@@ -252,6 +265,17 @@ var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 		code:    "missing_confirm_jid",
 		message: "confirm_jid must match the channel jid",
 		missing: func(r NewsletterRequest) bool { return r.ConfirmJID == "" || r.ConfirmJID != r.JID },
+	}},
+	NewsletterOpAdminInvite: {requireJID, {
+		code:    "missing_user_jid",
+		message: "invitee jid is required",
+		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
+	}},
+	NewsletterOpAdminInviteAccept: {requireJID},
+	NewsletterOpAdminInviteRevoke: {requireJID, {
+		code:    "missing_user_jid",
+		message: "invitee jid is required for revoke",
+		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
 	}},
 }
 

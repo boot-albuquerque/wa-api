@@ -441,6 +441,49 @@ func (a *MiscAdapter) DeleteNewsletter(ctx context.Context, txtID string, channe
 	return client.NewsletterDelete(ctxWithTimeout, parsed)
 }
 
+// CreateNewsletterAdminInvite sends an admin invite to a user.
+func (a *MiscAdapter) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+	client, parsedChannel, err := a.clientAndJID(txtID, channelJID)
+	if err != nil {
+		return err
+	}
+	parsedUser, err := wajid.ToJID(userJID)
+	if err != nil {
+		return err
+	}
+	parsedUser = resolveToLID(ctx, client, parsedUser, "admin_invite")
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterCreateAdminInvite(ctxWithTimeout, parsedChannel, parsedUser)
+}
+
+// AcceptNewsletterAdminInvite accepts a pending admin invite.
+func (a *MiscAdapter) AcceptNewsletterAdminInvite(ctx context.Context, txtID string, channelJID domain.JID) error {
+	client, parsed, err := a.clientAndJID(txtID, channelJID)
+	if err != nil {
+		return err
+	}
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterAcceptAdminInvite(ctxWithTimeout, parsed)
+}
+
+// RevokeNewsletterAdminInvite revokes a pending admin invite.
+func (a *MiscAdapter) RevokeNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+	client, parsedChannel, err := a.clientAndJID(txtID, channelJID)
+	if err != nil {
+		return err
+	}
+	parsedUser, err := wajid.ToJID(userJID)
+	if err != nil {
+		return err
+	}
+	parsedUser = resolveToLID(ctx, client, parsedUser, "admin_invite_revoke")
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
+	defer cancel()
+	return client.NewsletterRevokeAdminInvite(ctxWithTimeout, parsedChannel, parsedUser)
+}
+
 // resolveToLID converts a PN JID to its LID form via the client's store.
 // DIRECTIONAL: only converts PN→LID. If the JID is already LID, it is
 // returned unchanged — converting LID→PN would break the request (F228,

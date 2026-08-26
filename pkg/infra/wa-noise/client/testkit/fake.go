@@ -82,6 +82,9 @@ type Fake struct {
 	NewsletterDemoteAdminFn          func(ctx context.Context, channelJID, userJID types.JID) error
 	NewsletterChangeOwnerFn          func(ctx context.Context, channelJID, newOwnerJID types.JID) error
 	NewsletterDeleteFn               func(ctx context.Context, channelJID types.JID) error
+	NewsletterCreateAdminInviteFn    func(ctx context.Context, channelJID, userJID types.JID) error
+	NewsletterAcceptAdminInviteFn    func(ctx context.Context, channelJID types.JID) error
+	NewsletterRevokeAdminInviteFn    func(ctx context.Context, channelJID, userJID types.JID) error
 	PairPhoneFn                      func(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)
 	IsConnectedFn                    func() bool
 	IsLoggedInFn                     func() bool

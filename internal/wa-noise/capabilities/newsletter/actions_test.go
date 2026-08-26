@@ -497,3 +497,102 @@ func TestDeletePropagatesError(t *testing.T) {
 		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// F233(b) — CreateAdminInvite, AcceptAdminInvite, RevokeAdminInvite
+// ---------------------------------------------------------------------------
+
+func TestCreateAdminInviteSendsCorrectMutation(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{}}`)
+	channelJID := testJID()
+	userJID := testUserJID()
+
+	if err := CreateAdminInvite(context.Background(), f, channelJID, userJID); err != nil {
+		t.Fatalf("CreateAdminInvite: %v", err)
+	}
+	if got := mutationQueryID(t, f); got != mutationCreateAdminInvite {
+		t.Errorf("CreateAdminInvite used query ID %q, want %q", got, mutationCreateAdminInvite)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	payload := string(nodes[0].Content.([]byte))
+	if !strings.Contains(payload, `"newsletter_id":"`+channelJID.String()+`"`) {
+		t.Errorf("payload missing newsletter_id: %s", payload)
+	}
+	if !strings.Contains(payload, `"user_id":"`+userJID.String()+`"`) {
+		t.Errorf("payload missing user_id: %s", payload)
+	}
+}
+
+func TestCreateAdminInvitePropagatesError(t *testing.T) {
+	f := newFakeTransport()
+	sentinel := errors.New("boom")
+	f.iqErr = sentinel
+
+	if err := CreateAdminInvite(context.Background(), f, testJID(), testUserJID()); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+}
+
+func TestAcceptAdminInviteSendsCorrectMutation(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{}}`)
+	channelJID := testJID()
+
+	if err := AcceptAdminInvite(context.Background(), f, channelJID); err != nil {
+		t.Fatalf("AcceptAdminInvite: %v", err)
+	}
+	if got := mutationQueryID(t, f); got != mutationAcceptAdminInvite {
+		t.Errorf("AcceptAdminInvite used query ID %q, want %q", got, mutationAcceptAdminInvite)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	payload := string(nodes[0].Content.([]byte))
+	if !strings.Contains(payload, `"newsletter_id":"`+channelJID.String()+`"`) {
+		t.Errorf("payload missing newsletter_id: %s", payload)
+	}
+	if strings.Contains(payload, `"user_id"`) {
+		t.Errorf("accept must NOT send user_id, payload: %s", payload)
+	}
+}
+
+func TestAcceptAdminInvitePropagatesError(t *testing.T) {
+	f := newFakeTransport()
+	sentinel := errors.New("boom")
+	f.iqErr = sentinel
+
+	if err := AcceptAdminInvite(context.Background(), f, testJID()); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+}
+
+func TestRevokeAdminInviteSendsCorrectMutation(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{}}`)
+	channelJID := testJID()
+	userJID := testUserJID()
+
+	if err := RevokeAdminInvite(context.Background(), f, channelJID, userJID); err != nil {
+		t.Fatalf("RevokeAdminInvite: %v", err)
+	}
+	if got := mutationQueryID(t, f); got != mutationRevokeAdminInvite {
+		t.Errorf("RevokeAdminInvite used query ID %q, want %q", got, mutationRevokeAdminInvite)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	payload := string(nodes[0].Content.([]byte))
+	if !strings.Contains(payload, `"newsletter_id":"`+channelJID.String()+`"`) {
+		t.Errorf("payload missing newsletter_id: %s", payload)
+	}
+	if !strings.Contains(payload, `"user_id":"`+userJID.String()+`"`) {
+		t.Errorf("payload missing user_id: %s", payload)
+	}
+}
+
+func TestRevokeAdminInvitePropagatesError(t *testing.T) {
+	f := newFakeTransport()
+	sentinel := errors.New("boom")
+	f.iqErr = sentinel
+
+	if err := RevokeAdminInvite(context.Background(), f, testJID(), testUserJID()); !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want %v", err, sentinel)
+	}
+}

@@ -180,6 +180,11 @@ type Client interface {
 	NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error
 	NewsletterDelete(ctx context.Context, channelJID types.JID) error
 
+	// F233(b) — admin invite management.
+	NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error
+	NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error
+	NewsletterRevokeAdminInvite(ctx context.Context, channelJID, userJID types.JID) error
+
 	// Família de sessão (controle)
 
 	// PairPhone pede ao servidor do WhatsApp o codigo de pareamento por

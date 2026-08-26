@@ -9712,3 +9712,37 @@ oficial do WhatsApp Web usa. `delete` não mudou (já estava correto).
 --- FAIL: TestDeleteSendsCorrectMutation (0.00s)
     actions_test.go:482: Delete used query ID "7341777602580933", want "30062808666639665"
 ```
+
+### F233(b) — admin invite capabilities, 2026-08-26
+
+Três novas capabilities de newsletter para gestão de convites de admin.
+
+**Arquivos alterados:**
+- `capabilities/newsletter/queryids.go` — três novas constantes de query ID
+  (`mutationCreateAdminInvite`, `mutationAcceptAdminInvite`,
+  `mutationRevokeAdminInvite`)
+- `capabilities/newsletter/actions.go` — três novas funções
+  (`CreateAdminInvite`, `AcceptAdminInvite`, `RevokeAdminInvite`)
+- `core/newsletter.go` — três novos métodos de fachada no `*Client`
+  (`NewsletterCreateAdminInvite`, `NewsletterAcceptAdminInvite`,
+  `NewsletterRevokeAdminInvite`)
+
+**O que mudou:** acrescentou código; nenhum comportamento existente mudou.
+
+**Testes adicionados** em `capabilities/newsletter/actions_test.go`:
+- `TestCreateAdminInviteSendsCorrectMutation` — query ID + payload (newsletter_id, user_id)
+- `TestCreateAdminInvitePropagatesError`
+- `TestAcceptAdminInviteSendsCorrectMutation` — query ID + payload (newsletter_id), asserta que user_id NÃO vai
+- `TestAcceptAdminInvitePropagatesError`
+- `TestRevokeAdminInviteSendsCorrectMutation` — query ID + payload (newsletter_id, user_id)
+- `TestRevokeAdminInvitePropagatesError`
+
+**Controles negativos EXECUTADOS (F233(b))**:
+
+```
+--- FAIL: TestCreateAdminInviteSendsCorrectMutation (0.00s)
+    actions_test.go:515: CreateAdminInvite used query ID "9656078347839416", want "9387141988078609"
+
+--- FAIL: TestAcceptAdminInviteSendsCorrectMutation (0.00s)
+    actions_test.go:554: accept must NOT send user_id, payload: {"variables":{"newsletter_id":"1234567890@newsletter","user_id":"should-not-be-here"}}
+```

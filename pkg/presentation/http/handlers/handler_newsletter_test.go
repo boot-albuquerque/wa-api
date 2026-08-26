@@ -75,10 +75,19 @@ func TestNewsletter_CadaRotaChamaOMetodoCerto(t *testing.T) {
 		{"/newsletter/delete", func(h *NewsletterHandlers) http.Handler { return h.Delete },
 			`{"jid":"` + canalDeTeste + `","confirmJID":"` + canalDeTeste + `"}`,
 			"DeleteNewsletter", canalDeTeste, ""},
+		{"/newsletter/admin-invite", func(h *NewsletterHandlers) http.Handler { return h.AdminInvite },
+			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			"CreateNewsletterAdminInvite", canalDeTeste, "5516900000000@s.whatsapp.net"},
+		{"/newsletter/admin-invite/accept", func(h *NewsletterHandlers) http.Handler { return h.AdminInviteAccept },
+			`{"jid":"` + canalDeTeste + `"}`,
+			"AcceptNewsletterAdminInvite", canalDeTeste, ""},
+		{"/newsletter/admin-invite/revoke", func(h *NewsletterHandlers) http.Handler { return h.AdminInviteRevoke },
+			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			"RevokeNewsletterAdminInvite", canalDeTeste, "5516900000000@s.whatsapp.net"},
 	}
 
-	if len(casos) != 14 {
-		t.Fatalf("a familia tem 14 operacoes, a tabela tem %d", len(casos))
+	if len(casos) != 17 {
+		t.Fatalf("a familia tem 17 operacoes, a tabela tem %d", len(casos))
 	}
 
 	for _, c := range casos {
@@ -380,6 +389,85 @@ func TestNewsletter_DeleteFalhaDaPortaE500(t *testing.T) {
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
 		`{"jid":"`+canalDeTeste+`","confirmJID":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+// ---------------------------------------------------------------------------
+// F233(b) — admin invite validation and error paths
+// ---------------------------------------------------------------------------
+
+func TestNewsletter_AdminInviteSemUserJID_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("admin_invite without userJID reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_AdminInviteRevokeSemUserJID_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInviteRevoke, http.MethodPost, "/newsletter/admin-invite/revoke",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("admin_invite_revoke without userJID reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_AdminInviteAcceptSemJID_E400(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInviteAccept, http.MethodPost, "/newsletter/admin-invite/accept",
+		`{}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	if len(nr.NewsletterCalls) != 0 {
+		t.Fatalf("admin_invite_accept without jid reached the port: %+v", nr.NewsletterCalls)
+	}
+}
+
+func TestNewsletter_AdminInviteFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) error {
+			return errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",
+		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+func TestNewsletter_AdminInviteAcceptFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		AcceptAdminInviteFunc: func(_ context.Context, _ string, _ domain.JID) error {
+			return errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInviteAccept, http.MethodPost, "/newsletter/admin-invite/accept",
+		`{"jid":"`+canalDeTeste+`"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
+}
+
+func TestNewsletter_AdminInviteRevokeFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		RevokeAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) error {
+			return errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInviteRevoke, http.MethodPost, "/newsletter/admin-invite/revoke",
+		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
