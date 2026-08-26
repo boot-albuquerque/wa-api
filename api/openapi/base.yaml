@@ -235,6 +235,9 @@ components:
           description: |
             **Sempre presente e sempre `false`** num corpo de erro. Campo
             legado — a forma correcta de detectar erro é o estado HTTP.
+
+            Valor fora do enum não ocorre: é escrito pelo servidor, não lido
+            do pedido.
           example: false
         error:
           type: object
@@ -295,7 +298,12 @@ components:
           nullable: false
           type: boolean
           enum: [false]
-          description: '**Sempre presente e sempre `false`.** Campo legado.'
+          description: |
+            **Sempre presente e sempre `false`.** Campo legado — a forma
+            correcta de detectar erro é o estado HTTP.
+
+            Valor fora do enum não ocorre: é escrito pelo servidor, não lido
+            do pedido.
           example: false
 
     ResultadoEnvio:
@@ -330,6 +338,14 @@ components:
         Details:
           nullable: true
           type: string
+          description: |
+            Confirmação textual, em **inglês**, gerada pelo servidor.
+
+            **Não é estável**: o texto muda entre operações e não deve ser
+            comparado por um cliente. Quem precise de decidir a partir da
+            resposta deve usar o estado HTTP.
+
+            Pode vir ausente quando a operação não produz confirmação própria.
           example: Group name set successfully
 
     SucessoMensagem:
@@ -339,10 +355,23 @@ components:
         success:
           nullable: false
           type: boolean
+          description: |
+            **Sempre presente.** `true` quando a operação foi aceite.
+
+            Não confundir com o `success` do envelope: este vive dentro de
+            `data` e é do resultado da operação; aquele é do envelope HTTP.
+            Nas rotas que usam este esquema os dois aparecem, e valem `true`.
           example: true
         message:
           nullable: false
           type: string
+          description: |
+            Confirmação textual, em **inglês** (`Chat pinned`, `Chat unmuted`,
+            `Message starred`…).
+
+            **Sempre presente, e não é estável**: o texto varia com a operação
+            e com o ramo tomado — silenciar e reactivar devolvem palavras
+            diferentes. Não o compare num cliente; use o estado HTTP.
           example: Chat pinned
 
     AlvoConversa:

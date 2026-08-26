@@ -95,8 +95,17 @@ EstadoSonda:
   properties:
     status:
       type: string
+      nullable: false
       enum: [ok]
-      description: Constante `ok`. O que informa é o código HTTP e a própria resposta chegar.
+      description: |
+        Constante `ok`. **Sempre presente**, nunca `null`, nunca vazia.
+
+        O que informa não é o valor — é a resposta ter chegado com `200`. Um
+        cliente que compare o texto não ganha nada: a sonda falha por não
+        responder ou por responder outro estado, não por mudar esta palavra.
+
+        Valor fora do enum não ocorre: é escrito pelo código, não lido do
+        pedido.
       example: ok
 
 EstadoProntidao:
@@ -106,10 +115,16 @@ EstadoProntidao:
   properties:
     status:
       type: string
+      nullable: false
       enum: [ready, degraded]
       description: |
         `ready` quando todas as verificações passam. Qualquer outro valor
         significa que o serviço não deve receber tráfego.
+
+        **Sempre presente**, nunca `null`, nunca vazia. Valor fora do enum não
+        ocorre hoje — é escrito pelo código, não lido do pedido —, mas trate
+        qualquer valor diferente de `ready` como "não pronto", para o caso de
+        a lista crescer numa versão futura.
       example: ready
     checks:
       nullable: false
