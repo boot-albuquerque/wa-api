@@ -113,7 +113,7 @@
             $ref: '#/components/schemas/PedidoCriarUtilizador'
           example:
             name: filarapida
-            token: tok_fila
+            token: tk_EXEMPLO_NAO_USE_gere_o_seu
             events: Message,Receipt,Connected
             history: 100
             proxyConfig: {enabled: false, proxyUrl: ''}
@@ -137,7 +137,7 @@
               data:
                 id: 918e37366f27e1125ee0482a793267e1
                 name: filarapida
-                token: tok_fila
+                token: tk_EXEMPLO_NAO_USE_gere_o_seu
                 webhook: ''
                 connected: false
                 events: Message,Receipt,Connected

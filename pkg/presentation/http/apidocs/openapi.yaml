@@ -2185,7 +2185,12 @@ components:
           description: |
             Token de sessão a atribuir. Obrigatório e **único na instalação** —
             repetido dá `409`. É devolvido uma única vez, nesta resposta.
-          example: tok_fila
+
+            **É um segredo.** Trate-o como palavra-passe: quem o tiver opera a
+            conta de WhatsApp inteira. Não o registe em log, não o ponha em URL, e
+            não use o valor de exemplo — gere um aleatório de pelo menos 32
+            caracteres.
+          example: tk_EXEMPLO_NAO_USE_gere_o_seu
           type: string
         webhook:
           description: URL de webhook inicial. Pode ficar para depois, em `POST /webhook`.
@@ -2401,7 +2406,7 @@ components:
           $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
         token:
           description: Substitui o token de sessão. Tem de continuar único (`409` se colidir).
-          example: tok_fila_novo
+          example: tk_EXEMPLO_NAO_USE_gere_o_seu_2
           type: string
         webhook:
           example: https://exemplo.com.br/wa-api/eventos
@@ -5363,7 +5368,7 @@ paths:
                 enabled: false
                 mediaDelivery: base64
                 retentionDays: 30
-              token: tok_fila
+              token: tk_EXEMPLO_NAO_USE_gere_o_seu
             schema:
               $ref: '#/components/schemas/PedidoCriarUtilizador'
         required: true
@@ -5392,7 +5397,7 @@ paths:
                     public_url: ""
                     region: ""
                     retention_days: 30
-                  token: tok_fila
+                  token: tk_EXEMPLO_NAO_USE_gere_o_seu
                   webhook: ""
                 success: true
               schema:

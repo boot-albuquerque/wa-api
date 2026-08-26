@@ -126,7 +126,12 @@ PedidoCriarUtilizador:
       description: |
         Token de sessão a atribuir. Obrigatório e **único na instalação** —
         repetido dá `409`. É devolvido uma única vez, nesta resposta.
-      example: tok_fila
+
+        **É um segredo.** Trate-o como palavra-passe: quem o tiver opera a
+        conta de WhatsApp inteira. Não o registe em log, não o ponha em URL, e
+        não use o valor de exemplo — gere um aleatório de pelo menos 32
+        caracteres.
+      example: tk_EXEMPLO_NAO_USE_gere_o_seu
     webhook:
       type: string
       description: URL de webhook inicial. Pode ficar para depois, em `POST /webhook`.
@@ -175,7 +180,7 @@ PedidoEditarUtilizador:
     token:
       type: string
       description: Substitui o token de sessão. Tem de continuar único (`409` se colidir).
-      example: tok_fila_novo
+      example: tk_EXEMPLO_NAO_USE_gere_o_seu_2
     webhook:
       type: string
       example: https://exemplo.com.br/wa-api/eventos

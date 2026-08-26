@@ -56,6 +56,16 @@ func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}, err er
 				"message": appErr.Message,
 			}
 		} else {
+			// NUNCA `err.Error()` aqui. Este ramo apanha tudo o que não passou
+			// pela taxonomia — incluindo o que `reportPanic` entrega, que é o
+			// valor cru do panic. Esse valor traz endereços, tipos internos e,
+			// num panic com dado do pedido, o próprio dado. O texto genérico
+			// do status é a única coisa que pode sair; o erro completo já foi
+			// para o log, que é onde ele serve.
+			//
+			// Travado por TestRespondJSONNaoVazaDetalheDeErroInterno, com par
+			// de controlo — segurança que apaga a informação legítima das
+			// recusas de validação não seria segurança, seria cegueira.
 			envelope["code"] = statusCode
 			envelope["error"] = genericErrorMessage(statusCode)
 		}

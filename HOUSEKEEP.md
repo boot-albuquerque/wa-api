@@ -29200,3 +29200,125 @@ documentação OpenAPI de `/chat/mute`. A guarda contra campo desconhecido
 
 <!-- f-status: aberto -->
 
+## F269 — auditoria arquitetural do contrato público: nove divergências medidas
+
+**Data/contexto**: 2026-08-26, auditoria do contrato HTTP a pedido do
+utilizador, com o objectivo de eliminar as ambiguidades que hoje obrigam o
+consumidor a descobrir o comportamento por tentativa e erro.
+
+Cada ponto abaixo foi **medido**, não inferido. O contrato completo, com as
+regras e o alvo de cada um, está em `api/openapi/CONTRATO-ARQUITETURAL.md`.
+
+### 1. Singular e plural — a API é inconsistente consigo mesma
+
+| forma | famílias |
+|---|---|
+| singular para colecção | `/chat` (33), `/group` (18), `/newsletter` (18), `/user` (16), `/community` (4), `/message` (1) |
+| plural para colecção | `/labels` (2), `/admin/users` (3) |
+| singular legítimo (singleton) | `/session` (14), `/health`, `/livez`, `/webhook`, `/s3`, `/hmac`, `/proxy` |
+
+Noventa rotas usariam nome diferente sob a regra canónica.
+
+### 2. Sete famílias transportam a relação como palavra colada
+
+`/group/requestparticipants`, `/group/updaterequestparticipants`,
+`/group/joinapprovalmode`, `/group/updateparticipants`, `/chat/send/*`,
+`/newsletter/admin-invite`, `/community/link`. Em todas, o identificador do
+recurso-pai vai no CORPO em vez do caminho.
+
+### 3. Três convenções de caixa no mesmo contrato
+
+`snake_case` (`message_id`), `camelCase` (`groupJID`) e `PascalCase` (`Phone`)
+convivem, por vezes no mesmo corpo. O JID de grupo tem **quatro** grafias:
+`Group`, `groupJID`, `GroupJID`, `groupjid`.
+
+O que salva o consumidor hoje é o `encoding/json` do Go casar nomes ignorando
+maiúsculas — o que NÃO vale entre palavras diferentes (`code` vs `inviteLink`),
+que é onde os erros reais acontecem (F267).
+
+### 4. Não há prefixo de versão
+
+As rotas são servidas na raiz. É isto que torna os pontos 1 a 3 impossíveis de
+corrigir hoje: sem `/v1`, renomear parte todo cliente no momento do deploy.
+
+### 5. Nenhuma colecção é paginada
+
+```
+GET /user/contacts  ->  61 459 bytes, 1266 contactos, sem limite nem cursor
+GET /chat/list      ->   7 144 bytes
+POST /group/list    ->  todos os grupos
+```
+
+`GET /chat/history` é a única com `limit`, e mesmo essa não tem cursor.
+`GET /user/contacts` cresce com a agenda e não tem tecto.
+
+### 6. Dez códigos de estado nunca são usados
+
+Medido sobre a especificação: `201`, `202`, `204`, `410`, `412`, `415`, `429`,
+`502`, `503`, `504` não aparecem. `POST /group/create`,
+`POST /newsletter/create` e `POST /admin/users` criam recurso e devolvem `200`
+sem `Location`. `POST /user/history/sync` responde antes de o histórico chegar
+e devolve `200`, não `202`.
+
+### 7. Não há erro por campo
+
+A API devolve **um** código de erro, o do primeiro campo que falhou. Um pedido
+com três campos em falta revela-os um de cada vez. Não existe `error.details[]`.
+
+### 8. O `request_id` não vai no corpo do erro
+
+Medido: o cabeçalho **`Request-Id`** é emitido, incluindo em erro
+(`hlog.RequestIDHandler("req_id", "Request-Id")`), e o log traz `req_id`. O
+corpo do erro **não** o traz. O consumidor consegue correlacionar, mas pelo
+cabeçalho.
+
+Não é `X-Request-Id`: o prefixo está desaconselhado desde a RFC 6648, e
+renomear um cabeçalho que clientes já leem é mudança de contrato.
+
+### 9. Três formatos de data, e um deles é um número entre aspas
+
+| campo | forma |
+|---|---|
+| `timestamp` (envio) | inteiro Unix |
+| `timestamp` (saúde) | RFC 3339 UTC |
+| `creation_time` (canal) | **`"1787746245"`** — inteiro embrulhado em texto |
+
+E duas unidades para a mesma ideia em rotas vizinhas: `mute_duration` em
+NANOSSEGUNDOS inteiros, `duration` das efémeras em TEXTO (`"24h"`).
+
+### 10. Não há idempotência nem rate limiting na fronteira
+
+`POST /chat/send/text` chamado duas vezes envia duas mensagens. Não há
+`Idempotency-Key`. Não há `429` — o `x/time/rate` que existe protege a CONTA no
+envio ao WhatsApp, não o servidor.
+
+**O que NÃO é defeito, e foi confirmado por medição:**
+
+- **Erro interno nunca vaza no corpo.** `RespondJSON` só serializa `err`
+  quando ele é `*apperr.AppError`; tudo o resto cai em `genericErrorMessage`.
+  Logo não há stack trace, caminho de ficheiro, SQL nem segredo em resposta
+  nenhuma, **em ambiente nenhum**. A propriedade estava escrita no comentário e
+  **não estava travada**; agora está, com controlo negativo executado
+  (`TestRespondJSONNaoVazaDetalheDeErroInterno`).
+  Decisão consciente: **não** foi acrescentado bloco `debug` de
+  desenvolvimento. Criá-lo seria abrir um caminho de fuga que hoje não existe,
+  dependente de uma variável de ambiente para não disparar. "Nunca vaza" é mais
+  forte que "vaza só quando a configuração permite".
+- **Valor fora de enum é recusado** com `400` e código próprio, ao contrário de
+  campo desconhecido, que é ignorado. A diferença é deliberada.
+- **Prazo de 30 s** em toda operação contra o WhatsApp; nenhuma chamada externa
+  fica sem prazo.
+
+**Corrigido nesta sessão**: um **token de sessão real** deste ambiente
+(`tok_fila`) estava nos exemplos de `POST /admin/users` e `PUT /admin/users/{id}`.
+A página `/docs` é servida **sem autenticação**, logo era um segredo publicado.
+Substituído por valor obviamente falso e travado por
+`TestOpenAPINaoTrazSegredoReal`, com controlo negativo executado.
+
+**Status**: auditoria concluída e registada. Nenhum dos dez pontos foi
+corrigido por alteração de contrato — todos partiriam clientes existentes, e a
+ordem correcta é `/v1` primeiro (ponto 4). As decisões estão em
+`CONTRATO-ARQUITETURAL.md` e valem desde já para rota NOVA.
+
+<!-- f-status: aberto -->
+

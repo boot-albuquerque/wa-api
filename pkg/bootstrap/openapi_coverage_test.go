@@ -213,6 +213,31 @@ func rotasRegistadas(t *testing.T) []string {
 	return out
 }
 
+// segredosReaisDesteAmbiente são valores que existem MESMO, e que por isso
+// nunca podem aparecer na especificação.
+//
+// POR QUE ESTA LISTA EXISTE. Ao documentar `POST /admin/users` alguém colou o
+// token de sessão real do ambiente de testes no exemplo — funcionava, era
+// realista, e ficou. A especificação é servida sem autenticação a quem abrir
+// `/docs`: um segredo ali é um segredo publicado. O exemplo tem de ser
+// obviamente falso, e é isso que este teste obriga.
+var segredosReaisDesteAmbiente = []string{
+	"tok_fila",
+	"tok_lucas",
+}
+
+// TestOpenAPINaoTrazSegredoReal recusa a especificação que carregue uma
+// credencial verdadeira.
+func TestOpenAPINaoTrazSegredoReal(t *testing.T) {
+	documento := string(apidocs.Specification())
+	for _, segredo := range segredosReaisDesteAmbiente {
+		if strings.Contains(documento, segredo) {
+			t.Errorf("a especificação contém %q, que é uma credencial real deste ambiente. "+
+				"A página /docs é servida sem autenticação — use um valor obviamente falso.", segredo)
+		}
+	}
+}
+
 // marcasDeEvidencia são os quatro símbolos que podem abrir um summary.
 //
 // Estão aqui, e não só na tabela, porque um símbolo novo tem de ser uma
