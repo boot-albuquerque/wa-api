@@ -30679,3 +30679,299 @@ Os commits desta sessão tocam **zero ficheiros `.go`** (7 ficheiros, todos
 Markdown), pelo que não há alteração de código por validar.
 
 <!-- f-status: aberto -->
+
+
+## F290 — o mapa por IP do observador de ritmo nunca é purgado: cresce com entrada não confiável
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Limitação de ritmo" do
+scorecard de produção. Achado incidental, fora do âmbito da medição.
+
+**Onde**: `pkg/bootstrap/limits.go:50-76`.
+
+```go
+type rateLimitObserver struct {
+	mu       sync.Mutex
+	limiters map[string]*rate.Limiter
+	...
+}
+
+func (o *rateLimitObserver) limiterFor(ip string) *rate.Limiter {
+	...
+	l, ok := o.limiters[ip]
+	if !ok {
+		l = rate.NewLimiter(o.perIPRate, o.perIPBurst)
+		o.limiters[ip] = l
+	}
+	return l
+}
+```
+
+**Problema**: uma entrada é criada por IP de origem e **nunca é removida**. Não
+há expiração, teto de cardinalidade nem varredura. O observador é instanciado
+uma vez na construção do router (`pkg/bootstrap/router.go:257`), portanto o mapa
+vive tanto quanto o processo.
+
+A chave vem do `RemoteAddr`, que é entrada não confiável mesmo com o cuidado —
+correcto — de **não** confiar no `X-Forwarded-For`. Um servidor exposto vê IPs
+de origem distintos a cada varredura; num ambiente IPv6 o espaço de chaves é
+praticamente ilimitado.
+
+Não foi medido o crescimento em campo: o servidor da medição foi exercitado a
+partir de um único IP (`127.0.0.1`), portanto o mapa teve **uma** entrada. O
+defeito é de leitura de código, e é por isso que está aqui e não no
+`MEDICAO-PRODUCAO.md`.
+
+**Onde dói mais do que parece**: é a Regra 1 do `CLAUDE.md` (inventário de
+detentores) aplicada ao contrário. Hoje o mecanismo é observe-only e o custo é
+só memória. No dia em que o limitador for ligado a sério, este mapa passa a ser
+o recurso limitado partilhado por todos os clientes, e a política de despejo
+deixa de ser detalhe: uma tabela sem despejo com política LRU errada expulsa o
+cliente legítimo e mantém o do atacante.
+
+**Correção sugerida**: substituir por um cache com expiração por inactividade
+(um `*rate.Limiter` cujo bucket está cheio é indistinguível de um recém-criado,
+portanto despejar um inactivo é gratuito), com teto explícito de cardinalidade.
+Registar o teto no log quando for atingido — sem isso a saturação é invisível.
+
+**Anti-regressão exigida quando for corrigido**: teste que crie N+1 chaves
+distintas e verifique que a cardinalidade não passa do teto, mais um controlo
+negativo que remova o despejo e mostre o teste a falhar. E o caminho de
+SUCESSO: um cliente activo não pode ser despejado enquanto está a ser limitado —
+é a variante do defeito que um teste só de teto não apanha.
+
+**Status**: não corrigido. Achado incidental fora do âmbito da tarefa, e o
+`CLAUDE.md` proíbe corrigir de graça sem perguntar.
+
+<!-- f-status: aberto -->
+
+
+## F291 — `GET /chats/history` aceita `limit` sem tecto, e `limit=-1` devolve a conversa inteira
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Paginação" do scorecard de
+produção.
+
+**Onde**: `pkg/presentation/http/handlers/handler_chat_history.go:65-77`
+(analisa e recusa não-numérico), `pkg/application/usecase/chat/get_chat_history.go:124-128`
+(aplica o padrão de 50) e `pkg/infra/db/chat_history_repository.go:62-70`
+(`... ORDER BY timestamp DESC LIMIT ?`).
+
+**Problema**: o valor do cliente chega ao `LIMIT` do SQL **sem tecto**. Medido a
+2026-08-26 contra `localhost:8093`, uma conversa semeada com 5 001 mensagens:
+
+```
+query                              bytes    msgs
+(sem limit)                        15760      50
+&limit=100                         31510     100
+&limit=5000                      1575010    5000
+&limit=999999                    1575325    5001
+&limit=-1                        1575325    5001
+&limit=0                              38       0
+```
+
+Duas coisas distintas:
+
+1. **Sem tecto.** `limit=999999` devolve tudo. A rota irmã `GET /chats/list`
+   TEM tecto — `LimitMaximo = 500`, `pkg/application/usecase/user/list_chats.go:30`,
+   com o comentário a dizer exactamente porquê: "existe para que um cliente não
+   transforme a paginação em 'traga tudo'". As duas rotas divergem, e a que
+   guarda o objecto que mais cresce é a que não tem tecto.
+2. **`limit=-1` é `LIMIT -1`.** Em SQLite isso significa **sem limite** e
+   devolve a conversa inteira. Em PostgreSQL `LIMIT -1` é erro de faixa, logo a
+   MESMA chamada devolveria `500`. Não foi medido contra Postgres — a medição
+   correu só sobre SQLite, e dizê-lo é parte do achado.
+
+**Consequência medida**, com o `json.Marshal` de `RespondJSON`
+(`pkg/presentation/http/response.go:83`) a materializar o corpo inteiro em
+memória antes de escrever:
+
+```
+conc=50  limit=999999  wall=0.34s  RSS 16 832KB -> 183 504KB
+conc=100 limit=999999  wall=0.53s  RSS 183 504KB -> 264 496KB
+conc=100 limit=50      wall=0.29s  RSS sem crescimento
+```
+
+100 pedidos concorrentes de uma conversa de 5 000 mensagens levaram o processo
+de 16MB a 264MB. Não é preciso um utilizador com muitos dados: basta um cliente
+que peça `limit=-1` em laço.
+
+**Correção sugerida**: tecto em `get_chat_history.go`, no mesmo sítio onde o
+padrão é aplicado, e com o mesmo desenho do `ListChatsUseCase` — corrigir a
+entrada fora de faixa em vez de a recusar, para não partir quem já manda
+números grandes. `limit` negativo passa a valer o padrão, como `limit=abc` já
+vale.
+
+**Anti-regressão exigida**: teste do tecto (`limit` acima do máximo devolve o
+máximo), teste do negativo (`-1` devolve o padrão, **não** tudo) e controlo
+negativo que remova o tecto e mostre os dois a falhar. O teste do negativo é o
+que trava a causa: um tecto que só compare `>` deixa o `-1` passar.
+
+**Status**: não corrigido. É lacuna de desenho e a decisão do tecto é de
+produto; registada para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F292 — `POST /session/proxy` perde silenciosamente o `webhook_use_proxy` declarado por um pedido concorrente
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Concorrência" do scorecard
+de produção. É a única das quatro linhas directamente exercitável sem conta
+emparelhada.
+
+**Onde**: `pkg/application/usecase/storage/set_proxy.go`, função
+`resolveWebhookUseProxy` (passo 2: "otherwise the value STORED for this user"),
+com a escrita em `pkg/infra/db/session_config_repository.go:23`:
+
+```
+proxyConfigUpdateQuery = "UPDATE users SET proxy_url = ?, webhook_use_proxy = ? WHERE id = ?"
+webhookUseProxySelect  = "SELECT COALESCE(webhook_use_proxy, true) FROM users WHERE id = ?"
+```
+
+**Problema**: um pedido que **omite** `webhook_use_proxy` LÊ a coluna e
+reescreve-a junto com o `proxy_url` novo. Um pedido concorrente que a
+**declarou** é respondido `200` com o seu valor, e o banco fica com o outro.
+Nem uma resposta nem a outra diz que houve sobreposição.
+
+O diagnóstico da linha do scorecard estava errado no mecanismo: **não** há
+read-modify-write da linha inteira. O `UPDATE` é de duas colunas num único
+comando, portanto atómico, e escritas concorrentes de campos diferentes de
+`users` não se perdem. A janela é o par leitura→escrita, e um `ETag`/`If-Match`
+só a fecharia se a comparação de versão acontecesse DENTRO do mesmo `UPDATE`.
+
+**Medição** (`pkg/application/usecase/storage/session_config_concurrency_test.go`,
+repositório REAL sobre SQLite real, sob `-race`):
+
+```
+    session_config_concurrency_test.go:248: perda silenciosa confirmada:
+        A respondeu webhook_use_proxy=false, o banco tem true
+        (proxy_url="http://203.0.113.11:3128")
+```
+
+**E o número que ninguém teria adivinhado**: sem encontro marcado, a janela
+fechou **0 vezes em 200 rodadas** concorrentes. O defeito é real e raro, e um
+teste ingénuo de concorrência teria declarado o sistema seguro.
+
+**Correção sugerida**: nenhuma aplicada — é lacuna de desenho. O caminho mais
+barato não é `ETag`: é mudar o port para que "não informado" chegue ao SQL como
+tal (`webhook_use_proxy = COALESCE(?, webhook_use_proxy)`), eliminando a leitura
+separada. `ETag`/`If-Match` continua a ser a resposta certa para o caso geral de
+substituição de recurso, e é decisão de produto.
+
+**Anti-regressão**: já feita, e é o que trava o estado MEDIDO —
+`TestSetProxy_ConcorrenciaPerdeOFlagDeclarado` falha se a perda desaparecer, com
+a mensagem a mandar inverter a asserção e actualizar os documentos.
+Discriminantes: `TestSetProxy_Sequencial_NaoPerdeNada` e
+`TestSetProxy_BDeclaraOFlag_NaoEPerdaEUltimaEscrita`.
+
+**Controlos negativos EXECUTADOS**:
+
+```
+# 1) serializar A e B (tira o entrelaçamento):
+--- FAIL: TestSetProxy_ConcorrenciaPerdeOFlagDeclarado (0.06s)
+    session_config_concurrency_test.go:230: MUDANÇA DE COMPORTAMENTO:
+        webhook_use_proxy=false sobreviveu à escrita concorrente de B.
+
+# 2) fazer B DECLARAR o flag (tira a leitura, logo a janela):
+--- FAIL: TestSetProxy_ConcorrenciaPerdeOFlagDeclarado (0.06s)
+    session_config_concurrency_test.go:240: o UPDATE de B devia ter ficado
+        como o último; proxy_url="http://203.0.113.10:3128"
+```
+
+O segundo controlo falha noutra asserção — a de ordem — e não na da perda. Vale
+como prova de que o teste é sensível ao corpo de B, **não** como prova de que a
+asserção da perda morde; essa é a do primeiro controlo.
+
+**Status**: não corrigido; medido e travado.
+
+<!-- f-status: aberto -->
+
+
+## F293 — a API responde `429`, o contrato não o documenta em nenhuma das 141 operações, e os dois documentos afirmam o contrário
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Limitação de ritmo".
+
+**Onde**: `pkg/domain/apperr/codes.go:140` (`CategoryRateLimited` →
+`http.StatusTooManyRequests`), alimentada por
+`pkg/infra/wa-noise/errmap/iqerror.go:81` (`429` e `419` do servidor do
+WhatsApp), que chega ao cliente por `RespondJSON`
+(`pkg/presentation/http/response.go:52`, que usa o status da categoria e ignora
+o que o call site passou). São **64** sítios a chamar `errmap.ClassifyIQ`.
+
+**Problema**: um `429` é alcançável — é o relais do estrangulamento do
+WhatsApp — e **zero** das 141 operações o documentam:
+
+```
+$ curl -s localhost:8093/docs/openapi.yaml | python3 (contagem por código)
+[('101',1),('200',140),('400',131),('401',138),('403',4),('404',11),
+ ('409',8),('422',31),('500',136),('501',1)]
+ops com 429 documentado: 0
+```
+
+E os dois documentos afirmam o contrário do código:
+
+- `docs/PRODUCTION-READINESS.md`, linha 69: "`429` … **nunca** são usados";
+- a mesma página, linha 122: "nenhuma rota devolve `429`".
+
+**Correção sugerida**: documentar `429` nas operações que atravessam
+`errmap.ClassifyIQ`, com o `code` `upstream_rate_limited` e a semântica que a
+taxonomia já escreve — é a **única** categoria que o cliente deve repetir
+inalterada. Corrigir as duas linhas para dizerem o que é verdade: o servidor não
+gera `429` de protecção própria; relaia o do montante.
+
+**Anti-regressão exigida**: o gate que já existe para códigos de erro
+(`TestContratoCodigosDeErroExistemNoCodigo`) verifica a direcção
+documento→código. Falta a inversa: um código de estado que o mapa de categorias
+sabe produzir e que nenhuma operação declara.
+
+**Status**: não corrigido no contrato (é geração de OpenAPI, fora do âmbito
+desta tarefa). As duas linhas do scorecard **foram** corrigidas nesta sessão.
+
+<!-- f-status: aberto -->
+
+
+## F294 — "nenhuma colecção é paginada" nunca foi verdade: `/chats/list` pagina desde 2026-08-08, e a evidência gravada era uma PÁGINA lida como total
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Paginação".
+
+**Onde**: `api/openapi/CONTRATO-ARQUITETURAL.md` §19 e
+`docs/PRODUCTION-READINESS.md` linha 119. Contra
+`pkg/application/usecase/user/list_chats.go:22-31` e
+`pkg/presentation/http/handlers/handler_user.go:373-376`.
+
+**Problema**: os dois documentos dizem "**Medido**, sem paginação nenhuma" e
+"`GET /chat/history` é a **única** com limite". Medido a 2026-08-26 contra
+`localhost:8093` com 2 000 conversas semeadas:
+
+```
+query                      bytes  chats  total  limit_eco offset_eco
+(sem parametro)             5332     50   2000         50          0
+?limit=500                 52583    500   2000        500          0
+?limit=999999              52583    500   2000        500          0
+?limit=50&offset=1990       1135     10   2000         50       1990
+?offset=99999                 87      0   2000         50      99999
+```
+
+`limit`, `offset`, `total`, padrão de 50 e tecto de 500 — paginação completa, com
+o total para o cliente saber quantas páginas faltam. O código está lá **desde o
+commit que criou a rota**, `9d9dd7ec` de 2026-08-08 (`git log -S LimitMaximo`),
+dezoito dias antes de a secção §19 ter sido escrita.
+
+**A causa, e é o que interessa**: a linha da tabela §19 regista
+"`GET /chat/list` | 7 144 bytes". Esse número é compatível com a **primeira
+página de 50**, não com o total. A evidência foi recolhida correctamente e
+**interpretada** como se fosse a colecção inteira. Uma resposta que não diz
+"isto é uma página" só é distinguível de "isto é tudo" se quem mede olhar para
+os campos `total`/`limit` — que existem, e estavam na resposta.
+
+**Correção sugerida**: além de corrigir as duas afirmações, acrescentar à regra
+de medição do `CLAUDE.md` o teste que faltou: **uma colecção mede-se com dados
+que excedam qualquer página plausível**. 1 266 contactos provaram que
+`/user/contacts` não pagina porque 1 266 é maior que qualquer padrão; 7 144
+bytes de conversas não provaram nada sobre `/chat/list` porque ninguém verificou
+quantas conversas havia.
+
+**Status**: `docs/PRODUCTION-READINESS.md` corrigido nesta sessão.
+`api/openapi/CONTRATO-ARQUITETURAL.md` §19 **não** corrigido — o contrato é
+gerado/escrito noutro eixo e mexer nele estava fora do âmbito. Fica registado
+para a sessão que o tocar.
+
+<!-- f-status: aberto -->
