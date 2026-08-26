@@ -21,9 +21,34 @@
       falhado.
 
       **Regras**: `phone` é sempre um ARRAY, mesmo para um número só. O valor
-      pode ir NU (`554192421234`) — foi assim que foi medido. Um número sem
-      conta devolve `is_in_whatsapp: false` dentro de um `200`: **não é
-      erro**, é a resposta.
+      pode ir NU (`554192421234`) — foi assim que foi medido — ou como JID
+      completo, e nesse caso `query` volta com o JID. Um número sem conta
+      devolve `is_in_whatsapp: false` dentro de um `200`: **não é erro**, é a
+      resposta.
+
+      **A rota responde `200` a um pedido que não pede nada.** `phone` está
+      declarado obrigatório, mas não há `minItems` e as quatro formas de vazio
+      passam — medido em 2026-08-26:
+
+      | corpo | resposta |
+      |---|---|
+      | `{}` | `200 {"data":null}` |
+      | `{"phone":null}` | `200 {"data":null}` |
+      | `{"phone":[]}` | `200 {"data":null}` |
+      | `{"phone":[""]}` | `200 {"data":null}` |
+      | `{"phone":["   "]}` | `200 {"data":null}` |
+      | `{"phone":["nao-e-numero"]}` | `200 {"data":null}` |
+      | `{"phone":"554192421234"}` | `400 could_not_decode_payload` |
+
+      E repare que **`data: null` não é `data: []`**: quem iterar sobre a
+      resposta sem verificar nulidade parte. A causa está no caso de uso, que
+      acumula em `var results []CheckUserResult` e devolve a fatia nil
+      (`check_user.go:44-54`).
+
+      **A resposta NÃO é posicional.** Item inválido é descartado em silêncio e
+      duplicados são colapsados: medido, `["554192421234",""]` devolve UMA
+      entrada e `["554192421234","554192421234"]` também. Case sempre pelo
+      campo `query`, nunca pelo índice do array que enviou.
 
       **Autenticação**: token de sessão.
     security:
@@ -80,9 +105,27 @@
       **Regras**: `phone` é um ARRAY. O manipulador acrescenta
       `@s.whatsapp.net` a todo valor sem `@` antes de resolver
       (`handler_user.go:normalizePhones`), pelo que número nu e JID completo
-      funcionam os dois. Um valor que não parseia é **saltado em silêncio**,
-      não recusado — a resposta simplesmente não o traz, e não há sinal
-      distinguindo isso de "o servidor não sabe".
+      funcionam os dois.
+
+      **Não confunda com `POST /user/check`**: lá o valor viaja como NÚMERO NU
+      e é o WhatsApp que resolve; aqui ele é convertido num JID COMPLETO antes
+      de qualquer consulta. A mesma entrada tem destinos diferentes nas duas
+      rotas, e é isso que produz a ressalva seguinte.
+
+      **RESSALVA MEDIDA em 2026-08-26, que corrige o que aqui se dizia antes**:
+      um valor que não é número **não** é "saltado em silêncio". Depois de
+      `normalizePhones` ele contém `@`, logo passa o parser, e a consulta ao
+      WhatsApp não resolve. Observado:
+
+      - `{"phone":["nao-e-numero"]}` → `500` na primeira chamada e, nas
+        repetições, **nenhuma resposta em 45 s**;
+      - `{"phone":["   "]}` → **nenhuma resposta em 25 s**;
+      - `{"phone":["554192421234","nao-e-numero"]}` → **nenhuma resposta em
+        25 s**: uma entrada má leva consigo as boas do mesmo lote.
+
+      O servidor continua saudável durante isto — é o pedido que não termina.
+      Sanitize as entradas antes de chamar e prefira lotes pequenos: a resposta
+      não diz qual entrada envenenou o pedido, porque não há resposta.
 
       **Autenticação**: token de sessão.
     security:
@@ -139,16 +182,34 @@
       **Quando usar**: para construir uma agenda local, ou para dar nome a
       JIDs que chegam em eventos. Não há paginação — vem tudo de uma vez.
 
-      **Regra que muda o que se faz com isto**: **nas contas com endereçamento
-      LID as chaves vêm em `@lid`**, não em número. Medido: numa conta com 461
-      contactos, a totalidade das chaves era `@lid`. Quem quiser casar isto
-      com uma agenda por telefone precisa de resolver cada LID —
-      `GET /user/profile/{jid}` faz a tradução nos dois sentidos.
+      **Regra que muda o que se faz com isto**: as chaves MISTURAM espaços de
+      identidade, e a proporção varia por conta. Medido em 2026-08-26 — e isto
+      **corrige** a medição anterior, que afirmava que a totalidade das chaves
+      vinha em `@lid`:
+
+      | conta | total | `@lid` | `@s.whatsapp.net` | `@bot` |
+      |---|---:|---:|---:|---:|
+      | Business (`filarapida`) | 461 | 232 | 229 | 0 |
+      | pessoal (`lucas`) | 3456 | 2524 | 931 | 1 |
+
+      Não se pode assumir nem um espaço nem o outro. Quem quiser casar isto com
+      uma agenda por telefone tem de resolver cada `@lid` —
+      `GET /user/profile/{jid}` faz a tradução nos dois sentidos. O `@bot` é um
+      terceiro espaço (medido: `867051314767696@bot`, `PushName: "Meta AI"`) e
+      não é contacto humano.
 
       **Segunda ressalva medida**: `FullName` costuma vir VAZIO e o nome real
-      está em `PushName`. Numa conta WhatsApp Business, 460 dos 461 contactos
-      tinham só `PushName`. Um cliente que leia apenas `FullName` vê uma
-      agenda sem nomes.
+      está em `PushName`. Numa conta WhatsApp Business, apenas **1** dos 461
+      contactos tinha `FullName`, contra 460 com `PushName`. Um cliente que
+      leia apenas `FullName` vê uma agenda sem nomes.
+
+      **Terceira ressalva medida**: numa conta com muitos grupos, **2175 dos
+      3456 contactos não têm nome nenhum** — nem `FullName`, nem `PushName`,
+      nem `BusinessName`, nem `FirstName`. Para 2199 deles há `RedactedPhone`
+      (`+55∙∙∙∙∙∙∙∙45`), que é apresentável mas não serve para enviar mensagem.
+
+      **Tamanho**: 61 459 bytes para 461 contactos, 498 688 para 3456. Não há
+      paginação e não há tecto.
 
       **Autenticação**: token de sessão.
     security:
@@ -206,6 +267,19 @@
       `@s.whatsapp.net`, e grupos aparecem em `@g.us`. Quando a sessão está
       em espera, a normalização é saltada e o dado sai cru — **degrada, não
       falha**.
+
+      **O mapa não traz só contactos.** Medido, 384 chaves numa conta: 379
+      `@lid`, 3 `@g.us`, 1 `@s.whatsapp.net`, 1 `status@broadcast` — mais a
+      chave `0@s.whatsapp.net`, que é a conta oficial do WhatsApp. Grupos e
+      difusões entram de propósito; filtrar é de quem chama.
+
+      **Fuso**: os carimbos vêm em RFC 3339 no fuso LOCAL do servidor, não em
+      UTC — medido `2026-08-24T18:56:53.836029-04:00`.
+
+      **Descarte silencioso**: uma linha cujo carimbo não parseia é SALTADA,
+      com aviso no log e sem sinal na resposta
+      (`pkg/infra/db/message_history.go:143-148`). Uma conversa em falta aqui
+      não significa necessariamente ausência de mensagens.
 
       **Autenticação**: token de sessão.
     security:
@@ -435,9 +509,15 @@
       exemplo.
 
       **Regras**: a rota resolve o LID **DE** um número, logo o caminho tem de
-      trazer um JID `@s.whatsapp.net`. Passar um `@lid` é recusado com
+      trazer um JID `@s.whatsapp.net` COMPLETO. Passar um `@lid` é recusado com
       `jid_not_pn` e `400` — não é falha nossa, é o pedido invertido (F182;
       antes disto o mesmo caso dava `500`).
+
+      **Assimetria medida face a `GET /user/profile/{jid}`**: aquela rota
+      aceita número nu, esta **não**. Medido:
+      `GET /user/lid/554192421234` devolve `400 invalid_jid`, e só
+      `GET /user/lid/554192421234@s.whatsapp.net` funciona. Um cliente que use
+      o mesmo valor nas duas rotas parte numa delas.
 
       **A distinção entre `404` e `500`**: quando o mapeamento simplesmente
       não existe, a resposta é `404 lid_not_found`. Quando o armazenamento
