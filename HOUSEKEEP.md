@@ -28609,3 +28609,61 @@ das minhas próprias conclusões erradas (F240 sobre o carrossel, F249 sobre a
 adição de participante, F245 retirada por inteiro).
 
 <!-- f-status: corrigido -->
+
+## F260 — o tipo de conta (Business vs pessoal) é dedutível mas NÃO é declarado
+
+**Data/contexto**: 2026-08-26. O utilizador perguntou se algum endpoint diz o
+tipo da conta, ao investigar por que a `filarapida` não cria comunidades.
+
+**Medido**, `GET /session/profile/full` nas duas sessões vivas:
+
+| campo | `filarapida` (Business) | `lucas` (pessoal) |
+|---|---|---|
+| `platform` | **`smbi`** | `iphone` |
+| `business_name` | `FilaRápida` | *(vazio)* |
+| `pushname` | `FilaRápida` | `Lucas Albuqueque` |
+
+Os dois sinais existem. **O que não existe é um campo que diga o tipo.** O
+consumidor tem de saber que `smbi` significa conta comercial, ou inferir de
+`business_name` estar preenchido — nenhuma das duas está documentada.
+
+O nosso `pkg/infra/wa-noise/mapping/platform/platform.go` mapeia apenas a
+plataforma que ANUNCIAMOS ao parear (`CHROME`, `SAFARI`, `IPAD`…). Não
+classifica o que vem do par.
+
+## Por que isto importa agora — a ligação às comunidades (F237)
+
+A documentação oficial do WhatsApp, enviada pelo utilizador:
+
+> **Observação**: no momento, não é possível criar uma comunidade no WhatsApp
+> Business.
+
+Não é limitação do cliente Web — confirmei que o menu `Nova conversa` do
+Business Web só tem *Novo grupo*, *Novo contato* e *Nova transmissão
+comercial*. **É regra de produto.**
+
+Consequência prática: uma sessão `smbi` **nunca** conseguirá criar comunidade,
+por muito correta que seja a nossa implementação. Se expusermos
+`POST /group/create` com `is_parent`, essa chamada vai falhar para sempre
+nessa conta — e hoje o chamador não tem como saber porquê antes de tentar.
+
+**Correção sugerida**:
+
+1. `GET /session/profile/full` passa a devolver um campo explícito
+   (`account_type: "business" | "personal"`), derivado do `platform` e/ou de
+   `business_name`. Documentar a regra de derivação, com a ressalva de que é
+   inferência sobre um valor do par e não uma declaração do protocolo.
+2. Quando a criação de comunidade existir, recusar cedo em contas Business com
+   um código próprio (`community_unavailable_for_business`) em vez de deixar o
+   WhatsApp recusar com erro genérico.
+
+**Ressalva honesta**: que `smbi` signifique "SMB iOS" é leitura minha do valor,
+coerente com a conta ser Business e com o cliente Web se anunciar como
+"WhatsApp Business Web" — mas **não medi** o mapeamento no protocolo, e o
+nosso código não o define. Antes de codificar a regra, procurar a lista de
+valores possíveis (`smba` para Android será o par natural) em vez de assumir
+duas.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
