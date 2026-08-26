@@ -1,0 +1,598 @@
+# Grupo: Contactos e utilizadores + Status.
+#
+# Os esquemas abaixo foram MEDIDOS contra o servidor vivo em 2026-08-26 pela
+# sessão `filarapida`, salvo os das rotas de escrita, que não podem ser
+# chamadas e vêm assinaladas como derivadas do código.
+
+# ---------------------------------------------------------------- verificação
+
+PedidoVerificacaoNumero:
+  type: object
+  description: |
+    Números a verificar contra a base do WhatsApp. O campo é um ARRAY mesmo
+    para um único número — a rota foi feita para verificação em lote.
+  required: [phone]
+  properties:
+    phone:
+      type: array
+      description: |
+        Números a verificar. Aceita o número NU (`554192421234`), que é a
+        forma medida em campo. O nome declarado na struct é `phone`; como o
+        `encoding/json` do Go casa nomes ignorando maiúsculas, `Phone`
+        também é aceite.
+      items:
+        type: string
+        example: '554192421234'
+      example: ['554192421234']
+
+ResultadoVerificacaoNumero:
+  type: object
+  description: |
+    Uma entrada por número consultado, na ordem em que o servidor respondeu.
+    `is_in_whatsapp: false` NÃO é erro — é a resposta à pergunta.
+  required: [query, is_in_whatsapp, jid, verified_name]
+  properties:
+    query:
+      type: string
+      description: O que foi pedido, ecoado tal e qual — permite casar a resposta com a entrada.
+      example: '554192421234'
+    is_in_whatsapp:
+      type: boolean
+      description: Se o número tem conta de WhatsApp.
+      example: true
+    jid:
+      type: string
+      description: JID resolvido do número. Vazio quando `is_in_whatsapp` é falso.
+      example: 554192421234@s.whatsapp.net
+    verified_name:
+      type: string
+      description: |
+        Nome verificado, quando a conta é uma conta comercial verificada.
+        Vem vazio para contas pessoais — medido.
+      example: ''
+
+# ------------------------------------------------------------- info de contas
+
+PedidoInfoUtilizadores:
+  type: object
+  description: |
+    JIDs a consultar. O campo é o MESMO da rota de verificação (`phone`), mas
+    aqui o manipulador acrescenta `@s.whatsapp.net` a todo valor sem `@`
+    antes de chamar o caso de uso (F242/F225), pelo que tanto o número nu
+    como o JID completo funcionam.
+  required: [phone]
+  properties:
+    phone:
+      type: array
+      description: |
+        JIDs (ou números nus) a consultar. Um valor que não parseia é SALTADO
+        em silêncio, não recusado — comportamento preservado do upstream.
+      items:
+        type: string
+      example: ['554192421234@s.whatsapp.net']
+
+InfoUtilizadores:
+  type: object
+  description: |
+    Bloco `users`, indexado pelo JID consultado. É o objecto cru do módulo de
+    protocolo — a camada de aplicação não o decompõe de propósito, para não
+    arrastar o tipo do SDK para dentro dela.
+  required: [users]
+  properties:
+    users:
+      type: object
+      description: Uma entrada por JID consultado que o servidor conseguiu responder.
+      additionalProperties:
+        $ref: '#/components/schemas/InfoUtilizador'
+
+InfoUtilizador:
+  type: object
+  description: O que o WhatsApp sabe sobre uma conta, do ponto de vista da sessão que pergunta.
+  properties:
+    VerifiedName:
+      nullable: true
+      description: |
+        Bloco de verificação comercial. `null` para contas pessoais — medido
+        em campo. A forma do bloco quando NÃO é nulo não foi determinada com
+        segurança: nenhuma das contas de teste devolveu um.
+    Status:
+      type: string
+      description: O "recado" do perfil. Vazio quando a privacidade o esconde ou não há nenhum.
+      example: ''
+    PictureID:
+      type: string
+      description: Identificador da foto de perfil actual, para detectar troca sem baixar a imagem.
+      example: ''
+    Devices:
+      type: array
+      description: |
+        Aparelhos ligados àquela conta, cada um com o seu sufixo de
+        dispositivo. O primeiro, sem sufixo, é o aparelho principal.
+      items:
+        type: string
+      example:
+        - 554192421234@s.whatsapp.net
+        - 554192421234:41@s.whatsapp.net
+        - 554192421234:76@s.whatsapp.net
+    LID:
+      type: string
+      description: Identificador de privacidade da conta, quando o mapeamento é conhecido.
+      example: 90937376170214@lid
+
+# -------------------------------------------------------------------- roster
+
+Roster:
+  type: object
+  description: |
+    O roster inteiro, indexado por JID. **Nas contas com endereçamento LID as
+    chaves vêm em `@lid`**, não em número — medido: numa conta com 461
+    contactos, a totalidade das chaves devolvidas era `@lid`.
+  additionalProperties:
+    $ref: '#/components/schemas/ContactoDoRoster'
+
+ContactoDoRoster:
+  type: object
+  description: |
+    Uma entrada do roster. Repare que os nomes vêm de fontes diferentes:
+    `FullName` vem de sincronização de agenda, `PushName` vem do nome que a
+    própria pessoa publica. Numa conta WhatsApp Business quase tudo chega por
+    `PushName` — 460 de 461 contactos medidos —, e isso tem consequência para
+    a publicação de status (ver `POST /status/set/image`).
+  properties:
+    Found:
+      type: boolean
+      description: Se a entrada foi encontrada no armazenamento local de contactos.
+      example: true
+    FirstName:
+      type: string
+      description: Primeiro nome, quando veio da agenda.
+      example: ''
+    FullName:
+      type: string
+      description: Nome completo, quando veio da agenda. É o campo que a lista de destinatários de status usa.
+      example: ''
+    PushName:
+      type: string
+      description: Nome que a própria pessoa publica. É o que costuma estar preenchido.
+      example: Janio Gonzalez
+    BusinessName:
+      type: string
+      description: Nome comercial, quando a conta é comercial.
+      example: ''
+    RedactedPhone:
+      type: string
+      description: Número parcialmente ocultado, quando o WhatsApp o fornece em vez do número inteiro.
+      example: ''
+
+UltimaAtividadePorConversa:
+  type: object
+  description: |
+    Instante da mensagem mais recente de cada conversa, indexado por JID.
+    Derivado do histórico local (o `HistorySync` que chega depois do
+    pareamento), **não** de uma consulta ao WhatsApp.
+
+    As chaves são normalizadas para o espaço LID quando o mapeamento é
+    conhecido, para casarem com as chaves de `GET /user/contacts`. Um número
+    sem LID conhecido mantém a chave em `@s.whatsapp.net`, e grupos aparecem
+    em `@g.us`.
+  additionalProperties:
+    type: string
+    format: date-time
+  example:
+    100429404864623@lid: '2026-08-24T18:56:53.836029-04:00'
+    554192421234@s.whatsapp.net: '2026-08-24T18:56:53.796034-04:00'
+
+# -------------------------------------------------------------------- avatar
+
+PedidoAvatar:
+  type: object
+  description: |
+    De quem se quer a foto. **Esta rota LÊ** — não altera a foto da conta,
+    apesar de ser `POST`.
+  required: [Phone]
+  properties:
+    chat:
+      type: string
+      description: Nome universal do destino. `Phone` ganha quando os dois vierem.
+      example: 554192421234@s.whatsapp.net
+    Phone:
+      type: string
+      description: |
+        Contacto de quem se quer a foto. Aceita número nu, JID de telefone ou
+        LID — a resolução é leniente e aplica o servidor por omissão quando
+        falta o `@`.
+      example: 554192421234@s.whatsapp.net
+    Preview:
+      type: boolean
+      description: |
+        `true` devolve a miniatura; `false` (o padrão) devolve a imagem em
+        tamanho cheio.
+      default: false
+      example: true
+
+Avatar:
+  type: object
+  description: |
+    Ponteiro para a foto de perfil. A imagem NÃO vem no corpo — vem o URL, e
+    é dele que se baixa. O URL é temporário e assinado pelo WhatsApp.
+  properties:
+    id:
+      type: string
+      description: Identificador da foto. Muda quando a pessoa troca a imagem.
+      example: '1735689600'
+    url:
+      type: string
+      description: URL da imagem, para ser baixado por quem chamou.
+      example: https://pps.whatsapp.net/v/t61.24694-24/000000_0000000000000000_0000000000000000000_n.jpg
+
+# -------------------------------------------------------------------- perfil
+
+PerfilUtilizador:
+  type: object
+  description: |
+    Tudo o que se sabe sobre um contacto, reunido num pedido só, a partir de
+    QUALQUER uma das suas identidades. Cada peça é obtida separadamente e
+    **degrada em vez de falhar**: o que não se conseguiu obter aparece em
+    `unavailable`, com o motivo, em vez de sair como campo vazio mudo.
+  required: [jid, lid, query, on_whatsapp]
+  properties:
+    jid:
+      type: string
+      description: Identidade de telefone. Vazio quando só se conhece o LID e não há mapeamento.
+      example: 554192421234@s.whatsapp.net
+    lid:
+      type: string
+      description: Identidade de privacidade. Vazio quando não há mapeamento conhecido.
+      example: 90937376170214@lid
+    query:
+      type: string
+      description: O que foi pedido no caminho, ecoado — diz por qual identidade se entrou.
+      example: 554192421234@s.whatsapp.net
+    on_whatsapp:
+      type: boolean
+      nullable: true
+      description: |
+        Se o número tem conta. `false` é resposta, não erro — a rota devolve
+        `200` na mesma. **`null` é diferente de `false`**: significa que a
+        pergunta não pôde ser feita, e o motivo está em `unavailable`.
+      example: true
+    verified_name:
+      type: string
+      description: Nome verificado, quando a conta é comercial verificada.
+      example: ''
+    avatar_url:
+      type: string
+      description: URL da foto de perfil em tamanho cheio. Vazio quando indisponível.
+      example: ''
+    avatar_id:
+      type: string
+      description: Identificador da foto. Vazio quando indisponível.
+      example: ''
+    user_info:
+      description: |
+        O bloco cru do módulo de protocolo, com a mesma forma de
+        `POST /user/info` — indexado pelo JID consultado.
+      type: object
+      additionalProperties:
+        $ref: '#/components/schemas/InfoUtilizador'
+    unavailable:
+      type: object
+      description: |
+        O que NÃO pôde ser obtido, com o motivo, por chave. Ausente quando
+        tudo correu bem. As chaves observadas são `jid`, `lid`, `on_whatsapp`,
+        `user_info` e `avatar`.
+      additionalProperties:
+        type: string
+      example:
+        avatar: avatar hidden by privacy settings
+
+ResolucaoLID:
+  type: object
+  description: O par de identidades de um número, quando o mapeamento é conhecido.
+  required: [jid, lid]
+  properties:
+    jid:
+      type: string
+      description: O número consultado, em forma canónica.
+      example: 554192421234@s.whatsapp.net
+    lid:
+      type: string
+      description: O identificador de privacidade correspondente.
+      example: 90937376170214@lid
+
+# ---------------------------------------------------------------- bloqueio
+
+ListaBloqueados:
+  type: object
+  description: |
+    A lista de bloqueados da sessão. **Esta resposta NÃO usa o envelope
+    comum** — o manipulador serializa o resultado e escreve-o directamente
+    (`handler_blocklist.go:66-73`), pelo que não há `code`, `data` nem
+    `success`. Medido.
+  required: [Blocklist, DHash]
+  properties:
+    Blocklist:
+      type: array
+      description: JIDs bloqueados, em forma canónica. Array vazio quando não há nenhum.
+      items:
+        type: string
+      example: []
+    DHash:
+      type: string
+      description: |
+        Hash com que o WhatsApp versiona a lista. Serve para detectar que a
+        lista mudou sem a comparar entrada a entrada.
+      example: '1787412261963655'
+
+PedidoBloqueio:
+  type: object
+  description: |
+    Quem bloquear ou desbloquear. Basta UM dos dois campos: `JID` tem
+    precedência, e `Phone` é usado quando `JID` vem vazio.
+  properties:
+    chat:
+      type: string
+      description: Nome universal do destino. `Phone` ganha quando os dois vierem.
+      example: 554192421234@s.whatsapp.net
+    Phone:
+      type: string
+      description: |
+        Contacto. A resolução é LENIENTE por decisão registada na F203: um
+        número nu (`554192421234`) é aceite, porque um campo chamado `Phone`
+        que exigisse `@s.whatsapp.net` seria contrato surpreendente.
+      example: 554192421234@s.whatsapp.net
+    JID:
+      type: string
+      description: Contacto em forma de JID. Tem precedência sobre `Phone`.
+      example: 90937376170214@lid
+
+ResultadoBloqueio:
+  type: object
+  description: |
+    Resultado de bloquear ou desbloquear. **Nunca foi observado em campo**:
+    as duas rotas que o produzem falham hoje (ver F264), logo a forma abaixo
+    vem do código (`block_user.go:71-81`), não de medição.
+  properties:
+    Details:
+      type: string
+      description: Confirmação textual — `User blocked` ou `User unblocked`.
+      example: User blocked
+    JID:
+      type: string
+      description: O JID que a lista de bloqueio de facto usou, depois da normalização.
+      example: 554192421234@s.whatsapp.net
+    Blocklist:
+      type: array
+      description: A lista de bloqueados resultante da operação.
+      items:
+        type: string
+      example: [554192421234@s.whatsapp.net]
+    DHash:
+      type: string
+      description: Hash da lista resultante.
+      example: '1787412261963655'
+    RequestedJID:
+      type: string
+      description: |
+        O JID pedido, presente APENAS quando difere do usado — acontece
+        quando o pedido veio em LID e precisou de ser traduzido.
+      example: 90937376170214@lid
+
+# -------------------------------------------------------------------- presença
+
+PedidoPresenca:
+  type: object
+  description: Estado de presença global da sessão — é a conta inteira, não uma conversa.
+  required: [type]
+  properties:
+    type:
+      type: string
+      description: |
+        `available` marca a conta como online; `unavailable`, offline.
+        Qualquer outro valor é recusado com `invalid_presence_type`.
+      enum: [available, unavailable]
+      example: available
+
+PedidoSubscricaoPresenca:
+  type: object
+  description: De quem se quer receber notificações de presença.
+  required: [Phone]
+  properties:
+    chat:
+      type: string
+      description: Nome universal do destino. `Phone` ganha quando os dois vierem.
+      example: 554192421234@s.whatsapp.net
+    Phone:
+      type: string
+      description: Contacto a subscrever. Aceita número nu, JID de telefone ou LID.
+      example: 554192421234@s.whatsapp.net
+
+# ----------------------------------------------------------------- privacidade
+
+DefinicoesPrivacidade:
+  type: object
+  description: |
+    As definições de privacidade da conta, tal como o WhatsApp as devolve.
+
+    **Atenção à assimetria de nomes**: a LEITURA devolve as chaves em
+    `PascalCase` (`GroupAdd`, `LastSeen`…), mas a ESCRITA em
+    `POST /user/privacy` recebe o nome em minúsculas (`groupadd`, `last`…).
+    São vocabulários diferentes para a mesma definição, e a tabela de
+    validação da escrita (`pkg/domain/privacy.go:54-62`) conhece só sete das
+    dez chaves devolvidas aqui.
+  properties:
+    GroupAdd:
+      type: string
+      description: Quem pode adicionar a conta a grupos. Escreve-se como `groupadd`.
+      example: all
+    LastSeen:
+      type: string
+      description: Quem vê a hora do último acesso. Escreve-se como `last`.
+      example: contacts
+    Status:
+      type: string
+      description: Quem vê os status publicados. Escreve-se como `status`.
+      example: contacts
+    Profile:
+      type: string
+      description: Quem vê a foto de perfil. Escreve-se como `profile`.
+      example: all
+    ReadReceipts:
+      type: string
+      description: Se os confirmativos de leitura são enviados. Escreve-se como `readreceipts`.
+      example: all
+    CallAdd:
+      type: string
+      description: Quem pode ligar para a conta. Escreve-se como `calladd`.
+      example: all
+    Online:
+      type: string
+      description: Quem vê a conta como online. Escreve-se como `online`.
+      example: all
+    Messages:
+      type: string
+      description: |
+        Devolvido pela leitura e **sem contraparte na escrita** — não consta
+        da tabela de validação, logo não é definível por esta API.
+      example: all
+    Defense:
+      type: string
+      description: |
+        Devolvido pela leitura e **sem contraparte na escrita**. O significado
+        exacto não foi determinado com segurança pela implementação actual.
+      example: 'off'
+    Stickers:
+      type: string
+      description: |
+        Devolvido pela leitura e **sem contraparte na escrita** — não consta
+        da tabela de validação.
+      example: contacts
+
+PedidoDefinicaoPrivacidade:
+  type: object
+  description: |
+    Uma definição de privacidade de cada vez. Nome e valor são validados
+    contra a tabela do domínio ANTES de qualquer chamada ao WhatsApp, e cada
+    definição tem o seu próprio conjunto de valores válidos — `contacts` vale
+    para `status` e é recusado em `readreceipts`.
+  required: [privacy_setting, value]
+  properties:
+    privacy_setting:
+      type: string
+      description: |
+        Qual definição alterar, em minúsculas. **Não são as mesmas chaves que
+        a leitura devolve** — ver `DefinicoesPrivacidade`.
+      enum: [groupadd, last, status, profile, readreceipts, online, calladd]
+      example: status
+    value:
+      type: string
+      description: |
+        O valor. O conjunto válido DEPENDE da definição:
+
+        - `groupadd`, `last`, `status`, `profile`: `all`, `contacts`,
+          `contact_blacklist`, `none`
+        - `readreceipts`: `all`, `none`
+        - `online`: `all`, `match_last_seen`
+        - `calladd`: `all`, `known`
+
+        A comparação é sensível a maiúsculas: `ALL` é recusado.
+      example: contacts
+
+# --------------------------------------------------------------------- status
+
+PedidoStatusImagem:
+  type: object
+  description: |
+    Imagem a publicar como status. A origem é uma união de duas formas: URI
+    de dados ou URL http(s). Qualquer outra coisa é recusada antes de sair
+    da máquina.
+  required: [Image]
+  properties:
+    Image:
+      type: string
+      description: |
+        A imagem, como URI de dados começado por `data:image` **ou** como URL
+        `http(s)://`. O limite é de 16 MiB depois de descodificada, e é
+        verificado ANTES da descodificação quando o URI declara `;base64`.
+      example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+    Caption:
+      type: string
+      description: Legenda a mostrar sob a imagem.
+      example: Estamos abertos até às 20h.
+    Id:
+      type: string
+      description: |
+        Identificador a atribuir à mensagem. Quando ausente, o servidor gera
+        um — é o que vem em `message_id` na resposta.
+      example: 3EB0A4B2AFD45E625C0917
+    MimeType:
+      type: string
+      description: |
+        Tipo da imagem. Quando ausente, é detectado a partir dos bytes. O
+        tipo resolvido TEM de começar por `image/`, senão o pedido é recusado.
+      example: image/png
+    JPEGThumbnail:
+      type: string
+      format: byte
+      description: Miniatura JPEG, em base64, para o cliente desenhar antes de baixar a imagem.
+
+PedidoStatusVideo:
+  type: object
+  description: |
+    Vídeo a publicar como status. Mesma união de origens da imagem, com um
+    limite maior e uma verificação de tipo mais frouxa.
+  required: [Video]
+  properties:
+    Video:
+      type: string
+      description: |
+        O vídeo, como URI de dados começado por `data:` **ou** como URL
+        `http(s)://`. O limite é de 100 MiB depois de descodificado.
+
+        Repare que, ao contrário da imagem, o prefixo aceite é `data:` e não
+        `data:video` — e o tipo resolvido NÃO é verificado contra `video/`.
+      example: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+    Caption:
+      type: string
+      description: Legenda a mostrar sob o vídeo.
+      example: Bastidores de hoje.
+    Id:
+      type: string
+      description: Identificador a atribuir à mensagem. Quando ausente, o servidor gera um.
+      example: 3EB0A4B2AFD45E625C0917
+    MimeType:
+      type: string
+      description: Tipo do vídeo. Quando ausente, é detectado a partir dos bytes.
+      example: video/mp4
+    JPEGThumbnail:
+      type: string
+      format: byte
+      description: Miniatura JPEG, em base64, para o cliente desenhar antes de baixar o vídeo.
+
+PedidoStatusAudio:
+  type: object
+  description: |
+    Áudio a publicar como status. Não aceita legenda — o áudio de status não
+    a tem.
+  required: [Audio]
+  properties:
+    Audio:
+      type: string
+      description: |
+        O áudio, como URI de dados começado por `data:audio/` **ou** como URL
+        `http(s)://`. O limite é de 16 MiB depois de descodificado.
+      example: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
+    Id:
+      type: string
+      description: Identificador a atribuir à mensagem. Quando ausente, o servidor gera um.
+      example: 3EB0A4B2AFD45E625C0917
+    mimetype:
+      type: string
+      description: |
+        Tipo do áudio. Repare que, ao contrário das rotas de imagem e vídeo,
+        o campo é declarado em minúsculas (`mimetype`, não `MimeType`) —
+        divergência real da implementação (`pkg/domain/session.go:120`). Como
+        o `encoding/json` do Go casa nomes ignorando maiúsculas, `MimeType`
+        continua a ser aceite; `mimetype` é o nome declarado. Quando ausente,
+        o tipo é detectado a partir dos bytes.
+      example: audio/mp4
