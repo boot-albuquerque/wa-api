@@ -106,6 +106,7 @@ components:
         chat:
           description: JID de destino — contacto, grupo ou canal.
           example: 554192421234@s.whatsapp.net
+          nullable: false
           type: string
       type: object
     AlvoGrupo:
@@ -486,14 +487,17 @@ components:
         Participant:
           description: JID de quem escreveu a mensagem citada.
           example: 554192421234@s.whatsapp.net
+          nullable: false
           type: string
         QuotedText:
           description: Texto da mensagem citada, para o cliente desenhar a pré-visualização.
           example: Bom dia, tudo certo com o pedido?
+          nullable: false
           type: string
         StanzaId:
           description: '`message_id` da mensagem citada.'
           example: 3EB0A4B2AFD45E625C0917
+          nullable: false
           type: string
       required:
         - StanzaId
@@ -580,6 +584,7 @@ components:
       properties:
         Details:
           example: Group name set successfully
+          nullable: true
           type: string
       type: object
     EntradaDoIndiceDeConversas:
@@ -603,6 +608,7 @@ components:
         code:
           description: Estado HTTP, repetido no corpo.
           example: 200
+          nullable: false
           type: integer
         data:
           description: A carga útil, com forma própria de cada rota.
@@ -610,6 +616,7 @@ components:
         success:
           description: Sempre `true` em sucesso. Campo legado, será removido.
           example: true
+          nullable: false
           type: boolean
       required:
         - code
@@ -622,6 +629,7 @@ components:
         code:
           description: Estado HTTP, repetido no corpo.
           example: 400
+          nullable: false
           type: integer
         error:
           properties:
@@ -630,10 +638,12 @@ components:
                 Código estável em `snake_case`. É por aqui que um cliente deve
                 decidir o que fazer — a mensagem pode mudar, o código não.
               example: missing_chat
+              nullable: false
               type: string
             message:
               description: Descrição legível, segura para mostrar ao utilizador.
               example: missing chat in payload
+              nullable: false
               type: string
           required:
             - code
@@ -643,6 +653,7 @@ components:
           enum:
             - false
           example: false
+          nullable: false
           type: boolean
       required:
         - code
@@ -658,6 +669,7 @@ components:
       properties:
         code:
           example: 400
+          nullable: false
           type: integer
         error:
           example: bad request
@@ -666,6 +678,7 @@ components:
           enum:
             - false
           example: false
+          nullable: false
           type: boolean
       required:
         - code
@@ -700,6 +713,7 @@ components:
           description: Configuração em vigor que altera o comportamento do serviço.
           example:
             cluster: single
+          nullable: false
           type: object
         checks:
           additionalProperties:
@@ -707,6 +721,7 @@ components:
           description: Uma entrada por dependência verificada, com o seu resultado.
           example:
             database: ok
+          nullable: false
           type: object
         status:
           description: |
@@ -4491,15 +4506,18 @@ components:
         message_id:
           description: Identificador da mensagem no servidor, para reagir, editar, apagar ou encaminhar depois.
           example: 3EB0A4B2AFD45E625C0917
+          nullable: false
           type: string
         status:
           description: Estado do envio devolvido pelo servidor.
           example: sent
+          nullable: false
           type: string
         timestamp:
           description: Instante do envio, em segundos desde a época Unix.
           example: 1787747900
           format: int64
+          nullable: false
           type: integer
       required:
         - message_id
@@ -4872,18 +4890,22 @@ components:
         active_connections:
           description: Ligações WebSocket ao WhatsApp actualmente abertas.
           example: 2
+          nullable: false
           type: integer
         connected_users:
           description: Sessões com ligação estabelecida ao WhatsApp.
           example: 2
+          nullable: false
           type: integer
         goroutines:
           description: Goroutines em execução. Crescimento contínuo aqui costuma indicar fuga.
           example: 285
+          nullable: false
           type: integer
         logged_in_users:
           description: Sessões ligadas E autenticadas — as que conseguem operar.
           example: 2
+          nullable: false
           type: integer
         memory_stats:
           description: |
@@ -4891,44 +4913,61 @@ components:
             Medido na resposta real — a struct de domínio declara-o como mapa
             aberto, logo as chaves abaixo vêm do código que o preenche
             (`get_health.go:55-60`) e não do tipo.
+          nullable: false
           properties:
             alloc_mb:
               description: Memória de heap em uso neste instante.
               example: 7
+              nullable: false
               type: integer
             num_gc:
               description: Ciclos completos do coletor de lixo desde o arranque.
               example: 5
+              nullable: false
               type: integer
             sys_mb:
               description: Memória obtida do sistema operativo.
               example: 26
+              nullable: false
               type: integer
             total_alloc_mb:
               description: Total já alocado desde o arranque, cumulativo — nunca desce.
               example: 11
+              nullable: false
               type: integer
           type: object
         status:
-          description: Estado global do processo.
+          description: |
+            Estado global do processo. **Sempre presente** — sem `omitempty` na
+            struct, logo aparece mesmo quando vazio. Nunca `null`.
           example: ok
+          nullable: false
           type: string
         timestamp:
           description: Instante em que o retrato foi tirado, em UTC.
           example: "2026-08-26T12:41:38Z"
           format: date-time
+          nullable: false
           type: string
         total_users:
           description: Sessões existentes no banco, ligadas ou não.
           example: 2
+          nullable: false
           type: integer
         uptime:
           description: Há quanto tempo o processo está de pé, em notação de duração do Go.
           example: 3h12m45s
+          nullable: false
           type: string
         version:
-          description: Versão do binário (`pkg/bootstrap/bootstrap_server.go`).
+          description: |
+            Versão do binário (`pkg/bootstrap/bootstrap_server.go`).
+
+            **Pode não aparecer.** É o único campo desta resposta com `omitempty`
+            na struct (`pkg/domain/health.go:14`), logo é omitido quando a versão
+            está vazia. Nunca vem `null`; ou vem preenchido, ou não vem.
           example: 1.0.6
+          nullable: false
           type: string
       type: object
     SecaoLista:
@@ -5020,9 +5059,11 @@ components:
       properties:
         message:
           example: Chat pinned
+          nullable: false
           type: string
         success:
           example: true
+          nullable: false
           type: boolean
       type: object
     UltimaAtividadePorConversa:

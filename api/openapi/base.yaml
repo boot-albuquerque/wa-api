@@ -204,10 +204,12 @@ components:
       required: [code, success]
       properties:
         code:
+          nullable: false
           type: integer
           description: Estado HTTP, repetido no corpo.
           example: 200
         success:
+          nullable: false
           type: boolean
           description: Sempre `true` em sucesso. Campo legado, será removido.
           example: true
@@ -222,10 +224,12 @@ components:
       required: [code, error, success]
       properties:
         code:
+          nullable: false
           type: integer
           description: Estado HTTP, repetido no corpo.
           example: 400
         success:
+          nullable: false
           type: boolean
           enum: [false]
           example: false
@@ -234,12 +238,14 @@ components:
           required: [code, message]
           properties:
             code:
+              nullable: false
               type: string
               description: |
                 Código estável em `snake_case`. É por aqui que um cliente deve
                 decidir o que fazer — a mensagem pode mudar, o código não.
               example: missing_chat
             message:
+              nullable: false
               type: string
               description: Descrição legível, segura para mostrar ao utilizador.
               example: missing chat in payload
@@ -254,12 +260,14 @@ components:
       required: [code, error, success]
       properties:
         code:
+          nullable: false
           type: integer
           example: 400
         error:
           type: string
           example: bad request
         success:
+          nullable: false
           type: boolean
           enum: [false]
           example: false
@@ -273,15 +281,18 @@ components:
       required: [message_id, status]
       properties:
         message_id:
+          nullable: false
           type: string
           description: Identificador da mensagem no servidor, para reagir, editar, apagar ou encaminhar depois.
           example: 3EB0A4B2AFD45E625C0917
         timestamp:
+          nullable: false
           type: integer
           format: int64
           description: Instante do envio, em segundos desde a época Unix.
           example: 1787747900
         status:
+          nullable: false
           type: string
           description: Estado do envio devolvido pelo servidor.
           example: sent
@@ -291,6 +302,7 @@ components:
       description: Confirmação textual de uma operação sem carga útil própria.
       properties:
         Details:
+          nullable: true
           type: string
           example: Group name set successfully
 
@@ -299,9 +311,11 @@ components:
       description: Confirmação de uma operação de estado de conversa.
       properties:
         success:
+          nullable: false
           type: boolean
           example: true
         message:
+          nullable: false
           type: string
           example: Chat pinned
 
@@ -313,6 +327,7 @@ components:
         ambos vierem.
       properties:
         chat:
+          nullable: false
           type: string
           description: JID de destino — contacto, grupo ou canal.
           example: 554192421234@s.whatsapp.net
@@ -323,14 +338,17 @@ components:
       required: [StanzaId, Participant]
       properties:
         StanzaId:
+          nullable: false
           type: string
           description: "`message_id` da mensagem citada."
           example: 3EB0A4B2AFD45E625C0917
         Participant:
+          nullable: false
           type: string
           description: JID de quem escreveu a mensagem citada.
           example: 554192421234@s.whatsapp.net
         QuotedText:
+          nullable: false
           type: string
           description: Texto da mensagem citada, para o cliente desenhar a pré-visualização.
           example: Bom dia, tudo certo com o pedido?

@@ -3,35 +3,45 @@ SaudeDetalhada:
   description: Contagens do processo, devolvidas por `GET /health`.
   properties:
     status:
+      nullable: false
       type: string
-      description: Estado global do processo.
+      description: |
+        Estado global do processo. **Sempre presente** — sem `omitempty` na
+        struct, logo aparece mesmo quando vazio. Nunca `null`.
       example: ok
     timestamp:
+      nullable: false
       type: string
       format: date-time
       description: Instante em que o retrato foi tirado, em UTC.
       example: '2026-08-26T12:41:38Z'
     uptime:
+      nullable: false
       type: string
       description: Há quanto tempo o processo está de pé, em notação de duração do Go.
       example: 3h12m45s
     active_connections:
+      nullable: false
       type: integer
       description: Ligações WebSocket ao WhatsApp actualmente abertas.
       example: 2
     total_users:
+      nullable: false
       type: integer
       description: Sessões existentes no banco, ligadas ou não.
       example: 2
     connected_users:
+      nullable: false
       type: integer
       description: Sessões com ligação estabelecida ao WhatsApp.
       example: 2
     logged_in_users:
+      nullable: false
       type: integer
       description: Sessões ligadas E autenticadas — as que conseguem operar.
       example: 2
     memory_stats:
+      nullable: false
       type: object
       description: |
         Contadores do coletor de lixo do Go, em megabytes salvo `num_gc`.
@@ -40,28 +50,39 @@ SaudeDetalhada:
         (`get_health.go:55-60`) e não do tipo.
       properties:
         alloc_mb:
+          nullable: false
           type: integer
           description: Memória de heap em uso neste instante.
           example: 7
         total_alloc_mb:
+          nullable: false
           type: integer
           description: Total já alocado desde o arranque, cumulativo — nunca desce.
           example: 11
         sys_mb:
+          nullable: false
           type: integer
           description: Memória obtida do sistema operativo.
           example: 26
         num_gc:
+          nullable: false
           type: integer
           description: Ciclos completos do coletor de lixo desde o arranque.
           example: 5
     goroutines:
+      nullable: false
       type: integer
       description: Goroutines em execução. Crescimento contínuo aqui costuma indicar fuga.
       example: 285
     version:
+      nullable: false
       type: string
-      description: Versão do binário (`pkg/bootstrap/bootstrap_server.go`).
+      description: |
+        Versão do binário (`pkg/bootstrap/bootstrap_server.go`).
+
+        **Pode não aparecer.** É o único campo desta resposta com `omitempty`
+        na struct (`pkg/domain/health.go:14`), logo é omitido quando a versão
+        está vazia. Nunca vem `null`; ou vem preenchido, ou não vem.
       example: 1.0.6
 
 EstadoSonda:
@@ -91,6 +112,7 @@ EstadoProntidao:
         significa que o serviço não deve receber tráfego.
       example: ready
     checks:
+      nullable: false
       type: object
       description: Uma entrada por dependência verificada, com o seu resultado.
       additionalProperties:
@@ -98,6 +120,7 @@ EstadoProntidao:
       example:
         database: ok
     capabilities:
+      nullable: false
       type: object
       description: Configuração em vigor que altera o comportamento do serviço.
       additionalProperties:

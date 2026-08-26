@@ -158,8 +158,8 @@ name:
     | estado | aceite? | efeito |
     |---|---|---|
     | ausente | não | `400 missing_name` |
-    | `null` | não | `400 could_not_decode_payload` — o tipo é `string`, não `*string` |
-    | `""` | não | `400 missing_name` — a validação é `== ""` |
+    | `null` | não | `400 missing_name` — **indistinguível de ausente** |
+    | `""` | não | `400 missing_name` — **indistinguível de ausente** |
     | `"   "` | **sim** | aceite tal e qual; **não há `trim`** |
     | preenchido | sim | — |
   minLength: 1
@@ -193,6 +193,56 @@ campo ausente  ==  campo com ""  ==  campo com null (quando o tipo aceita)
 são **indistinguíveis** na maioria das rotas. Isso é aceitável em rotas de
 criação, onde ausente e vazio significam ambos "não foi dado". **Não é
 aceitável em actualização parcial** — ver secção 6.
+
+### 4.1 O que foi medido, e desmentiu a minha primeira leitura
+
+Eu tinha escrito que `null` num campo `string` daria
+`400 could_not_decode_payload`. **Não dá.** O `encoding/json` do Go trata
+`null` para um tipo não-ponteiro como **nada a fazer**: o campo fica com o
+valor zero, exactamente como se não tivesse vindo.
+
+Medido, `POST /chat/send/text`, quatro pedidos no mesmo minuto:
+
+```
+{"Phone":"…"}                  -> 400 missing_body
+{"Phone":"…","Body":null}      -> 400 missing_body     <- MESMO resultado
+{"Phone":"…","Body":""}        -> 400 missing_body     <- MESMO resultado
+{"Phone":"…","Body":"   "}     -> 200, mensagem ENVIADA
+{"Phone":"…","Body":123}       -> 400 could_not_decode_payload
+```
+
+**Três dos cinco estados colapsam num só.** Ausente, `null` e `""` são
+literalmente o mesmo pedido para o servidor. Só o tipo errado é distinguido.
+
+E o quarto é a surpresa: **`"   "` é enviado**. Uma mensagem de três espaços
+chega ao destinatário.
+
+### 4.2 O caso perigoso — `null` num booleano
+
+```
+POST /chat/mute {"jid":"…","mute":null}  ->  200 "Chat unmuted"
+```
+
+`null` num `bool` não-ponteiro vira **`false`**, em silêncio, e a operação faz o
+CONTRÁRIO do que um leitor distraído esperaria de "não decidi". É o mesmo
+mecanismo da F268, noutro tipo.
+
+**Regra que daqui sai**: um `bool` cujo `false` seja uma acção — e não um
+padrão inerte — **tem de ser ponteiro**, para que ausente e `false` se
+distingam.
+
+### 4.3 Arrays não são validados por omissão
+
+```
+POST /user/check {"phone":null}   ->  200 {"data":null}
+POST /user/check {"phone":[]}     ->  200 {"data":null}
+POST /user/check {"phone":[""]}   ->  200 {"data":null}
+```
+
+As três formas de "lista vazia" devolvem **sucesso com `data: null`**. A rota
+não exige `minItems`, e responde `200` a um pedido que não pede nada.
+`data: null` não é `data: []` — quem iterar sobre a resposta sem verificar
+parte. Registado em **F270**.
 
 **Onde a API usa ponteiro**, e portanto distingue:
 
