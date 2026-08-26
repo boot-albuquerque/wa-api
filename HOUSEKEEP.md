@@ -25144,10 +25144,16 @@ Os `curl`s, com os nomes de campo REAIS (ver `pkg/domain/mute.go`,
 `messageId`/`mute_duration` e levou `400 missing_message_id`):
 
 ```bash
-# mute on / off  — duration do conjunto fechado: "0" (para sempre), "8h", "168h"
+# mute on / off
+# CORRIGIDO em 2026-08-26 (F268): o campo é `mute_duration`, em NANOSSEGUNDOS.
+# O exemplo antigo usava `duration:"8h"`, que o Go ignora em silêncio — e como
+# a ausência significa "para sempre", ele silenciava indefinidamente com 200.
+#   28800000000000  = 8 horas
+#   604800000000000 = 1 semana
+#   omitido         = para sempre
 curl -s -X POST http://localhost:8080/chat/mute -H 'token: <TOKEN>' \
   -H 'Content-Type: application/json' \
-  -d '{"jid":"<JID>@s.whatsapp.net","mute":true,"duration":"8h"}'
+  -d '{"jid":"<JID>@s.whatsapp.net","mute":true,"mute_duration":28800000000000}'
 curl -s -X POST http://localhost:8080/chat/mute -H 'token: <TOKEN>' \
   -H 'Content-Type: application/json' \
   -d '{"jid":"<JID>@s.whatsapp.net","mute":false}'
@@ -29136,6 +29142,61 @@ proporção possível, porque parece de confiança.
 **Status**: não corrigido. O `docs/ENDPOINTS.md` foi escrito a partir da
 MEDIÇÃO e não das structs, e diz isso na secção "O que a bateria corrigiu nos
 meus próprios exemplos".
+
+<!-- f-status: aberto -->
+
+## F268 — o exemplo de `curl` da F223 silencia PARA SEMPRE em vez de 8 horas, e devolve `200`
+
+**Data/contexto**: 2026-08-26, ao auditar o lote de documentação OpenAPI do
+grupo `conversa`. O autor do lote copiou o estado da F223 em vez de o medir, e
+ao verificar essa cópia encontrei o defeito no próprio exemplo da F223.
+
+**Onde**: `HOUSEKEEP.md`, bloco de `curl` da entrada F223:
+
+```bash
+# mute on / off  — duration do conjunto fechado: "0" (para sempre), "8h", "168h"
+curl -s -X POST http://localhost:8080/chat/mute … \
+  -d '{"jid":"<JID>@s.whatsapp.net","mute":true,"duration":"8h"}'
+```
+
+**O campo `duration` NÃO existe** em `MuteChatRequest`
+(`pkg/domain/mute.go:12-18`), que declara `mute_duration` e mais nada.
+
+**Medido**, as duas grafias no mesmo instante:
+
+```
+{"jid":"…","mute":true,"duration":"8h"}        -> 200 {"success":true,"message":"Chat muted"}
+{"jid":"…","mute":true,"mute_duration":"8h"}   -> 400 could_not_decode_payload
+{"jid":"…","mute":true,"mute_duration":28800000000000} -> 200 Chat muted
+{"jid":"…","mute":true,"mute_duration":3600000000000}  -> 400 invalid_mute_duration
+     "mute_duration must be 8h, 168h (1 week), or omitted (forever); got 1h0m0s"
+```
+
+**Por que o `200` é a parte má.** O `encoding/json` do Go ignora campos
+desconhecidos em silêncio. Com `duration`, o `MuteDuration` fica **nil**, o use
+case lê `muteDuration = 0`, e `allowedMuteDurations[0]` é `true` — porque zero
+significa **para sempre** (`mute_chat.go:15-19`). Ou seja: quem seguir o
+exemplo pede oito horas, recebe `200`, e cala a conversa **indefinidamente**.
+
+Um `400` teria sido melhor resultado que este `200`.
+
+**A armadilha de fundo**, que é a mesma da F267 vista de outro ângulo: campo
+com nome errado não dá erro em Go — dá o valor zero. E quando o valor zero é um
+valor VÁLIDO com significado próprio, o erro de digitação vira uma escolha
+silenciosa. Onde o zero significa alguma coisa, o ponteiro tem de ser
+distinguido do zero **e a ausência tem de ser dita**, não inferida.
+
+**Correção sugerida**:
+
+1. Corrigir o exemplo da F223 para `mute_duration` em nanossegundos.
+2. Ponderar `DisallowUnknownFields` em `domain.DecodeRequest`. Muda contrato
+   observável — clientes que hoje mandam lixo passariam a levar `400` —, logo é
+   decisão do utilizador e commit próprio.
+3. Enquanto (2) não existir, a documentação OpenAPI da rota traz o aviso.
+
+**Status**: exemplo da F223 corrigido nesta sessão e aviso escrito na
+documentação OpenAPI de `/chat/mute`. A guarda contra campo desconhecido
+(ponto 2) **não** foi feita — é mudança de contrato e precisa de aval.
 
 <!-- f-status: aberto -->
 

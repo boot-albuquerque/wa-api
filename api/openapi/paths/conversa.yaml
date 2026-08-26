@@ -406,14 +406,23 @@
         Qualquer outro é `400 invalid_mute_duration`, com a mensagem a dizer
         o valor recebido — medido com `3600000000000` (1 hora).
       - Com `mute: false`, `mute_duration` é ignorado.
+      - **Cuidado com o nome do campo.** Um campo desconhecido — `duration`,
+        por exemplo — é ignorado em silêncio pelo servidor, e a ausência de
+        `mute_duration` significa **para sempre**. Enviar
+        `{"mute": true, "duration": "8h"}` devolve `200` e cala a conversa
+        **indefinidamente**, e não por oito horas. Medido; ver F268.
       - Destino em `jid`, com `chat` como alias.
 
-      **Estado medido em campo (F223)**: esta rota usa um patch de app-state
-      do tipo `regular_high`, e esse tipo está a ser recusado com
-      `409 app_state_conflict` nas duas sessões reais — com sincronização
-      completa e incremental, e mesmo com o estado local apagado. A rota está
-      correcta e a resposta é honesta, mas a capacidade está indisponível na
-      prática. `/chat/pin`, que usa `regular_low`, não é afectada.
+      **Estado medido em campo (2026-08-26)**: a rota **funciona** — silenciar
+      e reactivar devolvem `200` com as duas durações válidas, medido nesta
+      data contra as sessões reais.
+
+      Historicamente (F223) esta rota usava um patch de app-state do tipo
+      `regular_high` e era recusada com `409 app_state_conflict`, ao contrário
+      de `/chat/pin`, que usa `regular_low`. Esse defeito foi corrigido; o
+      `409` continua documentado abaixo porque a classificação de conflito
+      existe no código (`errmap/appstate.go`) e pode voltar a ocorrer se o
+      estado local dessincronizar.
 
       **Autenticação**: token de sessão.
     security:
