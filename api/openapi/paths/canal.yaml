@@ -100,6 +100,18 @@
       **Regras**: `jid` é obrigatório e tem de ser um JID `@newsletter`.
       `viewer_metadata` vem `null` quando não há relação com o canal.
 
+      **Duas ressalvas medidas a 2026-08-26, ambas contra-intuitivas**:
+
+      - **Um canal que não existe devolve `200`, não `404`.** A resposta traz
+        `state.type: non_existing`, `id: ""` (cadeia vazia, não o JID pedido),
+        `viewer_metadata: null` e `thread_metadata` todo zerado. Quem consome
+        tem de olhar `state.type`, não o código HTTP.
+      - **Um `jid` malformado devolve `500`, não `400`.** Medido com `"   "`,
+        `"nao-e-jid"` e um JID `@s.whatsapp.net`: os três dão
+        `500 newsletter_failed`, porque a falha de conversão de JID não é um
+        `apperr` e o use case a embrulha como erro interno. As rotas de
+        comunidade tratam o mesmo defeito como `400 invalid_community_jid`.
+
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
@@ -473,15 +485,30 @@
       para obter os `server_id` de que `POST /newsletter/mark-viewed` e
       `POST /newsletter/react` precisam.
 
-      **Regras**: `jid` é obrigatório. `count` a zero (ou ausente) **não** é um
-      limite nosso — o atributo é omitido do pedido e o servidor aplica o
-      padrão dele. `before` recebe um `server_id` para paginar para trás.
+      **Regras**: `jid` é obrigatório. **`count` é obrigatório na prática**,
+      embora a tabela de validação não o exija — ver a correcção abaixo.
+      `before` recebe um `server_id` para paginar para trás, e texto não
+      numérico ali é **descartado em silêncio**, virando "sem cursor".
+
+      **CORRECÇÃO medida a 2026-08-26**: esta descrição afirmava que `count` a
+      zero ou ausente deixava o servidor aplicar o padrão dele. **Não é o que
+      acontece.** Sem `count`, ou com `count` a `0`, `null` ou negativo, o
+      WhatsApp não responde e a rota devolve `500 newsletter_failed` ao fim do
+      tempo limite — o mesmo sintoma da F265. Confirmado em dois canais (um
+      vazio, um com sessenta publicações) e, no mesmo canal e no segundo
+      seguinte, `count: 1` devolveu `200`. Valores de `1` a `100` foram
+      aceites; o tecto não foi procurado.
 
       **Forma da resposta**: `data` é a lista directamente, sem chave
       intermédia — ao contrário de `GET /newsletter/list`. Um canal sem
-      publicações devolve `[]`, medido a 2026-08-26. A forma de cada elemento
-      não foi determinada com segurança: não havia canal com mensagens para
-      medir.
+      publicações devolve `[]`, medido a 2026-08-26.
+
+      **A forma de cada elemento passou a ser conhecida** nesta sessão, medida
+      sobre sessenta publicações reais de um canal público seguido — ver
+      `MensagemCanal`. As sete propriedades apareceram nas sessenta. Duas
+      ressalvas que mordem quem consome: `Message` pode vir **`null`** (2 em
+      60), e o campo `Type` **não é de confiança** — catorze publicações de
+      texto puro vieram marcadas `media`.
 
       **Autenticação**: token de sessão.
     security:
@@ -497,7 +524,9 @@
             count: 5
     responses:
       '200':
-        description: Mensagens do canal, ou `[]` quando ele não tem nenhuma.
+        description: |
+          Mensagens do canal, ou `[]` quando ele não tem nenhuma. Ordenadas por
+          `MessageServerID` crescente dentro da janela pedida.
         content:
           application/json:
             schema:
@@ -509,7 +538,14 @@
                       $ref: '#/components/schemas/MensagensCanal'
             example:
               code: 200
-              data: []
+              data:
+                - MessageServerID: 4379
+                  MessageID: 3EB0A4B2AFD45E625C0917
+                  Type: media
+                  Timestamp: '2026-08-25T19:22:23-04:00'
+                  ViewsCount: 0
+                  ReactionCounts: {'👍': 3, '😂': 58}
+                  Message: {videoMessage: {mimetype: video/mp4, seconds: 17}}
               success: true
       '400':
         description: Falta o `jid`, ou o corpo não é JSON válido.
@@ -526,7 +562,20 @@
       '401':
         $ref: '#/components/responses/NaoAutorizado'
       '500':
-        $ref: '#/components/responses/ErroInterno'
+        description: |
+          Falha da operação. **Inclui o caso, muito comum, de `count` ausente,
+          zero ou negativo** — ver a correcção na descrição. Um JID malformado
+          também cai aqui, e não em `400`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: newsletter_failed
+                message: newsletter operation failed
+              success: false
 
 /newsletter/updates:
   post:
@@ -582,16 +631,41 @@
         description: |
           Falta o `jid`, o corpo não é JSON válido, ou `since` não está em
           RFC 3339.
+
+          **Atenção: há DUAS formas de corpo neste `400`.** A recusa de `jid`
+          usa o envelope canónico, com `error` como objecto. A recusa de
+          `since` **usa o envelope ANTIGO, com `error` como STRING** — porque
+          é a única validação destas dezoito rotas que corre no manipulador,
+          antes da taxonomia `apperr` (`handler_newsletter.go:145`). Medido a
+          2026-08-26 com `{"since":"nao-e-data"}`:
+
+          ```json
+          {"code": 400, "error": "bad request", "success": false}
+          ```
+
+          Um cliente que leia `error.code` parte exactamente aqui, e só aqui
+          neste grupo de rotas. É a F266.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 400
-              error:
-                code: missing_jid
-                message: jid do canal é obrigatório
-              success: false
+              oneOf:
+                - $ref: '#/components/schemas/Erro'
+                - $ref: '#/components/schemas/ErroTextoSimples'
+            examples:
+              faltaJid:
+                summary: Falta o `jid` — envelope canónico
+                value:
+                  code: 400
+                  error:
+                    code: missing_jid
+                    message: jid do canal é obrigatório
+                  success: false
+              sinceMalFormatado:
+                summary: '`since` fora do RFC 3339 — envelope ANTIGO, `error` em texto'
+                value:
+                  code: 400
+                  error: bad request
+                  success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
       '500':
