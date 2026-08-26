@@ -2183,15 +2183,29 @@ components:
     ListaCanais:
       description: |
         Resposta de `GET /newsletter/list`. Repare no envelope duplo: a carga útil
-        é um objecto com a chave `newsletter`, e só dentro dela está a lista.
+        é um objecto com a chave `newsletter`, e só dentro dela está a lista. É a
+        única rota de canal com este nível extra — `POST /newsletter/messages`
+        devolve a lista directamente em `data`.
       properties:
         newsletter:
           description: |
-            Os canais que a sessão segue. Inclui canais em `state.type: deleted` —
-            medido a 2026-08-26 — logo um cliente que liste canais utilizáveis tem
-            de filtrar por estado.
+            Os canais que a sessão segue.
+
+            **Nunca é `null` nem ausente**: o adaptador constrói a fatia com
+            `make([]types.NewsletterMetadata, 0, len(resp))`
+            (`adapter.go:167`), logo uma sessão sem canais devolve `[]` e não
+            `null`. Isto distingue-a de outras rotas desta API, onde uma lista
+            vazia vem como `data: null` (F270).
+
+            **Inclui canais em `state.type: deleted`** — medido a 2026-08-26 —,
+            com `thread_metadata` inteiramente zerado e `viewer_metadata: null`.
+            Um cliente que mostre "os meus canais" tem de filtrar por
+            `state.type == "active"`, ou mostra entradas sem nome.
+
+            Não há paginação, cursor nem tecto: a lista vem inteira.
           items:
             $ref: '#/components/schemas/MetadadosCanal'
+          nullable: false
           type: array
       required:
         - newsletter
@@ -2221,6 +2235,113 @@ components:
         type: string
       nullable: true
       type: array
+    MensagemCanal:
+      description: |
+        Uma publicação de canal. **Forma medida a 2026-08-26** sobre sessenta
+        publicações reais de um canal público seguido — substitui o "não
+        determinado com segurança" que esta documentação trazia, escrito quando não
+        havia canal com mensagens para medir.
+
+        **As sete propriedades apareceram nas sessenta**, sem excepção: o conjunto
+        de chaves é estável. Os nomes vêm em maiúscula inicial porque a estrutura é
+        serializada tal como o vendor a define, sem etiquetas JSON a renomeá-la.
+      properties:
+        Message:
+          additionalProperties: true
+          description: |
+            O conteúdo da publicação, na forma de mensagem do protocolo do
+            WhatsApp.
+
+            **Pode vir `null`** — medido em 2 das 60 publicações, ambas com
+            `Type: "text"`. Um cliente que desça para dentro sem verificar parte
+            nessas duas.
+
+            Quando não é `null`, é um objecto com **uma ou duas** chaves. Chaves
+            observadas nas sessenta: `videoMessage` (25), `extendedTextMessage`
+            (16), `imageMessage` (15), `questionMessage` (2) e
+            `messageContextInfo` (48, sempre acompanhando outra). A chave que não é
+            `messageContextInfo` é o que a publicação é.
+
+            **A forma de dentro de cada uma dessas chaves não é o contrato desta
+            rota**: é a árvore protobuf do WhatsApp, serializada tal e qual, e
+            muda com o cliente que publicou. Documentá-la aqui seria copiar um tipo
+            do vendor para dentro do nosso contrato.
+          nullable: true
+          type: object
+        MessageID:
+          description: |
+            Identificador global da mensagem, hexadecimal maiúsculo.
+
+            **Duas formas coexistem no mesmo canal**, medidas: 22 caracteres com
+            prefixo `3EB0` (`3EB0DC0F29B6DA6AB033EE`) e 32 caracteres sem prefixo
+            fixo (`ACDC1643FEA86B9C252011C9C8673FF0`). Um cliente que valide
+            comprimento ou prefixo rejeita metade das publicações reais.
+
+            Sempre presente, nunca `null`.
+          example: 3EB0A4B2AFD45E625C0917
+          nullable: false
+          type: string
+        MessageServerID:
+          description: |
+            Identificador da publicação **dentro do canal**, atribuído pelo
+            servidor. Sempre presente, nunca `null`. É o valor que
+            `POST /newsletter/mark-viewed` (`serverIDs`),
+            `POST /newsletter/react` (`serverID`) e a paginação (`before`) pedem.
+
+            Crescente e aparentemente contíguo dentro de um canal — medido de 4321
+            a 4380 sem saltos.
+          example: 4379
+          nullable: false
+          type: integer
+        ReactionCounts:
+          additionalProperties:
+            description: Quantas pessoas reagiram com esse emoji exacto, sem normalização Unicode.
+            nullable: false
+            type: integer
+          description: "Contagem de reações por emoji. Objecto com o emoji como chave e um\ninteiro como valor.\n\n**Sempre presente e nunca `null`** nas sessenta medidas, e nunca `{}`\n— mas `{}` é a forma esperada para uma publicação sem reações, e não\nfoi observada só porque todas as sessenta tinham pelo menos uma.\n\n**As chaves não são normalizadas**: o mesmo emoji aparece como entradas\nSEPARADAS conforme o selector de variação Unicode. Medido na mesma\npublicação: `\"❤\"` com 1 e `\"❤️\"` com 6, e `\"\U0001F3F3‍\U0001F308\"` com 1 ao lado de\n`\"\U0001F3F3️‍\U0001F308\"` com 1. Quem somar reações tem de normalizar antes, ou conta a\nmesma reação duas vezes.\n"
+          example:
+            "\U0001F44D": 3
+            "\U0001F602": 58
+          nullable: false
+          type: object
+        Timestamp:
+          description: |
+            Instante da publicação, em RFC 3339 — **com o deslocamento de fuso do
+            SERVIDOR, não em UTC**. Medido `2026-08-25T19:22:23-04:00`.
+
+            É a terceira forma de data desta API, e a única deste grupo: os
+            `creation_time` e `update_time` de `MetadadosCanal` são texto com um
+            inteiro Unix. Sempre presente, nunca `null`.
+          example: "2026-08-25T19:22:23-04:00"
+          format: date-time
+          nullable: false
+          type: string
+        Type:
+          description: |
+            Tipo declarado da publicação. Valores medidos: `media` (56 de 60) e
+            `text` (4 de 60).
+
+            **Não é de confiança, e a medição é explícita quanto a isso**: catorze
+            publicações que só tinham `extendedTextMessage` — texto puro — vieram
+            marcadas `media`, e duas das quatro marcadas `text` traziam
+            `Message: null`. **Para saber o que a publicação é, olhe as chaves de
+            `Message`, não este campo.**
+
+            Não está declarado como enumeração porque é copiado do WhatsApp sem
+            validação nossa; um valor novo é devolvido tal e qual.
+          example: media
+          nullable: false
+          type: string
+        ViewsCount:
+          description: |
+            Contagem de visualizações. **Veio `0` nas sessenta publicações
+            medidas**, incluindo as que tinham dezenas de reações — logo é `0` que
+            se deve esperar, e o que um valor não-zero significaria **não foi
+            determinado com segurança**. Sempre presente, nunca `null`.
+          example: 0
+          nullable: false
+          type: integer
+      type: object
     MensagemDoHistorico:
       description: |
         Uma mensagem do histórico LOCAL. É leitura do nosso banco, não do
@@ -2361,159 +2482,350 @@ components:
       type: object
     MensagensCanal:
       description: |
-        Resposta de `POST /newsletter/messages`: uma lista de mensagens do canal,
-        directamente em `data`, sem chave intermédia. Medida `[]` num canal sem
-        publicações; **a forma de cada elemento não foi determinada com segurança**
-        — não havia canal com mensagens disponível para medir, e o tipo do vendor
-        não é o contrato desta rota.
+        Resposta de `POST /newsletter/messages`: as publicações do canal,
+        **directamente em `data`**, sem chave intermédia — ao contrário de
+        `GET /newsletter/list`.
+
+        Ordenada da mais antiga para a mais recente dentro da janela pedida
+        (`MessageServerID` crescente), e a janela é as últimas `count` publicações.
+        Um canal sem publicações devolve `[]`, não `null`.
       items:
-        type: object
+        $ref: '#/components/schemas/MensagemCanal'
       type: array
     MetadadosCanal:
       description: |
-        Metadados de um canal, medidos em `POST /newsletter/info` a 2026-08-26.
-        Repare que **os números vêm como texto** — `creation_time`,
-        `subscribers_count` e os `id` internos são strings, não inteiros. É a forma
-        do protocolo, não uma conversão nossa.
+        Metadados de um canal. Devolvidos por `POST /newsletter/create`,
+        `POST /newsletter/info`, `POST /newsletter/info-invite` e, dentro de
+        `newsletter[]`, por `GET /newsletter/list`.
+
+        **Todos os campos abaixo aparecem SEMPRE.** A estrutura é a do vendor,
+        serializada sem `omitempty` — medido contra um canal apagado, em que todas
+        as folhas vieram presentes com o valor zero (`""` ou `"0"`) em vez de
+        ausentes. Nenhum campo desta resposta é omitido; os únicos que vêm `null`
+        são `picture` e `viewer_metadata`, e estão assinalados.
+
+        **Os números vêm como TEXTO** — `creation_time`, `subscribers_count`,
+        `update_time` e os `id` internos são strings, não inteiros. É a forma do
+        protocolo, não uma conversão nossa.
       properties:
         id:
-          description: JID do canal.
+          description: |
+            JID do canal. **Vem `""` — não `null`, não ausente — quando o canal
+            pedido não existe**, e nesse caso `state.type` é `non_existing` e o
+            estado HTTP continua a ser `200`. Medido a 2026-08-26 com o JID de um
+            canal apagado.
+
+            Um cliente que ecoe `data.id` sem verificar `state.type` mostra uma
+            cadeia vazia ao utilizador.
           example: 120363411025775186@newsletter
+          nullable: false
           type: string
         state:
-          description: Estado do canal do ponto de vista do servidor.
+          description: |
+            Estado do canal do ponto de vista do servidor. **Sempre presente**,
+            nunca `null`, mesmo quando o canal não existe.
+          nullable: false
           properties:
             type:
               description: |
-                Valores observados em campo: `active` (canal em funcionamento),
-                `deleted` (apagado, ainda listado na lista do seguidor) e
-                `non_existing` (o que `info` devolve depois de um `delete`). Não
-                está fechado por enumeração no código — a lista acima é o que foi
-                medido, não o universo garantido.
+                | valor | quando aparece |
+                |---|---|
+                | `active` | canal em funcionamento |
+                | `deleted` | apagado, **mas ainda listado** em `GET /newsletter/list`, com `thread_metadata` inteiramente zerado e `viewer_metadata: null` |
+                | `non_existing` | o que `POST /newsletter/info` devolve para um canal apagado ou que nunca existiu |
+
+                Os três foram medidos a 2026-08-26. **A lista não está fechada por
+                enumeração no código**: este é um campo de RESPOSTA, copiado do que
+                o WhatsApp manda, e não passa por validação nenhuma nossa. Um valor
+                desconhecido não é recusado nem convertido — **é devolvido tal e
+                qual**, e um cliente que faça `switch` sobre ele tem de ter ramo de
+                omissão.
+
+                **Ao filtrar "os meus canais", filtre por `active`**, e não por
+                "diferente de `deleted`": um valor novo passaria pelo segundo teste.
+              enum:
+                - active
+                - deleted
+                - non_existing
               example: active
+              nullable: false
               type: string
           type: object
         thread_metadata:
           description: |
-            Os dados públicos do canal. `picture` e `preview` vêm com `url` e
-            `direct_path` VAZIOS na resposta medida — para obter a imagem é preciso
-            outra chamada, e essa não é destas rotas.
+            Os dados públicos do canal. **Sempre presente e nunca `null`** — num
+            canal apagado vem com todas as folhas a `""` ou `"0"`, não em falta.
+
+            Medido: `picture` e `preview` trazem `url` e `direct_path` VAZIOS em
+            canais próprios; para obter a imagem é preciso outra chamada, e essa
+            não é destas rotas. Num canal de terceiro seguido pela sessão, o
+            `preview.direct_path` veio preenchido — logo o vazio é propriedade do
+            canal, não da rota.
+          nullable: false
           properties:
             creation_time:
-              description: Instante de criação, em segundos Unix, como texto.
+              description: |
+                Instante de criação, em **segundos Unix, embrulhado em aspas** —
+                não é número nem RFC 3339. `"1787746245"` é a forma real.
+
+                **Vem `"0"` quando o canal não existe ou está apagado**, e `"0"` é
+                uma data válida em Unix (1970-01-01). Quem converter sem verificar
+                `state.type` mostra "1 de Janeiro de 1970". Medido.
               example: "1787745654"
+              nullable: false
               type: string
             description:
-              description: Descrição do canal, com a mesma forma do nome.
+              description: |
+                Descrição do canal, com a mesma forma de `name`. **Sempre presente
+                e nunca `null`**, mesmo num canal criado sem descrição — nesse
+                caso `text` é `""`.
+              nullable: false
               properties:
                 id:
+                  description: Identificador desta versão da descrição, como texto. `""` em canal apagado.
                   example: "1787745654587070"
+                  nullable: false
                   type: string
                 text:
+                  description: A descrição. `""` quando o canal não tem uma; nunca `null`, nunca ausente.
                   example: Novidades e horários de funcionamento.
+                  nullable: false
                   type: string
                 update_time:
+                  description: Instante da última alteração, como texto de dezasseis dígitos. `"0"` em canal apagado.
                   example: "1787745654587070"
+                  nullable: false
                   type: string
               type: object
             invite:
-              description: Código do convite público, o mesmo que `POST /newsletter/info-invite` aceita.
+              description: |
+                Código do convite público, o mesmo que `POST /newsletter/info-invite`
+                aceita. **Vem `""`** em canal apagado ou inexistente; nunca `null`,
+                nunca ausente.
               example: 0029Vb85MPpKLaHoEUxRt01E
+              nullable: false
               type: string
             name:
-              description: Nome do canal, com o instante da última alteração.
+              description: |
+                Nome do canal, com o instante da última alteração. Sempre presente
+                e nunca `null`; num canal apagado vem `{text:"", id:"",
+                update_time:"0"}`.
+              nullable: false
               properties:
                 id:
+                  description: Identificador desta versão do nome, como texto. `""` em canal apagado.
                   example: "1787745654587070"
+                  nullable: false
                   type: string
                 text:
+                  description: O nome. `""` em canal apagado ou inexistente; nunca `null`.
                   example: Avisos da Fila Rápida
+                  nullable: false
                   type: string
                 update_time:
+                  description: |
+                    Instante da última alteração do nome, como texto. **Não é em
+                    segundos**: os valores medidos têm dezasseis dígitos
+                    (`"1787745654587070"`), contra dez em `creation_time`. `"0"`
+                    em canal apagado.
                   example: "1787745654587070"
+                  nullable: false
                   type: string
               type: object
             picture:
               description: |
-                Descritor da imagem de perfil, ou `null` quando o canal não tem
-                uma. Medido `null` em `/newsletter/list` e preenchido com `url`
-                vazio em `/newsletter/info` para o MESMO canal — logo a presença
-                deste objecto não garante que haja imagem.
+                Descritor da imagem de perfil, **ou `null`**.
+
+                | rota | o que foi medido |
+                |---|---|
+                | `GET /newsletter/list` | `null` em TODOS os canais, incluindo os que têm imagem |
+                | `POST /newsletter/info` | objecto preenchido para o MESMO canal |
+                | canal apagado | `null` nas duas |
+
+                **`null` aqui não significa "canal sem imagem"** — significa "esta
+                rota não a trouxe". Para saber se há imagem, chame
+                `POST /newsletter/info`; e mesmo aí, o objecto vir preenchido não
+                garante imagem, porque `url` e `direct_path` podem vir vazios.
               nullable: true
               properties:
                 direct_path:
+                  description: |
+                    Caminho directo no CDN do WhatsApp. `""` nos canais próprios
+                    medidos e preenchido num canal de terceiro — nunca `null`,
+                    nunca ausente.
                   example: ""
+                  nullable: false
                   type: string
                 hash:
+                  description: |
+                    Resumo criptográfico da imagem. **Veio `null` em todas as
+                    medições**, sem excepção, em `picture` e em `preview`, em canal
+                    activo e apagado. É o único campo de `thread_metadata` que vem
+                    `null` em vez de `""`. Um valor não-`null` não foi observado, e
+                    **o que ele conteria não foi determinado com segurança**.
                   nullable: true
                   type: string
                 id:
+                  description: |
+                    Identificador da imagem, como texto. `""` em canal apagado;
+                    nunca `null`. **Muda entre chamadas** para o mesmo canal —
+                    medido `1787750687544878` e `1787756516362051` com minutos de
+                    intervalo —, logo não serve como chave de cache.
                   example: "1787750687544878"
+                  nullable: false
                   type: string
                 type:
+                  description: |
+                    Tipo do descritor. `IMAGE` em `picture`, `PREVIEW` em
+                    `preview`, `""` em canal apagado. Não é enumeração validada:
+                    é copiado do WhatsApp e um valor novo passa tal e qual.
                   example: IMAGE
+                  nullable: false
                   type: string
                 url:
+                  description: |
+                    URL de descarga. **Veio `""` em todos os canais próprios
+                    medidos**; nunca `null`. Vazio significa que é preciso outra
+                    chamada para obter a imagem.
                   example: ""
+                  nullable: false
                   type: string
               type: object
             preview:
-              description: Descritor da pré-visualização, com a mesma forma de `picture`.
+              description: |
+                Descritor da pré-visualização, com a **mesma forma** de `picture`.
+
+                Ao contrário de `picture`, veio como objecto (nunca `null`) em
+                todas as medições, incluindo `GET /newsletter/list` e canal
+                apagado — mas está declarado `nullable: true` porque partilha o
+                tipo de `picture` e o vendor pode omiti-lo pela mesma via.
               nullable: true
               properties:
                 direct_path:
+                  description: |
+                    Caminho directo no CDN. `""` nos canais próprios e
+                    **preenchido** num canal público de terceiro — medido. Nunca
+                    `null`.
                   example: ""
+                  nullable: false
                   type: string
                 hash:
+                  description: |
+                    Resumo criptográfico. **`null` em todas as medições**, tal como
+                    em `picture.hash`.
                   nullable: true
                   type: string
                 id:
+                  description: Identificador da pré-visualização, como texto. `""` em canal apagado; muda entre chamadas.
                   example: "1787750687544880"
+                  nullable: false
                   type: string
                 type:
+                  description: '`PREVIEW` nos casos medidos, `""` em canal apagado. Copiado do WhatsApp, sem validação nossa.'
                   example: PREVIEW
+                  nullable: false
                   type: string
                 url:
+                  description: URL de descarga. `""` nos canais próprios medidos; nunca `null`.
                   example: ""
+                  nullable: false
                   type: string
               type: object
             settings:
-              description: Definições do canal. A única observada governa que reações são aceites.
+              description: |
+                Definições do canal. Sempre presente e nunca `null`; num canal
+                apagado vem com as folhas a `""`. A única definição observada
+                governa que reações são aceites.
+              nullable: false
               properties:
                 reaction_codes:
+                  description: |
+                    Que reações o canal aceita. Sempre presente, nunca `null`.
+                  nullable: false
                   properties:
                     value:
-                      description: Valor observado, `ALL`.
+                      description: |
+                        `ALL` em todos os canais activos medidos, `""` em canal
+                        apagado. **Não é enumeração validada** — é copiado do
+                        WhatsApp e um valor novo é devolvido tal e qual. Nós não
+                        verificamos o emoji de `/newsletter/react` contra este
+                        campo.
                       example: ALL
+                      nullable: false
                       type: string
                   type: object
               type: object
             subscribers_count:
-              description: Número de seguidores, como texto.
+              description: |
+                Número de seguidores, **como texto**. Nunca `null`, nunca ausente.
+
+                **Ressalva medida**: veio `"0"` em todos os canais observados,
+                incluindo um canal público de terceiro com milhares de seguidores.
+                Ou seja, **este campo não é de confiança nesta rota** — o que ele
+                significa quando não é zero não foi determinado com segurança.
               example: "0"
+              nullable: false
               type: string
             verification:
-              description: Estado de verificação do canal. Valor observado, `unverified`.
+              description: |
+                Estado de verificação do canal. Valores observados a 2026-08-26:
+                `unverified` (canal comum), `verified` (canal verificado pelo
+                WhatsApp) e `""` (canal apagado ou inexistente).
+
+                **Não está declarado como enumeração** de propósito: é um campo de
+                resposta copiado do WhatsApp, sem validação nossa, e `""` já mostra
+                que o conjunto não é fechado. Um valor novo é devolvido tal e qual.
               example: unverified
+              nullable: false
               type: string
           type: object
         viewer_metadata:
           description: |
-            O que este canal é **para quem chamou**. Vem `null` quando o chamador
-            não tem relação com o canal — medido em `/newsletter/info-invite` sobre
-            canal não seguido, e em canal apagado.
+            O que este canal é **para quem chamou**.
+
+            **Vem `null`** quando o chamador não tem relação com o canal. Medido
+            `null` em três situações distintas: `POST /newsletter/info-invite`
+            sobre um canal próprio, entrada em `state.type: deleted` dentro de
+            `GET /newsletter/list`, e `POST /newsletter/info` sobre canal apagado.
+
+            Quando não é `null`, traz sempre as duas propriedades abaixo.
           nullable: true
           properties:
             mute:
-              description: '`on` quando silenciado, `off` quando não. É texto, não booleano.'
+              description: |
+                Silenciamento **como texto, não como booleano**: `on` quando
+                silenciado, `off` quando não.
+
+                **Só `on` foi medido.** `off` é o valor esperado do outro lado
+                (é o que `POST /newsletter/mute` com `mute:false` deveria
+                produzir), mas não foi observado nesta sessão porque exigiria uma
+                escrita. Trate `off` como provável e qualquer outro valor como
+                desconhecido.
               example: "on"
+              nullable: false
               type: string
             role:
               description: |
-                Papel do chamador. Os três valores foram medidos ponta a ponta na
-                cadeia de administração de 2026-08-26 (F233): `owner`, `admin` e
-                `subscriber`.
+                Papel do chamador no canal. Os três valores foram medidos ponta a
+                ponta na cadeia de administração de 2026-08-26 (F233):
+
+                | valor | significa |
+                |---|---|
+                | `owner` | dono; pode apagar, transferir posse e convidar administradores |
+                | `admin` | administrador; **não pode deixar de seguir o canal** (`403 newsletter_admin_cannot_unfollow`) |
+                | `subscriber` | seguidor comum |
+
+                **É um campo de RESPOSTA**: não passa por validação nossa, e um
+                valor desconhecido que o WhatsApp venha a introduzir é devolvido
+                tal e qual, sem erro e sem conversão. Um cliente que faça `switch`
+                sobre ele tem de ter ramo de omissão — e o ramo seguro é tratar
+                desconhecido como `subscriber`, porque é o menos permissivo.
+              enum:
+                - owner
+                - admin
+                - subscriber
               example: owner
+              nullable: false
               type: string
           type: object
       type: object
@@ -2678,18 +2990,36 @@ components:
           type: string
       type: object
     ParticipantesComunidade:
-      description: Resposta de `POST /community/participants`.
+      description: |
+        Resposta de `POST /community/participants`. A lista está dentro da chave
+        `participants`, um nível abaixo de `data`.
       properties:
         participants:
           description: |
-            Os participantes de todos os grupos ligados, em **LID** — medido a
-            2026-08-26. Quem precisar do número tem de resolver o LID por outra
-            rota; esta não devolve PN.
+            Os participantes de **todos** os grupos ligados, reunidos numa lista
+            só, em **LID** — medido a 2026-08-26. Quem precisar do número tem de
+            resolver o LID por outra rota; **esta não devolve PN**.
+
+            **Não foi determinado com segurança** se a lista traz duplicados
+            quando a mesma pessoa está em dois sub-grupos: a comunidade medida
+            tinha um só sub-grupo. Trate a lista como podendo repetir.
+
+            **Se o valor `null` é possível não foi determinado com segurança**,
+            pela mesma razão de `sub_groups`: o campo é `any` na struct de
+            resultado (`pkg/domain/community.go:28`). Verifique `null` antes de
+            iterar.
+
+            Sem paginação e sem tecto.
           example:
             - 90937376170214@lid
             - 29343770251463@lid
           items:
+            description: |
+              LID de um participante (`<opaco>@lid`). Nunca `null` dentro da lista
+              nos casos medidos; nunca em PN.
+            nullable: false
             type: string
+          nullable: false
           type: array
       required:
         - participants
@@ -2697,20 +3027,55 @@ components:
     PedidoAdminCanal:
       description: |
         Pedido das operações que apontam para OUTRO utilizador: convidar para
-        administrador, revogar esse convite, despromover e transferir a posse.
+        administrador (`/newsletter/admin-invite`), revogar esse convite
+        (`/newsletter/admin-invite/revoke`), despromover (`/newsletter/demote`) e
+        transferir a posse (`/newsletter/change-owner`).
+
+        São as únicas quatro das dezoito que exigem `userJID`.
       properties:
         jid:
-          description: JID do canal.
+          description: |
+            JID do canal. Obrigatório; ausente, `null` e `""` dão
+            `400 missing_jid`, e é verificado **antes** de `userJID`. Ver
+            `PedidoCanal`.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
         userJID:
           description: |
-            JID do utilizador alvo. Aceita **PN ou LID**: a conversão PN→LID é
-            feita antes do envio, contra o armazenamento da sessão
-            (`adapter.go:489`, F233c). A conversão é direccional — um LID nunca é
-            convertido de volta para PN. Se o armazenamento não conhecer o número,
-            o JID segue como está e é o WhatsApp que recusa.
+            JID do utilizador alvo. Aceita **PN ou LID**.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_user_jid` |
+            | `null` | não | `400 missing_user_jid` — indistinguível de ausente |
+            | `""` | não | `400 missing_user_jid` — indistinguível de ausente |
+            | PN (`…@s.whatsapp.net`) | sim | convertido para LID antes do envio |
+            | LID (`…@lid`) | sim | usado tal e qual |
+            | texto não interpretável | passa a validação | `500 newsletter_failed` — a falha de `wajid.ToJID` não vira `400` |
+
+            **A mensagem do `400` muda com a rota, embora o código não mude.**
+            Todas as quatro devolvem `missing_user_jid`, com quatro textos
+            diferentes — medidos:
+
+            | rota | `message` |
+            |---|---|
+            | `/newsletter/admin-invite` | `invitee jid is required` |
+            | `/newsletter/admin-invite/revoke` | `invitee jid is required for revoke` |
+            | `/newsletter/demote` | `user jid is required for demote` |
+            | `/newsletter/change-owner` | `new owner jid is required` |
+
+            Quem discrimina pela mensagem em vez do código parte quando o texto
+            mudar; o código é o contrato.
+
+            **A conversão PN→LID é direccional** (`adapter.go:489`, F233c): um LID
+            nunca é convertido de volta para PN. Se o armazenamento da sessão não
+            conhecer o número, o JID segue como está, é registado um aviso no log,
+            e é o WhatsApp que recusa — **não há erro nosso nesse caso**.
           example: 90937376170214@lid
+          minLength: 1
+          nullable: false
           type: string
       required:
         - jid
@@ -2764,19 +3129,48 @@ components:
       type: object
     PedidoApagarCanal:
       description: |
-        Pedido de eliminação de canal. Exige confirmação explícita: `confirmJID`
-        tem de ser **idêntico** a `jid`.
+        Pedido de eliminação de canal, em `DELETE /newsletter/delete` — **é a única
+        rota deste grupo que não é `POST`**. Exige confirmação explícita:
+        `confirmJID` tem de ser idêntico a `jid`.
       properties:
         confirmJID:
           description: |
-            Repetição literal de `jid`. Ausente, ou diferente de `jid`, devolve
-            `400 missing_confirm_jid` e **o WhatsApp nem chega a ser contactado**
-            (`newsletter_ops.go:266`).
+            Repetição literal de `jid`. A validação tem **dois ramos**, e ambos
+            devolvem o mesmo código (`newsletter_ops.go:266`):
+
+            ```go
+            r.ConfirmJID == "" || r.ConfirmJID != r.JID
+            ```
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_confirm_jid` — ramo `== ""` |
+            | `null` | não | `400 missing_confirm_jid` — indistinguível de ausente |
+            | `""` | não | `400 missing_confirm_jid` — indistinguível de ausente |
+            | diferente de `jid` | não | `400 missing_confirm_jid` — ramo `!= r.JID`, **e o código diz `missing` para um campo que foi enviado** |
+            | igual a `jid` | sim | o canal é apagado, **irreversivelmente** |
+
+            Os três primeiros ramos foram medidos, e o quarto também
+            (`confirmJID` de outro canal existente). Repare que a comparação é
+            **literal**: dois JID que apontem para o mesmo canal com grafia
+            diferente não passam, porque não há normalização antes da comparação.
+
+            **Enquanto a confirmação falhar, o WhatsApp NEM É CONTACTADO.** A
+            validação corre no use case, antes do despacho — logo um `400` daqui
+            garante que nada foi apagado.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
         jid:
-          description: JID do canal a apagar.
+          description: |
+            JID do canal a apagar. Obrigatório; ausente, `null` e `""` dão
+            `400 missing_jid`, e é verificado **antes** de `confirmJID` — medido:
+            `{"confirmJID":"x"}` revela `missing_jid`, não `missing_confirm_jid`.
+            Ver `PedidoCanal`.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
       required:
         - jid
@@ -2871,27 +3265,66 @@ components:
     PedidoAtualizacoesCanal:
       description: |
         Pedido de ATUALIZAÇÕES de mensagens já conhecidas — edições, contagens de
-        reação, remoções. Rota actualmente inoperante; ver a descrição dela.
+        reação, remoções. **Rota inoperante**: devolve `500` ao fim de 30 s em
+        todos os casos medidos (F265). Ver a descrição da rota.
       properties:
         after:
-          description: '`server_id` a partir do qual avançar, lido como número.'
+          description: |
+            `server_id` a partir do qual avançar, como texto. Tem exactamente a
+            mesma semântica de `before` em `PedidoMensagensCanal`, incluindo o
+            `TrimSpace` e o **descarte silencioso** de texto não numérico, que vira
+            `0`. Ausente, `null` e `""` são indistinguíveis.
           example: "104"
+          nullable: false
           type: string
         count:
-          description: Quantas atualizações trazer. Zero deixa o servidor decidir.
+          description: |
+            Quantas atualizações trazer. Ausente, `null` e `0` são indistinguíveis
+            entre si e fazem o adaptador omitir o atributo do pedido.
+
+            **O efeito de `count` nesta rota não foi determinado com segurança**:
+            a rota devolve `500` com qualquer valor, incluindo `2`, logo não há
+            como distinguir a falha do campo da falha da rota. Em
+            `/newsletter/messages`, que partilha o mesmo mecanismo, `count`
+            ausente ou zero é o que causa o `500` — a hipótese razoável é que aqui
+            seja igual, mas **é hipótese, não medição**.
           example: 5
+          nullable: false
           type: integer
         jid:
-          description: JID do canal.
+          description: |
+            JID do canal. Obrigatório; ausente, `null` e `""` dão
+            `400 missing_jid` e são indistinguíveis. Ver `PedidoCanal`.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
         since:
           description: |
-            Instante mínimo, em RFC 3339. É o ÚNICO campo de todas as dezoito
-            rotas cuja má formatação é recusada no manipulador, antes do use case
-            (`handler_newsletter.go:129`) — e a recusa sai como `400` de decodificação.
+            Instante mínimo, em RFC 3339.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | sim | instante zero — sem limite inferior |
+            | `null` | sim | idem — indistinguível de ausente |
+            | `""` | sim | idem: o manipulador só tenta interpretar quando o valor é não-vazio (`handler_newsletter.go:145`) |
+            | mal formatado | **não** | `400`, **mas no envelope ANTIGO** — ver abaixo |
+            | tipo não-texto | não | `400 could_not_decode_payload` |
+
+            **É o único campo das dezoito rotas validado no MANIPULADOR, antes do
+            use case** — e por isso o único cuja recusa não passa pela taxonomia
+            `apperr`. Medido a 2026-08-26 com `{"since":"nao-e-data"}`:
+
+            ```json
+            {"code": 400, "error": "bad request", "success": false}
+            ```
+
+            `error` é uma **string**, não o objecto `{code, message}` de todas as
+            outras recusas deste grupo. Um cliente que leia `error.code` parte
+            exactamente aqui, e só aqui. É a forma `ErroTextoSimples` (F266).
           example: "2026-08-26T00:00:00Z"
           format: date-time
+          nullable: false
           type: string
       required:
         - jid
@@ -3053,13 +3486,38 @@ components:
     PedidoCanal:
       description: |
         Pedido mínimo de canal: só o identificador. É a forma de `info`, `follow`,
-        `unfollow`, `subscribe` e `admin-invite/accept`.
+        `unfollow`, `mute` (sem o `mute`), `subscribe` e `admin-invite/accept`.
+
+        Campos desconhecidos são ignorados em silêncio.
       properties:
         jid:
           description: |
-            JID do canal, sempre no servidor `@newsletter`. Ausente, a resposta é
-            `400 missing_jid`.
+            JID do canal, sempre no servidor `@newsletter`. **Obrigatório em
+            catorze das dezoito operações** — todas menos `create` (que não tem
+            canal ainda) e `info-invite` (que usa o código do convite).
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_jid` |
+            | `null` | não | `400 missing_jid` — **indistinguível de ausente** |
+            | `""` | não | `400 missing_jid` — **indistinguível de ausente** |
+            | `"   "` | passa a validação | mas depois `500 newsletter_failed`: o JID não se consegue interpretar, e essa falha **não** vira `400` |
+            | `"nao-e-jid"` | passa a validação | idem, `500 newsletter_failed` |
+            | `"…@s.whatsapp.net"` | passa a validação | idem, `500` — o servidor do JID **não é verificado** por nós |
+            | tipo não-texto | não | `400 could_not_decode_payload` |
+            | `@newsletter` bem formado mas inexistente | **sim** | `200`, com `state.type: non_existing` e `id: ""` — **não é erro** |
+            | `@newsletter` real | sim | — |
+
+            **A penúltima linha é a armadilha desta rota**: pedir metadados de um
+            canal que nunca existiu devolve `200`, não `404`. Quem consome tem de
+            olhar `state.type`, não o código HTTP.
+
+            **O alias `chat` não é aceite aqui.** `{"chat":"…"}` devolve
+            `400 missing_jid`, medido.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
+          pattern: ^[0-9]+@newsletter$
           type: string
       required:
         - jid
@@ -3072,30 +3530,80 @@ components:
       properties:
         invite:
           description: |
-            Código do convite. Não passa pela conversão de JID de propósito
-            (`adapter.go:269`): tratá-lo como JID falharia com uma mensagem sobre
-            JID inválido, que manda quem investiga para o lado errado.
+            Código do convite, 24 caracteres alfanuméricos nos casos observados.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_invite` |
+            | `null` | não | `400 missing_invite` — indistinguível de ausente |
+            | `""` | não | `400 missing_invite` — indistinguível de ausente |
+            | `"   "` | passa a validação | mas o WhatsApp não responde e sai `500 newsletter_failed`. Medido |
+            | código inexistente | passa a validação | `500 newsletter_failed` — **não é `404`**. Medido com `"codigo-que-nao-existe"` |
+            | código real | sim | — |
+
+            Não passa pela conversão de JID de propósito (`adapter.go:269`):
+            tratá-lo como JID falharia com uma mensagem sobre JID inválido, que
+            manda quem investiga para o lado errado.
           example: 0029Vb85MPpKLaHoEUxRt01E
+          minLength: 1
+          nullable: false
           type: string
       required:
         - invite
       type: object
     PedidoComunidade:
       description: |
-        Pedido de leitura sobre uma comunidade. Aceita também o nome universal
-        `chat`, que preenche `communityJID` quando este vier vazio
-        (`pkg/domain/community.go:9`).
+        Pedido de leitura sobre uma comunidade: `POST /community/subgroups` e
+        `POST /community/participants`.
+
+        **É o único par de rotas deste ficheiro que aceita o alias universal
+        `chat`** — as quatro rotas de canal e as duas de ligação não o aceitam.
+        Campos desconhecidos são ignorados em silêncio.
       properties:
         chat:
-          description: Alias universal de destino. Só é usado se `communityJID` vier vazio.
+          description: |
+            Alias universal de destino (`ChatTarget`, `pkg/domain/chat_target.go`).
+
+            **Só é usado quando `communityJID` estiver vazio** — ausente, `null` ou
+            `""`, que são indistinguíveis entre si. Quando ambos vêm preenchidos,
+            **`communityJID` ganha e `chat` é ignorado em silêncio**: medido a
+            2026-08-26 mandando `communityJID` real e `chat: "outro@g.us"`, e a
+            resposta foi a da comunidade de `communityJID`. Não há erro de
+            conflito.
+
+            Ausente, `null` e `""` são indistinguíveis; se `communityJID` também
+            faltar, a resposta é `400 missing_community_jid`.
+
+            **Este alias NÃO existe em `/community/link` nem em
+            `/community/unlink`** — medido: `{"chat":"…","groupJID":"…"}` devolve
+            `400 missing_community_jid`.
           example: 120363430034334401@g.us
+          nullable: false
           type: string
         communityJID:
           description: |
-            JID da comunidade — que é um JID de GRUPO (`@g.us`), porque uma
-            comunidade é um grupo-pai. Ausente, a resposta é
-            `400 missing_community_jid`.
+            JID da comunidade — que é um JID de **GRUPO** (`@g.us`), porque uma
+            comunidade é um grupo-pai. Não existe servidor `@community`.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | ver `chat` | `400 missing_community_jid` **se `chat` também faltar** |
+            | `null` | ver `chat` | idem — indistinguível de ausente |
+            | `""` | ver `chat` | idem — **e é este estado que faz o alias `chat` entrar** |
+            | `"   "` | não | `400 invalid_community_jid`, `could not parse community JID "   "` |
+            | `"lixo"` | não | `400 invalid_community_jid` |
+            | `@g.us` real | sim | — |
+
+            **Repare na diferença para as rotas de canal**: aqui um JID malformado
+            dá `400` com código próprio, porque o use case embrulha a falha num
+            `apperr` de validação (`community.go:37`). Nas rotas de canal o mesmo
+            defeito dá `500 newsletter_failed`. As duas famílias tratam o mesmo
+            erro de forma diferente.
+
+            **Não há rota `/community/create`**: uma comunidade cria-se em
+            `POST /group/create` com `is_parent: true`.
           example: 120363430034334401@g.us
+          nullable: false
           type: string
       type: object
     PedidoConfigHmac:
@@ -3455,21 +3963,77 @@ components:
     PedidoCriarCanal:
       description: |
         Pedido de criação de canal. É a única operação de canal que não recebe
-        `jid` — o identificador é justamente o que ela devolve.
+        `jid` — o identificador é justamente o que ela devolve. Também é a única
+        sem nenhum campo obrigatório além de `name`.
       properties:
         description:
-          description: Descrição do canal, mostrada a quem abre a página dele. Opcional.
+          description: |
+            Descrição do canal, mostrada a quem abre a página dele. **Opcional** —
+            ausente, `null` e `""` são os três a mesma coisa (canal sem descrição),
+            e nenhum é recusado. Medido: `{"name":"…","description":null}` cria o
+            canal.
           example: Novidades e horários de funcionamento.
+          nullable: false
           type: string
         name:
-          description: Nome público do canal. Obrigatório; sem ele a resposta é `400 missing_name`.
+          description: |
+            Nome público do canal.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_name` |
+            | `null` | não | `400 missing_name` — indistinguível de ausente |
+            | `""` | não | `400 missing_name` — indistinguível de ausente |
+            | `"   "` | **sim, pela validação** | cria um canal com nome de três espaços; **não há `trim`** (`newsletter_ops.go:210`). Não medido em campo de propósito: seria uma escrita real |
+            | tipo não-texto | não | `400 could_not_decode_payload` |
+            | preenchido | sim | — |
+
+            **Comprimento máximo não determinado com segurança pela implementação
+            atual**: não há limite nosso, e o do WhatsApp não foi medido.
           example: Avisos da Fila Rápida
+          minLength: 1
+          nullable: false
           type: string
         picture:
           description: |
-            Imagem de perfil do canal, em base64 (o campo é `[]byte` em Go, logo o
-            JSON leva base64 sem prefixo `data:`). Opcional.
+            Imagem de perfil do canal, em **base64 cru** — o campo é `[]byte` em
+            Go, logo o JSON leva base64 sem o prefixo `data:`. Isto diverge de
+            `/chat/send/image`, que aceita o URI de dados.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | sim | canal sem imagem |
+            | `null` | **sim** | idem — indistinguível de ausente |
+            | `""` | **sim** | idem |
+            | base64 inválido | não | `400 could_not_decode_payload` |
+            | número | não | `400 could_not_decode_payload` |
+
+            **As duas linhas do meio são a armadilha deste campo, e custaram um
+            canal criado por acidente.** É natural supor que um valor errado num
+            `[]byte` morre na descodificação — e `"nao-e-base64!!"` e `123`
+            morrem. `null` e `""` **não morrem**: descodificam para `nil` e vazio,
+            e o pedido segue para o efeito real.
+
+            Medido a 2026-08-26 com a técnica de sonda segura — omitindo `name`,
+            que é o campo obrigatório, para que o pedido morra na validação em
+            qualquer ramo e o código de erro revele onde `picture` parou:
+
+            ```
+            {"picture":"nao-e-base64!!"}  -> 400 could_not_decode_payload
+            {"picture":123}               -> 400 could_not_decode_payload
+            {"picture":null}              -> 400 missing_name    <- PASSOU a descodificação
+            {"picture":""}                -> 400 missing_name    <- PASSOU
+            {}                            -> 400 missing_name
+            ```
+
+            Cinco entradas, três resultados, e nenhum canal criado.
+            `could_not_decode_payload` significa "o valor morreu na
+            descodificação"; qualquer outro código significa "o valor passou".
+
+            Não há validação de formato de imagem, de dimensão nem de tamanho do
+            nosso lado; quem recusa é o WhatsApp.
           format: byte
+          nullable: false
           type: string
       required:
         - name
@@ -5609,17 +6173,53 @@ components:
       type: object
     PedidoLigacaoComunidade:
       description: |
-        Pedido de ligação ou desligação de um grupo a uma comunidade. Ao contrário
-        das duas rotas de leitura, **não aceita o alias `chat`**: a struct não
-        inclui `ChatTarget` (`pkg/domain/community.go:31-40`).
+        Pedido de ligação ou desligação de um grupo a uma comunidade
+        (`POST /community/link` e `POST /community/unlink`).
+
+        **Não aceita o alias `chat`**: a struct não embute `ChatTarget`
+        (`pkg/domain/community.go:31-40`). Mandá-lo não dá erro — é ignorado como
+        qualquer campo desconhecido, e o pedido falha com
+        `400 missing_community_jid`. Medido.
       properties:
         communityJID:
-          description: JID da comunidade (grupo-pai). Ausente, `400 missing_community_jid`.
+          description: |
+            JID da comunidade (grupo-pai), no servidor `@g.us`.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_community_jid` |
+            | `null` | não | idem — indistinguível de ausente |
+            | `""` | não | idem — indistinguível de ausente |
+            | não interpretável | não | `400 invalid_jid`, `could not parse community JID "…"` |
+            | `@g.us` real | sim | — |
+
+            **É verificado antes de `groupJID`**: um pedido sem os dois revela
+            primeiro este. Medido.
+
+            **O código do JID malformado é `invalid_jid` aqui**, e não
+            `invalid_community_jid` como nas duas rotas de leitura — são funções
+            de parse diferentes (`community.go:106` contra `community.go:37`).
           example: 120363430034334401@g.us
+          minLength: 1
+          nullable: false
           type: string
         groupJID:
-          description: JID do grupo a ligar ou desligar. Ausente, `400 missing_group_jid`.
+          description: |
+            JID do grupo a ligar ou desligar, no servidor `@g.us`.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_group_jid` |
+            | `null` | não | idem — indistinguível de ausente |
+            | `""` | não | idem — indistinguível de ausente |
+            | não interpretável | não | `400 invalid_jid`, `could not parse group JID "…"` |
+            | `@g.us` real | sim | — |
+
+            **O grupo de avisos da comunidade não pode ser desligado**: nasce com
+            ela e vem marcado `IsDefaultSubGroup: true` (F237).
           example: 120363411669320145@g.us
+          minLength: 1
+          nullable: false
           type: string
       required:
         - communityJID
@@ -5737,19 +6337,42 @@ components:
       description: Pedido de marcação de mensagens do canal como vistas.
       properties:
         jid:
-          description: JID do canal.
+          description: |
+            JID do canal. Obrigatório; ausente, `null` e `""` dão
+            `400 missing_jid`. **É verificado antes de `serverIDs`**: um pedido sem
+            nenhum dos dois revela primeiro o `jid`. Ver `PedidoCanal`.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
         serverIDs:
           description: |
-            Os `server_id` a marcar. Lista vazia ou ausente é recusada com
-            `400 missing_server_ids`.
+            Os `server_id` a marcar como vistos.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_server_ids` |
+            | `null` | não | `400 missing_server_ids` — indistinguível de ausente |
+            | `[]` | não | `400 missing_server_ids` — **indistinguível de ausente** |
+            | `["a"]` | não | `400 could_not_decode_payload` — o pedido INTEIRO é recusado |
+            | `[1,2,3]` | sim | — |
+
+            **Item inválido NÃO é descartado em silêncio**, ao contrário do que
+            acontece nos botões de `/chat/send/buttons`: como o tipo é `[]int`, um
+            item não inteiro rebenta a descodificação e nada é marcado. Medido.
+
+            Duplicados e ordem não são validados por nós; `0` é um item aceite pela
+            descodificação, e o que o WhatsApp faz com ele não foi medido.
           example:
             - 1
             - 2
             - 3
           items:
+            description: Um `server_id` de mensagem do canal, tal como vem em `MessageServerID`.
+            nullable: false
             type: integer
+          minItems: 1
+          nullable: false
           type: array
       required:
         - jid
@@ -5795,24 +6418,72 @@ components:
         - id
       type: object
     PedidoMensagensCanal:
-      description: Pedido de histórico do canal, paginado para trás.
+      description: |
+        Pedido de histórico do canal, paginado para trás.
+
+        **`count` é obrigatório na prática, embora não esteja na tabela de
+        validação** — ver o campo.
       properties:
         before:
           description: |
-            `server_id` da mensagem a partir da qual paginar para trás. É lido como
-            número; texto não numérico não é recusado, é tratado como zero.
+            `server_id` da mensagem a partir da qual paginar para trás, **como
+            texto**.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | sim | sem cursor — começa da mais recente |
+            | `null` | sim | idem — indistinguível de ausente |
+            | `""` | sim | idem |
+            | `"104"` | sim | pagina a partir do `server_id` 104 |
+            | `" 104 "` | sim | igual a `"104"` — há `TrimSpace` **neste campo**, ao contrário do resto da API (`adapter.go:546`) |
+            | `"nao-numero"` | **sim, em silêncio** | `strconv.Atoi` falha e o valor vira `0`, que é o mesmo que "sem cursor". **Não há erro**: medido `200` com `{"before":"nao-numero"}` |
+            | tipo não-texto | não | `400 could_not_decode_payload` |
+
+            **A penúltima linha é um descarte silencioso**: um cursor mal formado
+            não é recusado, é convertido em "começar do princípio". Quem paginar
+            com um cursor corrompido recebe a primeira página outra vez, sem
+            sinal nenhum de que o cursor foi ignorado.
           example: "104"
+          nullable: false
           type: string
         count:
           description: |
-            Quantas mensagens trazer. Zero ou ausente **não** é um limite nosso: o
-            atributo é omitido do pedido e o servidor usa o padrão dele
-            (`adapter.go:330`).
+            Quantas mensagens trazer, da mais recente para trás.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | **não** | `500 newsletter_failed` ao fim do tempo limite |
+            | `null` | **não** | `500` — indistinguível de ausente |
+            | `0` | **não** | `500` — indistinguível de ausente |
+            | negativo | **não** | `500`. Medido com `-1` e `-5` |
+            | `>= 1` | sim | `200`. Medido com `1`, `2`, `8`, `60` e `100` |
+
+            **Esta tabela contradiz o que esta documentação afirmava até
+            2026-08-26.** Estava escrito que zero ou ausente deixava o servidor
+            aplicar o padrão dele, porque o adaptador omite o atributo nesse caso
+            (`adapter.go:326-343`). **Medido, não é o que acontece**: o WhatsApp
+            não responde ao pedido sem `count`, e o resultado é `500` com
+            `error.code: newsletter_failed` — o mesmo sintoma da F265. Confirmado
+            em dois canais distintos, um vazio e um com sessenta publicações, e o
+            mesmo canal responde `200` no segundo seguinte quando `count` vai a 1.
+
+            Ou seja: **`count` é obrigatório de facto e opcional de direito**. A
+            tabela `newsletterRequirements` não o exige, logo a recusa não é um
+            `400` legível, é um `500` ao fim da espera.
+
+            Máximo não determinado com segurança: `100` foi aceite, e não foi
+            procurado o tecto.
           example: 5
+          minimum: 1
+          nullable: false
           type: integer
         jid:
-          description: JID do canal.
+          description: |
+            JID do canal. Obrigatório; ausente, `null` e `""` dão
+            `400 missing_jid` e são indistinguíveis. Ver `PedidoCanal`.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
       required:
         - jid
@@ -6220,25 +6891,64 @@ components:
         reação — é por isso que o campo não é obrigatório.
       properties:
         jid:
-          description: JID do canal.
+          description: |
+            JID do canal. Obrigatório; ausente, `null` e `""` dão
+            `400 missing_jid`, e é verificado antes de `serverID`. Ver
+            `PedidoCanal`.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
         messageID:
-          description: Identificador da mensagem, quando o cliente o tem. Opcional.
+          description: |
+            Identificador da mensagem, quando o cliente o tem. **Opcional** —
+            ausente, `null` e `""` são indistinguíveis e resultam num
+            `types.MessageID` vazio, que segue assim para o WhatsApp. Não há
+            validação de formato do nosso lado. Os valores reais têm 22 ou 32
+            caracteres hexadecimais (ver `MensagemCanal.MessageID`).
           example: 3EB0A4B2AFD45E625C0917
+          nullable: false
           type: string
         reaction:
           description: |
-            O emoji. **Vazio remove a reação**, e por isso a validação não o exige
-            (`newsletter_ops.go:234`).
+            O emoji da reação.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | sim | **REMOVE** a reação existente |
+            | `null` | sim | remove — indistinguível de ausente |
+            | `""` | sim | remove — indistinguível de ausente |
+            | emoji | sim | põe a reação |
+
+            **Vazio remove**, e é por isso que a validação não o exige
+            (`newsletter_ops.go:234`): exigi-lo tornaria impossível desfazer uma
+            reação. A consequência é que um cliente com um bug que perca o campo
+            `reaction` **apaga** a reação em vez de dar erro.
+
+            O canal declara em `settings.reaction_codes.value` que reações aceita
+            (`ALL` nos casos medidos). Não validamos o emoji contra isso.
           example: "\U0001F44D"
+          nullable: false
           type: string
         serverID:
           description: |
-            `server_id` da mensagem alvo. Zero é recusado com
-            `400 missing_server_id` — logo não há como reagir à mensagem de
-            `server_id` 0, se ela existir.
+            `server_id` da mensagem alvo.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_server_id` |
+            | `null` | não | `400 missing_server_id` — indistinguível de ausente |
+            | `0` | não | `400 missing_server_id` — **indistinguível de ausente** |
+            | `"1"` (texto) | não | `400 could_not_decode_payload` |
+            | `>= 1` | sim | — |
+
+            **Consequência de `0` ser lido como ausência**: não há maneira de
+            reagir à mensagem de `server_id` 0, se ela existir. A validação é
+            `r.ServerID == 0` (`newsletter_ops.go:230`), e o campo é `int` e não
+            `*int`, logo o valor zero não se distingue de não ter vindo.
           example: 1
+          minimum: 1
+          nullable: false
           type: integer
       required:
         - jid
@@ -6361,17 +7071,42 @@ components:
           type: string
       type: object
     PedidoSilenciarCanal:
-      description: Pedido de silenciamento, que liga ou desliga conforme `mute`.
+      description: |
+        Pedido de silenciamento, que liga ou desliga conforme `mute`. Note que
+        `mute` **não** é obrigatório, e que a sua ausência não significa "não
+        decidi" — significa `false`.
       properties:
         jid:
-          description: JID do canal.
+          description: |
+            JID do canal. Obrigatório; ausente, `null` ou `""` dão
+            `400 missing_jid`, os três indistinguíveis entre si. Ver `PedidoCanal`
+            para a tabela completa, incluindo o `500` do JID malformado.
           example: 120363411025775186@newsletter
+          minLength: 1
+          nullable: false
           type: string
         mute:
+          default: false
           description: |
-            `true` silencia, `false` volta a notificar. O campo é booleano simples:
-            ausente vale `false`, ou seja, dessilenciar.
+            `true` silencia, `false` volta a notificar.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | sim | **dessilencia** — o valor zero de um `bool` é `false` |
+            | `null` | sim | **dessilencia** — indistinguível de ausente |
+            | `false` | sim | dessilencia |
+            | `true` | sim | silencia |
+            | tipo não-booleano | não | `400 could_not_decode_payload` |
+
+            **Isto é a armadilha da família F268, neste campo**: o campo é `bool` e
+            não `*bool`, logo "não mandei nada" e "mandei `false`" são o mesmo
+            pedido, e ambos EXECUTAM uma acção (dessilenciar) em vez de nenhuma.
+            Um corpo só com `jid` **altera** o estado do canal. Para silenciar é
+            obrigatório mandar `true` explicitamente.
+
+            O efeito é visível em `viewer_metadata.mute` de `POST /newsletter/info`.
           example: true
+          nullable: false
           type: boolean
       required:
         - jid
@@ -8672,47 +9407,94 @@ components:
         Um grupo ligado à comunidade. Os nomes de campo vêm em maiúscula inicial
         porque a estrutura é serializada tal como o vendor a define — não há
         etiquetas JSON a renomeá-la. Medido a 2026-08-26.
+
+        **As seis propriedades apareceram sempre**, nenhuma omitida, nenhuma
+        `null`.
       properties:
         IsDefaultSubGroup:
           description: |
-            `true` no grupo de avisos, que a comunidade cria sozinha e não pode ser
-            desligado.
+            `true` no **grupo de avisos**, que a comunidade cria sozinha e que não
+            pode ser desligado. `false` nos grupos ligados por
+            `POST /community/link`.
+
+            Sempre presente; nunca `null`. É o campo que distingue "o grupo que
+            sobra sempre" de "os grupos que eu liguei" — medido na transição
+            1 → 2 → 1 da F237, em que foi este que ficou.
           example: true
+          nullable: false
           type: boolean
         JID:
-          description: JID do sub-grupo.
+          description: JID do sub-grupo, no servidor `@g.us`. Sempre presente; nunca `null`, nunca ausente.
           example: 120363411669320145@g.us
+          nullable: false
           type: string
         Name:
-          description: Nome do sub-grupo.
+          description: |
+            Nome do sub-grupo. Sempre presente; nunca `null`. **`""` é possível**
+            — um grupo pode não ter nome definido —, e nesse caso é
+            indistinguível de "o servidor não informou".
           example: Avisos
+          nullable: false
           type: string
         NameSetAt:
           description: |
-            Quando o nome foi definido. Vem com o deslocamento do fuso do
-            SERVIDOR, não em UTC — medido `2026-08-26T08:08:21-04:00`.
+            Quando o nome foi definido, em RFC 3339 **com o deslocamento do fuso do
+            SERVIDOR, não em UTC** — medido `2026-08-26T08:08:21-04:00`. Sempre
+            presente; nunca `null`.
+
+            Num grupo sem nome definido a forma não foi determinada com segurança:
+            seria `0001-01-01T00:00:00Z` se o vendor deixar o `time.Time` a zero,
+            mas isso não foi observado.
           example: "2026-08-26T08:08:21-04:00"
           format: date-time
+          nullable: false
           type: string
         NameSetBy:
-          description: Quem definiu o nome, em LID. Vazio quando o servidor não o informa — foi o caso na medição.
+          description: |
+            Quem definiu o nome, em **LID**. Sempre presente; nunca `null`.
+
+            **Veio `""` na medição**, no grupo de avisos criado automaticamente com
+            a comunidade — o que é coerente com "ninguém o definiu". `""` é
+            indistinguível de "o servidor não informou".
           example: ""
+          nullable: false
           type: string
         NameSetByPN:
-          description: O mesmo, em PN. Igualmente vazio na medição.
+          description: |
+            O mesmo que `NameSetBy`, em **PN** (`…@s.whatsapp.net`). Sempre
+            presente; nunca `null`. Igualmente `""` na medição.
+
+            Os dois campos coexistem porque PN e LID não são intermutáveis; quando
+            ambos vierem vazios, **não há como identificar quem definiu o nome por
+            esta rota**.
           example: ""
+          nullable: false
           type: string
       type: object
     SubGruposComunidade:
-      description: Resposta de `POST /community/subgroups`.
+      description: |
+        Resposta de `POST /community/subgroups`. A lista está dentro da chave
+        `sub_groups`, um nível abaixo de `data`.
       properties:
         sub_groups:
           description: |
-            Os grupos ligados à comunidade. Nunca vem vazia numa comunidade real: o
-            grupo de avisos é criado com a comunidade e aparece sempre, marcado com
-            `IsDefaultSubGroup: true` (F237, medido com a transição 1 → 2 → 1).
+            Os grupos ligados à comunidade.
+
+            **Nunca vem vazia numa comunidade real**: o grupo de avisos é criado
+            com a comunidade e aparece sempre, marcado com `IsDefaultSubGroup:
+            true` (F237, medido com a transição 1 → 2 → 1 provocada por
+            `POST /community/link` e `POST /community/unlink`).
+
+            **Se o valor `null` é possível não foi determinado com segurança**: o
+            campo é `any` na struct de resultado (`pkg/domain/community.go:13`),
+            logo uma fatia `nil` vinda do adaptador seria serializada como `null` e
+            não como `[]`. Não foi observado, porque não há comunidade sem
+            sub-grupos. **Verifique `null` antes de iterar.**
+
+            Sem paginação e sem tecto.
           items:
             $ref: '#/components/schemas/SubGrupoComunidade'
+          nullable: false
           type: array
       required:
         - sub_groups
@@ -16067,6 +16849,18 @@ paths:
         **Regras**: `jid` é obrigatório e tem de ser um JID `@newsletter`.
         `viewer_metadata` vem `null` quando não há relação com o canal.
 
+        **Duas ressalvas medidas a 2026-08-26, ambas contra-intuitivas**:
+
+        - **Um canal que não existe devolve `200`, não `404`.** A resposta traz
+          `state.type: non_existing`, `id: ""` (cadeia vazia, não o JID pedido),
+          `viewer_metadata: null` e `thread_metadata` todo zerado. Quem consome
+          tem de olhar `state.type`, não o código HTTP.
+        - **Um `jid` malformado devolve `500`, não `400`.** Medido com `"   "`,
+          `"nao-e-jid"` e um JID `@s.whatsapp.net`: os três dão
+          `500 newsletter_failed`, porque a falha de conversão de JID não é um
+          `apperr` e o use case a embrulha como erro interno. As rotas de
+          comunidade tratam o mesmo defeito como `400 invalid_community_jid`.
+
         **Autenticação**: token de sessão.
       requestBody:
         content:
@@ -16351,15 +17145,30 @@ paths:
         para obter os `server_id` de que `POST /newsletter/mark-viewed` e
         `POST /newsletter/react` precisam.
 
-        **Regras**: `jid` é obrigatório. `count` a zero (ou ausente) **não** é um
-        limite nosso — o atributo é omitido do pedido e o servidor aplica o
-        padrão dele. `before` recebe um `server_id` para paginar para trás.
+        **Regras**: `jid` é obrigatório. **`count` é obrigatório na prática**,
+        embora a tabela de validação não o exija — ver a correcção abaixo.
+        `before` recebe um `server_id` para paginar para trás, e texto não
+        numérico ali é **descartado em silêncio**, virando "sem cursor".
+
+        **CORRECÇÃO medida a 2026-08-26**: esta descrição afirmava que `count` a
+        zero ou ausente deixava o servidor aplicar o padrão dele. **Não é o que
+        acontece.** Sem `count`, ou com `count` a `0`, `null` ou negativo, o
+        WhatsApp não responde e a rota devolve `500 newsletter_failed` ao fim do
+        tempo limite — o mesmo sintoma da F265. Confirmado em dois canais (um
+        vazio, um com sessenta publicações) e, no mesmo canal e no segundo
+        seguinte, `count: 1` devolveu `200`. Valores de `1` a `100` foram
+        aceites; o tecto não foi procurado.
 
         **Forma da resposta**: `data` é a lista directamente, sem chave
         intermédia — ao contrário de `GET /newsletter/list`. Um canal sem
-        publicações devolve `[]`, medido a 2026-08-26. A forma de cada elemento
-        não foi determinada com segurança: não havia canal com mensagens para
-        medir.
+        publicações devolve `[]`, medido a 2026-08-26.
+
+        **A forma de cada elemento passou a ser conhecida** nesta sessão, medida
+        sobre sessenta publicações reais de um canal público seguido — ver
+        `MensagemCanal`. As sete propriedades apareceram nas sessenta. Duas
+        ressalvas que mordem quem consome: `Message` pode vir **`null`** (2 em
+        60), e o campo `Type` **não é de confiança** — catorze publicações de
+        texto puro vieram marcadas `media`.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -16377,7 +17186,19 @@ paths:
             application/json:
               example:
                 code: 200
-                data: []
+                data:
+                  - Message:
+                      videoMessage:
+                        mimetype: video/mp4
+                        seconds: 17
+                    MessageID: 3EB0A4B2AFD45E625C0917
+                    MessageServerID: 4379
+                    ReactionCounts:
+                      "\U0001F44D": 3
+                      "\U0001F602": 58
+                    Timestamp: "2026-08-25T19:22:23-04:00"
+                    Type: media
+                    ViewsCount: 0
                 success: true
               schema:
                 allOf:
@@ -16386,7 +17207,9 @@ paths:
                       data:
                         $ref: '#/components/schemas/MensagensCanal'
                     type: object
-          description: Mensagens do canal, ou `[]` quando ele não tem nenhuma.
+          description: |
+            Mensagens do canal, ou `[]` quando ele não tem nenhuma. Ordenadas por
+            `MessageServerID` crescente dentro da janela pedida.
         "400":
           content:
             application/json:
@@ -16402,7 +17225,20 @@ paths:
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
-          $ref: '#/components/responses/ErroInterno'
+          content:
+            application/json:
+              example:
+                code: 500
+                error:
+                  code: newsletter_failed
+                  message: newsletter operation failed
+                success: false
+              schema:
+                $ref: '#/components/schemas/Erro'
+          description: |
+            Falha da operação. **Inclui o caso, muito comum, de `count` ausente,
+            zero ou negativo** — ver a correcção na descrição. Um JID malformado
+            também cai aqui, e não em `400`.
       security:
         - TokenSessao: []
       summary: ✅ Ler as mensagens de um canal
@@ -16697,17 +17533,42 @@ paths:
         "400":
           content:
             application/json:
-              example:
-                code: 400
-                error:
-                  code: missing_jid
-                  message: jid do canal é obrigatório
-                success: false
+              examples:
+                faltaJid:
+                  summary: Falta o `jid` — envelope canónico
+                  value:
+                    code: 400
+                    error:
+                      code: missing_jid
+                      message: jid do canal é obrigatório
+                    success: false
+                sinceMalFormatado:
+                  summary: '`since` fora do RFC 3339 — envelope ANTIGO, `error` em texto'
+                  value:
+                    code: 400
+                    error: bad request
+                    success: false
               schema:
-                $ref: '#/components/schemas/Erro'
+                oneOf:
+                  - $ref: '#/components/schemas/Erro'
+                  - $ref: '#/components/schemas/ErroTextoSimples'
           description: |
             Falta o `jid`, o corpo não é JSON válido, ou `since` não está em
             RFC 3339.
+
+            **Atenção: há DUAS formas de corpo neste `400`.** A recusa de `jid`
+            usa o envelope canónico, com `error` como objecto. A recusa de
+            `since` **usa o envelope ANTIGO, com `error` como STRING** — porque
+            é a única validação destas dezoito rotas que corre no manipulador,
+            antes da taxonomia `apperr` (`handler_newsletter.go:145`). Medido a
+            2026-08-26 com `{"since":"nao-e-data"}`:
+
+            ```json
+            {"code": 400, "error": "bad request", "success": false}
+            ```
+
+            Um cliente que leia `error.code` parte exactamente aqui, e só aqui
+            neste grupo de rotas. É a F266.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":

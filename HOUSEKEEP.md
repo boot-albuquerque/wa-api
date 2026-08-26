@@ -29397,3 +29397,57 @@ contrato observável. A regra de método está em uso.
 
 <!-- f-status: aberto -->
 
+## F271 — JID malformado nas rotas de canal devolve `500`, e devia ser `400`
+
+**Data/contexto**: 2026-08-26, auditoria de semântica de campo. Achado pelo
+executor do lote de canais ao documentar `jid`, e confirmado por mim.
+
+**Medido**, `POST /newsletter/info`, quatro entradas:
+
+```
+{}                                    -> 400 missing_jid
+{"jid":"   "}                         -> 500 newsletter_failed
+{"jid":"nao-e-jid"}                   -> 500 newsletter_failed
+{"jid":"554192421234@s.whatsapp.net"} -> 500 newsletter_failed
+```
+
+**Só a ausência é `400`.** Um JID presente mas impossível — três espaços, texto
+qualquer, ou um JID de servidor errado (`@s.whatsapp.net` onde se espera
+`@newsletter`) — atravessa a validação e falha lá dentro, saindo como
+`500 newsletter_failed`.
+
+**Por que isto importa mais do que parece:**
+
+1. **`5xx` diz ao cliente "o problema é meu, tenta outra vez".** É a semântica
+   do código, e é falsa aqui: repetir com o mesmo JID inválido falha sempre.
+   Um cliente com repetição automática vai insistir num pedido que nunca pode
+   funcionar.
+2. **Envenena o alarme.** Um painel que conte `5xx` como falha do serviço passa
+   a contar erros de digitação do consumidor. A taxa de erro do serviço deixa
+   de significar o que se pensa que significa.
+3. **A mensagem não ajuda a corrigir.** `newsletter operation failed` não diz
+   que o problema é o formato do JID.
+
+**Onde**: a validação em `newsletterRequirements` só verifica `JID == ""`
+(`pkg/application/usecase/notification/newsletter_ops.go:210-214`). A análise
+do JID acontece depois, no adaptador, e o erro que sobe não é classificado como
+`CategoryValidation`.
+
+**Vale para as catorze operações** que exigem `jid`, não só para `info`.
+
+**Correcção sugerida**: acrescentar à tabela de requisitos uma regra que analise
+o JID e exija o servidor `@newsletter`, devolvendo `400 invalid_newsletter_jid`.
+É onde as outras validações já vivem, e não muda o comportamento de nenhum
+pedido válido — só reclassifica pedidos que hoje falham na mesma, com o código
+errado.
+
+**Achado irmão, do mesmo lote**: a ORDEM de validação foi medida em
+`DELETE /newsletter/delete` — `{"confirmJID":"x"}` revela `missing_jid`, e não
+`missing_confirm_jid`. O `jid` é verificado primeiro. É o tipo de informação
+que a F270 pede que se documente, e está agora na descrição do campo.
+
+**Status**: não corrigido — muda o estado HTTP de uma classe de pedidos, logo é
+alteração de contrato observável e precisa de aval.
+
+<!-- f-status: aberto -->
+
