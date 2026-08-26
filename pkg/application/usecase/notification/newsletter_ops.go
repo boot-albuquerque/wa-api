@@ -205,14 +205,49 @@ type newsletterRequirement struct {
 	missing func(NewsletterRequest) bool
 }
 
+// Error codes for the shared JID rules. They are constants and not literals
+// because they cross the HTTP boundary — a client branches on them (ADR-0004).
+const (
+	codeMissingJID        = "missing_jid"
+	codeInvalidNewsletter = "invalid_newsletter_jid"
+)
+
 // requireJID é partilhado porque sete das onze operações pedem o mesmo canal:
 // escrever a mesma verificação sete vezes seria sete sítios onde a mensagem de
 // erro pode divergir.
 var requireJID = newsletterRequirement{
-	code:    "missing_jid",
+	code:    codeMissingJID,
 	message: "jid do canal é obrigatório",
 	missing: func(r NewsletterRequest) bool { return r.JID == "" },
 }
+
+// requireNewsletterServer rejects a jid that is PRESENT but cannot name a
+// channel — blanks, free text, or a jid from another server such as
+// "@s.whatsapp.net".
+//
+// WHY IT IS A VALIDATION AND NOT A DISPATCH FAILURE (F271). Until this rule
+// existed such a jid reached the adapter, failed there, and came back as
+// `500 newsletter_failed`. A 5xx tells the caller "my fault, retry" — false
+// here, since the same jid fails forever, so a client with automatic retry
+// hammers a request that can never work; and it makes any dashboard counting
+// 5xx count the consumer's typos as service failures.
+//
+// It sits immediately after requireJID so the ABSENCE keeps reporting
+// `missing_jid`: the two answers say different things to the caller, and
+// collapsing them would trade one wrong code for another.
+var requireNewsletterServer = newsletterRequirement{
+	code:    codeInvalidNewsletter,
+	message: "jid must be a channel jid ending in " + domain.ServerNewsletter,
+	missing: func(r NewsletterRequest) bool { return !r.JID.IsNewsletter() },
+}
+
+// The two rules travel TOGETHER in every row of the table below: an operation
+// that listed only requireJID would go back to answering 500 for a malformed
+// jid, which is the defect F271 recorded. A helper that built the pair would
+// enforce that structurally, but it would also add an uncovered function to the
+// log-coverage denominator (ADR-008 gate, stage=ratchet), so the invariant is
+// enforced by TestNewsletter_JIDRulesAreNeverSplit instead — it reads the table
+// and fails on any row that carries one rule without the other.
 
 // newsletterRequirements diz, por operação, o que o pedido tem de trazer.
 //
@@ -232,47 +267,47 @@ var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 		message: "código de convite é obrigatório",
 		missing: func(r NewsletterRequest) bool { return r.Invite == "" },
 	}},
-	NewsletterOpMarkViewed: {requireJID, {
+	NewsletterOpMarkViewed: {requireJID, requireNewsletterServer, {
 		code:    "missing_server_ids",
 		message: "pelo menos um server_id é obrigatório",
 		missing: func(r NewsletterRequest) bool { return len(r.ServerIDs) == 0 },
 	}},
 	// `reaction` NÃO entra na tabela: vazio REMOVE a reação, como no resto do
 	// protocolo. Exigi-lo tornaria impossível desfazer pelo painel.
-	NewsletterOpReact: {requireJID, {
+	NewsletterOpReact: {requireJID, requireNewsletterServer, {
 		code:    "missing_server_id",
 		message: "server_id é obrigatório",
 		missing: func(r NewsletterRequest) bool { return r.ServerID == 0 },
 	}},
-	NewsletterOpInfo:      {requireJID},
-	NewsletterOpFollow:    {requireJID},
-	NewsletterOpUnfollow:  {requireJID},
-	NewsletterOpMute:      {requireJID},
-	NewsletterOpMessages:  {requireJID},
-	NewsletterOpUpdates:   {requireJID},
-	NewsletterOpSubscribe: {requireJID},
-	NewsletterOpDemote: {requireJID, {
+	NewsletterOpInfo:      {requireJID, requireNewsletterServer},
+	NewsletterOpFollow:    {requireJID, requireNewsletterServer},
+	NewsletterOpUnfollow:  {requireJID, requireNewsletterServer},
+	NewsletterOpMute:      {requireJID, requireNewsletterServer},
+	NewsletterOpMessages:  {requireJID, requireNewsletterServer},
+	NewsletterOpUpdates:   {requireJID, requireNewsletterServer},
+	NewsletterOpSubscribe: {requireJID, requireNewsletterServer},
+	NewsletterOpDemote: {requireJID, requireNewsletterServer, {
 		code:    "missing_user_jid",
 		message: "user jid is required for demote",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
 	}},
-	NewsletterOpChangeOwner: {requireJID, {
+	NewsletterOpChangeOwner: {requireJID, requireNewsletterServer, {
 		code:    "missing_user_jid",
 		message: "new owner jid is required",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
 	}},
-	NewsletterOpDelete: {requireJID, {
+	NewsletterOpDelete: {requireJID, requireNewsletterServer, {
 		code:    "missing_confirm_jid",
 		message: "confirm_jid must match the channel jid",
 		missing: func(r NewsletterRequest) bool { return r.ConfirmJID == "" || r.ConfirmJID != r.JID },
 	}},
-	NewsletterOpAdminInvite: {requireJID, {
+	NewsletterOpAdminInvite: {requireJID, requireNewsletterServer, {
 		code:    "missing_user_jid",
 		message: "invitee jid is required",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
 	}},
-	NewsletterOpAdminInviteAccept: {requireJID},
-	NewsletterOpAdminInviteRevoke: {requireJID, {
+	NewsletterOpAdminInviteAccept: {requireJID, requireNewsletterServer},
+	NewsletterOpAdminInviteRevoke: {requireJID, requireNewsletterServer, {
 		code:    "missing_user_jid",
 		message: "invitee jid is required for revoke",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },

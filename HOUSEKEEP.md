@@ -29446,8 +29446,89 @@ errado.
 `missing_confirm_jid`. O `jid` é verificado primeiro. É o tipo de informação
 que a F270 pede que se documente, e está agora na descrição do campo.
 
-**Status**: não corrigido — muda o estado HTTP de uma classe de pedidos, logo é
-alteração de contrato observável e precisa de aval.
+**Correcção aplicada** (2026-08-26, branch `fix/jid-400`):
 
-<!-- f-status: aberto -->
+`requireNewsletterServer` entrou na tabela de requisitos, imediatamente a seguir
+a `requireJID`, nas **quinze** operações que exigem um jid de canal — `info`,
+`follow`, `unfollow`, `mute`, `messages`, `updates`, `mark_viewed`, `react`,
+`subscribe`, `demote`, `change_owner`, `delete`, `admin_invite`,
+`admin_invite_accept` e `admin_invite_revoke`. (A entrada original dizia
+catorze; contando os usos de `requireJID` na tabela são quinze.) `create` e
+`info_invite` não foram tocadas: uma não tem identificador e a outra usa um
+código de convite.
+
+A regra em si é `domain.JID.IsNewsletter`, ao lado de `IsLID` e `IsPN` e com a
+constante `domain.ServerNewsletter`. **Não** se usou
+`pkg/infra/wa-noise/mapping/jid.ParseJID`: além de a camada de use case não
+importar `pkg/infra` para regras de domínio, aquele analisador trata uma cadeia
+sem `@` como TELEFONE, ou seja `554192421234` passaria — o oposto do que esta
+validação existe para fazer. `IsNewsletter` é mais estrita que `IsLID`/`IsPN`
+de propósito: exige parte de utilizador não-vazia e sem brancos, porque é usada
+para ADMITIR um pedido e não para descrever um jid.
+
+Resposta nova: `400` com `error.code = "invalid_newsletter_jid"` e mensagem
+`jid must be a channel jid ending in @newsletter`. A ausência continua
+`400 missing_jid`, e a ordem do `delete` continua a revelar `missing_jid` antes
+de `missing_confirm_jid`.
+
+**Testes que o travam**:
+
+- `pkg/application/usecase/notification/newsletter_jid_validation_test.go`:
+  `TestNewsletter_MalformedJID_IsValidation` (os três valores medidos × as 15
+  operações), `TestNewsletter_MissingJID_StillMissingJID`,
+  `TestNewsletter_ValidChannelJID_PassesValidation` (caminho de SUCESSO),
+  `TestNewsletter_DeleteValidationOrder` (ordem),
+  `TestNewsletter_OpsWithoutChannelJID_Unaffected`,
+  `TestNewsletter_JIDRulesAreNeverSplit` (teste da CAUSA: lê a tabela e falha
+  se alguma linha levar `requireJID` sem `requireNewsletterServer`),
+  `TestNewsletter_MalformedJID_NeverReachesThePort`.
+- `pkg/presentation/http/handlers/handler_newsletter_jid_test.go`:
+  `TestNewsletter_JIDMalformadoE400` (contrato de resposta: status e
+  `error.code`), `TestNewsletter_JIDAusenteContinuaMissingJID`,
+  `TestNewsletter_JIDValidoContinuaA200`.
+- `pkg/domain/jid_newsletter_test.go`: `TestJID_IsNewsletter` e
+  `TestJID_NewsletterDoesNotDisturbLIDAndPN`.
+
+**Controlo negativo EXECUTADO**, duas mutações:
+
+1. `jidRules` reduzido a `{requireJID}` (a regra nova deixa de ser aplicada):
+
+```
+--- FAIL: TestNewsletter_MalformedJID_IsValidation/info/nao-e-jid
+        newsletter_jid_validation_test.go:104: no error returned
+--- FAIL: TestNewsletter_JIDRulesAreNeverSplit
+        op "info": missing_jid=true invalid_newsletter_jid=false; the two rules must travel together
+--- FAIL: TestNewsletter_MalformedJID_NeverReachesThePort/554192421234@s.whatsapp.net
+--- FAIL: TestNewsletter_JIDMalformadoE400/___
+        handler_newsletter_jid_test.go:55: status: got 200, want 400
+```
+
+2. `IsNewsletter` enfraquecido para só `hasSuffix(s, ServerNewsletter)`:
+
+```
+--- FAIL: TestJID_IsNewsletter
+    jid_newsletter_test.go:37: JID("@newsletter").IsNewsletter() = true, want false
+    jid_newsletter_test.go:37: JID("   @newsletter").IsNewsletter() = true, want false
+    jid_newsletter_test.go:37: JID("1 @newsletter").IsNewsletter() = true, want false
+```
+
+**Nota sobre o dublê** (ARMADILHAS nº1): o `contractsfake.NewsletterReader`
+aceita QUALQUER jid, por isso na primeira mutação a rota respondeu `200` onde a
+produção respondia `500`. O teste morde na mesma porque afirma `400` — mas por
+isso mesmo NÃO se pode escrever ali "não é 500": isso passaria com o dublê.
+
+**Efeito colateral medido**: uma primeira versão desta correcção introduziu um
+ajudante `withJID(...)` e três funções auxiliares no `pkg/domain`. Todas
+entraram no denominador do gate de log sem log nenhum, e
+`func_coverage` caiu de **595** para **593** décimos, abaixo do piso 595 do
+`.log-coverage-baseline` (stage=ratchet) — ou seja, a correcção passava nos
+testes e reprovava no `make check`. A versão final não acrescenta função
+elegível nenhuma: `eligible=978`, `covered=582`, `func_coverage=595`,
+`errpath_coverage=780`, idênticos aos de `HEAD`. O golden
+`cmd/logcov/testdata/eligible.golden` ganhou duas linhas `EXCLUDED` e foi
+regenerado.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->
 
