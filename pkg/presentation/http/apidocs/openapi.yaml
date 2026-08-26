@@ -5247,68 +5247,7 @@ components:
       name: token
       type: apiKey
 info:
-  description: |
-    API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber
-    mensagens, gerir grupos, comunidades e canais, consultar contactos e
-    administrar sessões.
-
-    ## Como se autentica
-
-    Quase todas as rotas usam um **token de sessão**, enviado no cabeçalho
-    `token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é
-    ele que diz *de que conta* a operação parte.
-
-    As rotas sob `/admin` usam outro segredo: o **token de administração**, no
-    cabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e
-    não pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica
-    em `<datadir>/admin_token`.
-
-    Três rotas de sonda não pedem credencial nenhuma: `/livez`,
-    `/health/live` e `/health/ready`.
-
-    Use o botão **Authorize** aqui em cima para preencher os dois.
-
-    ## O envelope das respostas
-
-    Sucesso e erro têm forma fixa:
-
-    ```json
-    { "code": 200, "data": { }, "success": true }
-    ```
-
-    ```json
-    { "code": 400, "error": { "code": "missing_chat", "message": "missing chat in payload" }, "success": false }
-    ```
-
-    `error.code` é estável e legível por máquina; `error.message` é para
-    mostrar a uma pessoa.
-
-    **Ressalva medida**: catorze pontos do código ainda respondem com
-    `"error"` em texto simples em vez do objecto — as recusas de campo
-    obrigatório das rotas de grupo, sobretudo. Está registado como F266 no
-    `HOUSEKEEP.md`, e a documentação de cada rota afectada diz.
-
-    ## O campo `chat`
-
-    Toda rota que recebe um destinatário aceita `"chat"` como nome universal do
-    campo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)
-    continua a funcionar e **ganha** quando os dois vierem no mesmo pedido.
-
-    ## Identificadores
-
-    - **PN** — o número, em `554192421234@s.whatsapp.net`
-    - **LID** — o identificador opaco, em `90937376170214@lid`
-    - **grupo** — `120363411669320145@g.us`
-    - **canal** — `120363411025775186@newsletter`
-
-    Onde a distinção importa, a descrição da rota diz qual das formas é exigida.
-
-    ## O que `200` significa, e o que não significa
-
-    Um `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem
-    foi desenhada no ecrã do destinatário, nem que a operação teve efeito
-    visível. As rotas em que essa diferença já foi medida trazem a ressalva na
-    descrição.
+  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 141 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-26, com duas sessões reais: **98 ✅, 8 \U0001F7E1, 3 ❌, 32 ⬜**.\n\nAs 32 por testar não são esquecimento: escreveriam configuração de uma\nsessão em uso, derrubariam sessões vivas, criariam ou apagariam contas, ou\nalterariam o perfil. O detalhe rota a rota está em\n`docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
   title: wa-api — API HTTP para WhatsApp
   version: 1.0.6
 openapi: 3.0.3
@@ -5377,7 +5316,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: Listar as sessões existentes
+      summary: ✅ Listar as sessões existentes
       tags:
         - Administração
     post:
@@ -5499,7 +5438,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: Criar uma sessão
+      summary: ⬜ Criar uma sessão
       tags:
         - Administração
   /admin/users/{id}:
@@ -5579,7 +5518,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: Apagar o registo de uma sessão
+      summary: ⬜ Apagar o registo de uma sessão
       tags:
         - Administração
     get:
@@ -5646,7 +5585,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: Consultar uma sessão pelo identificador
+      summary: ✅ Consultar uma sessão pelo identificador
       tags:
         - Administração
     put:
@@ -5755,7 +5694,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: Alterar uma sessão
+      summary: ⬜ Alterar uma sessão
       tags:
         - Administração
   /admin/users/{id}/full:
@@ -5843,7 +5782,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: Apagar uma sessão por completo, com ficheiros e ligação
+      summary: ⬜ Apagar uma sessão por completo, com ficheiros e ligação
       tags:
         - Administração
   /call/reject:
@@ -5921,7 +5860,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Recusar uma chamada a entrar
+      summary: ⬜ Recusar uma chamada a entrar
       tags:
         - Integrações e configuração
   /chat/archive:
@@ -6006,7 +5945,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Arquivar ou desarquivar uma conversa
+      summary: ✅ Arquivar ou desarquivar uma conversa
       tags:
         - Conversas
   /chat/delete/message:
@@ -6084,7 +6023,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Apagar para todos uma mensagem enviada
+      summary: ✅ Apagar para todos uma mensagem enviada
       tags:
         - Conversas
   /chat/downloadaudio:
@@ -6182,7 +6121,7 @@ paths:
             conteúdo de zero bytes (`empty_media`).
       security:
         - TokenSessao: []
-      summary: Descarregar o áudio de uma mensagem recebida
+      summary: ✅ Descarregar o áudio de uma mensagem recebida
       tags:
         - Descarga de mídia
   /chat/downloaddocument:
@@ -6280,7 +6219,7 @@ paths:
             conteúdo de zero bytes (`empty_media`).
       security:
         - TokenSessao: []
-      summary: Descarregar o documento de uma mensagem recebida
+      summary: ✅ Descarregar o documento de uma mensagem recebida
       tags:
         - Descarga de mídia
   /chat/downloadimage:
@@ -6384,7 +6323,7 @@ paths:
             servidor, e não como um `200` com corpo vazio.
       security:
         - TokenSessao: []
-      summary: Descarregar a imagem de uma mensagem recebida
+      summary: ✅ Descarregar a imagem de uma mensagem recebida
       tags:
         - Descarga de mídia
   /chat/downloadsticker:
@@ -6481,7 +6420,7 @@ paths:
             conteúdo de zero bytes (`empty_media`).
       security:
         - TokenSessao: []
-      summary: Descarregar o autocolante de uma mensagem recebida
+      summary: ✅ Descarregar o autocolante de uma mensagem recebida
       tags:
         - Descarga de mídia
   /chat/downloadvideo:
@@ -6581,7 +6520,7 @@ paths:
             conteúdo de zero bytes (`empty_media`).
       security:
         - TokenSessao: []
-      summary: Descarregar o vídeo de uma mensagem recebida
+      summary: ✅ Descarregar o vídeo de uma mensagem recebida
       tags:
         - Descarga de mídia
   /chat/ephemeral:
@@ -6653,7 +6592,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir o temporizador de mensagens temporárias da conversa
+      summary: ✅ Definir o temporizador de mensagens temporárias da conversa
       tags:
         - Conversas
   /chat/ephemeral/default:
@@ -6721,7 +6660,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir o temporizador padrão da conta
+      summary: ✅ Definir o temporizador padrão da conta
       tags:
         - Conversas
   /chat/history:
@@ -6844,7 +6783,7 @@ paths:
             `POST /session/history` antes de voltar a chamar.
       security:
         - TokenSessao: []
-      summary: Ler o histórico de mensagens de uma conversa
+      summary: ✅ Ler o histórico de mensagens de uma conversa
       tags:
         - Conversas
   /chat/list:
@@ -6932,7 +6871,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar as conversas por interação mais recente
+      summary: ✅ Listar as conversas por interação mais recente
       tags:
         - Conversas
   /chat/markread:
@@ -7006,7 +6945,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Marcar mensagens como lidas
+      summary: ✅ Marcar mensagens como lidas
       tags:
         - Conversas
   /chat/mute:
@@ -7116,7 +7055,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Silenciar ou dessilenciar uma conversa
+      summary: ✅ Silenciar ou dessilenciar uma conversa
       tags:
         - Conversas
   /chat/pin:
@@ -7197,7 +7136,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Fixar ou desafixar uma conversa no topo
+      summary: ✅ Fixar ou desafixar uma conversa no topo
       tags:
         - Conversas
   /chat/presence:
@@ -7269,7 +7208,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Anunciar "a escrever" ou "a gravar" numa conversa
+      summary: ✅ Anunciar "a escrever" ou "a gravar" numa conversa
       tags:
         - Conversas
   /chat/react:
@@ -7344,7 +7283,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Reagir a uma mensagem com um emoji
+      summary: ✅ Reagir a uma mensagem com um emoji
       tags:
         - Conversas
   /chat/request-unavailable-message:
@@ -7424,7 +7363,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Pedir ao par o reenvio de uma mensagem indecifrável
+      summary: "\U0001F7E1 Pedir ao par o reenvio de uma mensagem indecifrável"
       tags:
         - Conversas
   /chat/send/audio:
@@ -7556,7 +7495,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar um áudio ou mensagem de voz
+      summary: ✅ Enviar um áudio ou mensagem de voz
       tags:
         - Envio de mensagens
   /chat/send/buttons:
@@ -7671,7 +7610,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar uma mensagem com botões
+      summary: ✅ Enviar uma mensagem com botões
       tags:
         - Envio de mensagens
   /chat/send/carousel:
@@ -7787,7 +7726,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar um carrossel de cartões
+      summary: ✅ Enviar um carrossel de cartões
       tags:
         - Envio de mensagens
   /chat/send/contact:
@@ -7888,7 +7827,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar um cartão de contacto
+      summary: ✅ Enviar um cartão de contacto
       tags:
         - Envio de mensagens
   /chat/send/document:
@@ -8011,7 +7950,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar um documento
+      summary: ✅ Enviar um documento
       tags:
         - Envio de mensagens
   /chat/send/edit:
@@ -8118,7 +8057,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Editar uma mensagem já enviada
+      summary: ✅ Editar uma mensagem já enviada
       tags:
         - Envio de mensagens
   /chat/send/forward:
@@ -8255,7 +8194,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Encaminhar uma mensagem
+      summary: ✅ Encaminhar uma mensagem
       tags:
         - Envio de mensagens
   /chat/send/image:
@@ -8388,7 +8327,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar uma imagem
+      summary: ✅ Enviar uma imagem
       tags:
         - Envio de mensagens
   /chat/send/list:
@@ -8505,7 +8444,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar uma lista de seleção
+      summary: ✅ Enviar uma lista de seleção
       tags:
         - Envio de mensagens
   /chat/send/location:
@@ -8603,7 +8542,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar uma localização
+      summary: ✅ Enviar uma localização
       tags:
         - Envio de mensagens
   /chat/send/poll:
@@ -8706,7 +8645,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Criar uma enquete
+      summary: ✅ Criar uma enquete
       tags:
         - Envio de mensagens
   /chat/send/pollvote:
@@ -8831,7 +8770,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Votar numa enquete
+      summary: ✅ Votar numa enquete
       tags:
         - Envio de mensagens
   /chat/send/sticker:
@@ -8953,7 +8892,7 @@ paths:
             (`sticker_conversion_failed`) — que é do nosso lado, e não do payload.
       security:
         - TokenSessao: []
-      summary: Enviar um autocolante
+      summary: "\U0001F7E1 Enviar um autocolante"
       tags:
         - Envio de mensagens
   /chat/send/template:
@@ -9064,7 +9003,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar uma mensagem de modelo
+      summary: ✅ Enviar uma mensagem de modelo
       tags:
         - Envio de mensagens
   /chat/send/text:
@@ -9173,7 +9112,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar uma mensagem de texto
+      summary: ✅ Enviar uma mensagem de texto
       tags:
         - Envio de mensagens
   /chat/send/video:
@@ -9297,7 +9236,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Enviar um vídeo
+      summary: ✅ Enviar um vídeo
       tags:
         - Envio de mensagens
   /community/link:
@@ -9365,7 +9304,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Ligar um grupo a uma comunidade
+      summary: ✅ Ligar um grupo a uma comunidade
       tags:
         - Comunidades
   /community/participants:
@@ -9429,7 +9368,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar os participantes dos grupos de uma comunidade
+      summary: ✅ Listar os participantes dos grupos de uma comunidade
       tags:
         - Comunidades
   /community/subgroups:
@@ -9504,7 +9443,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar os sub-grupos de uma comunidade
+      summary: ✅ Listar os sub-grupos de uma comunidade
       tags:
         - Comunidades
   /community/unlink:
@@ -9571,7 +9510,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Desligar um grupo de uma comunidade
+      summary: ✅ Desligar um grupo de uma comunidade
       tags:
         - Comunidades
   /group/announce:
@@ -9626,7 +9565,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Fechar ou abrir o grupo à escrita de não-administradores
+      summary: ✅ Fechar ou abrir o grupo à escrita de não-administradores
       tags:
         - Grupos
   /group/create:
@@ -9722,7 +9661,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Criar um grupo, uma comunidade ou um sub-grupo
+      summary: ✅ Criar um grupo, uma comunidade ou um sub-grupo
       tags:
         - Grupos
   /group/ephemeral:
@@ -9785,7 +9724,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir o tempo das mensagens temporárias do grupo
+      summary: ✅ Definir o tempo das mensagens temporárias do grupo
       tags:
         - Grupos
   /group/info:
@@ -9886,7 +9825,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar os metadados de um grupo
+      summary: ✅ Consultar os metadados de um grupo
       tags:
         - Grupos
   /group/inviteinfo:
@@ -9988,7 +9927,7 @@ paths:
             como `500` de texto genérico.
       security:
         - TokenSessao: []
-      summary: Inspecionar um convite sem entrar no grupo
+      summary: ✅ Inspecionar um convite sem entrar no grupo
       tags:
         - Grupos
   /group/invitelink:
@@ -10062,7 +10001,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Obter o link de convite de um grupo
+      summary: ✅ Obter o link de convite de um grupo
       tags:
         - Grupos
   /group/join:
@@ -10143,7 +10082,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Entrar num grupo por código de convite
+      summary: ✅ Entrar num grupo por código de convite
       tags:
         - Grupos
   /group/joinapprovalmode:
@@ -10214,7 +10153,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Exigir aprovação de administrador para entrar no grupo
+      summary: ✅ Exigir aprovação de administrador para entrar no grupo
       tags:
         - Grupos
   /group/leave:
@@ -10280,7 +10219,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Sair de um grupo
+      summary: ✅ Sair de um grupo
       tags:
         - Grupos
   /group/list:
@@ -10362,7 +10301,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar os grupos da sessão
+      summary: ✅ Listar os grupos da sessão
       tags:
         - Grupos
   /group/locked:
@@ -10420,7 +10359,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Trancar ou destrancar a edição dos metadados do grupo
+      summary: ✅ Trancar ou destrancar a edição dos metadados do grupo
       tags:
         - Grupos
   /group/name:
@@ -10494,7 +10433,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Mudar o nome de um grupo
+      summary: ✅ Mudar o nome de um grupo
       tags:
         - Grupos
   /group/photo:
@@ -10585,7 +10524,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir a foto de um grupo
+      summary: ✅ Definir a foto de um grupo
       tags:
         - Grupos
   /group/photo/remove:
@@ -10643,7 +10582,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Remover a foto de um grupo
+      summary: ✅ Remover a foto de um grupo
       tags:
         - Grupos
   /group/requestparticipants:
@@ -10736,7 +10675,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar os pedidos de entrada pendentes de um grupo
+      summary: ✅ Listar os pedidos de entrada pendentes de um grupo
       tags:
         - Grupos
   /group/topic:
@@ -10808,7 +10747,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Mudar a descrição de um grupo
+      summary: ✅ Mudar a descrição de um grupo
       tags:
         - Grupos
   /group/updateparticipants:
@@ -10935,7 +10874,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Adicionar ou remover participantes de um grupo
+      summary: ✅ Adicionar ou remover participantes de um grupo
       tags:
         - Grupos
   /group/updaterequestparticipants:
@@ -11017,7 +10956,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Aprovar ou rejeitar pedidos de entrada num grupo
+      summary: "\U0001F7E1 Aprovar ou rejeitar pedidos de entrada num grupo"
       tags:
         - Grupos
   /health:
@@ -11068,7 +11007,7 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
       security:
         - TokenSessao: []
-      summary: Consultar a saúde detalhada do serviço
+      summary: ✅ Consultar a saúde detalhada do serviço
       tags:
         - Saúde
   /health/live:
@@ -11092,7 +11031,7 @@ paths:
                 $ref: '#/components/schemas/EstadoSonda'
           description: O processo está vivo.
       security: []
-      summary: Verificar se o processo está vivo (caminho alternativo)
+      summary: ✅ Verificar se o processo está vivo (caminho alternativo)
       tags:
         - Saúde
   /health/ready:
@@ -11127,7 +11066,7 @@ paths:
             não apenas no código HTTP — um `200` com `status` diferente de
             `ready` significa que alguma verificação não passou.
       security: []
-      summary: Verificar se o serviço pode receber tráfego
+      summary: ✅ Verificar se o serviço pode receber tráfego
       tags:
         - Saúde
   /hmac/config:
@@ -11171,7 +11110,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Revogar a chave HMAC da sessão
+      summary: ⬜ Revogar a chave HMAC da sessão
       tags:
         - Integrações e configuração
     get:
@@ -11211,7 +11150,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar se há chave HMAC configurada
+      summary: ✅ Consultar se há chave HMAC configurada
       tags:
         - Integrações e configuração
     post:
@@ -11281,7 +11220,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Gravar a chave HMAC da sessão
+      summary: ⬜ Gravar a chave HMAC da sessão
       tags:
         - Integrações e configuração
   /hmac/configure:
@@ -11346,7 +11285,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Gravar a chave HMAC da sessão (caminho original)
+      summary: ⬜ Gravar a chave HMAC da sessão (caminho original)
       tags:
         - Integrações e configuração
   /labels:
@@ -11403,7 +11342,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar as etiquetas da conta
+      summary: ✅ Listar as etiquetas da conta
       tags:
         - Integrações e configuração
   /labels/{id}/chats:
@@ -11476,7 +11415,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar as conversas de uma etiqueta
+      summary: ✅ Listar as conversas de uma etiqueta
       tags:
         - Integrações e configuração
   /livez:
@@ -11504,7 +11443,7 @@ paths:
                 $ref: '#/components/schemas/EstadoSonda'
           description: O processo está vivo.
       security: []
-      summary: Verificar se o processo está vivo
+      summary: ✅ Verificar se o processo está vivo
       tags:
         - Saúde
   /message/star:
@@ -11591,7 +11530,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Favoritar ou desfavoritar uma mensagem
+      summary: ✅ Favoritar ou desfavoritar uma mensagem
       tags:
         - Conversas
   /newsletter/admin-invite:
@@ -11664,7 +11603,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Convidar um utilizador para administrador do canal
+      summary: ✅ Convidar um utilizador para administrador do canal
       tags:
         - Canais
   /newsletter/admin-invite/accept:
@@ -11721,7 +11660,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Aceitar um convite para administrador de canal
+      summary: ✅ Aceitar um convite para administrador de canal
       tags:
         - Canais
   /newsletter/admin-invite/revoke:
@@ -11776,7 +11715,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Revogar um convite de administrador de canal
+      summary: ✅ Revogar um convite de administrador de canal
       tags:
         - Canais
   /newsletter/change-owner:
@@ -11853,7 +11792,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Transferir a posse de um canal
+      summary: ✅ Transferir a posse de um canal
       tags:
         - Canais
   /newsletter/create:
@@ -11933,7 +11872,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Criar um canal
+      summary: ✅ Criar um canal
       tags:
         - Canais
   /newsletter/delete:
@@ -11998,7 +11937,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Apagar um canal (IRREVERSÍVEL)
+      summary: ✅ Apagar um canal (IRREVERSÍVEL)
       tags:
         - Canais
   /newsletter/demote:
@@ -12069,7 +12008,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Despromover um administrador do canal a assinante
+      summary: ✅ Despromover um administrador do canal a assinante
       tags:
         - Canais
   /newsletter/follow:
@@ -12123,7 +12062,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Seguir um canal
+      summary: ✅ Seguir um canal
       tags:
         - Canais
   /newsletter/info:
@@ -12220,7 +12159,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar os metadados de um canal
+      summary: ✅ Consultar os metadados de um canal
       tags:
         - Canais
   /newsletter/info-invite:
@@ -12294,7 +12233,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar um canal pelo código de convite
+      summary: ✅ Consultar um canal pelo código de convite
       tags:
         - Canais
   /newsletter/list:
@@ -12354,7 +12293,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar os canais que a sessão segue
+      summary: ✅ Listar os canais que a sessão segue
       tags:
         - Canais
   /newsletter/mark-viewed:
@@ -12413,7 +12352,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Marcar mensagens de um canal como vistas
+      summary: "\U0001F7E1 Marcar mensagens de um canal como vistas"
       tags:
         - Canais
   /newsletter/messages:
@@ -12479,7 +12418,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Ler as mensagens de um canal
+      summary: ✅ Ler as mensagens de um canal
       tags:
         - Canais
   /newsletter/mute:
@@ -12535,7 +12474,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Silenciar ou dessilenciar um canal
+      summary: ✅ Silenciar ou dessilenciar um canal
       tags:
         - Canais
   /newsletter/react:
@@ -12592,7 +12531,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Reagir a uma mensagem de um canal
+      summary: "\U0001F7E1 Reagir a uma mensagem de um canal"
       tags:
         - Canais
   /newsletter/subscribe:
@@ -12650,7 +12589,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Subscrever as atualizações ao vivo de um canal
+      summary: ✅ Subscrever as atualizações ao vivo de um canal
       tags:
         - Canais
   /newsletter/unfollow:
@@ -12719,7 +12658,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Deixar de seguir um canal
+      summary: ✅ Deixar de seguir um canal
       tags:
         - Canais
   /newsletter/updates:
@@ -12800,7 +12739,7 @@ paths:
             espera pelo WhatsApp.
       security:
         - TokenSessao: []
-      summary: Buscar atualizações de mensagens de um canal (INOPERANTE)
+      summary: ❌ Buscar atualizações de mensagens de um canal (INOPERANTE)
       tags:
         - Canais
   /proxy/set:
@@ -12899,7 +12838,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Configurar o proxy de saída da sessão
+      summary: ⬜ Configurar o proxy de saída da sessão
       tags:
         - Integrações e configuração
   /s3/config:
@@ -12940,7 +12879,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Remover a configuração de S3 da sessão
+      summary: ⬜ Remover a configuração de S3 da sessão
       tags:
         - Integrações e configuração
     get:
@@ -12989,7 +12928,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar a configuração de S3 da sessão
+      summary: ✅ Consultar a configuração de S3 da sessão
       tags:
         - Integrações e configuração
     post:
@@ -13070,7 +13009,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Gravar a configuração de S3 da sessão
+      summary: ⬜ Gravar a configuração de S3 da sessão
       tags:
         - Integrações e configuração
   /s3/configure:
@@ -13145,7 +13084,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Gravar a configuração de S3 da sessão (caminho original)
+      summary: ⬜ Gravar a configuração de S3 da sessão (caminho original)
       tags:
         - Integrações e configuração
   /s3/test:
@@ -13229,7 +13168,7 @@ paths:
             é o genérico; a causa está no log do servidor.
       security:
         - TokenSessao: []
-      summary: Testar a ligação ao bucket configurado
+      summary: ⬜ Testar a ligação ao bucket configurado
       tags:
         - Integrações e configuração
   /session/connect:
@@ -13304,7 +13243,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Iniciar a ligação da sessão ao WhatsApp
+      summary: ⬜ Iniciar a ligação da sessão ao WhatsApp
       tags:
         - Sessões
   /session/disconnect:
@@ -13353,7 +13292,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Derrubar o transporte da sessão sem desemparelhar
+      summary: ⬜ Derrubar o transporte da sessão sem desemparelhar
       tags:
         - Sessões
   /session/history:
@@ -13424,7 +13363,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Configurar quantas mensagens a sessão guarda
+      summary: ⬜ Configurar quantas mensagens a sessão guarda
       tags:
         - Sessões
   /session/hmac/config:
@@ -13465,7 +13404,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Revogar a chave HMAC desta sessão
+      summary: ⬜ Revogar a chave HMAC desta sessão
       tags:
         - Sessões
     get:
@@ -13512,7 +13451,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Saber se esta sessão tem chave HMAC configurada
+      summary: ✅ Saber se esta sessão tem chave HMAC configurada
       tags:
         - Sessões
     post:
@@ -13583,7 +13522,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Gravar a chave HMAC de assinatura dos webhooks
+      summary: ⬜ Gravar a chave HMAC de assinatura dos webhooks
       tags:
         - Sessões
   /session/logout:
@@ -13648,7 +13587,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Desvincular o aparelho da conta de WhatsApp
+      summary: ⬜ Desvincular o aparelho da conta de WhatsApp
       tags:
         - Sessões
   /session/pairphone:
@@ -13730,7 +13669,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Emparelhar por código de telefone em vez de QR
+      summary: ⬜ Emparelhar por código de telefone em vez de QR
       tags:
         - Sessões
   /session/profile:
@@ -13810,7 +13749,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar o perfil da conta ligada
+      summary: ✅ Consultar o perfil da conta ligada
       tags:
         - Sessões
   /session/profile/full:
@@ -13916,7 +13855,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar o perfil da conta com os dados que só a rede sabe
+      summary: ✅ Consultar o perfil da conta com os dados que só a rede sabe
       tags:
         - Sessões
   /session/proxy:
@@ -14003,7 +13942,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Configurar o proxy de saída desta sessão
+      summary: ⬜ Configurar o proxy de saída desta sessão
       tags:
         - Sessões
   /session/qr:
@@ -14053,7 +13992,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Ler o QR code de emparelhamento
+      summary: ✅ Ler o QR code de emparelhamento
       tags:
         - Sessões
   /session/s3/config:
@@ -14094,7 +14033,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Remover a configuração S3 desta sessão
+      summary: ⬜ Remover a configuração S3 desta sessão
       tags:
         - Sessões
     get:
@@ -14150,7 +14089,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Ler a configuração S3 desta sessão
+      summary: ✅ Ler a configuração S3 desta sessão
       tags:
         - Sessões
     post:
@@ -14238,7 +14177,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Gravar a configuração S3 desta sessão
+      summary: ⬜ Gravar a configuração S3 desta sessão
       tags:
         - Sessões
   /session/s3/test:
@@ -14320,7 +14259,7 @@ paths:
             decifrado. A mensagem traz a causa.
       security:
         - TokenSessao: []
-      summary: Testar a configuração S3 gravada com uma ida real ao bucket
+      summary: ⬜ Testar a configuração S3 gravada com uma ida real ao bucket
       tags:
         - Sessões
   /session/status:
@@ -14410,7 +14349,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar o estado e o registo da sessão
+      summary: ✅ Consultar o estado e o registo da sessão
       tags:
         - Sessões
   /session/ws:
@@ -14503,7 +14442,7 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
       security:
         - TokenSessao: []
-      summary: Receber os eventos da sessão em tempo real (WebSocket)
+      summary: ⬜ Receber os eventos da sessão em tempo real (WebSocket)
       tags:
         - Sessões
   /status/set/audio:
@@ -14580,7 +14519,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Publicar um status com áudio
+      summary: "\U0001F7E1 Publicar um status com áudio"
       tags:
         - Status
   /status/set/image:
@@ -14669,7 +14608,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Publicar um status com imagem
+      summary: "\U0001F7E1 Publicar um status com imagem"
       tags:
         - Status
   /status/set/video:
@@ -14747,7 +14686,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Publicar um status com vídeo
+      summary: "\U0001F7E1 Publicar um status com vídeo"
       tags:
         - Status
   /user/avatar:
@@ -14849,7 +14788,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Obter a foto de perfil de um contacto
+      summary: ⬜ Obter a foto de perfil de um contacto
       tags:
         - Contactos e utilizadores
   /user/block:
@@ -14941,7 +14880,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Bloquear um contacto
+      summary: ❌ Bloquear um contacto
       tags:
         - Contactos e utilizadores
   /user/blocklist:
@@ -14985,7 +14924,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar os contactos bloqueados
+      summary: ✅ Listar os contactos bloqueados
       tags:
         - Contactos e utilizadores
   /user/check:
@@ -15044,7 +14983,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Verificar se números têm WhatsApp
+      summary: ✅ Verificar se números têm WhatsApp
       tags:
         - Contactos e utilizadores
   /user/contacts:
@@ -15099,7 +15038,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Listar o roster inteiro da conta
+      summary: ✅ Listar o roster inteiro da conta
       tags:
         - Contactos e utilizadores
   /user/contacts/last-activity:
@@ -15151,7 +15090,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar o instante da última mensagem de cada conversa
+      summary: ✅ Consultar o instante da última mensagem de cada conversa
       tags:
         - Contactos e utilizadores
   /user/contacts/sync:
@@ -15228,7 +15167,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Forçar a sincronização da agenda de contactos
+      summary: ✅ Forçar a sincronização da agenda de contactos
       tags:
         - Sessões
   /user/history/sync:
@@ -15330,7 +15269,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Pedir ao telemóvel as mensagens anteriores a uma âncora
+      summary: ✅ Pedir ao telemóvel as mensagens anteriores a uma âncora
       tags:
         - Sessões
   /user/info:
@@ -15394,7 +15333,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar aparelhos, recado e identidade de contas
+      summary: ✅ Consultar aparelhos, recado e identidade de contas
       tags:
         - Contactos e utilizadores
   /user/lid/{jid}:
@@ -15473,7 +15412,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Resolver o LID de um número
+      summary: ✅ Resolver o LID de um número
       tags:
         - Contactos e utilizadores
   /user/presence:
@@ -15536,7 +15475,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir a presença da própria conta
+      summary: ✅ Definir a presença da própria conta
       tags:
         - Contactos e utilizadores
   /user/presence/subscribe:
@@ -15601,7 +15540,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Subscrever a presença de um contacto
+      summary: ✅ Subscrever a presença de um contacto
       tags:
         - Contactos e utilizadores
   /user/privacy:
@@ -15657,7 +15596,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Ler as definições de privacidade da conta
+      summary: ✅ Ler as definições de privacidade da conta
       tags:
         - Contactos e utilizadores
     post:
@@ -15744,7 +15683,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Alterar uma definição de privacidade
+      summary: ⬜ Alterar uma definição de privacidade
       tags:
         - Contactos e utilizadores
   /user/profile/{jid}:
@@ -15829,7 +15768,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Reunir num pedido só tudo o que se sabe de um contacto
+      summary: ✅ Reunir num pedido só tudo o que se sabe de um contacto
       tags:
         - Contactos e utilizadores
   /user/status:
@@ -15896,7 +15835,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir o recado do perfil da conta
+      summary: ⬜ Definir o recado do perfil da conta
       tags:
         - Sessões
   /user/unblock:
@@ -15982,7 +15921,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Desbloquear um contacto
+      summary: ❌ Desbloquear um contacto
       tags:
         - Contactos e utilizadores
   /webhook:
@@ -16021,7 +15960,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Remover o webhook da sessão
+      summary: ⬜ Remover o webhook da sessão
       tags:
         - Integrações e configuração
     get:
@@ -16060,7 +15999,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar o webhook da sessão
+      summary: ✅ Consultar o webhook da sessão
       tags:
         - Integrações e configuração
     post:
@@ -16142,7 +16081,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir o webhook da sessão
+      summary: ⬜ Definir o webhook da sessão
       tags:
         - Integrações e configuração
     put:
@@ -16216,7 +16155,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Actualizar ou desligar o webhook da sessão
+      summary: ⬜ Actualizar ou desligar o webhook da sessão
       tags:
         - Integrações e configuração
   /webhook/history:
@@ -16263,7 +16202,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Consultar o limite de gravação de mensagens
+      summary: ✅ Consultar o limite de gravação de mensagens
       tags:
         - Integrações e configuração
     post:
@@ -16329,7 +16268,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: Definir o limite de gravação de mensagens
+      summary: ⬜ Definir o limite de gravação de mensagens
       tags:
         - Integrações e configuração
 security:

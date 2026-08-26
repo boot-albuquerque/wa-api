@@ -10,7 +10,16 @@ como um documento só.
 api/openapi/base.yaml            info, servers, tags, securitySchemes, componentes PARTILHADOS
 api/openapi/paths/<grupo>.yaml   os caminhos do seu grupo — e SÓ do seu grupo
 api/openapi/schemas/<grupo>.yaml os esquemas próprios do seu grupo
+api/openapi/evidencias.tsv       a marca de evidência de cada rota
 ```
+
+**Não cole ✅ 🟡 ❌ ⬜ no `summary`.** O marcador é aplicado pelo
+`cmd/openapidoc` a partir de `evidencias.tsv`. Colado no título, ele duplica
+assim que alguém reescrever o texto, e desatualiza-se sem ninguém dar por isso.
+
+Rota nova em `paths/` **exige** linha em `evidencias.tsv` — o gerador falha sem
+ela. E uma linha para rota que já não existe também o faz falhar: entrada
+obsoleta é o que mantém uma rota removida com ar de medida.
 
 **Nunca edite `pkg/presentation/http/apidocs/openapi.yaml`.** É gerado por
 `go run ./cmd/openapidoc`, e há teste que o recusa se estiver desactualizado.

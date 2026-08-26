@@ -213,6 +213,53 @@ func rotasRegistadas(t *testing.T) []string {
 	return out
 }
 
+// marcasDeEvidencia são os quatro símbolos que podem abrir um summary.
+//
+// Estão aqui, e não só na tabela, porque um símbolo novo tem de ser uma
+// decisão: acrescentar um quinto valor sem o declarar faria a página mostrar
+// uma classificação que ninguém definiu.
+var marcasDeEvidencia = []string{"✅", "🟡", "❌", "⬜"}
+
+// TestOpenAPISummariesTrazemMarcaDeEvidencia trava a propriedade que torna a
+// página honesta à primeira vista: o leitor vê, no título, quanta prova existe
+// de que aquela rota funciona.
+//
+// Sem este teste, uma rota nova entraria sem marca e leria-se como as outras —
+// e "não medida" passaria por "medida" só por não se distinguir.
+func TestOpenAPISummariesTrazemMarcaDeEvidencia(t *testing.T) {
+	contagem := map[string]int{}
+	for chave, op := range operacoesDaEspecificacao(t, carregarEspecificacao(t)) {
+		marca := ""
+		for _, candidata := range marcasDeEvidencia {
+			if strings.HasPrefix(op.resumo, candidata) {
+				marca = candidata
+				break
+			}
+		}
+		if marca == "" {
+			t.Errorf("%s: summary %q não começa por marca de evidência (%s) — "+
+				"o gerador aplica-a a partir de api/openapi/evidencias.tsv",
+				chave, op.resumo, strings.Join(marcasDeEvidencia, " "))
+			continue
+		}
+		contagem[marca]++
+		if resto := strings.TrimSpace(strings.TrimPrefix(op.resumo, marca)); resto == "" {
+			t.Errorf("%s: summary é só a marca, sem título", chave)
+		}
+	}
+	// O total tem de fechar com o número de operações: uma marca contada a
+	// menos significaria uma operação sem classificação a passar despercebida.
+	total := 0
+	for _, n := range contagem {
+		total += n
+	}
+	if esperado := len(operacoesDaEspecificacao(t, carregarEspecificacao(t))); total != esperado {
+		t.Errorf("marcas contadas = %d, operações = %d", total, esperado)
+	}
+	t.Logf("evidência: ✅%d 🟡%d ❌%d ⬜%d",
+		contagem["✅"], contagem["🟡"], contagem["❌"], contagem["⬜"])
+}
+
 // minimoDescricao é o piso abaixo do qual uma descrição é, na prática, o nome
 // da rota outra vez. Não mede qualidade — mede que alguém escreveu.
 const minimoDescricao = 80

@@ -14,6 +14,20 @@ existe de que cada uma funciona.
 | ❌ falhou, com o erro medido | pedido HTTP real que falhou; o erro concreto está na coluna de evidência |
 | ⬜ não testada, com o motivo dito | não foi executada, e a razão é específica |
 
+## Onde isto aparece
+
+A marca de cada rota é **aplicada ao título no Swagger UI**, para que quem abre
+a página veja a classificação sem ter de vir aqui. A fonte é
+`api/openapi/evidencias.tsv`, e o `cmd/openapidoc` é que a cola no `summary` ao
+gerar o documento — não está escrita à mão em lado nenhum.
+
+Três guardas mantêm isto honesto:
+
+1. rota documentada sem linha na tabela **faz o gerador falhar**;
+2. linha na tabela para rota que já não existe **também**;
+3. `TestOpenAPISummariesTrazemMarcaDeEvidencia` recusa a especificação se
+   qualquer operação chegar ao binário sem marca.
+
 ## Resumo quantitativo
 
 ```

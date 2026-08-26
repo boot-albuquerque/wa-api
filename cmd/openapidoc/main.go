@@ -26,11 +26,17 @@ import (
 )
 
 const (
-	baseFile    = "base.yaml"
-	pathsDir    = "paths"
-	schemasDir  = "schemas"
-	yamlIndent  = 2
-	defaultRoot = "api/openapi"
+	baseFile   = "base.yaml"
+	pathsDir   = "paths"
+	schemasDir = "schemas"
+	// evidenceFile carries the per-route evidence mark that gets prefixed onto
+	// each summary. It lives OUTSIDE the path fragments on purpose: pasted into
+	// a summary, the mark drifts the moment someone rewrites the title, and a
+	// second paste doubles it. One table, applied at merge time, cannot do
+	// either.
+	evidenceFile = "evidencias.tsv"
+	yamlIndent   = 2
+	defaultRoot  = "api/openapi"
 	// defaultOutput lives inside the package that embeds it: go:embed cannot
 	// reach outside its own directory, and a second copy of the document is a
 	// second thing to keep in step.
@@ -104,6 +110,9 @@ func Merge(root string) (map[string]any, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("nenhum caminho encontrado em %s/%s", root, pathsDir)
 	}
+	if err := applyEvidence(filepath.Join(root, evidenceFile), paths); err != nil {
+		return nil, err
+	}
 	doc["paths"] = paths
 
 	components, _ := doc["components"].(map[string]any)
@@ -157,6 +166,81 @@ func mergeDir(dir string, dst map[string]any, kind string) error {
 	}
 	return nil
 }
+
+// applyEvidence prefixes every operation summary with its evidence mark.
+//
+// A route documented in paths/ with no line in the table is an ERROR, not a
+// default: a new route must be classified, and letting silence pass for a
+// clean bill is exactly how a coverage report starts lying.
+//
+// The reverse — a line for a route that no longer exists — is also an error,
+// because a stale entry is what keeps a removed route looking measured.
+func applyEvidence(path string, paths map[string]any) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("tabela de evidência: %w", err)
+	}
+	marks := map[string]string{}
+	for lineNo, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != evidenceColumns {
+			return fmt.Errorf("%s:%d: esperava %d colunas separadas por tabulação, veio %d",
+				evidenceFile, lineNo+1, evidenceColumns, len(fields))
+		}
+		marks[strings.ToUpper(fields[0])+" "+fields[1]] = fields[2]
+	}
+
+	used := map[string]bool{}
+	var missing []string
+	for route, item := range paths {
+		methods, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		for method, body := range methods {
+			op, ok := body.(map[string]any)
+			if !ok {
+				continue
+			}
+			key := strings.ToUpper(method) + " " + route
+			mark, known := marks[key]
+			if !known {
+				missing = append(missing, key)
+				continue
+			}
+			used[key] = true
+			summary, _ := op["summary"].(string)
+			op["summary"] = mark + " " + strings.TrimSpace(summary)
+		}
+	}
+	sort.Strings(missing)
+	if len(missing) > 0 {
+		return fmt.Errorf("%d rotas documentadas sem classificação de evidência em %s — "+
+			"classifique-as antes de as publicar:\n  %s",
+			len(missing), evidenceFile, strings.Join(missing, "\n  "))
+	}
+
+	var stale []string
+	for key := range marks {
+		if !used[key] {
+			stale = append(stale, key)
+		}
+	}
+	sort.Strings(stale)
+	if len(stale) > 0 {
+		return fmt.Errorf("%d linhas em %s para rotas que já não existem na especificação — "+
+			"uma entrada obsoleta é o que mantém uma rota removida com ar de medida:\n  %s",
+			len(stale), evidenceFile, strings.Join(stale, "\n  "))
+	}
+	return nil
+}
+
+// evidenceColumns is the shape of one line: method, path, mark.
+const evidenceColumns = 3
 
 func readYAML(path string) (map[string]any, error) {
 	raw, err := os.ReadFile(path)
