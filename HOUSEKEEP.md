@@ -29941,3 +29941,50 @@ wrapper de erro, originalmente registrado como F276 pela worktree
 `capability-registry`, foi removido por ser duplicata exata da H187 já
 registrada pela worktree `provider-wa-noise` — mesmo arquivo:linha, mesmo
 conjunto de métodos.)
+
+## H187 — sete métodos de grupo/comunidade/newsletter sem wrapper de erro; `TestTodoMetodoComErroTemWrapper` já está vermelho na `main`
+
+**Data**: 2026-08-26
+**Contexto**: worktree `feature/provider-wa-noise`, tarefa de levantamento de
+capacidades (inventário de portas para a futura `capability-registry`). Não é
+escopo desta tarefa corrigir — é achado incidental encontrado ao rodar
+`go test ./pkg/infra/wa-noise/...` para confirmar que o ambiente estava
+saudável antes do levantamento.
+
+**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers_test.go` —
+`TestTodoMetodoComErroTemWrapper` já falha na `main`, sem qualquer mudança
+minha. É o gate anti-regressão da decisão 46=a (comentário do próprio teste):
+todo método que devolve erro na interface `Client` precisa de wrapper em
+`RealClient` que chame `errmap.ClassifyIQ`; sem ele, o método fica PROMOVIDO de
+`*wanoise.Client` e devolve o erro cru do SDK.
+
+**Problema, com evidência**:
+
+```
+--- FAIL: TestTodoMetodoComErroTemWrapper (0.01s)
+    realclient_wrappers_test.go:56: 7 método(s) da interface Client devolvem
+    erro e NÃO têm wrapper que traduza no RealClient: GetSubGroups, LinkGroup,
+    UnlinkGroup, NewsletterRevokeAdminInvite, GetLinkedGroupsParticipants,
+    NewsletterAcceptAdminInvite, NewsletterCreateAdminInvite.
+```
+
+Os sete correspondem a capacidades que o levantamento desta worktree marcou
+como implementadas no lado do adapter (`pkg/infra/wa-noise/adapters/group`
+para `GetSubGroups`/`GetLinkedGroupsParticipants`/`LinkGroup`/`UnlinkGroup`, via
+`CommunityDirectory`/`CommunityLifecycle`; `pkg/infra/wa-noise/adapters/misc`
+para os três métodos `Newsletter*AdminInvite`, via `NewsletterReader`) — o
+código EXISTE e compila, mas uma recusa do servidor do WhatsApp nessas sete
+chamadas chega ao chamador como `500 internal server error` cru em vez de
+classificado (mesma família da F204), porque falta o wrapper que traduz.
+
+**Correção sugerida**: acrescentar em `pkg/infra/wa-noise/client` os sete
+wrappers que chamam `errmap.ClassifyIQ`, no padrão dos demais métodos da
+interface `Client`. É mudança mecânica, mas fora do escopo desta tarefa
+(levantamento, não correção de adapters).
+
+**Status**: não corrigido nesta sessão — é achado incidental de uma tarefa de
+levantamento, e a raiz (`pkg/infra/wa-noise/client`) não foi tocada por mim.
+Reflected no inventário (`docs/PROVIDER-WA-NOISE-INVENTORY.md`): as sete
+capacidades estão marcadas `broken` (não `supported`), com este achado como
+evidência, para que a matriz de `capability-registry` não as trate como
+prontas.
