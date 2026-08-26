@@ -1,0 +1,724 @@
+# Grupo: Grupos.
+#
+# A FORMA DE `InfoGrupo` FOI MEDIDA, não derivada da struct: chamada real a
+# `POST /group/info` e a `POST /group/list` em 2026-08-26 contra a sessão
+# `filarapida`. Os nomes vêm em maiúscula inicial porque o adaptador devolve a
+# struct do wa-noise (`internal/wa-noise/protocol/types/group.go:15`) sem
+# etiquetas `json`, logo o Go serializa os nomes dos campos tal e qual.
+
+ParticipanteGrupo:
+  type: object
+  description: |
+    Um membro do grupo. Medido em `POST /group/info` — os três identificadores
+    vêm sempre juntos, e `JID` é igual a `LID` nos grupos cujo
+    `AddressingMode` é `lid`, que é o caso de todos os grupos medidos.
+  properties:
+    JID:
+      type: string
+      description: |
+        Identificador a usar para falar com este participante. É sempre igual
+        a `LID` ou a `PhoneNumber` — nunca uma terceira forma.
+      example: 90937376170214@lid
+    PhoneNumber:
+      type: string
+      description: O número, em forma PN.
+      example: 554192421234@s.whatsapp.net
+    LID:
+      type: string
+      description: O identificador opaco do participante.
+      example: 90937376170214@lid
+    IsAdmin:
+      type: boolean
+      description: Administrador do grupo.
+      example: false
+    IsSuperAdmin:
+      type: boolean
+      description: Criador do grupo. Um super-administrador é também administrador.
+      example: false
+    DisplayName:
+      type: string
+      description: |
+        Só vem preenchido para participantes anónimos de grupos em modo
+        anúncio; nos grupos medidos veio sempre vazio.
+      example: ''
+    Error:
+      type: integer
+      description: |
+        Código de falha ao ADICIONAR este participante. Só é diferente de zero
+        na resposta de `POST /group/create` e de `POST /group/updateparticipants`,
+        onde parte dos participantes pode falhar sem que a operação falhe.
+      example: 0
+    AddRequest:
+      type: object
+      nullable: true
+      description: |
+        Presente quando adicionar este participante gerou um convite em vez de
+        uma adesão. Veio `null` em todos os grupos medidos.
+      properties:
+        Code:
+          type: string
+          description: Código do convite gerado para este participante.
+        Expiration:
+          type: string
+          format: date-time
+          description: Instante em que o convite deixa de valer.
+
+InfoGrupo:
+  type: object
+  description: |
+    Metadados de um grupo. Devolvido por `POST /group/info` (dentro de
+    `group_info`), por `POST /group/list` (uma entrada por grupo) e por
+    `POST /group/inviteinfo` (dentro de `invite_info`).
+
+    **As três origens não trazem o mesmo conteúdo**, e isso foi medido:
+    `POST /group/list` devolve `ParticipantCount: 0` para todos os grupos,
+    enquanto `POST /group/info` sobre o MESMO grupo, no mesmo minuto,
+    devolveu `2`. Para contar membros use `Participants`, que vem correcto
+    nas duas, ou peça `/group/info`. A resposta de `/group/inviteinfo` traz
+    `AnnounceVersionID`, `ParticipantVersionID` e `MemberAddMode` vazios.
+  properties:
+    JID:
+      type: string
+      description: Identificador do grupo.
+      example: 120363411669320145@g.us
+    OwnerJID:
+      type: string
+      description: Quem criou o grupo, em forma LID.
+      example: 90937376170214@lid
+    OwnerPN:
+      type: string
+      description: O mesmo criador, em forma PN.
+      example: 554192421234@s.whatsapp.net
+    Name:
+      type: string
+      description: Nome do grupo, o que `POST /group/name` altera.
+      example: Equipa de entregas
+    NameSetAt:
+      type: string
+      format: date-time
+      description: Quando o nome actual foi definido.
+      example: '2026-08-26T08:42:49-04:00'
+    NameSetBy:
+      type: string
+      description: Quem definiu o nome actual, em forma LID.
+      example: 90937376170214@lid
+    NameSetByPN:
+      type: string
+      description: O mesmo, em forma PN.
+      example: 554192421234@s.whatsapp.net
+    Topic:
+      type: string
+      description: Descrição do grupo, o que `POST /group/topic` altera.
+      example: Combinações de rota do turno da manhã
+    TopicID:
+      type: string
+      description: |
+        Identificador da descrição actual. Tem a forma de um `message_id`
+        porque a descrição de grupo VIAJA como mensagem no protocolo.
+      example: 3EB0A4B2AFD45E625C0917
+    TopicSetAt:
+      type: string
+      format: date-time
+      description: |
+        Quando a descrição actual foi definida. Num grupo sem descrição vem
+        `0001-01-01T00:00:00Z`, o zero do Go, e não nulo nem ausente.
+      example: '2026-08-26T08:42:50-04:00'
+    TopicSetBy:
+      type: string
+      description: Quem definiu a descrição, em forma LID.
+      example: 90937376170214@lid
+    TopicSetByPN:
+      type: string
+      description: O mesmo, em forma PN.
+      example: 554192421234@s.whatsapp.net
+    TopicDeleted:
+      type: boolean
+      description: A descrição foi apagada, e não apenas nunca definida.
+      example: false
+    IsLocked:
+      type: boolean
+      description: |
+        Só administradores editam nome, descrição e foto. É o que
+        `POST /group/locked` alterna.
+      example: false
+    IsAnnounce:
+      type: boolean
+      description: |
+        Só administradores enviam mensagens. É o que `POST /group/announce`
+        alterna.
+      example: false
+    AnnounceVersionID:
+      type: string
+      description: |
+        Versão do estado de anúncio, atribuída pelo servidor. Vem vazia na
+        resposta de `POST /group/inviteinfo`.
+      example: '1787748173200757'
+    IsEphemeral:
+      type: boolean
+      description: O grupo tem mensagens temporárias ligadas.
+      example: true
+    DisappearingTimer:
+      type: integer
+      description: |
+        Duração das mensagens temporárias, em SEGUNDOS — `86400` para as 24
+        horas que `POST /group/ephemeral` pede como `"24h"`, `0` quando
+        desligado. A rota recebe texto e a leitura devolve segundos.
+      example: 86400
+    IsIncognito:
+      type: boolean
+      description: |
+        Grupo em que os participantes não vêem os números uns dos outros. Os
+        sub-grupos de aviso criados automaticamente por uma comunidade vêm
+        com este campo verdadeiro.
+      example: false
+    IsParent:
+      type: boolean
+      description: |
+        Este "grupo" é na verdade uma COMUNIDADE. É o que
+        `POST /group/create` com `is_parent: true` produz.
+      example: false
+    DefaultMembershipApprovalMode:
+      type: string
+      description: |
+        Só vem preenchido em comunidades, com `request_required`. Vazio em
+        grupos normais.
+      example: ''
+    LinkedParentJID:
+      type: string
+      description: |
+        A comunidade de que este grupo é sub-grupo. Vazio num grupo solto.
+      example: ''
+    IsDefaultSubGroup:
+      type: boolean
+      description: |
+        Este é o sub-grupo de avisos que o WhatsApp cria sozinho ao criar uma
+        comunidade. Não foi criado por ninguém e não deve ser apagado.
+      example: false
+    IsJoinApprovalRequired:
+      type: boolean
+      description: |
+        Entrar exige aprovação de um administrador. É o que
+        `POST /group/joinapprovalmode` alterna, e é o que faz
+        `GET /group/requestparticipants` ter alguma coisa para listar.
+      example: false
+    AddressingMode:
+      type: string
+      description: |
+        Que forma de identificador o grupo usa no fio. Veio `lid` em todos os
+        grupos medidos.
+      example: lid
+    GroupCreated:
+      type: string
+      format: date-time
+      description: Quando o grupo foi criado.
+      example: '2026-08-26T08:42:47-04:00'
+    CreatorCountryCode:
+      type: string
+      description: País da conta que criou o grupo, em duas letras.
+      example: BR
+    ParticipantVersionID:
+      type: string
+      description: |
+        Versão da lista de participantes, atribuída pelo servidor. Muda a cada
+        entrada ou saída. Vem vazia em `POST /group/inviteinfo`.
+      example: '1787748408570878'
+    Participants:
+      type: array
+      description: |
+        Os membros. Vem correcta nas três origens — ao contrário de
+        `ParticipantCount`.
+      items:
+        $ref: '#/components/schemas/ParticipanteGrupo'
+    ParticipantCount:
+      type: integer
+      description: |
+        Número de membros. **Medido a zero em `POST /group/list`** para todos
+        os grupos, incluindo os que `POST /group/info` conta correctamente no
+        mesmo instante. Não use este campo a partir da listagem; conte
+        `Participants`.
+      example: 2
+    MemberAddMode:
+      type: string
+      description: |
+        Quem pode acrescentar membros. Os valores do protocolo são
+        `admin_add` e `all_member_add`
+        (`internal/wa-noise/protocol/types/group.go:9-12`). Vem vazio em
+        `POST /group/inviteinfo`. Nenhuma rota desta API o altera.
+      example: admin_add
+    Suspended:
+      type: boolean
+      description: O grupo está suspenso pelo WhatsApp.
+      example: false
+
+SolicitacaoEntrada:
+  type: object
+  description: |
+    Um pedido de entrada pendente, devolvido por
+    `GET /group/requestparticipants`.
+
+    **A forma não foi observada com dados**: os dois grupos disponíveis não
+    tinham pedidos pendentes, e as três chamadas medidas devolveram `[]`. Os
+    campos abaixo vêm do tipo do protocolo
+    (`internal/wa-noise/protocol/types/group.go:159-162`), que é serializado
+    sem etiquetas `json`.
+  properties:
+    JID:
+      type: string
+      description: Quem pediu para entrar.
+      example: 554192421234@s.whatsapp.net
+    RequestedAt:
+      type: string
+      format: date-time
+      description: Quando o pedido foi feito.
+      example: '2026-08-26T08:42:47-04:00'
+
+AlvoGrupo:
+  type: object
+  description: |
+    O grupo sobre o qual a operação age. O nome específico da rota tem
+    precedência sobre `chat` quando os dois vierem
+    (`pkg/domain/chat_target.go:14-17`).
+
+    **O nome do campo varia entre rotas desta família**, e não por acidente:
+    `/group/photo/remove`, `/group/ephemeral` e `/group/joinapprovalmode`
+    leem `groupjid` todo em minúsculas, e as restantes leem `groupJID`. Na
+    prática o descodificador do Go casa nomes ignorando maiúsculas, logo as
+    duas grafias funcionam em todas — mas o exemplo de cada rota traz a que
+    foi medida.
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino, aceite em toda a API.
+      example: 120363411669320145@g.us
+
+PedidoCriarGrupo:
+  type: object
+  description: |
+    Criação de grupo, de comunidade ou de sub-grupo dentro de comunidade — as
+    três saem desta mesma rota, e o que as distingue são `is_parent` e
+    `linked_parent_jid`.
+  required: [name]
+  properties:
+    name:
+      type: string
+      description: |
+        Nome do grupo. Obrigatório; vazio ou ausente devolve `400`.
+      example: Equipa de entregas
+    participants:
+      type: array
+      description: |
+        Participantes iniciais, além da própria conta. Aceita o número nu
+        (`554192421234`) tanto quanto o JID completo — a resolução é feita por
+        `ResolveJID`.
+
+        **Pelo menos um é obrigatório**, EXCEPTO quando `is_parent` é
+        verdadeiro (`handler_group_mgmt.go:125`). Uma entrada vazia na lista é
+        recusada com o índice em que está.
+      items:
+        type: string
+      example: [554192421234@s.whatsapp.net]
+    is_parent:
+      type: boolean
+      description: |
+        Cria uma COMUNIDADE em vez de um grupo. O WhatsApp cria sozinho o
+        sub-grupo de avisos, que aparece depois em `POST /group/list` com
+        `IsDefaultSubGroup: true`.
+
+        Mutuamente exclusivo com `linked_parent_jid`: os dois juntos devolvem
+        `400` sem chegar ao WhatsApp.
+      example: false
+    linked_parent_jid:
+      type: string
+      description: |
+        Cria o grupo já dentro desta comunidade. Mutuamente exclusivo com
+        `is_parent`.
+      example: 120363430034334401@g.us
+
+PedidoEntrarGrupo:
+  type: object
+  description: |
+    **A struct de domínio mente aqui.** `GroupJoinRequest`
+    (`pkg/domain/group.go:52-54`) declara `inviteLink`, e não é o que a rota
+    lê: o manipulador declara a sua própria struct anónima com `code`
+    (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do domínio
+    recebe `400`.
+  required: [code]
+  properties:
+    code:
+      type: string
+      description: |
+        O código NU do convite, sem o `https://chat.whatsapp.com/` à frente —
+        é a forma que a bateria de campo mediu.
+
+        O URL completo também passa, porque a biblioteca corta o prefixo
+        (`internal/wa-noise/capabilities/group/invite.go:105`), mas isso não
+        foi medido nesta rota e o nome do campo continua a ser `code`.
+
+        Repare que `POST /group/invitelink` devolve o **link inteiro**, e não
+        o código: alimentar essa resposta directamente aqui depende do corte
+        de prefixo, não do contrato.
+      example: IVccRoDVSbpHKNkgNxyZx4
+
+PedidoInfoConvite:
+  type: object
+  description: |
+    Inspecção de um convite. O campo chama-se `Code` com maiúscula
+    (`pkg/domain/group.go:42-44`) — a bateria de campo mediu `400` com
+    `inviteLink`.
+  required: [Code]
+  properties:
+    Code:
+      type: string
+      description: |
+        Código do convite. **Medido**: o URL completo
+        `https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4` também devolve
+        `200`, porque a biblioteca corta o prefixo
+        (`internal/wa-noise/capabilities/group/invite.go:83`).
+      example: IVccRoDVSbpHKNkgNxyZx4
+
+PedidoNomeGrupo:
+  type: object
+  description: Novo nome de um grupo.
+  required: [name]
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    name:
+      type: string
+      description: |
+        O novo nome. Obrigatório — e repare que é o ÚNICO campo validado pelo
+        manipulador: um pedido sem `groupJID` passa a validação e só falha
+        mais à frente, na resolução do JID, com `invalid_jid`.
+      example: Equipa de entregas — turno da manhã
+
+PedidoTopicoGrupo:
+  type: object
+  description: Nova descrição de um grupo.
+  required: [topic]
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    topic:
+      type: string
+      description: |
+        A nova descrição. Obrigatória; vazia devolve `400`. Não há forma de
+        APAGAR a descrição por esta rota — enviar vazio é recusado, não
+        aceite como limpeza.
+      example: Combinações de rota do turno da manhã
+
+PedidoFotoGrupo:
+  type: object
+  description: |
+    Foto de grupo. **Duas armadilhas medidas, e as duas com uma variável de
+    cada vez.**
+  required: [photo]
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    photo:
+      type: string
+      format: byte
+      description: |
+        A imagem em base64 **CRU**, sem o prefixo `data:image/jpeg;base64,`.
+
+        Medido: os mesmos nomes de campo e a mesma imagem, com o prefixo,
+        devolvem `400` — o descodificador base64 do manipulador
+        (`handler_group_mgmt.go:245`) rejeita os `:` e `;` do URI de dados
+        antes de qualquer coisa chegar ao WhatsApp.
+
+        **Isto diverge de `/chat/send/image`**, que ACEITA o URI de dados. As
+        duas rotas recebem imagem e só uma aceita o prefixo.
+
+        A imagem tem de ser **JPEG**. PNG é bem descodificado aqui e depois
+        recusado pelo WhatsApp, com `422 upstream_rejected`.
+      example: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA==
+
+PedidoAnuncioGrupo:
+  type: object
+  description: Alterna o modo em que só administradores enviam mensagens.
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    announce:
+      type: boolean
+      description: |
+        `true` fecha o grupo à escrita de não-administradores. Ausente é
+        `false`, e um pedido sem este campo DESLIGA o modo — não é uma
+        consulta.
+      example: true
+
+PedidoTrancarGrupo:
+  type: object
+  description: Alterna o modo em que só administradores editam os metadados.
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    locked:
+      type: boolean
+      description: |
+        `true` impede não-administradores de mudar nome, descrição e foto.
+        Ausente é `false`, e destranca.
+      example: true
+
+PedidoTemporizadorGrupo:
+  type: object
+  description: |
+    Mensagens temporárias do grupo. O campo do grupo é `groupjid`, todo em
+    minúsculas (`pkg/domain/group.go:186`).
+  properties:
+    groupjid:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    duration:
+      type: string
+      description: |
+        Só três valores são reconhecidos: `24h`, `7d` e `90d`
+        (`group_management.go:229-241`).
+
+        **Qualquer outro valor DESLIGA o temporizador em silêncio**, com
+        `200` — incluindo um erro de escrita como `"24H"` ou `"1d"`. O código
+        chama-lhe regra preservada do upstream e regista um aviso no log; do
+        lado do cliente não há nada que distinga "desliguei" de "escrevi mal".
+        Para desligar de propósito, `off` serve tão bem como qualquer outro
+        valor não reconhecido.
+      example: 24h
+
+PedidoAtualizarParticipantes:
+  type: object
+  description: |
+    Adiciona ou remove membros. Veja a limitação de `Action` — promover e
+    despromover administrador NÃO estão nesta rota.
+  required: [Phone, Action]
+  properties:
+    groupJID:
+      type: string
+      description: |
+        JID do grupo. Obrigatório, mas validado DEPOIS de `Phone` e de
+        `Action` — um pedido a que falte tudo queixa-se primeiro dos
+        telefones.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    Phone:
+      type: array
+      description: |
+        Quem entra ou sai. Pelo menos um; uma entrada vazia é recusada com o
+        índice em que está.
+
+        **Aceita o número nu** (`554192421234`) — foi medido a passar da
+        validação. É uma diferença face a
+        `POST /group/updaterequestparticipants`, que exige o JID completo.
+      items:
+        type: string
+      example: [554192421234@s.whatsapp.net]
+    Action:
+      type: string
+      enum: [add, remove]
+      description: |
+        **Só `add` e `remove`** (`group_management.go:272-281`). Medido:
+        `promote` e `demote` devolvem
+        `400 invalid_action` — `unknown participant action "promote" (must be
+        "add" or "remove")`.
+
+        A biblioteca por baixo sabe promover e despromover há anos
+        (`internal/wa-noise/capabilities/group/participants.go:18-19`); a
+        rota é que não o expõe. Está registado como F263 no `HOUSEKEEP.md`, e
+        a consequência é concreta: **por esta API não há forma de dar nem de
+        tirar administrador a ninguém.**
+      example: add
+
+PedidoModoAprovacao:
+  type: object
+  description: |
+    Exigir, ou deixar de exigir, aprovação para entrar. O campo do grupo é
+    `groupjid`, todo em minúsculas (`pkg/domain/group_request.go:40`).
+  required: [groupjid]
+  properties:
+    groupjid:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    mode:
+      type: boolean
+      description: |
+        `true` passa a exigir aprovação. Ausente é `false`, e DESLIGA a
+        exigência — um pedido só com `groupjid` abre o grupo.
+      example: true
+
+PedidoSolicitacoesEntrada:
+  type: object
+  description: |
+    Corpo de `GET /group/requestparticipants`. Um `GET` com corpo é servido
+    pelo `curl` mas quebra clientes que assumem que `GET` não o tem — use os
+    parâmetros de query, que foram medidos a funcionar igualmente.
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+
+PedidoDecidirSolicitacoes:
+  type: object
+  description: Aprova ou rejeita pedidos de entrada pendentes.
+  required: [groupJID, Phone, Action]
+  properties:
+    groupJID:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us
+    Phone:
+      type: array
+      description: |
+        Os solicitantes a decidir. **Exige o JID COMPLETO.** Medido: o número
+        nu `554192421234` devolve `400 invalid_phone`, porque este use case
+        resolve com `ResolveQualifiedJID` e não com `ResolveJID`
+        (`group_request.go:100`). É uma divergência face a
+        `POST /group/updateparticipants`, que aceita o número nu.
+      items:
+        type: string
+      example: [554192421234@s.whatsapp.net]
+    Action:
+      type: string
+      enum: [approve, reject]
+      description: |
+        O veredito. Qualquer outro valor devolve `400 invalid_action`
+        (medido).
+      example: approve
+
+ResultadoListaGrupos:
+  type: object
+  description: Resposta de `POST /group/list`.
+  properties:
+    groups:
+      type: array
+      description: |
+        Todos os grupos de que a sessão participa, incluindo comunidades
+        (`IsParent: true`) e os sub-grupos de avisos que elas criam sozinhas
+        (`IsDefaultSubGroup: true`). Não há filtro nem paginação: a rota não
+        recebe campo nenhum.
+      items:
+        $ref: '#/components/schemas/InfoGrupo'
+
+ResultadoInfoGrupo:
+  type: object
+  description: Resposta de `POST /group/info`.
+  properties:
+    group_info:
+      $ref: '#/components/schemas/InfoGrupo'
+
+ResultadoInfoConvite:
+  type: object
+  description: Resposta de `POST /group/inviteinfo`.
+  properties:
+    invite_info:
+      $ref: '#/components/schemas/InfoGrupo'
+
+ResultadoLinkConvite:
+  type: object
+  description: Resposta de `POST /group/invitelink`.
+  properties:
+    invite_link:
+      type: string
+      description: |
+        O link INTEIRO, com o prefixo `https://chat.whatsapp.com/` — medido.
+        `POST /group/join` documenta o código nu, logo os dois não encaixam
+        por contrato, só por o corte de prefixo existir na biblioteca.
+      example: https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4
+
+ResultadoAtualizarParticipantes:
+  type: object
+  description: |
+    Resposta de `POST /group/updateparticipants`. É a única rota de escrita
+    desta família que devolve mais do que `Details`.
+  properties:
+    Details:
+      type: string
+      description: Confirmação textual, constante.
+      example: Participants updated
+    result:
+      type: array
+      description: |
+        A lista de participantes que o WhatsApp devolveu na MESMA resposta.
+        `Error` diferente de zero numa entrada diz que aquele participante
+        falhou enquanto os outros passaram.
+      items:
+        $ref: '#/components/schemas/ParticipanteGrupo'
+    confirmed:
+      type: boolean
+      description: |
+        A sessão que agiu LEU a mudança de volta. Neste transporte é sempre
+        `true`, porque o protocolo devolve a lista resultante na própria
+        resposta (`pkg/infra/wa-noise/adapters/group/participants.go:37`). O
+        campo existe porque nem todo transporte consegue confirmar, e um
+        sucesso que ninguém verificou não pode ser calado
+        (`pkg/domain/group.go:236`).
+      example: true
+
+PedidoRemoverFotoGrupo:
+  type: object
+  description: |
+    Remoção da foto. O campo do grupo é `groupjid`, todo em minúsculas
+    (`handler_group_mgmt.go:262`), ao contrário do `groupJID` das rotas
+    vizinhas.
+  properties:
+    groupjid:
+      type: string
+      description: JID do grupo.
+      example: 120363411669320145@g.us
+    chat:
+      type: string
+      description: Nome universal do destino.
+      example: 120363411669320145@g.us

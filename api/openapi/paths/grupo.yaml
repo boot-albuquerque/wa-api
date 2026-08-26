@@ -1,0 +1,1425 @@
+# Grupo: Grupos — 18 rotas.
+#
+# É a família com mais armadilhas MEDIDAS do inventário, e elas estão escritas
+# como regra visível em cada rota, não em nota de rodapé:
+#
+#   - sete rotas respondem `400` no formato ANTIGO, com `error` em texto
+#     simples em vez do objecto `{code,message}` (F266);
+#   - `/group/join` lê `code`, e a struct de domínio declara `inviteLink`
+#     (F267);
+#   - `/group/photo` recusa o prefixo `data:` que `/chat/send/image` aceita;
+#   - `/group/updateparticipants` não sabe promover nem despromover (F263);
+#   - `GET /group/requestparticipants` lê o corpo — e também a query string.
+
+/group/announce:
+  post:
+    tags: [Grupos]
+    summary: Fechar ou abrir o grupo à escrita de não-administradores
+    description: |
+      Liga ou desliga o modo anúncio: com ele ligado, só administradores
+      enviam mensagens no grupo. O estado resultante aparece em
+      `POST /group/info` como `IsAnnounce`.
+
+      **Quando usar**: em grupos de difusão — avisos de turno, comunicados —
+      onde a conversa de volta é ruído.
+
+      **Regras**: `announce` ausente vale `false`, logo um pedido só com o
+      grupo ABRE o grupo em vez de o consultar. O manipulador não valida
+      campo nenhum: um pedido sem grupo chega à resolução do JID e falha lá,
+      com `invalid_jid`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAnuncioGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+            announce: true
+    responses:
+      '200':
+        description: O WhatsApp aceitou a mudança.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group announce set successfully}
+              success: true
+      '400':
+        $ref: '#/components/responses/CorpoInvalido'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/create:
+  post:
+    tags: [Grupos]
+    summary: Criar um grupo, uma comunidade ou um sub-grupo
+    description: |
+      Cria um grupo com os participantes indicados. A MESMA rota cria as três
+      coisas, e o que as distingue são dois campos opcionais:
+
+      - sem nenhum deles: grupo normal, e `participants` é obrigatório;
+      - `is_parent: true`: **comunidade**. O WhatsApp cria sozinho o
+        sub-grupo de avisos, que passa a aparecer em `POST /group/list` com
+        `IsDefaultSubGroup: true`. Aqui `participants` deixa de ser exigido;
+      - `linked_parent_jid`: grupo criado já DENTRO da comunidade indicada.
+
+      **Quando usar**: no arranque de uma operação, para montar a estrutura
+      de uma vez. Para ligar um grupo que já existe a uma comunidade, a rota
+      é `POST /community/link`, não esta.
+
+      **Regras**: `name` é obrigatório. `is_parent` e `linked_parent_jid` são
+      mutuamente exclusivos — os dois juntos devolvem `400` sem contactar o
+      WhatsApp. Uma entrada vazia em `participants` é recusada com o índice
+      dela. Participante que o WhatsApp recuse individualmente não faz o
+      pedido falhar: volta na lista com `Error` diferente de zero.
+
+      **Formato do erro `400`**: esta rota usa `rejectMissingField`
+      (`handler_group_mgmt.go:99`) e responde no envelope ANTIGO,
+      `{"code":400,"error":"bad request","success":false}`, com `error` em
+      STRING. Um cliente que leia `error.code` parte aqui. É o achado F266.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCriarGrupo'
+          example:
+            name: Equipa de entregas
+            participants: [554192421234@s.whatsapp.net]
+    responses:
+      '200':
+        description: |
+          Grupo criado. O corpo traz os metadados completos do grupo novo,
+          na mesma forma que `POST /group/info` devolve.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/InfoGrupo'
+            example:
+              code: 200
+              data:
+                JID: 120363411669320145@g.us
+                OwnerJID: 90937376170214@lid
+                OwnerPN: 554192421234@s.whatsapp.net
+                Name: Equipa de entregas
+                IsParent: false
+                LinkedParentJID: ''
+                AddressingMode: lid
+                Participants:
+                  - JID: 90937376170214@lid
+                    PhoneNumber: 554192421234@s.whatsapp.net
+                    LID: 90937376170214@lid
+                    IsAdmin: true
+                    IsSuperAdmin: true
+                    Error: 0
+                    AddRequest: null
+              success: true
+      '400':
+        description: |
+          `name` ausente, `participants` ausente ou vazio num grupo normal,
+          ou `is_parent` e `linked_parent_jid` no mesmo pedido.
+
+          **Formato antigo (F266)**: `error` vem em texto simples.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/ephemeral:
+  post:
+    tags: [Grupos]
+    summary: Definir o tempo das mensagens temporárias do grupo
+    description: |
+      Liga as mensagens temporárias com uma das três durações reconhecidas,
+      ou desliga-as.
+
+      **Quando usar**: em grupos operacionais cujo histórico não deve
+      persistir.
+
+      **Regra que morde**: só `24h`, `7d` e `90d` são reconhecidos
+      (`group_management.go:229-241`). **Qualquer outro valor DESLIGA o
+      temporizador**, responde `200`, e regista um aviso no log — incluindo
+      um erro de escrita como `"24H"` ou `"1d"`. Do lado do cliente não há
+      nada que distinga "desligou de propósito" de "escreveu mal".
+
+      **O campo do grupo é `groupjid`**, todo em minúsculas
+      (`pkg/domain/group.go:186`).
+
+      **Leitura de volta**: `POST /group/info` devolve `DisappearingTimer` em
+      SEGUNDOS — `86400` para as 24 horas que aqui se pedem como texto.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoTemporizadorGrupo'
+          example:
+            groupjid: 120363411669320145@g.us
+            duration: 24h
+    responses:
+      '200':
+        description: |
+          Temporizador definido. Repare que este `200` também cobre o caso em
+          que a duração não foi reconhecida e o temporizador foi DESLIGADO.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Disappearing timer set}
+              success: true
+      '400':
+        $ref: '#/components/responses/CorpoInvalido'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/info:
+  post:
+    tags: [Grupos]
+    summary: Consultar os metadados de um grupo
+    description: |
+      Devolve o retrato completo de um grupo: nome, descrição, definições,
+      comunidade a que pertence e a lista de participantes com quem é
+      administrador.
+
+      **Quando usar**: sempre que precisar da contagem de membros ou de saber
+      quem é administrador. `POST /group/list` traz a mesma forma mas
+      **devolve `ParticipantCount` a zero** — medido no mesmo minuto, para o
+      mesmo grupo, contra o `2` correcto desta rota.
+
+      **Regras**: `groupJID` é obrigatório; a recusa é `400 missing_group_jid`.
+      Um JID que não seja de grupo devolve `400 invalid_group_jid`.
+
+      **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`
+      quando a sessão existe mas não está emparelhada. Estes vêm no envelope
+      NOVO, com `error` em objecto — ao contrário das rotas de escrita desta
+      família.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AlvoGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+    responses:
+      '200':
+        description: Metadados do grupo no instante do pedido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoInfoGrupo'
+            example:
+              code: 200
+              data:
+                group_info:
+                  JID: 120363411669320145@g.us
+                  OwnerJID: 90937376170214@lid
+                  OwnerPN: 554192421234@s.whatsapp.net
+                  Name: Equipa de entregas
+                  NameSetAt: '2026-08-26T08:42:49-04:00'
+                  Topic: Combinações de rota do turno da manhã
+                  TopicID: 3EB0A4B2AFD45E625C0917
+                  IsLocked: false
+                  IsAnnounce: false
+                  IsEphemeral: true
+                  DisappearingTimer: 86400
+                  IsParent: false
+                  LinkedParentJID: ''
+                  IsJoinApprovalRequired: false
+                  AddressingMode: lid
+                  GroupCreated: '2026-08-26T08:42:47-04:00'
+                  CreatorCountryCode: BR
+                  ParticipantCount: 2
+                  MemberAddMode: admin_add
+                  Suspended: false
+                  Participants:
+                    - JID: 90937376170214@lid
+                      PhoneNumber: 554192421234@s.whatsapp.net
+                      LID: 90937376170214@lid
+                      IsAdmin: false
+                      IsSuperAdmin: false
+                      Error: 0
+                      AddRequest: null
+              success: true
+      '400':
+        description: |
+          `groupJID` ausente (`missing_group_jid`), impossível de resolver
+          (`invalid_group_jid`), corpo que não é JSON
+          (`could_not_decode_payload`), ou sessão por emparelhar
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_group_jid
+                message: missing groupJID parameter
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/inviteinfo:
+  post:
+    tags: [Grupos]
+    summary: Inspecionar um convite sem entrar no grupo
+    description: |
+      Lê os metadados do grupo que está por trás de um convite, **sem
+      aderir** e sem gerar pedido de entrada. É a rota a chamar antes de
+      `POST /group/join`.
+
+      **Quando usar**: para saber quantos membros tem, quem é o dono, e
+      sobretudo se `IsJoinApprovalRequired` é verdadeiro — nesse caso
+      `POST /group/join` produz uma SOLICITAÇÃO em vez de uma entrada.
+
+      **Regras**: o campo chama-se `Code`, com maiúscula
+      (`pkg/domain/group.go:42-44`); `inviteLink` devolve
+      `400 missing_code`. O valor é o código nu. **Medido**: o URL completo
+      também devolve `200`, porque a biblioteca corta o prefixo
+      (`internal/wa-noise/capabilities/group/invite.go:83`).
+
+      **Ressalva medida**: a resposta traz `AnnounceVersionID`,
+      `ParticipantVersionID` e `MemberAddMode` VAZIOS, ao contrário de
+      `POST /group/info` sobre o mesmo grupo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoInfoConvite'
+          example:
+            Code: IVccRoDVSbpHKNkgNxyZx4
+    responses:
+      '200':
+        description: Metadados do grupo por trás do convite.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoInfoConvite'
+            example:
+              code: 200
+              data:
+                invite_info:
+                  JID: 120363411669320145@g.us
+                  OwnerJID: 90937376170214@lid
+                  OwnerPN: 554192421234@s.whatsapp.net
+                  Name: Equipa de entregas
+                  Topic: Combinações de rota do turno da manhã
+                  IsJoinApprovalRequired: false
+                  ParticipantCount: 2
+                  AnnounceVersionID: ''
+                  ParticipantVersionID: ''
+                  MemberAddMode: ''
+                  Participants:
+                    - JID: 90937376170214@lid
+                      PhoneNumber: 554192421234@s.whatsapp.net
+                      LID: 90937376170214@lid
+                      IsAdmin: false
+                      IsSuperAdmin: false
+                      Error: 0
+                      AddRequest: null
+              success: true
+      '400':
+        description: |
+          `Code` ausente (`missing_code`), corpo inválido
+          (`could_not_decode_payload`), ou sessão por emparelhar
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_code
+                message: missing Code in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        description: |
+          O convite foi revogado, é inválido, ou o WhatsApp não respondeu.
+          Ao contrário de `/group/info`, esta rota NÃO traduz a recusa do
+          WhatsApp para `422`: o use case embrulha o erro com `fmt.Errorf`
+          (`get_group_invite_info.go:44`), logo a recusa de convite chega
+          como `500` de texto genérico.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 500
+              error: internal server error
+              success: false
+
+/group/invitelink:
+  post:
+    tags: [Grupos]
+    summary: Obter o link de convite de um grupo
+    description: |
+      Devolve o link de convite actual do grupo. **Não o revoga**: o
+      adaptador chama o SDK com o sinalizador de reposição a falso
+      (`pkg/infra/wa-noise/adapters/group/read.go:44`), logo chamadas
+      repetidas devolvem o mesmo link. Não há rota nesta API para revogar um
+      link.
+
+      **Quando usar**: para distribuir acesso a um grupo sem adicionar
+      pessoa a pessoa.
+
+      **Cuidado ao encadear com `POST /group/join`**: esta rota devolve o
+      **link inteiro** (`https://chat.whatsapp.com/…`) e o `join` documenta o
+      **código nu**. Alimentar um no outro só funciona porque a biblioteca
+      corta o prefixo, e não porque o contrato o promete.
+
+      **Regras**: `groupJID` é obrigatório (`missing_group_jid`); só um
+      administrador obtém o link — o WhatsApp recusa aos outros, e a recusa
+      chega traduzida como `422`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AlvoGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+    responses:
+      '200':
+        description: O link actual do grupo.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoLinkConvite'
+            example:
+              code: 200
+              data: {invite_link: 'https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4'}
+              success: true
+      '400':
+        description: |
+          `groupJID` ausente (`missing_group_jid`), impossível de resolver
+          (`invalid_group_jid`), corpo inválido
+          (`could_not_decode_payload`), ou sessão por emparelhar
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_group_jid
+                message: missing groupJID parameter
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/join:
+  post:
+    tags: [Grupos]
+    summary: Entrar num grupo por código de convite
+    description: |
+      Faz a conta entrar no grupo por trás de um convite.
+
+      **A struct de domínio MENTE aqui, e é a armadilha mais cara desta
+      família.** `GroupJoinRequest` (`pkg/domain/group.go:52-54`) declara
+      `inviteLink`, e **não é o que a rota lê**: o manipulador declara a sua
+      própria struct anónima, com o campo `code`
+      (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do
+      domínio recebe `400`. É o achado F267.
+
+      O valor é o **código nu** — `IVccRoDVSbpHKNkgNxyZx4` — e não o URL,
+      que é o que `POST /group/invitelink` devolve.
+
+      **Quando usar**: depois de `POST /group/inviteinfo`, que diz o que há
+      do outro lado sem aderir.
+
+      **Ressalva NÃO medida**: num grupo com `IsJoinApprovalRequired`, o
+      protocolo transforma a entrada numa SOLICITAÇÃO pendente em vez de uma
+      adesão. O manipulador devolve sempre a mesma frase de sucesso e não
+      distingue os dois casos — se a conta entrou mesmo, confirme com
+      `POST /group/list`. O comportamento exacto do código de estado nesse
+      caso não foi determinado com segurança pela implementação actual.
+
+      **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples
+      (F266).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEntrarGrupo'
+          example:
+            code: IVccRoDVSbpHKNkgNxyZx4
+    responses:
+      '200':
+        description: |
+          O pedido de entrada foi aceite pelo WhatsApp. **Não confirma que a
+          conta está no grupo**: num grupo que exija aprovação, isto pode ser
+          uma solicitação pendente.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group joined successfully}
+              success: true
+      '400':
+        description: |
+          `code` ausente ou vazio. **Formato antigo (F266)**: `error` vem em
+          texto simples, e não diz qual campo faltou — a causa fica só no
+          log.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/joinapprovalmode:
+  post:
+    tags: [Grupos]
+    summary: Exigir aprovação de administrador para entrar no grupo
+    description: |
+      Liga ou desliga a exigência de aprovação. Com ela ligada, quem segue o
+      link de convite fica em espera, e passa a aparecer em
+      `GET /group/requestparticipants` até um administrador decidir.
+
+      **Quando usar**: em grupos cujo link circula, para filtrar quem entra
+      sem revogar o link.
+
+      **Regras**: o campo do grupo é `groupjid`, todo em minúsculas
+      (`pkg/domain/group_request.go:40`). `mode` ausente vale `false`, logo
+      um pedido só com o grupo **DESLIGA** a exigência — não a consulta.
+      Para ler o estado actual use `IsJoinApprovalRequired` de
+      `POST /group/info`.
+
+      **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`, no
+      envelope novo — esta rota não passa por `rejectMissingField`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoModoAprovacao'
+          example:
+            groupjid: 120363411669320145@g.us
+            mode: true
+    responses:
+      '200':
+        description: Modo de aprovação alterado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group join approval mode updated successfully}
+              success: true
+      '400':
+        description: |
+          `groupjid` ausente (`missing_group_jid`), impossível de resolver
+          (`invalid_group_jid`), corpo inválido
+          (`could_not_decode_payload`), ou sessão por emparelhar
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_group_jid
+                message: missing groupJID parameter
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/leave:
+  post:
+    tags: [Grupos]
+    summary: Sair de um grupo
+    description: |
+      Faz a conta sair do grupo. **É irreversível pela própria conta**: não
+      há rota que a reponha, e voltar exige um convite novo ou que um
+      administrador a adicione.
+
+      **Quando usar**: no encerramento de uma operação. Para deixar de ver o
+      grupo sem sair dele, arquive a conversa em vez disto.
+
+      **Regras**: `groupJID` é obrigatório — a recusa vem do manipulador
+      (`handler_group_mgmt.go:176`), no envelope antigo. `chat` é aceite como
+      alternativa; o nome específico ganha quando os dois vierem.
+
+      **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples
+      (F266).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AlvoGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+    responses:
+      '200':
+        description: A saída foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group left successfully}
+              success: true
+      '400':
+        description: |
+          `groupJID` e `chat` ambos ausentes. **Formato antigo (F266)**:
+          `error` em texto simples.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/list:
+  post:
+    tags: [Grupos]
+    summary: Listar os grupos da sessão
+    description: |
+      Devolve todos os grupos de que a conta participa, cada um com os mesmos
+      metadados que `POST /group/info` traz.
+
+      **Quando usar**: para descobrir os JIDs dos grupos. É a rota de partida
+      de quase tudo o resto desta família.
+
+      **Ressalva MEDIDA, e que muda o que se pode fazer com a resposta**:
+      `ParticipantCount` vem **zero** para todos os grupos aqui, enquanto
+      `POST /group/info` sobre o mesmo grupo, no mesmo minuto, devolveu `2`.
+      Para contar membros a partir desta listagem, conte `Participants`, que
+      vem correcta.
+
+      **O que a lista inclui**: comunidades (`IsParent: true`) e os
+      sub-grupos de avisos que elas criam sozinhas
+      (`IsDefaultSubGroup: true`) aparecem como entradas normais, ao lado dos
+      grupos comuns.
+
+      **Regras**: o corpo é ignorado — a rota não tem filtro nem paginação
+      (`handler_group.go`, `ListGroupsUseCase`). Envie `{}`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            description: Sem campos. O corpo é lido e descartado.
+          example: {}
+    responses:
+      '200':
+        description: Todos os grupos da sessão.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoListaGrupos'
+            example:
+              code: 200
+              data:
+                groups:
+                  - JID: 120363411669320145@g.us
+                    OwnerJID: 90937376170214@lid
+                    OwnerPN: 554192421234@s.whatsapp.net
+                    Name: Equipa de entregas
+                    Topic: Combinações de rota do turno da manhã
+                    IsAnnounce: false
+                    IsLocked: false
+                    IsEphemeral: true
+                    DisappearingTimer: 86400
+                    IsParent: false
+                    LinkedParentJID: ''
+                    IsDefaultSubGroup: false
+                    AddressingMode: lid
+                    ParticipantCount: 0
+                    MemberAddMode: admin_add
+                    Suspended: false
+                    Participants:
+                      - JID: 90937376170214@lid
+                        PhoneNumber: 554192421234@s.whatsapp.net
+                        LID: 90937376170214@lid
+                        IsAdmin: false
+                        IsSuperAdmin: false
+                        Error: 0
+                        AddRequest: null
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/locked:
+  post:
+    tags: [Grupos]
+    summary: Trancar ou destrancar a edição dos metadados do grupo
+    description: |
+      Liga ou desliga a tranca: com ela ligada, só administradores mudam
+      nome, descrição e foto do grupo. O estado resultante aparece em
+      `POST /group/info` como `IsLocked`.
+
+      **Quando usar**: em grupos grandes, para que a identidade do grupo não
+      dependa da boa-fé de todos os membros.
+
+      **Não confundir com `POST /group/announce`**: a tranca governa quem
+      edita os METADADOS; o anúncio governa quem envia MENSAGENS. São
+      independentes e podem estar ligados ao mesmo tempo.
+
+      **Regras**: `locked` ausente vale `false`, logo um pedido só com o
+      grupo DESTRANCA. O manipulador não valida campo nenhum: um pedido sem
+      grupo falha adiante, com `invalid_jid`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoTrancarGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+            locked: true
+    responses:
+      '200':
+        description: O WhatsApp aceitou a mudança.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group lock updated}
+              success: true
+      '400':
+        $ref: '#/components/responses/CorpoInvalido'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/name:
+  post:
+    tags: [Grupos]
+    summary: Mudar o nome de um grupo
+    description: |
+      Renomeia o grupo. O nome novo aparece de imediato em
+      `POST /group/info`, junto com `NameSetAt` e `NameSetBy`.
+
+      **Quando usar**: para manter o nome alinhado com a operação — o nome é
+      o que aparece na lista de conversas de cada membro.
+
+      **Regras**: `name` é obrigatório e vazio é recusado. **É o único campo
+      validado pelo manipulador** (`handler_group_mgmt.go:198`): um pedido
+      sem `groupJID` passa esta validação e só falha adiante, na resolução do
+      JID, com `invalid_jid` no envelope NOVO. As duas recusas desta rota
+      têm portanto formatos diferentes.
+
+      Num grupo com `IsLocked` verdadeiro, só administradores conseguem — a
+      recusa vem do WhatsApp, como `422`.
+
+      **Formato do erro `400` de campo em falta**: envelope ANTIGO, `error`
+      em texto simples (F266).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoNomeGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+            name: Equipa de entregas — turno da manhã
+    responses:
+      '200':
+        description: Nome alterado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group name set successfully}
+              success: true
+      '400':
+        description: |
+          `name` ausente ou vazio. **Formato antigo (F266)**: `error` em
+          texto simples.
+
+          Um `groupJID` ausente ou inválido produz `400` também, mas no
+          envelope NOVO, com `error.code: invalid_jid`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/photo:
+  post:
+    tags: [Grupos]
+    summary: Definir a foto de um grupo
+    description: |
+      Substitui a foto do grupo pela imagem enviada.
+
+      **Duas armadilhas medidas, isoladas com uma variável de cada vez:**
+
+      1. **A imagem vai em base64 CRU, sem o prefixo
+         `data:image/jpeg;base64,`.** Os mesmos nomes de campo e a mesma
+         imagem, com o prefixo, devolvem `400`; sem o prefixo, `200`. O
+         descodificador do manipulador (`handler_group_mgmt.go:245`) rejeita
+         os `:` e `;` do URI de dados antes de qualquer coisa sair da
+         máquina. **Isto DIVERGE de `POST /chat/send/image`**, que aceita o
+         URI de dados — as duas rotas recebem imagem e só uma o tolera.
+      2. **A imagem tem de ser JPEG.** PNG é bem descodificado aqui e depois
+         recusado pelo WhatsApp, com `422 upstream_rejected`.
+
+      **Quando usar**: no arranque de um grupo, ou quando a identidade visual
+      muda. Para tirar a foto sem pôr outra, use `POST /group/photo/remove`.
+
+      **Regras**: `photo` é obrigatório; é o único campo validado
+      (`handler_group_mgmt.go:242`). Num grupo com `IsLocked` verdadeiro, só
+      administradores conseguem.
+
+      **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples,
+      tanto para `photo` em falta como para base64 inválido (F266).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoFotoGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+            photo: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA==
+    responses:
+      '200':
+        description: Foto definida.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group photo set successfully}
+              success: true
+      '400':
+        description: |
+          `photo` ausente, ou não é base64 válido — é aqui que cai o prefixo
+          `data:image/jpeg;base64,`. **Formato antigo (F266)**: `error` em
+          texto simples, logo o cliente não distingue as duas causas pelo
+          corpo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        description: |
+          O WhatsApp recusou a imagem. **A causa medida foi o formato**: PNG
+          chega aqui, JPEG passa.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 422
+              error:
+                code: upstream_rejected
+                message: WhatsApp refused this request; repeating it unchanged will not help
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/photo/remove:
+  post:
+    tags: [Grupos]
+    summary: Remover a foto de um grupo
+    description: |
+      Tira a foto do grupo, deixando-o sem imagem. É a mesma operação de
+      `POST /group/photo` com conteúdo nulo
+      (`group_management.go:174`), exposta como rota própria.
+
+      **Quando usar**: para limpar a identidade visual sem escolher outra
+      imagem.
+
+      **Regra que morde**: o campo do grupo é `groupjid`, **todo em
+      minúsculas** (`handler_group_mgmt.go:262`), ao contrário do
+      `groupJID` das rotas vizinhas. Na prática o descodificador do Go casa
+      nomes ignorando maiúsculas e as duas grafias funcionam; o exemplo traz
+      a que foi medida.
+
+      **O manipulador não valida campo nenhum**: um pedido sem grupo chega à
+      resolução do JID e falha lá, com `invalid_jid` no envelope novo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoRemoverFotoGrupo'
+          example:
+            groupjid: 120363411669320145@g.us
+    responses:
+      '200':
+        description: Foto removida.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group photo removed successfully}
+              success: true
+      '400':
+        $ref: '#/components/responses/CorpoInvalido'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/requestparticipants:
+  get:
+    tags: [Grupos]
+    summary: Listar os pedidos de entrada pendentes de um grupo
+    description: |
+      Devolve quem pediu para entrar no grupo e ainda espera decisão. Só tem
+      conteúdo em grupos com `IsJoinApprovalRequired` verdadeiro — nos outros
+      devolve lista vazia, porque quem segue o link entra directamente.
+
+      **É um `GET` que lê o CORPO JSON.** Serve-se bem com `curl -X GET -d`,
+      mas quebra clientes e intermediários que assumem que um `GET` não tem
+      corpo — muitos descartam-no em silêncio.
+
+      **Medido, e é a saída para esse problema**: os parâmetros de query
+      `?group_jid=` e `?chat=` funcionam igualmente
+      (`handler_group.go:52-62`), e devolveram `200` nas três formas.
+      **Prefira a query string**; o corpo existe por compatibilidade.
+
+      **Regras**: sem grupo por nenhuma das três vias, a resposta é
+      `400 could_not_decode_payload` — medido, e é uma mensagem que não
+      descreve a causa real, que é o grupo em falta.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: query
+        required: false
+        description: |
+          JID do grupo. É a forma recomendada. Usada só quando o corpo não
+          trouxe `groupJID`.
+        schema:
+          type: string
+          example: 120363411669320145@g.us
+      - name: chat
+        in: query
+        required: false
+        description: |
+          Nome universal do destino. Usado só quando nem o corpo nem
+          `group_jid` trouxeram o grupo.
+        schema:
+          type: string
+          example: 120363411669320145@g.us
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoSolicitacoesEntrada'
+          example:
+            groupJID: 120363411669320145@g.us
+    responses:
+      '200':
+        description: |
+          Os pedidos pendentes. **Medido em três chamadas, e as três
+          devolveram `[]`** — os grupos disponíveis não exigiam aprovação,
+          logo a forma de uma entrada preenchida não foi observada com dados
+          e vem do tipo do protocolo.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/SolicitacaoEntrada'
+            example:
+              code: 200
+              data: []
+              success: true
+      '400':
+        description: |
+          Grupo ausente nas três vias. A mensagem medida é
+          `could_not_decode_payload`, e não `missing_group_jid`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: could_not_decode_payload
+                message: could not decode payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/topic:
+  post:
+    tags: [Grupos]
+    summary: Mudar a descrição de um grupo
+    description: |
+      Define a descrição (tópico) do grupo. Aparece em `POST /group/info`
+      como `Topic`, com `TopicSetAt` e `TopicSetBy`.
+
+      **Detalhe do protocolo que a resposta revela**: a descrição VIAJA como
+      mensagem — por isso `TopicID` tem a forma de um `message_id`, e por
+      isso a mudança aparece no grupo como evento de sistema.
+
+      **Quando usar**: para deixar escrito no grupo o que ele é, sem depender
+      de alguém repetir a regra.
+
+      **Regras**: `topic` é obrigatório e vazio é recusado — **não há forma
+      de APAGAR a descrição por esta rota**. É o único campo validado
+      (`handler_group_mgmt.go:220`): sem `groupJID` a falha vem adiante, como
+      `invalid_jid`. Num grupo com `IsLocked` verdadeiro, só administradores
+      conseguem.
+
+      **Formato do erro `400` de campo em falta**: envelope ANTIGO, `error`
+      em texto simples (F266).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoTopicoGrupo'
+          example:
+            groupJID: 120363411669320145@g.us
+            topic: Combinações de rota do turno da manhã
+    responses:
+      '200':
+        description: Descrição alterada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group topic set successfully}
+              success: true
+      '400':
+        description: |
+          `topic` ausente ou vazio. **Formato antigo (F266)**: `error` em
+          texto simples.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/updateparticipants:
+  post:
+    tags: [Grupos]
+    summary: Adicionar ou remover participantes de um grupo
+    description: |
+      Adiciona ou remove membros, vários de uma vez.
+
+      **Limitação medida, e documentada aqui em vez de escondida (F263)**:
+      `Action` aceita **só `add` e `remove`**
+      (`group_management.go:272-281`). `promote` e `demote` devolvem
+      `400 invalid_action` — `unknown participant action "promote" (must be
+      "add" or "remove")`.
+
+      A biblioteca por baixo sabe promover e despromover há anos
+      (`internal/wa-noise/capabilities/group/participants.go:18-19`); é a
+      rota que não o expõe. **A consequência é concreta: por esta API não há
+      forma de dar nem de tirar administrador a ninguém.** Não há rota
+      alternativa.
+
+      **Quando usar**: para gerir o quadro de membros. Para decidir pedidos
+      de entrada pendentes, a rota é
+      `POST /group/updaterequestparticipants`, e o vocabulário lá é outro
+      (`approve`/`reject`).
+
+      **Regras e a ORDEM em que são aplicadas**, que muda a mensagem de erro:
+      primeiro `Phone` não vazio, depois cada entrada de `Phone` não vazia,
+      depois `Action`, e **só então** `groupJID`
+      (`handler_group_mgmt.go:341-356`). Um pedido a que falte tudo queixa-se
+      dos telefones.
+
+      `Phone` aceita o **número nu** (`554192421234`) — medido a passar da
+      validação. É uma diferença face a
+      `POST /group/updaterequestparticipants`, que exige o JID completo.
+
+      **Dois formatos de erro na mesma rota**: as recusas de campo em falta
+      usam `rejectMissingField` e saem no envelope ANTIGO, com `error` em
+      texto simples (F266); `invalid_action` e `invalid_jid` saem no envelope
+      NOVO, com `error` em objecto. Um cliente tem de aguentar os dois.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAtualizarParticipantes'
+          example:
+            groupJID: 120363411669320145@g.us
+            Phone: [554192421234@s.whatsapp.net]
+            Action: add
+    responses:
+      '200':
+        description: |
+          A mudança foi enviada e o WhatsApp devolveu a lista resultante.
+          Participante que tenha falhado individualmente volta em `result`
+          com `Error` diferente de zero — o `200` cobre o sucesso parcial.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoAtualizarParticipantes'
+            example:
+              code: 200
+              data:
+                Details: Participants updated
+                confirmed: true
+                result:
+                  - JID: 90937376170214@lid
+                    PhoneNumber: 554192421234@s.whatsapp.net
+                    LID: 90937376170214@lid
+                    IsAdmin: false
+                    IsSuperAdmin: false
+                    Error: 0
+                    AddRequest: null
+              success: true
+      '400':
+        description: |
+          **Dois formatos possíveis.**
+
+          `Phone` vazio, entrada vazia na lista, `Action` ausente ou
+          `groupJID` ausente saem no formato ANTIGO (F266):
+          `{"code":400,"error":"bad request","success":false}`.
+
+          `Action` desconhecido — incluindo `promote` e `demote` — e JID
+          irresolúvel saem no formato NOVO, como o exemplo abaixo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_action
+                message: unknown participant action "promote" (must be "add" or "remove")
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/group/updaterequestparticipants:
+  post:
+    tags: [Grupos]
+    summary: Aprovar ou rejeitar pedidos de entrada num grupo
+    description: |
+      Decide os pedidos pendentes listados por
+      `GET /group/requestparticipants`. É a contrapartida de
+      `POST /group/joinapprovalmode`: sem a exigência de aprovação ligada,
+      não há o que decidir.
+
+      **Quando usar**: depois de ler os pendentes, para deixar entrar (ou
+      não) quem seguiu o link.
+
+      **Regra que morde, medida**: `Phone` exige o **JID COMPLETO**. O número
+      nu `554192421234` devolve `400 invalid_phone`, porque este use case
+      resolve com `ResolveQualifiedJID` e não com `ResolveJID`
+      (`group_request.go:100`). **É uma divergência face a
+      `POST /group/updateparticipants`**, que aceita o número nu — as duas
+      rotas recebem uma lista chamada `Phone` e só uma tolera a forma curta.
+
+      **Vocabulário próprio**: `Action` é `approve` ou `reject` — e não
+      `add`/`remove`, que é o da outra rota. Qualquer outro valor devolve
+      `400 invalid_action` (medido).
+
+      **Erros**: `missing_group_jid`, `missing_phone`, `missing_action`,
+      `invalid_group_jid`, `invalid_phone`, `invalid_action`, `no_session` —
+      todos no envelope NOVO. Esta rota não passa por `rejectMissingField`.
+
+      **Desfecho parcial**: o adaptador faz uma chamada por solicitante. Se
+      algum falhar, a rota devolve erro — não há corpo que relate quais
+      passaram.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDecidirSolicitacoes'
+          example:
+            groupJID: 120363411669320145@g.us
+            Phone: [554192421234@s.whatsapp.net]
+            Action: approve
+    responses:
+      '200':
+        description: Os pedidos foram decididos.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Group request participants updated successfully}
+              success: true
+      '400':
+        description: |
+          Campo em falta, JID de grupo irresolúvel, telefone em forma curta
+          (`invalid_phone`), ou `Action` fora de `approve`/`reject`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_phone
+                message: could not parse Phone
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
