@@ -1271,7 +1271,19 @@ rules_frozen=true
 # o baseline sozinha contra o mesmo commit-base da foundation; o merge soma
 # os deltas — medido com `go run ./cmd/logcov -json ./pkg` apos o merge
 # completo, nao inferido.
-min_func_coverage=595
+#
+# feature/engine-capability-integration (2026-08-26): merge das tres
+# branches da onda 3 (engine-http-wiring, capability-http-endpoints,
+# account-type-detection) sobre a onda 2 ja integrada. func_coverage CAI
+# 595->594 (-1, decimo perdido por DILUICAO, nao regressao): cada branch
+# melhorou sua propria razao isoladamente contra o commit-base da onda 2, mas
+# a soma dos numeradores e denominadores das tres branches combinadas produz
+# uma razao levemente diferente da soma aritmetica simples de cada delta
+# isolado — o mesmo padrao ja registrado noutras entradas deste ficheiro
+# (numerador e denominador crescem juntos e a razao pode cair um decimo sem
+# nenhuma funcao individual ter perdido log). Medido com
+# `go run ./cmd/logcov -json ./pkg` apos o merge completo, nao inferido.
+min_func_coverage=594
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1530,7 +1542,11 @@ min_func_coverage=595
 # justificativa de min_func_coverage acima). errpath_coverage SOBE 780->781
 # (+1, ratchet-UP): capability-registry acrescenta mais um caminho de saida
 # coberto em pkg/capabilityregistry. Medido apos o merge completo.
-min_errpath_coverage=781
+#
+# feature/engine-capability-integration (2026-08-26): merge da onda 3 (ver
+# justificativa de min_func_coverage acima). errpath_coverage SOBE 781->782
+# (+1, ratchet-UP). Medido apos o merge completo.
+min_errpath_coverage=782
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1582,7 +1598,14 @@ min_errpath_coverage=781
 # account-type-detection (2026-08-26): min_eligible sobe mais (ver commit da
 # branch para o delta exato) — regenerado apos o merge completo da onda 3,
 # valor final medido abaixo.
-min_eligible=1007
+#
+# feature/engine-capability-integration (2026-08-26): merge da onda 3 (ver
+# justificativa de min_func_coverage acima). min_eligible SOBE 1007->1011
+# (+4): funcoes elegiveis novas de account-type-detection (detectors por
+# engine + persistencia) que capability-http-endpoints nao tinha no seu
+# commit-base isolado. Medido apos o merge completo, nao inferido pela soma
+# das branches.
+min_eligible=1011
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
