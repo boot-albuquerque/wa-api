@@ -360,15 +360,16 @@ LimiteHistorico:
 
 PedidoLimiteHistorico:
   type: object
-  description: Corpo de `POST /webhook/history` — e de `POST /session/history`, que é o mesmo manipulador.
+  description: Corpo de `POST /session/history`.
   required: [history]
   properties:
     history:
       type: integer
       minimum: 0
       description: |
-        Quantas mensagens gravar por conversa. `0` desactiva. **Negativo é
-        recusado** com `400 invalid_history`.
+        Quantas mensagens gravar por conversa em `message_history`. `0`
+        desliga a gravação, e é o valor de origem de uma instalação nova.
+        Negativo é recusado com `400 invalid_history`.
       example: 100
 
 PedidoConfiguracaoS3:
@@ -467,23 +468,26 @@ ResultadoConfiguracaoS3:
 ResultadoTesteS3:
   type: object
   description: |
-    Resposta de `POST /s3/test`. `Bucket` e `Region` ecoam a configuração
-    **testada** — é o que distingue "testei o que gravaste" de "respondi 200".
-    Nenhuma credencial aparece aqui.
+    Resposta de `POST /session/s3/test`. `Bucket` e `Region` ecoam a
+    configuração que foi TESTADA — é o que distingue "testei o que gravou" de
+    "respondi 200".
+  required: [connected]
   properties:
     connected:
       type: boolean
-      description: '`true` quando o bucket respondeu dentro dos 10 segundos.'
+      description: |
+        Só aparece `true`: qualquer falha do teste sai como erro, não como
+        `connected: false`.
       example: true
     Details:
       type: string
       example: S3 connection test successful
     Bucket:
       type: string
-      example: wa-api-midia
+      example: wa-api-media
     Region:
       type: string
-      example: sa-east-1
+      example: eu-west-1
 
 PedidoConfiguracaoHmac:
   type: object
@@ -532,37 +536,42 @@ ResultadoConfiguracaoHmac:
 PedidoProxy:
   type: object
   description: |
-    Corpo de `POST /proxy/set`. **`enable` decide o ramo**: ligar valida o URL,
-    desligar limpa o proxy gravado sem sequer olhar para ele.
-  properties:
-    proxy_url:
-      type: string
-      description: |
-        URL do proxy. Obrigatório quando `enable` é `true`
-        (`400 missing_proxy_url`); tem de ser analisável
-        (`400 invalid_proxy_url`) e o esquema tem de ser **`http` ou
-        `socks5`** (`400 unsupported_proxy_scheme`) — **`https` não é
-        aceite**.
+    Corpo de `POST /proxy/set` **e** de `POST /session/proxy` — os dois
+    caminhos são a MESMA operação, servida pelo mesmo manipulador. O segundo é
+    a forma nova; o primeiro fica por compatibilidade.
 
-        Costuma trazer credenciais no userinfo; nunca é devolvido em erro nem
-        escrito no log.
-      example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+    `enable` decide o ramo: ligar valida o URL, desligar limpa o proxy gravado
+    sem sequer olhar para ele.
+  required: [enable]
+  properties:
     enable:
       type: boolean
       description: |
-        `true` grava o proxy, `false` remove-o. No ramo de remoção o
-        `proxy_url` **não é validado**, para que uma configuração partida possa
-        ser apagada.
+        `true` grava o proxy; `false` remove-o. No ramo de remoção o
+        `proxy_url` é IGNORADO de propósito — recusar a remoção porque a URL
+        que vai ser deitada fora está malformada tornaria uma configuração
+        estragada impossível de apagar.
       example: true
+    proxy_url:
+      type: string
+      description: |
+        URL do proxy. Só `http` e `socks5` são aceites — `https` é recusado
+        com `400 unsupported_proxy_scheme`, porque exige um transporte que
+        este processo não monta. Credenciais vão no userinfo
+        (`socks5://utilizador:segredo@servidor:1080`) e nunca aparecem em log
+        nem em mensagem de erro.
+      example: 'socks5://proxy.interno:1080'
     webhook_use_proxy:
       type: boolean
-      nullable: true
       description: |
-        Se a entrega dos webhooks também sai por este proxy. **Ausente preserva
-        o valor gravado** — a distinção entre ausente e `false` é deliberada.
+        Se a entrega de WEBHOOK também sai por este proxy. Omitido, herda o
+        valor gravado e, na falta dele, o padrão da instalação.
 
-        Com esta opção ligada, um endereço reservado ou de loopback é recusado
-        com `400 reserved_proxy_address`; com ela desligada é permitido.
+        **Muda a validação**: com este modo ligado, um endereço reservado ou
+        de loopback é recusado com `400 reserved_proxy_address` — de outra
+        forma, o proxy indicado pelo inquilino seria um caminho à volta do
+        validador de saída. Com ele desligado, o proxy só carrega o tráfego
+        do próprio WhatsApp e um endereço interno é permitido.
       example: false
 
 ResultadoProxy:

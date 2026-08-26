@@ -298,6 +298,7 @@ PerfilSessao:
       example: true
 
 PerfilSessaoCompleto:
+  description: "Resposta de `GET /session/profile/full`. Perfil da conta ligada, incluindo `platform` — o único sinal de que a conta é Business (`smbi`) ou pessoal."
   allOf:
     - $ref: '#/components/schemas/PerfilSessao'
     - type: object
@@ -356,19 +357,8 @@ PerfilSessaoCompleto:
           example:
             user_info: 'sessao sem JID proprio; nada a consultar'
 
-PedidoLimiteHistorico:
-  type: object
-  description: Corpo de `POST /session/history`.
-  required: [history]
-  properties:
-    history:
-      type: integer
-      minimum: 0
-      description: |
-        Quantas mensagens gravar por conversa em `message_history`. `0`
-        desliga a gravação, e é o valor de origem de uma instalação nova.
-        Negativo é recusado com `400 invalid_history`.
-      example: 100
+# PedidoLimiteHistorico vive em schemas/infra.yaml: POST /session/history e POST /webhook/history são o
+# MESMO manipulador, e dois esquemas para uma operação divergiriam.
 
 ResultadoLimiteHistorico:
   type: object
@@ -386,63 +376,11 @@ ResultadoLimiteHistorico:
       type: integer
       example: 100
 
-PedidoProxy:
-  type: object
-  description: Corpo de `POST /session/proxy`.
-  required: [enable]
-  properties:
-    enable:
-      type: boolean
-      description: |
-        `true` grava o proxy; `false` remove-o. No ramo de remoção o
-        `proxy_url` é IGNORADO de propósito — recusar a remoção porque a URL
-        que vai ser deitada fora está malformada tornaria uma configuração
-        estragada impossível de apagar.
-      example: true
-    proxy_url:
-      type: string
-      description: |
-        URL do proxy. Só `http` e `socks5` são aceites — `https` é recusado
-        com `400 unsupported_proxy_scheme`, porque exige um transporte que
-        este processo não monta. Credenciais vão no userinfo
-        (`socks5://utilizador:segredo@servidor:1080`) e nunca aparecem em log
-        nem em mensagem de erro.
-      example: 'socks5://proxy.interno:1080'
-    webhook_use_proxy:
-      type: boolean
-      description: |
-        Se a entrega de WEBHOOK também sai por este proxy. Omitido, herda o
-        valor gravado e, na falta dele, o padrão da instalação.
+# PedidoProxy vive em schemas/infra.yaml: POST /proxy/set e POST /session/proxy são o
+# MESMO manipulador, e dois esquemas para uma operação divergiriam.
 
-        **Muda a validação**: com este modo ligado, um endereço reservado ou
-        de loopback é recusado com `400 reserved_proxy_address` — de outra
-        forma, o proxy indicado pelo inquilino seria um caminho à volta do
-        validador de saída. Com ele desligado, o proxy só carrega o tráfego
-        do próprio WhatsApp e um endereço interno é permitido.
-      example: false
-
-ResultadoProxy:
-  type: object
-  description: |
-    Resposta de `POST /session/proxy`. O ramo de REMOÇÃO responde só
-    `Details`; o de gravação ecoa também o que ficou gravado, e é isso que
-    distingue "gravei o que pediu" de "respondi 200".
-  properties:
-    Details:
-      type: string
-      example: Proxy configured successfully
-    Set:
-      type: boolean
-      description: Presente apenas no ramo de gravação.
-      example: true
-    ProxyURL:
-      type: string
-      description: Eco da URL gravada. Presente apenas no ramo de gravação.
-      example: 'socks5://proxy.interno:1080'
-    webhook_use_proxy:
-      type: boolean
-      description: Eco do modo resolvido e gravado. Presente apenas no ramo de gravação.
-      example: false
+# ResultadoProxy vive em schemas/infra.yaml: POST /proxy/set e POST /session/proxy são o
+# MESMO manipulador, e dois esquemas para uma operação divergiriam.
 
 PedidoConfigS3:
   type: object
@@ -562,29 +500,8 @@ VistaConfigS3:
       type: integer
       example: 30
 
-ResultadoTesteS3:
-  type: object
-  description: |
-    Resposta de `POST /session/s3/test`. `Bucket` e `Region` ecoam a
-    configuração que foi TESTADA — é o que distingue "testei o que gravou" de
-    "respondi 200".
-  required: [connected]
-  properties:
-    connected:
-      type: boolean
-      description: |
-        Só aparece `true`: qualquer falha do teste sai como erro, não como
-        `connected: false`.
-      example: true
-    Details:
-      type: string
-      example: S3 connection test successful
-    Bucket:
-      type: string
-      example: wa-api-media
-    Region:
-      type: string
-      example: eu-west-1
+# ResultadoTesteS3 vive em schemas/infra.yaml: POST /s3/test e POST /session/s3/test são o
+# MESMO manipulador, e dois esquemas para uma operação divergiriam.
 
 PedidoConfigHmac:
   type: object

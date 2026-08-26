@@ -1330,13 +1330,31 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 400
-              error:
-                code: invalid_action
-                message: unknown participant action "promote" (must be "add" or "remove")
-              success: false
+              oneOf:
+                - $ref: '#/components/schemas/Erro'
+                - $ref: '#/components/schemas/ErroTextoSimples'
+            examples:
+              acaoDesconhecida:
+                summary: Formato NOVO — Action inválido
+                description: |
+                  `promote` e `demote` caem aqui: a biblioteca sabe fazê-los,
+                  a rota não os expõe (F263).
+                value:
+                  code: 400
+                  error:
+                    code: invalid_action
+                    message: unknown participant action "promote" (must be "add" or "remove")
+                  success: false
+              campoObrigatorioEmFalta:
+                summary: Formato ANTIGO — campo obrigatório ausente
+                description: |
+                  `Phone` vazio, `Action` ausente ou `groupJID` ausente passam
+                  por `rejectMissingField`, que não usa a taxonomia de erro —
+                  `error` vem em texto simples (F266). Medido.
+                value:
+                  code: 400
+                  error: bad request
+                  success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
       '422':

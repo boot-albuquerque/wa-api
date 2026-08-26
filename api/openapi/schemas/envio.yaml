@@ -270,6 +270,7 @@ ResultadoEnvioAudio:
 # ---------------------------------------------------------------------------
 
 PedidoEnvioTexto:
+  description: "Corpo de `POST /chat/send/text`. Mensagem de texto, com pré-visualização de link opcional."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -302,6 +303,7 @@ PedidoEnvioTexto:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioImagem:
+  description: "Corpo de `POST /chat/send/image`. Imagem com legenda opcional; aceita URI de dados ou base64."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -348,6 +350,7 @@ PedidoEnvioImagem:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioVideo:
+  description: "Corpo de `POST /chat/send/video`. Vídeo com legenda; mínimo de 256 bytes, recusado antes do envio."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -393,6 +396,7 @@ PedidoEnvioVideo:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioAudio:
+  description: "Corpo de `POST /chat/send/audio`. Áudio ou nota de voz; mínimo de 128 bytes. A legenda, se houver, vai como mensagem separada."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -450,6 +454,7 @@ PedidoEnvioAudio:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioDocumento:
+  description: "Corpo de `POST /chat/send/document`. Ficheiro com nome próprio, mostrado como anexo descarregável."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -497,6 +502,7 @@ PedidoEnvioDocumento:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioAutocolante:
+  description: "Corpo de `POST /chat/send/sticker`. Autocolante em WebP."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -545,6 +551,7 @@ PedidoEnvioAutocolante:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioLocalizacao:
+  description: "Corpo de `POST /chat/send/location`. Ponto no mapa, com nome e morada opcionais."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -579,6 +586,7 @@ PedidoEnvioLocalizacao:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioContacto:
+  description: "Corpo de `POST /chat/send/contact`. Cartão de contacto em vCard, que o destinatário pode guardar."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -613,6 +621,7 @@ PedidoEnvioContacto:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioEnquete:
+  description: "Corpo de `POST /chat/send/poll`. Enquete com opções. O destino vai em `Group`, e não em `Phone`, mesmo para contacto individual."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -645,6 +654,7 @@ PedidoEnvioEnquete:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoVotoEnquete:
+  description: "Corpo de `POST /chat/send/pollvote`. Voto numa enquete existente, identificada pelo par `PollMessageId` mais `PollMessageTimestamp`."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -696,6 +706,7 @@ PedidoVotoEnquete:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioBotoes:
+  description: "Corpo de `POST /chat/send/buttons`. Mensagem interativa com botões. Cada botão exige `title` — `displayText` é ignorado e o botão cai em silêncio."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -745,6 +756,7 @@ PedidoEnvioBotoes:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioLista:
+  description: "Corpo de `POST /chat/send/list`. Lista de seleção, agrupada em secções, aberta por um botão."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -807,6 +819,7 @@ PedidoEnvioLista:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioCarrossel:
+  description: "Corpo de `POST /chat/send/carousel`. Cartões deslizáveis na horizontal; cada cartão exige `Buttons`."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -839,6 +852,7 @@ PedidoEnvioCarrossel:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioModelo:
+  description: "Corpo de `POST /chat/send/template`. Mensagem de modelo com botões de URL, de chamada ou de resposta rápida."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -875,6 +889,7 @@ PedidoEnvioModelo:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEncaminhamento:
+  description: "Corpo de `POST /chat/send/forward`. Duas formas — por chave de mensagem (`MessageID` mais `Chat`) ou por conteúdo (`Phone` mais `Body`)."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -926,6 +941,7 @@ PedidoEncaminhamento:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEdicaoMensagem:
+  description: "Corpo de `POST /chat/send/edit`. Substitui o texto de uma mensagem já enviada, identificada por `Id`."
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
