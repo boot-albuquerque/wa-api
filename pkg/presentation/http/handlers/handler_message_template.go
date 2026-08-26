@@ -44,7 +44,10 @@ func (h *SendTemplateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req domain.SendTemplateRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("path", r.URL.Path).
 			Str("user_id", txtID).

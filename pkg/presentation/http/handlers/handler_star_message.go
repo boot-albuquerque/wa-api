@@ -25,7 +25,10 @@ func (h *StarMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.StarMessageRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return

@@ -33,7 +33,10 @@ func (h *GetCommunitySubGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.
 		return
 	}
 	var req domain.GetCommunitySubGroupsRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode community subgroups payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -65,7 +68,10 @@ func (h *GetCommunityParticipantsHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		return
 	}
 	var req domain.GetCommunityParticipantsRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode community participants payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -97,7 +103,10 @@ func (h *CommunityLinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req domain.CommunityLinkRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode community link payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -128,7 +137,10 @@ func (h *CommunityUnlinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 	var req domain.CommunityUnlinkRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode community unlink payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return

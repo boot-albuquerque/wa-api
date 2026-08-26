@@ -66,7 +66,10 @@ func NewGroupManagementHandlers(uc *group.GroupManagementUseCase) *GroupManageme
 }
 
 func decodeAndRespond(w http.ResponseWriter, r *http.Request, v interface{}) bool {
-	if err := domain.DecodeRequest(r.Body, v); err != nil {
+	if err := decodeRequest(w, r, v); err != nil {
+		if requestAnswered(err) {
+			return false
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode group management payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return false

@@ -29194,9 +29194,169 @@ distinguido do zero **e a ausência tem de ser dita**, não inferida.
    decisão do utilizador e commit próprio.
 3. Enquanto (2) não existir, a documentação OpenAPI da rota traz o aviso.
 
-**Status**: exemplo da F223 corrigido nesta sessão e aviso escrito na
-documentação OpenAPI de `/chat/mute`. A guarda contra campo desconhecido
-(ponto 2) **não** foi feita — é mudança de contrato e precisa de aval.
+**Status**: CORRIGIDO em 2026-08-26. O exemplo da F223 e o aviso na
+documentação OpenAPI de `/chat/mute` já tinham sido feitos; nesta sessão fez-se
+o ponto 2, em duas metades que separam o que muda contrato do que não muda:
+
+1. **Detecção, sem mudar contrato** — `domain.DecodeRequestWithUnknownFields`
+   (`pkg/domain/decode_unknown_fields.go`) descodifica exactamente como
+   `DecodeRequest` e devolve, além disso, os nomes das chaves de topo que o
+   destino não aceita. O pedido continua a ser aceite; o que deixa de existir é
+   o silêncio. A fronteira HTTP regista um WARN que **nomeia** cada campo
+   (`unknown field "duration"`), com o array estruturado `unknown_fields`.
+2. **Recusa, OPT-IN** — `WA_API_STRICT_UNKNOWN_FIELDS=true|1|yes` faz a mesma
+   fronteira responder `400` com código próprio `unknown_field`, nomeando os
+   campos. **Desligada por omissão**: ligá-la por omissão recusaria pedidos que
+   hoje funcionam. Valor desconhecido na variável fica no modo permissivo.
+
+Também se honrou a regra 4.5 do `CONTRATO-ARQUITETURAL` em
+`mute_chat.go`: `nil` (ausente) e `0` (explícito) passam a ser ramos DISTINTOS,
+com `muteForever` nomeado. O comportamento observável não muda — os dois
+continuam a significar "para sempre" —, o que muda é o código passar a poder
+distingui-los.
+
+**Como a política chega às ~48 rotas**: `decodeRequest`
+(`pkg/presentation/http/handlers/decode.go`) substitui `domain.DecodeRequest`
+em todos os sítios de descodificação e devolve o MESMO erro, para que cada
+handler mantenha o seu próprio log e a sua própria resposta — vários testes
+asseveram as palavras exactas desses logs (`handler_send_template_test.go:315`
+exige "unexpected EOF" e não "could not decode payload"). A única obrigação
+nova do chamador é `requestAnswered(err)`, que diz que o modo estrito já
+respondeu.
+
+**Testes que o travam** (todos com controlo negativo EXECUTADO):
+
+- `pkg/domain/decode_unknown_fields_test.go` — nomeia o campo da medição da
+  F268 verbatim; corpo limpo não reporta nada; campo do `ChatTarget` embutido e
+  casamento insensível a maiúsculas continuam CONHECIDOS; tipo errado é erro de
+  descodificação e não campo desconhecido; ordem estável em 20 repetições
+  (ordem de mapa em Go é aleatória); corpo vazio e corpo não-objecto mantêm a
+  resposta anterior.
+- `pkg/presentation/http/handlers/handler_unknown_field_test.go` — pela ROTA
+  REGISTADA: WARN nomeando `duration` (modo permissivo), `400 unknown_field`
+  nomeando `duration` e SEM chegar à porta (modo estrito), aceitação inalterada
+  com o modo desligado, e corpo limpo sem aviso nenhum.
+- `pkg/application/usecase/chat/mute_duration_pointer_test.go` — ausente, `0`
+  explícito e `8h` explícito, cada um com o valor que chega à porta.
+
+<!-- f-status: corrigido -->
+
+## F272 — a detecção de campo desconhecido culpava o campo PAI por uma chave estranha aninhada
+
+**Data/contexto**: 2026-08-26, ao escrever os controlos negativos da F268. O
+controlo "tipo errado não é campo desconhecido" passou sem morder — a mutação
+não fez o teste falhar —, e a pergunta *por que é que este controlo é vácuo?*
+levou a um defeito real na primeira versão da detecção.
+
+**Onde**: `pkg/domain/decode_unknown_fields.go`, na comparação do erro de
+`DisallowUnknownFields`.
+
+**Problema**: `DisallowUnknownFields` vale em TODOS os níveis do documento. A
+sonda por chave de topo descodifica `{"ReplyTo": {...}}` e, se houver chave
+estranha DENTRO do objecto, recebe `json: unknown field "typo"` — um erro sobre
+uma chave aninhada, levantado ao sondar uma chave de topo perfeitamente válida.
+Com a comparação por PREFIXO que a primeira versão fazia, o resultado era:
+
+```
+{"Phone":"…","Body":"oi","ReplyTo":{"StanzaId":"A","Participant":"p","typo":1}}
+  -> unknown=[ReplyTo]
+```
+
+`ReplyTo` **é** campo de `SendMessageRequest`. Reportá-lo está errado duas
+vezes: nomeia um campo válido, e em modo estrito recusaria um pedido apontando
+o consumidor à chave errada.
+
+**Correcção aplicada**: comparar o erro com o NOME da chave sob sonda
+(`json: unknown field %q` formatado com o nome), em vez do prefixo. Chave
+aninhada passa a não corresponder, e o campo pai deixa de ser culpado. A
+consequência é a limitação documentada no ficheiro: chave estranha aninhada não
+é reportada — o que é preferível a ser reportada errada.
+
+**Status**: corrigido na mesma sessão em que nasceu. Travado por
+`TestDecodeRequestWithUnknownFields_NestedStrayKeyDoesNotBlameTheParent`;
+controlo negativo executado (repor a comparação por prefixo), saída:
+`unknown = [ReplyTo], want none`.
+
+**A lição de método**, que vale mais que o defeito: **um controlo negativo que
+não morde é informação.** Este passou porque a propriedade que ele julgava
+medir já era garantida por um retorno antecipado — e investigar essa vacuidade
+foi o que revelou o defeito. Controlo vácuo não é ruído a ignorar; é a pergunta
+"então o que é que segura esta propriedade?" por responder.
+
+<!-- f-status: corrigido -->
+
+## F273 — inventário das rotas em que o valor zero tem significado escondido
+
+**Data/contexto**: 2026-08-26, ao corrigir a F268. A F268 é uma instância; esta
+entrada é o levantamento das outras, porque a armadilha é estrutural e não da
+rota de silenciar.
+
+**A armadilha, enunciada**: com campo desconhecido ignorado (o modo por
+omissão, mesmo depois da F268), um nome mal escrito não dá erro — dá o valor
+zero. Onde o valor zero é uma ESCOLHA VÁLIDA com significado próprio, o erro de
+digitação vira essa escolha, com `200`.
+
+Levantamento sobre os campos escalares NÃO-ponteiro dos tipos `*Request` em
+`pkg/domain/`:
+
+### 1. Configuração persistida — os piores, porque a escolha fica gravada
+
+| onde | campo | o que o zero significa |
+|---|---|---|
+| `pkg/domain/storage.go:5` | `S3ConfigRequest.Enabled` | `false` **DESLIGA** o S3 |
+| `pkg/domain/storage.go:14` | `S3ConfigRequest.RetentionDays` | `0` é "nunca expira" (`pkg/infra/storage/s3.go:336`, `if config.RetentionDays > 0`) |
+| `pkg/domain/storage.go:148` | `ProxyConfigRequest.Enable` | `false` desliga o proxy |
+| `pkg/domain/webhook.go:13` | `WebhookConfigRequest.Active` | `false` desactiva o webhook |
+
+Um `POST /s3/config` com `enable` em vez de `enabled` responde `200` e escreve
+"desligado". É a F268 com o efeito a durar até alguém reparar.
+
+### 2. O caso inverso — zero usado como sentinela de "ausente"
+
+`pkg/application/usecase/user/edit_user.go:78`:
+
+```go
+if req.Expiration != 0 {
+    upd.Expiration = &req.Expiration
+}
+```
+
+Aqui o zero significa "não foi enviado", logo **`expiration: 0` explícito é
+inexprimível**: não há forma de pôr a expiração a zero por esta rota. E na
+MESMA função, quatro linhas abaixo, `req.History` **é** ponteiro e ramifica
+sobre `nil` — duas convenções no mesmo `struct`, o que torna impossível ao
+consumidor saber qual se aplica sem ler o código.
+
+### 3. Booleanos de acção — o zero é a acção OPOSTA
+
+`ArchiveChatRequest.Archive`, `PinChatRequest.Pin`, `StarMessageRequest.Star`,
+`SetGroupLockedRequest.Locked`, `SetGroupAnnounceRequest.Announce`,
+`SetGroupJoinApprovalModeRequest.Mode`. Em todos, o nome mal escrito produz
+`false` e a rota executa o INVERSO do pedido, com `200` e uma mensagem que diz
+o que fez ("Chat unarchived") — só que ninguém lê a mensagem de um `200`.
+
+`StarMessageRequest.FromMe` é o pior deste grupo: não é uma acção, é parte da
+IDENTIDADE da mensagem. `false` por omissão aponta para outra mensagem.
+
+### 4. Verificados e SEGUROS, para não voltarem a ser investigados
+
+- `RequestHistorySyncRequest.Count` — `count <= 0` cai no valor por omissão
+  (`request_history_sync.go:55-58`); o zero não tem significado próprio.
+- `SendAudioRequest.Seconds` — `0` é "duração desconhecida", que é o mesmo que
+  ausente.
+
+**Correcção sugerida**, por ordem de valor:
+
+1. `WA_API_STRICT_UNKNOWN_FIELDS=true` já cobre TODOS os casos acima de uma só
+   vez, sem tocar em nenhum destes ficheiros — é o argumento mais forte para o
+   modo estrito passar a ser o padrão numa versão futura do contrato.
+2. Passar a ponteiro os campos do grupo 1 (configuração persistida), com ramo
+   sobre `nil`, como manda a regra 4.5.
+3. `EditUserRequest.Expiration` a ponteiro, alinhando com `History` no mesmo
+   `struct`.
+
+**Status**: não corrigido — nenhum destes está no âmbito da F268, e o grupo 1
+muda contrato observável. Registado para decisão do utilizador.
 
 <!-- f-status: aberto -->
 

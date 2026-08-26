@@ -44,7 +44,10 @@ func (h *SendMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendMessageRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("path", r.URL.Path).
 			Msg("send message payload could not be decoded")
