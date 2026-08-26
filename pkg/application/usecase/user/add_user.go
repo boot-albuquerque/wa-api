@@ -30,6 +30,17 @@ const (
 	// Constante nomeada, e não literal repetido, porque o teste de contrato o
 	// afirma e o cliente o lê (ADR-0004).
 	noFieldsToUpdateCode = "no_fields_to_update"
+
+	// invalidEngineCode marca a criação recusada por engine ausente, nula,
+	// vazia ou fora de {wa_noise, wa_headless} (itens 4-5). Mensagem em
+	// pt-BR, convenção do projeto para o campo error.message do envelope.
+	invalidEngineCode = "invalid_engine"
+	invalidEngineMsg  = "engine é obrigatório e deve ser \"wa_noise\" ou \"wa_headless\""
+
+	// engineImmutableCode marca uma tentativa de mudar o engine de um
+	// usuário já existente (itens 8, 61) — ver EditUserUseCase.Execute.
+	engineImmutableCode = "engine_immutable"
+	engineImmutableMsg  = "engine não pode ser alterado após a criação da conta"
 )
 
 // AddUserUseCase adiciona um novo usuário
@@ -57,6 +68,15 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	// Validate required fields
 	if req.Name == "" || req.Token == "" {
 		return nil, apperr.New("missing_name_or_token", apperr.CategoryValidation, "name and token are required", false, nil)
+	}
+
+	// Engine é OBRIGATÓRIO na criação (itens 4-5 do prompt arquitetural):
+	// ausente/nulo/vazio/inválido é 400 invalid_engine, nunca um default
+	// silencioso. domain.ParseEngine já rejeita "" e "legacy_unknown" — o
+	// segundo é valor interno de leitura, nunca escolha de criação.
+	engine, err := domain.ParseEngine(req.Engine)
+	if err != nil {
+		return nil, apperr.New(invalidEngineCode, apperr.CategoryValidation, invalidEngineMsg, false, err)
 	}
 
 	// Set defaults
@@ -148,6 +168,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		S3:              s3ForRecord,
 		HmacKey:         encryptedHmacKey,
 		History:         req.History,
+		Engine:          engine,
 	})
 	if err != nil {
 		if errors.Is(err, ErrDuplicateToken) {
@@ -206,6 +227,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		S3Config:       s3Config,
 		Events:         req.Events,
 		HmacConfigured: req.HmacKey != "",
+		Engine:         engine.String(),
 	}, nil
 }
 

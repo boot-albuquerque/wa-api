@@ -22,6 +22,13 @@ type AddUserRequest struct {
 	S3Config    *S3Config    `json:"s3Config,omitempty"`
 	HmacKey     string       `json:"hmacKey,omitempty"`
 	History     int          `json:"history,omitempty"`
+
+	// Engine é o transporte que servirá esta sessão. OBRIGATÓRIO na criação
+	// (itens 4-5 do prompt arquitetural): ausente, nulo, vazio ou fora de
+	// {wa_noise, wa_headless} é 400 invalid_engine — nunca um default
+	// silencioso. Recebido como string crua; a validação/conversão para
+	// domain.Engine é do use case (ParseEngine).
+	Engine string `json:"engine"`
 }
 
 // EditUserRequest é o request para editar um usuário existente
@@ -41,6 +48,13 @@ type EditUserRequest struct {
 	// could NEVER set it back to 0 (disable). Same pattern as
 	// SendLocationRequest.Latitude (F121): nil = not mentioned, 0 = valid value.
 	History *int `json:"history,omitempty"`
+
+	// Engine, quando presente no corpo, é comparado ao valor persistido — o
+	// motor é IMUTÁVEL depois da criação (itens 8, 61). POINTER, mesmo motivo
+	// do History acima: nil = campo não mencionado (edição normal, não mexe
+	// no motor); string presente (mesmo vazia) = tentativa de mudar, que só é
+	// aceita se for IGUAL ao valor já gravado.
+	Engine *string `json:"engine,omitempty"`
 }
 
 // --- Aliases snake_case na LEITURA (F210, decisão 49=a do canal) ------------
@@ -178,6 +192,12 @@ type UserResponse struct {
 	S3Config       map[string]interface{} `json:"s3_config,omitempty"`
 	Events         string                 `json:"events,omitempty"`
 	HmacConfigured bool                   `json:"hmac_configured,omitempty"`
+
+	// Engine é o transporte que serve esta sessão (item 9: leituras
+	// administrativas devolvem o motor). Vazio apenas em respostas que não
+	// carregam o dado (nenhuma hoje) — AddUser e ListUsers sempre o
+	// preenchem.
+	Engine string `json:"engine,omitempty"`
 }
 
 // SessionDeviceInfo carrega os dados de identidade e estado do aparelho

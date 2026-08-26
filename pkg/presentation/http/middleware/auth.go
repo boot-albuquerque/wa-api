@@ -17,12 +17,39 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	ownershipdb "wa-api/pkg/infra/db"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
+
+// errSessionSuperseded answers a request authenticated with a superseded
+// session's token (F276, item 6). Code is domain.ErrSessionSuperseded.Error()
+// itself — not a literal — so this string and the sentinel errors.Is compares
+// against never drift apart (CLAUDE.md: zero string literal solta).
+//
+// Message deliberately says nothing about the session that replaced this one
+// (domain.ErrSessionSuperseded's own doc: "sem vazar detalhes da nova
+// sessão").
+var errSessionSuperseded = apperr.New(domain.ErrSessionSuperseded.Error(), apperr.CategoryConflict,
+	"sessão substituída por uma sessão mais recente", false, domain.ErrSessionSuperseded)
+
+// OwnershipStatusReader is the subset of *db.AccountOwnershipRepository that
+// AuthAlice needs: "has the claim for this session been superseded by a
+// newer one?" (F276, item 6). Narrowed to an interface, and not the
+// concrete type, so this package depends only on the one method it calls,
+// and so tests can fake it without a database.
+//
+// nil is a valid value for AuthAlice's ownership parameter: it means the
+// mechanism is not wired for this deployment (e.g. `single` mode, where
+// pkg/infra/db.AccountOwnershipRepository is never constructed — see its own
+// package comment), and the check is skipped entirely, exactly like a
+// session_id that never made a claim (found=false).
+type OwnershipStatusReader interface {
+	CurrentStatusForSession(ctx context.Context, sessionID string) (ownershipdb.AccountOwnership, bool, error)
+}
 
 var errUnauthorized = &apperr.AppError{
 	Code:     "unauthorized",
@@ -130,7 +157,19 @@ func queryTokenAllowed(path string) bool {
 }
 
 // AuthAlice returns middleware that looks up a user by token.
-func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handler {
+//
+// ownership, when non-nil, gates the request behind account-ownership
+// arbitration (F276, item 6): the SESSION ID a superseded claim is keyed by
+// is, today, the same as the authenticated user's own id (txtid below) — a
+// deliberate reuse, not an assumption smuggled in. This codebase has no
+// separate "login session" concept distinct from the `users` row (one token
+// row IS the session, in the sense account_ownership.session_id needs), so
+// there is no second identifier to join against, and inventing one here
+// would be exactly the unmeasured design decision the F276 HOUSEKEEP entry
+// declined to make. Reusing the user id keeps the mapping total (every
+// authenticated request has one) and reversible without a schema change, the
+// day a real multi-session-per-user model exists.
+func AuthAlice(db *sql.DB, userCache *cache.Cache, ownership OwnershipStatusReader) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var ctx context.Context
@@ -229,6 +268,31 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 				return
 			}
+
+			// F276, item 6: a token whose session was superseded by a newer
+			// claim stops operating. found=false ("this session_id never
+			// made a claim") is NOT superseded — see
+			// AccountOwnershipRepository.CurrentStatusForSession's own
+			// contract — so it falls through exactly like ownership==nil.
+			if ownership != nil {
+				status, ownershipFound, err := ownership.CurrentStatusForSession(r.Context(), txtid)
+				if err != nil {
+					hlog.FromRequest(r).Error().Err(err).
+						Str("path", r.URL.Path).
+						Msg("failed to read account ownership status")
+					customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
+					return
+				}
+				if ownershipFound && !status.IsActive() {
+					hlog.FromRequest(r).Warn().
+						Str("path", r.URL.Path).
+						Str("method", r.Method).
+						Msg("authentication rejected: session superseded by a newer claim")
+					customhttp.RespondJSON(w, http.StatusConflict, nil, errSessionSuperseded)
+					return
+				}
+			}
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

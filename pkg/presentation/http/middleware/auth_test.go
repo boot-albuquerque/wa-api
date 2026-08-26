@@ -52,7 +52,7 @@ func insertAuthUser(t *testing.T, db *sqlx.DB, id, token, tokenHash string) {
 }
 
 func serveAuth(db *sqlx.DB, userCache *cache.Cache, r *http.Request) *httptest.ResponseRecorder {
-	handler := AuthAlice(db.DB, userCache)(http.HandlerFunc(
+	handler := AuthAlice(db.DB, userCache, nil)(http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, r)

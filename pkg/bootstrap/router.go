@@ -14,9 +14,11 @@ import (
 	"github.com/rs/zerolog/hlog"
 
 	appport "wa-api/pkg/application/contracts"
+	dbpkg "wa-api/pkg/infra/db"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/apidocs"
 	"wa-api/pkg/presentation/http/handlers"
+	mwpkg "wa-api/pkg/presentation/http/middleware"
 
 	"github.com/rs/zerolog/log"
 )
@@ -306,7 +308,15 @@ func buildRouter(d Deps) *mux.Router {
 	//     handed — which must already carry req_id).
 	c := alice.New(boundaryLogMiddlewares(d.Log)...)
 
-	c = c.Append(authAlice(d.DB.DB, d.UserCache))
+	// ownershipReader stays a nil interface (not skipped) when d.DB has no
+	// real *sql.DB underneath — a zero-value *sqlx.DB placeholder, per the
+	// comment on Deps.DB above. AuthAlice treats nil as "mechanism not wired
+	// here", the same as a session_id that never made a claim.
+	var ownershipReader mwpkg.OwnershipStatusReader
+	if d.DB != nil && d.DB.DB != nil {
+		ownershipReader = dbpkg.NewAccountOwnershipRepository(d.DB)
+	}
+	c = c.Append(authAlice(d.DB.DB, d.UserCache, ownershipReader))
 	c = c.Append(recordUserIDHandler)
 
 	// Probes (ADR-0005 D6 — see health.go for the split and for what readiness

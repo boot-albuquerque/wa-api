@@ -56,11 +56,11 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 	ctx := context.Background()
 
-	if _, err := uc.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "shared"}); err != nil {
+	if _, err := uc.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "shared", Engine: "wa_noise"}); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
 
-	_, err := uc.Execute(ctx, domain.AddUserRequest{Name: "mallory", Token: "shared"})
+	_, err := uc.Execute(ctx, domain.AddUserRequest{Name: "mallory", Token: "shared", Engine: "wa_noise"})
 	if !errors.Is(err, user.ErrDuplicateToken) {
 		t.Fatalf("second add error = %v, want user.ErrDuplicateToken", err)
 	}
@@ -89,7 +89,7 @@ func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			_, err := uc.Execute(context.Background(),
-				domain.AddUserRequest{Name: "racer", Token: "contended"})
+				domain.AddUserRequest{Name: "racer", Token: "contended", Engine: "wa_noise"})
 			successes[idx] = err == nil
 		}(i)
 	}
@@ -118,7 +118,7 @@ func TestAddUserPersistsTokenHash(t *testing.T) {
 	db := newUserTestDB(t)
 	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
-	resp, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
+	resp, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -137,10 +137,10 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 	ctx := context.Background()
 	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
-	if _, err := add.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "alice-token"}); err != nil {
+	if _, err := add.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "alice-token", Engine: "wa_noise"}); err != nil {
 		t.Fatalf("add alice: %v", err)
 	}
-	bob, err := add.Execute(ctx, domain.AddUserRequest{Name: "bob", Token: "bob-token"})
+	bob, err := add.Execute(ctx, domain.AddUserRequest{Name: "bob", Token: "bob-token", Engine: "wa_noise"})
 	if err != nil {
 		t.Fatalf("add bob: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
-		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "old-token"})
+		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "old-token", Engine: "wa_noise"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
-		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "secret-token"}); err != nil {
+		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "secret-token", Engine: "wa_noise"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 

@@ -8,6 +8,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // hmacKey32 tem exatamente o comprimento mínimo aceito por AddUser.
@@ -31,7 +32,7 @@ func TestAddUserUseCase_Execute_Rejections(t *testing.T) {
 		},
 		{
 			name: "hmac curto demais",
-			req:  domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: "curto"},
+			req:  domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise", HmacKey: "curto"},
 		},
 	}
 
@@ -82,7 +83,7 @@ func TestAddUserUseCase_Execute_DuplicateToken(t *testing.T) {
 			repo := &contractsfake.UserRepository{CreateUserFunc: tt.fn}
 			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
-			_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
+			_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise"})
 			if !errors.Is(err, user.ErrDuplicateToken) {
 				t.Fatalf("err = %v, queria user.ErrDuplicateToken", err)
 			}
@@ -100,7 +101,7 @@ func TestAddUserUseCase_Execute_RepositoryError(t *testing.T) {
 	logger := &contractsfake.Logger{}
 	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, logger)
 
-	_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
+	_, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise"})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, queria embrulhar boom", err)
 	}
@@ -126,7 +127,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 	}{
 		{
 			name: "mínimo, com defaults",
-			req:  domain.AddUserRequest{Name: "alice", Token: "tok"},
+			req:  domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise"},
 			// sem ProxyConfig, webhookUseProxy vira true por default
 			wantProxy: true,
 		},
@@ -135,27 +136,29 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 			req: domain.AddUserRequest{
 				Name:        "bob",
 				Token:       "tok2",
+				Engine:      "wa_noise",
 				ProxyConfig: &domain.ProxyConfig{ProxyURL: "http://proxy:8080", WebhookUseProxy: &useProxy},
 			},
 			wantProxy: false,
 		},
 		{
 			name: "eventos com entradas vazias são ignoradas",
-			req:  domain.AddUserRequest{Name: "carol", Token: "tok3", Events: "Message,, ,ReadReceipt"},
+			req:  domain.AddUserRequest{Name: "carol", Token: "tok3", Engine: "wa_noise", Events: "Message,, ,ReadReceipt"},
 			// a entrada vazia entra no `continue`, não vira erro
 			wantProxy: true,
 		},
 		{
 			name:           "hmac no comprimento mínimo",
-			req:            domain.AddUserRequest{Name: "dave", Token: "tok4", HmacKey: hmacKey32},
+			req:            domain.AddUserRequest{Name: "dave", Token: "tok4", Engine: "wa_noise", HmacKey: hmacKey32},
 			wantProxy:      true,
 			wantHmacConfig: true,
 		},
 		{
 			name: "s3 habilitado inicializa o cliente",
 			req: domain.AddUserRequest{
-				Name:  "erin",
-				Token: "tok5",
+				Name:   "erin",
+				Token:  "tok5",
+				Engine: "wa_noise",
 				S3Config: &domain.S3Config{
 					Enabled: true, Endpoint: "http://s3:9000", Region: "us-east-1",
 					Bucket: "b", AccessKey: "ak", SecretKey: "sk", PathStyle: true,
@@ -248,7 +251,7 @@ func TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario(t *testing.T) {
 	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, logger)
 
 	resp, err := uc.Execute(context.Background(),
-		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32})
+		domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise", HmacKey: hmacKey32})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, queria embrulhar boom", err)
 	}
@@ -278,7 +281,7 @@ func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
 	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 	_, err := uc.Execute(context.Background(),
-		domain.AddUserRequest{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1]})
+		domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise", HmacKey: hmacKey32[:len(hmacKey32)-1]})
 	if err == nil {
 		t.Fatal("esperava recusa por chave curta")
 	}
@@ -318,7 +321,7 @@ func TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T
 			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(),
-				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
+				domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise", Events: tt.events})
 			if err == nil {
 				t.Fatal("esperava recusa por tipo de evento desconhecido")
 			}
@@ -356,7 +359,7 @@ func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
 
 			resp, err := uc.Execute(context.Background(),
-				domain.AddUserRequest{Name: "alice", Token: "tok", Events: tt.events})
+				domain.AddUserRequest{Name: "alice", Token: "tok", Engine: "wa_noise", Events: tt.events})
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
@@ -389,8 +392,9 @@ func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
 
 	resp, err := uc.Execute(context.Background(),
 		domain.AddUserRequest{
-			Name:  "alice",
-			Token: "tok",
+			Name:   "alice",
+			Token:  "tok",
+			Engine: "wa_noise",
 			S3Config: &domain.S3Config{
 				Enabled: true, SecretKey: "my-s3-secret",
 			},
@@ -403,5 +407,85 @@ func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
 	}
 	if len(repo.CreateUserCalls) != 0 {
 		t.Errorf("CreateUser called %d times, want 0", len(repo.CreateUserCalls))
+	}
+}
+
+// TestAddUserUseCase_Execute_EngineObrigatorio trava os itens 4-5 do prompt
+// arquitetural: engine ausente, nulo (zero value da string), vazio ou fora de
+// {wa_noise, wa_headless} é recusado com invalid_engine ANTES de qualquer
+// escrita — nunca um default silencioso (era o comportamento antigo do
+// UserRecord.Engine zero-value, documentado em pkg/domain/user_record.go, e
+// que esta mudança fecha do lado HTTP).
+func TestAddUserUseCase_Execute_EngineObrigatorio(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		engine string
+	}{
+		{name: "ausente (zero value)", engine: ""},
+		{name: "legacy_unknown não é escolha de criação", engine: "legacy_unknown"},
+		{name: "valor arbitrário", engine: "postgres"},
+		{name: "case errado não é normalizado", engine: "WA_NOISE"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{}
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+
+			resp, err := uc.Execute(context.Background(),
+				domain.AddUserRequest{Name: "alice", Token: "tok", Engine: tt.engine})
+
+			var appErr *apperr.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("err = %v, queria *apperr.AppError", err)
+			}
+			if appErr.Code != "invalid_engine" {
+				t.Errorf("code = %q, queria %q", appErr.Code, "invalid_engine")
+			}
+			if appErr.Category != apperr.CategoryValidation {
+				t.Errorf("category = %q, queria %q (400)", appErr.Category, apperr.CategoryValidation)
+			}
+			if resp != nil {
+				t.Errorf("resposta = %+v, queria nil", resp)
+			}
+			if len(repo.CreateUserCalls) != 0 {
+				t.Errorf("CreateUser chamado %d vezes, queria 0 — engine inválido não pode chegar à escrita", len(repo.CreateUserCalls))
+			}
+		})
+	}
+}
+
+// TestAddUserUseCase_Execute_EngineValidoEhPersistido é o controle POSITIVO
+// da TestAddUserUseCase_Execute_EngineObrigatorio: os dois únicos valores
+// aceitos criam o usuário e o motor gravado é exatamente o que veio no
+// request — sem reescrita — e a resposta o reflete (item 3: leitura
+// administrativa mostra o motor).
+func TestAddUserUseCase_Execute_EngineValidoEhPersistido(t *testing.T) {
+	t.Parallel()
+
+	for _, engine := range []string{"wa_noise", "wa_headless"} {
+		t.Run(engine, func(t *testing.T) {
+			t.Parallel()
+			repo := &contractsfake.UserRepository{}
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+
+			resp, err := uc.Execute(context.Background(),
+				domain.AddUserRequest{Name: "alice", Token: "tok", Engine: engine})
+			if err != nil {
+				t.Fatalf("erro inesperado: %v", err)
+			}
+			if len(repo.CreateUserCalls) != 1 {
+				t.Fatalf("CreateUser chamado %d vezes, queria 1", len(repo.CreateUserCalls))
+			}
+			if got := repo.CreateUserCalls[0].Rec.Engine.String(); got != engine {
+				t.Errorf("engine gravado = %q, queria %q", got, engine)
+			}
+			if resp.Engine != engine {
+				t.Errorf("resp.Engine = %q, queria %q", resp.Engine, engine)
+			}
+		})
 	}
 }

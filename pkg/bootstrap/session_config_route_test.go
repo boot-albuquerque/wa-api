@@ -153,7 +153,7 @@ func newSessionCfgFixture(t *testing.T) *sessionCfgFixture {
 
 	f := &sessionCfgFixture{db: database, router: mux.NewRouter(), revalidacoes: &revalidacoes, conectado: &conectado}
 	f.seedUser(t)
-	registerCustomRoutes(f.router, alice.New(authAlice(database.DB, userinfocache)), ch)
+	registerCustomRoutes(f.router, alice.New(authAlice(database.DB, userinfocache, nil)), ch)
 	return f
 }
 

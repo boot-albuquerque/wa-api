@@ -66,6 +66,7 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersReq
 			ProxyConfig: proxyConfig,
 			S3Config:    s3Config,
 			Events:      entry.Events,
+			Engine:      entry.Engine.String(),
 		})
 	}
 

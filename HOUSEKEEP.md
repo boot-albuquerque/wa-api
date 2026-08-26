@@ -29929,10 +29929,46 @@ dele), depois de resolver o usuário/sessão pelo token, chamar
 (409, mensagem sem detalhe da nova sessão — não incluir
 `SupersededBySessionID` na resposta).
 
-**Status**: não corrigido nesta sessão — contrato pronto
-(`ErrSessionSuperseded`, `CurrentStatusForSession`), wiring HTTP pendente.
-Fica para quem tocar `pkg/presentation/http/middleware/auth.go` ou para uma
-sessão de continuação desta mesma feature.
+**Status**: CORRIGIDO em 2026-08-26, worktree `feature/engine-http-wiring`.
+`AuthAlice` (`pkg/presentation/http/middleware/auth.go`) recebeu um terceiro
+parâmetro `ownership OwnershipStatusReader` (interface estreita sobre
+`*db.AccountOwnershipRepository.CurrentStatusForSession`, para não amarrar o
+middleware ao tipo concreto nem à camada de persistência inteira). Depois de
+resolver `txtid` pelo token, se `ownership != nil` e
+`CurrentStatusForSession(ctx, txtid)` devolve `found && !status.IsActive()`,
+a resposta é 409 `session_superseded` (via `apperr.New`, categoria
+`CategoryConflict`) e a cadeia para ali — o handler downstream nunca roda.
+`ownership == nil` (ex.: modo `single`, onde a tabela nunca é consultada)
+preserva o comportamento de antes desta mudança, byte a byte.
+
+**A decisão que faltava (session_id ↔ linha de `users`)**: este projecto não
+tem um conceito de "sessão de login" distinto da linha de `users` — um token
+É a sessão, no sentido que `account_ownership.session_id` precisa. Não havia
+um segundo identificador para juntar contra, e inventar um seria exactamente
+a decisão de design não medida que esta entrada, na sua primeira versão,
+recusou tomar sem medir o formato real da relação. A decisão tomada agora:
+`sessionID = txtid` (o id do próprio usuário autenticado). Está documentada
+no comentário de `AuthAlice` em `auth.go`, não só aqui — é reversível sem
+migração de esquema no dia em que existir um modelo real de múltiplas sessões
+por usuário.
+
+**Wiring em produção**: `pkg/bootstrap/router.go` (`buildRouter`) só constrói
+`dbpkg.NewAccountOwnershipRepository(d.DB)` quando `d.DB != nil &&
+d.DB.DB != nil` — caso contrário `ownershipReader` fica como interface nil
+(não como ponteiro concreto nil dentro de interface, que seria a armadilha
+clássica de Go: `var ownershipReader mwpkg.OwnershipStatusReader` declarado
+como interface, só recebe valor concreto dentro do `if`).
+
+**Testes** (`pkg/presentation/http/middleware/auth_ownership_test.go`):
+`TestAuthAlice_SessionSuperseded_E409` (409 + corpo não vaza `session_id` da
+sessão vencedora, e o handler downstream — que faz `t.Fatal` se rodar — NUNCA
+executa), `TestAuthAlice_SessionAtiva_NaoBloqueia` (dono ativo passa; e
+`session_id` que nunca fez claim — `found=false` — também passa, não é
+superseded), `TestAuthAlice_OwnershipNil_PulaAChecagem` (comportamento
+idêntico ao de antes da mudança quando o mecanismo não está wireado).
+Controle negativo executado: revertida a checagem em `auth.go`,
+`TestAuthAlice_SessionSuperseded_E409` falhou (o handler downstream rodou),
+os outros dois continuaram verdes; checagem restaurada.
 
 **Nota de integração**: um achado sobre `TestTodoMetodoComErroTemWrapper` e os
 sete métodos sem wrapper de erro, originalmente registrado também como F276
@@ -29992,5 +30028,12 @@ capacidades estão marcadas `broken` (não `supported`), com este achado como
 evidência, para que a matriz de `capability-registry` não as trate como
 prontas.
 
-<!-- f-status: aberto -->
+<!-- Esta marca é a do bloco F276 (ver nota de integração acima): o gate
+lido por cmd/logcov/housekeep_status_test.go só reconhece cabeçalhos
+`## F\d+`, então H187 (sem número F) nunca foi rastreada por ele — o texto
+da H187 acima é histórico dentro do bloco de F276, não um segundo achado
+com veredito próprio. H187 continua aberta de facto (é trabalho de outra
+worktree, `pkg/infra/wa-noise/client`), só não tem marca formal porque
+nunca teve. -->
+<!-- f-status: corrigido -->
 
