@@ -257,6 +257,26 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/status/set/audio", customChain.Then(ch.Session.PublishStatusAudio), "POST")
 	// Static files — keep in routes.go only, not reregistered here
 
+	// A padronização de caminhos (F269). Corre DEPOIS de todas as rotas antigas
+
+	// estarem registadas, porque lê o que foi registado para lhe acrescentar a
+
+	// forma canónica. Ver api/openapi/CAMINHOS-CANONICOS.md.
+
+	//
+
+	// Uma entrada da tabela sem rota correspondente é ERRO de configuração e
+
+	// aborta o arranque: uma tabela que aponta para rotas inexistentes já não
+
+	// descreve o serviço, e descobrir isso quando um cliente chama é tarde.
+
+	if orfas := registry.RegisterCanonicalAliases(CaminhosCanonicos()); len(orfas) > 0 {
+
+		panic("bootstrap: tabela de caminhos canónicos aponta para rotas inexistentes: " + strings.Join(orfas, ", "))
+
+	}
+
 	registry.Apply(router)
 }
 
