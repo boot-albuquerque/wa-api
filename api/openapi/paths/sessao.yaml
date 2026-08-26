@@ -1,0 +1,1530 @@
+# Grupo: Sessões.
+#
+# Ciclo de vida da ligação ao WhatsApp, perfil da conta ligada, e as
+# configurações por sessão que vivem sob /session (histórico, proxy, S3, HMAC).
+#
+# Três notas que valem para o grupo inteiro:
+#
+#  1. `GET /session/connect` e `GET /session/disconnect` são GET e MUTAM
+#     estado. É surpreendente, está dito em cada uma, e não é para ser imitado.
+#  2. Quatro caminhos sob /session são o MESMO manipulador de rotas de
+#     /webhook, /s3 e /hmac — o par "novo" das antigas. Cada operação diz qual.
+#  3. Toda recusa deste grupo passa pela taxonomia `apperr`, logo o corpo de
+#     erro é o objecto `{code,message}` e não a forma antiga em texto simples.
+#     A ÚNICA excepção medida está em `POST /user/history/sync`, e está dita lá.
+
+/session/connect:
+  get:
+    tags: [Sessões]
+    summary: Iniciar a ligação da sessão ao WhatsApp
+    description: |
+      Arranca o cliente de WhatsApp desta sessão. É o passo que faz o QR code
+      aparecer em `GET /session/qr` e que habilita o pedido de código em
+      `POST /session/pairphone`.
+
+      **É um GET que MUTA estado.** Não é seguro nem idempotente no sentido
+      do HTTP: repetir a chamada reclama a posse da sessão outra vez e volta a
+      lançar o arranque. A forma sobrevive por compatibilidade com clientes
+      existentes.
+
+      **O `200` não significa "ligado".** A ligação corre numa goroutine que
+      arranca DEPOIS da resposta; o corpo diz `{"status":"connecting"}`. Quem
+      confirma o estado é `GET /session/status` (`connected` e `loggedIn`) ou
+      o evento `Connected` em `GET /session/ws`.
+
+      **O que o `200` garante**: que a posse da sessão é desta réplica. A
+      verificação de posse é síncrona e acontece ANTES da resposta — antes
+      disso o cliente recebia `200` para um arranque que nunca ia acontecer
+      (F108). Em modo `single` a verificação passa sempre.
+
+      **Fluxo completo de emparelhamento**:
+
+      1. `POST /admin/users` cria a sessão e devolve o token — que não é
+         recuperável depois;
+      2. `GET /session/connect` com esse token;
+      3. `GET /session/qr` para ler o QR **ou** `POST /session/pairphone` para
+         receber um código de oito caracteres;
+      4. ler o QR no telemóvel, ou digitar o código em *Aparelhos conectados*;
+      5. `GET /session/status` confirma — `loggedIn: true`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Pedido aceite e posse da sessão confirmada. A ligação arranca em segundo plano.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/EstadoConexao'
+            example:
+              code: 200
+              data:
+                status: connecting
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: |
+          Outra réplica é dona desta sessão. Encaminhe o pedido para o
+          processo que a detém — insistir aqui não resolve.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: session_owned_by_another_replica
+                message: this session is owned by another replica; route the request to its owner
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/disconnect:
+  get:
+    tags: [Sessões]
+    summary: Derrubar o transporte da sessão sem desemparelhar
+    description: |
+      Fecha a ligação ao WhatsApp **mantendo o emparelhamento**. A sessão
+      continua a existir em *Aparelhos conectados* no telemóvel e volta a
+      ligar-se com `GET /session/connect`, sem QR novo.
+
+      É a diferença para `POST /session/logout`, que desvincula o aparelho e
+      exige emparelhar de novo.
+
+      **É um GET que MUTA estado**, como `/session/connect`, e pelo mesmo
+      motivo histórico.
+
+      **Regras**: exige um cliente vivo. Sem ele a resposta é
+      `400 no_session` — não um `200` silencioso.
+
+      **Efeito visível depois**: `GET /session/status` passa a responder
+      `connected: false` mantendo `loggedIn: true`, e sai um evento
+      `Disconnected` pelo webhook e por `GET /session/ws`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Transporte derrubado. `details` vem vazio.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDesconexao'
+            example:
+              code: 200
+              data:
+                details: ''
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/logout:
+  post:
+    tags: [Sessões]
+    summary: Desvincular o aparelho da conta de WhatsApp
+    description: |
+      **Desemparelha.** A sessão desaparece de *Aparelhos conectados* no
+      telemóvel, e voltar a operar exige emparelhar do zero — com o telemóvel
+      à mão. Não há como desfazer a partir daqui.
+
+      Para apenas derrubar a ligação e voltar depois, use
+      `GET /session/disconnect`.
+
+      **Regras**:
+
+      - exige um cliente vivo **e ligado**: o logout fala com o WhatsApp
+        (manda um `remove-companion-device`), e sem transporte não há o que
+        enviar. Nesse estado a resposta é `409 session_not_connected`, com a
+        saída dita na mensagem — ligar primeiro;
+      - nesse caso de `409`, o estado LOCAL é alinhado à força, para
+        `users.connected` deixar de mentir sobre uma sessão morta (F93);
+      - o sucesso solta a sessão dos registos DEPOIS de o logout passar (F80).
+        Sem essa ordem, `GET /session/status` continuava a responder
+        `loggedIn: true` para uma sessão que já não existia.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Aparelho desvinculado. `details` vem vazio.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDesconexao'
+            example:
+              code: 200
+              data:
+                details: ''
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: |
+          A sessão existe mas não tem ligação viva, e o logout precisa de uma
+          para alcançar o WhatsApp. Chame `GET /session/connect` primeiro.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: session_not_connected
+                message: session has no live connection; call /session/connect before logging out
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/qr:
+  get:
+    tags: [Sessões]
+    summary: Ler o QR code de emparelhamento
+    description: |
+      Devolve a imagem do QR code guardada para esta sessão, em data URI.
+
+      **Vazio é comportamento normal, não defeito.** O valor só existe
+      durante a janela de emparelhamento: é gravado a cada código novo que o
+      WhatsApp emite e limpo quando a janela expira. Numa sessão já
+      autenticada, ou numa que ainda não chamou `GET /session/connect`, a
+      resposta é `200` com `{"QRCode": ""}`.
+
+      **Como usar**: chame `GET /session/connect` primeiro e sondar esta rota
+      até o campo vir preenchido. O código gira sozinho — leia sempre o mais
+      recente. Quem quiser evitar a sondagem tem os eventos `QR` e `QRTimeout`
+      em `GET /session/ws`, que trazem também o texto cru do código e a
+      validade.
+
+      **Regras**: exige um cliente vivo — sem ele, `400 no_session`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Valor actual da coluna de QR. Medido em 2026-08-26 numa sessão já
+          autenticada: `{"QRCode": ""}`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/CodigoQR'
+            example:
+              code: 200
+              data:
+                QRCode: ''
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/pairphone:
+  post:
+    tags: [Sessões]
+    summary: Emparelhar por código de telefone em vez de QR
+    description: |
+      Pede ao WhatsApp um **código de emparelhamento** de oito caracteres,
+      que a pessoa digita no telemóvel em *Aparelhos conectados → Conectar
+      com número de telefone*. É a alternativa ao QR quando não há como
+      mostrar uma imagem ao utilizador.
+
+      **Fluxo completo**:
+
+      1. `POST /admin/users` cria a sessão e devolve o token;
+      2. `GET /session/connect` com esse token;
+      3. `POST /session/pairphone` com o número — esta rota — **ou**
+         `GET /session/qr` para o caminho por imagem;
+      4. digitar o `LinkingCode` no telemóvel;
+      5. `GET /session/status` confirma com `loggedIn: true`.
+
+      **Regras**:
+
+      - `Phone` é obrigatório: só dígitos, com código de país, sem `+` e sem
+        `@s.whatsapp.net`. Vazio dá `400 missing_phone`;
+      - a sessão **não pode já estar autenticada** — a guarda corre ANTES de
+        pedir o código ao servidor, e uma sessão emparelhada recebe
+        `400 already_paired`;
+      - exige um cliente vivo, logo `GET /session/connect` antes;
+      - o número é validado do lado do WhatsApp e do wa-noise. Número curto
+        demais ou em formato nacional volta como `400 pair_phone_failed`,
+        com a mensagem original do SDK;
+      - o código tem validade curta. Expirado, peça outro.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoPareamentoTelefone'
+          example:
+            Phone: '554192421234'
+    responses:
+      '200':
+        description: Código emitido. Digite-o no telemóvel antes de expirar.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoPareamentoTelefone'
+            example:
+              code: 200
+              data:
+                LinkingCode: ABCD-EFGH
+              success: true
+      '400':
+        description: |
+          Recusa de validação. Os códigos possíveis: `missing_phone` (sem o
+          campo `Phone`), `already_paired` (a sessão já está autenticada),
+          `no_session` (nenhum cliente vivo — ligue primeiro),
+          `pair_phone_failed` (o número foi recusado; a mensagem traz o motivo
+          do SDK) e `decode_payload_failed` (corpo não é JSON válido).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: already_paired
+                message: already paired
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/status:
+  get:
+    tags: [Sessões]
+    summary: Consultar o estado e o registo da sessão
+    description: |
+      Junta o estado AO VIVO da ligação (`connected`, `loggedIn`) com o
+      registo persistido da sessão — JID, webhook, eventos subscritos, proxy,
+      limite de histórico e resumo da configuração S3.
+
+      **Responde mesmo com a sessão em baixo, e isso é deliberado.** Não há
+      guarda de sessão aqui: exigir um cliente vivo devolvia `400 no session`
+      justamente no único momento em que alguém pergunta o estado — quando a
+      sessão NÃO está de pé (F196). Uma sessão desligada responde `200` com
+      `connected: false`.
+
+      **`connected` e `loggedIn` são coisas diferentes**: pode haver
+      credencial válida com o transporte caído — é o que
+      `GET /session/disconnect` produz.
+
+      **Dois campos não são preenchidos por ninguém**: `token` sai sempre
+      vazio e `hmac_configured` sai sempre `false`, mesmo quando existe chave
+      HMAC gravada. Para a chave, pergunte a `GET /session/hmac/config`.
+
+      **Quando usar**: como confirmação depois de `/session/connect` e do
+      emparelhamento, e como sonda periódica de saúde de uma sessão.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Estado no instante do pedido. O exemplo é a resposta REAL medida em
+          2026-08-26, com a sessão ligada e autenticada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/EstadoSessao'
+            example:
+              code: 200
+              data:
+                id: 918e37366f27e1125ee0482a793267e1
+                name: filarapida
+                connected: true
+                loggedIn: true
+                token: ''
+                jid: '5516981818244:25@s.whatsapp.net'
+                webhook: ''
+                events: ''
+                proxy_url: ''
+                qrcode: ''
+                history: '100'
+                proxy_config:
+                  enabled: false
+                  proxyUrl: ''
+                s3_config:
+                  bucket: ''
+                  enabled: false
+                  endpoint: ''
+                  media_delivery: base64
+                  path_style: true
+                  public_url: ''
+                  region: ''
+                  retention_days: 30
+                hmac_configured: false
+              success: true
+      '400':
+        description: |
+          `missing_session_id` quando o token é aceite mas não traz sessão, ou
+          `no_session` quando não há registo de sessão no banco para ele.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: no_session
+                message: no session
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/profile:
+  get:
+    tags: [Sessões]
+    summary: Consultar o perfil da conta ligada
+    description: |
+      Perfil da PRÓPRIA conta: nome anunciado, avatar, JID, LID e estado do
+      aparelho emparelhado.
+
+      **Lê só o store local.** Não fala com o servidor do WhatsApp, responde
+      em microssegundos e não está sujeita a limite de taxa. Para o recado e
+      as definições de privacidade — que exigem rede — use
+      `GET /session/profile/full`.
+
+      **Regras**:
+
+      - a resposta é um objecto PLANO: os campos de aparelho (`lid`,
+        `platform`, `connected`, `logged_in`…) vivem na raiz, ao lado de
+        `pushname`. Não há nível aninhado;
+      - `avatar_url` vazio tem duas causas indistinguíveis na resposta — não
+        haver foto, ou a consulta ter falhado. A falha fica no log;
+      - numa sessão ligada e ainda não autenticada, `jid` vem vazio e os
+        campos de aparelho continuam preenchidos. É deliberado: é justamente
+        aí que `connected: true, logged_in: false` tem valor;
+      - a resposta traz `Cache-Control: no-store` — o estado da sessão muda
+        sozinho, e uma resposta em cache faria alguém depurar um estado que já
+        não existe.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Perfil local. O exemplo é a resposta REAL medida em 2026-08-26, numa
+          conta WhatsApp Business.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/PerfilSessao'
+            example:
+              code: 200
+              data:
+                pushname: FilaRápida
+                avatar_url: 'https://pps.whatsapp.net/v/t61.24694-24/520223213_1330652325295225_4382315407885093369_n.jpg'
+                avatar_id: '214830039'
+                jid: '5516981818244@s.whatsapp.net'
+                full_name: ''
+                business_name: FilaRápida
+                lid: '29343770251463:25@lid'
+                platform: smbi
+                registration_id: 4190140233
+                lid_migration_timestamp: 1766149842
+                initialized: true
+                connected: true
+                logged_in: true
+              success: true
+      '400':
+        description: |
+          `missing_session_id` quando o token não traz sessão, ou `no_session`
+          quando não há cliente para ela.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: no_session
+                message: no session
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/profile/full:
+  get:
+    tags: [Sessões]
+    summary: Consultar o perfil da conta com os dados que só a rede sabe
+    description: |
+      Tudo o que `GET /session/profile` traz, mais dois blocos que exigem
+      falar com o servidor do WhatsApp: `user_info` (recado, dispositivos
+      conhecidos, LID) e `privacy` (definições de privacidade da conta).
+
+      **É a rota CARA do par, e a separação é de custo.** Está sujeita a
+      latência e a limite de taxa — um laço de seis consultas de perfil já
+      disparou `429: rate-overlimit` em medição. Se lhe basta identidade e
+      estado, use `/session/profile`.
+
+      **Degrada em vez de falhar**: se as consultas remotas caírem, a resposta
+      ainda traz toda a base local, e o campo `unavailable` diz o que faltou e
+      porquê. `unavailable` só aparece quando algo falta.
+
+      **Como deduzir o tipo de conta — e a ressalva.** Não existe campo
+      nenhum, em rota nenhuma desta API, que declare se a conta é WhatsApp
+      Business ou pessoal (achado F260 do `HOUSEKEEP.md`). O que existem são
+      dois sinais, medidos nas duas sessões vivas em 2026-08-26:
+
+      | sinal | conta Business | conta pessoal |
+      |---|---|---|
+      | `platform` | `smbi` | `iphone` |
+      | `business_name` | preenchido | vazio |
+
+      **Isto é inferência sobre um valor que o PAR reporta, não uma
+      declaração do protocolo.** Que `smbi` corresponda a "SMB iOS" é leitura
+      do valor, coerente com a conta ser Business, e não um mapeamento medido
+      no fio; `platform` reporta o aparelho emparelhado, e outros valores
+      (`android`, `web`…) existem e não foram medidos aqui. Trate os dois
+      campos como pista corroborável, não como resposta autoritativa.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Perfil completo. O exemplo é a resposta REAL medida em 2026-08-26,
+          abreviada na lista de dispositivos.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/PerfilSessaoCompleto'
+            example:
+              code: 200
+              data:
+                pushname: FilaRápida
+                avatar_url: 'https://pps.whatsapp.net/v/t61.24694-24/520223213_1330652325295225_4382315407885093369_n.jpg'
+                avatar_id: '214830039'
+                jid: '5516981818244@s.whatsapp.net'
+                full_name: ''
+                business_name: FilaRápida
+                lid: '29343770251463:25@lid'
+                platform: smbi
+                registration_id: 4190140233
+                lid_migration_timestamp: 1766149842
+                initialized: true
+                connected: true
+                logged_in: true
+                user_info:
+                  '5516981818244@s.whatsapp.net':
+                    VerifiedName: null
+                    Status: conta de testes
+                    PictureID: '214830039'
+                    Devices:
+                      - '5516981818244@s.whatsapp.net'
+                      - '5516981818244:25@s.whatsapp.net'
+                    LID: '29343770251463@lid'
+                privacy:
+                  GroupAdd: all
+                  LastSeen: contacts
+                  Status: contacts
+                  Profile: all
+                  ReadReceipts: all
+                  CallAdd: all
+                  Online: all
+                  Messages: all
+                  Defense: 'off'
+                  Stickers: contacts
+              success: true
+      '400':
+        description: '`missing_session_id` ou `no_session`.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: no_session
+                message: no session
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/ws:
+  get:
+    tags: [Sessões]
+    summary: Receber os eventos da sessão em tempo real (WebSocket)
+    description: |
+      **Esta rota é um UPGRADE para WebSocket, e o botão *Try it out* desta
+      página NÃO a exercita.** O Swagger UI só fala HTTP; use um cliente de
+      WebSocket (`wscat`, `websocat`, a API `WebSocket` do navegador).
+
+      É o contraponto em tempo real de `GET /session/status` e
+      `GET /session/qr`: em vez de sondar, o cliente recebe os eventos
+      empurrados. As rotas REST continuam intactas — este canal é aditivo, não
+      substituto.
+
+      **Autenticação — e a única excepção da API.** O token vai no cabeçalho
+      `token`, como em toda a parte; mas esta é a **única** rota onde
+      `?token=` na query string continua a ser aceite, porque a API
+      `WebSocket` do navegador não permite cabeçalho no handshake e não há
+      alternativa (F75). O token que viaja assim é redigido no log.
+
+      **O que chega**: exactamente os mesmos objectos que sairiam pelo webhook
+      da sessão — quadros de texto com um objecto JSON PLANO, com `type` a
+      dizer o evento e os campos do evento na raiz. **Não há envelope
+      `{code,data,success}` aqui.**
+
+      **O filtro é o mesmo do webhook**: só chegam os tipos subscritos em
+      `users.events` (o campo `events` de `GET /session/status`). Uma sessão
+      sem subscrições não recebe nada, e isso não é uma falha da ligação.
+
+      Entre os tipos que este canal entrega:
+
+      - emparelhamento — `QR` (traz `code`, `qrCodeBase64` e `expiresAt`),
+        `QRTimeout`, `PairSuccess`, `PairError`;
+      - ligação — `Connected`, `Disconnected`, `ConnectFailure`, `LoggedOut`,
+        `KeepAliveTimeout`, `KeepAliveRestored`, `StreamError`;
+      - mensagens — `Message`, `UndecryptableMessage`, `Receipt`,
+        `ReadReceipt`, `MediaRetry`;
+      - sincronização — `HistorySync`, `AppState`, `AppStateSyncComplete`,
+        `OfflineSyncCompleted`;
+      - restantes — grupos, contactos, etiquetas, presença, chamadas e canais.
+
+      **Regras**:
+
+      - o canal é só de empurrar. O servidor lê e DESCARTA o que o cliente
+        enviar — a leitura existe apenas para detectar a queda da ligação;
+      - o limite de leitura por quadro é de 1 MB;
+      - várias ligações do mesmo token são permitidas e recebem todas o mesmo
+        evento;
+      - a entrega é de melhor esforço: um cliente parado não bloqueia nem
+        atrasa a entrega ao webhook.
+
+      **Exemplo de ligação**:
+
+      ```
+      wscat -c 'ws://localhost:8080/session/ws' -H 'token: <TOKEN>'
+      ```
+    security:
+      - TokenSessao: []
+    responses:
+      '101':
+        description: |
+          Protocolo trocado — a ligação passa a WebSocket e os eventos começam
+          a chegar como quadros de texto. O esquema abaixo descreve a forma de
+          CADA quadro, não um corpo de resposta HTTP.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventoWebSocket'
+            example:
+              type: QR
+              event: code
+              code: '2@abc123...,def456...,ghi789...'
+              qrCodeBase64: 'data:image/png;base64,iVBORw0KGgo...'
+              expiresAt: '2026-08-26T13:18:34Z'
+      '400':
+        description: |
+          `missing_session_id`, ou falha do próprio upgrade — cabeçalhos de
+          handshake em falta ou versão de WebSocket não suportada. Neste
+          segundo caso a resposta vem da biblioteca de WebSocket e **não** usa
+          o envelope da API.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_session_id
+                message: missing session id
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+
+/session/history:
+  post:
+    tags: [Sessões]
+    summary: Configurar quantas mensagens a sessão guarda
+    description: |
+      Define o limite de mensagens gravadas por conversa na tabela
+      `message_history`, que é o que alimenta `GET /chat/history` e o
+      encaminhamento por chave de mensagem.
+
+      **`0` é o valor de origem, e desliga a gravação por inteiro.** Uma
+      instalação nova não acumula histórico nenhum até esta chamada — nem em
+      tempo real nem por sincronização. Se contava com `GET /chat/history`
+      trazer alguma coisa, chame isto primeiro.
+
+      **Esta rota é o MESMO manipulador de `POST /webhook/history`**, que
+      pertence ao grupo de integrações. O nome `/webhook/history` engana —
+      sugere um registo de entregas de webhook, e o efeito é sobre o
+      histórico de MENSAGENS (achado F252 do `HOUSEKEEP.md`). Os dois caminhos
+      escrevem a mesma coluna; use este.
+
+      **Regras**: exige um cliente vivo (`400 no_session`); valor negativo é
+      recusado com `400 invalid_history` e nada é gravado.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoLimiteHistorico'
+          example:
+            history: 100
+    responses:
+      '200':
+        description: Limite gravado. As chaves da resposta têm maiúscula inicial.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoLimiteHistorico'
+            example:
+              code: 200
+              data:
+                Details: History configured successfully
+                History: 100
+              success: true
+      '400':
+        description: |
+          `invalid_history` (valor negativo), `no_session` (nenhum cliente
+          vivo), `missing_session_id` ou `decode_payload_failed`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_history
+                message: history cannot be negative
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/proxy:
+  post:
+    tags: [Sessões]
+    summary: Configurar o proxy de saída desta sessão
+    description: |
+      Grava ou remove o proxy por onde o tráfego desta sessão sai, e opta por
+      fazer — ou não — a entrega de webhook passar pelo mesmo caminho.
+
+      **Exige a sessão DESLIGADA.** Com transporte vivo a resposta é
+      `400 proxy_while_connected`: chame `GET /session/disconnect`, configure,
+      e volte a ligar com `GET /session/connect`. Trocar o proxy por baixo de
+      uma ligação a correr não teria efeito na ligação existente.
+
+      **Regras**:
+
+      - só `http` e `socks5` são aceites. `https` parece obviamente aceitável
+        e **não é** — exige um transporte que este processo não monta, e volta
+        como `400 unsupported_proxy_scheme`;
+      - com `webhook_use_proxy` ligado, um endereço reservado ou de loopback é
+        recusado (`400 reserved_proxy_address`): a entrega de webhook sairia
+        por ele, e um proxy escolhido pelo inquilino tornar-se-ia um caminho à
+        volta do validador de saída. Com ele desligado, o proxy só carrega o
+        tráfego do WhatsApp e um endereço interno é permitido de propósito;
+      - `enable: false` remove a configuração e **ignora** `proxy_url` — de
+        outra forma, uma configuração estragada seria impossível de apagar;
+      - a URL nunca aparece em log nem em mensagem de erro: ela carrega
+        credenciais no userinfo. Só o esquema é observável.
+
+      **A rota irmã** `POST /proxy/set` (grupo de integrações) faz o mesmo
+      para o proxy global.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoProxy'
+          example:
+            enable: true
+            proxy_url: 'socks5://proxy.interno:1080'
+            webhook_use_proxy: false
+    responses:
+      '200':
+        description: |
+          Configuração gravada. O ramo de remoção (`enable: false`) responde
+          só com `Details: "Proxy disabled successfully"`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoProxy'
+            example:
+              code: 200
+              data:
+                Details: Proxy configured successfully
+                Set: true
+                ProxyURL: 'socks5://proxy.interno:1080'
+                webhook_use_proxy: false
+              success: true
+      '400':
+        description: |
+          `proxy_while_connected` (desligue a sessão primeiro),
+          `missing_proxy_url`, `invalid_proxy_url`,
+          `unsupported_proxy_scheme`, `reserved_proxy_address`,
+          `missing_session_id` ou `decode_payload_failed`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: proxy_while_connected
+                message: 'cannot set proxy while connected. Please disconnect first'
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/s3/config:
+  get:
+    tags: [Sessões]
+    summary: Ler a configuração S3 desta sessão
+    description: |
+      Devolve a configuração de armazenamento S3 gravada para esta sessão.
+
+      **O segredo não sai, e a access key vem sempre mascarada.** A leitura
+      nem seleciona a coluna do segredo, portanto não há reformatação da
+      resposta que o exponha; `access_key` devolve a constante `***`
+      INCONDICIONALMENTE — mascarar só quando existe revelaria a existência.
+
+      **Uma sessão sem configuração responde `200`**, com a configuração
+      limpa (`enabled: false`, `path_style: true`, `media_delivery: base64`),
+      e não um erro. É o que deixa distinguir "nada configurado" de "a leitura
+      falhou".
+
+      **Rota irmã**: `GET /s3/config` (grupo de integrações) é o mesmo
+      manipulador, no caminho antigo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Configuração actual. O exemplo é a resposta REAL medida em
+          2026-08-26, numa sessão sem S3 configurado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/VistaConfigS3'
+            example:
+              code: 200
+              data:
+                enabled: false
+                endpoint: ''
+                region: ''
+                bucket: ''
+                access_key: '***'
+                path_style: true
+                public_url: ''
+                media_delivery: base64
+                retention_days: 30
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+  post:
+    tags: [Sessões]
+    summary: Gravar a configuração S3 desta sessão
+    description: |
+      Grava, por inteiro, a configuração de armazenamento S3 desta sessão.
+      **Não é actualização parcial**: o que não vier no corpo é gravado com o
+      valor zero.
+
+      **Regras, e a ordem em que são aplicadas** — a ordem é o contrato, não
+      um detalhe:
+
+      1. exige um cliente vivo (`400 no_session`);
+      2. `media_delivery`, se vier, tem de ser `base64`, `s3` ou `both`;
+         vazio assume `base64`; outro valor é
+         `400 invalid_media_delivery` e **nada é gravado**;
+      3. `endpoint`, se vier, passa pelo validador de saída — endereço
+         reservado ou de loopback é `400 invalid_s3_endpoint`;
+      4. o segredo é cifrado ANTES de a linha ser escrita: uma falha aqui não
+         grava, ou a coluna guardaria a credencial em claro (ADR-0009);
+      5. só depois de gravar é que o cliente S3 é registado. Se o registo
+         falhar, a resposta é `500` **com a configuração já gravada** — é
+         comportamento histórico deliberado: a configuração é o que se pediu
+         para guardar, e a ligação é o que `POST /session/s3/test` existe para
+         verificar.
+
+      **`enabled: false` REVOGA**: o cliente construído com a credencial
+      anterior é removido, senão continuaria a carregar mídia.
+
+      **Rotas irmãs**: `POST /s3/configure` e o seu alias `POST /s3/config`
+      (grupo de integrações) são o mesmo manipulador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoConfigS3'
+          example:
+            enabled: true
+            endpoint: 'https://s3.eu-west-1.amazonaws.com'
+            region: eu-west-1
+            bucket: wa-api-media
+            access_key: AKIAIOSFODNN7EXAMPLE
+            secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+            path_style: true
+            public_url: 'https://media.exemplo.com'
+            media_delivery: s3
+            retention_days: 30
+    responses:
+      '200':
+        description: Configuração gravada e cliente S3 registado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfigS3'
+            example:
+              code: 200
+              data:
+                Details: S3 configuration saved successfully
+                Enabled: true
+              success: true
+      '400':
+        description: |
+          `invalid_media_delivery`, `invalid_s3_endpoint`, `no_session`,
+          `missing_session_id` ou `decode_payload_failed`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_media_delivery
+                message: "media_delivery must be 'base64', 's3', or 'both'"
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+  delete:
+    tags: [Sessões]
+    summary: Remover a configuração S3 desta sessão
+    description: |
+      Apaga a configuração de armazenamento S3 e devolve a sessão à entrega
+      de mídia em `base64`.
+
+      **Regras**: exige um cliente vivo (`400 no_session`). A resposta sai só
+      com `Details` — `Enabled` fica `false` e o campo é omitido.
+
+      **Rota irmã**: `DELETE /s3/config` (grupo de integrações), mesmo
+      manipulador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Configuração removida.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfigS3'
+            example:
+              code: 200
+              data:
+                Details: S3 configuration deleted successfully
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/session/s3/test:
+  post:
+    tags: [Sessões]
+    summary: Testar a configuração S3 gravada com uma ida real ao bucket
+    description: |
+      Faz uma ida e volta REAL ao bucket, com a credencial GRAVADA, e diz se
+      funcionou. Não é uma validação de forma: é uma chamada de rede, com
+      tecto de 10 segundos.
+
+      **O corpo do pedido é ignorado de propósito** — a rota testa o que está
+      guardado, que é a única leitura que responde à pergunta que se faz aqui:
+      *"a configuração que eu gravei funciona?"*. Aceitar credenciais no corpo
+      testaria uma credencial diferente da que o envio de mídia vai usar.
+      Envie o corpo vazio.
+
+      **Regras**:
+
+      - exige um cliente vivo (`400 no_session`);
+      - exige S3 **ligado**: com `enabled: false` a resposta é
+        `400 s3_not_enabled`;
+      - um segredo gravado fora do formato cifrado **falha** o teste, e não é
+        usado como texto em claro — de outra forma, uma linha legada
+        continuaria a funcionar em silêncio e nunca seria reconfigurada;
+      - qualquer falha da ida ao bucket sai como `500` com a causa na
+        mensagem, não como `connected: false`.
+
+      **Rota irmã**: `POST /s3/test` (grupo de integrações), mesmo
+      manipulador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: A ligação ao bucket funcionou. `Bucket` e `Region` ecoam o que foi testado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoTesteS3'
+            example:
+              code: 200
+              data:
+                connected: true
+                Details: S3 connection test successful
+                Bucket: wa-api-media
+                Region: eu-west-1
+              success: true
+      '400':
+        description: '`s3_not_enabled`, `no_session` ou `missing_session_id`.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: s3_not_enabled
+                message: S3 is not enabled for this user
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        description: |
+          O teste falhou: credencial recusada, bucket inexistente, endpoint
+          inalcançável, tempo esgotado, ou o segredo gravado não pôde ser
+          decifrado. A mensagem traz a causa.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: internal_error
+                message: internal server error
+              success: false
+
+/session/hmac/config:
+  get:
+    tags: [Sessões]
+    summary: Saber se esta sessão tem chave HMAC configurada
+    description: |
+      Diz se existe chave de assinatura de webhook para esta sessão.
+
+      **O valor nunca sai — nem em claro, nem cifrado.** A resposta é
+      `{"hmac_key": ""}` quando não há chave e `{"hmac_key": "***"}` quando
+      há. Devolver a chave transformaria uma leitura de configuração num
+      vazamento do segredo que a assinatura existe para proteger.
+
+      **Note que `GET /session/status` NÃO responde a esta pergunta**: o campo
+      `hmac_configured` de lá sai sempre `false`, mesmo com chave gravada.
+      Esta rota é a fonte fiável.
+
+      **Rota irmã**: `GET /hmac/config` (grupo de integrações), mesmo
+      manipulador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Presença da chave. O exemplo é a resposta REAL medida em 2026-08-26,
+          numa sessão sem chave configurada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/VistaConfigHmac'
+            example:
+              code: 200
+              data:
+                hmac_key: ''
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+  post:
+    tags: [Sessões]
+    summary: Gravar a chave HMAC de assinatura dos webhooks
+    description: |
+      Grava a chave com que os webhooks desta sessão passam a ser assinados,
+      para o receptor poder verificar que a entrega veio mesmo daqui.
+
+      **Regras, na ordem em que são aplicadas**:
+
+      1. exige um cliente vivo (`400 no_session`);
+      2. a chave tem de ter **pelo menos 32 caracteres** — abaixo disso é
+         `400 hmac_key_too_short` e nada chega ao cifrador;
+      3. é cifrada antes de a linha ser escrita: uma falha aqui não grava;
+      4. só depois é publicada no cache, que não expira. Publicar antes
+         deixaria a chave a assinar webhooks sem existir no banco, e um
+         reinício fá-la-ia desaparecer sem aviso.
+
+      A chave em claro nunca entra em log nem em mensagem de erro — o único
+      dado dela que aparece é o comprimento.
+
+      **Rotas irmãs**: `POST /hmac/configure` e o seu alias
+      `POST /hmac/config` (grupo de integrações) são o mesmo manipulador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoConfigHmac'
+          example:
+            hmac_key: uma-chave-com-pelo-menos-32-caracteres
+    responses:
+      '200':
+        description: Chave gravada e activa.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfigHmac'
+            example:
+              code: 200
+              data:
+                Details: HMAC configuration saved successfully
+                Enabled: true
+              success: true
+      '400':
+        description: |
+          `hmac_key_too_short` (menos de 32 caracteres), `no_session`,
+          `missing_session_id` ou `decode_payload_failed`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: hmac_key_too_short
+                message: HMAC key must be at least 32 characters long
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+  delete:
+    tags: [Sessões]
+    summary: Revogar a chave HMAC desta sessão
+    description: |
+      Apaga a chave de assinatura. Os webhooks desta sessão passam a sair sem
+      assinatura — um receptor que a exija deixa de os aceitar.
+
+      **Regras**: exige um cliente vivo (`400 no_session`). A resposta sai só
+      com `Details` — `Enabled` fica `false` e o campo é omitido.
+
+      **Rota irmã**: `DELETE /hmac/config` (grupo de integrações), mesmo
+      manipulador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Chave revogada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfigHmac'
+            example:
+              code: 200
+              data:
+                Details: HMAC configuration deleted successfully
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/status:
+  post:
+    tags: [Sessões]
+    summary: Definir o recado do perfil da conta
+    description: |
+      Altera o **recado** do perfil — o texto que aparece como "Sobre" no
+      WhatsApp. Muda a conta, e é visível para quem a puder ver segundo as
+      definições de privacidade.
+
+      **Isto NÃO publica uma story.** A rota `POST /status/set/text` já
+      existiu, apontava para este mesmo manipulador e não publicava status
+      nenhum — quem a chamava julgava publicar e estava a mudar o perfil. Foi
+      removida (F229). Para publicar status efémero há
+      `POST /status/set/image`, `/video` e `/audio`; status de TEXTO não é uma
+      capacidade que exista.
+
+      **Regras**: `Body` é obrigatório — vazio é `400 missing_body`. Exige um
+      cliente vivo.
+
+      **Onde confirmar**: o recado aparece em `GET /session/profile/full`, no
+      campo `Status` dentro de `user_info`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoRecado'
+          example:
+            Body: Atendimento das 9h às 18h
+    responses:
+      '200':
+        description: Recado alterado. `details` vem vazio.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoRecado'
+            example:
+              code: 200
+              data:
+                details: ''
+              success: true
+      '400':
+        description: '`missing_body`, `no_session`, `missing_session_id` ou `decode_payload_failed`.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_body
+                message: missing Body in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/contacts/sync:
+  post:
+    tags: [Sessões]
+    summary: Forçar a sincronização da agenda de contactos
+    description: |
+      Força a busca do patch de app-state que carrega a agenda de contactos.
+      É o que se chama quando `GET /user/contacts` devolve menos contactos do
+      que o telemóvel mostra, ou nomes desactualizados.
+
+      **É capacidade distinta de `POST /user/history/sync`**, não uma variante
+      dela: aquela pede mensagens ao dispositivo principal, esta puxa a
+      agenda. Nenhuma faz o trabalho da outra.
+
+      **O `200` significa que o pedido foi FEITO**, não que a agenda já
+      chegou: os contactos entram depois, por eventos de app-state
+      (`AppState`, `AppStateSyncComplete`). Confirme relendo
+      `GET /user/contacts`.
+
+      **Regras**: `mode` é obrigatório e aceita **exactamente** três valores —
+      `if_unsynced`, `incremental` e `full`. Qualquer outro é
+      `400 invalid_sync_mode`. Em particular `delta` **não existe**, apesar de
+      parecer plausível. Exige um cliente vivo.
+
+      **Custo de cada modo**: `if_unsynced` não faz nada se a agenda já
+      estiver sincronizada; `incremental` é uma busca barata que preserva a
+      versão local; `full` refaz o instantâneo completo e é caro — não o use
+      em laço.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoSincronizacaoContactos'
+          example:
+            mode: if_unsynced
+    responses:
+      '200':
+        description: Pedido de sincronização despachado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoSincronizacaoContactos'
+            example:
+              code: 200
+              data:
+                details: contact roster sync requested
+                mode: if_unsynced
+              success: true
+      '400':
+        description: |
+          `invalid_sync_mode` (valor fora dos três aceites, incluindo o campo
+          em falta), `no_session`, `missing_session_id` ou
+          `decode_payload_failed`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_sync_mode
+                message: 'mode must be one of: if_unsynced, incremental, full'
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/history/sync:
+  post:
+    tags: [Sessões]
+    summary: Pedir ao telemóvel as mensagens anteriores a uma âncora
+    description: |
+      Pede ao dispositivo principal as mensagens **anteriores** a uma que o
+      chamador já tem. É assim que se recupera histórico antigo de uma
+      conversa, que o WhatsApp não entrega por iniciativa própria depois do
+      emparelhamento.
+
+      **O pedido é sempre relativo a uma âncora**, e é por isso que cinco dos
+      campos descrevem uma mensagem já conhecida. Sem âncora o protocolo não
+      tem "antes de quê" responder.
+
+      **Regras**:
+
+      - `chat_jid` é obrigatório — sem ele, `400 missing_chat_jid`;
+      - `oldest_msg_id` é obrigatório — sem ele, `400 missing_oldest_msg_id`.
+        É a âncora, e aceitar o pedido sem ela seria responder `200` sem nada
+        acontecer;
+      - `count` ausente, zero ou negativo assume **50**, o lote recomendado
+        pela biblioteca;
+      - exige um cliente vivo (`400 no_session`);
+      - o corpo pode ser omitido sem erro de decodificação, mas aí cai nas
+        duas recusas acima.
+
+      **O `200` é o despacho, não a entrega.** A resposta traz o id do PEDIDO
+      em `details`; as mensagens chegam depois, como um evento `HistorySync`
+      do tipo ON_DEMAND — pelo webhook e por `GET /session/ws`, se a sessão
+      subscrever `HistorySync`. `count` na resposta é o que foi PEDIDO, nunca
+      o que chegou. `timestamp` sai sempre `0`: nada o preenche.
+
+      **Só grava se o histórico estiver ligado.** Com `history = 0` — o valor
+      de origem — as mensagens que chegarem não entram em `message_history`.
+      Chame `POST /session/history` antes.
+
+      **Uma ressalva de formato de erro**: um corpo que não seja JSON válido
+      é recusado aqui com o envelope ANTIGO, `error` em texto simples
+      (`{"code":400,"error":"bad request","success":false}`), e não com o
+      objecto `{code,message}` — o manipulador passa o erro cru de
+      decodificação em vez do erro tipado (F266). As restantes recusas desta
+      rota usam o envelope normal.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoSincronizacaoHistorico'
+          example:
+            count: 50
+            chat_jid: '554192421234@s.whatsapp.net'
+            oldest_msg_id: 3EB0A4B2AFD45E625C0917
+            oldest_msg_from_me: true
+            oldest_msg_timestamp: 1787747900
+    responses:
+      '200':
+        description: Pedido despachado ao dispositivo principal. As mensagens chegam depois, por evento.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoSincronizacaoHistorico'
+            example:
+              code: 200
+              data:
+                details: 3EB0A4B2AFD45E625C0917
+                timestamp: 0
+                count: 50
+                chat_jid: '554192421234@s.whatsapp.net'
+                oldest_msg_id: 3EB0A4B2AFD45E625C0917
+                oldest_msg_from_me: true
+                oldest_msg_timestamp: 1787747900
+              success: true
+      '400':
+        description: |
+          `missing_chat_jid`, `missing_oldest_msg_id`, `no_session` ou
+          `missing_session_id` — todos no envelope normal. Corpo mal formado
+          sai no envelope ANTIGO, com `error` em texto simples (ver a
+          descrição).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_oldest_msg_id
+                message: 'oldest_msg_id é obrigatório: é a âncora a partir da qual se pede para trás'
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
