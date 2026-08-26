@@ -1,22 +1,49 @@
 package handlers
 
-// Erros-sentinela compartilhados pelos handlers deste pacote. Todos descrevem
-// falha de fronteira HTTP — o que faltou ou nao pode ser lido na requisicao —
-// e nunca falha de dominio, que vem tipada dos use cases.
+import "wa-api/pkg/domain/apperr"
+
+// Boundary sentinel errors shared across handlers. Each describes a failure
+// at the HTTP boundary — something missing or unreadable in the request —
+// never a domain failure, which comes typed from the use cases.
+//
+// These are *apperr.AppError so that RespondJSON derives both the status
+// code AND the structured {"code":..., "message":...} object from the
+// taxonomy. The 244 call sites that pass them need no change: the
+// Category.HTTPStatus matches the status each call site already passes
+// (F236).
 var (
-	errUnauthorized     = &simpleErr{"unauthorized"}
-	errMissingSessionID = &simpleErr{"missing session id"}
-	errMissingID        = &simpleErr{"missing ID"}
-	errDecodePayload    = &simpleErr{"could not decode payload"}
-	// errMissingJID cobre o parametro {jid} do caminho, e nao um campo de
-	// corpo — distinto de errDecodePayload de proposito (F81).
-	errMissingJID = &simpleErr{"missing jid in path"}
+	errUnauthorized = &apperr.AppError{
+		Code:     CodeUnauthorized,
+		Category: apperr.CategoryUnauthorized,
+		Message:  "unauthorized",
+	}
+	errMissingSessionID = &apperr.AppError{
+		Code:     CodeMissingSessionID,
+		Category: apperr.CategoryValidation,
+		Message:  "missing session id",
+	}
+	errMissingID = &apperr.AppError{
+		Code:     CodeMissingID,
+		Category: apperr.CategoryValidation,
+		Message:  "missing ID",
+	}
+	errDecodePayload = &apperr.AppError{
+		Code:     CodeDecodePayload,
+		Category: apperr.CategoryValidation,
+		Message:  "could not decode payload",
+	}
+	errMissingJID = &apperr.AppError{
+		Code:     CodeMissingJID,
+		Category: apperr.CategoryValidation,
+		Message:  "missing jid in path",
+	}
 )
 
-type simpleErr struct {
-	msg string
-}
-
-func (e simpleErr) Error() string {
-	return e.msg
-}
+const (
+	CodeUnauthorized    = "unauthorized"
+	CodeMissingSessionID = "missing_session_id"
+	CodeMissingID       = "missing_id"
+	CodeDecodePayload   = "could_not_decode_payload"
+	CodeMissingJID      = "missing_jid"
+	CodeInvalidJID      = "invalid_jid"
+)

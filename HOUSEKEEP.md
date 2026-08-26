@@ -26779,6 +26779,53 @@ isso ANTES de alguém escrever um cliente que dependa da forma string.
 **Status**: não corrigido — descoberto ao verificar a F224, e fora do âmbito
 dela.
 
+### Atualização (2026-08-25, LOTE B — erros)
+
+**O que foi feito:**
+
+1. Os cinco sentinels `simpleErr` em `errors.go` foram convertidos para
+   `*apperr.AppError` com campo `code` estruturado. Os 244 chamadores não
+   mudam — continuam a passar `error` interface.
+
+2. Os três `errors.New("unauthorized")` em `middleware/auth.go` (linhas 57,
+   156, 223) foram convertidos para um sentinel local `errUnauthorized` do
+   tipo `*apperr.AppError` com `code:"unauthorized"`, `Category:
+   CategoryUnauthorized`. Antes, `RespondJSON` recebia um `error` cru e
+   renderizava `{"error":"unauthorized"}` (string); agora renderiza
+   `{"error":{"code":"unauthorized","message":"unauthorized"}}` (objeto
+   estruturado). O status HTTP 401 mantém-se — `CategoryUnauthorized.
+   HTTPStatus()` devolve 401.
+
+3. Varredura de outros `errors.New()` a chegar ao `RespondJSON`: não há
+   mais nenhum nos middlewares. O único erro cru remanescente é o
+   `db.Query` failure em `AuthAlice` (linha 183), que é erro REAL do banco
+   e deve continuar como 500 interno.
+
+**Ficheiros tocados:**
+- `pkg/presentation/http/handlers/errors.go` — reescrito (5 sentinels + 6
+  constantes de código)
+- `pkg/presentation/http/middleware/auth.go` — 3 substituições + sentinel
+  local
+
+**Testes:**
+- `handler_user_profile_test.go:TestMiddleware_ErrUnauthorized_IsAppError`
+  — confirma tipo, código e status HTTP do sentinel de `handlers`
+- `middleware/auth_extra_test.go:TestErrUnauthorized_IsAppError` — confirma
+  tipo, código e status HTTP do sentinel de `middleware`
+- `middleware/auth_extra_test.go:TestAuthAdmin_RejectsWithStructuredError`
+  — chama o middleware real e verifica envelope estruturado
+  `{"code":"unauthorized","message":"unauthorized"}` no campo `error`
+- `handler_boundary_test.go:TestHandlers_ErrorEnvelopeCarriesOnlyGenericText`
+  — atualizado para aceitar o novo formato (objeto apperr), mantendo a
+  invariante de não vazar detalhes internos
+
+**Controle negativo (middleware):** revertido `errUnauthorized` para
+`errors.New("unauthorized")` — `TestErrUnauthorized_IsAppError` falhou com
+`errors.As target *apperr.AppError: false` e
+`TestAuthAdmin_RejectsWithStructuredError` falhou com
+`error field is a bare string "unauthorized", want structured object`.
+Restaurado.
+
 <!-- f-status: aberto -->
 
 ## F237 — 62 dos 136 métodos do wa-noise nunca são chamados, e entre eles estão as COMUNIDADES
@@ -26878,6 +26925,35 @@ caminho que façam o mesmo — a bateria só apanhou esta porque foi a única co
 `{jid}` a ser exercitada com valor sintético.
 
 **Status**: não corrigido — descoberto na bateria.
+
+### Atualização (2026-08-25, LOTE B — erros)
+
+**O que foi feito:** adicionada validação `isPlausibleJIDOrPhone(alvo)` no
+início de `GetUserProfile()` (`handler_user.go`), imediatamente após extrair
+o `{jid}` de `mux.Vars(r)`. Strings malformadas (curtas demais, com letras
+no segmento numérico, vazias) devolvem `400` com `code:"invalid_jid"`.
+Formatos válidos passam: JID qualificado (`…@s.whatsapp.net`), telefone nu,
+e LID (`…@lid`).
+
+**Ficheiros tocados:**
+- `pkg/presentation/http/handlers/handler_user.go` — `isPlausibleJIDOrPhone()`
+  + guarda no `GetUserProfile()`
+
+**Testes:**
+- `handler_user_profile_test.go:TestGetUserProfile_MalformedJID_Returns400`
+  — 4 subcasos (garbage, too_short, has_letters, empty_via_router): todos
+  devolvem 400 com `code:"invalid_jid"`
+- `handler_user_profile_test.go:TestGetUserProfile_ValidJIDFormats_Pass` —
+  3 subcasos (qualified_jid, bare_phone, lid): nenhum é rejeitado pela
+  guarda
+- `handler_user_profile_test.go:TestGetUserProfile_MalformedJID_IsAppError`
+  — confirma que o erro é `*apperr.AppError`
+- `handler_user_profile_test.go:TestIsPlausibleJIDOrPhone` — 13 casos
+  unitários da função de validação
+
+**Controle negativo:** removida a guarda `isPlausibleJIDOrPhone` —
+`TestGetUserProfile_MalformedJID_Returns400` falhou com `status 500, want
+400`. Restaurada.
 
 <!-- f-status: aberto -->
 
@@ -27046,6 +27122,16 @@ pedidos malformados de clientes.
 
 **Status**: não corrigido.
 
+### Atualização (2026-08-25, LOTE B — erros)
+
+**O que foi feito (parcial):** a primeira linha da tabela (`GET
+/user/profile/{jid}` com JID malformado) está coberta pela correção da
+**F238** — agora devolve `400 invalid_jid` em vez de `500`.
+
+As outras duas linhas (`POST /group/info` e `POST /group/invitelink` com
+grupo de que não é membro) **não foram corrigidas neste lote** — os ficheiros
+`handler_group*.go` estão fora do escopo (pertencem a outro lote).
+
 <!-- f-status: aberto -->
 
 ## F242 — `/user/info` devolve `200` com resultado VAZIO quando o formato está errado
@@ -27069,6 +27155,31 @@ F225; ou recusar com `400` explicando. Devolver `200` vazio é a única opção
 indefensável.
 
 **Status**: não corrigido.
+
+### Atualização (2026-08-25, LOTE B — erros)
+
+**O que foi feito:** adicionada `normalizePhones()` em `handler_user.go`,
+chamada em `GetUser()` (handler de `/user/info`) antes de invocar o use case.
+A função percorre `req.Phone` e, para cada entrada que não contenha `@`,
+acrescenta `@s.whatsapp.net`. Entradas que já contêm `@` passam inalteradas.
+
+Assim, `{"Phone":["554192421234"]}` produz o mesmo resultado que
+`{"Phone":["554192421234@s.whatsapp.net"]}` — como o resto da API faz desde
+a F225.
+
+**Ficheiros tocados:**
+- `pkg/presentation/http/handlers/handler_user.go` — `normalizePhones()` +
+  chamada em `GetUser()`
+
+**Testes:**
+- `handler_user_profile_test.go:TestNormalizePhones` — confirma
+  normalização de número nu e passagem inalterada de JID qualificado
+- `handler_user_profile_test.go:TestNormalizePhones_Empty` — confirma que
+  slice vazio devolve slice vazio
+
+**Controle negativo:** não aplicável isoladamente — a normalização é uma
+transformação de dados, e a ausência dela foi o defeito original (resultado
+vazio). O teste `TestNormalizePhones` cobre ambos os lados.
 
 <!-- f-status: aberto -->
 
@@ -27739,6 +27850,38 @@ F233(a) criou para o GraphQL.
 
 **Status**: não corrigido.
 
+### Atualização (2026-08-25, LOTE B — erros)
+
+**O que foi feito:**
+
+1. Criado `pkg/infra/wa-noise/errmap/download.go` com `ClassifyDownload()`:
+   quando o erro contém `media.DownloadHTTPError` com status 403, 404 ou
+   410, converte para `*apperr.AppError` com `code:"media_unavailable"`,
+   `Category: CategoryNotFound`. Outros status passam inalterados.
+
+2. Ligada a classificação nos cinco handlers de download em
+   `handler_download.go` (Image, Video, Audio, Document, Sticker):
+   `err = errmap.ClassifyDownload(err)` antes do `RespondJSON` no caminho
+   de erro. Agora um `403` do CDN devolve `4xx media_unavailable` em vez
+   de `500`.
+
+**Ficheiros tocados:**
+- `pkg/infra/wa-noise/errmap/download.go` — criado
+- `pkg/presentation/http/handlers/handler_download.go` — 5 handlers
+  modificados (import + chamada a `ClassifyDownload`)
+
+**Testes:**
+- `errmap/download_test.go:TestClassifyDownload` — 6 subcasos: 403→
+  media_unavailable, 404→media_unavailable, 410→media_unavailable, 500→
+  passthrough, non-download error→passthrough, nil→nil. O helper
+  `cdnError()` constrói a cadeia real de erro com
+  `media.DownloadHTTPError{Response: &http.Response{StatusCode: …}}`
+
+**Controle negativo:** removida a chamada `errmap.ClassifyDownload(err)`
+do handler de audio — `TestClassifyDownload` (no pacote errmap) continua
+a passar (testa a função, não o handler), mas o handler voltaria a devolver
+500. Restaurada.
+
 <!-- f-status: aberto -->
 
 ## F255 — as 13 rotas destrutivas, exercitadas e confirmadas na interface
@@ -27918,6 +28061,46 @@ já embrulhado. Um teste de contrato que rejeite `data.data` no corpo apanharia
 a família toda de uma vez.
 
 **Status**: não corrigido.
+
+### Atualização (2026-08-25, LOTE B — erros)
+
+**O que foi feito:**
+
+1. `handler_misc.go`, `DeleteUserCompleteHandler.ServeHTTP` (linha ~98):
+   trocado `customhttp.RespondJSON(w, 200, rsp, nil)` por
+   `customhttp.RespondJSON(w, rsp.Code, rsp.Data, nil)`. O `rsp` é
+   `*domain.DeleteUserCompleteResult` que já tem `Code`, `Data`, `Success`
+   e `Details` — passá-lo inteiro ao `RespondJSON` produzia `data.data` e
+   `data.code` no envelope.
+
+2. `handler_newsletter.go`, `CreateNewsletterHandler.ServeHTTP` (linha
+   ~122): trocado `customhttp.RespondJSON(w, http.StatusOK, rsp, nil)` por
+   `customhttp.RespondJSON(w, http.StatusOK, rsp.Data, nil)`. O `rsp` é
+   `*notification.NewsletterResult` com `Data any` (json:"data,omitempty")
+   — passá-lo inteiro produzia `data.data` e `data.duration_seconds`.
+
+**Ficheiros tocados:**
+- `pkg/presentation/http/handlers/handler_misc.go` — 1 linha
+- `pkg/presentation/http/handlers/handler_newsletter.go` — 1 linha
+
+**Testes:**
+- `handler_misc_test.go:TestDeleteUserCompleteHandler_NoDoubleWrap` — cria
+  user em SQLite, chama DELETE via mux router, verifica que a resposta NÃO
+  tem `data.data` nem `data.code`
+- `handler_newsletter_test.go:TestNewsletter_Create_NoDoubleWrap` — chama
+  create, verifica que a resposta NÃO tem `data.data` nem
+  `data.duration_seconds`
+
+**Controle negativo (delete user complete):** revertido para
+`customhttp.RespondJSON(w, 200, rsp, nil)` — teste falhou com
+`response has nested data.data, double-wrapping detected`. Restaurado.
+
+**Controle negativo (newsletter create):** revertido para
+`customhttp.RespondJSON(w, http.StatusOK, rsp, nil)` — teste falhou com
+`response has nested data.data or data.duration_seconds`. Restaurado.
+
+**Nota**: a varredura completa de outras rotas com o mesmo padrão não foi
+feita — a bateria não o procurava. Pode haver outros.
 
 <!-- f-status: aberto -->
 

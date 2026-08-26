@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -172,6 +173,44 @@ func TestDeleteUserCompleteHandler_Success(t *testing.T) {
 		t.Fatalf("usuario sobreviveu a exclusao completa (%d linhas)", remaining)
 	}
 	assertNoOutcomeLog(t, recs)
+}
+
+// F258: DELETE /admin/users/{id}/full must NOT double-wrap the envelope.
+// Before the fix, rsp (which IS an envelope with code/data/success) was
+// passed as the data argument, producing data.data in the response.
+func TestDeleteUserCompleteHandler_NoDoubleWrap(t *testing.T) {
+	db := ipmSQLite(t)
+	if _, err := db.Exec(`CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT, jid TEXT, token TEXT, s3_enabled BOOLEAN)`); err != nil {
+		t.Fatalf("create table: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO users (id, name, jid, token, s3_enabled) VALUES ('u-1','Alice','5511@s.whatsapp.net','tok',0)`); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+
+	router := mux.NewRouter()
+	router.Handle("/admin/users/{id}/complete", deleteUserCompleteHandler(t, db))
+
+	rec, _ := ipmServe(t, router, http.MethodDelete, "/admin/users/u-1/complete", "", nil)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	var dataField map[string]json.RawMessage
+	if err := json.Unmarshal(raw["data"], &dataField); err != nil {
+		t.Fatalf("envelope.data is not an object: %v", err)
+	}
+	if _, hasNestedData := dataField["data"]; hasNestedData {
+		t.Fatalf("F258 regression: response has data.data (double-wrapped envelope): %s", rec.Body.String())
+	}
+	if _, hasNestedCode := dataField["code"]; hasNestedCode {
+		t.Fatalf("F258 regression: response has data.code (double-wrapped envelope): %s", rec.Body.String())
+	}
 }
 
 func TestDeleteUserCompleteHandler_DatabaseFailure(t *testing.T) {

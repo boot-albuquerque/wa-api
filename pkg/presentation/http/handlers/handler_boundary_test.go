@@ -616,12 +616,30 @@ func TestHandlers_ErrorEnvelopeCarriesOnlyGenericText(t *testing.T) {
 			}
 
 			env := decodeEnvelope(t, rec)
-			var got string
-			if err := json.Unmarshal(env.Error, &got); err != nil {
-				t.Fatalf("envelope.error nao e' uma string generica: %s", env.Error)
-			}
-			if got != want {
-				t.Fatalf("envelope.error: got %q, want %q — o texto do erro interno chegou ao cliente", got, want)
+
+			// After F236, boundary sentinels (errDecodePayload, errUnauthorized,
+			// etc.) are *apperr.AppError. RespondJSON renders them as a structured
+			// {"code":..., "message":...} object instead of a generic string.
+			// Both formats are safe — apperr messages are curated, never internal
+			// details. Accept either shape; the real invariant is that the leaky
+			// error text never reaches the client.
+			var gotStr string
+			if err := json.Unmarshal(env.Error, &gotStr); err != nil {
+				var gotObj struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				}
+				if err2 := json.Unmarshal(env.Error, &gotObj); err2 != nil {
+					t.Fatalf("envelope.error is neither a string nor a structured error: %s", env.Error)
+				}
+				if gotObj.Code == "" {
+					t.Fatalf("structured error has empty code: %s", env.Error)
+				}
+				if strings.Contains(gotObj.Message, "hunter2") || strings.Contains(gotObj.Message, "/var/lib/pg") {
+					t.Fatalf("detalhe interno vazou na mensagem do apperr: %s", env.Error)
+				}
+			} else if gotStr != want {
+				t.Fatalf("envelope.error: got %q, want %q — o texto do erro interno chegou ao cliente", gotStr, want)
 			}
 
 			if strings.Contains(rec.Body.String(), "hunter2") || strings.Contains(rec.Body.String(), "/var/lib/pg") {

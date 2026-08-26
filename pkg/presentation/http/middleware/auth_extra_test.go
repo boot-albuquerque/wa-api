@@ -2,12 +2,15 @@ package middleware
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 
 	appport "wa-api/pkg/application/contracts"
 	dbpkg "wa-api/pkg/infra/db"
@@ -329,5 +332,56 @@ func TestAuthAliceScanErrorLogsAndReturns500(t *testing.T) {
 	}
 	if !strings.Contains(out, `"level":"error"`) {
 		t.Errorf("scan failure not logged at ERROR; logs: %s", out)
+	}
+}
+
+// F236: middleware errUnauthorized is *apperr.AppError, not errors.New.
+func TestErrUnauthorized_IsAppError(t *testing.T) {
+	var appErr *apperr.AppError
+	if !errors.As(errUnauthorized, &appErr) {
+		t.Fatal("errUnauthorized is not *apperr.AppError")
+	}
+	if appErr.Code != "unauthorized" {
+		t.Fatalf("code = %q, want %q", appErr.Code, "unauthorized")
+	}
+	if appErr.Category.HTTPStatus() != http.StatusUnauthorized {
+		t.Fatalf("HTTPStatus = %d, want 401", appErr.Category.HTTPStatus())
+	}
+}
+
+// F236: AuthAdmin rejection produces a structured error with code field.
+func TestAuthAdmin_RejectsWithStructuredError(t *testing.T) {
+	handler := AuthAdmin("admin-secret")(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("next handler ran for a rejected request")
+	}))
+
+	r := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
+	r.Header.Set("Authorization", "wrong-token")
+
+	rec, _ := serveWithRequestLogger(t, handler, r)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+
+	var env struct {
+		Code  int `json:"code"`
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if env.Error.Code != "unauthorized" {
+		t.Fatalf("error.code = %q, want %q — bare string instead of structured object", env.Error.Code, "unauthorized")
+	}
+	if env.Error.Message == "" {
+		t.Fatal("error.message is empty")
+	}
+	if env.Success {
+		t.Fatal("success=true on a 401")
 	}
 }
