@@ -26900,10 +26900,57 @@ um a um.
 O que está classificado com confiança é o grupo das comunidades, porque fui
 ler as assinaturas.
 
-**Status**: inventário, não defeito. Comunidades ficam como candidato de
-trabalho concreto.
+## Resolvido: as comunidades foram expostas e verificadas em campo (2026-08-26)
 
-<!-- f-status: aberto -->
+Lote `boot-albuquerque/wa-comunidades`, commit `8e1f987`, integrado em
+`feature/wa-noise`. O que passou a existir:
+
+| rota | porta | método do wa-noise |
+|---|---|---|
+| `POST /group/create` com `is_parent` | `GroupLifecycle` | `CreateGroup` (`ReqCreate.IsParent`) |
+| `POST /group/create` com `linked_parent_jid` | `GroupLifecycle` | `CreateGroup` (`ReqCreate.LinkedParent`) |
+| `POST /community/link` | `CommunityLifecycle` | `LinkGroup` |
+| `POST /community/unlink` | `CommunityLifecycle` | `UnlinkGroup` |
+| `POST /community/subgroups` | `CommunityDirectory` | `GetSubGroups` |
+| `POST /community/participants` | `CommunityDirectory` | `GetLinkedGroupsParticipants` |
+
+`is_parent` e `linked_parent_jid` são mutuamente exclusivos (400), e `is_parent`
+relaxa a exigência de participantes — criar comunidade vazia é legítimo.
+
+**Verificação em campo**, sessão `filarapida` (`smbi`, conta **Business**):
+
+```
+POST /group/create {"name":"CAP-F237 comunidade","is_parent":true}
+  -> 200  120363430034334401@g.us  IsParent=true
+          + grupo de avisos 120363428908937094@g.us (IsDefaultSubGroup=true)
+POST /community/subgroups     -> 1 subgrupo  (só o de avisos)
+POST /community/link          -> 200
+POST /community/subgroups     -> 2 subgrupos (avisos + CAP-F237 subgrupo)
+POST /community/participants  -> ["90937376170214@lid","29343770251463@lid"]
+POST /community/unlink        -> 200
+POST /community/subgroups     -> 1 subgrupo  (volta ao estado inicial)
+```
+
+O `200` não bastou — a prova é a **transição medida 1 -> 2 -> 1** e a
+comprovação visual no WhatsApp Business Web (`claude in chrome`), onde a aba
+*Comunidades*, antes vazia, passou a listar **CAP-F237 comunidade / Avisos**, e
+o log de sistema do grupo de avisos diz:
+
+```
+O grupo "CAP-F237 subgrupo" foi adicionado.
+O grupo "CAP-F237 subgrupo" foi removido.
+```
+
+**Achado incidental que derrubou uma hipótese minha**: a documentação oficial
+diz que não se cria comunidade no WhatsApp Business, e eu tinha registado isso
+na F260 como bloqueio à verificação deste lote. É falso ao nível do protocolo —
+ver a F260, corrigida. Uma limitação da ajuda do produto descreve o cliente,
+não o wire.
+
+**Status**: corrigido — comunidades expostas e verificadas em campo. O resto do
+inventário dos 62 continua por classificar um a um.
+
+<!-- f-status: corrigido -->
 
 ## F238 — `GET /user/profile/{jid}` devolve `500` para JID malformado
 
@@ -28638,24 +28685,52 @@ A documentação oficial do WhatsApp, enviada pelo utilizador:
 > **Observação**: no momento, não é possível criar uma comunidade no WhatsApp
 > Business.
 
-Não é limitação do cliente Web — confirmei que o menu `Nova conversa` do
-Business Web só tem *Novo grupo*, *Novo contato* e *Nova transmissão
-comercial*. **É regra de produto.**
+**Isto foi REFUTADO em campo em 2026-08-26.** A frase descreve o CLIENTE, não o
+protocolo. O menu `Nova conversa` do Business Web de facto não oferece *Nova
+comunidade* — mas a criação pelo wire funciona:
 
-Consequência prática: uma sessão `smbi` **nunca** conseguirá criar comunidade,
-por muito correta que seja a nossa implementação. Se expusermos
-`POST /group/create` com `is_parent`, essa chamada vai falhar para sempre
-nessa conta — e hoje o chamador não tem como saber porquê antes de tentar.
+```
+POST /group/create  (token=tok_fila, sessão smbi/Business)
+{"name":"CAP-F237 comunidade","is_parent":true}
+-> 200  JID=120363430034334401@g.us  IsParent=true
+        OwnerPN=5516981818244@s.whatsapp.net
+        DefaultMembershipApprovalMode=request_required
+```
 
-**Correção sugerida**:
+E o servidor criou sozinho o grupo de avisos (`120363428908937094@g.us`,
+`IsDefaultSubGroup=true`), exatamente como a documentação descreve para contas
+pessoais.
+
+**Comprovação visual** (`claude in chrome`, WhatsApp Business Web da
+`filarapida`): a aba *Comunidades* — que estava vazia — passou a listar
+**CAP-F237 comunidade** com o subgrupo **Avisos**, e o log de mensagens de
+sistema do grupo de avisos mostra o ciclo inteiro:
+
+```
+Você adicionou ~Lucas Albuqueque
+O grupo "CAP-F237 subgrupo" foi adicionado.      <- POST /community/link
+O grupo "CAP-F237 subgrupo" foi removido.        <- POST /community/unlink
+```
+
+**A lição de método** (a mesma da regra "a resposta NEGATIVA também é
+informação", agora ao contrário): uma limitação documentada na AJUDA DO PRODUTO
+é afirmação sobre a INTERFACE do cliente. Não vale como afirmação sobre o
+protocolo, e não devia ter sido aceite por mim como bloqueio sem uma medição.
+Custou um lote inteiro dado como não-verificável.
+
+**O que sobra da F260**: nada do bloqueio, tudo do resto. Continua verdade que
+não há campo declarando o tipo de conta, e a correção sugerida (1) permanece
+válida. A correção sugerida (2) — recusar cedo em contas Business — **cai por
+inteiro**: recusaria uma operação que funciona.
+
+**Correção sugerida** (revista):
 
 1. `GET /session/profile/full` passa a devolver um campo explícito
    (`account_type: "business" | "personal"`), derivado do `platform` e/ou de
    `business_name`. Documentar a regra de derivação, com a ressalva de que é
    inferência sobre um valor do par e não uma declaração do protocolo.
-2. Quando a criação de comunidade existir, recusar cedo em contas Business com
-   um código próprio (`community_unavailable_for_business`) em vez de deixar o
-   WhatsApp recusar com erro genérico.
+2. ~~Recusar cedo a criação de comunidade em contas Business.~~ **Retirada** —
+   medição de 2026-08-26 mostra que funciona.
 
 **Ressalva honesta**: que `smbi` signifique "SMB iOS" é leitura minha do valor,
 coerente com a conta ser Business e com o cliente Web se anunciar como
@@ -28664,6 +28739,7 @@ nosso código não o define. Antes de codificar a regra, procurar a lista de
 valores possíveis (`smba` para Android será o par natural) em vez de assumir
 duas.
 
-**Status**: não corrigido.
+**Status**: não corrigido — o campo `account_type` continua por expor. O
+bloqueio das comunidades foi retirado por medição.
 
 <!-- f-status: aberto -->

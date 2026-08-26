@@ -29,6 +29,12 @@ var miscStaticRoutes = map[string]staticRoute{
 	"newsletter.change.owner": {httpMethod: "POST", httpPath: "/newsletter/change-owner"},
 	"newsletter.delete":       {httpMethod: "DELETE", httpPath: "/newsletter/delete"},
 
+	// F233(b): convite de administrador de canal. Mesma forma de pedido das
+	// restantes operações de newsletter, logo o mesmo lugar.
+	"newsletter.admin.invite":        {httpMethod: "POST", httpPath: "/newsletter/admin-invite"},
+	"newsletter.admin.invite.accept": {httpMethod: "POST", httpPath: "/newsletter/admin-invite/accept"},
+	"newsletter.admin.invite.revoke": {httpMethod: "POST", httpPath: "/newsletter/admin-invite/revoke"},
+
 	// F191: leitura de etiquetas. Não há método de escrita porque a
 	// biblioteca não sabe criá-las (LIB-01).
 	"label.list":       {httpMethod: "GET", httpPath: "/labels"},

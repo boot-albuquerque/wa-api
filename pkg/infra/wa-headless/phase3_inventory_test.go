@@ -111,6 +111,18 @@ var inventarioFase3 = map[string]portStatus{
 		"nunca é chamado."},
 	"GroupRequests": {satisfeito: true},
 
+	// --- os DOIS ports que as comunidades trouxeram (F237, 2026-08-26) ---
+
+	"CommunityDirectory": {motivo: "PENDENTE, e não medido nesta engine: as comunidades " +
+		"foram expostas contra o wa-noise, que fala protocolo. Quem dirige a SPA teria " +
+		"de encontrar o módulo equivalente na página, e isso não foi procurado. " +
+		"Classificado como pendente por HONESTIDADE — não há medição que autorize " +
+		"chamar-lhe satisfeito nem recusado."},
+
+	"CommunityLifecycle": {motivo: "PENDENTE, e não medido nesta engine: ver " +
+		"CommunityDirectory. Ligar e desligar grupos de uma comunidade é escrita, " +
+		"logo o risco de o fazer às cegas é maior que o da leitura."},
+
 	// --- os NOVE ports que a fusão de feature/wa-noise trouxe (2026-08-23) ---
 	//
 	// A branch de socket partiu a mensageria em portas por TIPO de mensagem, e o
