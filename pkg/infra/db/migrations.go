@@ -144,6 +144,12 @@ var migrations = []Migration{
 		UpSQL:   addUsersEngineSQL,
 		DownSQL: addUsersEngineDownSQL,
 	},
+	{
+		ID:      migrationIDAccountOwnership,
+		Name:    migrationNameAccountOwnership,
+		UpSQL:   accountOwnershipSQL,
+		DownSQL: accountOwnershipDownSQL,
+	},
 }
 
 // migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
@@ -909,6 +915,12 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 	} else if migration.ID == migrationIDWebhookOutbox {
 		if db.DriverName() == "sqlite" {
 			_, err = tx.Exec(addWebhookOutboxSQLiteSQL)
+		} else {
+			_, err = tx.Exec(migration.UpSQL)
+		}
+	} else if migration.ID == migrationIDAccountOwnership {
+		if db.DriverName() == "sqlite" {
+			_, err = tx.Exec(accountOwnershipSQLiteSQL)
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}

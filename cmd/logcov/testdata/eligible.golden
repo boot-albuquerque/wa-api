@@ -3080,6 +3080,10 @@ pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
 pkg/domain.AddUserRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.ArchiveChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.BlockUserRequest.ResolveChat	EXCLUDED	X1
+pkg/domain.CanonicalAccountIdentity.IsResolved	EXCLUDED	X1
+pkg/domain.CanonicalAccountIdentity.IsZero	EXCLUDED	X1
+pkg/domain.CanonicalAccountIdentity.String	EXCLUDED	X4
+pkg/domain.CanonicalAccountIdentity.WithResolvedPN	EXCLUDED	X1
 pkg/domain.ChatPresenceRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
 pkg/domain.DecodeRequest	ELIGIBLE	uncovered:L1
@@ -3107,6 +3111,7 @@ pkg/domain.JID.IsPN	EXCLUDED	X1
 pkg/domain.JID.Namespace	EXCLUDED	X1
 pkg/domain.JID.Server	ELIGIBLE	uncovered:L1
 pkg/domain.MuteChatRequest.ResolveChat	EXCLUDED	X1
+pkg/domain.NewCanonicalAccountIdentity	EXCLUDED	X1
 pkg/domain.NormalizeIdentityInput	EXCLUDED	X1
 pkg/domain.ParseEngine	ELIGIBLE	uncovered:L1
 pkg/domain.ParticipantsUpdate.Valida	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group.go:268)
@@ -3151,6 +3156,8 @@ pkg/domain.WebhookConfigRequest.ResolveURL	EXCLUDED	X1
 pkg/domain.hasSuffix	EXCLUDED	X1
 pkg/domain.init	EXCLUDED	X3
 pkg/domain.isUnknownField	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,decode_unknown_fields.go:116)
+pkg/domain.sessionSupersededError.Error	EXCLUDED	X4
+pkg/domain.stripDevice	EXCLUDED	X1
 pkg/domain.unknownTopLevelFields	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,decode_unknown_fields.go:82)
 pkg/domain/apperr.AppError.Error	EXCLUDED	X4
 pkg/domain/apperr.AppError.Is	ELIGIBLE	uncovered:L1
@@ -3174,6 +3181,11 @@ pkg/infra/auth.ValidateAdminToken	ELIGIBLE	covered
 pkg/infra/auth.WithUserInfo	EXCLUDED	X1
 pkg/infra/constants.IsValidEventType	EXCLUDED	X1
 pkg/infra/constants.init	EXCLUDED	X3
+pkg/infra/db.AccountOwnership.IsActive	EXCLUDED	X1
+pkg/infra/db.AccountOwnershipRepository.ClaimAccountIdentity	ELIGIBLE	covered
+pkg/infra/db.AccountOwnershipRepository.ClaimAccountIdentity.func1	EXCLUDED	X1
+pkg/infra/db.AccountOwnershipRepository.CurrentActiveOwner	ELIGIBLE	covered
+pkg/infra/db.AccountOwnershipRepository.CurrentStatusForSession	ELIGIBLE	covered
 pkg/infra/db.BackfillUserEngines	ELIGIBLE	covered
 pkg/infra/db.ChatActivityRepository.GetChatPushNames	ELIGIBLE	uncovered:L1
 pkg/infra/db.ChatActivityRepository.GetLastActivityByUser	ELIGIBLE	uncovered:L1
@@ -3194,6 +3206,7 @@ pkg/infra/db.LabelRepository.ListLabels	ELIGIBLE	covered
 pkg/infra/db.LabelRepository.SetChatLabel	ELIGIBLE	covered
 pkg/infra/db.LabelRepository.SetMessageLabel	ELIGIBLE	covered
 pkg/infra/db.LabelRepository.UpsertLabel	ELIGIBLE	covered
+pkg/infra/db.NewAccountOwnershipRepository	EXCLUDED	X1
 pkg/infra/db.NewChatActivityRepository	EXCLUDED	X1
 pkg/infra/db.NewChatHistoryRepository	EXCLUDED	X1
 pkg/infra/db.NewHmacConfigRepository	EXCLUDED	X1
