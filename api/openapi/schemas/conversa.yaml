@@ -1,0 +1,629 @@
+# Grupo: Conversas e Descarga de mídia.
+#
+# Esquemas próprios das 18 rotas de `paths/conversa.yaml`. Tudo o que é comum
+# — Envelope, Erro, ResultadoEnvio, SucessoMensagem, AlvoConversa — vive em
+# base.yaml e é referenciado, nunca copiado.
+
+# ---------------------------------------------------------------------------
+# Gestão da conversa (arquivar, fixar, silenciar)
+# ---------------------------------------------------------------------------
+
+PedidoArquivarConversa:
+  type: object
+  description: |
+    Arquiva ou desarquiva uma conversa. O destino é `jid`; `chat` é aceite
+    como nome universal e só vale quando `jid` vier ausente ou vazio.
+  required: [archive]
+  properties:
+    jid:
+      type: string
+      description: JID da conversa — contacto, grupo ou canal.
+      example: 554192421234@s.whatsapp.net
+    chat:
+      type: string
+      description: |
+        Nome universal do destino. `jid` tem precedência quando os dois
+        vierem preenchidos.
+      example: 554192421234@s.whatsapp.net
+    archive:
+      type: boolean
+      description: '`true` arquiva, `false` desarquiva.'
+      example: true
+
+PedidoFixarConversa:
+  type: object
+  description: |
+    Fixa ou desafixa a CONVERSA no topo da lista. Não fixa uma mensagem
+    dentro dela — isso é outro mecanismo (`PinInChatMessage`), e não está
+    exposto nesta API.
+  required: [pin]
+  properties:
+    jid:
+      type: string
+      description: JID da conversa a fixar.
+      example: 554192421234@s.whatsapp.net
+    chat:
+      type: string
+      description: Nome universal do destino; `jid` tem precedência.
+      example: 554192421234@s.whatsapp.net
+    pin:
+      type: boolean
+      description: '`true` fixa, `false` desafixa.'
+      example: true
+
+PedidoSilenciarConversa:
+  type: object
+  description: |
+    Silencia ou dessilencia uma conversa.
+
+    **`mute_duration` é um número inteiro de NANOSSEGUNDOS**, e não uma
+    string de duração — é um `*time.Duration` do Go
+    (`pkg/domain/mute.go:17`). Enviar `"8h"` devolve
+    `400 could_not_decode_payload`, medido.
+  required: [mute]
+  properties:
+    jid:
+      type: string
+      description: JID da conversa a silenciar.
+      example: 554192421234@s.whatsapp.net
+    chat:
+      type: string
+      description: Nome universal do destino; `jid` tem precedência.
+      example: 554192421234@s.whatsapp.net
+    mute:
+      type: boolean
+      description: '`true` silencia, `false` dessilencia (imediato).'
+      example: true
+    mute_duration:
+      type: integer
+      format: int64
+      nullable: true
+      description: |
+        Por quanto tempo silenciar, em NANOSSEGUNDOS. O WhatsApp oferece
+        exactamente três opções, e o servidor recusa qualquer outro valor
+        com `400 invalid_mute_duration`:
+
+        | opção | valor a enviar |
+        |---|---|
+        | 8 horas | `28800000000000` |
+        | 1 semana | `604800000000000` |
+        | para sempre | `0`, ou o campo ausente |
+
+        Ignorado quando `mute` é `false`.
+      enum: [0, 28800000000000, 604800000000000]
+      example: 28800000000000
+
+# ---------------------------------------------------------------------------
+# Acções sobre mensagem
+# ---------------------------------------------------------------------------
+
+PedidoFavoritarMensagem:
+  type: object
+  description: |
+    Favorita ou desfavorita uma mensagem. Os três identificadores são
+    obrigatórios: a conversa, quem escreveu a mensagem e a própria mensagem.
+  required: [chat, sender, message_id]
+  properties:
+    chat:
+      type: string
+      description: JID da conversa onde a mensagem está.
+      example: 554192421234@s.whatsapp.net
+    sender:
+      type: string
+      description: |
+        JID de quem ESCREVEU a mensagem. Obrigatório — sem ele a resposta é
+        `400 missing_sender`. Em conversa individual com uma mensagem
+        própria, é o JID da própria conta.
+      example: 554192421234@s.whatsapp.net
+    message_id:
+      type: string
+      description: '`message_id` da mensagem a favoritar.'
+      example: 3EB0A4B2AFD45E625C0917
+    from_me:
+      type: boolean
+      description: '`true` quando a mensagem foi escrita pela própria sessão.'
+      example: true
+    star:
+      type: boolean
+      description: '`true` favorita, `false` desfavorita.'
+      example: true
+
+PedidoApagarMensagem:
+  type: object
+  description: |
+    Revoga ("apagar para todos") uma mensagem própria. `Phone` é o destino da
+    conversa; `chat` é aceite como alias e só vale quando `Phone` faltar.
+  required: [Id]
+  properties:
+    Phone:
+      type: string
+      description: JID ou número da conversa onde a mensagem foi enviada.
+      example: 554192421234@s.whatsapp.net
+    chat:
+      type: string
+      description: Nome universal do destino; `Phone` tem precedência.
+      example: 554192421234@s.whatsapp.net
+    Id:
+      type: string
+      description: '`message_id` da mensagem a revogar.'
+      example: 3EB0A4B2AFD45E625C0917
+
+ResultadoApagarMensagem:
+  type: object
+  description: |
+    `message_id` é o identificador da mensagem REVOGADA, e não o da mensagem
+    de revogação que o envio criou — é o que responde à pergunta "qual
+    mensagem foi apagada".
+  required: [message_id, status]
+  properties:
+    message_id:
+      type: string
+      example: 3EB0A4B2AFD45E625C0917
+    timestamp:
+      type: integer
+      format: int64
+      description: Instante da revogação, em segundos desde a época Unix.
+      example: 1787747900
+    status:
+      type: string
+      enum: [deleted]
+      description: Constante `deleted`.
+      example: deleted
+
+PedidoReagir:
+  type: object
+  description: |
+    Reage a uma mensagem com um emoji, ou remove a reação existente.
+  required: [Body, Id]
+  properties:
+    Phone:
+      type: string
+      description: JID ou número da conversa onde a mensagem está.
+      example: 554192421234@s.whatsapp.net
+    chat:
+      type: string
+      description: Nome universal do destino; `Phone` tem precedência.
+      example: 554192421234@s.whatsapp.net
+    Body:
+      type: string
+      description: |
+        O emoji da reação. Dois valores têm significado especial:
+        `"remove"` retira a reação, e string vazia é RECUSADA com
+        `400 missing_body` — para remover, envie `"remove"`.
+      example: 👍
+    Id:
+      type: string
+      description: |
+        `message_id` da mensagem reagida. Um prefixo `me:` marca a mensagem
+        como própria — `me:3EB0A4B2AFD45E625C0917` — e o prefixo é removido
+        antes de chegar ao WhatsApp.
+      example: 3EB0A4B2AFD45E625C0917
+    Participant:
+      type: string
+      description: |
+        JID de quem escreveu a mensagem reagida, em conversa de grupo. Um
+        `Participant` que não resolve é IGNORADO em silêncio, não recusado —
+        comportamento preservado do código histórico.
+      example: 554192421234@s.whatsapp.net
+
+PedidoMarcarLida:
+  type: object
+  description: |
+    Marca uma ou mais mensagens como lidas.
+
+    **Use `ChatPhone`, não `Chat`.** Os dois nomes são aceites pelo
+    desserializador, mas só `ChatPhone` é RESOLVIDO: o ramo de `Chat` está
+    por implementar (`mark_read.go:41`, `jidChat = ""`) e faz a conversa
+    seguir vazia para o WhatsApp. Sem nenhum dos dois é
+    `400 missing_chatphone`, medido.
+  required: [Id]
+  properties:
+    Id:
+      type: array
+      description: Lista de `message_id` a marcar como lidos. Vazia é `400 missing_id`.
+      items:
+        type: string
+      example: [3EB0A4B2AFD45E625C0917]
+    ChatPhone:
+      type: string
+      description: JID ou número da conversa. É o campo que a implementação resolve.
+      example: 554192421234@s.whatsapp.net
+    SenderPhone:
+      type: string
+      description: |
+        JID de quem escreveu as mensagens, em conversa de grupo. Opcional.
+      example: 554192421234@s.whatsapp.net
+    Chat:
+      type: string
+      description: |
+        Nome antigo de `ChatPhone`. Aceite, mas NÃO resolvido — ver a
+        descrição do esquema.
+      example: 554192421234@s.whatsapp.net
+    Sender:
+      type: string
+      description: Nome antigo de `SenderPhone`. Aceite, mas não resolvido.
+      example: 554192421234@s.whatsapp.net
+
+PedidoPresencaNaConversa:
+  type: object
+  description: |
+    Anuncia "a escrever" ou "a gravar" numa conversa. É um sinal efémero: o
+    WhatsApp deixa de o mostrar sozinho passado pouco tempo, e não há rota
+    para o retirar — envie `paused` para isso.
+  required: [State]
+  properties:
+    Phone:
+      type: string
+      description: JID ou número da conversa onde o estado é anunciado.
+      example: 554192421234@s.whatsapp.net
+    chat:
+      type: string
+      description: Nome universal do destino; `Phone` tem precedência.
+      example: 554192421234@s.whatsapp.net
+    State:
+      type: string
+      description: |
+        O estado a anunciar. Os valores documentados na implementação são
+        `composing` (a escrever), `recording` (a gravar) e `paused` (parou).
+      example: composing
+    Media:
+      type: string
+      description: |
+        Qualificador opcional do estado, passado tal e qual ao WhatsApp.
+        Envie string vazia quando não se aplicar.
+      example: ''
+
+PedidoMensagemIndisponivel:
+  type: object
+  description: |
+    Pede ao par o REENVIO de uma mensagem que não se conseguiu decifrar.
+  required: [chat, sender, id]
+  properties:
+    chat:
+      type: string
+      description: JID da conversa onde a mensagem indecifrável apareceu.
+      example: 554192421234@s.whatsapp.net
+    sender:
+      type: string
+      description: JID de quem escreveu a mensagem indecifrável.
+      example: 554192421234@s.whatsapp.net
+    id:
+      type: string
+      description: '`message_id` da mensagem a pedir de volta.'
+      example: 3EB0A4B2AFD45E625C0917
+
+ResultadoMensagemIndisponivel:
+  type: object
+  description: |
+    Confirmação de que o PEDIDO foi enviado ao par. Não diz que a mensagem
+    voltou: o reenvio, se acontecer, chega depois como mensagem normal.
+  required: [success, message]
+  properties:
+    success:
+      type: boolean
+      example: true
+    message:
+      type: string
+      example: Unavailable message request sent successfully
+    request_id:
+      type: string
+      description: Identificador da mensagem de pedido criada pelo envio.
+      example: 3EB0C7D1F94A62B15D4488
+    chat:
+      type: string
+      description: Ecoa o `chat` enviado.
+      example: 554192421234@s.whatsapp.net
+    sender:
+      type: string
+      description: Ecoa o `sender` enviado.
+      example: 554192421234@s.whatsapp.net
+    message_id:
+      type: string
+      description: Ecoa o `id` enviado — a mensagem pedida de volta.
+      example: 3EB0A4B2AFD45E625C0917
+    timestamp:
+      type: integer
+      format: int64
+      description: Instante do pedido, em segundos desde a época Unix.
+      example: 1787747900
+
+# ---------------------------------------------------------------------------
+# Mensagens temporárias
+# ---------------------------------------------------------------------------
+
+PedidoTemporizadorDaConversa:
+  type: object
+  description: |
+    Define o temporizador de mensagens temporárias de UMA conversa.
+    Ao contrário de `/chat/mute`, aqui a duração é TEXTO.
+  required: [chat, duration]
+  properties:
+    chat:
+      type: string
+      description: |
+        JID da conversa — contacto ou grupo. Obrigatório e sem alias:
+        ausente é `400 missing_chat`.
+      example: 554192421234@s.whatsapp.net
+    duration:
+      type: string
+      description: |
+        Uma das cinco palavras que o servidor aceita. Qualquer outra é
+        `400 invalid_duration`, medido.
+      enum: ['0', 'off', '24h', '7d', '90d']
+      example: 24h
+
+PedidoTemporizadorPadrao:
+  type: object
+  description: |
+    Define o temporizador padrão da CONTA, aplicado às conversas novas. Não
+    altera conversa nenhuma que já exista.
+  required: [duration]
+  properties:
+    duration:
+      type: string
+      description: |
+        Mesmo conjunto de `/chat/ephemeral`. Ausente é
+        `400 missing_duration`; valor fora do conjunto é
+        `400 invalid_duration`.
+      enum: ['0', 'off', '24h', '7d', '90d']
+      example: '0'
+
+# ---------------------------------------------------------------------------
+# Descarga de mídia
+# ---------------------------------------------------------------------------
+
+PedidoDescargaDeMidia:
+  type: object
+  description: |
+    O DESCRITOR da mídia, e não um identificador de mensagem. Os sete campos
+    saem do `data_json` da mensagem devolvida por `GET /chat/history`, dentro
+    de `Message.imageMessage` / `videoMessage` / `audioMessage` /
+    `documentMessage` / `stickerMessage`, com estes nomes de origem:
+
+    | campo daqui | campo no `data_json` |
+    |---|---|
+    | `Url` | `URL` |
+    | `DirectPath` | `directPath` |
+    | `MediaKey` | `mediaKey` |
+    | `Mimetype` | `mimetype` |
+    | `FileEncSHA256` | `fileEncSha256` |
+    | `FileSHA256` | `fileSha256` |
+    | `FileLength` | `fileLength` |
+
+    **Pelo menos um entre `Url` e `DirectPath`** tem de vir; faltarem os dois
+    é `400 missing_url_or_direct_path`, medido. Só `DirectPath` é caminho
+    válido, e é a forma em que os metadados chegam em vários eventos.
+  properties:
+    Url:
+      type: string
+      description: URL da mídia na CDN do WhatsApp.
+      example: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+    DirectPath:
+      type: string
+      description: Caminho directo na CDN. Alternativa a `Url`.
+      example: /o1/v/t24/f2/m234/exemplo
+    MediaKey:
+      type: string
+      format: byte
+      description: Chave de decifragem, em base64.
+      example: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+    Mimetype:
+      type: string
+      description: |
+        Tipo da mídia. É devolvido TAL E QUAL na resposta e é também o
+        prefixo da Data URL de `Data` — os dois não podem divergir, por
+        construção.
+      example: image/png
+    FileEncSHA256:
+      type: string
+      format: byte
+      description: SHA-256 do ficheiro CIFRADO, em base64.
+      example: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+    FileSHA256:
+      type: string
+      format: byte
+      description: SHA-256 do ficheiro decifrado, em base64.
+      example: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+    FileLength:
+      type: integer
+      format: int64
+      description: Tamanho do ficheiro em bytes.
+      example: 74
+
+ResultadoDescargaDeMidia:
+  type: object
+  description: |
+    O conteúdo binário, já decifrado e codificado como Data URL.
+  required: [Mimetype, Data]
+  properties:
+    Mimetype:
+      type: string
+      description: O mesmo `Mimetype` que veio no pedido.
+      example: image/png
+    Data:
+      type: string
+      description: |
+        Data URL completa — `data:<mimetype>;base64,<conteúdo>`. Não é
+        base64 nu: o prefixo faz parte do valor.
+
+        Um download que devolva ZERO bytes é `500 empty_media`, e não um
+        `200` com Data URL vazia — decisão consciente registada como F126.
+      example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+
+# ---------------------------------------------------------------------------
+# Leitura: lista de conversas e histórico
+# ---------------------------------------------------------------------------
+
+PaginaDeConversas:
+  type: object
+  description: |
+    Uma página da lista de conversas, ordenada da interação mais recente para
+    a mais antiga. NÃO traz mensagens — a lista existe para ordenar
+    conversas.
+  required: [chats, total, limit, offset]
+  properties:
+    chats:
+      type: array
+      items:
+        $ref: '#/components/schemas/ResumoDeConversa'
+    total:
+      type: integer
+      description: Total de conversas conhecidas, independente da página pedida.
+      example: 384
+    limit:
+      type: integer
+      description: Tamanho da página realmente aplicado, depois da correcção de faixa.
+      example: 50
+    offset:
+      type: integer
+      description: Deslocamento realmente aplicado.
+      example: 0
+
+ResumoDeConversa:
+  type: object
+  description: |
+    Uma conversa da lista. Os campos de nome são todos opcionais e podem vir
+    ausentes ao mesmo tempo: medido nas contas reais, a maioria das pessoas
+    sem nome simplesmente não está no roster, e para elas não há nome a
+    obter. `phone` é o que sobra de legível nesses casos.
+  required: [jid, name, is_group, last_activity]
+  properties:
+    jid:
+      type: string
+      description: |
+        Identidade da conversa como ela vive no histórico local. Para
+        contactos pode ser `@lid` ou `@s.whatsapp.net`; para grupos é sempre
+        `@g.us`. O valor reservado `status@broadcast` aparece aqui e
+        representa os status vistos, não uma conversa.
+      example: 90937376170214@lid
+    name:
+      type: string
+      description: Melhor nome disponível. String vazia quando não há nenhum.
+      example: Lucas Albuqueque
+    is_group:
+      type: boolean
+      example: false
+    last_activity:
+      type: string
+      format: date-time
+      description: |
+        Instante da mensagem mais recente já persistida nesta conversa. É a
+        chave de ordenação da lista.
+      example: '2026-08-26T09:08:10.351982-04:00'
+    push_name:
+      type: string
+      description: Nome que a pessoa escolheu no telemóvel, cru.
+      example: Lucas Albuqueque
+    full_name:
+      type: string
+      description: Nome do roster, cru.
+      example: Lucas Albuquerque
+    business_name:
+      type: string
+      description: Nome comercial verificado, cru.
+      example: Loja Exemplo
+    phone:
+      type: string
+      description: |
+        Número resolvido a partir do `@lid`, quando o mapeamento local o
+        conhece. Só é preenchido para as conversas DA PÁGINA devolvida, e
+        degrada em silêncio se a sessão estiver offline.
+      example: '554192421234'
+
+MensagemDoHistorico:
+  type: object
+  description: |
+    Uma mensagem do histórico LOCAL. É leitura do nosso banco, não do
+    WhatsApp — por isso responde com o telemóvel offline.
+  required: [id, user_id, chat_jid, sender_jid, message_id, timestamp, message_type]
+  properties:
+    id:
+      type: integer
+      description: Chave da linha no banco local. Serve para ordenar e desduplicar, não é o id da mensagem no WhatsApp.
+      example: 22780
+    user_id:
+      type: string
+      description: Sessão a que a linha pertence.
+      example: 918e37366f27e1125ee0482a793267e1
+    chat_jid:
+      type: string
+      description: |
+        Conversa sob a qual a linha está arquivada. Pode DIFERIR do
+        `chat_jid` que foi pedido: um pedido em `@lid` funde as linhas
+        guardadas sob o telefone da mesma pessoa.
+      example: 554192421234@s.whatsapp.net
+    sender_jid:
+      type: string
+      description: Quem escreveu, na forma em que foi gravado (pode trazer sufixo de dispositivo).
+      example: 5516981818244@s.whatsapp.net
+    message_id:
+      type: string
+      description: '`message_id` no WhatsApp — o valor a usar em reagir, apagar, favoritar e encaminhar.'
+      example: 2A196F2C7F3F02A666F6
+    timestamp:
+      type: string
+      format: date-time
+      example: '2026-08-26T09:08:10.351982-04:00'
+    message_type:
+      type: string
+      description: |
+        Tipo da mensagem como foi classificado na gravação — `text`,
+        `image`, `video`, `audio`, `document`, `sticker`. `unknown` aparece
+        quando o tipo não foi reconhecido, e é um valor real e frequente.
+      example: video
+    text_content:
+      type: string
+      description: Texto ou legenda, quando existe.
+      example: bateria video real
+    media_link:
+      type: string
+      description: Ligação para a mídia arquivada, quando o armazenamento externo está configurado.
+      example: ''
+    quoted_message_id:
+      type: string
+      description: '`message_id` da mensagem citada, quando esta é resposta a outra.'
+      example: 3EB0A4B2AFD45E625C0917
+    data_json:
+      type: string
+      description: |
+        O evento COMPLETO do WhatsApp, serializado como uma string de JSON —
+        e não como objecto. Para o usar é preciso desserializar o valor uma
+        segunda vez.
+
+        É daqui que saem os sete campos do descritor de mídia que as rotas
+        `/chat/download*` exigem, sob
+        `Message.imageMessage` / `videoMessage` / `audioMessage` /
+        `documentMessage` / `stickerMessage`.
+      example: '{"Info":{"Chat":"554192421234@s.whatsapp.net","ID":"2A196F2C7F3F02A666F6"},"Message":{"imageMessage":{"URL":"https://mmg.whatsapp.net/o1/v/t24/exemplo","directPath":"/o1/v/t24/exemplo","mediaKey":"SlpkRE1hd3FWcDFa","mimetype":"image/png","fileEncSha256":"ZXhlbXBsbw==","fileSha256":"ZXhlbXBsbw==","fileLength":"74"}}}'
+
+IndiceDeConversas:
+  type: object
+  description: |
+    Resposta de `chat_jid=index`: as conversas do chamador com o instante da
+    última mensagem gravada em cada uma. É um MAPA cuja chave é o id da
+    sessão — forma histórica preservada; hoje traz no máximo a chave do
+    próprio chamador.
+  additionalProperties:
+    type: array
+    items:
+      $ref: '#/components/schemas/EntradaDoIndiceDeConversas'
+  example:
+    918e37366f27e1125ee0482a793267e1:
+      - chat_jid: 554192421234@s.whatsapp.net
+        last_updated: '2026-08-26T09:08:10.351982-04:00'
+      - chat_jid: 120363411669320145@g.us
+        last_updated: '2026-08-24T19:01:14.41138-04:00'
+
+EntradaDoIndiceDeConversas:
+  type: object
+  description: Uma conversa do índice, e quando teve a última mensagem gravada.
+  required: [chat_jid, last_updated]
+  properties:
+    chat_jid:
+      type: string
+      example: 554192421234@s.whatsapp.net
+    last_updated:
+      type: string
+      format: date-time
+      description: Instante já formatado em RFC 3339, com nanossegundos.
+      example: '2026-08-26T09:08:10.351982-04:00'
