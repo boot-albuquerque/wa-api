@@ -29378,6 +29378,59 @@ corrigido por alteração de contrato — todos partiriam clientes existentes, e
 ordem correcta é `/v1` primeiro (ponto 4). As decisões estão em
 `CONTRATO-ARQUITETURAL.md` e valem desde já para rota NOVA.
 
+## Pontos 1 e 2 CORRIGIDOS em 2026-08-26 — a padronização de caminhos
+
+**91 formas canónicas** registadas ao lado das antigas. 143 → 234 rotas.
+
+```
+/chat/list                 -> /chats/list
+/group/requestparticipants -> GET    /groups/{group_jid}/join-requests
+/group/photo               -> PUT    /groups/{group_jid}/photo
+/group/photo/remove        -> DELETE /groups/{group_jid}/photo
+/community/link            -> PUT    /communities/{community_jid}/subgroups/{group_jid}
+/community/unlink          -> DELETE /communities/{community_jid}/subgroups/{group_jid}
+```
+
+**Nenhum cliente parte**: as antigas continuam registadas e a responder,
+marcadas `deprecated` no OpenAPI, **sem data de remoção**.
+
+**O que isto ensinou sobre o ponto 4** (ausência de `/v1`), e corrige o que eu
+tinha escrito: eu afirmei que sem versão era *impossível* corrigir naming,
+status codes e caminhos. **Metade estava errada.** Tudo o que é **aditivo** —
+um caminho novo — coexiste com o antigo, e não precisa de versão nenhuma.
+`/v1` só é pré-requisito para o que **não pode coexistir**: mudar o estado HTTP
+de uma rota, ou unificar o envelope de erro. Uma rota não pode devolver `200` e
+`201` ao mesmo tempo; um caminho novo pode existir ao lado do velho.
+
+Custou-me a ver porque tratei "mudança de contrato" como uma categoria só.
+São duas: a que ACRESCENTA e a que SUBSTITUI.
+
+**Verificado em campo**, as duas formas e o efeito:
+
+```
+GET /chat/list 200        GET /chats/list 200
+POST /group/info 200      POST /groups/info 200
+PUT    /communities/{c}/subgroups/{g}  ->  subgrupos 1 -> 2
+DELETE /communities/{c}/subgroups/{g}  ->  subgrupos 2 -> 1
+```
+
+E paridade na única que devolve erro, em vez de a dar por falhada:
+
+```
+POST /group/updaterequestparticipants  -> 400 invalid_phone
+POST /groups/{group_jid}/join-requests -> 400 invalid_phone   IDÊNTICAS
+```
+
+**Cinco guardas**, com controlo negativo executado em cada uma das quatro que
+são teste. A quinta não é teste: uma entrada da tabela sem rota correspondente
+faz o processo entrar em **pânico no arranque** —
+`panic: tabela de caminhos canónicos aponta para rotas inexistentes: GET /x`.
+
+**Status**: pontos 1 e 2 corrigidos. Continuam abertos: 3 (três convenções de
+caixa), 4 (sem `/v1`, agora só para o que não coexiste), 5 (paginação), 6
+(status codes), 7 (erro por campo), 8 (`request_id` no corpo), 9 (formatos de
+data), 10 (idempotência e rate limiting).
+
 <!-- f-status: aberto -->
 
 ## F270 — a fronteira entre "sonda recusada" e "escrita real" não é visível de fora

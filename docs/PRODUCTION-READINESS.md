@@ -1,6 +1,6 @@
 # Production Readiness Scorecard — wa-api
 
-**Data**: 2026-08-26. **Medido**, não estimado: cada número desta página vem de
+**Data**: 2026-08-26, revisto depois da padronização de caminhos. **Medido**, não estimado: cada número desta página vem de
 um comando cuja saída está registada nos commits desta série.
 
 ## Como ler este documento
@@ -25,12 +25,12 @@ Um scorecard que se auto-atribui verdes é um instrumento de conforto. Este tem
 | estágio | ✅ | 🟡 | ❌ |
 |---|---:|---:|---:|
 | 1. Implementação | 3 | 2 | 1 |
-| 2. Contrato explícito | 8 | 3 | 4 |
+| 2. Contrato explícito | 10 | 3 | 2 |
 | 3. Testes | 5 | 1 | 1 |
 | 4. Evidência | 4 | 1 | 0 |
 | 5. Auditoria | 5 | 0 | 0 |
-| 6. Produção | 2 | 3 | 5 |
-| **Total** | **27** | **10** | **11** |
+| 6. Produção | 2 | 4 | 4 |
+| **Total** | **29** | **11** | **8** |
 
 **A leitura honesta**: o contrato e a evidência estão fortes; a **prontidão
 operacional não está**. Uma API pode ser perfeitamente documentada e continuar
@@ -53,7 +53,7 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 
 | propriedade | estado | prova / lacuna |
 |---|---|---|
-| Cobertura OpenAPI | ✅ | **141 de 141** operações (143 rotas − 2 de `/docs`, excluídas de propósito) |
+| Cobertura OpenAPI | ✅ | **232 de 232** operações (234 rotas − 2 de `/docs`, excluídas de propósito) |
 | Toda operação tem tag, título e descrição | ✅ | `TestOpenAPIOperacoesEstaoCompletas` |
 | **Toda propriedade tem semântica de presença** | ✅ | **694 de 694** com `description` **e** `nullable`. `TestTodaPropriedadeDeclaraNulabilidade` |
 | Enums dizem o que acontece fora da lista | ✅ | `TestTodoEnumDizOQueAconteceComValorDesconhecido` |
@@ -64,8 +64,8 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | Envelope de erro único | 🟡 | **duas** formas em produção: `error` objecto e `error` string (F266, 14 pontos). Ambas documentadas, o que impede o cliente de partir — mas é um contrato com duas caras |
 | Nomes consistentes | 🟡 | glossário escrito e vinculante para o novo; o existente mistura `snake_case`, `camelCase` e `PascalCase`, e `group_jid` tem **quatro** grafias (F269) |
 | Prosa da documentação verificada | 🟡 | os gates leem estrutura, não texto. Oito menções de um código inexistente sobreviveram em descrições até serem apanhadas à mão (ARMADILHAS #29) |
-| Singular/plural coerente | ❌ | 6 famílias usam singular para colecção (`/chat`, `/group`, `/user`, …), 2 usam plural. **90 rotas** violariam a regra canónica (F269) |
-| Relação no caminho, não no nome | ❌ | 7 famílias colam a relação: `/group/requestparticipants` em vez de `/groups/{id}/join-requests` |
+| Singular/plural coerente | ✅ | **91 formas canónicas** registadas a 26/08, com gate que recusa família de colecção sem canónica. As antigas continuam a funcionar, marcadas `deprecated` |
+| Relação no caminho, não no nome | ✅ | 9 rotas reestruturadas com o identificador no caminho e o método a dizer a operação; `TestCaminhosCanonicosCumpremARegra` recusa a relação colada |
 | Códigos de estado semânticos | ❌ | `201`, `202`, `204`, `410`, `412`, `415`, `429`, `502`, `503`, `504` **nunca** são usados. `POST /group/create` cria recurso e devolve `200` sem `Location` |
 | `additionalProperties: false` | ❌ | não declarado, e **corretamente**: seria falso enquanto o padrão for aceitar. Ligar o modo estrito é decisão de versão |
 
@@ -74,7 +74,7 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | propriedade | estado | prova / lacuna |
 |---|---|---|
 | Especificação está em dia com as fontes | ✅ | `TestOpenAPIGeradoEstaAtualizado` |
-| Respostas reais batem com o documentado | ✅ | `TestContratoRespostaDeRecusaBateComOEsquema` — **141 operações exercitadas** contra o router |
+| Respostas reais batem com o documentado | ✅ | `TestContratoRespostaDeRecusaBateComOEsquema` — **232 operações exercitadas** contra o router |
 | Os testes de contrato não podem ficar cegos | ✅ | piso mínimo em cada um; falham se exercitarem menos do que o esperado |
 | Controlo negativo em cada gate novo | ✅ | executado e colado nos commits. Duas vezes o primeiro não valeu por partir o build — refeito com mutação que compila (ARMADILHAS #4) |
 | Suite passa | ✅ | 116 pacotes verdes |
@@ -86,10 +86,10 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | propriedade | estado | prova / lacuna |
 |---|---|---|
 | Classificação por rota, visível no título | ✅ | ✅🟡❌⬜ no `summary` de cada operação, aplicada de `evidencias.tsv` pelo gerador |
-| Nenhuma rota sem classificação | ✅ | `TestOpenAPISummariesTrazemMarcaDeEvidencia`; **141 de 141** |
+| Nenhuma rota sem classificação | ✅ | `TestOpenAPISummariesTrazemMarcaDeEvidencia`; **232 de 232** |
 | Tabela não pode desactualizar-se | ✅ | rota nova sem linha **falha o gerador**; linha órfã **também** — a falha por excesso é a silenciosa |
-| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **98 ✅, 8 🟡, 3 ❌, 32 ⬜** |
-| Cobertura de efeito confirmado | 🟡 | 98 de 141. As 32 ⬜ não são esquecimento: escreveriam configuração em uso, derrubariam sessões, ou alterariam a conta — cada uma com o motivo escrito |
+| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **178 ✅, 13 🟡, 6 ❌, 35 ⬜** |
+| Cobertura de efeito confirmado | 🟡 | **178 de 232**. As 35 ⬜ não são esquecimento: escreveriam configuração em uso, derrubariam sessões, ou alterariam a conta — cada uma com o motivo escrito |
 
 ## 5. Auditoria
 
@@ -97,9 +97,10 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 |---|---|---|
 | Achados registados com medição | ✅ | **F256** a **F271** no `HOUSEKEEP.md`, com comando e saída |
 | Defeitos não mascarados na documentação | ✅ | as 3 rotas que falham estão documentadas **como falhando**, com o erro medido |
-| Correcções não alteram contrato sem aval | ✅ | as 3 desta série só mudam respostas que **já falhavam** |
+| Correcções não alteram contrato sem aval | ✅ | as 3 de comportamento só mudam respostas que **já falhavam**; a padronização de caminhos é puramente ADITIVA — nenhuma rota antiga mudou |
 | Erros do auditor também registados | ✅ | 5 meus nesta série: contador mais grosseiro que o gate, acusação injusta a um executor, F267 a apanhar-me, e duas mutações que partiram o build |
 | Armadilhas catalogadas | ✅ | 53 entradas em `ARMADILHAS.md`, cada uma com a evidência que a produziu |
+| Padronização não parte cliente | ✅ | 143 rotas antigas continuam a responder; medido `GET /chat/list` e `GET /chats/list` a devolverem ambos `200` |
 
 ## 6. Produção
 
@@ -114,7 +115,7 @@ resolve.
 | Prazos em dependência externa | 🟡 | 30 s por operação contra o WhatsApp, uniforme. **Não é configurável por rota**, e é o que produz o `500` de `/newsletter/updates` |
 | Sondas separadas | 🟡 | `/livez` e `/health/ready` distinguem vivacidade de prontidão. Mas `/health` — a funcional — está **atrás de token**, o que a torna inútil para um balanceador |
 | **Paginação** | ❌ | **nenhuma colecção é paginada**. `GET /user/contacts` devolveu **61 459 bytes** com 1266 contactos, sem limite nem cursor. Cresce com a agenda do utilizador |
-| **Versionamento** | ❌ | não há `/v1`. É isto que torna impossível corrigir naming, status codes e caminhos sem partir todos os clientes |
+| **Versionamento** | 🟡 | continua sem `/v1`. Mas a padronização de 26/08 mostrou que **alias lado a lado** resolve tudo o que é ADITIVO — um caminho novo coexiste com o antigo, sem versão. `/v1` continua pré-requisito para o que **não pode coexistir**: mudar o status code de uma rota, ou unificar o envelope de erro |
 | **Idempotência** | ❌ | não há `Idempotency-Key`. `POST /chat/send/text` chamado duas vezes envia **duas** mensagens; um `500` pode ter enviado |
 | **Limitação de ritmo** | ❌ | nenhuma rota devolve `429`. O `x/time/rate` que existe protege a CONTA no envio, não o servidor |
 | **Concorrência** | ❌ | sem `ETag`, `If-Match` ou versão. Duas escritas simultâneas ao mesmo recurso perdem uma, em silêncio |
@@ -126,8 +127,12 @@ resolve.
 A ordem não é de importância — é de **dependência**. Fazer fora de ordem
 duplica trabalho:
 
-1. **`/v1`**, como sinónimo das rotas actuais. Nada muda observavelmente, e
-   passa a existir sítio onde mudar.
+1. ~~**`/v1`** como pré-requisito do naming.~~ **Feito de outra forma**: a
+   padronização de 26/08 registou as formas canónicas **ao lado** das antigas,
+   sem versão. Descobriu-se que o alias resolve tudo o que é ADITIVO — um
+   caminho novo pode coexistir com o antigo. O que `/v1` ainda é
+   pré-requisito é para o que **não pode coexistir**: mudar o status code de
+   uma rota, ou unificar o envelope de erro.
 2. **Paginação em `/user/contacts`**, `/chat/list` e `/group/list`. É o único
    ❌ que degrada **sozinho**, com o crescimento dos dados do utilizador.
 3. **`429` e limitação de ritmo** — o número certo depende do perfil de uso e é
@@ -142,9 +147,15 @@ e é por isso que vem depois do 1.
 
 ## Duas coisas que este scorecard NÃO afirma
 
-- **Que a API funciona.** Afirma que 98 rotas tiveram efeito confirmado, 8
-  responderam sem observador, 3 falham e 32 não foram exercitadas. A diferença
-  entre isto e "funciona" é o assunto inteiro da coluna de evidência.
+- **Que a API funciona.** Afirma que 178 operações tiveram efeito confirmado,
+  13 responderam sem observador, 6 falham e 35 não foram exercitadas. A
+  diferença entre isto e "funciona" é o assunto inteiro da coluna de evidência.
+
+  E note-se de onde vem o salto de 98 para 178: **não** de mais medição, mas de
+  as rotas terem duplicado com a padronização. As 91 canónicas herdam a prova
+  da antiga que substituem, porque são o mesmo manipulador noutro caminho. Um
+  número maior que não representa mais trabalho de verificação — e dizê-lo é o
+  que impede a tabela de parecer melhor do que é.
 - **Que os gates cobrem tudo.** Eles leem estrutura, não prosa
   (ARMADILHAS #29), e verificam o repositório, não o binário em execução
   (ARMADILHAS #27). As duas limitações estão escritas nos próprios gates.

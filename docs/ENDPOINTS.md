@@ -2,20 +2,25 @@
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
 **Bateria em campo**: 2026-08-26 — ver "Verificação em campo".
-**Total**: 141 entradas de rota (método + caminho) sobre **125 caminhos
-distintos**, registadas em `pkg/bootstrap/wiring_routes.go`. Eram 121 no
-levantamento de 24/08: entraram 4 de comunidade e 3 de convite de admin de
-canal, e a contagem antiga não separava método de caminho.
+**Total**: **234 entradas de rota** (método + caminho) sobre **212 caminhos
+distintos**.
+
+O número duplicou a 26/08 com a padronização: 143 rotas antigas, mais 91
+formas canónicas registadas ao lado delas. As antigas continuam a funcionar e
+estão marcadas `deprecated` no OpenAPI — ver "Caminhos canónicos".
+
+Percurso: 121 no levantamento de 24/08 → 141 com comunidades e convites de
+admin → 143 → **234** com a padronização.
 
 **Estado por caminho, contado da tabela de verificação** (não estimado):
 
 | | caminhos |
 |---|---|
-| ✅ chamada real com efeito confirmado | **98** |
-| 🟡 `200` sem observador independente | **8** |
-| ❌ falhou, com o erro medido | **3** — `/user/block`, `/user/unblock`, `/newsletter/updates` |
-| ⬜ não testada, com o motivo dito | **16** |
-| | **125** |
+| ✅ chamada real com efeito confirmado | **178** |
+| 🟡 sucesso sem observador independente | **13** |
+| ❌ falhou, com o erro medido | **6** — três defeitos, cada um em forma antiga e canónica |
+| ⬜ não testada, com o motivo dito | **35** |
+| | **232** |
 
 Reproduzir a lista:
 
@@ -396,7 +401,7 @@ projeto sem medir (F222).
 
 | | natureza | acesso |
 |---|---|---|
-| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 141 rotas REST |
+| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 234 rotas REST (143 + 91 canónicas) |
 | **Evolution API** | serviço HTTP sobre Baileys | REST + webhooks |
 | **Baileys** | **biblioteca** TypeScript | API de programa, não HTTP |
 | **Open WA** | automação de **Puppeteer** sobre a SPA do WhatsApp Web | REST (EASY API) ou biblioteca |

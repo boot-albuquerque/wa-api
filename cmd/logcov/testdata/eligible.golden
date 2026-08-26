@@ -2764,6 +2764,7 @@ pkg/application/usecase/user.normalizeToLID	ELIGIBLE	covered
 pkg/application/usecase/user.ordenar	EXCLUDED	X1
 pkg/application/usecase/user.ordenar.func1	EXCLUDED	X6
 pkg/application/usecase/user.soNumero	EXCLUDED	X1
+pkg/bootstrap.CaminhosCanonicos	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,caminhos_canonicos.go:29)
 pkg/bootstrap.EngineSelection.Default	EXCLUDED	X1
 pkg/bootstrap.EngineSelection.EngineFor	EXCLUDED	X1
 pkg/bootstrap.EngineSelection.SessoesEmHeadless	ELIGIBLE	uncovered:L1
@@ -2862,6 +2863,7 @@ pkg/bootstrap.adminTokenSource.String	EXCLUDED	X4
 pkg/bootstrap.agendarProximaTentativa	ELIGIBLE	covered
 pkg/bootstrap.agendarProximaTentativa.func1	EXCLUDED	X6
 pkg/bootstrap.agendarProximaTentativa.func2	EXCLUDED	X6
+pkg/bootstrap.analisarCaminhos	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,caminhos_canonicos.go:44);uncovered:L2(S-ret,caminhos_canonicos.go:55)
 pkg/bootstrap.atrasoDaTentativa	ELIGIBLE	uncovered:L1
 pkg/bootstrap.bodyLimitMiddleware	EXCLUDED	X1
 pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:29)
@@ -3891,6 +3893,7 @@ pkg/infra/wa-noise/runtime/session.wanoiseSession.translatePairingItem	EXCLUDED	
 pkg/presentation/http.Find	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
+pkg/presentation/http.HandlerRegistry.RegisterCanonicalAliases	ELIGIBLE	uncovered:L1
 pkg/presentation/http.NewHandlerRegistry	EXCLUDED	X1
 pkg/presentation/http.NewProfileFullHandler	EXCLUDED	X1
 pkg/presentation/http.NewProfileHandler	EXCLUDED	X1
@@ -3898,6 +3901,8 @@ pkg/presentation/http.ProfileFullHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consu
 pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:74)
 pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:49)
 pkg/presentation/http.genericErrorMessage	EXCLUDED	X1
+pkg/presentation/http.injectPathParams	EXCLUDED	X1
+pkg/presentation/http.injectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:94);uncovered:L2(S-consume,canonico.go:105);uncovered:L2(S-consume,canonico.go:126)
 pkg/presentation/http/apidocs.Handler	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,apidocs.go:61)
 pkg/presentation/http/apidocs.Handler.func1	EXCLUDED	X1
 pkg/presentation/http/apidocs.Specification	EXCLUDED	X1

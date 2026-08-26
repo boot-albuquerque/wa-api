@@ -3,7 +3,12 @@
 Levantamento: 2026-08-26, contra `bootstrap.Routes(Deps{})` — a mesma função
 que serve o processo, e a mesma que `cmd/listroutes` usa.
 
-**141 entradas de rota** (método + caminho) sobre **125 caminhos distintos**.
+**234 entradas de rota** (método + caminho) sobre **212 caminhos distintos**.
+
+A matriz abaixo é do levantamento original, quando havia 141 entradas. Desde a
+padronização de 26/08 cada família de colecção tem também a forma canónica, que
+não muda a distribuição por autor — a canónica é gerada da mesma fonte que a
+antiga, e não foi escrita por ninguém. Ver `CAMINHOS-CANONICOS.md`.
 
 | Grupo | Tag(s) OpenAPI | Rotas | Worktree | Ficheiros | Depende de |
 |---|---|---:|---|---|---|
