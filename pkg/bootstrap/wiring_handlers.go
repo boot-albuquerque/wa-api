@@ -112,6 +112,7 @@ type customHandlers struct {
 	Reaction    *handlers.ReactionHandlers
 	Contact     *handlers.ContactHandlers
 	GroupMgmt   *handlers.GroupManagementHandlers
+	Community  *handlers.CommunityHandlers
 	ChatHistory *handlers.ChatHistoryHandlers
 	Newsletter  *handlers.NewsletterHandlers
 	Label       *handlers.LabelHandlers
@@ -426,6 +427,16 @@ func initCustomHandlers(s *server) {
 		jidResolver, logger)
 	groupMgmtHandlers := handlers.NewGroupManagementHandlers(groupMgmtUC)
 
+	// Community UseCases + Handlers
+	communityReadUC := group.NewCommunityReadUseCase(groupAdapter, jidResolver, logger)
+	communityWriteUC := group.NewCommunityWriteUseCase(groupAdapter, jidResolver, logger)
+	communityHandlers := &handlers.CommunityHandlers{
+		GetSubGroups:    handlers.NewGetCommunitySubGroupsHandler(communityReadUC),
+		GetParticipants: handlers.NewGetCommunityParticipantsHandler(communityReadUC),
+		LinkGroup:       handlers.NewCommunityLinkGroupHandler(communityWriteUC),
+		UnlinkGroup:     handlers.NewCommunityUnlinkGroupHandler(communityWriteUC),
+	}
+
 	// Download Handlers (/chat/download*)
 	downloadHandlers := &handlers.DownloadHandlers{
 		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(mediaDownloader, logger)),
@@ -472,6 +483,7 @@ func initCustomHandlers(s *server) {
 		Reaction:    reactionHandlers,
 		Contact:     contactHandlers,
 		GroupMgmt:   groupMgmtHandlers,
+		Community:  communityHandlers,
 		ChatHistory: chatHistoryHandlers,
 		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
 		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),

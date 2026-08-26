@@ -119,6 +119,12 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/group/updaterequestparticipants", customChain.Then(ch.Group.UpdateGroupRequestParticipants), "POST")
 	registry.Register("/group/joinapprovalmode", customChain.Then(ch.Group.SetGroupJoinApprovalMode), "POST")
 
+	// Community routes — read and lifecycle operations on WhatsApp communities
+	registry.Register("/community/subgroups", customChain.Then(ch.Community.GetSubGroups), "POST")
+	registry.Register("/community/participants", customChain.Then(ch.Community.GetParticipants), "POST")
+	registry.Register("/community/link", customChain.Then(ch.Community.LinkGroup), "POST")
+	registry.Register("/community/unlink", customChain.Then(ch.Community.UnlinkGroup), "POST")
+
 	// Storage routes (S3, HMAC, Proxy, History)
 	registry.Register("/s3/configure", customChain.Then(ch.Storage.ConfigureS3), "POST")
 	registry.Register("/s3/config", customChain.Then(ch.Storage.ConfigureS3), "POST")

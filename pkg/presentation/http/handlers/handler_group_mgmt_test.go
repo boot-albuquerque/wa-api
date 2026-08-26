@@ -83,7 +83,7 @@ func grpMgmtCases() []grpMgmtCase {
 			body: `{"name":"squad","participants":["5511999999999"]}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.CreateGroup },
 			failOp: func(f *grpMgmtFakes, err error) {
-				f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID) (any, error) {
+				f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
 					return nil, err
 				}
 			},
@@ -558,6 +558,95 @@ func TestSetGroupPhoto_DecodesBase64(t *testing.T) {
 	}
 	if string(captured) != "jpeg-photo-data" {
 		t.Errorf("port received %q, want %q", string(captured), "jpeg-photo-data")
+	}
+}
+
+// F237: CreateGroup accepts is_parent to create a community.
+func TestCreateGroup_IsParent(t *testing.T) {
+	f := newGrpMgmtFakes()
+	var captured domain.CreateGroupOpts
+	f.lifecycle.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+		captured = opts
+		return "community", nil
+	}
+	body := `{"name":"My Community","is_parent":true}`
+	rec, _ := grpMgmtServe(grpMgmtCase{
+		name: "CreateGroup",
+		path: "/group/create",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.CreateGroup },
+	}, f, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !captured.IsParent {
+		t.Error("opts.IsParent not set")
+	}
+	call := f.lifecycle.CreateGroupCalls[0]
+	if len(call.Participants) != 0 {
+		t.Errorf("community creation should accept empty participants, got %d", len(call.Participants))
+	}
+}
+
+// F237: CreateGroup accepts linked_parent_jid to create a group inside a community.
+func TestCreateGroup_LinkedParentJID(t *testing.T) {
+	f := newGrpMgmtFakes()
+	var captured domain.CreateGroupOpts
+	f.lifecycle.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+		captured = opts
+		return "child-group", nil
+	}
+	body := `{"name":"Sub Group","participants":["5511999999999"],"linked_parent_jid":"120363@g.us"}`
+	rec, _ := grpMgmtServe(grpMgmtCase{
+		name: "CreateGroup",
+		path: "/group/create",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.CreateGroup },
+	}, f, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if captured.LinkedParentJID != "120363@g.us" {
+		t.Errorf("opts.LinkedParentJID = %q, want 120363@g.us", captured.LinkedParentJID)
+	}
+}
+
+// F237: is_parent and linked_parent_jid are mutually exclusive.
+func TestCreateGroup_MutuallyExclusive(t *testing.T) {
+	f := newGrpMgmtFakes()
+	body := `{"name":"Bad","is_parent":true,"linked_parent_jid":"120363@g.us"}`
+	rec, capture := grpMgmtServe(grpMgmtCase{
+		name: "CreateGroup",
+		path: "/group/create",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.CreateGroup },
+	}, f, body)
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	logassert.OutcomeLogged(t, capture.Records(t), "mutually exclusive")
+	if len(f.lifecycle.CreateGroupCalls) != 0 {
+		t.Fatal("mutually exclusive fields reached the port")
+	}
+}
+
+// F237: is_parent=true relaxes participants requirement.
+func TestCreateGroup_IsParent_NoParticipantsRequired(t *testing.T) {
+	f := newGrpMgmtFakes()
+	f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+		return "ok", nil
+	}
+	body := `{"name":"Community","is_parent":true,"participants":[]}`
+	rec, _ := grpMgmtServe(grpMgmtCase{
+		name: "CreateGroup",
+		path: "/group/create",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.CreateGroup },
+	}, f, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 — is_parent should relax participants requirement (body: %s)", rec.Code, rec.Body.String())
 	}
 }
 

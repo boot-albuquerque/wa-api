@@ -44,8 +44,9 @@ type GroupDirectory interface {
 type GroupLifecycle interface {
 	SessionGuard
 
-	// CreateGroup cria um grupo com os participantes informados.
-	CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID) (any, error)
+	// CreateGroup creates a group (or community) with the given participants.
+	// opts carries optional community flags (IsParent, LinkedParentJID).
+	CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error)
 
 	// JoinGroup entra num grupo por código de convite.
 	JoinGroup(ctx context.Context, txtID, code string) (any, error)
@@ -139,6 +140,28 @@ type GroupSettings interface {
 	GroupParticipants
 	GroupPhotoSetter
 	GroupEphemeralSetter
+}
+
+// CommunityDirectory exposes read operations on communities (parent groups).
+type CommunityDirectory interface {
+	SessionGuard
+
+	// GetSubGroups returns the child groups of a community.
+	GetSubGroups(ctx context.Context, txtID string, community domain.JID) (any, error)
+
+	// GetLinkedGroupsParticipants returns participants across all child groups.
+	GetLinkedGroupsParticipants(ctx context.Context, txtID string, community domain.JID) (any, error)
+}
+
+// CommunityLifecycle covers linking and unlinking groups to/from communities.
+type CommunityLifecycle interface {
+	SessionGuard
+
+	// LinkGroup adds an existing group as a child of a community.
+	LinkGroup(ctx context.Context, txtID string, parent, child domain.JID) error
+
+	// UnlinkGroup removes a child group from a community.
+	UnlinkGroup(ctx context.Context, txtID string, parent, child domain.JID) error
 }
 
 // GroupRequests cobre a fila de solicitações de entrada em grupo.

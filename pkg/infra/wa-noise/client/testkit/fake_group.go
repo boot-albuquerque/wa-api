@@ -126,3 +126,31 @@ func (f *Fake) SetGroupJoinApprovalMode(ctx context.Context, jid types.JID, mode
 	}
 	return nil
 }
+
+func (f *Fake) GetSubGroups(ctx context.Context, community types.JID) ([]*types.GroupLinkTarget, error) {
+	if f.GetSubGroupsFn != nil {
+		return f.GetSubGroupsFn(ctx, community)
+	}
+	return nil, nil
+}
+
+func (f *Fake) GetLinkedGroupsParticipants(ctx context.Context, community types.JID) ([]types.JID, error) {
+	if f.GetLinkedGroupsParticipantsFn != nil {
+		return f.GetLinkedGroupsParticipantsFn(ctx, community)
+	}
+	return nil, nil
+}
+
+func (f *Fake) LinkGroup(ctx context.Context, parent, child types.JID) error {
+	if f.LinkGroupFn != nil {
+		return f.LinkGroupFn(ctx, parent, child)
+	}
+	return nil
+}
+
+func (f *Fake) UnlinkGroup(ctx context.Context, parent, child types.JID) error {
+	if f.UnlinkGroupFn != nil {
+		return f.UnlinkGroupFn(ctx, parent, child)
+	}
+	return nil
+}

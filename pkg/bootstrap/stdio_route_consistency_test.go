@@ -106,6 +106,13 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		// Path-parameter routes dispatched by stdio DYNAMIC routes.
 		// The static table cannot express parameterized paths; these are
 		// served by buildPath functions in the stdio_routes_*.go files.
+		// F237: community routes are HTTP-only for now; stdio entries will be
+		// added when the stdio transport gains community support.
+		"POST /community/subgroups":    {reason: "F237: new community route; stdio entry deferred"},
+		"POST /community/participants": {reason: "F237: new community route; stdio entry deferred"},
+		"POST /community/link":         {reason: "F237: new community route; stdio entry deferred"},
+		"POST /community/unlink":       {reason: "F237: new community route; stdio entry deferred"},
+
 		"GET /user/lid/{jid}":           {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "user.lid", httpMethod: "GET"},
 		"GET /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.get", httpMethod: "GET"},
 		"PUT /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.edit", httpMethod: "PUT"},
@@ -263,6 +270,7 @@ func newRouterForRouteCheck() *mux.Router {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Community:   &handlers.CommunityHandlers{},
 		Newsletter:  &handlers.NewsletterHandlers{},
 		Label:       &handlers.LabelHandlers{},
 		ChatHistory: &handlers.ChatHistoryHandlers{},

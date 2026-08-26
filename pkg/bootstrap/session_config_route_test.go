@@ -126,6 +126,7 @@ func newSessionCfgFixture(t *testing.T) *sessionCfgFixture {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Community:   &handlers.CommunityHandlers{},
 		Newsletter:  &handlers.NewsletterHandlers{},
 		Label:       &handlers.LabelHandlers{},
 

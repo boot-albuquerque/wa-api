@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"time"
+	"wa-api/pkg/domain"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	"wa-api/pkg/infra/wa-noise/client/testkit"
 
@@ -22,7 +23,7 @@ func TestGroupAdapter_CreateGroup_OK(t *testing.T) {
 		return &types.GroupInfo{}, nil
 	}}
 	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	if _, err := a.CreateGroup(context.Background(), "u1", "MyGroup", nil); err != nil {
+	if _, err := a.CreateGroup(context.Background(), "u1", "MyGroup", nil, domain.CreateGroupOpts{}); err != nil {
 		t.Fatalf("CreateGroup = %v", err)
 	}
 	if !called {
@@ -33,7 +34,7 @@ func TestGroupAdapter_CreateGroup_OK(t *testing.T) {
 // TestGroupAdapter_CreateGroup_NoSession.
 func TestGroupAdapter_CreateGroup_NoSession(t *testing.T) {
 	a := NewGroupAdapter(testkit.GetterWith(nil))
-	_, err := a.CreateGroup(context.Background(), "u1", "X", nil)
+	_, err := a.CreateGroup(context.Background(), "u1", "X", nil, domain.CreateGroupOpts{})
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("CreateGroup code = %q", testkit.AppErrCode(err))
 	}

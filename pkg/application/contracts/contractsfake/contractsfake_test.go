@@ -625,7 +625,7 @@ func TestGroupLifecycle(t *testing.T) {
 	ctx := context.Background()
 	parts := []domain.JID{"a@s", "b@s"}
 
-	if v, err := f.CreateGroup(ctx, "u1", "meu grupo", parts); v != nil || err != nil {
+	if v, err := f.CreateGroup(ctx, "u1", "meu grupo", parts, domain.CreateGroupOpts{}); v != nil || err != nil {
 		t.Errorf("CreateGroup zero-value = %v, %v", v, err)
 	}
 	if v, err := f.JoinGroup(ctx, "u1", "code"); v != nil || err != nil {
@@ -645,10 +645,10 @@ func TestGroupLifecycle(t *testing.T) {
 		t.Errorf("LeaveGroupCalls = %+v", f.LeaveGroupCalls)
 	}
 
-	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID) (any, error) { return nil, errBoom }
+	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) { return nil, errBoom }
 	f.JoinGroupFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
 	f.LeaveGroupFunc = func(context.Context, string, domain.JID) error { return errBoom }
-	if _, err := f.CreateGroup(ctx, "u1", "", nil); !errors.Is(err, errBoom) {
+	if _, err := f.CreateGroup(ctx, "u1", "", nil, domain.CreateGroupOpts{}); !errors.Is(err, errBoom) {
 		t.Errorf("CreateGroupFunc = %v", err)
 	}
 	if _, err := f.JoinGroup(ctx, "u1", ""); !errors.Is(err, errBoom) {

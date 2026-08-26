@@ -104,8 +104,10 @@ func rejectMissingField(w http.ResponseWriter, r *http.Request, field, logMsg st
 
 func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
 	var req struct {
-		Name         string   `json:"name"`
-		Participants []string `json:"participants"`
+		Name            string   `json:"name"`
+		Participants    []string `json:"participants"`
+		IsParent        bool     `json:"is_parent"`
+		LinkedParentJID string   `json:"linked_parent_jid"`
 	}
 	if !decodeAndRespond(w, r, &req) {
 		return
@@ -114,7 +116,13 @@ func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, 
 		rejectMissingField(w, r, "name", "create group request rejected")
 		return
 	}
-	if len(req.Participants) < 1 {
+	if req.IsParent && req.LinkedParentJID != "" {
+		err := fmt.Errorf("is_parent and linked_parent_jid are mutually exclusive")
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("create group request rejected")
+		customhttp.RespondJSON(w, 400, nil, err)
+		return
+	}
+	if !req.IsParent && len(req.Participants) < 1 {
 		rejectMissingField(w, r, "participants", "create group request rejected")
 		return
 	}
@@ -122,7 +130,11 @@ func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, 
 		rejectEmptyElement(w, r, "participants", i, "create group request rejected")
 		return
 	}
-	rsp, err := uc.CreateGroup(r.Context(), id, req.Name, req.Participants)
+	opts := domain.CreateGroupOpts{
+		IsParent:        req.IsParent,
+		LinkedParentJID: domain.JID(req.LinkedParentJID),
+	}
+	rsp, err := uc.CreateGroup(r.Context(), id, req.Name, req.Participants, opts)
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("create group failed")
 		customhttp.RespondJSON(w, 500, nil, err)
