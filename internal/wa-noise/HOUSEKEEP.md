@@ -3260,3 +3260,69 @@ COMPILA e falha com mensagem.
 exige um canal COM mensagens, e o canal de teste estava vazio.
 
 <!-- f-status: aberto -->
+
+
+## LIB-04 — `newsletter.MarkViewed` espera a resposta do servidor e deita-a fora
+
+**Data / contexto**: 2026-08-26, campanha de observadores para as rotas 🟡 do
+wa-api (`OBSERVADORES-AMBAR.md` §4). A pergunta era: `POST /newsletters/mark-viewed`
+devolve `200` com `data: null` — existe algum sinal do servidor que confirme a
+marcação?
+
+**Onde**: `internal/wa-noise/capabilities/newsletter/actions.go:51-74`.
+
+```go
+reqID := t.GenerateRequestID()
+resp := t.WaitResponse(reqID)
+err := t.SendNode(ctx, waBinary.Node{Tag: "receipt", Attrs: ...})
+if err != nil {
+    t.CancelResponse(reqID, resp)
+    return err
+}
+// TODO handle response?
+<-resp
+return nil
+```
+
+**Problema**: a função **regista a espera, envia, e bloqueia à espera da
+resposta** — e depois descarta o nó recebido sem o olhar. O `// TODO handle
+response?` é do upstream e está por resolver.
+
+O custo não é teórico: este é o único sinal que o servidor devolve para a
+operação. A documentação do próprio fork diz que `NewsletterMarkViewed`
+"marks a channel message as viewed, **incrementing the view counter**"
+(`internal/wa-noise/core/newsletter.go:52-53`), e o contador só se lê pela via
+`GetNewsletterMessageUpdates` / `NewsletterSubscribeLiveUpdates`
+(`core/newsletter.go:206-208`) — que no wa-api está exposta como
+`POST /newsletters/updates` e **está inoperante** (achado F265 do `HOUSEKEEP.md`
+da raiz: `500` ao fim de 30 s, o servidor nunca responde).
+
+Ou seja: das duas confirmações possíveis, uma está partida do outro lado e a
+outra é recebida aqui e deitada fora. É por isso que a rota do wa-api não
+consegue subir de 🟡 a ✅.
+
+**Evidência de que o nó chega**: `<-resp` só desbloqueia quando o servidor
+responde ao `reqID`; a função retorna `nil`, logo o canal foi lido. O teste
+existente `TestMarkViewedRegistraOCanalAntesDeEnviar`
+(`actions_test.go:105-118`) já trava a ORDEM (registar antes de enviar) e a
+ausência de cancelamento, mas não olha para o conteúdo — porque não há conteúdo
+a olhar.
+
+**Correcção sugerida**: mudar a assinatura para devolver o nó, ou ao menos
+classificar um `<error>` na resposta como erro em vez de sucesso. Um `receipt`
+recusado hoje devolve `nil` e vira `200` na API acima. É divergência
+deliberada face ao upstream, logo entrada no `PATCHES.md` se for feita.
+
+**Estado**: não corrigido. É código vendorizado e a mudança altera assinatura
+pública — decisão do utilizador. Cruzamento: `HOUSEKEEP.md` da raiz, F265, e
+LIB-03 deste ficheiro.
+
+**Correcção de referência cruzada (integração de 2026-08-26)**: a versão
+original desta entrada apontava a F32 (duas query IDs de newsletter erradas no
+upstream) como hipótese mais provável para a F265. **Essa hipótese caiu.**
+`GetMessageUpdates` não é uma query MEX e não tem query ID nenhum — é um IQ
+binário com namespace `newsletter`. A causa determinada da F265 é
+`PROTOCOL_CHANGED`, registada em LIB-03 e em
+`INVESTIGATION-newsletter-updates.md`.
+
+<!-- f-status: aberto -->

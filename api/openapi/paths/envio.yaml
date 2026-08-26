@@ -455,9 +455,22 @@
     tags: [Envio de mensagens]
     summary: Enviar um autocolante
     description: |
-      Envia um autocolante. A imagem recebida é **sempre convertida para WebP**
-      pelo servidor; o que sobe ao WhatsApp é o resultado da conversão, nunca
-      os bytes de entrada.
+      Envia um autocolante.
+
+      **CORRECÇÃO medida a 2026-08-26**: esta descrição afirmava que a imagem
+      é "sempre convertida para WebP" pelo servidor. **Não é.** A conversão
+      corre em dois ramos apenas — `image/jpeg`, `image/png`, `image/jpg` num,
+      `image/gif` e `video/*` no outro; qualquer outro tipo, **incluindo
+      `image/webp`**, cai no `default` de `ConvertToWebPSticker`
+      (`pkg/infra/media/sticker/exif.go:62`) e sobe **tal e qual**, recebendo
+      só o EXIF de pacote. O tipo é decidido por `http.DetectContentType`, que
+      reconhece a assinatura WebP.
+
+      **Consequência prática**: um WebP que já vem do chamador **não é
+      redimensionado para 512×512**. Se ele não tiver as dimensões que o
+      WhatsApp desenha, a rota devolve `200`, a mensagem chega, e o cliente
+      mostra uma bolha vazia — foi exactamente isso que a bateria de campo
+      mediu. **Para que a conversão corra, envie PNG ou JPEG.** É a F279.
 
       **Quando usar**: figurinhas. Uma imagem comum enviada por aqui vira
       autocolante — o que muda o tamanho com que é desenhada e retira legenda e
@@ -472,8 +485,15 @@
         são metadata e não alteram a imagem.
 
       **Ressalva medida (2026-08-26)**: a rota devolveu `200` e a mensagem
-      chegou, mas com um WebP sintético o cliente desenha uma bolha vazia. A
-      rota está exercitada; o autocolante em si **não** está provado.
+      chegou, mas com um WebP sintético o cliente desenha uma bolha vazia — pela
+      razão acima: aquele WebP nunca foi convertido. A rota está exercitada; o
+      autocolante em si **não** está provado.
+
+      **Como se prova, sem olhar para o ecrã**: o autocolante enviado é gravado
+      em `message_history` (`adapters/chat/messenger.go:570`), logo
+      `GET /chats/history` devolve o descritor em `data_json`, e
+      `POST /chats/downloadsticker` traz os bytes de volta — que se verificam
+      como `RIFF`…`WEBP` de 512×512. Procedimento em `HUMAN-LAST.md` §2.
 
       **Autenticação**: token de sessão.
     security:

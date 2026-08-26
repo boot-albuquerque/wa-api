@@ -30093,6 +30093,115 @@ este ambiente não tem. Ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md`
 
 <!-- f-status: aberto -->
 
+## F279 — autocolante em WebP NÃO é convertido, e a documentação afirma que é
+
+**Data**: 2026-08-26. **Contexto**: campanha de observadores para as oito rotas
+🟡 (`OBSERVADORES-AMBAR.md`), rota `POST /chats/send/sticker`.
+
+**Onde**: `pkg/infra/media/sticker/exif.go:40-65`, `ConvertToWebPSticker`:
+
+```go
+mimeType := http.DetectContentType(data)
+...
+case mimeType == "image/jpeg", mimeType == "image/png", mimeType == "image/jpg":
+    converted, err := ConvertImageToWebP(data)   // ffmpeg, scale=512:512
+default:
+    return data, mimeType, nil                   // ← passa incólume
+```
+
+**Problema**: `api/openapi/paths/envio.yaml:458-460` afirma como facto:
+
+> A imagem recebida é **sempre convertida para WebP** pelo servidor; o que sobe
+> ao WhatsApp é o resultado da conversão, nunca os bytes de entrada.
+
+Não é verdade. `http.DetectContentType` reconhece a assinatura WebP e devolve
+`image/webp`, que não é nenhum dos ramos de conversão — cai no `default` e sobe
+tal e qual, recebendo apenas o EXIF (`exif.go:33-35`).
+
+**Evidência**, medida com o próprio exemplo publicado na documentação
+(`envio.yaml:489`, `data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==`):
+
+```
+$ go run /tmp/wsniff.go
+webp sniff: image/webp
+```
+
+**Isto explica o 🟡 da rota.** A bateria de 2026-08-26 enviou esse WebP
+sintético de 26 bytes, recebeu `200`, a mensagem chegou, e o cliente desenhou
+bolha vazia. O autocolante nunca passou pelo `scale=512:512`
+(`pkg/infra/media/sticker/sticker.go:92-96`) porque o caminho de conversão nunca
+correu para ele. O defeito não estava no envio nem no protocolo — estava em
+enviar uma imagem que o WhatsApp não desenha, achando que o servidor a
+normalizaria.
+
+**Consulta às referências (regra da `CLAUDE.md`)**: o whatsapp-web.js tem a
+MESMA política — a conversão por ffmpeg só corre para o que ainda não é WebP.
+Logo a divergência **não** está na política de conversão, e copiar a referência
+não corrigiria nada. É informação útil e negativa: o que está errado é a nossa
+documentação, não o desenho.
+
+**Correcção sugerida**, duas partes independentes:
+
+1. **Documentação** (barata, sem risco): trocar "sempre convertida" pela regra
+   real — converte-se `image/jpeg`, `image/png`, `image/jpg`, `image/gif` e
+   `video/*`; qualquer outro tipo, **WebP incluído**, sobe como veio, e cabe ao
+   chamador garantir 512×512.
+2. **Código** (a decidir): validar as dimensões de um WebP recebido e recusar
+   com `400` o que o WhatsApp não desenha, em vez de aceitar e produzir bolha
+   vazia. É mais um caso de `200` que diz menos do que aparenta.
+
+**Estado**: não corrigido. Achado incidental, fora do escopo da tarefa
+(inventário de observadores), e a parte 2 muda comportamento de rota. Registado
+para decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` §2.
+
+<!-- f-status: aberto -->
+
+
+## F280 — `UpdateRequestParticipants` deita fora o resultado por participante que o WhatsApp devolve
+
+**Data**: 2026-08-26. **Contexto**: idem, rota
+`POST /groups/{group_jid}/join-requests`.
+
+**Onde**: `pkg/infra/wa-noise/adapters/group/participants.go:81`:
+
+```go
+_, err = client.UpdateGroupRequestParticipants(ctx, jid, jids, change)
+return err
+```
+
+**Problema**: `client.UpdateGroupRequestParticipants` devolve
+`([]types.GroupParticipant, error)` — a lista traz, **por solicitante**, o `JID`
+resolvido e um campo `Error` diferente de zero quando aquele solicitante
+falhou. O adaptador descarta o primeiro valor de retorno, e a rota devolve uma
+frase fixa: `{Details: "Group request participants updated successfully"}`.
+
+Consequência concreta, já reconhecida na documentação da própria rota
+(`api/openapi/paths/grupo.yaml:1411-1413`): *"o adaptador faz uma chamada por
+solicitante. Se algum falhar, a rota devolve erro — não há corpo que relate
+quais passaram."* Um sucesso parcial é indistinguível de sucesso total.
+
+**Evidência da inconsistência interna**: a rota IRMÃ,
+`POST /groups/{group_jid}/participants`, **devolve** exactamente essa lista, com
+`Error: 0` por participante (`api/openapi/paths/grupo.yaml:1324-1337`). Duas
+rotas do mesmo grupo, o mesmo tipo de retorno do upstream, e só uma o expõe.
+
+**Por que isto importa para a campanha de evidências**: a resposta do próprio
+WhatsApp seria o observador mais directo desta rota — não independente, mas
+suficiente para distinguir "aceitou os três" de "aceitou um". Descartá-la é
+parte da razão de o `200` não dizer nada.
+
+**Correcção sugerida**: propagar `[]types.GroupParticipant` até
+`domain.UpdateGroupRequestParticipantsResult`, no mesmo formato que
+`ResultadoAtualizarParticipantes` já usa, e documentar o sucesso parcial. É
+mudança de contrato de resposta (acrescento, não remoção), logo compatível.
+
+**Estado**: não corrigido. Fora do escopo, e altera o corpo de uma rota
+documentada — exige decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §3.
+
+<!-- f-status: aberto -->
+
+
+
 ## F289 — `orphan-browser-check` acusa como órfão um browser cujo DONO está vivo, e por isso bloqueia qualquer `make check` concorrente noutro worktree
 
 **Data/contexto**: 2026-08-26, achado de lado ao correr o gate no fim da
