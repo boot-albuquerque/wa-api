@@ -17,6 +17,8 @@ require (
 require (
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/beeper/argo-go v1.1.2
+	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f
+	github.com/chromedp/chromedp v0.16.0
 	github.com/coder/websocket v1.8.14
 	github.com/justinas/alice v1.2.0
 	github.com/lib/pq v1.10.9
@@ -40,8 +42,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.21 // indirect
 	github.com/aws/smithy-go v1.24.2 // indirect
-	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f // indirect
-	github.com/chromedp/chromedp v0.16.0 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
@@ -74,4 +74,5 @@ require (
 	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sys v0.47.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 )

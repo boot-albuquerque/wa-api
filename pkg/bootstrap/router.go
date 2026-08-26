@@ -15,6 +15,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	customhttp "wa-api/pkg/presentation/http"
+	"wa-api/pkg/presentation/http/apidocs"
 	"wa-api/pkg/presentation/http/handlers"
 
 	"github.com/rs/zerolog/log"
@@ -336,6 +337,15 @@ func buildRouter(d Deps) *mux.Router {
 		}
 	}
 	router.Handle("/health/ready", alice.New().Then(readinessHandler(ready))).Methods("GET")
+
+	// A documentação da API fica FORA da cadeia autenticada, ao lado das
+	// sondas, e pela mesma razão que elas: não carrega credencial nem dado.
+	// Exigir token para ler como se obtém um token seria circular. O leitor
+	// fornece o seu pelo botão Authorize, e ele viaja só nos pedidos que ele
+	// próprio dispara.
+	docs := alice.New(securityHeadersMiddleware).Then(apidocs.Handler())
+	router.PathPrefix(apidocs.BasePath + "/").Handler(docs).Methods("GET")
+	router.Handle(apidocs.BasePath, docs).Methods("GET")
 
 	// O devui precisa do token de admin para o entregar ao painel; ver
 	// devui.Handler para a consequência de segurança disso.

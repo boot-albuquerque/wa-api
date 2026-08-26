@@ -1,0 +1,143 @@
+# Grupo: Saúde.
+#
+# MODELO DE REFERÊNCIA. Este ficheiro é o contrato de forma para os restantes
+# grupos: cada operação traz tags, summary orientado à ação, description que
+# diz o que faz / quando usar / que regras respeitar, security explícito,
+# e responses com schema E exemplo — sucesso e falha.
+/health:
+  get:
+    tags: [Saúde]
+    summary: Consultar a saúde detalhada do serviço
+    description: |
+      Devolve um retrato do processo: há quanto tempo está de pé, quantas
+      sessões existem, quantas estão ligadas e autenticadas, e quantas
+      goroutines correm.
+
+      **Quando usar**: em painéis de operação e em diagnóstico, quando se quer
+      saber *como* o serviço está, e não apenas se responde.
+
+      **Autenticação**: exige token de sessão. É a diferença face às outras
+      três sondas — esta expõe contagens da instalação, logo não fica aberta.
+      Para sondas de orquestrador use `/livez` ou `/health/ready`, que não
+      pedem credencial.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Retrato do processo no instante do pedido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/SaudeDetalhada'
+            example:
+              code: 200
+              data:
+                status: ok
+                timestamp: '2026-08-26T13:17:14Z'
+                uptime: 2m19.584700417s
+                active_connections: 2
+                total_users: 2
+                connected_users: 2
+                logged_in_users: 2
+                memory_stats:
+                  alloc_mb: 7
+                  num_gc: 5
+                  sys_mb: 26
+                  total_alloc_mb: 11
+                goroutines: 285
+                version: 1.0.6
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+
+/livez:
+  get:
+    tags: [Saúde]
+    summary: Verificar se o processo está vivo
+    description: |
+      Sonda de vivacidade. Responde assim que o processo consegue atender —
+      não consulta banco, não fala com o WhatsApp e não depende de sessão
+      nenhuma.
+
+      **Quando usar**: como `livenessProbe` de contentor. É o que o
+      `HEALTHCHECK` do Dockerfile aponta.
+
+      **Regra importante**: responder aqui significa apenas que o processo
+      está de pé. Para saber se ele já pode receber tráfego, use
+      `/health/ready`.
+
+      **Autenticação**: nenhuma.
+    security: []
+    responses:
+      '200':
+        description: O processo está vivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EstadoSonda'
+            example:
+              status: ok
+
+/health/live:
+  get:
+    tags: [Saúde]
+    summary: Verificar se o processo está vivo (caminho alternativo)
+    description: |
+      O mesmo manipulador de `/livez`, servido noutro caminho.
+
+      **Por que existem os dois**: `/livez` é o que os manifestos implantados
+      apontam hoje, e renomear uma sonda por baixo de uma implantação a correr
+      torna todos os contentores insalubres ao mesmo tempo. `/health/live` é a
+      forma nova; `/livez` fica como sinónimo.
+
+      **Autenticação**: nenhuma.
+    security: []
+    responses:
+      '200':
+        description: O processo está vivo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EstadoSonda'
+            example:
+              status: ok
+
+/health/ready:
+  get:
+    tags: [Saúde]
+    summary: Verificar se o serviço pode receber tráfego
+    description: |
+      Sonda de prontidão. Ao contrário da vivacidade, **verifica dependências**
+      — hoje, o banco de dados — e diz o resultado de cada uma em `checks`.
+
+      **Quando usar**: como `readinessProbe`, e como porta do balanceador. Um
+      processo vivo mas sem banco responde aqui de forma diferente, e é isso
+      que evita mandar-lhe tráfego.
+
+      **Também devolve `capabilities`**, com a configuração em vigor — por
+      exemplo o modo de aglomerado (`cluster`), que em `single` significa que
+      um segundo processo sobre o mesmo diretório de dados é recusado (ADR-0005).
+
+      **Autenticação**: nenhuma.
+    security: []
+    responses:
+      '200':
+        description: |
+          O serviço está pronto. Note que o estado vem no CORPO, em `status`, e
+          não apenas no código HTTP — um `200` com `status` diferente de
+          `ready` significa que alguma verificação não passou.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EstadoProntidao'
+            example:
+              status: ready
+              checks:
+                database: ok
+              capabilities:
+                cluster: single

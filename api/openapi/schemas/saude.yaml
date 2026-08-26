@@ -1,0 +1,106 @@
+SaudeDetalhada:
+  type: object
+  description: Contagens do processo, devolvidas por `GET /health`.
+  properties:
+    status:
+      type: string
+      description: Estado global do processo.
+      example: ok
+    timestamp:
+      type: string
+      format: date-time
+      description: Instante em que o retrato foi tirado, em UTC.
+      example: '2026-08-26T12:41:38Z'
+    uptime:
+      type: string
+      description: Há quanto tempo o processo está de pé, em notação de duração do Go.
+      example: 3h12m45s
+    active_connections:
+      type: integer
+      description: Ligações WebSocket ao WhatsApp actualmente abertas.
+      example: 2
+    total_users:
+      type: integer
+      description: Sessões existentes no banco, ligadas ou não.
+      example: 2
+    connected_users:
+      type: integer
+      description: Sessões com ligação estabelecida ao WhatsApp.
+      example: 2
+    logged_in_users:
+      type: integer
+      description: Sessões ligadas E autenticadas — as que conseguem operar.
+      example: 2
+    memory_stats:
+      type: object
+      description: |
+        Contadores do coletor de lixo do Go, em megabytes salvo `num_gc`.
+        Medido na resposta real — a struct de domínio declara-o como mapa
+        aberto, logo as chaves abaixo vêm do código que o preenche
+        (`get_health.go:55-60`) e não do tipo.
+      properties:
+        alloc_mb:
+          type: integer
+          description: Memória de heap em uso neste instante.
+          example: 7
+        total_alloc_mb:
+          type: integer
+          description: Total já alocado desde o arranque, cumulativo — nunca desce.
+          example: 11
+        sys_mb:
+          type: integer
+          description: Memória obtida do sistema operativo.
+          example: 26
+        num_gc:
+          type: integer
+          description: Ciclos completos do coletor de lixo desde o arranque.
+          example: 5
+    goroutines:
+      type: integer
+      description: Goroutines em execução. Crescimento contínuo aqui costuma indicar fuga.
+      example: 285
+    version:
+      type: string
+      description: Versão do binário (`pkg/bootstrap/bootstrap_server.go`).
+      example: 1.0.6
+
+EstadoSonda:
+  type: object
+  description: |
+    Resposta das sondas de vivacidade. Repare que NÃO usa o envelope comum —
+    é resposta de infraestrutura, lida por orquestradores que esperam a forma
+    mais simples possível.
+  required: [status]
+  properties:
+    status:
+      type: string
+      enum: [ok]
+      description: Constante `ok`. O que informa é o código HTTP e a própria resposta chegar.
+      example: ok
+
+EstadoProntidao:
+  type: object
+  description: Resposta da sonda de prontidão, com o resultado de cada dependência.
+  required: [status, checks]
+  properties:
+    status:
+      type: string
+      enum: [ready, degraded]
+      description: |
+        `ready` quando todas as verificações passam. Qualquer outro valor
+        significa que o serviço não deve receber tráfego.
+      example: ready
+    checks:
+      type: object
+      description: Uma entrada por dependência verificada, com o seu resultado.
+      additionalProperties:
+        type: string
+      example:
+        database: ok
+    capabilities:
+      type: object
+      description: Configuração em vigor que altera o comportamento do serviço.
+      additionalProperties:
+        type: string
+      example:
+        cluster: single

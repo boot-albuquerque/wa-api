@@ -1,0 +1,633 @@
+# GERADO por "go run ./cmd/openapidoc" — NÃO EDITE À MÃO.
+#
+# As fontes são api/openapi/base.yaml (info, tags, segurança, componentes
+# partilhados), api/openapi/paths/<grupo>.yaml (um por família de rotas) e
+# api/openapi/schemas/<grupo>.yaml (esquemas próprios de cada família).
+#
+# O teste TestOpenAPIGeradoEstaAtualizado recusa este ficheiro se ele
+# divergir das fontes.
+components:
+  parameters:
+    IdNoCaminho:
+      description: Identificador do recurso, em hexadecimal de 32 caracteres.
+      in: path
+      name: id
+      required: true
+      schema:
+        example: 918e37366f27e1125ee0482a793267e1
+        pattern: ^[0-9a-f]{32}$
+        type: string
+    JidNoCaminho:
+      description: JID do utilizador, em forma PN ou LID.
+      in: path
+      name: jid
+      required: true
+      schema:
+        example: 554192421234@s.whatsapp.net
+        pattern: ^[0-9]+(:[0-9]+)?@(s\.whatsapp\.net|lid)$
+        type: string
+  responses:
+    CorpoInvalido:
+      content:
+        application/json:
+          example:
+            code: 400
+            error:
+              code: decode_payload_failed
+              message: could not decode payload
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: O corpo não é JSON válido, ou não corresponde à forma esperada.
+    ErroInterno:
+      content:
+        application/json:
+          example:
+            code: 500
+            error:
+              code: internal_error
+              message: internal server error
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        Falha não classificada, ou tempo esgotado à espera do WhatsApp (o
+        limite por pedido é de 30 segundos).
+    NaoAutorizado:
+      content:
+        application/json:
+          example:
+            code: 401
+            error:
+              code: unauthorized
+              message: unauthorized
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        Token ausente, inválido ou revogado. Nas rotas `/admin`, significa que
+        o cabeçalho `Authorization` não corresponde ao token de administração.
+    RecusadoPeloWhatsApp:
+      content:
+        application/json:
+          example:
+            code: 422
+            error:
+              code: upstream_rejected
+              message: WhatsApp refused this request; repeating it unchanged will not help
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        O pedido foi bem formado e chegou ao WhatsApp, que o recusou. Repetir
+        o mesmo pedido não ajuda — algo no estado da conta, nas permissões ou
+        no conteúdo tem de mudar primeiro.
+    SemSessao:
+      content:
+        application/json:
+          example:
+            code: 400
+            error:
+              code: missing_session_id
+              message: missing session id
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        O token foi aceite mas não há sessão associada. Acontece quando a
+        sessão foi criada e ainda não emparelhada.
+  schemas:
+    AlvoConversa:
+      description: |
+        Nome universal do destino. Toda rota que recebe um destinatário o
+        aceita; o nome antigo e específico da rota tem precedência quando
+        ambos vierem.
+      properties:
+        chat:
+          description: JID de destino — contacto, grupo ou canal.
+          example: 554192421234@s.whatsapp.net
+          type: string
+      type: object
+    ContextoResposta:
+      description: Citação — faz a mensagem enviada aparecer como resposta a outra.
+      properties:
+        Participant:
+          description: JID de quem escreveu a mensagem citada.
+          example: 554192421234@s.whatsapp.net
+          type: string
+        QuotedText:
+          description: Texto da mensagem citada, para o cliente desenhar a pré-visualização.
+          example: Bom dia, tudo certo com o pedido?
+          type: string
+        StanzaId:
+          description: '`message_id` da mensagem citada.'
+          example: 3EB0A4B2AFD45E625C0917
+          type: string
+      required:
+        - StanzaId
+        - Participant
+      type: object
+    Detalhes:
+      description: Confirmação textual de uma operação sem carga útil própria.
+      properties:
+        Details:
+          example: Group name set successfully
+          type: string
+      type: object
+    Envelope:
+      description: Forma comum a toda resposta de sucesso.
+      properties:
+        code:
+          description: Estado HTTP, repetido no corpo.
+          example: 200
+          type: integer
+        data:
+          description: A carga útil, com forma própria de cada rota.
+          nullable: true
+        success:
+          description: Sempre `true` em sucesso. Campo legado, será removido.
+          example: true
+          type: boolean
+      required:
+        - code
+        - success
+      type: object
+    Erro:
+      description: |
+        Forma comum a toda resposta de erro que passa pela taxonomia `apperr`.
+      properties:
+        code:
+          description: Estado HTTP, repetido no corpo.
+          example: 400
+          type: integer
+        error:
+          properties:
+            code:
+              description: |
+                Código estável em `snake_case`. É por aqui que um cliente deve
+                decidir o que fazer — a mensagem pode mudar, o código não.
+              example: missing_chat
+              type: string
+            message:
+              description: Descrição legível, segura para mostrar ao utilizador.
+              example: missing chat in payload
+              type: string
+          required:
+            - code
+            - message
+          type: object
+        success:
+          enum:
+            - false
+          example: false
+          type: boolean
+      required:
+        - code
+        - error
+        - success
+      type: object
+    ErroTextoSimples:
+      description: |
+        Forma ANTIGA de erro, com `error` em texto simples em vez do objecto.
+        Sobrevive em catorze pontos do código — sobretudo nas recusas de campo
+        obrigatório das rotas de grupo (`rejectMissingField`). Registado como
+        F266 no `HOUSEKEEP.md`. Um cliente que leia `error.code` parte aqui.
+      properties:
+        code:
+          example: 400
+          type: integer
+        error:
+          example: bad request
+          type: string
+        success:
+          enum:
+            - false
+          example: false
+          type: boolean
+      required:
+        - code
+        - error
+        - success
+      type: object
+    EstadoProntidao:
+      description: Resposta da sonda de prontidão, com o resultado de cada dependência.
+      properties:
+        capabilities:
+          additionalProperties:
+            type: string
+          description: Configuração em vigor que altera o comportamento do serviço.
+          example:
+            cluster: single
+          type: object
+        checks:
+          additionalProperties:
+            type: string
+          description: Uma entrada por dependência verificada, com o seu resultado.
+          example:
+            database: ok
+          type: object
+        status:
+          description: |
+            `ready` quando todas as verificações passam. Qualquer outro valor
+            significa que o serviço não deve receber tráfego.
+          enum:
+            - ready
+            - degraded
+          example: ready
+          type: string
+      required:
+        - status
+        - checks
+      type: object
+    EstadoSonda:
+      description: |
+        Resposta das sondas de vivacidade. Repare que NÃO usa o envelope comum —
+        é resposta de infraestrutura, lida por orquestradores que esperam a forma
+        mais simples possível.
+      properties:
+        status:
+          description: Constante `ok`. O que informa é o código HTTP e a própria resposta chegar.
+          enum:
+            - ok
+          example: ok
+          type: string
+      required:
+        - status
+      type: object
+    ResultadoEnvio:
+      description: |
+        Resposta comum a todas as rotas de envio. `status: "sent"` significa
+        que o WhatsApp aceitou a mensagem — não que ela já foi desenhada no
+        cliente do destinatário.
+      properties:
+        message_id:
+          description: Identificador da mensagem no servidor, para reagir, editar, apagar ou encaminhar depois.
+          example: 3EB0A4B2AFD45E625C0917
+          type: string
+        status:
+          description: Estado do envio devolvido pelo servidor.
+          example: sent
+          type: string
+        timestamp:
+          description: Instante do envio, em segundos desde a época Unix.
+          example: 1787747900
+          format: int64
+          type: integer
+      required:
+        - message_id
+        - status
+      type: object
+    SaudeDetalhada:
+      description: Contagens do processo, devolvidas por `GET /health`.
+      properties:
+        active_connections:
+          description: Ligações WebSocket ao WhatsApp actualmente abertas.
+          example: 2
+          type: integer
+        connected_users:
+          description: Sessões com ligação estabelecida ao WhatsApp.
+          example: 2
+          type: integer
+        goroutines:
+          description: Goroutines em execução. Crescimento contínuo aqui costuma indicar fuga.
+          example: 285
+          type: integer
+        logged_in_users:
+          description: Sessões ligadas E autenticadas — as que conseguem operar.
+          example: 2
+          type: integer
+        memory_stats:
+          description: |
+            Contadores do coletor de lixo do Go, em megabytes salvo `num_gc`.
+            Medido na resposta real — a struct de domínio declara-o como mapa
+            aberto, logo as chaves abaixo vêm do código que o preenche
+            (`get_health.go:55-60`) e não do tipo.
+          properties:
+            alloc_mb:
+              description: Memória de heap em uso neste instante.
+              example: 7
+              type: integer
+            num_gc:
+              description: Ciclos completos do coletor de lixo desde o arranque.
+              example: 5
+              type: integer
+            sys_mb:
+              description: Memória obtida do sistema operativo.
+              example: 26
+              type: integer
+            total_alloc_mb:
+              description: Total já alocado desde o arranque, cumulativo — nunca desce.
+              example: 11
+              type: integer
+          type: object
+        status:
+          description: Estado global do processo.
+          example: ok
+          type: string
+        timestamp:
+          description: Instante em que o retrato foi tirado, em UTC.
+          example: "2026-08-26T12:41:38Z"
+          format: date-time
+          type: string
+        total_users:
+          description: Sessões existentes no banco, ligadas ou não.
+          example: 2
+          type: integer
+        uptime:
+          description: Há quanto tempo o processo está de pé, em notação de duração do Go.
+          example: 3h12m45s
+          type: string
+        version:
+          description: Versão do binário (`pkg/bootstrap/bootstrap_server.go`).
+          example: 1.0.6
+          type: string
+      type: object
+    SucessoMensagem:
+      description: Confirmação de uma operação de estado de conversa.
+      properties:
+        message:
+          example: Chat pinned
+          type: string
+        success:
+          example: true
+          type: boolean
+      type: object
+  securitySchemes:
+    TokenAdmin:
+      description: |
+        Token de administração do wa-api, para as rotas `/admin`. É **regerado
+        a cada arranque do processo** e fica em `<datadir>/admin_token`.
+        Enviado tal e qual, sem o prefixo `Bearer`.
+      in: header
+      name: Authorization
+      type: apiKey
+    TokenSessao:
+      description: |
+        Token da sessão de WhatsApp. Identifica de que conta parte a operação.
+        É criado em `POST /admin/users` e não é recuperável depois — se se
+        perder, cria-se outra sessão.
+
+        Por compatibilidade, também é aceite como `?token=` na query string,
+        mas cada uso emite aviso no log e essa forma será removida.
+      in: header
+      name: token
+      type: apiKey
+info:
+  description: |
+    API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber
+    mensagens, gerir grupos, comunidades e canais, consultar contactos e
+    administrar sessões.
+
+    ## Como se autentica
+
+    Quase todas as rotas usam um **token de sessão**, enviado no cabeçalho
+    `token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é
+    ele que diz *de que conta* a operação parte.
+
+    As rotas sob `/admin` usam outro segredo: o **token de administração**, no
+    cabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e
+    não pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica
+    em `<datadir>/admin_token`.
+
+    Três rotas de sonda não pedem credencial nenhuma: `/livez`,
+    `/health/live` e `/health/ready`.
+
+    Use o botão **Authorize** aqui em cima para preencher os dois.
+
+    ## O envelope das respostas
+
+    Sucesso e erro têm forma fixa:
+
+    ```json
+    { "code": 200, "data": { }, "success": true }
+    ```
+
+    ```json
+    { "code": 400, "error": { "code": "missing_chat", "message": "missing chat in payload" }, "success": false }
+    ```
+
+    `error.code` é estável e legível por máquina; `error.message` é para
+    mostrar a uma pessoa.
+
+    **Ressalva medida**: catorze pontos do código ainda respondem com
+    `"error"` em texto simples em vez do objecto — as recusas de campo
+    obrigatório das rotas de grupo, sobretudo. Está registado como F266 no
+    `HOUSEKEEP.md`, e a documentação de cada rota afectada diz.
+
+    ## O campo `chat`
+
+    Toda rota que recebe um destinatário aceita `"chat"` como nome universal do
+    campo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)
+    continua a funcionar e **ganha** quando os dois vierem no mesmo pedido.
+
+    ## Identificadores
+
+    - **PN** — o número, em `554192421234@s.whatsapp.net`
+    - **LID** — o identificador opaco, em `90937376170214@lid`
+    - **grupo** — `120363411669320145@g.us`
+    - **canal** — `120363411025775186@newsletter`
+
+    Onde a distinção importa, a descrição da rota diz qual das formas é exigida.
+
+    ## O que `200` significa, e o que não significa
+
+    Um `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem
+    foi desenhada no ecrã do destinatário, nem que a operação teve efeito
+    visível. As rotas em que essa diferença já foi medida trazem a ressalva na
+    descrição.
+  title: wa-api — API HTTP para WhatsApp
+  version: 1.0.6
+openapi: 3.0.3
+paths:
+  /health:
+    get:
+      description: |
+        Devolve um retrato do processo: há quanto tempo está de pé, quantas
+        sessões existem, quantas estão ligadas e autenticadas, e quantas
+        goroutines correm.
+
+        **Quando usar**: em painéis de operação e em diagnóstico, quando se quer
+        saber *como* o serviço está, e não apenas se responde.
+
+        **Autenticação**: exige token de sessão. É a diferença face às outras
+        três sondas — esta expõe contagens da instalação, logo não fica aberta.
+        Para sondas de orquestrador use `/livez` ou `/health/ready`, que não
+        pedem credencial.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                code: 200
+                data:
+                  active_connections: 2
+                  connected_users: 2
+                  goroutines: 285
+                  logged_in_users: 2
+                  memory_stats:
+                    alloc_mb: 7
+                    num_gc: 5
+                    sys_mb: 26
+                    total_alloc_mb: 11
+                  status: ok
+                  timestamp: "2026-08-26T13:17:14Z"
+                  total_users: 2
+                  uptime: 2m19.584700417s
+                  version: 1.0.6
+                success: true
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/SaudeDetalhada'
+                    type: object
+          description: Retrato do processo no instante do pedido.
+        "401":
+          $ref: '#/components/responses/NaoAutorizado'
+      security:
+        - TokenSessao: []
+      summary: Consultar a saúde detalhada do serviço
+      tags:
+        - Saúde
+  /health/live:
+    get:
+      description: |
+        O mesmo manipulador de `/livez`, servido noutro caminho.
+
+        **Por que existem os dois**: `/livez` é o que os manifestos implantados
+        apontam hoje, e renomear uma sonda por baixo de uma implantação a correr
+        torna todos os contentores insalubres ao mesmo tempo. `/health/live` é a
+        forma nova; `/livez` fica como sinónimo.
+
+        **Autenticação**: nenhuma.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                status: ok
+              schema:
+                $ref: '#/components/schemas/EstadoSonda'
+          description: O processo está vivo.
+      security: []
+      summary: Verificar se o processo está vivo (caminho alternativo)
+      tags:
+        - Saúde
+  /health/ready:
+    get:
+      description: |
+        Sonda de prontidão. Ao contrário da vivacidade, **verifica dependências**
+        — hoje, o banco de dados — e diz o resultado de cada uma em `checks`.
+
+        **Quando usar**: como `readinessProbe`, e como porta do balanceador. Um
+        processo vivo mas sem banco responde aqui de forma diferente, e é isso
+        que evita mandar-lhe tráfego.
+
+        **Também devolve `capabilities`**, com a configuração em vigor — por
+        exemplo o modo de aglomerado (`cluster`), que em `single` significa que
+        um segundo processo sobre o mesmo diretório de dados é recusado (ADR-0005).
+
+        **Autenticação**: nenhuma.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                capabilities:
+                  cluster: single
+                checks:
+                  database: ok
+                status: ready
+              schema:
+                $ref: '#/components/schemas/EstadoProntidao'
+          description: |
+            O serviço está pronto. Note que o estado vem no CORPO, em `status`, e
+            não apenas no código HTTP — um `200` com `status` diferente de
+            `ready` significa que alguma verificação não passou.
+      security: []
+      summary: Verificar se o serviço pode receber tráfego
+      tags:
+        - Saúde
+  /livez:
+    get:
+      description: |
+        Sonda de vivacidade. Responde assim que o processo consegue atender —
+        não consulta banco, não fala com o WhatsApp e não depende de sessão
+        nenhuma.
+
+        **Quando usar**: como `livenessProbe` de contentor. É o que o
+        `HEALTHCHECK` do Dockerfile aponta.
+
+        **Regra importante**: responder aqui significa apenas que o processo
+        está de pé. Para saber se ele já pode receber tráfego, use
+        `/health/ready`.
+
+        **Autenticação**: nenhuma.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                status: ok
+              schema:
+                $ref: '#/components/schemas/EstadoSonda'
+          description: O processo está vivo.
+      security: []
+      summary: Verificar se o processo está vivo
+      tags:
+        - Saúde
+security:
+  - TokenSessao: []
+servers:
+  - description: Instância local de desenvolvimento
+    url: http://localhost:8080
+tags:
+  - description: |
+      Ciclo de vida da ligação ao WhatsApp — emparelhar, ligar, desligar, ler o
+      QR code e consultar o estado e o perfil da conta ligada.
+    name: Sessões
+  - description: |
+      Todas as formas de enviar mensagem: texto, mídia, localização, contacto,
+      enquete, botões, lista, carrossel, modelo e encaminhamento.
+    name: Envio de mensagens
+  - description: |
+      O que se faz *depois* de a mensagem existir — reagir, editar, apagar,
+      favoritar, marcar como lida — e a gestão da conversa: arquivar, fixar,
+      silenciar, temporizar e listar histórico.
+    name: Conversas
+  - description: |
+      Recupera o conteúdo binário de uma mensagem de mídia recebida, a partir do
+      descritor que veio na própria mensagem.
+    name: Descarga de mídia
+  - description: |
+      Criar e administrar grupos: participantes, nome, tópico, foto, links de
+      convite, aprovação de entrada e definições de quem pode escrever.
+    name: Grupos
+  - description: |
+      Comunidades são grupos-pai que agregam sub-grupos. Aqui ligam-se e
+      desligam-se grupos, e listam-se sub-grupos e participantes.
+    name: Comunidades
+  - description: |
+      Canais de difusão (newsletters): criar, seguir, publicar, reagir e gerir
+      administradores, incluindo a transferência de posse.
+    name: Canais
+  - description: |
+      Publicação de status (as "novidades" de 24 horas), com imagem, vídeo ou
+      áudio.
+    name: Status
+  - description: |
+      Consulta e gestão de terceiros: verificar se um número tem WhatsApp, ler
+      perfis, resolver PN para LID, bloquear, e gerir presença e privacidade.
+    name: Contactos e utilizadores
+  - description: |
+      Gestão das sessões do próprio wa-api — criar, listar, actualizar e apagar
+      utilizadores. Usa o token de administração, não o token de sessão.
+    name: Administração
+  - description: |
+      Webhooks, armazenamento S3, assinatura HMAC, proxy de saída, etiquetas e
+      recusa de chamadas.
+    name: Integrações e configuração
+  - description: |
+      Sondas de vivacidade e prontidão, para orquestradores e balanceadores.
+    name: Saúde
