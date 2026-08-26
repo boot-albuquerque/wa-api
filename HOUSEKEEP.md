@@ -29893,7 +29893,7 @@ identificador. Uma linha, e o diagnóstico deixa de depender de sorte.
 
 <!-- f-status: aberto -->
 
-## H187 — `TestTodoMetodoComErroTemWrapper` já falhava antes desta worktree, para os métodos de comunidade e admin-invite de newsletter
+## F276 — `TestTodoMetodoComErroTemWrapper` já falhava antes desta worktree, para os métodos de comunidade e admin-invite de newsletter
 
 **Data**: 2026-08-26. **Contexto**: worktree `capability-registry`, achado ao
 rodar `go test ./...` para verificar o efeito das mudanças desta sessão —
