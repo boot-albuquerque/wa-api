@@ -19,17 +19,17 @@ import (
 // eleven places for it to drift — the same reasoning that made the use case a
 // single dispatch table instead of eleven use cases.
 type NewsletterHandlers struct {
-	Create      *newsletterOpHandler
-	Info        *newsletterOpHandler
-	InfoInvite  *newsletterOpHandler
-	Follow      *newsletterOpHandler
-	Unfollow    *newsletterOpHandler
-	Mute        *newsletterOpHandler
-	Messages    *newsletterOpHandler
-	Updates     *newsletterOpHandler
-	MarkViewed  *newsletterOpHandler
-	React       *newsletterOpHandler
-	Subscribe   *newsletterOpHandler
+	Create            *newsletterOpHandler
+	Info              *newsletterOpHandler
+	InfoInvite        *newsletterOpHandler
+	Follow            *newsletterOpHandler
+	Unfollow          *newsletterOpHandler
+	Mute              *newsletterOpHandler
+	Messages          *newsletterOpHandler
+	Updates           *newsletterOpHandler
+	MarkViewed        *newsletterOpHandler
+	React             *newsletterOpHandler
+	Subscribe         *newsletterOpHandler
 	Demote            *newsletterOpHandler
 	ChangeOwner       *newsletterOpHandler
 	Delete            *newsletterOpHandler
@@ -78,17 +78,17 @@ func newNewsletterOpHandler(uc *notification.NewsletterOpsUseCase, op notificati
 // NewNewsletterHandlers creates all newsletter operation handlers.
 func NewNewsletterHandlers(uc *notification.NewsletterOpsUseCase) *NewsletterHandlers {
 	return &NewsletterHandlers{
-		Create:      newNewsletterOpHandler(uc, notification.NewsletterOpCreate),
-		Info:        newNewsletterOpHandler(uc, notification.NewsletterOpInfo),
-		InfoInvite:  newNewsletterOpHandler(uc, notification.NewsletterOpInfoInvite),
-		Follow:      newNewsletterOpHandler(uc, notification.NewsletterOpFollow),
-		Unfollow:    newNewsletterOpHandler(uc, notification.NewsletterOpUnfollow),
-		Mute:        newNewsletterOpHandler(uc, notification.NewsletterOpMute),
-		Messages:    newNewsletterOpHandler(uc, notification.NewsletterOpMessages),
-		Updates:     newNewsletterOpHandler(uc, notification.NewsletterOpUpdates),
-		MarkViewed:  newNewsletterOpHandler(uc, notification.NewsletterOpMarkViewed),
-		React:       newNewsletterOpHandler(uc, notification.NewsletterOpReact),
-		Subscribe:   newNewsletterOpHandler(uc, notification.NewsletterOpSubscribe),
+		Create:            newNewsletterOpHandler(uc, notification.NewsletterOpCreate),
+		Info:              newNewsletterOpHandler(uc, notification.NewsletterOpInfo),
+		InfoInvite:        newNewsletterOpHandler(uc, notification.NewsletterOpInfoInvite),
+		Follow:            newNewsletterOpHandler(uc, notification.NewsletterOpFollow),
+		Unfollow:          newNewsletterOpHandler(uc, notification.NewsletterOpUnfollow),
+		Mute:              newNewsletterOpHandler(uc, notification.NewsletterOpMute),
+		Messages:          newNewsletterOpHandler(uc, notification.NewsletterOpMessages),
+		Updates:           newNewsletterOpHandler(uc, notification.NewsletterOpUpdates),
+		MarkViewed:        newNewsletterOpHandler(uc, notification.NewsletterOpMarkViewed),
+		React:             newNewsletterOpHandler(uc, notification.NewsletterOpReact),
+		Subscribe:         newNewsletterOpHandler(uc, notification.NewsletterOpSubscribe),
 		Demote:            newNewsletterOpHandler(uc, notification.NewsletterOpDemote),
 		ChangeOwner:       newNewsletterOpHandler(uc, notification.NewsletterOpChangeOwner),
 		Delete:            newNewsletterOpHandler(uc, notification.NewsletterOpDelete),
