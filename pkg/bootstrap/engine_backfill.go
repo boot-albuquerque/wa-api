@@ -39,6 +39,8 @@ func engineDomainFor(infraEngine string) (domain.Engine, error) {
 	case EngineWaHeadless:
 		return domain.EngineWaHeadless, nil
 	default:
+		log.Error().Str("infra_engine", infraEngine).
+			Msg("no domain engine for configured infrastructure engine")
 		return "", fmt.Errorf("no domain engine for infrastructure engine %q", infraEngine)
 	}
 }
@@ -60,10 +62,11 @@ func runEngineBackfill(ctx context.Context, db *sqlx.DB, sel EngineSelection) {
 		return
 	}
 
+	// engineDomainFor ja' disse QUAL valor nao mapeou; este Fatal e' o que
+	// termina o processo, e nao uma segunda explicacao do mesmo erro.
 	defaultEngine, err := engineDomainFor(sel.Default())
 	if err != nil {
-		log.Fatal().Err(err).Str("default_engine", sel.Default()).
-			Msg("cannot map configured default engine to a domain engine")
+		log.Fatal().Err(err).Msg("cannot map configured default engine to a domain engine")
 		return
 	}
 

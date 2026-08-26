@@ -56,10 +56,10 @@ func isUniqueViolation(err error) bool {
 // passavam ambas pela checagem e ambas inseriam. Quem decide é o índice
 // UNIQUE de token_hash, atomicamente.
 func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) (bool, error) {
+	// engineForCreate ja' registrou o motivo; repetir aqui daria duas linhas
+	// para a mesma recusa.
 	engine, err := engineForCreate(rec.Engine)
 	if err != nil {
-		log.Warn().Err(err).Str("table", "users").Str("user_id", rec.ID).
-			Str("column", usersEngineColumn).Msg("create user rejected: invalid engine")
 		return false, err
 	}
 
@@ -345,6 +345,11 @@ func engineForCreate(e domain.Engine) (domain.Engine, error) {
 		return domain.EngineWaNoise, nil
 	}
 	if !e.IsValidForCreate() {
+		// O log mora AQUI, e nao no chamador: e' esta funcao que conhece a
+		// distincao entre ausencia e engano, e duplicar a linha nos dois
+		// niveis so' produziria duas mensagens para um erro.
+		log.Warn().Str("table", usersTable).Str("column", usersEngineColumn).
+			Str("engine", e.String()).Msg("rejected user engine: not valid for creation")
 		return "", fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, e.String())
 	}
 	return e, nil

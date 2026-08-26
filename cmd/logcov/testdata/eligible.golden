@@ -2907,8 +2907,9 @@ pkg/bootstrap.editedText	EXCLUDED	X1
 pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
 pkg/bootstrap.encryptionKeySource.String	EXCLUDED	X4
-pkg/bootstrap.engineSelectionConfigurada	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_selection.go:118);uncovered:L2(S-ret,engine_selection.go:122)
-pkg/bootstrap.engineValido	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_selection.go:140)
+pkg/bootstrap.engineDomainFor	ELIGIBLE	covered
+pkg/bootstrap.engineSelectionConfigurada	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_selection.go:119);uncovered:L2(S-ret,engine_selection.go:123)
+pkg/bootstrap.engineValido	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_selection.go:141)
 pkg/bootstrap.enqueueSessionEvent	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
 pkg/bootstrap.ensureUserInfoCached	ELIGIBLE	covered
@@ -3000,6 +3001,7 @@ pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.
 pkg/bootstrap.resolveTokenCacheTTL	ELIGIBLE	uncovered:L1
 pkg/bootstrap.resolverChaveHMAC	ELIGIBLE	covered
 pkg/bootstrap.rotaDeEngine	ELIGIBLE	uncovered:L1
+pkg/bootstrap.runEngineBackfill	ELIGIBLE	uncovered:L3(zerolog,engine_backfill.go:61)
 pkg/bootstrap.runOutboxSweeper	ELIGIBLE	uncovered:L1
 pkg/bootstrap.s3ClientManager.InitializeS3Client	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,s3_config_adapters.go:54)
 pkg/bootstrap.s3ClientManager.RemoveClient	EXCLUDED	X1
@@ -3085,6 +3087,9 @@ pkg/domain.DecodeRequestWithUnknownFields	ELIGIBLE	uncovered:L1
 pkg/domain.DeleteMessageRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
 pkg/domain.EditUserRequest.UnmarshalJSON	EXCLUDED	X4
+pkg/domain.Engine.IsKnown	EXCLUDED	X1
+pkg/domain.Engine.IsValidForCreate	EXCLUDED	X1
+pkg/domain.Engine.String	EXCLUDED	X4
 pkg/domain.GetAvatarRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.GetCommunityParticipantsRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.GetCommunitySubGroupsRequest.ResolveChat	EXCLUDED	X1
@@ -3103,6 +3108,7 @@ pkg/domain.JID.Namespace	EXCLUDED	X1
 pkg/domain.JID.Server	ELIGIBLE	uncovered:L1
 pkg/domain.MuteChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.NormalizeIdentityInput	EXCLUDED	X1
+pkg/domain.ParseEngine	ELIGIBLE	uncovered:L1
 pkg/domain.ParticipantsUpdate.Valida	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group.go:268)
 pkg/domain.PinChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ReactRequest.ResolveChat	EXCLUDED	X1
@@ -3168,6 +3174,7 @@ pkg/infra/auth.ValidateAdminToken	ELIGIBLE	covered
 pkg/infra/auth.WithUserInfo	EXCLUDED	X1
 pkg/infra/constants.IsValidEventType	EXCLUDED	X1
 pkg/infra/constants.init	EXCLUDED	X3
+pkg/infra/db.BackfillUserEngines	ELIGIBLE	covered
 pkg/infra/db.ChatActivityRepository.GetChatPushNames	ELIGIBLE	uncovered:L1
 pkg/infra/db.ChatActivityRepository.GetLastActivityByUser	ELIGIBLE	uncovered:L1
 pkg/infra/db.ChatHistoryRepository.ChatIndexByUser	ELIGIBLE	covered
@@ -3234,6 +3241,7 @@ pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
 pkg/infra/db.applyTokenHashMigration	ELIGIBLE	covered
 pkg/infra/db.createMigrationsTable	ELIGIBLE	covered
 pkg/infra/db.createTableIfNotExistsSQLite	ELIGIBLE	covered
+pkg/infra/db.engineForCreate	ELIGIBLE	covered
 pkg/infra/db.flexTimeScan.Scan	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,message_history.go:85)
 pkg/infra/db.getAppliedMigrations	ELIGIBLE	covered
 pkg/infra/db.initializePostgres	ELIGIBLE	covered
