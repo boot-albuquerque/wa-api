@@ -2,39 +2,48 @@ package handlers
 
 import "wa-api/pkg/domain/apperr"
 
-// Boundary-error sentinels shared by the handlers in this package. Each
-// describes a missing or unreadable piece of the HTTP request — never a
-// domain failure, which arrives typed from the use cases.
+// Boundary sentinel errors shared across handlers. Each describes a failure
+// at the HTTP boundary — something missing or unreadable in the request —
+// never a domain failure, which comes typed from the use cases.
 //
-// All five are *apperr.AppError so that RespondJSON produces the structured
-// envelope ({"code": ..., "error": {"code": ..., "message": ...}}) that
-// the F224 errors already use — eliminating the two-format split (F236).
+// These are *apperr.AppError so that RespondJSON derives both the status
+// code AND the structured {"code":..., "message":...} object from the
+// taxonomy. The 244 call sites that pass them need no change: the
+// Category.HTTPStatus matches the status each call site already passes
+// (F236).
 var (
 	errUnauthorized = &apperr.AppError{
-		Code:     "unauthorized",
+		Code:     CodeUnauthorized,
 		Category: apperr.CategoryUnauthorized,
 		Message:  "unauthorized",
 	}
 	errMissingSessionID = &apperr.AppError{
-		Code:     "missing_session_id",
+		Code:     CodeMissingSessionID,
 		Category: apperr.CategoryValidation,
 		Message:  "missing session id",
 	}
 	errMissingID = &apperr.AppError{
-		Code:     "missing_id",
+		Code:     CodeMissingID,
 		Category: apperr.CategoryValidation,
 		Message:  "missing ID",
 	}
 	errDecodePayload = &apperr.AppError{
-		Code:     "decode_payload_failed",
+		Code:     CodeDecodePayload,
 		Category: apperr.CategoryValidation,
 		Message:  "could not decode payload",
 	}
-	// errMissingJID covers the {jid} path parameter, not a body field —
-	// distinct from errDecodePayload on purpose (F81).
 	errMissingJID = &apperr.AppError{
-		Code:     "missing_jid",
+		Code:     CodeMissingJID,
 		Category: apperr.CategoryValidation,
 		Message:  "missing jid in path",
 	}
+)
+
+const (
+	CodeUnauthorized    = "unauthorized"
+	CodeMissingSessionID = "missing_session_id"
+	CodeMissingID       = "missing_id"
+	CodeDecodePayload   = "could_not_decode_payload"
+	CodeMissingJID      = "missing_jid"
+	CodeInvalidJID      = "invalid_jid"
 )

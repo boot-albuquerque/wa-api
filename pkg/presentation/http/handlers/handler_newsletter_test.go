@@ -167,6 +167,46 @@ func TestNewsletter_FalhaDaPortaE500(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// F258 — newsletter create must NOT produce data.data in the response.
+// Before the fix, the handler passed rsp (a NewsletterResult with a json
+// "data" field) as the data argument to RespondJSON, which already wraps
+// in {"code":..., "data":..., "success":...}. Result: data.data.
+// ---------------------------------------------------------------------------
+
+func TestNewsletter_Create_NoDoubleWrap(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+
+	rec, _ := ipmServe(t, newsletterOps(nr).Create, http.MethodPost, "/newsletter/create",
+		`{"name":"Canal X","description":"d"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+
+	dataBytes, ok := raw["data"]
+	if !ok {
+		return
+	}
+
+	var dataObj map[string]json.RawMessage
+	if err := json.Unmarshal(dataBytes, &dataObj); err != nil {
+		return
+	}
+	if _, hasNestedData := dataObj["data"]; hasNestedData {
+		t.Fatalf("F258 regression: response has data.data (double-wrapped): %s", rec.Body.String())
+	}
+	if _, hasDuration := dataObj["duration_seconds"]; hasDuration {
+		t.Fatalf("F258 regression: response has data.duration_seconds (NewsletterResult leaked): %s", rec.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
 // F233 — GraphQL 405 from the WhatsApp server on unfollow must be 403
 // with code "newsletter_admin_cannot_unfollow", not 500.
 // ---------------------------------------------------------------------------

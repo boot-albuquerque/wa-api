@@ -119,7 +119,7 @@ func (h *newsletterOpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, http.StatusOK, rsp, nil)
+	customhttp.RespondJSON(w, http.StatusOK, rsp.Data, nil)
 }
 
 // toRequest converts the wire body into the use case request. The only

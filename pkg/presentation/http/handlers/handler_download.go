@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/infra/wa-noise/errmap"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/rs/zerolog/hlog"
-
-	"wa-api/pkg/application/usecase/message"
 )
 
 type DownloadImageHandler struct{ uc *message.DownloadImageUseCase }
@@ -30,6 +30,7 @@ func (h *DownloadImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		err = errmap.ClassifyDownload(err)
 		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -55,6 +56,7 @@ func (h *DownloadVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		err = errmap.ClassifyDownload(err)
 		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -80,6 +82,7 @@ func (h *DownloadAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		err = errmap.ClassifyDownload(err)
 		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -107,6 +110,7 @@ func (h *DownloadDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		err = errmap.ClassifyDownload(err)
 		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -134,6 +138,7 @@ func (h *DownloadStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
+		err = errmap.ClassifyDownload(err)
 		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return

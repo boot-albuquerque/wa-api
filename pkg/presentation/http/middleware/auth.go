@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,12 +16,19 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/hlog"
 	"github.com/rs/zerolog/log"
 )
+
+var errUnauthorized = &apperr.AppError{
+	Code:     "unauthorized",
+	Category: apperr.CategoryUnauthorized,
+	Message:  "unauthorized",
+}
 
 // Values is a string map for user attributes carried through request context.
 type Values struct {
@@ -54,7 +60,7 @@ func AuthAdmin(adminToken string) func(http.Handler) http.Handler {
 					Str("remote_addr", r.RemoteAddr).
 					Bool("token_present", token != "").
 					Msg("admin authentication rejected")
-				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r)
@@ -153,7 +159,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 					Str("path", r.URL.Path).
 					Str("method", r.Method).
 					Msg("authentication rejected: request carries no token")
-				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 				return
 			}
 
@@ -220,7 +226,7 @@ func AuthAlice(db *sql.DB, userCache *cache.Cache) func(http.Handler) http.Handl
 					Bool("token_present", token != "").
 					Bool("cache_hit", found).
 					Msg("authentication rejected: no user matches the supplied token")
-				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errors.New("unauthorized"))
+				customhttp.RespondJSON(w, http.StatusUnauthorized, nil, errUnauthorized)
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))

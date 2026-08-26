@@ -4,12 +4,14 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/hlog"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"wa-api/pkg/application/usecase/user"
@@ -217,6 +219,7 @@ func (h *UserHandlers) GetUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
+		req.Phone = normalizePhones(req.Phone)
 		result, err := h.getUser.Execute(r.Context(), txtID, req)
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
@@ -310,6 +313,15 @@ func (h *UserHandlers) GetUserProfile() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingJID)
 			return
 		}
+		if !isPlausibleJIDOrPhone(alvo) {
+			err := apperr.New(CodeInvalidJID, apperr.CategoryValidation,
+				"jid must be a phone number or a qualified JID (user@server)", false, nil)
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).Str("jid", alvo).
+				Msg("malformed jid in path")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
 		result, err := h.getUserProfile.Execute(r.Context(), txtID, alvo)
 		if err != nil {
 			hlog.FromRequest(r).Warn().Err(err).
@@ -359,6 +371,44 @@ func (h *UserHandlers) ListChats() http.Handler {
 		}
 		customhttp.RespondJSON(w, http.StatusOK, result, nil)
 	})
+}
+
+// isPlausibleJIDOrPhone rejects inputs that are clearly neither a phone
+// number nor a qualified JID.  A phone is digits only with 7-20 chars; a
+// JID contains '@'.  The check is deliberately lenient — deep validation
+// happens in the use case / wa-noise layer — but it catches the measured
+// case (F238): a garbage string that triggers a 500 in the downstream.
+func isPlausibleJIDOrPhone(s string) bool {
+	if strings.ContainsRune(s, '@') {
+		return true
+	}
+	if len(s) < 7 || len(s) > 20 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+const whatsappSuffix = "@s.whatsapp.net"
+
+// normalizePhones appends the WhatsApp suffix to bare phone numbers in the
+// slice, leaving already-qualified JIDs untouched. This is the handler-level
+// decision from F242/F225: the rest of the API accepts bare phones, so
+// /user/info must too.
+func normalizePhones(phones []string) []string {
+	out := make([]string, len(phones))
+	for i, p := range phones {
+		if !strings.Contains(p, "@") {
+			out[i] = p + whatsappSuffix
+		} else {
+			out[i] = p
+		}
+	}
+	return out
 }
 
 // inteiroDaQuery devolve 0 quando o parâmetro falta OU não é número — os

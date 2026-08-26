@@ -95,7 +95,7 @@ func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, rsp.Code, rsp.Data, nil)
 }
 
 // RejectCallHandler handles POST /call/reject
