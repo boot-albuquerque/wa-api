@@ -26,6 +26,15 @@ import (
 // bypass trivial.
 const fetchVideoMaxBytes int64 = 100 * 1024 * 1024
 
+// minVideoBytes is the minimum payload size for a valid video file. Real
+// video containers (MP4, WebM, MKV) carry headers and codec data that make
+// even an empty-track file larger than this. A 32-byte MP4, for instance,
+// is structurally impossible — http.DetectContentType maps it to
+// "application/octet-stream", and resolveMimeType falls back to that,
+// which is not a video/* type. The floor catches truncated or garbage
+// payloads before they reach the upload path.
+const minVideoBytes = 256
+
 // dataPrefix é o discriminador do ramo data URI de SendVideoRequest.Video
 // (`git show 41bc8e2^:handlers.go`, em torno da linha 1583:
 // `t.Video[0:4] == "data"`) — a MAIS FROUXA das quatro discriminações de
@@ -126,8 +135,17 @@ func (uc *SendVideoUseCase) Execute(ctx context.Context, txtID string, req domai
 	if len(data) == 0 {
 		return nil, apperr.New("empty_video_body", apperr.CategoryValidation, "video body is empty", false, nil)
 	}
+	if len(data) < minVideoBytes {
+		return nil, apperr.New("video_too_small", apperr.CategoryValidation, "video payload too small to be valid", false, nil)
+	}
 
 	mimeType := resolveMimeType(req.MimeType, data)
+	// Reject when the resolved MIME is determinate and NOT a video type.
+	// "application/octet-stream" (Go's "I don't know") is allowed through
+	// because http.DetectContentType cannot recognize MP4 containers.
+	if mimeType != "application/octet-stream" && !strings.HasPrefix(mimeType, "video/") {
+		return nil, apperr.New("invalid_video_mime_type", apperr.CategoryValidation, "resolved MIME type is not a video type", false, nil)
+	}
 
 	payload := domain.MediaPayload{Bytes: data, MimeType: mimeType, Caption: req.Caption, JPEGThumbnail: req.JPEGThumbnail}
 

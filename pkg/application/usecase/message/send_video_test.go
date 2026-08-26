@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/media/opengraph"
 )
 
@@ -23,11 +25,16 @@ const fetchVideoMaxBytesForTest int64 = 100 * 1024 * 1024
 
 const videoURL = "https://exemplo.com/clipe.mp4"
 
-// mp4Bytes é um corpo binário genérico, não reconhecido pelo sniffer do Go
-// como um tipo específico de vídeo (http.DetectContentType devolve
-// "application/octet-stream" para ele) — bom o bastante para os testes que
-// não dependem do resultado exato do sniffing.
-var mp4Bytes = []byte{0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x01, 0x02, 0x03, 0x04}
+// mp4Bytes is a binary payload NOT recognized by Go's sniffer as a specific
+// video type (http.DetectContentType returns "application/octet-stream") —
+// good enough for tests that don't depend on exact sniffing. Must be at
+// least minVideoBytes (256, F240) to pass the minimum size check.
+var mp4Bytes = func() []byte {
+	b := make([]byte, 300)
+	b[0], b[1], b[2], b[3] = 0x00, 0x00, 0x00, 0x18
+	b[4], b[5], b[6], b[7] = 'f', 't', 'y', 'p'
+	return b
+}()
 
 func videoDataURI(mime string, data []byte) string {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(data)
@@ -224,12 +231,13 @@ func TestSendVideo_EmptyBodyRejected(t *testing.T) {
 
 // --- precedência de MIME: dois níveis, igual a Image ----------------------
 
-// TestSendVideo_MimeType_SniffedFromBytes prova o único nível alcançável
-// hoje: sem MimeType no DTO (achado CAP-06, campo ausente), o MIME final
-// vem sempre de sniffing dos bytes — nunca do Content-Type remoto.
+// TestSendVideo_MimeType_SniffedFromBytes proves that without a client
+// MimeType, the resolved MIME comes from byte sniffing — NOT the remote
+// Content-Type. With the F240 MIME family check, a payload that sniffs as
+// text/plain is now correctly rejected (it is not a video type).
 func TestSendVideo_MimeType_SniffedFromBytes(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{}
-	plainText := []byte("isto sniffa como text/plain")
+	plainText := []byte(strings.Repeat("isto sniffa como text/plain. ", 10))
 	mf := &contractsfake.MediaFetcher{
 		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
 			return plainText, "video/mp4", nil
@@ -240,11 +248,15 @@ func TestSendVideo_MimeType_SniffedFromBytes(t *testing.T) {
 	_, err := message.NewSendVideoUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
 		Execute(context.Background(), userID, domain.SendVideoRequest{Phone: "5511987654321", Video: videoURL})
 
-	if err != nil {
-		t.Fatalf("caminho feliz falhou: %v", err)
+	if err == nil {
+		t.Fatal("expected rejection: text/plain payload is not a valid video type")
 	}
-	if got := mm.SendVideoCalls[0].Payload.MimeType; got != "text/plain; charset=utf-8" {
-		t.Errorf("MimeType: got %q, want sniffing dos bytes (%q) — nao o Content-Type remoto", got, "text/plain; charset=utf-8")
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) || appErr.Code != "invalid_video_mime_type" {
+		t.Fatalf("expected invalid_video_mime_type, got: %v", err)
+	}
+	if len(mm.SendVideoCalls) != 0 {
+		t.Fatal("SendVideo should not have been called for non-video MIME")
 	}
 }
 
@@ -623,6 +635,88 @@ func TestSendVideo_MimeTypeAndThumbnailFlowToPayload(t *testing.T) {
 	}
 	if string(call.Payload.JPEGThumbnail) != string(thumb) {
 		t.Errorf("JPEGThumbnail: got %v, want %v — o campo nao fluiu do request ate' a porta", call.Payload.JPEGThumbnail, thumb)
+	}
+}
+
+// --- F240: minimum size and MIME family validation -------------------------
+
+// TestSendVideo_F240_TooSmallPayloadRejected proves that a payload below
+// minVideoBytes is rejected before reaching SendVideo.
+func TestSendVideo_F240_TooSmallPayloadRejected(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	tinyPayload := make([]byte, 32)
+	mf := &contractsfake.MediaFetcher{
+		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
+			return tinyPayload, "video/mp4", nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	_, err := message.NewSendVideoUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendVideoRequest{Phone: "5511987654321", Video: videoURL})
+
+	if err == nil {
+		t.Fatal("32-byte video was accepted; expected video_too_small")
+	}
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) || appErr.Code != "video_too_small" {
+		t.Fatalf("expected video_too_small, got: %v", err)
+	}
+	if len(mm.SendVideoCalls) != 0 {
+		t.Fatal("SendVideo should not have been called for tiny payload")
+	}
+}
+
+// TestSendVideo_F240_NonVideoMimeRejected proves that when sniffing resolves
+// to a determinate non-video type (e.g. image/png), the request is rejected.
+func TestSendVideo_F240_NonVideoMimeRejected(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	// PNG magic: \x89PNG\r\n\x1a\n — sniffs as "image/png"
+	pngPayload := make([]byte, 300)
+	pngPayload[0] = 0x89
+	copy(pngPayload[1:], []byte("PNG\r\n\x1a\n"))
+	mf := &contractsfake.MediaFetcher{
+		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
+			return pngPayload, "", nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	_, err := message.NewSendVideoUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendVideoRequest{Phone: "5511987654321", Video: videoURL})
+
+	if err == nil {
+		t.Fatal("PNG payload was accepted as video; expected invalid_video_mime_type")
+	}
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) || appErr.Code != "invalid_video_mime_type" {
+		t.Fatalf("expected invalid_video_mime_type, got: %v", err)
+	}
+	if len(mm.SendVideoCalls) != 0 {
+		t.Fatal("SendVideo should not have been called for non-video MIME")
+	}
+}
+
+// TestSendVideo_F240_OctetStreamAllowedThrough proves that
+// "application/octet-stream" (Go's "I don't know") is NOT rejected, because
+// http.DetectContentType cannot recognize MP4 containers.
+func TestSendVideo_F240_OctetStreamAllowedThrough(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	mf := &contractsfake.MediaFetcher{
+		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
+			return mp4Bytes, "video/mp4", nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	_, err := message.NewSendVideoUseCase(mm, &contractsfake.JIDResolver{}, mf, logger).
+		Execute(context.Background(), userID, domain.SendVideoRequest{Phone: "5511987654321", Video: videoURL})
+
+	if err != nil {
+		t.Fatalf("octet-stream payload was rejected: %v", err)
+	}
+	if len(mm.SendVideoCalls) != 1 {
+		t.Fatalf("SendVideo chamado %d vez(es), quero 1", len(mm.SendVideoCalls))
 	}
 }
 

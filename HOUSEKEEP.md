@@ -27023,6 +27023,57 @@ hipóteses diferentes e não medi qual.
 | `/message/star` | `200` |
 | `/chat/history` | `200` com mensagens — exige `chat_jid`, não `jid` |
 
+### Sessão 2026-08-25 — LOTE C (implementação)
+
+Implementada validação mínima de mídia em duas rotas — vídeo e áudio. Não é
+validação profunda de estrutura; é o mínimo que rejeita payloads claramente
+inválidos antes de eles chegarem ao upload.
+
+**Vídeo** (`pkg/application/usecase/message/send_video.go`):
+
+- Constante `minVideoBytes = 256` — piso de tamanho. Um MP4 real (ftyp + mdat)
+  não existe abaixo disto.
+- Guarda de tamanho: `len(data) < minVideoBytes` → `400 video_too_small`.
+- Guarda de MIME family: se `resolveMimeType` devolver algo determinado (≠
+  `application/octet-stream`) E que não comece com `video/`, rejeita com
+  `400 invalid_video_mime_type`.
+- `application/octet-stream` passa deliberadamente — `http.DetectContentType`
+  do Go NÃO reconhece contentores MP4 (devolve octet-stream para qualquer MP4
+  válido), então bloquear octet-stream seria bloquear todo MP4 real.
+
+**Áudio** (`pkg/application/usecase/message/send_audio.go`):
+
+- Constante `minAudioBytes = 128` — piso de tamanho.
+- Guarda de tamanho: `len(data) < minAudioBytes` → `400 audio_too_small`.
+- SEM guarda de MIME family — `resolveAudioMimeType` tem fallback que SEMPRE
+  devolve `audio/*` (nível 4: `audio/ogg; codecs=opus` ou `audio/mpeg`), então
+  a condição `!strings.HasPrefix(mimeType, "video/")` nunca dispararia.
+
+**Testes**:
+
+| teste | ficheiro |
+|---|---|
+| `TestSendVideo_F240_TooSmallPayloadRejected` | `send_video_test.go` |
+| `TestSendVideo_F240_NonVideoMimeRejected` | `send_video_test.go` |
+| `TestSendVideo_F240_OctetStreamAllowedThrough` | `send_video_test.go` |
+| `TestSendAudio_F240_TooSmallPayloadRejected` | `send_audio_test.go` |
+
+**Controlos negativos executados** (saída colada no contexto da sessão):
+
+- Vídeo tamanho: removi a guarda → `32-byte video was accepted` (teste falha).
+- Vídeo MIME: removi a guarda → `PNG payload was accepted as video` (teste
+  falha).
+- Áudio tamanho: removi a guarda → `32-byte audio was accepted` (teste falha).
+
+**Fixtures actualizados**: `sendVideoMP4Bytes` (12→300), `sendAudioOggBytes`
+(12→160), `mp4Bytes` (12→300), `oggBytes` (12→160) — as antigas estavam abaixo
+dos novos pisos e faziam falhar testes pré-existentes.
+
+**Decisão de design registada**: o `application/octet-stream` é o "não sei" do
+Go, e bloquear "não sei" quando a maioria dos vídeos reais devolve exactamente
+isso seria pior que o problema original. A guarda só rejeita quando o MIME É
+determinado e NÃO é vídeo.
+
 <!-- f-status: aberto -->
 
 ## F241 — erro do CHAMADOR a virar `500` em três rotas
@@ -27576,6 +27627,22 @@ sempre o mesmo. É a decisão que já se tomou na F225 para o campo de destino.
 
 **Status**: não corrigido.
 
+### Sessão 2026-08-25 — LOTE C (implementação)
+
+Ambos os handlers (`SetWebhookHandler` e `UpdateWebhookHandler`) passaram a
+decodificar o corpo para `domain.WebhookConfigRequest`, que conhece os dois
+campos (`webhook` e `webhookurl`), e a resolver a URL via `ResolveURL()` — que
+prefere `webhookurl` quando ambos estiverem presentes. Testes de cross-field:
+
+- `TestSetWebhook_F250_AcceptsWebhookField` — POST com `"webhook":…` funciona
+- `TestUpdateWebhook_F250_AcceptsWebhookurlField` — PUT com `"webhookurl":…`
+  funciona
+- `TestSetWebhook_F250_WebhookurlFieldWinsOverWebhook` — precedência quando
+  ambos presentes
+
+Controles negativos executados: quebrar `ResolveURL` para ignorar
+`WebhookURLField` faz os testes de PUT e precedência falharem.
+
 <!-- f-status: aberto -->
 
 ## F251 — ler e escrever configuração usam CAMINHOS diferentes
@@ -27623,6 +27690,20 @@ escrita, mantendo `/configure`. Documentar o par no `ENDPOINTS.md`.
 
 **Status**: não corrigido.
 
+### Sessão 2026-08-25 — LOTE C (implementação)
+
+Adicionados dois registos de rota em `wiring_routes.go`:
+
+```go
+registry.Register("/s3/config", customChain.Then(ch.Storage.ConfigureS3), "POST")
+registry.Register("/hmac/config", customChain.Then(ch.Storage.ConfigureHmac), "POST")
+```
+
+Mesmo handler de `/s3/configure` e `/hmac/configure` respectivamente. Golden
+files actualizados. Structural exceptions adicionadas em
+`stdio_route_consistency_test.go` (alias sem entrada stdio própria).
+Documentação em `ENDPOINTS.md` actualizada.
+
 <!-- f-status: aberto -->
 
 ## F252 — `POST /webhook/history` altera o limite de histórico de MENSAGENS
@@ -27664,6 +27745,19 @@ mesma definição, documentá-lo e apontar `GET`/`POST` coerentemente; se forem
 duas, separar como já se fez para o `GET`.
 
 **Status**: não corrigido — precisa de decisão.
+
+### Sessão 2026-08-25 — LOTE C (implementação)
+
+Adicionado comentário esclarecedor em `wiring_routes.go` no registo de
+`POST /webhook/history`:
+
+```
+F252: POST /webhook/history sets the message-recording limit (column
+users.history), NOT a webhook delivery log. [...]
+```
+
+Clarificação documental apenas — o comportamento não mudou, e a decisão de
+separar (ou não) continua pendente.
 
 <!-- f-status: aberto -->
 
@@ -27892,6 +27986,23 @@ F229) ou, se apagar conversa for para existir, implementá-la — o `wa-noise`
 tem primitivas de chat na lista da F237 que valeria verificar.
 
 **Status**: não corrigido.
+
+### Sessão 2026-08-25 — LOTE C (implementação)
+
+Removido o registo de `/chat/delete` em `wiring_routes.go:236`. A rota canónica
+`/chat/delete/message` (linha 80) continua. Alterações em cadeia:
+
+- `stdio_routes_chat.go`: `chat.delete` agora aponta para `/chat/delete/message`
+- `handler_message_mutation_test.go`: `deleteRoutePaths` reduzido a
+  `["/chat/delete/message"]`; `TestMessageMutation_BothDeleteRoutesBehaveIdentically`
+  removido (vacuous com uma só rota)
+- `stdio_route_consistency_test.go`: `POST /chat/delete/message` removido de
+  `knownPending` (agora coberto pelo stdio via `chat.delete`)
+- `ENDPOINTS.md`: `/chat/delete` marcada como removida (F257)
+
+Controle negativo executado: reverter o stdio para `/chat/delete` causa
+`TestStdioRoutesMatchRegisteredHTTPRoutes` a falhar com *"não existe rota HTTP
+para esse caminho"*.
 
 <!-- f-status: aberto -->
 

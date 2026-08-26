@@ -31,9 +31,15 @@ var errSendVideoSentinel = errors.New(sendVideoSentinelToken)
 
 const sendVideoTestURL = "https://exemplo.com/clipe.mp4"
 
-// sendVideoMP4Bytes é binário (não texto) — usado como corpo de vídeo
-// genérico nos testes de rota.
-var sendVideoMP4Bytes = []byte{0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x01, 0x02, 0x03, 0x04}
+// sendVideoMP4Bytes is a payload large enough to pass minVideoBytes (256,
+// F240). http.DetectContentType returns "application/octet-stream" for MP4
+// containers, so the MIME family check allows it through as indeterminate.
+var sendVideoMP4Bytes = func() []byte {
+	b := make([]byte, 300)
+	b[0], b[1], b[2], b[3] = 0x00, 0x00, 0x00, 0x18
+	b[4], b[5], b[6], b[7] = 'f', 't', 'y', 'p'
+	return b
+}()
 
 func defaultSendVideoFetcher() *contractsfake.MediaFetcher {
 	return &contractsfake.MediaFetcher{

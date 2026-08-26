@@ -27,6 +27,12 @@ import (
 // sem isso, o limite do ramo URL vira um bypass trivial.
 const fetchAudioMaxBytes int64 = 16 * 1024 * 1024
 
+// minAudioBytes is the minimum payload size for a valid audio file. Even a
+// silent OGG/Opus or MP3 frame is larger than this — a handful of bytes
+// cannot carry a valid container header. The floor catches truncated or
+// garbage payloads before they reach the upload path.
+const minAudioBytes = 128
+
 // dataAudioPrefix é o discriminador do ramo data URI de
 // SendAudioRequest.Audio (`git show 41bc8e2^:handlers.go`, em torno da
 // linha 1088: `strings.HasPrefix(t.Audio, "data:audio/")`) — ESTREITO como
@@ -134,6 +140,9 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 
 	if len(data) == 0 {
 		return nil, apperr.New("empty_audio_body", apperr.CategoryValidation, "audio body is empty", false, nil)
+	}
+	if len(data) < minAudioBytes {
+		return nil, apperr.New("audio_too_small", apperr.CategoryValidation, "audio payload too small to be valid", false, nil)
 	}
 
 	// ptt: nil no request significa TRUE (voice note) — não false. Inverter

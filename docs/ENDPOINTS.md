@@ -178,7 +178,7 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | GET | `/chat/history` | histórico de mensagens de uma conversa |
 | POST | `/chat/archive` | arquivar / desarquivar |
 | POST | `/chat/mute` | silenciar / dessilenciar: 8h, 1 semana, sempre (CAP-52) — **bloqueado, ver F223** |
-| POST | `/chat/delete` | apagar conversa |
+| ~~POST~~ | ~~`/chat/delete`~~ | **removida (F257)** — era alias de `/chat/delete/message`, não apagava conversa. Usar `/chat/delete/message`. |
 | POST | `/chat/markread` | marcar como lida |
 | POST | `/chat/presence` | "a escrever" / "a gravar" |
 | POST | `/chat/react` | reagir com emoji |
@@ -353,10 +353,12 @@ Publicar texto como story (status efémero) não é uma capability existente.
 | GET/POST | `/webhook/history` | histórico de entregas |
 | GET | `/s3/config` | ler configuração S3 global |
 | POST | `/s3/configure` | definir configuração S3 global |
+| POST | `/s3/config` | alias de `/s3/configure` (F251) |
 | DELETE | `/s3/config` | remover |
 | POST | `/s3/test` | testar |
 | GET | `/hmac/config` | ler configuração HMAC |
 | POST | `/hmac/configure` | definir |
+| POST | `/hmac/config` | alias de `/hmac/configure` (F251) |
 | DELETE | `/hmac/config` | remover |
 | GET | `/labels` | etiquetas (WhatsApp Business) |
 | GET | `/labels/{id}/chats` | conversas de uma etiqueta |

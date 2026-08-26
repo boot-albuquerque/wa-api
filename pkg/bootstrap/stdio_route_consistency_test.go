@@ -97,6 +97,12 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		// the stdio transport is request/response and cannot represent it.
 		"GET /session/ws": {reason: "WebSocket upgrade; incompatible with request/response stdio transport"},
 
+		// F251: POST /s3/config and POST /hmac/config are aliases of
+		// /s3/configure and /hmac/configure respectively — same handler,
+		// shorter path. Whichever stdio entry covers /configure covers /config.
+		"POST /s3/config":   {reason: "alias of POST /s3/configure (F251); same handler, same RPC method"},
+		"POST /hmac/config": {reason: "alias of POST /hmac/configure (F251); same handler, same RPC method"},
+
 		// Path-parameter routes dispatched by stdio DYNAMIC routes.
 		// The static table cannot express parameterized paths; these are
 		// served by buildPath functions in the stdio_routes_*.go files.
@@ -130,7 +136,6 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 	// granting a permanent exemption.
 	knownPending := map[string]bool{
 		"GET /chat/list":             true,
-		"POST /chat/delete/message":  true,
 		"POST /chat/downloadsticker": true,
 		"POST /chat/send/template":   true,
 

@@ -42,13 +42,11 @@ var errMutationSentinel = errors.New(mutationSentinelToken)
 // registrar a recusa — o status sozinho não prova que houve log com causa.
 const mutationUnauthorizedCause = "unauthorized"
 
-// deleteRoutePaths são as DUAS rotas que apontam para o MESMO handler de
-// delete. O alias não é erro de migração: `/chat/delete` e
-// `/chat/delete/message` já apontavam para o mesmo handler antes do
-// refactor (`git show 41bc8e2^:custom_routes.go`, linhas 51 e 171), e
-// preservar as duas é contrato público. Toda asserção sobre delete roda nas
-// duas — uma tabela que só testasse uma deixaria o alias sem cobertura.
-var deleteRoutePaths = []string{"/chat/delete/message", "/chat/delete"}
+// deleteRoutePaths lists the route(s) that reach DeleteMessage. The former
+// alias /chat/delete was removed (F257) because the name suggests "delete
+// conversation", which does not exist — the only capability is deleting a
+// single message.
+var deleteRoutePaths = []string{"/chat/delete/message"}
 
 // mutationRouter registra os três caminhos exatamente como
 // wiring_routes.go:77, :78 e :204 fazem — inclusive o alias de delete
@@ -223,56 +221,9 @@ func TestMessageMutation_Success_ViaRegisteredRoute(t *testing.T) {
 	}
 }
 
-// TestMessageMutation_BothDeleteRoutesBehaveIdentically trava o alias como
-// contrato: as duas rotas de delete têm de produzir o MESMO status, o MESMO
-// corpo e a MESMA chamada de porta. Só um teste que compara as duas pega uma
-// divergência introduzida em apenas uma delas.
-func TestMessageMutation_BothDeleteRoutesBehaveIdentically(t *testing.T) {
-	const body = `{"Phone":"5511999999999","Id":"3EB0ABC123"}`
-
-	type observed struct {
-		code      int
-		body      string
-		messageID string
-	}
-	seen := make(map[string]observed, len(deleteRoutePaths))
-
-	for _, path := range deleteRoutePaths {
-		cm := &contractsfake.ChatMessenger{
-			RevokeMessageFunc: func(_ context.Context, _ string, target domain.JID, messageID string) (domain.MessageSendResult, error) {
-				if target != domain.JID("5511999999999@s.whatsapp.net") {
-					t.Errorf("%s: target: got %q", path, target)
-				}
-				if messageID != "3EB0ABC123" {
-					t.Errorf("%s: messageID: got %q", path, messageID)
-				}
-				return domain.MessageSendResult{ID: "id-da-revogacao", Timestamp: time.Unix(1755500110, 0)}, nil
-			},
-		}
-		jr := &contractsfake.JIDResolver{}
-
-		rec := mutationServe(t, cm, jr, path, body, msgAuthed)
-
-		if n := len(cm.RevokeMessageCalls); n != 1 {
-			t.Fatalf("%s: RevokeMessage chamado %d vez(es), quero 1", path, n)
-		}
-		seen[path] = observed{code: rec.Code, body: rec.Body.String(), messageID: cm.RevokeMessageCalls[0].MessageID}
-	}
-
-	first := seen[deleteRoutePaths[0]]
-	for _, path := range deleteRoutePaths[1:] {
-		got := seen[path]
-		if got.code != first.code {
-			t.Errorf("%s devolveu %d e %s devolveu %d — o alias divergiu", path, got.code, deleteRoutePaths[0], first.code)
-		}
-		if got.body != first.body {
-			t.Errorf("%s devolveu corpo %q e %s devolveu %q — o alias divergiu", path, got.body, deleteRoutePaths[0], first.body)
-		}
-		if got.messageID != first.messageID {
-			t.Errorf("%s revogou %q e %s revogou %q — o alias divergiu", path, got.messageID, deleteRoutePaths[0], first.messageID)
-		}
-	}
-}
+// TestMessageMutation_BothDeleteRoutesBehaveIdentically was removed: F257
+// dropped the /chat/delete alias, leaving only /chat/delete/message. With a
+// single route the identity test is vacuous.
 
 // TestMessageMutation_RevokeTargetsOwnMessage prova o argumento que um
 // engano silencioso trocaria: o usecase entrega à porta o ID da mensagem
