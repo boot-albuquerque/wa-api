@@ -268,11 +268,38 @@ inválido — é um corpo **sem aquele campo**.
 
 | campo | tipo | porque o ponteiro importa |
 |---|---|---|
-| `mute_duration` | `*time.Duration` | `0` significa **para sempre**; ausente também. Ver F268 |
+| `mute_duration` | `*time.Duration` | ponteiro **mas não aproveitado** — ver 4.5 |
 | `Latitude` / `Longitude` | `*float64` | `0` é uma coordenada válida (Golfo da Guiné) |
 | `ptt` | `*bool` | `false` é "não é nota de voz"; ausente é "decide tu" |
 | `ForwardingScore` | `*uint32` | `0` é "não encaminhada"; ausente usa o padrão `1` |
 | `webhookUseProxy` | `*bool` | `false` é explícito; ausente herda o gravado |
+
+### 4.5 Ser ponteiro não basta — é preciso USAR o ponteiro
+
+Encontrado ao auditar o lote de conversas, e é mais fino do que eu tinha
+escrito. `mute_duration` **é** `*time.Duration`, logo o servidor consegue
+distinguir ausente de `0`. Mas o use case deita a distinção fora
+(`mute_chat.go:49-53`):
+
+```go
+var muteDuration time.Duration          // zero
+if req.MuteDuration != nil {
+    muteDuration = *req.MuteDuration    // nil salta este ramo
+}
+if !allowedMuteDurations[muteDuration] { // e 0 está na lista: "para sempre"
+```
+
+`nil` cai no mesmo ramo que `0`. **Os três estados — ausente, `null` e `0` —
+colapsam em "para sempre"**, apesar do ponteiro.
+
+O ponteiro é condição **necessária e não suficiente**. A regra completa:
+
+> Onde o valor zero tiver significado próprio, o campo tem de ser ponteiro
+> **e** o código tem de ramificar sobre `nil` ANTES de desreferenciar — não
+> depois, com o zero como padrão.
+
+É esta segunda metade que falta em `mute_duration`, e é por isso que a F268
+foi possível mesmo com o tipo certo.
 
 **Sempre que o valor zero do tipo tiver significado próprio, o campo TEM de ser
 ponteiro.** Não sê-lo é o defeito da F268: `duration` mal escrito → `nil` →
