@@ -1,0 +1,1571 @@
+# Grupo: Conversas e Descarga de mídia.
+#
+# As 18 rotas do que se faz DEPOIS de a mensagem existir: reagir, apagar,
+# favoritar, marcar como lida, e a gestão da própria conversa — arquivar,
+# fixar, silenciar, temporizar, listar e descarregar mídia.
+#
+# Tudo o que está aqui foi lido no manipulador e no use case, e as recusas
+# foram MEDIDAS contra o servidor em 2026-08-26. Onde a struct de domínio e o
+# comportamento real divergem, o que está escrito é o comportamento real.
+
+/chat/list:
+  get:
+    tags: [Conversas]
+    summary: Listar as conversas por interação mais recente
+    description: |
+      Devolve uma página da lista de conversas, ordenada da mais recente para
+      a mais antiga. Junta três fontes que sozinhas não respondem "com quem
+      falei por último": o histórico local, o roster de contactos e os nomes
+      de grupo.
+
+      **Quando usar**: para montar a lista lateral de um cliente, ou para
+      descobrir o `jid` de uma conversa antes de chamar `GET /chat/history`.
+
+      **Não traz mensagens.** A lista existe para ORDENAR conversas; trazer
+      conteúdo tornaria-a cara sem a tornar mais útil.
+
+      **Regras**:
+
+      - `limit` fora de faixa é CORRIGIDO, não recusado: ausente ou `<= 0`
+        vira 50, acima de 500 é cortado em 500.
+      - Um valor não numérico em `limit` ou `offset` conta como AUSENTE, e a
+        rota responde com o padrão em vez de `400` — é rota de leitura, e
+        recusar tudo por um parâmetro decorativo seria desproporcional.
+      - Nem toda conversa tem nome: medido nas contas reais, a maioria das
+        pessoas sem nome não está no roster e para elas não há nome a obter.
+        O campo `phone` é o identificador legível que sobra nesses casos, e
+        só é resolvido para as conversas DA PÁGINA devolvida.
+      - `status@broadcast` aparece na lista como se fosse uma conversa. São
+        os status vistos, não um contacto.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    parameters:
+      - name: limit
+        in: query
+        required: false
+        description: Quantas conversas devolver. Padrão 50, tecto 500.
+        schema:
+          type: integer
+          default: 50
+          maximum: 500
+          example: 50
+      - name: offset
+        in: query
+        required: false
+        description: Quantas conversas saltar. Negativo vira zero.
+        schema:
+          type: integer
+          default: 0
+          example: 0
+    responses:
+      '200':
+        description: Uma página da lista, com o total para paginar.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/PaginaDeConversas'
+            example:
+              code: 200
+              data:
+                chats:
+                  - jid: 90937376170214@lid
+                    name: Lucas Albuqueque
+                    is_group: false
+                    last_activity: '2026-08-26T09:08:10.351982-04:00'
+                    push_name: Lucas Albuqueque
+                    phone: '554192421234'
+                  - jid: 120363411669320145@g.us
+                    name: wa-headless-lab — teste automatizado, pode apagar
+                    is_group: true
+                    last_activity: '2026-08-24T19:01:14.41138-04:00'
+                total: 384
+                limit: 3
+                offset: 0
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/history:
+  get:
+    tags: [Conversas]
+    summary: Ler o histórico de mensagens de uma conversa
+    description: |
+      Devolve as mensagens já gravadas de uma conversa, da mais recente para
+      a mais antiga. É leitura do banco LOCAL, não do WhatsApp: responde com
+      o telemóvel offline, e só contém o que a gravação de histórico
+      capturou.
+
+      **O parâmetro chama-se `chat_jid`, não `chat`.** É a única rota deste
+      grupo com esse nome, e é medido: `?chat=` devolve
+      `400 missing_chat_jid`.
+
+      **Quando usar**: para reconstruir uma conversa, e para obter o
+      `data_json` de onde saem os sete campos do descritor que as rotas
+      `/chat/download*` exigem.
+
+      **Regras**:
+
+      - `chat_jid=index` troca a resposta por um ÍNDICE: um mapa de id de
+        sessão para a lista de conversas com a data da última mensagem. As
+        duas formas de resposta são diferentes e sempre foram.
+      - Pedir com um `@lid` também traz as linhas guardadas sob o telefone da
+        mesma pessoa, fundidas e desduplicadas por `message_id`. Medido em 30
+        conversas reais: 27 vinham vazias sem essa fusão, porque estavam
+        arquivadas sob o outro nome.
+      - `limit` ausente é 50. Um `limit` que não seja número é
+        `400 invalid_limit`, ao contrário de `/chat/list` — aqui a recusa é
+        no limite do fio, como o manipulador histórico fazia.
+      - Não existe `offset`, `before`, `after` nem filtro por tipo: nenhum
+        deles alguma vez existiu nesta rota.
+      - Com a gravação de histórico desligada para a sessão, a resposta é
+        `501 history_disabled`. A configuração é revalidada contra o banco
+        antes de recusar, para que um cache velho não feche a rota.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    parameters:
+      - name: chat_jid
+        in: query
+        required: true
+        description: |
+          JID da conversa — contacto (`@lid` ou `@s.whatsapp.net`), grupo
+          (`@g.us`) ou o valor reservado `index`.
+        schema:
+          type: string
+          example: 554192421234@s.whatsapp.net
+      - name: limit
+        in: query
+        required: false
+        description: Quantas mensagens devolver. Padrão 50.
+        schema:
+          type: integer
+          default: 50
+          example: 40
+    responses:
+      '200':
+        description: |
+          As mensagens da conversa, da mais recente para a mais antiga. Com
+          `chat_jid=index`, `data` traz o índice em vez do array.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      oneOf:
+                        - type: array
+                          items:
+                            $ref: '#/components/schemas/MensagemDoHistorico'
+                        - $ref: '#/components/schemas/IndiceDeConversas'
+            example:
+              code: 200
+              data:
+                - id: 22777
+                  user_id: 918e37366f27e1125ee0482a793267e1
+                  chat_jid: 554192421234@s.whatsapp.net
+                  sender_jid: 5516981818244@s.whatsapp.net
+                  message_id: 3EB0A4B2AFD45E625C0917
+                  timestamp: '2026-08-26T08:40:23.498488-04:00'
+                  message_type: video
+                  text_content: bateria video real
+                  media_link: ''
+                  data_json: '{"Info":{"Chat":"554192421234@s.whatsapp.net","ID":"3EB0A4B2AFD45E625C0917"},"Message":{"videoMessage":{"URL":"https://mmg.whatsapp.net/o1/v/t24/exemplo","directPath":"/o1/v/t24/exemplo","mediaKey":"SlpkRE1hd3FWcDFa","mimetype":"video/mp4","fileEncSha256":"ZXhlbXBsbw==","fileSha256":"ZXhlbXBsbw==","fileLength":"2010098"}}}'
+              success: true
+      '400':
+        description: |
+          Falta `chat_jid` (`missing_chat_jid`), `limit` não é número
+          (`invalid_limit`), ou o token não tem sessão associada
+          (`missing_session_id`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_chat_jid
+                message: chat_jid is required
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+      '501':
+        description: |
+          A gravação de histórico está desligada para esta sessão. Ligue-a em
+          `POST /session/history` antes de voltar a chamar.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 501
+              error:
+                code: history_disabled
+                message: message history is disabled for this user
+              success: false
+
+/chat/archive:
+  post:
+    tags: [Conversas]
+    summary: Arquivar ou desarquivar uma conversa
+    description: |
+      Move a conversa para a lista de arquivadas, ou tira-a de lá.
+
+      **Quando usar**: para tirar da lista principal uma conversa que não
+      precisa de atenção, sem a apagar.
+
+      **Efeito colateral herdado, e não controlado por nós**: arquivar
+      também DESAFIXA a conversa. Quem fixa e depois arquiva fica com uma
+      conversa desafixada, e nada nesta API o reporta.
+
+      **Regras**: o destino vai em `jid`; `chat` é aceite como nome
+      universal e só vale quando `jid` faltar. Ausentes os dois, é
+      `400 missing_jid` (medido). A operação é uma escrita de app-state, logo
+      pode devolver `409 app_state_conflict` quando o estado local está
+      dessincronizado do servidor.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoArquivarConversa'
+          example:
+            jid: 554192421234@s.whatsapp.net
+            archive: true
+    responses:
+      '200':
+        description: O patch de app-state foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/SucessoMensagem'
+            example:
+              code: 200
+              data: {success: true, message: Chat archived}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `jid` e `chat`
+          ausentes (`missing_jid`), JID mal formado (`invalid_chat_jid`) ou
+          sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: missing jid in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: |
+          O WhatsApp recusou o patch de app-state por conflito: a nossa cópia
+          do estado está dessincronizada da dele. Repetir depois de uma
+          sincronização pode funcionar.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: app_state_conflict
+                message: 'app state conflict: the local state is out of sync with the server'
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/pin:
+  post:
+    tags: [Conversas]
+    summary: Fixar ou desafixar uma conversa no topo
+    description: |
+      Fixa a CONVERSA no topo da lista, ou tira-a de lá.
+
+      **Não fixa uma mensagem dentro da conversa.** Fixar mensagem é outro
+      mecanismo por completo (uma mensagem `PinInChatMessage`, com id
+      próprio) e não está exposto nesta API.
+
+      **Quando usar**: para manter uma conversa acessível no topo do cliente.
+
+      **Regras**: destino em `jid`, com `chat` como alias; ausentes os dois é
+      `400 missing_jid`. Arquivar a conversa depois de a fixar DESFAZ a
+      fixação. É escrita de app-state, logo `409 app_state_conflict` é
+      possível — mas esta rota usa um tipo de patch (`regular_low`) que, ao
+      contrário do de `/chat/mute`, verifica em campo hoje.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoFixarConversa'
+          example:
+            jid: 554192421234@s.whatsapp.net
+            pin: true
+    responses:
+      '200':
+        description: O patch de app-state foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/SucessoMensagem'
+            example:
+              code: 200
+              data: {success: true, message: Chat pinned}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `jid` e `chat`
+          ausentes (`missing_jid`), JID mal formado (`invalid_chat_jid`) ou
+          sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: missing jid in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: Conflito de app-state — o estado local está dessincronizado do servidor.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: app_state_conflict
+                message: 'app state conflict: the local state is out of sync with the server'
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/mute:
+  post:
+    tags: [Conversas]
+    summary: Silenciar ou dessilenciar uma conversa
+    description: |
+      Silencia as notificações de uma conversa por 8 horas, por 1 semana ou
+      para sempre.
+
+      > **Atenção ao formato de `mute_duration`.** É a ÚNICA rota do
+      > inventário em que a duração é um NÚMERO INTEIRO DE NANOSSEGUNDOS, e
+      > não texto — é um `*time.Duration` do Go. Enviar `"8h"` devolve
+      > `400 could_not_decode_payload`, medido; o valor correcto é
+      > `28800000000000`. A rota vizinha `/chat/ephemeral` faz o CONTRÁRIO e
+      > aceita `"24h"` como texto.
+
+      **Quando usar**: para calar uma conversa ruidosa sem a arquivar nem
+      sair dela.
+
+      **Regras**:
+
+      - Só três valores são aceites: `28800000000000` (8 horas),
+        `604800000000000` (1 semana) e `0` ou campo ausente (para sempre).
+        Qualquer outro é `400 invalid_mute_duration`, com a mensagem a dizer
+        o valor recebido — medido com `3600000000000` (1 hora).
+      - Com `mute: false`, `mute_duration` é ignorado.
+      - Destino em `jid`, com `chat` como alias.
+
+      **Estado medido em campo (F223)**: esta rota usa um patch de app-state
+      do tipo `regular_high`, e esse tipo está a ser recusado com
+      `409 app_state_conflict` nas duas sessões reais — com sincronização
+      completa e incremental, e mesmo com o estado local apagado. A rota está
+      correcta e a resposta é honesta, mas a capacidade está indisponível na
+      prática. `/chat/pin`, que usa `regular_low`, não é afectada.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoSilenciarConversa'
+          example:
+            jid: 554192421234@s.whatsapp.net
+            mute: true
+            mute_duration: 28800000000000
+    responses:
+      '200':
+        description: O patch de app-state foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/SucessoMensagem'
+            example:
+              code: 200
+              data: {success: true, message: Chat muted}
+              success: true
+      '400':
+        description: |
+          `mute_duration` como texto ou corpo ilegível
+          (`could_not_decode_payload`), duração fora das três permitidas
+          (`invalid_mute_duration`), `jid` e `chat` ausentes (`missing_jid`),
+          JID mal formado (`invalid_chat_jid`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_mute_duration
+                message: mute_duration must be 8h, 168h (1 week), or omitted (forever); got 1h0m0s
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: |
+          Conflito de app-state. **É a resposta que esta rota devolve hoje em
+          campo** — ver a ressalva F223 na descrição.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: app_state_conflict
+                message: 'app state conflict: the local state is out of sync with the server'
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/message/star:
+  post:
+    tags: [Conversas]
+    summary: Favoritar ou desfavoritar uma mensagem
+    description: |
+      Marca uma mensagem como favorita, ou retira a marca.
+
+      **Quando usar**: para guardar uma mensagem na lista de favoritas da
+      conta, visível em todos os dispositivos ligados.
+
+      **Regras**: são necessários TRÊS identificadores, e não dois —
+      `chat`, `message_id` **e `sender`**. Faltar `sender` é
+      `400 missing_sender`, medido; é o erro em que se cai ao derivar o
+      exemplo da conversa em vez de o medir. Em conversa individual com uma
+      mensagem própria, `sender` é o JID da própria conta e `from_me` é
+      `true`.
+
+      **Histórico**: até à correcção da F223/CAP-54 esta rota devolvia
+      `409 app_state_conflict`; hoje devolve `200`. O `409` continua
+      possível, porque continua a ser uma escrita de app-state.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoFavoritarMensagem'
+          example:
+            chat: 554192421234@s.whatsapp.net
+            sender: 554192421234@s.whatsapp.net
+            message_id: 3EB0A4B2AFD45E625C0917
+            from_me: true
+            star: true
+    responses:
+      '200':
+        description: O patch de app-state foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/SucessoMensagem'
+            example:
+              code: 200
+              data: {success: true, message: Message starred}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `chat`
+          (`missing_chat`), `message_id` (`missing_message_id`) ou `sender`
+          (`missing_sender`) ausentes, JID mal formado (`invalid_chat_jid`,
+          `invalid_sender_jid`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_sender
+                message: missing sender in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: Conflito de app-state — o estado local está dessincronizado do servidor.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: app_state_conflict
+                message: 'app state conflict: the local state is out of sync with the server'
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/delete/message:
+  post:
+    tags: [Conversas]
+    summary: Apagar para todos uma mensagem enviada
+    description: |
+      Revoga uma mensagem própria: ela desaparece para todos os
+      participantes, substituída pelo aviso do cliente.
+
+      **Quando usar**: para retirar uma mensagem enviada por engano. Só faz
+      sentido para mensagens próprias — revogar a mensagem de outra pessoa
+      não é uma operação que o WhatsApp permita a um participante comum.
+
+      **Regras**:
+
+      - `Phone` (ou o alias `chat`) e `Id` são obrigatórios; faltar `Id` é
+        `400 missing_id`, medido.
+      - `message_id` na resposta é o da mensagem APAGADA, e não o da mensagem
+        de revogação que o envio criou — é o que responde à pergunta do
+        cliente.
+      - Um `Id` inexistente NÃO é recusado: o WhatsApp aceita a revogação de
+        um id que não conhece e nada acontece do outro lado.
+
+      **Nota de nomes**: esta rota é a canónica. `POST /chat/delete` existiu
+      como alias e foi REMOVIDA — apesar do nome, nunca apagou conversa
+      nenhuma.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoApagarMensagem'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Id: 3EB0A4B2AFD45E625C0917
+    responses:
+      '200':
+        description: A revogação foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoApagarMensagem'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: deleted}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
+          ausentes (`missing_phone`), `Id` ausente (`missing_id`), destino
+          mal formado (`invalid_phone`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_id
+                message: missing Id in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/react:
+  post:
+    tags: [Conversas]
+    summary: Reagir a uma mensagem com um emoji
+    description: |
+      Coloca um emoji de reação numa mensagem, ou retira o que já lá está.
+
+      **Quando usar**: para confirmar leitura de forma visível, ou responder
+      sem escrever.
+
+      **Regras**:
+
+      - Para RETIRAR a reação, envie `Body: "remove"`. String vazia não
+        serve: é `400 missing_body`, medido.
+      - O `Id` aceita o prefixo `me:` para marcar a mensagem como própria
+        (`me:3EB0A4B2AFD45E625C0917`); o prefixo é retirado antes de seguir
+        para o WhatsApp.
+      - Em grupo, `Participant` diz quem escreveu a mensagem reagida. Um
+        `Participant` que não resolve é IGNORADO em silêncio, e não recusado.
+      - A resposta tem a mesma forma das rotas de envio, porque reagir é
+        enviar uma mensagem: `message_id` é o da mensagem REAGIDA.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoReagir'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Id: 3EB0A4B2AFD45E625C0917
+            Body: 👍
+    responses:
+      '200':
+        description: A reação foi aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
+          ausentes (`missing_phone`), `Body` vazio (`missing_body`), `Id`
+          ausente (`missing_id`), destino mal formado (`invalid_phone`) ou
+          sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_body
+                message: missing Body in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/markread:
+  post:
+    tags: [Conversas]
+    summary: Marcar mensagens como lidas
+    description: |
+      Envia o recibo de leitura de uma ou mais mensagens — os dois traços
+      azuis do lado de quem escreveu.
+
+      **Quando usar**: depois de o seu sistema processar as mensagens
+      recebidas, para que o remetente veja que chegaram a quem as lê.
+
+      **Regras, e uma ressalva medida**:
+
+      - O campo que a implementação RESOLVE é `ChatPhone`. O nome antigo
+        `Chat` é aceite pelo desserializador, mas o ramo que o converteria em
+        JID está por implementar (`mark_read.go:41`), e a conversa segue
+        VAZIA para o WhatsApp. Use `ChatPhone`.
+      - Sem nenhum dos dois, é `400 missing_chatphone`, medido.
+      - `Id` é uma LISTA. Vazia é `400 missing_id`.
+      - `SenderPhone` só faz sentido em grupo, e é opcional.
+      - Esta rota NÃO aceita o alias universal `chat` — o tipo de pedido não
+        o declara.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoMarcarLida'
+          example:
+            ChatPhone: 554192421234@s.whatsapp.net
+            Id: [3EB0A4B2AFD45E625C0917]
+    responses:
+      '200':
+        description: Os recibos foram enviados ao WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Message marked as read}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `ChatPhone` ausente
+          (`missing_chatphone`), destino mal formado (`invalid_chatphone`,
+          `invalid_senderphone`), lista `Id` vazia (`missing_id`) ou sessão
+          inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_chatphone
+                message: missing ChatPhone in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/presence:
+  post:
+    tags: [Conversas]
+    summary: Anunciar "a escrever" ou "a gravar" numa conversa
+    description: |
+      Mostra ao outro lado que se está a escrever ou a gravar áudio.
+
+      **Quando usar**: antes de enviar uma mensagem que demore a ser
+      composta, para que a conversa não pareça parada.
+
+      **Regras**:
+
+      - `State` é obrigatório; ausente é `400 missing_state`, medido. Os
+        valores da implementação são `composing`, `recording` e `paused`.
+      - `Media` é um qualificador opcional passado tal e qual ao WhatsApp;
+        envie string vazia quando não se aplicar.
+      - Não há rota para "parar de escrever" a não ser enviar `paused`. O
+        sinal também expira sozinho do lado do WhatsApp.
+      - Isto é presença NA CONVERSA. A presença global da conta (online /
+        offline) é `POST /user/presence`, outra rota.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoPresencaNaConversa'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            State: composing
+            Media: ''
+    responses:
+      '200':
+        description: O estado foi anunciado ao WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Chat presence sent}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
+          ausentes (`missing_phone`), `State` ausente (`missing_state`),
+          destino mal formado (`invalid_phone`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_state
+                message: missing State in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/ephemeral:
+  post:
+    tags: [Conversas]
+    summary: Definir o temporizador de mensagens temporárias da conversa
+    description: |
+      Liga, desliga ou muda o prazo ao fim do qual as mensagens desta
+      conversa desaparecem sozinhas.
+
+      **Quando usar**: quando a conversa não deve deixar rasto permanente do
+      lado dos participantes.
+
+      **Regras**:
+
+      - `duration` é TEXTO, ao contrário do `mute_duration` de
+        `/chat/mute` — aqui `"24h"` é o valor certo. O conjunto aceite é
+        `"0"` ou `"off"` (desligar), `"24h"`, `"7d"` e `"90d"`. Qualquer
+        outro é `400 invalid_duration`, medido com `"12h"`.
+      - `chat` é obrigatório e NÃO tem alias: ausente é `400 missing_chat`.
+      - `duration` ausente é `400 missing_duration` — distinto de
+        `"0"`, que é um pedido explícito para desligar.
+      - Vale para conversa individual e para grupo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoTemporizadorDaConversa'
+          example:
+            chat: 554192421234@s.whatsapp.net
+            duration: 24h
+    responses:
+      '200':
+        description: O temporizador foi definido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Disappearing timer set}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `chat` ausente
+          (`missing_chat`), `duration` ausente (`missing_duration`),
+          `duration` fora do conjunto (`invalid_duration`), JID mal formado
+          (`invalid_jid`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_duration
+                message: 'duration must be one of: 0, 24h, 7d, 90d'
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/ephemeral/default:
+  post:
+    tags: [Conversas]
+    summary: Definir o temporizador padrão da conta
+    description: |
+      Define o prazo de desaparecimento que passa a valer para as conversas
+      NOVAS desta conta.
+
+      **Quando usar**: para que toda conversa iniciada a partir de agora
+      nasça com mensagens temporárias, sem ter de as ligar uma a uma.
+
+      **Regras**:
+
+      - **Não altera conversa nenhuma que já exista.** Para essas, use
+        `POST /chat/ephemeral`, conversa a conversa.
+      - `duration` é texto e usa o mesmo conjunto: `"0"` ou `"off"`,
+        `"24h"`, `"7d"`, `"90d"`. Fora dele é `400 invalid_duration`.
+      - `duration` ausente é `400 missing_duration`, medido — não é o mesmo
+        que enviar `"0"`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoTemporizadorPadrao'
+          example:
+            duration: '0'
+    responses:
+      '200':
+        description: O temporizador padrão foi definido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Default disappearing timer set}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `duration` ausente
+          (`missing_duration`), `duration` fora do conjunto
+          (`invalid_duration`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_duration
+                message: missing duration in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/request-unavailable-message:
+  post:
+    tags: [Conversas]
+    summary: Pedir ao par o reenvio de uma mensagem indecifrável
+    description: |
+      Pede ao dispositivo que escreveu a mensagem que a envie outra vez,
+      cifrada para esta sessão.
+
+      **Quando usar**: quando uma mensagem chega e não se consegue decifrar —
+      tipicamente porque a sessão de cifra com aquele dispositivo se perdeu.
+      É o mecanismo que o próprio cliente do WhatsApp usa nesse caso.
+
+      **Regras**:
+
+      - Os três campos são obrigatórios: `chat`, `sender` e `id`. Faltar
+        qualquer um é `400`, com `missing_chat`, `missing_sender` ou
+        `missing_id` — este último medido.
+      - **Um `200` diz que o PEDIDO saiu, não que a mensagem voltou.** O
+        reenvio, se acontecer, chega depois pelo caminho normal de mensagem
+        recebida; o par pode simplesmente não responder.
+      - `request_id` na resposta identifica a mensagem de pedido criada, não
+        a mensagem pedida — essa continua em `message_id`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoMensagemIndisponivel'
+          example:
+            chat: 554192421234@s.whatsapp.net
+            sender: 554192421234@s.whatsapp.net
+            id: 3EB0A4B2AFD45E625C0917
+    responses:
+      '200':
+        description: O pedido de reenvio foi entregue ao WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoMensagemIndisponivel'
+            example:
+              code: 200
+              data:
+                success: true
+                message: Unavailable message request sent successfully
+                request_id: 3EB0C7D1F94A62B15D4488
+                chat: 554192421234@s.whatsapp.net
+                sender: 554192421234@s.whatsapp.net
+                message_id: 3EB0A4B2AFD45E625C0917
+                timestamp: 1787747900
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `chat`
+          (`missing_chat`), `sender` (`missing_sender`) ou `id`
+          (`missing_id`) ausentes, JID mal formado (`invalid_chat_jid`,
+          `invalid_sender_jid`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_id
+                message: missing ID in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/downloadimage:
+  post:
+    tags: [Descarga de mídia]
+    summary: Descarregar a imagem de uma mensagem recebida
+    description: |
+      Baixa da CDN do WhatsApp o conteúdo de uma `imageMessage`, decifra-o e
+      devolve-o como Data URL.
+
+      **O corpo é o DESCRITOR da mídia, não um identificador de mensagem.**
+      Os sete campos saem do `data_json` da mensagem devolvida por
+      `GET /chat/history`, sob `Message.imageMessage`. Sem esse passo
+      anterior não há como usar esta rota — ver a descrição da etiqueta
+      **Descarga de mídia**.
+
+      **Quando usar**: para arquivar ou reprocessar a mídia que chegou numa
+      conversa.
+
+      **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
+      é `400 missing_url_or_direct_path`, medido. O `Mimetype` devolvido é o
+      MESMO que entrou, e é também o prefixo da Data URL. Mídia expirada na
+      CDN é `404 media_unavailable`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDescargaDeMidia'
+          example:
+            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+            DirectPath: /o1/v/t24/f2/m234/exemplo
+            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+            Mimetype: image/png
+            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+            FileLength: 74
+    responses:
+      '200':
+        description: A imagem, decifrada e em Data URL.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
+            example:
+              code: 200
+              data:
+                Mimetype: image/png
+                Data: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
+          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_url_or_direct_path
+                message: missing Url and DirectPath in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: |
+          A CDN do WhatsApp respondeu 403, 404 ou 410: a mídia já não está
+          disponível. Mídia antiga expira, e nesse caso repetir não ajuda.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: media_unavailable
+                message: media is no longer available; it may have expired on the WhatsApp CDN
+              success: false
+      '500':
+        description: |
+          Falha na descarga ou na decifragem (`media_download_failed`), ou
+          conteúdo de zero bytes (`empty_media`) — que é tratado como erro de
+          servidor, e não como um `200` com corpo vazio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: media_download_failed
+                message: failed to download media
+              success: false
+
+/chat/downloadvideo:
+  post:
+    tags: [Descarga de mídia]
+    summary: Descarregar o vídeo de uma mensagem recebida
+    description: |
+      Baixa da CDN do WhatsApp o conteúdo de uma `videoMessage`, decifra-o e
+      devolve-o como Data URL.
+
+      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
+      `GET /chat/history` sob `Message.videoMessage` — os mesmos sete campos
+      de todas as rotas deste grupo.
+
+      **Quando usar**: para arquivar ou reprocessar um vídeo recebido.
+
+      **Cuidado com o tamanho**: a resposta é JSON com o ficheiro inteiro em
+      base64, logo cresce cerca de um terço acima do original. Um vídeo de
+      1,5 MB medido em campo devolveu 2 010 098 bytes de `Data`.
+
+      **Regras**: pelo menos um entre `Url` e `DirectPath`. Mídia expirada é
+      `404 media_unavailable`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDescargaDeMidia'
+          example:
+            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+            DirectPath: /o1/v/t24/f2/m234/exemplo
+            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+            Mimetype: video/mp4
+            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+            FileLength: 1503232
+    responses:
+      '200':
+        description: O vídeo, decifrado e em Data URL.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
+            example:
+              code: 200
+              data:
+                Mimetype: video/mp4
+                Data: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
+          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_url_or_direct_path
+                message: missing Url and DirectPath in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: A mídia já não está disponível na CDN do WhatsApp.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: media_unavailable
+                message: media is no longer available; it may have expired on the WhatsApp CDN
+              success: false
+      '500':
+        description: |
+          Falha na descarga ou na decifragem (`media_download_failed`), ou
+          conteúdo de zero bytes (`empty_media`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: media_download_failed
+                message: failed to download media
+              success: false
+
+/chat/downloadaudio:
+  post:
+    tags: [Descarga de mídia]
+    summary: Descarregar o áudio de uma mensagem recebida
+    description: |
+      Baixa da CDN do WhatsApp o conteúdo de uma `audioMessage`, decifra-o e
+      devolve-o como Data URL. Serve tanto para áudio anexado como para
+      mensagem de voz.
+
+      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
+      `GET /chat/history` sob `Message.audioMessage`.
+
+      **Quando usar**: para transcrever, arquivar ou reproduzir fora do
+      WhatsApp um áudio recebido.
+
+      **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
+      é `400 missing_url_or_direct_path`. O `Mimetype` medido em campo para
+      mensagem de voz é `audio/mp4`, e é devolvido tal e qual.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDescargaDeMidia'
+          example:
+            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+            DirectPath: /o1/v/t24/f2/m234/exemplo
+            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+            Mimetype: audio/mp4
+            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+            FileLength: 14130
+    responses:
+      '200':
+        description: O áudio, decifrado e em Data URL.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
+            example:
+              code: 200
+              data:
+                Mimetype: audio/mp4
+                Data: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yTTRBIG1wNDE=
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
+          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_url_or_direct_path
+                message: missing Url and DirectPath in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: A mídia já não está disponível na CDN do WhatsApp.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: media_unavailable
+                message: media is no longer available; it may have expired on the WhatsApp CDN
+              success: false
+      '500':
+        description: |
+          Falha na descarga ou na decifragem (`media_download_failed`), ou
+          conteúdo de zero bytes (`empty_media`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: media_download_failed
+                message: failed to download media
+              success: false
+
+/chat/downloaddocument:
+  post:
+    tags: [Descarga de mídia]
+    summary: Descarregar o documento de uma mensagem recebida
+    description: |
+      Baixa da CDN do WhatsApp o conteúdo de uma `documentMessage`,
+      decifra-o e devolve-o como Data URL.
+
+      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
+      `GET /chat/history` sob `Message.documentMessage`.
+
+      **Quando usar**: para guardar em disco ou processar um ficheiro que
+      chegou por conversa.
+
+      **Regras**: pelo menos um entre `Url` e `DirectPath`. O nome original
+      do ficheiro NÃO vem nesta resposta — está no `data_json` da mensagem
+      (`fileName`), e tem de ser lido de lá. Mídia expirada é
+      `404 media_unavailable`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDescargaDeMidia'
+          example:
+            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+            DirectPath: /o1/v/t24/f2/m234/exemplo
+            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+            Mimetype: application/pdf
+            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+            FileLength: 48
+    responses:
+      '200':
+        description: O documento, decifrado e em Data URL.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
+            example:
+              code: 200
+              data:
+                Mimetype: application/pdf
+                Data: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDM+Pgo=
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
+          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_url_or_direct_path
+                message: missing Url and DirectPath in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: A mídia já não está disponível na CDN do WhatsApp.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: media_unavailable
+                message: media is no longer available; it may have expired on the WhatsApp CDN
+              success: false
+      '500':
+        description: |
+          Falha na descarga ou na decifragem (`media_download_failed`), ou
+          conteúdo de zero bytes (`empty_media`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: media_download_failed
+                message: failed to download media
+              success: false
+
+/chat/downloadsticker:
+  post:
+    tags: [Descarga de mídia]
+    summary: Descarregar o autocolante de uma mensagem recebida
+    description: |
+      Baixa da CDN do WhatsApp o conteúdo de uma `stickerMessage`, decifra-o
+      e devolve-o como Data URL. Autocolantes são normalmente WebP, animados
+      ou não.
+
+      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
+      `GET /chat/history` sob `Message.stickerMessage`.
+
+      **Quando usar**: para arquivar ou reutilizar um autocolante recebido.
+
+      **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
+      é `400 missing_url_or_direct_path`. Mídia expirada é
+      `404 media_unavailable`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDescargaDeMidia'
+          example:
+            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+            DirectPath: /o1/v/t24/f2/m234/exemplo
+            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+            Mimetype: image/webp
+            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+            FileLength: 59
+    responses:
+      '200':
+        description: O autocolante, decifrado e em Data URL.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
+            example:
+              code: 200
+              data:
+                Mimetype: image/webp
+                Data: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
+          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_url_or_direct_path
+                message: missing Url and DirectPath in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: A mídia já não está disponível na CDN do WhatsApp.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: media_unavailable
+                message: media is no longer available; it may have expired on the WhatsApp CDN
+              success: false
+      '500':
+        description: |
+          Falha na descarga ou na decifragem (`media_download_failed`), ou
+          conteúdo de zero bytes (`empty_media`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: media_download_failed
+                message: failed to download media
+              success: false
