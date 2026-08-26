@@ -59,16 +59,16 @@ func (f *CommunityDirectory) GetLinkedGroupsParticipants(ctx context.Context, tx
 
 // CommunityLifecycleLinkGroupCall records a call to LinkGroup.
 type CommunityLifecycleLinkGroupCall struct {
-	Ctx   context.Context
-	TxtID string
+	Ctx    context.Context
+	TxtID  string
 	Parent domain.JID
 	Child  domain.JID
 }
 
 // CommunityLifecycleUnlinkGroupCall records a call to UnlinkGroup.
 type CommunityLifecycleUnlinkGroupCall struct {
-	Ctx   context.Context
-	TxtID string
+	Ctx    context.Context
+	TxtID  string
 	Parent domain.JID
 	Child  domain.JID
 }

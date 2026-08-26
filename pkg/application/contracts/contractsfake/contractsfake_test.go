@@ -645,7 +645,9 @@ func TestGroupLifecycle(t *testing.T) {
 		t.Errorf("LeaveGroupCalls = %+v", f.LeaveGroupCalls)
 	}
 
-	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) { return nil, errBoom }
+	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+		return nil, errBoom
+	}
 	f.JoinGroupFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
 	f.LeaveGroupFunc = func(context.Context, string, domain.JID) error { return errBoom }
 	if _, err := f.CreateGroup(ctx, "u1", "", nil, domain.CreateGroupOpts{}); !errors.Is(err, errBoom) {

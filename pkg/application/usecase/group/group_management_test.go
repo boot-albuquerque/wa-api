@@ -255,7 +255,9 @@ func TestGroupManagement_FalhaDaPortaLogaEPropaga(t *testing.T) {
 		{
 			name: "CreateGroup",
 			arrange: func(f *mgmtFakes) {
-				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) { return nil, boom }
+				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+					return nil, boom
+				}
 			},
 			call: func(uc *group.GroupManagementUseCase) error {
 				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"}, domain.CreateGroupOpts{})
@@ -403,7 +405,9 @@ func TestGroupManagement_CaminhoFeliz(t *testing.T) {
 
 	t.Run("CreateGroup repassa nome e participantes resolvidos", func(t *testing.T) {
 		f := newMgmt()
-		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) { return "created", nil }
+		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+			return "created", nil
+		}
 
 		res, err := f.uc.CreateGroup(ctx, "u1", "meu grupo", []string{"5511987654321", "5522987654321"}, domain.CreateGroupOpts{})
 		if err != nil {
