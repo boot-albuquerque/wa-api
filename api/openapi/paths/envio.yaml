@@ -1,0 +1,1409 @@
+# Grupo: Envio de mensagens — as 16 rotas POST /chat/send/*.
+#
+# NOTA SOBRE O 400 INLINE. Este ficheiro NÃO referencia
+# `#/components/responses/CorpoInvalido` nas recusas de payload. A razão é
+# medida: o exemplo daquela resposta traz `error.code: decode_payload_failed`,
+# e o servidor devolve `could_not_decode_payload`
+# (`handlers/errors.go:41`, `CodeDecodePayload`, confirmado em 2026-08-26
+# contra localhost:8080). Cada rota traz o seu 400 com os códigos que
+# realmente saem dela, em `examples` nomeados.
+#
+# As recusas de campo obrigatório destas 16 rotas passam TODAS pela taxonomia
+# `apperr` — nenhuma usa o envelope antigo de texto simples da F266.
+
+/chat/send/text:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar uma mensagem de texto
+    description: |
+      Envia texto simples para um contacto, grupo ou canal, opcionalmente com
+      pré-visualização de link, citação e menções.
+
+      **Quando usar**: é a rota base de envio. Qualquer mensagem sem mídia nem
+      elemento interativo passa por aqui.
+
+      **Regras**:
+      - `Body` é obrigatório; vazio é `400 missing_body`.
+      - O destino vem em `Phone` ou no nome universal `chat`; `Phone` ganha
+        quando os dois vierem. Nenhum dos dois é `400 missing_phone`.
+      - Com `LinkPreview: true`, o serviço busca a metadata Open Graph da
+        primeira URL do corpo. Falha na busca **não** é erro: a mensagem segue
+        sem pré-visualização.
+
+      **O que `200` significa**: o WhatsApp aceitou a mensagem. Não diz que ela
+      já foi desenhada no ecrã de quem recebe.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioTexto'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Body: Bom dia! O seu pedido saiu para entrega.
+    responses:
+      '200':
+        description: Mensagem aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: |
+          Payload recusado antes de qualquer envio. `error.code` diz qual regra
+          falhou.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+              missing_body:
+                summary: Corpo vazio
+                value: {code: 400, error: {code: missing_body, message: missing Body in payload}, success: false}
+              invalid_phone:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+              could_not_decode_payload:
+                summary: O corpo não é JSON válido
+                value: {code: 400, error: {code: could_not_decode_payload, message: could not decode payload}, success: false}
+              no_session:
+                summary: Token válido, mas a sessão não está ligada ao WhatsApp
+                value: {code: 400, error: {code: no_session, message: no session}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/image:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar uma imagem
+    description: |
+      Envia uma imagem, com legenda opcional. Os bytes vêm num de dois
+      transportes: URI de dados no próprio pedido, ou URL http(s) que o
+      servidor busca.
+
+      **Quando usar**: fotografias, capturas, etiquetas — qualquer imagem que
+      deva ser desenhada na conversa, e não descarregada como ficheiro. Para
+      ficheiro, use `/chat/send/document`.
+
+      **Regras**:
+      - A URI de dados tem de começar exactamente por `data:image`. Um
+        `data:application/pdf;...` **não** conta como imagem e termina em
+        `400 unsupported_image_source`.
+      - Teto de **16 MB** nos dois transportes.
+      - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes
+        DECODIFICADOS. O rótulo que a própria URI de dados declara é ignorado de
+        propósito — aceitá-lo abriria a porta a bytes de um tipo com rótulo de
+        outro. Se o resultado não for de imagem, é `400 invalid_image_mime_type`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioImagem'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+            Caption: A etiqueta do seu pedido.
+    responses:
+      '200':
+        description: Imagem subida e mensagem aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+              missing_image:
+                summary: Campo `Image` vazio
+                value: {code: 400, error: {code: missing_image, message: missing Image in payload}, success: false}
+              unsupported_image_source:
+                summary: Nem URI de dados `data:image`, nem URL http(s)
+                value: {code: 400, error: {code: unsupported_image_source, message: 'Image data should start with "data:image/png;base64," or be an http(s) URL'}, success: false}
+              invalid_data_uri:
+                summary: A URI de dados não decodifica
+                value: {code: 400, error: {code: invalid_data_uri, message: could not decode data URI}, success: false}
+              image_fetch_failed:
+                summary: A URL não pôde ser buscada
+                value: {code: 400, error: {code: image_fetch_failed, message: failed to fetch image from url}, success: false}
+              image_too_large:
+                summary: Acima de 16 MB
+                value: {code: 400, error: {code: image_too_large, message: image payload exceeds size limit}, success: false}
+              empty_image_body:
+                summary: Zero bytes depois de obtidos
+                value: {code: 400, error: {code: empty_image_body, message: image body is empty}, success: false}
+              invalid_image_mime_type:
+                summary: O tipo resolvido não é de imagem
+                value: {code: 400, error: {code: invalid_image_mime_type, message: resolved MIME type is not an image type}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/video:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar um vídeo
+    description: |
+      Envia um vídeo, com legenda opcional. Mesmos dois transportes da imagem:
+      URI de dados ou URL http(s) buscada pelo servidor.
+
+      **Quando usar**: conteúdo que deve tocar dentro da conversa. Um vídeo
+      enviado por `/chat/send/document` chega como ficheiro para descarregar.
+
+      **Regras**:
+      - A discriminação da URI de dados é a mais FROUXA das rotas de mídia:
+        bastam os quatro primeiros caracteres serem `data`, sem os dois-pontos.
+        Qualquer MIME declarado passa.
+      - Teto de **100 MB**.
+      - **Piso de 256 bytes** (`send_video.go:36`): abaixo disso é
+        `400 video_too_small`, verificado ANTES de qualquer envio. Medido em
+        2026-08-26 com uma URI de dados de 6 bytes.
+      - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes.
+        Se não for de vídeo, é `400 invalid_video_mime_type`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioVideo'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+            Caption: O vídeo da montagem.
+    responses:
+      '200':
+        description: Vídeo subido e mensagem aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_video:
+                summary: Campo `Video` vazio
+                value: {code: 400, error: {code: missing_video, message: missing Video in payload}, success: false}
+              video_too_small:
+                summary: Menos de 256 bytes — medido em 2026-08-26
+                value: {code: 400, error: {code: video_too_small, message: video payload too small to be valid}, success: false}
+              video_too_large:
+                summary: Acima de 100 MB
+                value: {code: 400, error: {code: video_too_large, message: video payload exceeds size limit}, success: false}
+              unsupported_video_source:
+                summary: Nem prefixo `data`, nem URL http(s)
+                value: {code: 400, error: {code: unsupported_video_source, message: 'Video data should start with "data:video/mp4;base64," or be an http(s) URL'}, success: false}
+              video_fetch_failed:
+                summary: A URL não pôde ser buscada
+                value: {code: 400, error: {code: video_fetch_failed, message: failed to fetch video from url}, success: false}
+              invalid_video_mime_type:
+                summary: O tipo resolvido não é de vídeo
+                value: {code: 400, error: {code: invalid_video_mime_type, message: resolved MIME type is not a video type}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/audio:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar um áudio ou mensagem de voz
+    description: |
+      Envia áudio, como mensagem de voz (a bolha com a onda) ou como ficheiro
+      de áudio, conforme `ptt`.
+
+      **Quando usar**: gravações de voz e ficheiros de som. Para um `.mp3` que
+      deva chegar como anexo para guardar, prefira `/chat/send/document`.
+
+      **Regras**:
+      - A URI de dados tem de começar exactamente por `data:audio/` — mais
+        estreito que as outras rotas de mídia.
+      - Teto de **16 MB**, e **piso de 128 bytes** (`send_audio.go:34`): abaixo
+        disso é `400 audio_too_small`, ANTES de qualquer envio. Medido em
+        2026-08-26.
+      - **`ptt` ausente significa `true`**, e não `false`.
+      - **A legenda vai como mensagem SEPARADA** (HOUSEKEEP F116): o protocolo
+        não tem campo de legenda em áudio. Ela é enviada DEPOIS do áudio, e o
+        conjunto **não é atómico** — se a legenda falhar, o áudio já foi, o
+        pedido continua `200` e `caption_status` vale `failed`. Por isso esta
+        rota é a única do grupo cuja resposta tem campos extra.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioAudio'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Audio: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
+            ptt: true
+            Caption: O áudio que combinámos.
+    responses:
+      '200':
+        description: |
+          Áudio subido e aceite. Quando houve legenda, `caption_status` diz se
+          ela também saiu — `failed` aqui significa áudio entregue e legenda
+          não, e reenviar duplicaria o áudio.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvioAudio'
+            example:
+              code: 200
+              data:
+                message_id: 3EB0A4B2AFD45E625C0917
+                timestamp: 1787747900
+                status: sent
+                caption_message_id: 3EB0F1C9D2A74B380E1128
+                caption_status: sent
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_audio:
+                summary: Campo `Audio` vazio
+                value: {code: 400, error: {code: missing_audio, message: missing Audio in payload}, success: false}
+              audio_too_small:
+                summary: Menos de 128 bytes — medido em 2026-08-26
+                value: {code: 400, error: {code: audio_too_small, message: audio payload too small to be valid}, success: false}
+              audio_too_large:
+                summary: Acima de 16 MB
+                value: {code: 400, error: {code: audio_too_large, message: audio payload exceeds size limit}, success: false}
+              unsupported_audio_source:
+                summary: Nem URI de dados `data:audio/`, nem URL http(s)
+                value: {code: 400, error: {code: unsupported_audio_source, message: 'audio must be base64 (data:audio/) or valid HTTP URL'}, success: false}
+              audio_fetch_failed:
+                summary: A URL não pôde ser buscada
+                value: {code: 400, error: {code: audio_fetch_failed, message: failed to fetch audio from url}, success: false}
+              empty_audio_body:
+                summary: Zero bytes depois de obtidos
+                value: {code: 400, error: {code: empty_audio_body, message: audio body is empty}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/document:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar um documento
+    description: |
+      Envia um ficheiro como anexo, com o nome com que ele deve aparecer no
+      cliente.
+
+      **Quando usar**: PDFs, planilhas, ZIPs — o que deve ser descarregado e
+      guardado, e não desenhado na conversa.
+
+      **Regras**:
+      - `FileName` é **obrigatório**: vazio é `400 missing_filename`. É
+        metadata pura e nunca vira operação de ficheiro no servidor.
+      - A URI de dados aceite é QUALQUER `data:`, sem restrição de MIME — um
+        documento legitimamente carrega `application/pdf`, `application/zip` ou
+        `text/plain`.
+      - Teto de **100 MB**, o maior das cinco rotas de mídia.
+      - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioDocumento'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Document: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
+            FileName: nota-fiscal-1234.pdf
+            Caption: A nota fiscal do pedido.
+    responses:
+      '200':
+        description: Documento subido e mensagem aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_document:
+                summary: Campo `Document` vazio
+                value: {code: 400, error: {code: missing_document, message: missing Document in payload}, success: false}
+              missing_filename:
+                summary: Campo `FileName` vazio
+                value: {code: 400, error: {code: missing_filename, message: missing FileName in payload}, success: false}
+              unsupported_document_source:
+                summary: Nem URI de dados `data:`, nem URL http(s)
+                value: {code: 400, error: {code: unsupported_document_source, message: 'Document data should start with "data:mime/type;base64," or be an http(s) URL'}, success: false}
+              document_fetch_failed:
+                summary: A URL não pôde ser buscada
+                value: {code: 400, error: {code: document_fetch_failed, message: failed to fetch document from url}, success: false}
+              document_too_large:
+                summary: Acima de 100 MB
+                value: {code: 400, error: {code: document_too_large, message: document payload exceeds size limit}, success: false}
+              empty_document_body:
+                summary: Zero bytes depois de obtidos
+                value: {code: 400, error: {code: empty_document_body, message: document body is empty}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/sticker:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar um autocolante
+    description: |
+      Envia um autocolante. A imagem recebida é **sempre convertida para WebP**
+      pelo servidor; o que sobe ao WhatsApp é o resultado da conversão, nunca
+      os bytes de entrada.
+
+      **Quando usar**: figurinhas. Uma imagem comum enviada por aqui vira
+      autocolante — o que muda o tamanho com que é desenhada e retira legenda e
+      descarga.
+
+      **Regras**:
+      - Transportes: URI de dados (prefixo `data`) ou URL http(s). Teto de
+        **16 MB**.
+      - Uma entrada que não seja nenhum dos dois transportes segue tal e qual
+        para a conversão e é recusada lá, com `400 sticker_processing_failed`.
+      - Os campos de pacote (`PackId`, `PackName`, `PackPublisher`) e `Emojis`
+        são metadata e não alteram a imagem.
+
+      **Ressalva medida (2026-08-26)**: a rota devolveu `200` e a mensagem
+      chegou, mas com um WebP sintético o cliente desenha uma bolha vazia. A
+      rota está exercitada; o autocolante em si **não** está provado.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioAutocolante'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Sticker: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
+    responses:
+      '200':
+        description: Autocolante convertido, subido e aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_sticker:
+                summary: Campo `Sticker` vazio
+                value: {code: 400, error: {code: missing_sticker, message: missing Sticker in payload}, success: false}
+              sticker_processing_failed:
+                summary: A entrada não é uma URI de dados que a conversão reconheça
+                value: {code: 400, error: {code: sticker_processing_failed, message: failed to process sticker payload}, success: false}
+              sticker_too_large:
+                summary: Acima de 16 MB
+                value: {code: 400, error: {code: sticker_too_large, message: sticker payload exceeds size limit}, success: false}
+              sticker_fetch_failed:
+                summary: A URL não pôde ser buscada
+                value: {code: 400, error: {code: sticker_fetch_failed, message: failed to fetch sticker from url}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        description: |
+          Falha não classificada, ou falha da conversão para WebP
+          (`sticker_conversion_failed`) — que é do nosso lado, e não do payload.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error: {code: sticker_conversion_failed, message: failed to convert sticker to webp}
+              success: false
+
+/chat/send/location:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar uma localização
+    description: |
+      Envia um ponto no mapa, com rótulo opcional. Não há upload nem busca
+      externa — só metadata de protocolo.
+
+      **Quando usar**: partilhar o endereço de uma entrega ou o ponto de
+      encontro. É localização ESTÁTICA; partilha em tempo real não é exposta
+      por esta API.
+
+      **Regras**:
+      - `Latitude` e `Longitude` são obrigatórios, e **zero é valor VÁLIDO**
+        (HOUSEKEEP F121). Os campos distinguem "não informado" de "zero": omitir
+        é `400 missing_latitude` / `400 missing_longitude`, mandar `0` é aceite —
+        é o ponto onde o equador cruza o meridiano de Greenwich.
+      - `Name` é opcional e serve só de rótulo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioLocalizacao'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Latitude: -25.4284
+            Longitude: -49.2733
+            Name: Curitiba
+    responses:
+      '200':
+        description: Localização aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_latitude:
+                summary: Campo `Latitude` ausente — note que `0` NÃO cai aqui
+                value: {code: 400, error: {code: missing_latitude, message: missing Latitude in payload}, success: false}
+              missing_longitude:
+                summary: Campo `Longitude` ausente
+                value: {code: 400, error: {code: missing_longitude, message: missing Longitude in payload}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+              invalid_phone:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/contact:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar um cartão de contacto
+    description: |
+      Envia um contacto em formato vCard, que o cliente desenha como cartão com
+      botão de guardar.
+
+      **Quando usar**: passar o contacto de um técnico, de um vendedor ou de
+      outro atendimento sem obrigar a pessoa a copiar o número à mão.
+
+      **Regras**:
+      - `Name` e `Vcard` são obrigatórios.
+      - **O vCard não é validado nem reescrito**: o servidor transporta a string
+        tal e qual. Um vCard malformado sai daqui com `200` e chega quebrado.
+      - Para o cliente reconhecer o contacto como utilizador de WhatsApp, a
+        linha `TEL` precisa do parâmetro `waid`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioContacto'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Name: Suporte DisparaZap
+            Vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:Suporte DisparaZap\nTEL;type=CELL;waid=554192421234:+55 41 9242-1234\nEND:VCARD"
+    responses:
+      '200':
+        description: Cartão de contacto aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_name:
+                summary: Campo `Name` vazio
+                value: {code: 400, error: {code: missing_name, message: missing Name in payload}, success: false}
+              missing_vcard:
+                summary: Campo `Vcard` vazio
+                value: {code: 400, error: {code: missing_vcard, message: missing Vcard in payload}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+              invalid_phone:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/poll:
+  post:
+    tags: [Envio de mensagens]
+    summary: Criar uma enquete
+    description: |
+      Cria uma enquete de escolha ÚNICA na conversa. Para votar numa enquete que
+      já existe, use `/chat/send/pollvote`.
+
+      **Quando usar**: recolher uma decisão de um grupo ou de um contacto sem
+      pedir resposta em texto livre.
+
+      **Regras**:
+      - **O campo de destino chama-se `Group`, e não `Phone`** — mesmo para uma
+        enquete enviada a um contacto individual. Medido em 2026-08-26: com
+        `Phone` a rota responde `400 missing_group`. O nome universal `chat`
+        também funciona.
+      - `Header` é a pergunta, e é obrigatório.
+      - São precisas **pelo menos duas** opções; menos é
+        `400 insufficient_options`.
+      - O número de opções selecionáveis é sempre 1 e **não é configurável** por
+        esta API.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioEnquete'
+          example:
+            Group: 120363411669320145@g.us
+            Header: Qual o melhor horário para a entrega?
+            Options: [Manhã, Tarde, Noite]
+    responses:
+      '200':
+        description: Enquete aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_group:
+                summary: Destino ausente — é o que sai quando se manda `Phone` em vez de `Group`
+                value: {code: 400, error: {code: missing_group, message: missing Group in payload}, success: false}
+              missing_header:
+                summary: Pergunta vazia
+                value: {code: 400, error: {code: missing_header, message: missing Header in payload}, success: false}
+              insufficient_options:
+                summary: Menos de duas opções
+                value: {code: 400, error: {code: insufficient_options, message: at least 2 options are required}, success: false}
+              invalid_group:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_group, message: could not parse Group}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/pollvote:
+  post:
+    tags: [Envio de mensagens]
+    summary: Votar numa enquete
+    description: |
+      Emite um voto numa enquete já criada. O voto é cifrado com um segredo
+      derivado da mensagem de enquete original — por isso a rota pede os quatro
+      campos que a identificam, em vez de a procurar no histórico: depender do
+      histórico faria a rota falhar em silêncio depois de uma poda.
+
+      **Quando usar**: votar em nome da conta ligada. Para criar a enquete, use
+      `/chat/send/poll`.
+
+      **Regras**:
+      - `Phone` é a CONVERSA onde a enquete está; `Sender` é quem a CRIOU. São
+        campos diferentes e ambos obrigatórios.
+      - `Sender` pode vir em PN ou LID: o servidor resolve a forma correcta
+        antes de cifrar, preferindo o que o histórico registou e recorrendo ao
+        mapeamento PN→LID quando não a tem (HOUSEKEEP F228).
+      - `PollMessageTimestamp` a zero conta como ausente.
+      - `Options` traz o texto EXACTO das opções votadas.
+
+      **O que `200` significa aqui**: o voto foi DESPACHADO ao servidor do
+      WhatsApp. **Não** é confirmação de que foi contabilizado, e a resposta não
+      permite distinguir as duas coisas — confirme na interface do WhatsApp.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoVotoEnquete'
+          example:
+            Phone: 120363411669320145@g.us
+            Sender: 554192421234@s.whatsapp.net
+            PollMessageId: 3EB0A4B2AFD45E625C0917
+            PollMessageTimestamp: 1787748016
+            Options: [Manhã]
+    responses:
+      '200':
+        description: |
+          Voto despachado. Ver a ressalva na descrição: despacho não é
+          contabilização.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_poll_message_id:
+                summary: Campo `PollMessageId` vazio
+                value: {code: 400, error: {code: missing_poll_message_id, message: missing PollMessageId in payload}, success: false}
+              missing_poll_message_timestamp:
+                summary: Campo `PollMessageTimestamp` ausente ou zero
+                value: {code: 400, error: {code: missing_poll_message_timestamp, message: missing PollMessageTimestamp in payload}, success: false}
+              missing_sender:
+                summary: Campo `Sender` vazio
+                value: {code: 400, error: {code: missing_sender, message: missing Sender in payload}, success: false}
+              missing_options:
+                summary: Nenhuma opção votada
+                value: {code: 400, error: {code: missing_options, message: at least 1 option is required}, success: false}
+              invalid_sender:
+                summary: "`Sender` não parseia como JID"
+                value: {code: 400, error: {code: invalid_sender, message: could not parse Sender}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/buttons:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar uma mensagem com botões
+    description: |
+      Envia uma mensagem interativa de fluxo nativo, com corpo, rodapé, imagem
+      de cabeçalho opcional e uma lista de botões.
+
+      **Quando usar**: confirmar, abrir uma ligação, ligar para um número ou
+      copiar um código sem obrigar a pessoa a escrever.
+
+      **Regras — e esta é a rota com mais armadilhas medidas do grupo**:
+      - **O rótulo do botão é `title`**, com `text` e `buttonText` como
+        sinónimos. **Não é `displayText`** — esse é o nome de
+        `/chat/send/template`. Medido em 2026-08-26: um botão com `displayText`
+        é DESCARTADO EM SILÊNCIO.
+      - Os tipos aceites são `reply`, `cta_url`, `cta_call` e `copy`. Tipo vazio
+        vira `reply`; **tipo desconhecido descarta o botão em silêncio** — em
+        particular `quickreply`, que é válido em `/chat/send/template` e não
+        aqui. Também medido em 2026-08-26.
+      - O descarte é PARCIAL: mandar três botões e receber `200` não garante que
+        chegaram três. Só quando TODOS caem é que a rota recusa, com
+        `400 no_valid_buttons`.
+      - O título é truncado em **20 runas**, e o corte acontece antes de o
+        título servir de `id` — logo o identificador que volta no clique já vem
+        truncado.
+      - `Phone`, corpo (`Body` ou `text`) e `Buttons` não vazio são recusados
+        JUNTOS, numa única mensagem: `400 missing_buttons_fields`.
+      - A imagem de cabeçalho é opcional e tolerante: se falhar a obtenção, a
+        mensagem segue sem ela.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioBotoes'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Title: Confirmação de entrega
+            Body: Confirma a entrega para hoje às 15h?
+            Footer: DisparaZap
+            Buttons:
+              - {type: reply, title: Confirmar, id: confirmar}
+              - {type: reply, title: Remarcar, id: remarcar}
+              - {type: cta_url, title: Ver pedido, url: 'https://exemplo.com/pedido/1234'}
+    responses:
+      '200':
+        description: |
+          Mensagem interativa aceite pelo WhatsApp. **Não garante que todos os
+          botões enviados chegaram** — os inválidos foram descartados em
+          silêncio, e a resposta não os enumera.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_buttons_fields:
+                summary: Falta `Phone`, o corpo, ou a lista de botões — recusa única para os três
+                value: {code: 400, error: {code: missing_buttons_fields, message: 'missing Phone, Body or Buttons'}, success: false}
+              no_valid_buttons:
+                summary: Todos os botões descartados — medido em 2026-08-26 com `displayText` e com `quickreply`
+                value: {code: 400, error: {code: no_valid_buttons, message: 'no valid buttons parsed, accepted types: reply, cta_url, cta_call, copy'}, success: false}
+              invalid_phone:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/list:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar uma lista de seleção
+    description: |
+      Envia uma mensagem com um botão que abre uma lista de opções agrupadas em
+      secções.
+
+      **Quando usar**: mais opções do que caberiam em botões — um cardápio, uma
+      lista de serviços, um menu de atendimento.
+
+      **Regras**:
+      - Duas formas de entrada: `Sections` (preferida, multi-secção) e `List`
+        (legada, lista plana embrulhada numa secção única cujo título vem de
+        `TopText`, ou de `Menu` quando `TopText` vem vazio). Quando `Sections`
+        vem preenchida, `List` é ignorada.
+      - O corpo aceita quatro nomes, nesta ordem: `Desc`, `Body`, `body`,
+        `text`. Nenhum preenchido é `400 missing_desc`.
+      - `ButtonText` vazio vira `Select`.
+      - **Descarte silencioso em duas camadas**: linha sem `title` é descartada;
+        secção que fica sem linhas é descartada. Só quando nenhuma secção
+        sobrevive é que a rota recusa, com `400 no_valid_sections`. Mandar três
+        linhas e receber `200` não garante que chegaram três.
+      - O identificador de cada linha é `RowId`, com `RowID`, `rowId` e `rowID`
+        como sinónimos; vazios os quatro, o próprio título vira identificador.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioLista'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            TopText: Cardápio de hoje
+            Desc: Escolha um item do cardápio.
+            FooterText: Entregas até às 22h
+            ButtonText: Ver cardápio
+            Sections:
+              - title: Pizzas
+                rows:
+                  - {title: Pizza margherita, desc: 'Molho de tomate, mozzarella e manjericão', RowId: margherita}
+                  - {title: Pizza calabresa, desc: Calabresa e cebola, RowId: calabresa}
+    responses:
+      '200':
+        description: |
+          Lista aceite pelo WhatsApp. **Não garante que todas as linhas enviadas
+          chegaram** — as sem título foram descartadas em silêncio.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_desc:
+                summary: Corpo vazio nos quatro nomes aceites
+                value: {code: 400, error: {code: missing_desc, message: missing Desc/Body in payload}, success: false}
+              missing_sections:
+                summary: Nem `Sections` nem `List`
+                value: {code: 400, error: {code: missing_sections, message: missing Sections (or List) in payload}, success: false}
+              no_valid_sections:
+                summary: Todas as linhas e secções descartadas na normalização
+                value: {code: 400, error: {code: no_valid_sections, message: no valid sections/rows found in payload}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/carousel:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar um carrossel de cartões
+    description: |
+      Envia vários cartões que deslizam na horizontal, cada um com a sua
+      imagem, texto e botões — no wire, cada cartão é uma mensagem de botões
+      aninhada na moldura do carrossel.
+
+      **Quando usar**: apresentar um catálogo curto em que cada item tem a sua
+      própria ação.
+
+      **Regras**:
+      - **Cada cartão exige `Buttons`**, e um `Body` não vazio. Cartão sem um
+        dos dois é DESCARTADO EM SILÊNCIO; se nenhum sobreviver, a rota responde
+        `400 no_valid_cards`. Medido em 2026-08-26 com um cartão sem `Buttons`.
+      - Os botões dos cartões seguem as mesmas regras de `/chat/send/buttons`,
+        incluindo o descarte silencioso por tipo desconhecido.
+      - `Title` do cartão **é decorativo**: o iOS não o desenha, só o Android
+        (HOUSEKEEP F217). Informação obrigatória vai em `Body`.
+      - A imagem de cada cartão é tolerante: se falhar a obtenção, o cartão
+        segue sem imagem. Teto de 10 MB por imagem.
+      - Só a apresentação `hscroll_cards` é exposta; o modo de álbum não é
+        configurável por esta API (HOUSEKEEP F211).
+
+      **Ressalva medida**: o cliente Web desenha *"Não foi possível carregar a
+      mensagem. Use seu celular para acessá-la."* — é limitação do Web para
+      tipos interativos, e não falha do envio. Está fotografado a funcionar no
+      telemóvel (HOUSEKEEP F240).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioCarrossel'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Body: As pizzas de hoje.
+            Footer: Entregas até às 22h
+            Cards:
+              - Title: Pizza margherita
+                Body: 'Molho de tomate, mozzarella e manjericão. R$ 45,00.'
+                Buttons:
+                  - {type: reply, title: Pedir, id: pedir-margherita}
+              - Title: Pizza calabresa
+                Body: 'Calabresa e cebola. R$ 48,00.'
+                Buttons:
+                  - {type: reply, title: Pedir, id: pedir-calabresa}
+    responses:
+      '200':
+        description: |
+          Carrossel aceite pelo WhatsApp. **Não garante que todos os cartões
+          enviados chegaram** — os sem corpo ou sem botão válido foram
+          descartados em silêncio.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_carousel_fields:
+                summary: Falta `Phone`, o corpo, ou a lista de cartões — recusa única para os três
+                value: {code: 400, error: {code: missing_carousel_fields, message: 'missing Phone, Body or Cards'}, success: false}
+              no_valid_cards:
+                summary: Todos os cartões descartados — medido em 2026-08-26 com um cartão sem `Buttons`
+                value: {code: 400, error: {code: no_valid_cards, message: 'no valid cards after normalisation, accepted button types: reply, cta_url, cta_call, copy'}, success: false}
+              invalid_phone:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/template:
+  post:
+    tags: [Envio de mensagens]
+    summary: Enviar uma mensagem de modelo
+    description: |
+      Envia um modelo hidratado: corpo, rodapé e até quatro botões de modelo.
+      É o formato ANTIGO de mensagem com botões, e tem vocabulário próprio.
+
+      **Quando usar**: quando o cliente do destinatário não desenha o fluxo
+      nativo de `/chat/send/buttons`. Para envios novos, prefira aquela rota.
+
+      **Regras — atenção ao vocabulário, que é diferente do de
+      `/chat/send/buttons`**:
+      - O rótulo do botão é **`DisplayText`**, e não `title`.
+      - Os tipos são **`quickreply`, `url` e `call`**, e não `reply`/`cta_url`/
+        `cta_call`/`copy`. Um `Type` desconhecido **não** é recusado nem
+        descartado: cai em `quickreply`.
+      - **Não há validação do conteúdo por tipo**: um botão `url` sem `Url` é
+        aceite e produz um botão com destino vazio.
+      - `Footer` é **obrigatório** aqui — é a única rota de envio em que o
+        rodapé não é opcional. Vazio é `400 missing_footer`.
+      - `Buttons` vazio é `400 missing_buttons`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEnvioModelo'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Content: O seu pedido 1234 está pronto para retirada.
+            Footer: DisparaZap
+            Buttons:
+              - {DisplayText: Abrir pedido, Url: 'https://exemplo.com/pedido/1234', Type: url}
+              - {DisplayText: Ligar para a loja, PhoneNumber: '+554192421234', Type: call}
+              - {DisplayText: Já retirei, Type: quickreply, Id: '1'}
+    responses:
+      '200':
+        description: Modelo aceite pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_content:
+                summary: Campo `Content` vazio
+                value: {code: 400, error: {code: missing_content, message: missing Content in payload}, success: false}
+              missing_footer:
+                summary: Campo `Footer` vazio — obrigatório só nesta rota
+                value: {code: 400, error: {code: missing_footer, message: missing Footer in payload}, success: false}
+              missing_buttons:
+                summary: Lista de botões vazia
+                value: {code: 400, error: {code: missing_buttons, message: missing Buttons in payload}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/forward:
+  post:
+    tags: [Envio de mensagens]
+    summary: Encaminhar uma mensagem
+    description: |
+      Encaminha uma mensagem, marcada como encaminhada no cliente. A rota tem
+      **duas formas**, e é a presença de `MessageID` que escolhe qual delas
+      corre.
+
+      **Por chave** (`Phone` + `MessageID`): a mensagem guardada é procurada no
+      histórico e reenviada tal e qual — **incluindo mídia, sem novo upload**. O
+      `ForwardingScore` do payload é IGNORADO: o valor é lido do contexto da
+      mensagem original e incrementado em 1, como o Baileys faz. `Chat` é
+      opcional e hoje não entra na busca; está reservado para desambiguação
+      futura.
+
+      **Por conteúdo** (`Phone` + `Body`): a API cria uma mensagem de texto NOVA
+      marcada como encaminhada. O `ForwardingScore` do payload é respeitado, com
+      `1` por omissão.
+
+      **Regras**:
+      - Sem `MessageID`, `Body` passa a ser obrigatório — vazio é
+        `400 missing_body`.
+      - Com `MessageID`, `Body` é ignorado.
+      - A forma por chave depende do histórico de mensagens, que **não vem
+        ligado por omissão**: com `history = 0` nada é gravado, e a busca
+        devolve `404 message_not_found`. Ligue com
+        `POST /session/history {"history": 100}` antes de contar com isto
+        (HOUSEKEEP F227/F230).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEncaminhamento'
+          examples:
+            por_chave:
+              summary: Por chave de mensagem — reenvia a mensagem guardada, mídia incluída
+              value:
+                Phone: 554192421234@s.whatsapp.net
+                MessageID: 3EB0A4B2AFD45E625C0917
+                Chat: 120363411669320145@g.us
+            por_conteudo:
+              summary: Por conteúdo — cria texto novo marcado como encaminhado
+              value:
+                Phone: 554192421234@s.whatsapp.net
+                Body: Bom dia! O seu pedido saiu para entrega.
+                ForwardingScore: 1
+    responses:
+      '200':
+        description: |
+          Encaminhamento aceite pelo WhatsApp. `message_id` é o da mensagem NOVA
+          na conversa de destino, e não o da original.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_body:
+                summary: Forma por conteúdo sem `Body`
+                value: {code: 400, error: {code: missing_body, message: missing Body in payload}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+              invalid_phone:
+                summary: Destino não parseia como JID
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: |
+          Forma por chave: não há mensagem com esse `MessageID` no histórico
+          desta sessão, ou ela existe sem o conteúdo guardado. A causa mais
+          comum é o histórico estar desligado (`history = 0`, o padrão).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              message_not_found:
+                summary: Nenhuma linha no histórico para esse `MessageID`
+                value: {code: 404, error: {code: message_not_found, message: message not found in history}, success: false}
+              message_no_data:
+                summary: A linha existe, mas sem o conteúdo guardado
+                value: {code: 404, error: {code: message_no_data, message: stored message has no data}, success: false}
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/chat/send/edit:
+  post:
+    tags: [Envio de mensagens]
+    summary: Editar uma mensagem já enviada
+    description: |
+      Substitui o texto de uma mensagem que a própria conta enviou. O cliente do
+      destinatário desenha a marca de "editada".
+
+      **Quando usar**: corrigir um erro numa mensagem recente sem a apagar e
+      reenviar. Para revogar, use `/chat/delete/message`.
+
+      **Regras**:
+      - `Id` é o `message_id` da mensagem a editar, e `Body` é o novo texto.
+      - **A ordem de validação é observável**: `Phone` e `Body` são verificados
+        primeiro, e o `Id` só DEPOIS de `Phone` ter sido parseado. Um pedido com
+        `Phone` inválido E `Id` ausente responde `invalid_phone`, e não
+        `missing_id`.
+      - `StanzaId` e `Participant` preservam a citação da mensagem original, e
+        são opcionais.
+      - **`message_id` na resposta é o da mensagem EDITADA** (o `Id` que foi
+        enviado), e não o de uma mensagem nova — a edição não cria mensagem.
+
+      **Não determinado com segurança pela implementação atual**: a janela de
+      tempo em que o WhatsApp aceita uma edição. O serviço não a verifica; uma
+      mensagem antiga demais é recusada a montante e chega aqui como
+      `422 upstream_rejected`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEdicaoMensagem'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Id: 3EB0A4B2AFD45E625C0917
+            Body: Bom dia! O seu pedido sai para entrega às 15h.
+    responses:
+      '200':
+        description: |
+          Edição aceite pelo WhatsApp. `message_id` repete o `Id` enviado — é a
+          mensagem editada, não uma nova.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data: {message_id: 3EB0A4B2AFD45E625C0917, timestamp: 1787747900, status: sent}
+              success: true
+      '400':
+        description: Payload recusado antes de qualquer envio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            examples:
+              missing_body:
+                summary: Novo texto vazio
+                value: {code: 400, error: {code: missing_body, message: missing Body in payload}, success: false}
+              missing_id:
+                summary: Campo `Id` vazio — só sai quando `Phone` já passou e parseou
+                value: {code: 400, error: {code: missing_id, message: missing Id in payload}, success: false}
+              invalid_phone:
+                summary: Destino não parseia — vence `missing_id` quando os dois falham
+                value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
+              missing_phone:
+                summary: Destino ausente em `Phone` e em `chat`
+                value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
