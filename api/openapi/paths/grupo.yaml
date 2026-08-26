@@ -237,7 +237,15 @@
       mesmo grupo, contra o `2` correcto desta rota.
 
       **Regras**: `groupJID` é obrigatório; a recusa é `400 missing_group_jid`.
-      Um JID que não seja de grupo devolve `400 invalid_group_jid`.
+      Um JID MAL FORMADO — número nu, só espaços — devolve
+      `400 invalid_group_jid`.
+
+      **Medido, e desmente o que aqui estava escrito**: um JID BEM formado mas
+      de CONTACTO (`554192421234@s.whatsapp.net`) **não** é recusado por
+      validação. Passa `ResolveJID`, segue para o WhatsApp, e a chamada fica
+      pendurada **~75 segundos** antes de devolver `500 internal server error`
+      — muito acima dos 30 s de `waclient.RequestTimeout`. Quem chamar esta
+      rota tem de impor prazo próprio.
 
       **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`
       quando a sessão existe mas não está emparelhada. Estes vêm no envelope
@@ -1090,9 +1098,18 @@
       (`handler_group.go:52-62`), e devolveram `200` nas três formas.
       **Prefira a query string**; o corpo existe por compatibilidade.
 
-      **Regras**: sem grupo por nenhuma das três vias, a resposta é
-      `400 could_not_decode_payload` — medido, e é uma mensagem que não
-      descreve a causa real, que é o grupo em falta.
+      **Regras**: sem grupo por nenhuma das três vias, a recusa é `400`, mas o
+      CÓDIGO depende de haver corpo — e o que aparece mais é o enganador:
+
+      | pedido | resposta medida |
+      |---|---|
+      | sem corpo e sem query | `400 could_not_decode_payload` — a causa real é o grupo em falta, não o corpo |
+      | corpo `{}` | `400 missing_group_jid` — a mensagem certa |
+      | corpo `{"groupJID":null}` | `400 missing_group_jid` |
+      | corpo que não é JSON, com `?group_jid=` | `200` — o erro de descodificação é PERDOADO quando a query traz o grupo (`handler_group.go:47-63`) |
+
+      Ou seja: o `curl` sem `-d` — que é o `GET` normal de qualquer cliente —
+      é exactamente o caso que devolve a mensagem que não descreve a causa.
 
       **Autenticação**: token de sessão.
     security:
@@ -1148,8 +1165,9 @@
               success: true
       '400':
         description: |
-          Grupo ausente nas três vias. A mensagem medida é
-          `could_not_decode_payload`, e não `missing_group_jid`.
+          Grupo ausente nas três vias. Com corpo JSON presente a mensagem é
+          `missing_group_jid`; **sem corpo nenhum é `could_not_decode_payload`**,
+          que não descreve a causa real — medido.
         content:
           application/json:
             schema:
