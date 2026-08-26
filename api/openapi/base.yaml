@@ -53,6 +53,36 @@ info:
     obrigatório das rotas de grupo, sobretudo. Está registado como F266 no
     `HOUSEKEEP.md`, e a documentação de cada rota afectada diz.
 
+    ## Campos que a API não conhece
+
+    Um campo que o servidor não reconhece é **ignorado**, e o pedido segue sem
+    ele. Isto é herança do decodificador de JSON do Go e vale para toda a API.
+
+    **É mais perigoso do que parece**, e foi medido: um nome mal escrito não
+    produz erro — produz o valor zero. Quando o valor zero significa alguma
+    coisa, o erro de digitação vira uma escolha silenciosa. O caso real:
+    `{"mute": true, "duration": "8h"}` em `/chat/mute` devolve `200` e cala a
+    conversa **para sempre**, porque o campo é `mute_duration` e a ausência
+    dele significa "para sempre".
+
+    Desde 2026-08-26 o servidor **regista** cada campo desconhecido:
+
+    ```
+    WRN unknown field "duration" route=/chat/mute unknown_fields=["duration"] req_id=…
+    ```
+
+    E há um modo **estrito**, desligado por omissão, que os recusa:
+
+    ```
+    WA_API_STRICT_UNKNOWN_FIELDS=true
+    POST /chat/mute {"jid":"…","mute":true,"duration":"8h"}
+      -> 400 {"error":{"code":"unknown_field","message":"unknown field \"duration\""}}
+    ```
+
+    Está desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se
+    integra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata
+    de apanhar um nome errado antes de ele chegar a produção.
+
     ## O campo `chat`
 
     Toda rota que recebe um destinatário aceita `"chat"` como nome universal do
