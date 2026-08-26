@@ -616,3 +616,94 @@ func TestEditUser_SemS3ConfigNaoTocaNoS3(t *testing.T) {
 			"configuração de quem só queria mudar o nome", *recebido.S3)
 	}
 }
+
+// TestEditUser_EngineImutavel trava os itens 8/61: o engine não pode ser
+// alterado depois da criação. Divergir do valor persistido é recusado com
+// engine_immutable (409, CategoryConflict) e o UPDATE NUNCA chega ao
+// repositório — não é só o código HTTP que importa, é a garantia de que o
+// banco não muda.
+func TestEditUser_EngineImutavel(t *testing.T) {
+	t.Parallel()
+
+	novoEngine := "wa_headless"
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineWaNoise}}, nil
+		},
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
+		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", Engine: &novoEngine,
+	})
+
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("err = %v, queria *apperr.AppError", err)
+	}
+	if appErr.Code != "engine_immutable" {
+		t.Errorf("code = %q, queria %q", appErr.Code, "engine_immutable")
+	}
+	if appErr.Category != apperr.CategoryConflict {
+		t.Errorf("category = %q, queria %q (409)", appErr.Category, apperr.CategoryConflict)
+	}
+	if len(repo.UpdateUserCalls) != 0 {
+		t.Errorf("UpdateUser chamado %d vezes, queria 0 — engine divergente não pode tocar o banco", len(repo.UpdateUserCalls))
+	}
+}
+
+// TestEditUser_EngineIgualAoPersistidoEhNoop é o controle POSITIVO: reenviar
+// o MESMO engine já gravado (edição idempotente que reenvia o próprio
+// estado) não é "divergir" e não é recusado.
+func TestEditUser_EngineIgualAoPersistidoEhNoop(t *testing.T) {
+	t.Parallel()
+
+	mesmoEngine := "wa_noise"
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineWaNoise}}, nil
+		},
+		UpdateUserFunc: func(context.Context, string, domain.UserUpdate) error { return nil },
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
+		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", Name: "novo-nome", Engine: &mesmoEngine,
+	})
+	if err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+	if len(repo.UpdateUserCalls) != 1 {
+		t.Fatalf("UpdateUser chamado %d vezes, queria 1", len(repo.UpdateUserCalls))
+	}
+	if repo.UpdateUserCalls[0].Update.Engine != nil {
+		t.Errorf("Update.Engine = %v, queria nil — reenviar o mesmo valor não deve virar um SET no adapter", *repo.UpdateUserCalls[0].Update.Engine)
+	}
+}
+
+// TestEditUser_SemEngineNoBodyNaoConsultaEngine é o controle de que um PUT
+// que não menciona engine (o caso comum) não paga o custo extra de
+// ListUsers, e não pode ser recusado por causa de um campo que não veio.
+func TestEditUser_SemEngineNoBodyNaoConsultaEngine(t *testing.T) {
+	t.Parallel()
+
+	repo := &contractsfake.UserRepository{
+		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
+		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
+			t.Fatal("ListUsers não deveria ser chamado quando engine não veio no corpo")
+			return nil, nil
+		},
+	}
+	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
+		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
+
+	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+		UserID: "u1", Name: "novo-nome",
+	}); err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+}

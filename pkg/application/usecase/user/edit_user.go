@@ -48,6 +48,30 @@ func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserReque
 		return apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
 	}
 
+	// Engine é IMUTÁVEL depois da criação (itens 8, 61). req.Engine != nil
+	// significa "o campo veio no corpo" — nil é "não mencionado" e não passa
+	// por aqui. Um valor igual ao persistido é um no-op tolerado (edição
+	// idempotente que reenvia o próprio estado); qualquer divergência é
+	// recusada, sem tocar o banco.
+	if req.Engine != nil {
+		entries, err := uc.users.ListUsers(ctx, req.UserID)
+		if err != nil {
+			return fmt.Errorf("database error: %w", err)
+		}
+		if len(entries) == 0 {
+			// Defensivo: UserExists acabou de confirmar a linha; uma corrida
+			// (delete concorrente) entre as duas leituras é a única forma
+			// disto acontecer.
+			uc.logger.Warn(ctx, "user vanished between UserExists and ListUsers", "userID", req.UserID)
+			return apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
+		}
+		if *req.Engine != entries[0].Engine.String() {
+			uc.logger.Warn(ctx, "engine change rejected: immutable after creation",
+				"userID", req.UserID, "current", entries[0].Engine.String(), "requested", *req.Engine)
+			return apperr.New(engineImmutableCode, apperr.CategoryConflict, engineImmutableMsg, false, nil)
+		}
+	}
+
 	// Validate events if provided
 	if req.Events != "" {
 		eventList := strings.Split(req.Events, ",")
