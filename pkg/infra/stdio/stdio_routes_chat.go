@@ -26,7 +26,7 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.send.list":     {httpMethod: "POST", httpPath: "/chat/send/list"},
 	"chat.send.edit":     {httpMethod: "POST", httpPath: "/chat/send/edit"},
 
-	"chat.delete":                      {httpMethod: "POST", httpPath: "/chat/delete"},
+	"chat.delete":                      {httpMethod: "POST", httpPath: "/chat/delete/message"},
 	"chat.react":                       {httpMethod: "POST", httpPath: "/chat/react"},
 	"chat.archive":                     {httpMethod: "POST", httpPath: "/chat/archive"},
 	"chat.pin":                         {httpMethod: "POST", httpPath: "/chat/pin"},

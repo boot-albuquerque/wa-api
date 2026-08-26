@@ -1,11 +1,25 @@
 package domain
 
-// WebhookConfigRequest representa a requisição para configuração de webhook.
+// WebhookConfigRequest represents a webhook configuration request.
+//
+// Clients historically used different field names: POST sent "webhookurl",
+// PUT sent "webhook". Both fields are always decoded; ResolveURL picks
+// whichever is non-empty (preferring "webhookurl" when both are present,
+// matching the POST-first convention).
 type WebhookConfigRequest struct {
 	WebhookURL      string   `json:"webhook"`
-	WebhookURLField string   `json:"webhookurl"` // Alternativa usada em SetWebhook
+	WebhookURLField string   `json:"webhookurl"`
 	Events          []string `json:"events,omitempty"`
 	Active          bool     `json:"active"`
+}
+
+// ResolveURL returns the webhook URL from whichever field the client
+// populated. When both are present, WebhookURLField ("webhookurl") wins.
+func (r WebhookConfigRequest) ResolveURL() string {
+	if r.WebhookURLField != "" {
+		return r.WebhookURLField
+	}
+	return r.WebhookURL
 }
 
 // WebhookConfigResult representa o resultado de operação de webhook.

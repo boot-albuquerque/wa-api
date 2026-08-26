@@ -765,3 +765,58 @@ func TestWebhookHandlers_F164_NilPublishUserInfo_Panics(t *testing.T) {
 		})
 	}
 }
+
+// --- F250: cross-field acceptance ------------------------------------------
+
+// TestSetWebhook_F250_AcceptsWebhookField proves POST /webhook accepts the
+// "webhook" field name (historically only "webhookurl" worked for POST).
+func TestSetWebhook_F250_AcceptsWebhookField(t *testing.T) {
+	db := &webhookFakeDB{}
+	body := `{"webhook":"https://example.com/via-webhook-field","events":["Message"]}`
+
+	rec, recs := serveWebhook(t, NewSetWebhookHandler(newWebhookTestContext(db)), http.MethodPost, body, true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	data := webhookEnvelope(t, rec)["data"].(map[string]any)
+	if data["webhook"] != "https://example.com/via-webhook-field" {
+		t.Fatalf("webhook = %v, want the URL sent via 'webhook' field", data["webhook"])
+	}
+	logassert.NoSecrets(t, recs)
+}
+
+// TestUpdateWebhook_F250_AcceptsWebhookurlField proves PUT /webhook accepts
+// the "webhookurl" field name (historically only "webhook" worked for PUT).
+func TestUpdateWebhook_F250_AcceptsWebhookurlField(t *testing.T) {
+	db := &webhookFakeDB{}
+	body := `{"webhookurl":"https://example.com/via-webhookurl-field","events":["Message"],"active":true}`
+
+	rec, recs := serveWebhook(t, NewUpdateWebhookHandler(newWebhookTestContext(db)), http.MethodPut, body, true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	data := webhookEnvelope(t, rec)["data"].(map[string]any)
+	if data["webhook"] != "https://example.com/via-webhookurl-field" {
+		t.Fatalf("webhook = %v, want the URL sent via 'webhookurl' field", data["webhook"])
+	}
+	logassert.NoSecrets(t, recs)
+}
+
+// TestSetWebhook_F250_WebhookurlFieldWinsOverWebhook proves that when BOTH
+// "webhookurl" and "webhook" are present, "webhookurl" takes precedence.
+func TestSetWebhook_F250_WebhookurlFieldWinsOverWebhook(t *testing.T) {
+	db := &webhookFakeDB{}
+	body := `{"webhook":"https://example.com/webhook","webhookurl":"https://example.com/webhookurl","events":["Message"]}`
+
+	rec, _ := serveWebhook(t, NewSetWebhookHandler(newWebhookTestContext(db)), http.MethodPost, body, true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	data := webhookEnvelope(t, rec)["data"].(map[string]any)
+	if data["webhook"] != "https://example.com/webhookurl" {
+		t.Fatalf("webhook = %v, want webhookurl to win when both present", data["webhook"])
+	}
+}

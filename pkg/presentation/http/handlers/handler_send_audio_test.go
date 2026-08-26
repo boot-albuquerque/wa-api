@@ -31,10 +31,17 @@ var errSendAudioSentinel = errors.New(sendAudioSentinelToken)
 
 const sendAudioTestURL = "https://exemplo.com/nota-de-voz.ogg"
 
-// sendAudioOggBytes é binário (não texto) e não é reconhecido pelo sniffer
-// do Go (http.DetectContentType devolve "application/octet-stream") — usado
-// para exercitar o fallback de MIME por PTT nos testes de rota.
-var sendAudioOggBytes = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C}
+// sendAudioOggBytes is binary (not text) and is NOT recognized by Go's
+// sniffer (http.DetectContentType returns "application/octet-stream") — used
+// to exercise the PTT-based MIME fallback in route tests. Must be at least
+// minAudioBytes (128) to pass the minimum size validation (F240).
+var sendAudioOggBytes = func() []byte {
+	b := make([]byte, 160)
+	for i := range b {
+		b[i] = byte(i + 1)
+	}
+	return b
+}()
 
 func defaultSendAudioFetcher() *contractsfake.MediaFetcher {
 	return &contractsfake.MediaFetcher{

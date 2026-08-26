@@ -121,13 +121,20 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 
 	// Storage routes (S3, HMAC, Proxy, History)
 	registry.Register("/s3/configure", customChain.Then(ch.Storage.ConfigureS3), "POST")
+	registry.Register("/s3/config", customChain.Then(ch.Storage.ConfigureS3), "POST")
 	registry.Register("/s3/config", customChain.Then(ch.Storage.GetS3Config), "GET")
 	registry.Register("/s3/test", customChain.Then(ch.Storage.TestS3Connection), "POST")
 	registry.Register("/s3/config", customChain.Then(ch.Storage.DeleteS3Config), "DELETE")
 	registry.Register("/hmac/configure", customChain.Then(ch.Storage.ConfigureHmac), "POST")
+	registry.Register("/hmac/config", customChain.Then(ch.Storage.ConfigureHmac), "POST")
 	registry.Register("/hmac/config", customChain.Then(ch.Storage.GetHmacConfig), "GET")
 	registry.Register("/hmac/config", customChain.Then(ch.Storage.DeleteHmacConfig), "DELETE")
 	registry.Register("/proxy/set", customChain.Then(ch.Storage.SetProxy), "POST")
+	// F252: POST /webhook/history sets the message-recording limit (column
+	// users.history), NOT a webhook delivery log. The name mirrors the GET
+	// path below, which reads the same column. Renamed internally from
+	// "history" to "SetHistory" for clarity, but the public path stays to
+	// preserve client compatibility.
 	registry.Register("/webhook/history", customChain.Then(ch.Storage.SetHistory), "POST")
 	registry.Register("/webhook/history", customChain.Then(ch.Storage.GetHistory), "GET")
 
@@ -233,7 +240,9 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	// exact defect of HOUSEKEEP F124, and no assertion about a response body
 	// would have caught it.
 	registry.Register("/chat/history", customChain.Then(ch.ChatHistory.GetChatHistory), "GET")
-	registry.Register("/chat/delete", customChain.Then(ch.Message.DeleteMessage), "POST")
+	// F257: /chat/delete was an alias for /chat/delete/message (same handler,
+	// DeleteMessage). Removed because the name suggests "delete conversation",
+	// which does not exist. The canonical route is /chat/delete/message (line 80).
 	registry.Register("/status/set/image", customChain.Then(ch.Session.PublishStatusImage), "POST")
 	registry.Register("/status/set/video", customChain.Then(ch.Session.PublishStatusVideo), "POST")
 	registry.Register("/status/set/audio", customChain.Then(ch.Session.PublishStatusAudio), "POST")

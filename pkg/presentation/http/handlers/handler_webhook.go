@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
@@ -132,10 +133,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	txtid := info.Get("Id")
 	token := info.Get("Token")
 
-	var t struct {
-		WebhookURL string   `json:"webhookurl"`
-		Events     []string `json:"events,omitempty"`
-	}
+	var t domain.WebhookConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("handler", "SetWebhook").
@@ -144,7 +142,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	webhook := t.WebhookURL
+	webhook := t.ResolveURL()
 	var eventstring string
 	if len(t.Events) > 0 {
 		var validEvents []string
@@ -213,11 +211,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	txtid := info.Get("Id")
 	token := info.Get("Token")
 
-	var t struct {
-		WebhookURL string   `json:"webhook"`
-		Events     []string `json:"events,omitempty"`
-		Active     bool     `json:"active"`
-	}
+	var t domain.WebhookConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("handler", "UpdateWebhook").
@@ -226,7 +220,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	webhook := t.WebhookURL
+	webhook := t.ResolveURL()
 	var eventstring string
 	var validEvents []string
 	for _, event := range t.Events {

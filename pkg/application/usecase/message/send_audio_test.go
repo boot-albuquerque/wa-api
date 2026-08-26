@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/media/opengraph"
 )
 
@@ -21,12 +23,17 @@ import (
 // aqui só para a asserção do valor passado a MediaFetcher.FetchBytes.
 const fetchAudioMaxBytesForTest int64 = 16 * 1024 * 1024
 
-// oggBytes é um corpo binário que não é reconhecido pelo sniffer do Go
-// (http.DetectContentType devolve "application/octet-stream" para ele,
-// diferente de texto puro que sniffa como "text/plain") — usado para
-// exercitar o nível 4 da precedência de MIME (fallback por PTT) e, nos
-// demais testes, como corpo de áudio genérico.
-var oggBytes = []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C}
+// oggBytes is a binary payload NOT recognized by Go's sniffer
+// (http.DetectContentType returns "application/octet-stream") — used to
+// exercise MIME level 4 (PTT fallback) and as a generic audio body. Must
+// be at least minAudioBytes (128, F240) to pass the minimum size check.
+var oggBytes = func() []byte {
+	b := make([]byte, 160)
+	for i := range b {
+		b[i] = byte(i + 1)
+	}
+	return b
+}()
 
 const audioURL = "https://exemplo.com/nota-de-voz.ogg"
 
@@ -359,7 +366,7 @@ func TestSendAudio_MimeType_Level2_NonAudioRemoteContentTypeIgnored(t *testing.T
 // quando o resultado NAO é "application/octet-stream".
 func TestSendAudio_MimeType_Level3_SniffedWhenRecognized(t *testing.T) {
 	mm := &contractsfake.MediaMessenger{}
-	plainText := []byte("isto e' texto puro, sniffavel como text/plain")
+	plainText := []byte(strings.Repeat("plain text that sniffs as text/plain. ", 4))
 	mf := &contractsfake.MediaFetcher{
 		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
 			return plainText, "", nil
@@ -982,5 +989,34 @@ func TestSendAudio_LegendaFalhaMasAudioJaFoi(t *testing.T) {
 	}
 	if !logger.Logged("audio sent but caption failed") {
 		t.Error("a falha da legenda não foi registada: o operador não consegue diagnosticar")
+	}
+}
+
+// --- F240: minimum size validation -----------------------------------------
+
+// TestSendAudio_F240_TooSmallPayloadRejected proves that a payload below
+// minAudioBytes is rejected before reaching SendAudio.
+func TestSendAudio_F240_TooSmallPayloadRejected(t *testing.T) {
+	mm := &contractsfake.MediaMessenger{}
+	tinyPayload := make([]byte, 32)
+	mf := &contractsfake.MediaFetcher{
+		FetchBytesFunc: func(context.Context, string, int64) ([]byte, string, error) {
+			return tinyPayload, "audio/ogg", nil
+		},
+	}
+	logger := &contractsfake.Logger{}
+
+	_, err := message.NewSendAudioUseCase(mm, &contractsfake.JIDResolver{}, mf, &contractsfake.TextMessenger{}, logger).
+		Execute(context.Background(), userID, domain.SendAudioRequest{Phone: "5511987654321", Audio: audioURL})
+
+	if err == nil {
+		t.Fatal("32-byte audio was accepted; expected audio_too_small")
+	}
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) || appErr.Code != "audio_too_small" {
+		t.Fatalf("expected audio_too_small, got: %v", err)
+	}
+	if len(mm.SendAudioCalls) != 0 {
+		t.Fatal("SendAudio should not have been called for tiny payload")
 	}
 }
