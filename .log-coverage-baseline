@@ -1255,7 +1255,7 @@ rules_frozen=true
 # cobertas (utility functions sem log proprio; o log fica nos handlers).
 # Os 30+ ResolveChat methods sao EXCLUDED (metodos de struct sem log).
 # covered NAO muda; eligible +2 faz a razao cair.
-min_func_coverage=591
+min_func_coverage=593
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1525,7 +1525,7 @@ min_errpath_coverage=779
 # F225 (2026-08-25): min_eligible SOBE 962->964 (+2, ratchet-UP honesto).
 # ENTRAM (2): domain.DecodeRequest e domain.ResolveChatField
 # (pkg/domain/chat_target.go) — utility functions com corpo >2 statements.
-min_eligible=994
+min_eligible=1000
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

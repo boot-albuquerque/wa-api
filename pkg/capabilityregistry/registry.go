@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog/log"
 )
 
 // CapabilityRegistry resolves which CapabilityProvider serves an engine, and
@@ -40,6 +42,8 @@ var ErrUnknownEngine = fmt.Errorf("capabilityregistry: unknown engine")
 func (r *CapabilityRegistry) Provider(engine domain.Engine) (CapabilityProvider, error) {
 	p, ok := r.providers[engine]
 	if !ok {
+		log.Warn().Str("engine", engine.String()).
+			Msg("capabilityregistry: no provider for engine")
 		return nil, fmt.Errorf("%w: %q", ErrUnknownEngine, engine)
 	}
 	return p, nil
@@ -68,6 +72,9 @@ func (r *CapabilityRegistry) Decide(capability domain.Capability, engine domain.
 			d.Supported = false
 			d.Status = domain.StatusPermissionRequired
 			d.Reason = fmt.Sprintf("capability %q on engine %q is otherwise supported, but these preconditions failed: %v", capability, engine, failedPreconditions)
+			log.Warn().Str("capability", capability.String()).Str("engine", engine.String()).
+				Strs("failed_preconditions", failedPreconditions).
+				Msg("capabilityregistry: downgraded supported decision to permission_required")
 		}
 	}
 	return d, nil

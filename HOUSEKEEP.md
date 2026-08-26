@@ -29892,3 +29892,36 @@ repositório.
 identificador. Uma linha, e o diagnóstico deixa de depender de sorte.
 
 <!-- f-status: aberto -->
+
+## H187 — `TestTodoMetodoComErroTemWrapper` já falhava antes desta worktree, para os métodos de comunidade e admin-invite de newsletter
+
+**Data**: 2026-08-26. **Contexto**: worktree `capability-registry`, achado ao
+rodar `go test ./...` para verificar o efeito das mudanças desta sessão —
+nada a ver com o trabalho de capability registry em si.
+
+**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers_test.go:56`
+(`TestTodoMetodoComErroTemWrapper`).
+
+**Problema**: sete métodos da interface `Client` devolvem erro e não têm
+wrapper em `RealClient` que traduza o erro cru do SDK via
+`errmap.ClassifyIQ` — `LinkGroup`, `UnlinkGroup`, `GetSubGroups`,
+`GetLinkedGroupsParticipants`, `NewsletterCreateAdminInvite`,
+`NewsletterAcceptAdminInvite`, `NewsletterRevokeAdminInvite`. Sem o wrapper, a
+recusa do servidor do WhatsApp chega ao cliente HTTP como `500` em vez do
+código correto (o mesmo padrão da F204, já catalogado).
+
+**Confirmado como PRÉ-EXISTENTE**: `git stash` das mudanças desta worktree e
+`go test ./pkg/infra/wa-noise/client/...` reproduz a mesma falha, com a mesma
+lista de métodos (ordem diferente, conjunto idêntico). Nada tocado nesta
+worktree (`pkg/domain/capability*.go`, `pkg/capabilityregistry/*`) tem
+qualquer relação com `pkg/infra/wa-noise/client`.
+
+**Correção sugerida**: escrever os sete wrappers, no padrão dos demais
+métodos de `RealClient`, chamando `errmap.ClassifyIQ` sobre o erro do SDK.
+
+**Status**: não corrigido — fora de escopo desta worktree (capability
+registry não mexe em `pkg/infra/wa-noise/client`). Registrado para quem
+mexer ali; nenhuma correção de graça aplicada, conforme a política do
+projeto.
+
+<!-- f-status: aberto -->

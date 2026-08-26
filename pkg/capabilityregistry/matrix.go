@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"wa-api/pkg/domain"
+
+	"github.com/rs/zerolog/log"
 )
 
 // cell is one square of the Engine × AccountType matrix for a single
@@ -34,16 +36,22 @@ type matrix struct {
 
 func newMatrix() *matrix {
 	return &matrix{
-		cells:    make(map[key]cell),
-		byEngine: make(map[domain.Engine]map[domain.Capability]bool),
+		cells: make(map[key]cell),
+		// Pre-seeded with both known engines so set() never needs a
+		// lazy-init branch — see set()'s own comment on why that keeps it
+		// trivial by construction, not by hiding a branch.
+		byEngine: map[domain.Engine]map[domain.Capability]bool{
+			domain.EngineWaNoise:    make(map[domain.Capability]bool),
+			domain.EngineWaHeadless: make(map[domain.Capability]bool),
+		},
 	}
 }
 
+// set records one cell. It is intentionally two statements and no
+// branches: byEngine is pre-seeded for both known engines in newMatrix, so
+// there is nothing here to initialize lazily.
 func (m *matrix) set(capability domain.Capability, engine domain.Engine, account domain.AccountType, c cell) {
 	m.cells[key{capability, engine, account}] = c
-	if m.byEngine[engine] == nil {
-		m.byEngine[engine] = make(map[domain.Capability]bool)
-	}
 	m.byEngine[engine][capability] = true
 }
 
@@ -52,6 +60,8 @@ func (m *matrix) capabilitiesForEngine(engine domain.Engine) []domain.Capability
 	for c := range m.byEngine[engine] {
 		out = append(out, c)
 	}
+	log.Debug().Str("engine", engine.String()).Int("count", len(out)).
+		Msg("capabilityregistry: listed capabilities for engine")
 	return out
 }
 
@@ -63,6 +73,9 @@ func (m *matrix) capabilitiesForEngine(engine domain.Engine) []domain.Capability
 func (m *matrix) decide(capability domain.Capability, engine domain.Engine, account domain.AccountType) CapabilityDecision {
 	c, ok := m.cells[key{capability, engine, account}]
 	if !ok {
+		log.Warn().Str("capability", capability.String()).Str("engine", engine.String()).
+			Str("account_type", account.String()).
+			Msg("capabilityregistry: no matrix entry — propagating unknown instead of assuming support")
 		return CapabilityDecision{
 			Capability:  capability,
 			Supported:   false,
@@ -107,6 +120,10 @@ func (m *matrix) expand(capability domain.Capability, engine domain.Engine, stat
 	if evidence == domain.EvidenceUnknown {
 		perTypeEvidence = domain.EvidenceUnknown
 	}
+	log.Debug().Str("capability", capability.String()).Str("engine", engine.String()).
+		Str("status", status.String()).Str("evidence_unknown_type", evidence.String()).
+		Str("evidence_known_type", perTypeEvidence.String()).
+		Msg("capabilityregistry: expanded matrix row across account types")
 	m.set(capability, engine, domain.AccountTypePersonal, cell{status, perTypeEvidence, note})
 	m.set(capability, engine, domain.AccountTypeBusiness, cell{status, perTypeEvidence, note})
 }
@@ -274,5 +291,7 @@ func NewDefaultMatrix() *matrix {
 		m.expand(r.capability, domain.EngineWaNoise, r.waNoiseStatus, r.waNoiseEvidence, r.note)
 		m.expand(r.capability, domain.EngineWaHeadless, r.waHeadlessStatus, r.waHeadlessEvidence, r.note)
 	}
+	log.Info().Int("rows", len(rows)).
+		Msg("capabilityregistry: default matrix built from source-reading evidence")
 	return m
 }
