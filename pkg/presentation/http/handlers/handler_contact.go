@@ -128,6 +128,7 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
+	req.Phone = normalizePhones(req.Phone)
 	rsp, err := h.uc.Execute(r.Context(), id, req)
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).

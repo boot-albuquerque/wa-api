@@ -27217,28 +27217,34 @@ indefensável.
 
 ### Atualização (2026-08-25, LOTE B — erros)
 
-**O que foi feito:** adicionada `normalizePhones()` em `handler_user.go`,
-chamada em `GetUser()` (handler de `/user/info`) antes de invocar o use case.
-A função percorre `req.Phone` e, para cada entrada que não contenha `@`,
-acrescenta `@s.whatsapp.net`. Entradas que já contêm `@` passam inalteradas.
+**Correcção da actualização anterior:** a normalização estava em
+`handler_user.go:GetUser()`, mas `/user/info` é servido por
+`GetUserInfoHandler` em `handler_contact.go:118` — ficheiro errado.
 
-Assim, `{"Phone":["554192421234"]}` produz o mesmo resultado que
-`{"Phone":["554192421234@s.whatsapp.net"]}` — como o resto da API faz desde
-a F225.
+**O que foi feito:** adicionada chamada `req.Phone = normalizePhones(req.Phone)`
+em `GetUserInfoHandler.ServeHTTP()` (`handler_contact.go`), depois do decode
+e antes do use case. A função `normalizePhones` já existia em
+`handler_user.go` (mesmo pacote `handlers`). O resolver em produção
+(`mapping/jid/resolver.go`) **rejeita** telefone nu — sem a normalização,
+números sem `@` eram pulados e o resultado voltava vazio.
 
 **Ficheiros tocados:**
-- `pkg/presentation/http/handlers/handler_user.go` — `normalizePhones()` +
-  chamada em `GetUser()`
+- `pkg/presentation/http/handlers/handler_contact.go` — 1 linha
+  (`req.Phone = normalizePhones(req.Phone)`)
+- `pkg/presentation/http/handlers/handler_contact_test.go` —
+  `TestGetUserInfo_NormalizaBarePhone` (novo) + ajuste do teste existente
+  `TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada`
 
 **Testes:**
-- `handler_user_profile_test.go:TestNormalizePhones` — confirma
-  normalização de número nu e passagem inalterada de JID qualificado
-- `handler_user_profile_test.go:TestNormalizePhones_Empty` — confirma que
-  slice vazio devolve slice vazio
+- `handler_contact_test.go:TestGetUserInfo_NormalizaBarePhone` — fake do
+  resolver que REJEITA nu (como produção), envia `{"phone":["554192421234"]}`,
+  confirma que o resolver recebe `554192421234@s.whatsapp.net`
+- `handler_user_profile_test.go:TestNormalizePhones` — teste unitário da
+  função (permanece válido)
 
-**Controle negativo:** não aplicável isoladamente — a normalização é uma
-transformação de dados, e a ausência dela foi o defeito original (resultado
-vazio). O teste `TestNormalizePhones` cobre ambos os lados.
+**Controle negativo:** removida a chamada `normalizePhones` — teste falhou
+com `resolver received "554192421234", want
+"554192421234@s.whatsapp.net" — handler did not normalize`. Restaurada.
 
 <!-- f-status: aberto -->
 
