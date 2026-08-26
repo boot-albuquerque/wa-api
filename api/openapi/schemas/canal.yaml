@@ -56,7 +56,9 @@ PedidoCanal:
     Pedido mínimo de canal: só o identificador. É a forma de `info`, `follow`,
     `unfollow`, `mute` (sem o `mute`), `subscribe` e `admin-invite/accept`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [jid]
   properties:
     jid:
@@ -1095,7 +1097,9 @@ PedidoComunidade:
 
     **É o único par de rotas deste ficheiro que aceita o alias universal
     `chat`** — as quatro rotas de canal e as duas de ligação não o aceitam.
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   properties:
     communityJID:
       type: string

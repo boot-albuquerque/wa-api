@@ -25,7 +25,10 @@ PedidoVerificacaoNumero:
     Números a verificar contra a base do WhatsApp. O campo é um ARRAY mesmo
     para um único número — a rota foi feita para verificação em lote.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [phone]
   properties:
     phone:
@@ -137,7 +140,10 @@ PedidoInfoUtilizadores:
     uma cadeia que `/user/check` descarta em silêncio, aqui vira
     `lixo@s.whatsapp.net` e faz a chamada inteira falhar — ver `phone`.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [phone]
   properties:
     phone:
@@ -492,7 +498,10 @@ PedidoAvatar:
     De quem se quer a foto. **Esta rota LÊ** — não altera a foto da conta,
     apesar de ser `POST`. O `POST` existe só porque o alvo vai no corpo.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [Phone]
   properties:
     chat:
@@ -786,7 +795,10 @@ PedidoBloqueio:
     ausente. Medido — e é divergência real face a `POST /user/avatar` e
     `POST /user/presence/subscribe`, onde a mesma entrada dá `invalid_phone`.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   properties:
     chat:
       type: string
@@ -904,7 +916,10 @@ PedidoPresenca:
   description: |
     Estado de presença global da sessão — é a conta inteira, não uma conversa.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [type]
   properties:
     type:
@@ -914,24 +929,23 @@ PedidoPresenca:
       description: |
         `available` marca a conta como online; `unavailable`, offline.
 
-        **Valor fora da lista é RECUSADO** com `400 invalid_presence_type` e a
-        mensagem `invalid presence type. Allowed values: 'available',
-        'unavailable'`, antes de qualquer chamada ao WhatsApp
-        (`send_presence.go:30-38`). Não é ignorado nem tratado como padrão. A
-        comparação é sensível a maiúsculas: `Available` cai no mesmo `400`.
+        **Valor fora da lista é RECUSADO** antes de qualquer chamada ao
+        WhatsApp (`send_presence.go`). Não é ignorado nem tratado como padrão.
+        A comparação é sensível a maiúsculas: `Available` é recusado.
 
         | estado | aceite? | efeito medido |
         |---|---|---|
-        | ausente (`{}`) | não | `400 invalid_presence_type` |
-        | `null` | não | `400 invalid_presence_type` — indistinguível de ausente |
-        | `""` | não | `400 invalid_presence_type` — idem |
-        | `"lixo"` | não | `400 invalid_presence_type` |
+        | ausente (`{}`) | não | `400 missing_presence_type` |
+        | `null` | não | `400 missing_presence_type` — indistinguível de ausente |
+        | `""` | não | `400 missing_presence_type` — idem |
+        | `"XPTO"` | não | `400 invalid_presence_type`, com o valor recebido na mensagem |
         | `123` | não | `400 could_not_decode_payload` |
         | `available` / `unavailable` | sim | — |
 
-        Repare que **não existe código próprio para "campo em falta"**: os três
-        estados de ausência caem no erro de valor inválido, o que é honesto
-        (para o servidor eles SÃO o mesmo pedido) mas pouco informativo.
+        **Campo em falta e valor errado têm códigos DIFERENTES** desde
+        2026-08-26. Até essa data os cinco primeiros estados caíam todos em
+        `invalid_presence_type`, e quem esquecia o campo era informado de que o
+        seu valor era inválido — sem ter mandado valor nenhum.
       example: available
 
 PedidoSubscricaoPresenca:
@@ -939,7 +953,10 @@ PedidoSubscricaoPresenca:
   description: |
     De quem se quer receber notificações de presença.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [Phone]
   properties:
     chat:
@@ -1100,7 +1117,10 @@ PedidoDefinicaoPrivacidade:
     mesmo pedido: caem no `400` de nome inválido ou de valor inválido, nunca
     num código próprio de "campo em falta".
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [privacy_setting, value]
   properties:
     privacy_setting:
@@ -1163,7 +1183,10 @@ PedidoStatusImagem:
     dados ou URL http(s). Qualquer outra coisa é recusada antes de sair da
     máquina.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [Image]
   properties:
     Image:
@@ -1258,7 +1281,10 @@ PedidoStatusVideo:
     Vídeo a publicar como status. Mesma união de origens da imagem, com um
     limite maior e uma verificação de tipo mais frouxa.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [Video]
   properties:
     Video:
@@ -1339,7 +1365,10 @@ PedidoStatusAudio:
     struct não tem `Caption` nem `JPEGThumbnail` (`pkg/domain/session.go:117-121`),
     e enviá-los é ignorado em silêncio, como qualquer campo desconhecido.
 
-    Campos desconhecidos no corpo são ignorados em silêncio.
+    Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+    desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+    modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+    `400 unknown_field`. Ver a secção "Campos que a API não conhece".
   required: [Audio]
   properties:
     Audio:

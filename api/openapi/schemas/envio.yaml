@@ -520,7 +520,9 @@ ResultadoEnvioAudio:
 PedidoEnvioTexto:
   description: |
     Corpo de `POST /chat/send/text`. Mensagem de texto, com pré-visualização de
-    link opcional. Campos desconhecidos são ignorados em silêncio.
+    link opcional. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -587,7 +589,9 @@ PedidoEnvioTexto:
 PedidoEnvioImagem:
   description: |
     Corpo de `POST /chat/send/image`. Imagem com legenda opcional; aceita URI de
-    dados ou URL http(s). Campos desconhecidos são ignorados em silêncio.
+    dados ou URL http(s). Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -665,7 +669,9 @@ PedidoEnvioImagem:
 PedidoEnvioVideo:
   description: |
     Corpo de `POST /chat/send/video`. Vídeo com legenda; mínimo de 256 bytes,
-    recusado antes do envio. Campos desconhecidos são ignorados em silêncio.
+    recusado antes do envio. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -863,7 +869,9 @@ PedidoEnvioAudio:
 PedidoEnvioDocumento:
   description: |
     Corpo de `POST /chat/send/document`. Ficheiro com nome próprio, mostrado
-    como anexo descarregável. Campos desconhecidos são ignorados em silêncio.
+    como anexo descarregável. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1039,7 +1047,9 @@ PedidoEnvioLocalizacao:
   description: |
     Corpo de `POST /chat/send/location`. Ponto no mapa, com nome opcional. Não
     há campo de morada — só `Latitude`, `Longitude` e `Name` chegam ao
-    protocolo. Campos desconhecidos são ignorados em silêncio.
+    protocolo. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1098,7 +1108,9 @@ PedidoEnvioLocalizacao:
 PedidoEnvioContacto:
   description: |
     Corpo de `POST /chat/send/contact`. Cartão de contacto em vCard, que o
-    destinatário pode guardar. Campos desconhecidos são ignorados em silêncio.
+    destinatário pode guardar. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1302,7 +1314,9 @@ PedidoEnvioBotoes:
   description: |
     Corpo de `POST /chat/send/buttons`. Mensagem interativa com botões. Cada
     botão exige `title` — `displayText` é ignorado e o botão cai em silêncio.
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1403,7 +1417,9 @@ PedidoEnvioBotoes:
 PedidoEnvioLista:
   description: |
     Corpo de `POST /chat/send/list`. Lista de seleção, agrupada em secções,
-    aberta por um botão. Campos desconhecidos são ignorados em silêncio.
+    aberta por um botão. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object

@@ -33,26 +33,43 @@ components:
           example:
             code: 400
             error:
-              code: decode_payload_failed
+              code: could_not_decode_payload
               message: could not decode payload
             success: false
           schema:
             $ref: '#/components/schemas/Erro'
-      description: O corpo não é JSON válido, ou não corresponde à forma esperada.
+      description: |
+        O corpo não é JSON válido, ou um campo veio com o tipo errado — por
+        exemplo `{"Body": 123}` onde se espera texto.
+
+        Note que um campo com o NOME errado não cai aqui: é ignorado (e
+        registado). Ver "Campos que a API não conhece".
     ErroInterno:
       content:
         application/json:
           example:
             code: 500
-            error:
-              code: internal_error
-              message: internal server error
+            error: internal server error
             success: false
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: '#/components/schemas/ErroTextoSimples'
       description: |
         Falha não classificada, ou tempo esgotado à espera do WhatsApp (o
         limite por pedido é de 30 segundos).
+
+        **`error` vem em TEXTO, não em objecto.** Não há `error.code` num `500`
+        genérico: um erro que não passou pela taxonomia `apperr` nunca tem o
+        seu texto próprio serializado — `RespondJSON` devolve só o texto do
+        estado HTTP. É isso que impede a fuga de caminho de ficheiro, consulta
+        SQL ou valor de `panic`, e está travado por
+        `TestRespondJSONNaoVazaDetalheDeErroInterno`.
+
+        Um cliente que leia `error.code` aqui recebe `undefined`. Ramifique
+        pelo estado HTTP.
+
+        Algumas rotas DEVOLVEM um `500` classificado, com objecto — é o caso de
+        `newsletter_failed`. Essas documentam-no na própria resposta, em vez de
+        referenciarem esta.
     NaoAutorizado:
       content:
         application/json:
@@ -3438,7 +3455,9 @@ components:
         **Ordem das recusas, medida**: `missing_phone` → `missing_id` →
         `invalid_phone`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         Id:
           description: |
@@ -3472,7 +3491,9 @@ components:
         Arquiva ou desarquiva uma conversa. O destino é `jid`; `chat` é aceite
         como nome universal e só vale quando `jid` vier ausente ou vazio.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         archive:
           description: |
@@ -3695,7 +3716,10 @@ components:
         De quem se quer a foto. **Esta rota LÊ** — não altera a foto da conta,
         apesar de ser `POST`. O `POST` existe só porque o alvo vai no corpo.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         Phone:
           description: |
@@ -3761,7 +3785,10 @@ components:
         ausente. Medido — e é divergência real face a `POST /user/avatar` e
         `POST /user/presence/subscribe`, onde a mesma entrada dá `invalid_phone`.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         JID:
           description: |
@@ -3811,7 +3838,9 @@ components:
         Pedido mínimo de canal: só o identificador. É a forma de `info`, `follow`,
         `unfollow`, `mute` (sem o `mute`), `subscribe` e `admin-invite/accept`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         jid:
           description: |
@@ -3881,7 +3910,9 @@ components:
 
         **É o único par de rotas deste ficheiro que aceita o alias universal
         `chat`** — as quatro rotas de canal e as duas de ligação não o aceitam.
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         chat:
           description: |
@@ -4170,7 +4201,9 @@ components:
         A única excepção é `media_delivery`, que quando vazio assume `base64` em
         vez de ficar `""`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         access_key:
           description: |
@@ -4374,7 +4407,9 @@ components:
         `linked_parent_jid` — produzem corpos IDÊNTICOS. O cliente não consegue
         saber qual campo falhou; a causa fica só no log do servidor.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         is_parent:
           default: false
@@ -4707,7 +4742,10 @@ components:
         mesmo pedido: caem no `400` de nome inválido ou de valor inválido, nunca
         num código próprio de "campo em falta".
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         privacy_setting:
           description: |
@@ -4799,7 +4837,9 @@ components:
         partir do histórico, tal e qual, não completa o download nessas
         mensagens.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         DirectPath:
           description: |
@@ -5023,7 +5063,9 @@ components:
         `{}` e `{"token": ""}` dão o mesmo, medido a 2026-08-26.
 
         `s3Config`/`proxyConfig` são aceites também em `snake_case`; o camelCase
-        vence quando ambos vierem. Campos desconhecidos são ignorados em silêncio.
+        vence quando ambos vierem. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         events:
           description: |
@@ -5564,7 +5606,9 @@ components:
       description: |
         Corpo de `POST /chat/send/buttons`. Mensagem interativa com botões. Cada
         botão exige `title` — `displayText` é ignorado e o botão cai em silêncio.
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioCarrossel:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -5687,7 +5731,9 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/contact`. Cartão de contacto em vCard, que o
-        destinatário pode guardar. Campos desconhecidos são ignorados em silêncio.
+        destinatário pode guardar. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioDocumento:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -5770,7 +5816,9 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/document`. Ficheiro com nome próprio, mostrado
-        como anexo descarregável. Campos desconhecidos são ignorados em silêncio.
+        como anexo descarregável. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioEnquete:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -5916,7 +5964,9 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/image`. Imagem com legenda opcional; aceita URI de
-        dados ou URL http(s). Campos desconhecidos são ignorados em silêncio.
+        dados ou URL http(s). Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioLista:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -6034,7 +6084,9 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/list`. Lista de seleção, agrupada em secções,
-        aberta por um botão. Campos desconhecidos são ignorados em silêncio.
+        aberta por um botão. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioLocalizacao:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -6095,7 +6147,9 @@ components:
       description: |
         Corpo de `POST /chat/send/location`. Ponto no mapa, com nome opcional. Não
         há campo de morada — só `Latitude`, `Longitude` e `Name` chegam ao
-        protocolo. Campos desconhecidos são ignorados em silêncio.
+        protocolo. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioModelo:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -6226,7 +6280,9 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/text`. Mensagem de texto, com pré-visualização de
-        link opcional. Campos desconhecidos são ignorados em silêncio.
+        link opcional. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoEnvioVideo:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -6302,7 +6358,9 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/video`. Vídeo com legenda; mínimo de 256 bytes,
-        recusado antes do envio. Campos desconhecidos são ignorados em silêncio.
+        recusado antes do envio. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
     PedidoFavoritarMensagem:
       description: |
         Favorita ou desfavorita uma mensagem. Os três identificadores são
@@ -6315,7 +6373,9 @@ components:
         **Ordem das recusas, medida**: `missing_chat` → `missing_message_id` →
         `missing_sender` → `invalid_chat_jid` → `invalid_sender_jid`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         chat:
           description: |
@@ -6395,7 +6455,9 @@ components:
         dentro dela — isso é outro mecanismo (`PinInChatMessage`), e não está
         exposto nesta API.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         chat:
           description: |
@@ -6524,7 +6586,10 @@ components:
         uma cadeia que `/user/check` descarta em silêncio, aqui vira
         `lixo@s.whatsapp.net` e faz a chamada inteira falhar — ver `phone`.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         phone:
           description: |
@@ -6636,7 +6701,9 @@ components:
     PedidoLimiteHistorico:
       description: |
         Corpo de `POST /webhook/history` e de `POST /session/history` — a mesma
-        operação. Campos desconhecidos são ignorados em silêncio.
+        operação. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         history:
           default: 0
@@ -6680,7 +6747,9 @@ components:
         com `Chat` (o campo antigo) passa a guarda do destino e cai em
         `missing_id`, o que confirma que `Chat` é aceite sem ser usado.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         Chat:
           description: |
@@ -7036,30 +7105,32 @@ components:
       description: |
         Estado de presença global da sessão — é a conta inteira, não uma conversa.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         type:
           description: |
             `available` marca a conta como online; `unavailable`, offline.
 
-            **Valor fora da lista é RECUSADO** com `400 invalid_presence_type` e a
-            mensagem `invalid presence type. Allowed values: 'available',
-            'unavailable'`, antes de qualquer chamada ao WhatsApp
-            (`send_presence.go:30-38`). Não é ignorado nem tratado como padrão. A
-            comparação é sensível a maiúsculas: `Available` cai no mesmo `400`.
+            **Valor fora da lista é RECUSADO** antes de qualquer chamada ao
+            WhatsApp (`send_presence.go`). Não é ignorado nem tratado como padrão.
+            A comparação é sensível a maiúsculas: `Available` é recusado.
 
             | estado | aceite? | efeito medido |
             |---|---|---|
-            | ausente (`{}`) | não | `400 invalid_presence_type` |
-            | `null` | não | `400 invalid_presence_type` — indistinguível de ausente |
-            | `""` | não | `400 invalid_presence_type` — idem |
-            | `"lixo"` | não | `400 invalid_presence_type` |
+            | ausente (`{}`) | não | `400 missing_presence_type` |
+            | `null` | não | `400 missing_presence_type` — indistinguível de ausente |
+            | `""` | não | `400 missing_presence_type` — idem |
+            | `"XPTO"` | não | `400 invalid_presence_type`, com o valor recebido na mensagem |
             | `123` | não | `400 could_not_decode_payload` |
             | `available` / `unavailable` | sim | — |
 
-            Repare que **não existe código próprio para "campo em falta"**: os três
-            estados de ausência caem no erro de valor inválido, o que é honesto
-            (para o servidor eles SÃO o mesmo pedido) mas pouco informativo.
+            **Campo em falta e valor errado têm códigos DIFERENTES** desde
+            2026-08-26. Até essa data os cinco primeiros estados caíam todos em
+            `invalid_presence_type`, e quem esquecia o campo era informado de que o
+            seu valor era inválido — sem ter mandado valor nenhum.
           enum:
             - available
             - unavailable
@@ -7078,7 +7149,9 @@ components:
         **Ordem das recusas, medida**: `missing_phone` → `missing_state` →
         `invalid_phone`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         Media:
           description: |
@@ -7159,7 +7232,9 @@ components:
         Depois disso, `enable` decide o ramo: ligar valida o URL, desligar limpa o
         proxy gravado sem sequer olhar para ele.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         enable:
           default: false
@@ -7246,7 +7321,9 @@ components:
         **Ordem das recusas, medida**: `missing_phone` → `missing_body` →
         `invalid_phone` → `missing_id`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         Body:
           description: |
@@ -7390,7 +7467,9 @@ components:
         não uma story.
 
         Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         Body:
           description: |
@@ -7416,7 +7495,8 @@ components:
 
             `SetStatusMessageRequest` tem um único campo, `Body`
             (`domain/session.go:70-72`). `chat` é aceite pelo decodificador apenas
-            porque campos desconhecidos são ignorados em silêncio em TODA a API —
+            porque campos desconhecidos são ignorados em TODA a API (desde 2026-08-26
+            com registo no log, e recusáveis com `WA_API_STRICT_UNKNOWN_FIELDS`) —
             não porque esta rota o leia. Está aqui documentado, e não removido,
             porque `chat` é o destino universal do §2 do contrato arquitectural e
             um integrador pode mandá-lo por hábito: mandar não dá erro, e também
@@ -7436,7 +7516,9 @@ components:
         não são inventáveis, e sem esse evento a rota não tem alvo. Subscreva
         `CallOffer` (ou `All`) e leia-os de lá.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         call_from:
           description: |
@@ -7554,7 +7636,7 @@ components:
         `invalid_mute_duration`. Um pedido com destino mal formado E duração
         inválida revela só o primeiro.
 
-        Campos desconhecidos são ignorados em silêncio — ver o aviso em
+        Campos desconhecidos são ignorados (e registados no log) — ver o aviso em
         `mute_duration`, que é onde isso faz estrago.
       properties:
         chat:
@@ -7632,7 +7714,9 @@ components:
         Corpo de `POST /user/contacts/sync`.
 
         Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         mode:
           description: |
@@ -7686,7 +7770,9 @@ components:
         passa o erro cru a `RespondJSON` em vez do `errDecodePayload` tipado que
         as outras rotas usam. Medido com `{"count":"50"}`.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         chat_jid:
           description: |
@@ -7820,7 +7906,10 @@ components:
         struct não tem `Caption` nem `JPEGThumbnail` (`pkg/domain/session.go:117-121`),
         e enviá-los é ignorado em silêncio, como qualquer campo desconhecido.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       example:
         Audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
       properties:
@@ -7893,7 +7982,10 @@ components:
         dados ou URL http(s). Qualquer outra coisa é recusada antes de sair da
         máquina.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       example:
         Caption: Estamos abertos até às 20h.
         Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
@@ -7988,7 +8080,10 @@ components:
         Vídeo a publicar como status. Mesma união de origens da imagem, com um
         limite maior e uma verificação de tipo mais frouxa.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       example:
         Caption: Bastidores de hoje.
         Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
@@ -8067,7 +8162,10 @@ components:
       description: |
         De quem se quer receber notificações de presença.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         Phone:
           description: |
@@ -8110,7 +8208,9 @@ components:
         duração, logo um pedido com os dois errados revela só o JID.
 
         O manipulador declara struct própria (`handler_disappearing.go:29-32`),
-        e é ela que manda. Campos desconhecidos são ignorados em silêncio.
+        e é ela que manda. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         chat:
           description: |
@@ -8331,7 +8431,10 @@ components:
         Números a verificar contra a base do WhatsApp. O campo é um ARRAY mesmo
         para um único número — a rota foi feita para verificação em lote.
 
-        Campos desconhecidos no corpo são ignorados em silêncio.
+        Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
+        desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
+        modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
+        `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
         phone:
           description: |
@@ -8484,7 +8587,9 @@ components:
         string) — medido a 2026-08-26, e divergente do
         `400 could_not_decode_payload` do resto da API.
 
-        Campos desconhecidos são ignorados em silêncio.
+        Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+        recusa-os com `400 unknown_field`.
       properties:
         active:
           default: false
@@ -12548,7 +12653,9 @@ paths:
           o valor recebido — medido com `3600000000000` (1 hora).
         - Com `mute: false`, `mute_duration` é ignorado.
         - **Cuidado com o nome do campo.** Um campo desconhecido — `duration`,
-          por exemplo — é ignorado em silêncio pelo servidor, e a ausência de
+          por exemplo — é ignorado pelo servidor (que desde 2026-08-26 o REGISTA no
+          log, e o recusa com `400 unknown_field` se
+          `WA_API_STRICT_UNKNOWN_FIELDS=true`), e a ausência de
           `mute_duration` significa **para sempre**. Enviar
           `{"mute": true, "duration": "8h"}` devolve `200` e cala a conversa
           **indefinidamente**, e não por oito horas. Medido; ver F268.
@@ -16465,7 +16572,7 @@ paths:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/Erro'
-                  - $ref: '#/components/schemas/ErroTextoSimples'
+                  - $ref: '#/components/schemas/Erro'
           description: |
             **Dois formatos possíveis.**
 
@@ -17708,11 +17815,15 @@ paths:
           `state.type: non_existing`, `id: ""` (cadeia vazia, não o JID pedido),
           `viewer_metadata: null` e `thread_metadata` todo zerado. Quem consome
           tem de olhar `state.type`, não o código HTTP.
-        - **Um `jid` malformado devolve `500`, não `400`.** Medido com `"   "`,
-          `"nao-e-jid"` e um JID `@s.whatsapp.net`: os três dão
-          `500 newsletter_failed`, porque a falha de conversão de JID não é um
-          `apperr` e o use case a embrulha como erro interno. As rotas de
-          comunidade tratam o mesmo defeito como `400 invalid_community_jid`.
+        - **Um `jid` malformado devolve `400 invalid_newsletter_jid`** — medido
+          com `"   "`, `"nao-e-jid"` e um JID `@s.whatsapp.net`. Até 2026-08-26
+          os três davam `500` (F271), o que dizia ao cliente "o problema é meu,
+          tenta outra vez" para um pedido que falharia sempre. A ausência
+          continua a dar `missing_jid`, e a distinção é deliberada.
+        - **`userJID` ainda NÃO tem essa regra.** Medido:
+          `{"jid":"<válido>","userJID":"nao-e-jid"}` devolve `500`. Vale para as
+          quatro operações que o exigem (`admin-invite`, `revoke`,
+          `change-owner`, `demote`). Registado em F271, por corrigir.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -18404,7 +18515,7 @@ paths:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/Erro'
-                  - $ref: '#/components/schemas/ErroTextoSimples'
+                  - $ref: '#/components/schemas/Erro'
           description: |
             Falta o `jid`, o corpo não é JSON válido, ou `since` não está em
             RFC 3339.
@@ -18865,12 +18976,10 @@ paths:
             application/json:
               example:
                 code: 500
-                error:
-                  code: internal_error
-                  message: internal server error
+                error: internal server error
                 success: false
               schema:
-                $ref: '#/components/schemas/Erro'
+                $ref: '#/components/schemas/ErroTextoSimples'
           description: |
             O teste saiu e falhou: bucket inacessível, credencial recusada, tempo
             esgotado aos 10 segundos, ou segredo gravado que não decifra. O corpo
@@ -19956,12 +20065,10 @@ paths:
             application/json:
               example:
                 code: 500
-                error:
-                  code: internal_error
-                  message: internal server error
+                error: internal server error
                 success: false
               schema:
-                $ref: '#/components/schemas/Erro'
+                $ref: '#/components/schemas/ErroTextoSimples'
           description: |
             O teste falhou: credencial recusada, bucket inexistente, endpoint
             inalcançável, tempo esgotado, ou o segredo gravado não pôde ser
@@ -20933,9 +21040,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `invalid_sync_mode` (valor fora dos três aceites, incluindo o campo
-            em falta), `no_session`, `missing_session_id` ou
+            `missing_sync_mode` (campo ausente, `null` ou `""`),
+            `invalid_sync_mode` (valor não-vazio fora dos três aceites, com o
+            valor recebido na mensagem), `no_session`, `missing_session_id` ou
             `decode_payload_failed`.
+
+            Os dois primeiros eram o MESMO código até 2026-08-26 — quem esquecia
+            o campo era informado de que o seu valor era inválido.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":

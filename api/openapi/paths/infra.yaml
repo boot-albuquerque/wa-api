@@ -1210,12 +1210,10 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Erro'
+              $ref: '#/components/schemas/ErroTextoSimples'
             example:
               code: 500
-              error:
-                code: internal_error
-                message: internal server error
+              error: internal server error
               success: false
 
 /hmac/config:

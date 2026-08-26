@@ -1350,7 +1350,7 @@
             schema:
               oneOf:
                 - $ref: '#/components/schemas/Erro'
-                - $ref: '#/components/schemas/ErroTextoSimples'
+                - $ref: '#/components/schemas/Erro'
             examples:
               acaoDesconhecida:
                 summary: Formato NOVO — Action inválido

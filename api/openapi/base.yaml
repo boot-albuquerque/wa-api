@@ -470,7 +470,12 @@ components:
             success: false
 
     CorpoInvalido:
-      description: O corpo não é JSON válido, ou não corresponde à forma esperada.
+      description: |
+        O corpo não é JSON válido, ou um campo veio com o tipo errado — por
+        exemplo `{"Body": 123}` onde se espera texto.
+
+        Note que um campo com o NOME errado não cai aqui: é ignorado (e
+        registado). Ver "Campos que a API não conhece".
       content:
         application/json:
           schema:
@@ -478,7 +483,7 @@ components:
           example:
             code: 400
             error:
-              code: decode_payload_failed
+              code: could_not_decode_payload
               message: could not decode payload
             success: false
 
@@ -502,13 +507,25 @@ components:
       description: |
         Falha não classificada, ou tempo esgotado à espera do WhatsApp (o
         limite por pedido é de 30 segundos).
+
+        **`error` vem em TEXTO, não em objecto.** Não há `error.code` num `500`
+        genérico: um erro que não passou pela taxonomia `apperr` nunca tem o
+        seu texto próprio serializado — `RespondJSON` devolve só o texto do
+        estado HTTP. É isso que impede a fuga de caminho de ficheiro, consulta
+        SQL ou valor de `panic`, e está travado por
+        `TestRespondJSONNaoVazaDetalheDeErroInterno`.
+
+        Um cliente que leia `error.code` aqui recebe `undefined`. Ramifique
+        pelo estado HTTP.
+
+        Algumas rotas DEVOLVEM um `500` classificado, com objecto — é o caso de
+        `newsletter_failed`. Essas documentam-no na própria resposta, em vez de
+        referenciarem esta.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Erro'
+            $ref: '#/components/schemas/ErroTextoSimples'
           example:
             code: 500
-            error:
-              code: internal_error
-              message: internal server error
+            error: internal server error
             success: false

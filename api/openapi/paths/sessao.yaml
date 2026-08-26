@@ -1118,12 +1118,10 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Erro'
+              $ref: '#/components/schemas/ErroTextoSimples'
             example:
               code: 500
-              error:
-                code: internal_error
-                message: internal server error
+              error: internal server error
               success: false
 
 /session/hmac/config:
@@ -1419,9 +1417,13 @@
               success: true
       '400':
         description: |
-          `invalid_sync_mode` (valor fora dos três aceites, incluindo o campo
-          em falta), `no_session`, `missing_session_id` ou
+          `missing_sync_mode` (campo ausente, `null` ou `""`),
+          `invalid_sync_mode` (valor não-vazio fora dos três aceites, com o
+          valor recebido na mensagem), `no_session`, `missing_session_id` ou
           `decode_payload_failed`.
+
+          Os dois primeiros eram o MESMO código até 2026-08-26 — quem esquecia
+          o campo era informado de que o seu valor era inválido.
         content:
           application/json:
             schema:

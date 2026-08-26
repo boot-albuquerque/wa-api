@@ -1078,7 +1078,9 @@ PedidoRecado:
     não uma story.
 
     Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [Body]
   properties:
     Body:
@@ -1107,7 +1109,8 @@ PedidoRecado:
 
         `SetStatusMessageRequest` tem um único campo, `Body`
         (`domain/session.go:70-72`). `chat` é aceite pelo decodificador apenas
-        porque campos desconhecidos são ignorados em silêncio em TODA a API —
+        porque campos desconhecidos são ignorados em TODA a API (desde 2026-08-26
+        com registo no log, e recusáveis com `WA_API_STRICT_UNKNOWN_FIELDS`) —
         não porque esta rota o leia. Está aqui documentado, e não removido,
         porque `chat` é o destino universal do §2 do contrato arquitectural e
         um integrador pode mandá-lo por hábito: mandar não dá erro, e também
@@ -1139,7 +1142,9 @@ PedidoSincronizacaoContactos:
     Corpo de `POST /user/contacts/sync`.
 
     Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [mode]
   properties:
     mode:
@@ -1216,7 +1221,9 @@ PedidoSincronizacaoHistorico:
     passa o erro cru a `RespondJSON` em vez do `errDecodePayload` tipado que
     as outras rotas usam. Medido com `{"count":"50"}`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [chat_jid, oldest_msg_id]
   properties:
     count:

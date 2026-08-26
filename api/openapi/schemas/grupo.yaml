@@ -550,7 +550,9 @@ PedidoCriarGrupo:
     `linked_parent_jid` — produzem corpos IDÊNTICOS. O cliente não consegue
     saber qual campo falhou; a causa fica só no log do servidor.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [name]
   properties:
     name:

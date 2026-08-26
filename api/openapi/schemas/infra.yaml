@@ -444,7 +444,9 @@ PedidoEditarUtilizador:
     `{}` e `{"token": ""}` dão o mesmo, medido a 2026-08-26.
 
     `s3Config`/`proxyConfig` são aceites também em `snake_case`; o camelCase
-    vence quando ambos vierem. Campos desconhecidos são ignorados em silêncio.
+    vence quando ambos vierem. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   properties:
     name:
       type: string
@@ -783,7 +785,9 @@ PedidoWebhook:
     string) — medido a 2026-08-26, e divergente do
     `400 could_not_decode_payload` do resto da API.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   properties:
     webhookurl:
       type: string
@@ -942,7 +946,9 @@ PedidoLimiteHistorico:
   type: object
   description: |
     Corpo de `POST /webhook/history` e de `POST /session/history` — a mesma
-    operação. Campos desconhecidos são ignorados em silêncio.
+    operação. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [history]
   properties:
     history:
@@ -985,7 +991,9 @@ PedidoConfiguracaoS3:
     A única excepção é `media_delivery`, que quando vazio assume `base64` em
     vez de ficar `""`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   properties:
     enabled:
       type: boolean
@@ -1362,7 +1370,9 @@ PedidoProxy:
     Depois disso, `enable` decide o ramo: ligar valida o URL, desligar limpa o
     proxy gravado sem sequer olhar para ele.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [enable]
   properties:
     enable:
@@ -1636,7 +1646,9 @@ PedidoRecusarChamada:
     não são inventáveis, e sem esse evento a rota não tem alvo. Subscreva
     `CallOffer` (ou `All`) e leia-os de lá.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [call_from, call_id]
   properties:
     call_from:

@@ -28,6 +28,19 @@ Três guardas mantêm isto honesto:
 3. `TestOpenAPISummariesTrazemMarcaDeEvidencia` recusa a especificação se
    qualquer operação chegar ao binário sem marca.
 
+> **Revisto a 2026-08-26, depois de três correcções de contrato.** As contagens
+> abaixo foram **reconciliadas nas três fontes** — `api/openapi/evidencias.tsv`,
+> a especificação servida pelo binário, e a legenda de `info.description` — e
+> batem: 98 / 8 / 3 / 32.
+>
+> **Não mudaram, e é correcto que não tenham mudado.** As correcções alteraram
+> apenas respostas de RECUSA, e recusa medida não confirma efeito — uma rota não
+> sobe de ⬜ para ✅ por eu ter provado que ela rejeita bem um pedido inválido.
+>
+> As três ❌ foram **re-medidas com entrada válida** e continuam a falhar:
+> `/newsletter/updates` (500 ao fim de 30 s), `/user/block` e `/user/unblock`
+> (422 `upstream_rejected`).
+
 ## Resumo quantitativo
 
 ```

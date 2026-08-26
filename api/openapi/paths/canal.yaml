@@ -106,11 +106,15 @@
         `state.type: non_existing`, `id: ""` (cadeia vazia, não o JID pedido),
         `viewer_metadata: null` e `thread_metadata` todo zerado. Quem consome
         tem de olhar `state.type`, não o código HTTP.
-      - **Um `jid` malformado devolve `500`, não `400`.** Medido com `"   "`,
-        `"nao-e-jid"` e um JID `@s.whatsapp.net`: os três dão
-        `500 newsletter_failed`, porque a falha de conversão de JID não é um
-        `apperr` e o use case a embrulha como erro interno. As rotas de
-        comunidade tratam o mesmo defeito como `400 invalid_community_jid`.
+      - **Um `jid` malformado devolve `400 invalid_newsletter_jid`** — medido
+        com `"   "`, `"nao-e-jid"` e um JID `@s.whatsapp.net`. Até 2026-08-26
+        os três davam `500` (F271), o que dizia ao cliente "o problema é meu,
+        tenta outra vez" para um pedido que falharia sempre. A ausência
+        continua a dar `missing_jid`, e a distinção é deliberada.
+      - **`userJID` ainda NÃO tem essa regra.** Medido:
+        `{"jid":"<válido>","userJID":"nao-e-jid"}` devolve `500`. Vale para as
+        quatro operações que o exigem (`admin-invite`, `revoke`,
+        `change-owner`, `demote`). Registado em F271, por corrigir.
 
       **Autenticação**: token de sessão.
     security:
@@ -650,7 +654,7 @@
             schema:
               oneOf:
                 - $ref: '#/components/schemas/Erro'
-                - $ref: '#/components/schemas/ErroTextoSimples'
+                - $ref: '#/components/schemas/Erro'
             examples:
               faltaJid:
                 summary: Falta o `jid` — envelope canónico

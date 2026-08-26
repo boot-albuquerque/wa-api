@@ -22,7 +22,9 @@ PedidoArquivarConversa:
     Arquiva ou desarquiva uma conversa. O destino é `jid`; `chat` é aceite
     como nome universal e só vale quando `jid` vier ausente ou vazio.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [archive]
   properties:
     jid:
@@ -72,7 +74,9 @@ PedidoFixarConversa:
     dentro dela — isso é outro mecanismo (`PinInChatMessage`), e não está
     exposto nesta API.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [pin]
   properties:
     jid:
@@ -120,7 +124,7 @@ PedidoSilenciarConversa:
     `invalid_mute_duration`. Um pedido com destino mal formado E duração
     inválida revela só o primeiro.
 
-    Campos desconhecidos são ignorados em silêncio — ver o aviso em
+    Campos desconhecidos são ignorados (e registados no log) — ver o aviso em
     `mute_duration`, que é onde isso faz estrago.
   required: [mute]
   properties:
@@ -206,7 +210,9 @@ PedidoFavoritarMensagem:
     **Ordem das recusas, medida**: `missing_chat` → `missing_message_id` →
     `missing_sender` → `invalid_chat_jid` → `invalid_sender_jid`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [chat, sender, message_id]
   properties:
     chat:
@@ -286,7 +292,9 @@ PedidoApagarMensagem:
     **Ordem das recusas, medida**: `missing_phone` → `missing_id` →
     `invalid_phone`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [Id]
   properties:
     Phone:
@@ -360,7 +368,9 @@ PedidoReagir:
     **Ordem das recusas, medida**: `missing_phone` → `missing_body` →
     `invalid_phone` → `missing_id`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [Body, Id]
   properties:
     Phone:
@@ -443,7 +453,9 @@ PedidoMarcarLida:
     com `Chat` (o campo antigo) passa a guarda do destino e cai em
     `missing_id`, o que confirma que `Chat` é aceite sem ser usado.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [Id]
   properties:
     Id:
@@ -512,7 +524,9 @@ PedidoPresencaNaConversa:
     **Ordem das recusas, medida**: `missing_phone` → `missing_state` →
     `invalid_phone`.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [State]
   properties:
     Phone:
@@ -695,7 +709,9 @@ PedidoTemporizadorDaConversa:
     duração, logo um pedido com os dois errados revela só o JID.
 
     O manipulador declara struct própria (`handler_disappearing.go:29-32`),
-    e é ela que manda. Campos desconhecidos são ignorados em silêncio.
+    e é ela que manda. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   required: [chat, duration]
   properties:
     chat:
@@ -802,7 +818,9 @@ PedidoDescargaDeMidia:
     partir do histórico, tal e qual, não completa o download nessas
     mensagens.
 
-    Campos desconhecidos são ignorados em silêncio.
+    Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
+    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
+    recusa-os com `400 unknown_field`.
   properties:
     Url:
       type: string

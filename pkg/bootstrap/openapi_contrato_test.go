@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -221,6 +223,185 @@ func TestContratoExemplosSaoValidosContraOTipo(t *testing.T) {
 		t.Errorf("%d exemplos que contradizem o próprio esquema:\n  %s",
 			len(problemas), strings.Join(problemas, "\n  "))
 	}
+}
+
+// TestContratoCodigosDeErroExistemNoCodigo apanha a obsolescência que nenhum
+// outro gate vê: um `error.code` documentado que o código já não produz.
+//
+// POR QUE É PRECISO. Corrigir uma validação renomeia códigos — `invalid_x` que
+// se parte em `missing_x` e `invalid_x`, por exemplo. A especificação continua
+// a citar o nome antigo em exemplos e em prosa, e nada estoira: o YAML é
+// válido, a rota existe, o exemplo é do tipo certo. Só um cliente é que
+// descobre, ramificando sobre um código que nunca chega.
+//
+// O que se afirma: todo código citado num EXEMPLO de resposta existe como
+// literal no código Go. Não prova que a rota o devolve — prova que ele não foi
+// inventado nem sobreviveu a uma renomeação.
+func TestContratoCodigosDeErroExistemNoCodigo(t *testing.T) {
+	fonte := lerFonteGo(t)
+
+	citados := map[string][]string{}
+	var recolhe func(caminho string, no any)
+	recolhe = func(caminho string, no any) {
+		switch valor := no.(type) {
+		case map[string]any:
+			if erro, ok := valor["error"].(map[string]any); ok {
+				if codigo, ok := erro["code"].(string); ok {
+					citados[codigo] = append(citados[codigo], caminho)
+				}
+			}
+			for chave, filho := range valor {
+				recolhe(caminho+"."+chave, filho)
+			}
+		case []any:
+			for _, filho := range valor {
+				recolhe(caminho, filho)
+			}
+		}
+	}
+	doc := especificacao(t)
+	recolhe("", doc["paths"])
+	recolhe("", doc["components"])
+
+	if len(citados) < minimoDeCodigosCitados {
+		t.Fatalf("só %d códigos de erro citados em exemplos (mínimo %d): "+
+			"o teste não está a medir o que diz", len(citados), minimoDeCodigosCitados)
+	}
+
+	var inventados []string
+	for codigo, onde := range citados {
+		if !strings.Contains(fonte, `"`+codigo+`"`) {
+			inventados = append(inventados, codigo+" (em "+onde[0]+")")
+		}
+	}
+	sort.Strings(inventados)
+	if len(inventados) > 0 {
+		t.Errorf("%d códigos de erro documentados que NÃO existem no código Go — "+
+			"foram renomeados, removidos, ou nunca existiram:\n  %s",
+			len(inventados), strings.Join(inventados, "\n  "))
+	}
+	t.Logf("códigos de erro citados em exemplos: %d, todos presentes no código", len(citados))
+}
+
+// TestContratoExemploDeErroBateComOEsquema apanha o par que diverge sem
+// estoirar: o exemplo mostra `error` como objecto e o esquema diz que é texto,
+// ou o contrário.
+//
+// POR QUE ACONTECE. Esta API tem DUAS formas de erro — a canónica, com
+// `{code, message}`, e a antiga, com `error` em texto (F266). Escolher a
+// errada não parte nada: o YAML é válido, o Swagger desenha o exemplo, e o
+// gerador de clientes produz um tipo que nunca casa com o que chega.
+//
+// Medido a 2026-08-26: havia 23 divergências, e em todas era o ESQUEMA que
+// estava errado — os exemplos tinham sido copiados de respostas reais.
+func TestContratoExemploDeErroBateComOEsquema(t *testing.T) {
+	doc := especificacao(t)
+	caminhos, _ := doc["paths"].(map[string]any)
+
+	var divergem []string
+	verificados := 0
+	for caminho, item := range caminhos {
+		metodos, _ := item.(map[string]any)
+		for metodo, corpo := range metodos {
+			op, ok := corpo.(map[string]any)
+			if !ok {
+				continue
+			}
+			respostas, _ := op["responses"].(map[string]any)
+			for codigo, bruto := range respostas {
+				resposta, ok := bruto.(map[string]any)
+				if !ok {
+					continue
+				}
+				if _, ehRef := resposta["$ref"]; ehRef {
+					continue // componente partilhado, verificado por si próprio
+				}
+				conteudo, _ := resposta["content"].(map[string]any)
+				json, _ := conteudo["application/json"].(map[string]any)
+				exemplo, _ := json["example"].(map[string]any)
+				if exemplo == nil {
+					continue
+				}
+				erro, tem := exemplo["error"]
+				if !tem {
+					continue
+				}
+				verificados++
+				esquema := renderYAML(json["schema"])
+				textoSimples := strings.Contains(esquema, "ErroTextoSimples")
+				chave := strings.ToUpper(metodo) + " " + caminho + " [" + codigo + "]"
+				switch erro.(type) {
+				case string:
+					if !textoSimples {
+						divergem = append(divergem, chave+": exemplo com `error` em TEXTO, esquema de objecto")
+					}
+				case map[string]any:
+					if textoSimples {
+						divergem = append(divergem, chave+": exemplo com `error` em OBJECTO, esquema ErroTextoSimples")
+					}
+				}
+			}
+		}
+	}
+	if verificados < minimoDeExemplosDeErro {
+		t.Fatalf("só %d exemplos de erro verificados (mínimo %d)", verificados, minimoDeExemplosDeErro)
+	}
+	sort.Strings(divergem)
+	if len(divergem) > 0 {
+		t.Errorf("%d exemplos de erro que contradizem o próprio esquema:\n  %s",
+			len(divergem), strings.Join(divergem, "\n  "))
+	}
+	t.Logf("exemplos de erro verificados: %d, todos coerentes com o esquema", verificados)
+}
+
+// renderYAML serializa um nó para inspecção textual.
+func renderYAML(no any) string {
+	bruto, err := yaml.Marshal(no)
+	if err != nil {
+		return ""
+	}
+	return string(bruto)
+}
+
+// minimoDeExemplosDeErro é o piso que impede o teste de se declarar conforme
+// sem ter olhado para nada.
+const minimoDeExemplosDeErro = 50
+
+// minimoDeCodigosCitados impede o teste de passar por não ter olhado para nada.
+const minimoDeCodigosCitados = 20
+
+// lerFonteGo concatena o código Go do repositório, sem testes.
+//
+// Sem testes de propósito: um código que só apareça num ficheiro _test.go é um
+// código que a produção não emite, e documentá-lo seria descrever a suite em
+// vez da API.
+func lerFonteGo(t *testing.T) string {
+	t.Helper()
+	var sb strings.Builder
+	raizes := []string{"../../pkg", "../../internal/wa-noise", "../../cmd"}
+	for _, raiz := range raizes {
+		err := filepath.Walk(raiz, func(caminho string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			if !strings.HasSuffix(caminho, ".go") || strings.HasSuffix(caminho, "_test.go") {
+				return nil
+			}
+			conteudo, err := os.ReadFile(caminho)
+			if err != nil {
+				return nil
+			}
+			sb.Write(conteudo)
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("percorrer %s: %v", raiz, err)
+		}
+	}
+	if sb.Len() == 0 {
+		t.Fatal("nenhum código Go lido: o gate estaria a comparar contra o vazio")
+	}
+	return sb.String()
 }
 
 func tipoBate(tipo string, valor any) string {

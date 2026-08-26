@@ -424,7 +424,9 @@
         o valor recebido — medido com `3600000000000` (1 hora).
       - Com `mute: false`, `mute_duration` é ignorado.
       - **Cuidado com o nome do campo.** Um campo desconhecido — `duration`,
-        por exemplo — é ignorado em silêncio pelo servidor, e a ausência de
+        por exemplo — é ignorado pelo servidor (que desde 2026-08-26 o REGISTA no
+        log, e o recusa com `400 unknown_field` se
+        `WA_API_STRICT_UNKNOWN_FIELDS=true`), e a ausência de
         `mute_duration` significa **para sempre**. Enviar
         `{"mute": true, "duration": "8h"}` devolve `200` e cala a conversa
         **indefinidamente**, e não por oito horas. Medido; ver F268.

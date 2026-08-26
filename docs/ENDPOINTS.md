@@ -551,6 +551,19 @@ que produz mensagem. Cada corpo abaixo é o corpo **que foi enviado**, não um
 corpo derivado da struct — a diferença importa, e a secção
 "O que a bateria corrigiu nos meus próprios exemplos" diz porquê.
 
+> **Actualizado a 2026-08-26, depois de três correcções.** As marcas e as
+> contagens abaixo **não mudaram** — e é correcto que não tenham mudado: as
+> correcções alteraram apenas respostas de RECUSA, e recusa medida não confirma
+> efeito. O que mudou foram os códigos de erro de algumas rotas:
+>
+> | rota | antes | depois |
+> |---|---|---|
+> | as 14 de canal que exigem `jid` | `500 newsletter_failed` | `400 invalid_newsletter_jid` |
+> | `/user/contacts/sync` | `invalid_sync_mode` para tudo | `missing_sync_mode` vs `invalid_sync_mode` |
+> | `/user/presence` | `invalid_presence_type` para tudo | `missing_presence_type` vs `invalid_presence_type` |
+> | `/user/privacy` | dois códigos | quatro, com a ordem de validação medida |
+> | toda a API | campo desconhecido em silêncio | registado no log; recusável com `WA_API_STRICT_UNKNOWN_FIELDS` |
+
 **Legenda**
 
 | marca | significa |
@@ -771,7 +784,7 @@ O `userJID` pode ir em PN ou LID — a resolução PN→LID é feita antes do en
 | `GET /user/blocklist` | ✅ | — |
 | `POST /user/presence` | ✅ | `{"type":"available"}` |
 | `POST /user/presence/subscribe` | ✅ | `{"Phone":"554192421234@s.whatsapp.net"}` |
-| `POST /user/contacts/sync` | ✅ | `{"mode":"if_unsynced"}` — só `if_unsynced`, `incremental`, `full` |
+| `POST /user/contacts/sync` | ✅ | `{"mode":"if_unsynced"}` — só `if_unsynced`, `incremental`, `full`; ausente dá `missing_sync_mode`, valor errado dá `invalid_sync_mode` |
 | `POST /user/history/sync` | ✅ | `{"count":5,"chat_jid":"…","oldest_msg_id":"3EB0…","oldest_msg_from_me":true,"oldest_msg_timestamp":1787747900}` |
 | `POST /user/block` | ❌ | `{"Phone":"554192421234@s.whatsapp.net"}` → **`422 upstream_rejected`** |
 | `POST /user/unblock` | ❌ | idem |
