@@ -1,0 +1,1455 @@
+# Grupo: Canais (newsletters) e Comunidades — 22 rotas.
+#
+# As dezoito rotas de canal partilham UM use case com tabela de despacho
+# (`pkg/application/usecase/notification/newsletter_ops.go`) e UMA forma de
+# corpo (`newsletterBody`, `handler_newsletter.go:44`). Os campos obrigatórios
+# de cada operação, e o código de erro de cada um, saem da tabela
+# `newsletterRequirements` — não de convenção.
+#
+# RESSALVA DE IDIOMA (F262): cinco mensagens de erro dessa tabela ainda estão
+# em português no código. Os exemplos abaixo mostram a mensagem COMO ELA SAI,
+# e não uma tradução — quem consome a API vê o que está aqui.
+
+# --- Canais -----------------------------------------------------------------
+
+/newsletter/create:
+  post:
+    tags: [Canais]
+    summary: Criar um canal
+    description: |
+      Cria um canal de difusão novo, do qual a sessão que chama fica **dono**
+      (`viewer_metadata.role: owner`).
+
+      **Quando usar**: é o primeiro passo de tudo o resto. É também o primeiro
+      passo da cadeia de administração — sem um canal criado por si, nenhuma
+      das rotas de administrador tem sobre o que operar.
+
+      **Regras**: `name` é obrigatório; sem ele a resposta é
+      `400 missing_name`. É a única das dezoito operações que não recebe `jid`
+      — o identificador é o que ela devolve.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCriarCanal'
+          example:
+            name: Avisos da Fila Rápida
+            description: Novidades e horários de funcionamento.
+    responses:
+      '200':
+        description: Canal criado. `data` traz os metadados do canal novo.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MetadadosCanal'
+            example:
+              code: 200
+              data:
+                id: 120363411025775186@newsletter
+                state: {type: active}
+                thread_metadata:
+                  creation_time: '1787745654'
+                  invite: 0029Vb85MPpKLaHoEUxRt01E
+                  name: {text: Avisos da Fila Rápida, id: '1787745654587070', update_time: '1787745654587070'}
+                  description: {text: Novidades e horários de funcionamento., id: '1787745654587070', update_time: '1787745654587070'}
+                  subscribers_count: '0'
+                  verification: unverified
+                viewer_metadata: {mute: 'on', role: owner}
+              success: true
+      '400':
+        description: Falta o nome, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_name
+                message: nome do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/info:
+  post:
+    tags: [Canais]
+    summary: Consultar os metadados de um canal
+    description: |
+      Devolve o retrato de um canal: nome, descrição, código de convite,
+      contagem de seguidores, estado e — o mais útil — **o papel de quem
+      chama**, em `viewer_metadata.role`.
+
+      **Quando usar**: para descobrir se a sessão é `owner`, `admin` ou
+      `subscriber` antes de tentar uma operação de administração. Também é a
+      forma de confirmar que um `delete` teve efeito: o canal apagado passa a
+      `state.type: non_existing` com `viewer_metadata: null`.
+
+      **Regras**: `jid` é obrigatório e tem de ser um JID `@newsletter`.
+      `viewer_metadata` vem `null` quando não há relação com o canal.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCanal'
+          example:
+            jid: 120363411025775186@newsletter
+    responses:
+      '200':
+        description: Metadados do canal, do ponto de vista da sessão que chamou.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MetadadosCanal'
+            example:
+              code: 200
+              data:
+                id: 120363411025775186@newsletter
+                state: {type: active}
+                thread_metadata:
+                  creation_time: '1787745654'
+                  invite: 0029Vb85MPpKLaHoEUxRt01E
+                  name: {text: Avisos da Fila Rápida, id: '1787745654587070', update_time: '1787745654587070'}
+                  description: {text: Novidades e horários de funcionamento., id: '1787745654587070', update_time: '1787745654587070'}
+                  subscribers_count: '0'
+                  verification: unverified
+                  picture: {url: '', id: '1787750687544878', type: IMAGE, direct_path: '', hash: null}
+                  preview: {url: '', id: '1787750687544880', type: PREVIEW, direct_path: '', hash: null}
+                  settings: {reaction_codes: {value: ALL}}
+                viewer_metadata: {mute: 'on', role: owner}
+              success: true
+      '400':
+        description: |
+          Falta o `jid`, ou o corpo não é JSON válido. Note a mensagem em
+          português: é o que o código devolve hoje (F262).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/info-invite:
+  post:
+    tags: [Canais]
+    summary: Consultar um canal pelo código de convite
+    description: |
+      O mesmo retrato de `POST /newsletter/info`, mas a partir do **código do
+      link público** em vez do JID.
+
+      **Quando usar**: quando se tem apenas o link partilhado de um canal e se
+      quer saber o que ele é antes de seguir. O código é a parte final do link
+      (`https://whatsapp.com/channel/<código>`) e vai nu no campo `invite`.
+
+      **Regras**: `invite` é obrigatório; sem ele a resposta é
+      `400 missing_invite`. Como quem chama pode não ter relação nenhuma com o
+      canal, `viewer_metadata` costuma vir `null` — foi o valor medido mesmo
+      contra um canal próprio.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCanalPorConvite'
+          example:
+            invite: 0029Vb85MPpKLaHoEUxRt01E
+    responses:
+      '200':
+        description: Metadados do canal a que o convite aponta.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MetadadosCanal'
+            example:
+              code: 200
+              data:
+                id: 120363411025775186@newsletter
+                state: {type: active}
+                thread_metadata:
+                  creation_time: '1787745654'
+                  invite: 0029Vb85MPpKLaHoEUxRt01E
+                  name: {text: Avisos da Fila Rápida, id: '1787745654587070', update_time: '1787745654587070'}
+                  subscribers_count: '0'
+                  verification: unverified
+                viewer_metadata: null
+              success: true
+      '400':
+        description: Falta o código de convite, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_invite
+                message: código de convite é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/list:
+  get:
+    tags: [Canais]
+    summary: Listar os canais que a sessão segue
+    description: |
+      Lista todos os canais seguidos pela sessão, cada um com os mesmos
+      metadados de `POST /newsletter/info`.
+
+      **Quando usar**: para descobrir os JIDs com que as outras dezassete
+      rotas trabalham. É a única rota de canal em `GET`, e não recebe corpo
+      nenhum.
+
+      **Ressalva medida**: a lista inclui canais em `state.type: deleted`, com
+      `thread_metadata` inteiramente vazio e `viewer_metadata: null`. Um
+      cliente que mostre "os meus canais" tem de filtrar por estado, ou mostra
+      entradas sem nome.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Os canais seguidos, dentro da chave `newsletter` — repare no nível
+          extra entre `data` e a lista.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ListaCanais'
+            example:
+              code: 200
+              data:
+                newsletter:
+                  - id: 120363411025775186@newsletter
+                    state: {type: active}
+                    thread_metadata:
+                      creation_time: '1787745654'
+                      invite: 0029Vb85MPpKLaHoEUxRt01E
+                      name: {text: Avisos da Fila Rápida, id: '1787745654587070', update_time: '1787745654587070'}
+                      subscribers_count: '0'
+                      verification: unverified
+                      picture: null
+                    viewer_metadata: {mute: 'on', role: owner}
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/follow:
+  post:
+    tags: [Canais]
+    summary: Seguir um canal
+    description: |
+      Passa a seguir o canal indicado, que a partir daí aparece em
+      `GET /newsletter/list`.
+
+      **Quando usar**: depois de descobrir um canal por
+      `POST /newsletter/info-invite`, para o acompanhar.
+
+      **Regras**: `jid` é obrigatório. A resposta de sucesso traz
+      `data: null` — a operação não devolve carga útil, e o `200` é a
+      confirmação. Para verificar o efeito, chame `GET /newsletter/list`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCanal'
+          example:
+            jid: 120363411025775186@newsletter
+    responses:
+      '200':
+        description: O canal passou a ser seguido. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/unfollow:
+  post:
+    tags: [Canais]
+    summary: Deixar de seguir um canal
+    description: |
+      Deixa de seguir o canal. Ele sai de `GET /newsletter/list`.
+
+      **Regra que surpreende**: **um administrador ou dono NÃO pode deixar de
+      seguir o próprio canal**. O WhatsApp recusa com `405`, e nós traduzimos
+      isso em `403 newsletter_admin_cannot_unfollow`
+      (`pkg/infra/wa-noise/errmap/newsletter.go:74`). Para sair, é preciso
+      primeiro deixar de ser administrador — o que, no caso do dono, significa
+      transferir a posse por `POST /newsletter/change-owner`.
+
+      **Regras**: `jid` é obrigatório. `data` vem `null` em sucesso.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCanal'
+          example:
+            jid: 120363411025775186@newsletter
+    responses:
+      '200':
+        description: Deixou de seguir. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '403':
+        description: |
+          Quem chama é administrador ou dono do canal, e por isso não pode
+          deixar de o seguir.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 403
+              error:
+                code: newsletter_admin_cannot_unfollow
+                message: channel admins cannot unfollow their own channel; dismiss yourself as admin first
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/mute:
+  post:
+    tags: [Canais]
+    summary: Silenciar ou dessilenciar um canal
+    description: |
+      Liga ou desliga o silenciamento do canal para esta sessão, conforme o
+      campo `mute`.
+
+      **Quando usar**: quando se segue um canal ruidoso e não se quer perder o
+      acesso ao conteúdo, apenas as notificações.
+
+      **Regras**: `jid` é obrigatório; `mute` é booleano e, ausente, vale
+      `false` — ou seja, um corpo só com `jid` **dessilencia**. O efeito é
+      visível em `viewer_metadata.mute` de `POST /newsletter/info`, que vem
+      como texto `on`/`off`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoSilenciarCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            mute: true
+    responses:
+      '200':
+        description: Silenciamento alterado. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/messages:
+  post:
+    tags: [Canais]
+    summary: Ler as mensagens de um canal
+    description: |
+      Devolve as publicações do canal, da mais recente para trás.
+
+      **Quando usar**: para construir a linha do tempo de um canal seguido, ou
+      para obter os `server_id` de que `POST /newsletter/mark-viewed` e
+      `POST /newsletter/react` precisam.
+
+      **Regras**: `jid` é obrigatório. `count` a zero (ou ausente) **não** é um
+      limite nosso — o atributo é omitido do pedido e o servidor aplica o
+      padrão dele. `before` recebe um `server_id` para paginar para trás.
+
+      **Forma da resposta**: `data` é a lista directamente, sem chave
+      intermédia — ao contrário de `GET /newsletter/list`. Um canal sem
+      publicações devolve `[]`, medido a 2026-08-26. A forma de cada elemento
+      não foi determinada com segurança: não havia canal com mensagens para
+      medir.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoMensagensCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            count: 5
+    responses:
+      '200':
+        description: Mensagens do canal, ou `[]` quando ele não tem nenhuma.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/MensagensCanal'
+            example:
+              code: 200
+              data: []
+              success: true
+      '400':
+        description: Falta o `jid`, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/updates:
+  post:
+    tags: [Canais]
+    summary: Buscar atualizações de mensagens de um canal (INOPERANTE)
+    description: |
+      Deveria devolver as ALTERAÇÕES a mensagens já conhecidas — edições,
+      contagens de reação, remoções —, ao contrário de
+      `POST /newsletter/messages`, que devolve as mensagens em si.
+
+      **Esta rota está inoperante.** Medida a 2026-08-26 e de novo nesta
+      sessão: responde **`500` ao fim de 30,0 segundos**, com
+      `error.code: newsletter_failed` e, no log,
+      `context deadline exceeded`. Os 30 s são exactamente o tempo limite por
+      pedido — o servidor do WhatsApp **não responde**, não é ele a recusar.
+      `POST /newsletter/messages` sobre o mesmo canal e no mesmo segundo
+      devolve `200`, logo a sessão, o canal e o transporte estão bons. Está
+      registado como F265 no `HOUSEKEEP.md`; a hipótese em aberto é um query
+      ID desactualizado, e um ID inexistente produz silêncio, não erro.
+
+      **Não use esta rota em produção.** Para acompanhar um canal, use
+      `POST /newsletter/messages` ou `POST /newsletter/subscribe`.
+
+      **Regras**: `jid` é obrigatório. `since` vai em RFC 3339 e é o único
+      campo destas dezoito rotas validado no manipulador, antes do use case.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAtualizacoesCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            count: 5
+    responses:
+      '200':
+        description: |
+          Nunca observado. Documentado por ser o que o código devolveria se o
+          servidor respondesse; a forma dos elementos não foi medida.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: []
+              success: true
+      '400':
+        description: |
+          Falta o `jid`, o corpo não é JSON válido, ou `since` não está em
+          RFC 3339.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        description: |
+          **O que esta rota devolve hoje, sempre**, ao fim de 30 segundos de
+          espera pelo WhatsApp.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: newsletter_failed
+                message: newsletter operation failed
+              success: false
+
+/newsletter/mark-viewed:
+  post:
+    tags: [Canais]
+    summary: Marcar mensagens de um canal como vistas
+    description: |
+      Informa o WhatsApp de que as mensagens indicadas foram vistas, o que
+      alimenta as contagens de visualização do canal.
+
+      **Quando usar**: depois de mostrar publicações ao utilizador, com os
+      `server_id` obtidos em `POST /newsletter/messages`.
+
+      **Regras**: `jid` e `serverIDs` são obrigatórios; lista vazia é recusada
+      com `400 missing_server_ids`. `data` vem `null` em sucesso, e **não há
+      forma de confirmar o efeito por esta API** — foi por isso que a bateria
+      de campo a classificou como `200` sem observador independente.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoMarcarVistoCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            serverIDs: [1, 2, 3]
+    responses:
+      '200':
+        description: O WhatsApp aceitou a marcação. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou a lista de `serverIDs` está vazia.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_server_ids
+                message: pelo menos um server_id é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/react:
+  post:
+    tags: [Canais]
+    summary: Reagir a uma mensagem de um canal
+    description: |
+      Põe — ou tira — uma reação numa publicação do canal.
+
+      **Como se REMOVE a reação**: enviando `reaction` vazio. É por isso que
+      esse campo não é obrigatório: exigi-lo tornaria impossível desfazer
+      (`newsletter_ops.go:234`).
+
+      **Regras**: `jid` e `serverID` são obrigatórios. `serverID` a zero é
+      recusado com `400 missing_server_id`. `data` vem `null` em sucesso, e o
+      efeito não é confirmável por esta API — classificada como `200` sem
+      observador independente na bateria de campo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoReagirCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            serverID: 1
+            reaction: 👍
+    responses:
+      '200':
+        description: O WhatsApp aceitou a reação. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou `serverID` é zero.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_server_id
+                message: server_id é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/subscribe:
+  post:
+    tags: [Canais]
+    summary: Subscrever as atualizações ao vivo de um canal
+    description: |
+      Liga as atualizações ao vivo do canal, para que as publicações novas
+      cheguem por eventos em vez de sondagem.
+
+      **Regras**: `jid` é obrigatório.
+
+      **Ressalva medida no código**: o WhatsApp devolve **por quanto tempo** a
+      subscrição vale, e o use case chega a guardar esse valor
+      (`NewsletterResult.DurationSeconds`), mas o manipulador responde apenas
+      com `rsp.Data` (`handler_newsletter.go:120`) — que nesta operação é
+      `nil`. Ou seja, a resposta é `data: null` e **a duração não é devolvida**.
+      É a mesma família do achado F261.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCanal'
+          example:
+            jid: 120363411025775186@newsletter
+    responses:
+      '200':
+        description: |
+          Subscrição feita. `data` é sempre `null`, e a validade que o servidor
+          informou é descartada.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/admin-invite:
+  post:
+    tags: [Canais]
+    summary: Convidar um utilizador para administrador do canal
+    description: |
+      Cria um convite para que outro utilizador se torne **administrador** do
+      canal.
+
+      **É o passo que faltava para todo o resto.** A cadeia de administração,
+      medida ponta a ponta a 2026-08-26 (F233), é:
+
+      ```
+      create -> admin-invite -> admin-invite/accept -> change-owner -> demote -> delete
+       owner     (convite)         role=admin           role=owner    subscriber  non_existing
+      ```
+
+      Sem um segundo administrador, `change-owner` e `demote` não têm a quem
+      apontar — e era por isso que pareciam não funcionar.
+
+      **Não é enviada mensagem nenhuma.** É uma mutação pura do protocolo: o
+      convidado só fica a saber pelo cliente dele. Procurar o convite no chat
+      de quem convida é procurar no sítio errado (F261).
+
+      **Ressalva medida**: a resposta traz `data: null` **mesmo em sucesso**. O
+      servidor devolve um `invite_expiration_time` (sete dias) que a API deita
+      fora (F261). Um `200` aqui significa "convite criado" — a validade **não
+      é devolvida**, e não há como consultá-la por esta API.
+
+      **Regras**: `jid` e `userJID` são obrigatórios. `userJID` pode ir em PN
+      ou LID; a resolução PN→LID acontece antes do envio (F233c).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAdminCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            userJID: 90937376170214@lid
+    responses:
+      '200':
+        description: |
+          Convite criado. `data` é `null` e o prazo de validade não é
+          devolvido — ver a ressalva acima.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid` ou o `userJID`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_user_jid
+                message: invitee jid is required
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/admin-invite/accept:
+  post:
+    tags: [Canais]
+    summary: Aceitar um convite para administrador de canal
+    description: |
+      Aceita, **na sessão convidada**, um convite criado por
+      `POST /newsletter/admin-invite`. É esta chamada que transforma o
+      convidado em administrador.
+
+      **Quem chama**: a sessão CONVIDADA, não a que convidou. O canal já é
+      identificado pelo `jid`, e por isso não há `userJID` aqui.
+
+      **Como confirmar**: `POST /newsletter/info` na sessão convidada passa a
+      devolver `viewer_metadata.role: admin`. Foi assim que a cadeia foi
+      medida — a prova está do lado do convidado (F233).
+
+      **Regras**: `jid` é obrigatório. `data` vem `null` em sucesso.
+
+      **Autenticação**: token de sessão (a do convidado).
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCanal'
+          example:
+            jid: 120363411025775186@newsletter
+    responses:
+      '200':
+        description: 'Convite aceite; quem chamou passa a `role: admin`. `data` é `null`.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid`, ou o corpo não é JSON válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_jid
+                message: jid do canal é obrigatório
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/admin-invite/revoke:
+  post:
+    tags: [Canais]
+    summary: Revogar um convite de administrador de canal
+    description: |
+      Cancela um convite de administrador que ainda não foi aceite.
+
+      **Quem chama**: a sessão que convidou. `userJID` identifica o convidado
+      cujo convite se quer revogar.
+
+      **Regras**: `jid` e `userJID` são obrigatórios. `userJID` aceita PN ou
+      LID, com resolução PN→LID antes do envio. `data` vem `null` em sucesso, e
+      não há rota que liste convites pendentes — logo o efeito não é
+      confirmável por esta API.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAdminCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            userJID: 90937376170214@lid
+    responses:
+      '200':
+        description: Convite revogado. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid` ou o `userJID`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_user_jid
+                message: invitee jid is required for revoke
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/change-owner:
+  post:
+    tags: [Canais]
+    summary: Transferir a posse de um canal
+    description: |
+      Transfere a posse do canal para outro utilizador. Medido a 2026-08-26: o
+      alvo passa a `role: owner` e **quem chamava, o dono anterior, cai a
+      `admin`** (F233).
+
+      **O alvo tem de já ser administrador.** Se não for, o WhatsApp recusa com
+      `401` e nós devolvemos `403 newsletter_new_owner_not_admin`. É por isso
+      que esta rota vem depois de `admin-invite` e `admin-invite/accept` na
+      cadeia — sem esses dois passos não existe segundo administrador a quem
+      passar a posse.
+
+      **Irreversível sem a cooperação do novo dono**: depois da transferência,
+      só ele pode devolvê-la.
+
+      **Regras**: `jid` e `userJID` são obrigatórios. `userJID` aceita PN ou
+      LID (resolução PN→LID antes do envio, F233c). `data` vem `null`; para
+      confirmar, chame `POST /newsletter/info` e olhe
+      `viewer_metadata.role`.
+
+      **Autenticação**: token de sessão (a do dono actual).
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAdminCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            userJID: 90937376170214@lid
+    responses:
+      '200':
+        description: |
+          Posse transferida. `data` é `null`; a mudança confirma-se em
+          `POST /newsletter/info`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid` ou o `userJID` do novo dono.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_user_jid
+                message: new owner jid is required
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '403':
+        description: O utilizador indicado ainda não é administrador do canal.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 403
+              error:
+                code: newsletter_new_owner_not_admin
+                message: the new owner must already be a channel admin
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/demote:
+  post:
+    tags: [Canais]
+    summary: Despromover um administrador do canal a assinante
+    description: |
+      Tira o papel de administrador a um utilizador, que passa a
+      `role: subscriber` — medido a 2026-08-26 (F233).
+
+      **O dono não pode ser despromovido.** O WhatsApp recusa com `405` e nós
+      devolvemos `403 newsletter_cannot_demote_owner`: para tirar poder ao
+      dono, é preciso primeiro `POST /newsletter/change-owner`.
+
+      **Precisa de um segundo administrador para ter sentido**, e ele só
+      existe depois de `admin-invite` + `admin-invite/accept`. Era essa a razão
+      de esta rota parecer não funcionar antes de a cadeia estar fechada.
+
+      **Regras**: `jid` e `userJID` são obrigatórios. `userJID` aceita PN ou
+      LID. `data` vem `null`; confirme por `POST /newsletter/info`.
+
+      **Autenticação**: token de sessão (a do dono).
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAdminCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            userJID: 90937376170214@lid
+    responses:
+      '200':
+        description: Administrador despromovido a assinante. `data` é `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: Falta o `jid` ou o `userJID` do alvo.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_user_jid
+                message: user jid is required for demote
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '403':
+        description: O alvo é o dono do canal, e o dono não pode ser despromovido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 403
+              error:
+                code: newsletter_cannot_demote_owner
+                message: the channel owner cannot be demoted; transfer ownership first
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/newsletter/delete:
+  delete:
+    tags: [Canais]
+    summary: Apagar um canal (IRREVERSÍVEL)
+    description: |
+      **Destrói o canal e todo o seu conteúdo. Não há como desfazer.**
+
+      É o último passo da cadeia de administração de canal (F233), e só o dono
+      o pode dar.
+
+      **Método `DELETE`, não `POST`** — e com corpo, que é invulgar mas é o que
+      esta rota exige.
+
+      **Confirmação obrigatória**: `confirmJID` tem de ser **idêntico** a
+      `jid`. Sem ele, ou com valor diferente, a resposta é
+      `400 missing_confirm_jid` e **o WhatsApp nem chega a ser contactado** —
+      a guarda está do nosso lado, antes do envio.
+
+      **Como se confirma o efeito** (as três vias usadas na verificação de
+      campo): `GET /newsletter/list` deixa de o listar;
+      `POST /newsletter/info` passa a devolver `state.type: non_existing` com
+      `viewer_metadata: null`; e o link público de convite deixa de resolver.
+
+      **Autenticação**: token de sessão (a do dono).
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoApagarCanal'
+          example:
+            jid: 120363411025775186@newsletter
+            confirmJID: 120363411025775186@newsletter
+    responses:
+      '200':
+        description: Canal apagado. `data` é sempre `null`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Envelope'
+            example:
+              code: 200
+              data: null
+              success: true
+      '400':
+        description: |
+          Falta o `jid`, ou `confirmJID` está ausente ou é diferente de `jid`.
+          Neste último caso nada foi enviado ao WhatsApp.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_confirm_jid
+                message: confirm_jid must match the channel jid
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+# --- Comunidades ------------------------------------------------------------
+
+/community/subgroups:
+  post:
+    tags: [Comunidades]
+    summary: Listar os sub-grupos de uma comunidade
+    description: |
+      Lista os grupos ligados a uma comunidade.
+
+      **Onde nasce uma comunidade**: não há rota `/community/create`. Uma
+      comunidade cria-se em `POST /group/create` com `is_parent: true` — é um
+      grupo-pai, e é por isso que o identificador dela é `@g.us` e não um
+      servidor próprio. Essa rota pertence à etiqueta **Grupos**.
+
+      **A lista nunca vem vazia numa comunidade real**: o grupo de avisos é
+      criado automaticamente com a comunidade e aparece sempre, marcado com
+      `IsDefaultSubGroup: true`. Medido a 2026-08-26, com a transição
+      1 → 2 → 1 provocada por `POST /community/link` e
+      `POST /community/unlink` (F237).
+
+      **Regras**: `communityJID` é obrigatório e é um JID de GRUPO (`@g.us`),
+      porque a comunidade é um grupo-pai. O alias universal `chat` também é
+      aceite, e só é usado quando `communityJID` vem vazio.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoComunidade'
+          example:
+            communityJID: 120363430034334401@g.us
+    responses:
+      '200':
+        description: Os grupos ligados à comunidade, dentro da chave `sub_groups`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/SubGruposComunidade'
+            example:
+              code: 200
+              data:
+                sub_groups:
+                  - JID: 120363411669320145@g.us
+                    Name: Avisos
+                    NameSetAt: '2026-08-26T08:08:21-04:00'
+                    NameSetBy: ''
+                    NameSetByPN: ''
+                    IsDefaultSubGroup: true
+              success: true
+      '400':
+        description: |
+          Falta o `communityJID`, ou ele não é um JID que se consiga
+          interpretar.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_community_jid
+                message: missing communityJID parameter
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/community/participants:
+  post:
+    tags: [Comunidades]
+    summary: Listar os participantes dos grupos de uma comunidade
+    description: |
+      Devolve os participantes de **todos** os grupos ligados à comunidade,
+      reunidos numa lista só.
+
+      **Os identificadores vêm em LID**, não em número — medido a 2026-08-26.
+      Quem precisar do telefone tem de resolver o LID por outra rota; esta não
+      devolve PN.
+
+      **Regras**: `communityJID` é obrigatório, é um JID `@g.us`, e o alias
+      universal `chat` também é aceite.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoComunidade'
+          example:
+            communityJID: 120363430034334401@g.us
+    responses:
+      '200':
+        description: Os participantes, em LID, dentro da chave `participants`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ParticipantesComunidade'
+            example:
+              code: 200
+              data:
+                participants:
+                  - 90937376170214@lid
+                  - 29343770251463@lid
+              success: true
+      '400':
+        description: |
+          Falta o `communityJID`, ou ele não é um JID que se consiga
+          interpretar — neste caso o código é `invalid_community_jid`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_community_jid
+                message: could not parse community JID "xxx"
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/community/link:
+  post:
+    tags: [Comunidades]
+    summary: Ligar um grupo a uma comunidade
+    description: |
+      Torna um grupo existente sub-grupo de uma comunidade. Medido a
+      2026-08-26: o sub-grupo passa a aparecer em
+      `POST /community/subgroups`, e o cliente do WhatsApp mostra a mensagem de
+      sistema *"O grupo X foi adicionado"* (F237).
+
+      **Regras**: `communityJID` e `groupJID` são ambos obrigatórios — a
+      ausência de cada um tem o seu próprio código
+      (`missing_community_jid`, `missing_group_jid`). Esta rota **não** aceita
+      o alias universal `chat`: a struct do pedido não o inclui.
+
+      **Resposta**: `data` traz apenas a confirmação textual
+      `{"Details": "Group linked to community successfully"}`, escrita pelo
+      manipulador — não vem do WhatsApp. Confirme o efeito por
+      `POST /community/subgroups`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoLigacaoComunidade'
+          example:
+            communityJID: 120363430034334401@g.us
+            groupJID: 120363411669320145@g.us
+    responses:
+      '200':
+        description: Grupo ligado à comunidade.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data:
+                Details: Group linked to community successfully
+              success: true
+      '400':
+        description: |
+          Falta o `communityJID` ou o `groupJID`, ou um deles não é
+          interpretável como JID (`invalid_jid`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_group_jid
+                message: missing groupJID parameter
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/community/unlink:
+  post:
+    tags: [Comunidades]
+    summary: Desligar um grupo de uma comunidade
+    description: |
+      Retira um grupo da comunidade. O grupo continua a existir — deixa apenas
+      de ser sub-grupo. Medido a 2026-08-26, com a contagem de sub-grupos a
+      voltar de 2 para 1 e a mensagem de sistema *"O grupo X foi removido"* no
+      cliente (F237).
+
+      **Regra que a medição confirmou**: o grupo de avisos
+      (`IsDefaultSubGroup: true`) nasce com a comunidade e permanece — foi ele
+      que sobrou quando a contagem voltou a 1.
+
+      **Regras**: `communityJID` e `groupJID` são obrigatórios; o alias `chat`
+      não é aceite aqui.
+
+      **Resposta**: `data` traz a confirmação textual
+      `{"Details": "Group unlinked from community successfully"}`, escrita pelo
+      manipulador. Confirme por `POST /community/subgroups`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoLigacaoComunidade'
+          example:
+            communityJID: 120363430034334401@g.us
+            groupJID: 120363411669320145@g.us
+    responses:
+      '200':
+        description: Grupo desligado da comunidade.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data:
+                Details: Group unlinked from community successfully
+              success: true
+      '400':
+        description: Falta o `communityJID` ou o `groupJID`, ou um deles não é um JID válido.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_community_jid
+                message: missing communityJID parameter
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
