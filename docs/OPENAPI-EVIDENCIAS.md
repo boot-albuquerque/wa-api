@@ -1,6 +1,27 @@
 # Relatório de evidências — documentação OpenAPI
 
-**Actualizado a 2026-08-26**, depois da padronização de caminhos (F269).
+**Actualizado a 2026-08-26**, depois da padronização de caminhos (F269) e da
+integração das três campanhas de evidência.
+
+O que mudou nesta ronda:
+
+| | antes | depois |
+|---|---:|---:|
+| ✅ | 98 | **122** |
+| 🟡 | 8 | 8 |
+| ❌ | 3 | **4** |
+| ⬜ | 32 | **7** |
+| total | 141 | 141 |
+
+**25 rotas mudaram de marca**, todas a sair de ⬜: 24 para ✅ e uma para ❌. A
+campanha que as moveu está em `CAMPANHA-DESCARTAVEL.md`, e o que a destravou
+foi um fixture — sessões criadas por `POST /admin/users` e nunca emparelhadas,
+descartáveis por construção. O motivo *"mexeria na sessão em uso"*, que
+bloqueava 25 das 32 ⬜, não era impossibilidade: era falta de fixture.
+
+Os 🟡 não se moveram, e é correcto que não se tenham movido — sem conta
+emparelhada não há observador a exercitar. O que mudou neles foi o **motivo**:
+quatro dos oito estavam factualmente errados (`OBSERVADORES-AMBAR.md`).
 
 ## O contrato descreve um nome por operação
 
