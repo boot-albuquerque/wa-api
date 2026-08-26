@@ -4,8 +4,9 @@
 
 ## O contrato descreve um nome por operação
 
-O router serve **234 rotas**; o contrato documenta **141**. A diferença são as
-91 formas antigas, que **continuam a responder** e saíram da especificação.
+O router serve **236 rotas**; o contrato documenta **143**. A diferença são as
+91 formas antigas, que **continuam a responder** e saíram da especificação, mais
+as duas rotas novas de capacidades (item abaixo).
 
 Documentar as duas formas punha 232 operações para 141 capacidades, e obrigava
 o leitor a escolher entre `/chat/list` e `/chats/list` sem elemento para
@@ -24,29 +25,29 @@ antigo continua a funcionar.
 ## Resumo quantitativo
 
 ```
-Rotas servidas pelo router:     234
-  documentadas (canónicas):     141
+Rotas servidas pelo router:     236
+  documentadas (canónicas):     143
   antigas, fora do contrato:     91   (continuam a responder)
   /docs e /docs/:                 2
 
-Operações documentadas:         141
+Operações documentadas:         143
 Cobertura do contrato:          100%
-Caminhos distintos:             122
-Esquemas:                       165
+Caminhos distintos:             124
+Esquemas:                       170
 Propriedades com semântica:     694 de 694
 
 Validação:
   OK  chamada real com efeito confirmado: 98
   AMR sucesso sem observador independente: 8
   ERR falhou, com o erro medido:          3
-  NT  não testada, com o motivo dito:     32
+  NT  não testada, com o motivo dito:     34
 ```
 
 ## Por grupo
 
 | Grupo | Operações | ✅ | 🟡 | ❌ | ⬜ |
 |---|---:|---:|---:|---:|---:|
-| Administração | 6 | 2 | 0 | 0 | 4 |
+| Administração | 7 | 2 | 0 | 0 | 5 |
 | Canais | 18 | 15 | 2 | 1 | 0 |
 | Comunidades | 4 | 4 | 0 | 0 | 0 |
 | Contactos e utilizadores | 14 | 10 | 0 | 2 | 2 |
@@ -56,9 +57,9 @@ Validação:
 | Grupos | 18 | 17 | 1 | 0 | 0 |
 | Integrações e configuração | 19 | 6 | 0 | 0 | 13 |
 | Saúde | 4 | 4 | 0 | 0 | 0 |
-| Sessões | 21 | 8 | 0 | 0 | 13 |
+| Sessões | 22 | 8 | 0 | 0 | 14 |
 | Status | 3 | 0 | 3 | 0 | 0 |
-| **Total** | **141** | **98** | **8** | **3** | **32** |
+| **Total** | **143** | **98** | **8** | **3** | **34** |
 
 ## As três que falham
 
@@ -72,6 +73,7 @@ Validação:
 
 | Grupo | Método | Caminho | Substitui | Teste | Título |
 |---|---|---|---|---|---|
+| Administração | `GET` | `/admin/capabilities` | — | ⬜ | Consultar a matriz completa de capacidades |
 | Administração | `GET` | `/admin/users` | — | ✅ | Listar as sessões existentes |
 | Administração | `POST` | `/admin/users` | — | ⬜ | Criar uma sessão |
 | Administração | `DELETE` | `/admin/users/{id}` | — | ⬜ | Apagar o registo de uma sessão |
@@ -189,6 +191,7 @@ Validação:
 | Saúde | `GET` | `/health/live` | — | ✅ | Verificar se o processo está vivo (caminho alternativo) |
 | Saúde | `GET` | `/health/ready` | — | ✅ | Verificar se o serviço pode receber tráfego |
 | Saúde | `GET` | `/livez` | — | ✅ | Verificar se o processo está vivo |
+| Sessões | `GET` | `/session/capabilities` | — | ⬜ | Consultar o que a própria sessão consegue fazer |
 | Sessões | `GET` | `/session/connect` | — | ⬜ | Iniciar a ligação da sessão ao WhatsApp |
 | Sessões | `GET` | `/session/disconnect` | — | ⬜ | Derrubar o transporte da sessão sem desemparelhar |
 | Sessões | `POST` | `/session/history` | — | ⬜ | Configurar quantas mensagens a sessão guarda |

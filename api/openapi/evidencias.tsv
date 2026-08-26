@@ -15,6 +15,7 @@
 # adaptador de injecção é código novo entre o cliente e o manipulador.
 #
 # método	caminho	marca
+GET	/admin/capabilities	⬜
 GET	/admin/users	✅
 POST	/admin/users	⬜
 DELETE	/admin/users/{id}	⬜
@@ -38,6 +39,7 @@ GET	/s3/config	✅
 POST	/s3/config	⬜
 POST	/s3/configure	⬜
 POST	/s3/test	⬜
+GET	/session/capabilities	⬜
 GET	/session/connect	⬜
 GET	/session/disconnect	⬜
 POST	/session/history	⬜

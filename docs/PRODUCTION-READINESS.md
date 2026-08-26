@@ -53,7 +53,7 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 
 | propriedade | estado | prova / lacuna |
 |---|---|---|
-| Cobertura OpenAPI | ✅ | **141 de 141** operações documentadas. O router serve 234 rotas: 141 canónicas mais 91 formas antigas que continuam a responder e **saíram do contrato** — uma operação, um nome |
+| Cobertura OpenAPI | ✅ | **143 de 143** operações documentadas (incluindo `engine` em `/admin/users` e as duas rotas novas de `/session/capabilities` e `/admin/capabilities`). O router serve 236 rotas: 143 canónicas mais 91 formas antigas que continuam a responder e **saíram do contrato** — uma operação, um nome |
 | Toda operação tem tag, título e descrição | ✅ | `TestOpenAPIOperacoesEstaoCompletas` |
 | **Toda propriedade tem semântica de presença** | ✅ | **694 de 694** com `description` **e** `nullable`. `TestTodaPropriedadeDeclaraNulabilidade` |
 | Enums dizem o que acontece fora da lista | ✅ | `TestTodoEnumDizOQueAconteceComValorDesconhecido` |

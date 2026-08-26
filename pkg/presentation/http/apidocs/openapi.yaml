@@ -1263,6 +1263,54 @@ components:
         - error
         - success
       type: object
+    EstadoCapacidade:
+      description: |
+        Classifica **por que** uma capacidade é ou não suportada para um par
+        (engine, account_type) — os valores não são sinónimos de "não", cada um
+        nomeia uma origem de falha diferente, porque quem corrige (e o quê)
+        muda com a origem:
+
+        - `supported`: verificado a funcionar como documentado.
+        - `partially_supported`: algumas variantes funcionam, outras não (ex.:
+          um subconjunto de tipos de mídia).
+        - `not_implemented`: o wa-api nunca escreveu a porta/use case/rota para
+          esta capacidade, embora nada a bloqueie. Correcção: escrevê-la aqui.
+        - `engine_unsupported`: o transporte (socket wa-noise ou a SPA do
+          wa-headless) não tem forma nenhuma de realizar esta operação.
+          Correcção: implementar no transporte, ou aceitar a lacuna.
+        - `upstream_unsupported`: o próprio WhatsApp não oferece esta operação
+          pelo protocolo que este projecto fala (WhatsApp Web multi-dispositivo),
+          independentemente do transporte. Correcção: nenhuma — é um tecto, não
+          um bug.
+        - `account_type_unsupported`: o WhatsApp restringe a operação a um tipo
+          de conta diferente (ex.: catálogo/produtos exigem conta empresarial
+          ligada à WABA, que nenhuma das duas engines aqui alcança). Correcção:
+          nenhuma dentro das engines deste projecto.
+        - `account_state_unsupported`: a conta poderia em geral fazer isto, mas
+          um estado por-conta bloqueia agora (ex.: não verificada, limitada por
+          taxa). É uma pré-condição de EXECUÇÃO, não um facto estático de
+          (engine, account_type) — ver `required_preconditions`.
+        - `permission_required`: a capacidade exige um papel/permissão que a
+          sessão não tem agora (ex.: administrador de grupo).
+        - `broken`: a capacidade está ligada de ponta a ponta mas está medida
+          (em HOUSEKEEP.md/verificação de campo) a comportar-se mal.
+        - `unknown`: ninguém verificou ainda. É o default HONESTO até alguém
+          confirmar — nunca se confunde com `not_implemented`, que afirma uma
+          conclusão que o caso `unknown` ainda não ganhou.
+      enum:
+        - supported
+        - partially_supported
+        - not_implemented
+        - engine_unsupported
+        - account_type_unsupported
+        - account_state_unsupported
+        - permission_required
+        - upstream_unsupported
+        - broken
+        - unknown
+      example: supported
+      nullable: false
+      type: string
     EstadoConexao:
       description: |
         Resposta de `GET /session/connect`. O corpo NÃO é o `ConnectResult` do
@@ -2348,6 +2396,100 @@ components:
           type: integer
       required:
         - History
+      type: object
+    LinhaCapacidadeAdmin:
+      description: Uma célula da matriz capacidade × engine × account_type, com a decisão completa do registo.
+      properties:
+        account_type:
+          $ref: '#/components/schemas/TipoDeConta'
+        capability:
+          description: Nome da capacidade avaliada, um dos valores de `domain.Capability`.
+          example: send_text
+          nullable: false
+          type: string
+        engine:
+          description: |
+            Engine desta linha da matriz. Ao contrário do `engine` de
+            `UtilizadorAdmin`, este nunca é `legacy_unknown` — a matriz é
+            construída a partir de `knownEngines`, uma lista fixa das duas
+            engines que o registo tem provider, não de uma sessão gravada, e por
+            isso um valor fora dos dois listados não pode aparecer aqui.
+          enum:
+            - wa_noise
+            - wa_headless
+          example: wa_noise
+          nullable: false
+          type: string
+        evidence:
+          description: |
+            **Eixo independente do `status`**: quão confiante o registo está na
+            decisão, não a decisão em si. Duas células podem partilhar o mesmo
+            `status` e divergir aqui — "supported, confirmed" (medido contra
+            HOUSEKEEP.md ou teste de integração real) contra "supported,
+            probable" (o adaptador existe e tem lógica real, mas ninguém
+            verificou contra um dispositivo).
+
+            - `confirmed`: medição citável existe (HOUSEKEEP.md/ARMADILHAS.md,
+              verificação de campo, teste de integração real).
+            - `probable`: o ficheiro do adaptador foi lido e tem lógica real, mas
+              ninguém confirmou o comportamento ao vivo.
+            - `not_tested`: simplificação deliberada — a dimensão (tipicamente
+              `account_type`) nunca foi exercitada porque nada no código a
+              diferencia ainda, embora a dimensão engine para a mesma capacidade
+              tenha sido verificada.
+            - `unknown`: ninguém olhou.
+
+            Um valor **desconhecido** deste enum não ocorre nesta resposta: é
+            escrito pelo servidor a partir de `domain.EvidenceStatus`, nunca lido
+            de um pedido.
+          enum:
+            - confirmed
+            - probable
+            - not_tested
+            - unknown
+          example: confirmed
+          nullable: false
+          type: string
+        reason:
+          description: |
+            Explicação legível de por que a decisão é a que é. Pode vir vazia
+            quando a decisão não tem nada a acrescentar ao próprio `status`.
+          example: verificado contra conta real (HOUSEKEEP F210)
+          nullable: false
+          type: string
+        required_preconditions:
+          description: |
+            Pré-condições em falta para esta capacidade funcionar AGORA, quando
+            `status` é `account_state_unsupported` ou `permission_required` — por
+            exemplo, a conta não estar verificada, ou a sessão não ter
+            permissão de administrador do grupo. **Ausente** quando vazio
+            (`omitempty`), e é o único campo desta linha que descreve estado de
+            execução em vez de um facto estático de (engine, account_type).
+          example: []
+          items:
+            type: string
+          nullable: false
+          type: array
+        status:
+          $ref: '#/components/schemas/EstadoCapacidade'
+        supported:
+          description: |
+            Atalho derivado de `status`: `true` **apenas** quando `status` é
+            `supported`. `partially_supported` conta como `false` aqui de
+            propósito — quem pergunta "posso fazer isto" quer um sim/não estrito,
+            e tratar um suporte parcial como sim esconderia exactamente a lacuna
+            que este campo existe para revelar.
+          example: true
+          nullable: false
+          type: boolean
+      required:
+        - capability
+        - engine
+        - account_type
+        - supported
+        - status
+        - reason
+        - evidence
       type: object
     LinhaLista:
       description: |
@@ -4518,6 +4660,29 @@ components:
         `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
         não dá erro: dá o valor zero.
       properties:
+        engine:
+          description: |
+            Transporte que servirá a sessão. **Obrigatório** — não há default
+            silencioso.
+
+            - `wa_noise`: fala o protocolo do WhatsApp Web directamente pelo
+              socket (`internal/wa-noise`). É o transporte histórico.
+            - `wa_headless`: conduz um Chromium por trás da SPA do WhatsApp Web.
+
+            A engine é definida **aqui, uma única vez**: `PUT /admin/users/{id}`
+            recusa qualquer tentativa de a alterar depois da criação
+            (`409 engine_immutable`).
+
+            Ausente, `null`, `""` ou qualquer valor **desconhecido** deste enum
+            (fora de `{wa_noise, wa_headless}`) — incluindo `legacy_unknown`, que
+            é um estado interno de leitura e nunca uma escolha de criação — dão
+            `400 invalid_engine`.
+          enum:
+            - wa_noise
+            - wa_headless
+          example: wa_noise
+          nullable: false
+          type: string
         events:
           description: |
             Eventos subscritos, **numa única string separada por vírgulas** — não
@@ -4639,6 +4804,7 @@ components:
       required:
         - name
         - token
+        - engine
       type: object
     PedidoDecidirSolicitacoes:
       description: |
@@ -5067,6 +5233,21 @@ components:
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
+        engine:
+          description: |
+            **Imutável.** O campo é aceite no corpo para permitir reenviar o
+            estado actual (edição idempotente), mas qualquer valor diferente do
+            já gravado é recusado com `409 engine_immutable` — a engine só se
+            escolhe em `POST /admin/users`. Ausente é *não mencionado*, e não
+            dispara verificação nenhuma. Um valor **desconhecido** deste enum não
+            tem tratamento especial: cai na mesma comparação e é recusado como
+            diferente do gravado.
+          enum:
+            - wa_noise
+            - wa_headless
+          example: wa_noise
+          nullable: false
+          type: string
         events:
           description: |
             Nova lista de eventos, separada por vírgulas. Ausente, `null` e `""`
@@ -9088,6 +9269,54 @@ components:
         - jid
         - lid
       type: object
+    RespostaCapacidadesAdmin:
+      description: |
+        Corpo de `GET /admin/capabilities`: a matriz capacidade × engine ×
+        account_type inteira, com diagnóstico.
+      properties:
+        capabilities:
+          description: |
+            Uma linha por combinação (capacidade, engine, account_type) que o
+            registo conhece. Não filtrada por sessão nenhuma.
+          items:
+            $ref: '#/components/schemas/LinhaCapacidadeAdmin'
+          nullable: false
+          type: array
+        total:
+          description: Número de linhas em `capabilities` — o `len()` do array, não um valor independente.
+          example: 3
+          minimum: 0
+          nullable: false
+          type: integer
+      required:
+        - capabilities
+        - total
+      type: object
+    RespostaCapacidadesSessao:
+      description: |
+        Corpo de `GET /session/capabilities`: o estado de cada capacidade
+        conhecida, para a engine da sessão autenticada.
+      properties:
+        account_type:
+          $ref: '#/components/schemas/TipoDeConta'
+        capabilities:
+          additionalProperties:
+            $ref: '#/components/schemas/EstadoCapacidade'
+          description: |
+            Mapa `nome da capacidade → estado`. As chaves são os valores de
+            `domain.Capability` conhecidos por este build (as constantes usadas
+            por `capabilityregistry.PortCoverage`, deduplicadas e ordenadas) — a
+            lista completa não está fixa aqui porque cresce sem alterar este
+            contrato; o valor de cada chave é sempre um dos
+            `EstadoCapacidade` abaixo.
+          example:
+            catalog: not_implemented
+            channel_create: engine_unsupported
+            send_media: supported
+            send_text: supported
+          nullable: false
+          type: object
+      type: object
     RespostaWebhookAtualizado:
       description: |
         Resposta de `PUT /webhook`.
@@ -10446,6 +10675,20 @@ components:
           nullable: false
           type: boolean
       type: object
+    TipoDeConta:
+      description: |
+        Tipo de conta de WhatsApp: `personal` ou `business` (WABA). `unknown` é o
+        ÚNICO valor que a detecção actual produz — a detecção real de tipo de
+        conta é de uma worktree em paralelo (account-type-detection) e ainda não
+        está ligada às rotas deste grupo, por isso toda decisão hoje usa
+        `unknown`, que o registo trata como resposta legítima, não como erro.
+      enum:
+        - personal
+        - business
+        - unknown
+      example: unknown
+      nullable: false
+      type: string
     UltimaAtividadePorConversa:
       additionalProperties:
         description: |
@@ -10513,6 +10756,28 @@ components:
           nullable: false
           readOnly: true
           type: boolean
+        engine:
+          description: |
+            Transporte que serve esta sessão: `wa_noise` fala o protocolo
+            directamente pelo socket; `wa_headless` conduz o Chromium por trás da
+            SPA do WhatsApp Web. Definido na criação (`POST /admin/users`) e
+            **imutável** depois — `PUT /admin/users/{id}` recusa qualquer valor
+            diferente do já gravado com `409 engine_immutable`.
+
+            **`legacy_unknown` não aparece aqui.** É um terceiro valor interno,
+            gravado apenas em linhas cuja engine nunca foi registada (coluna
+            adicionada depois de a linha existir) e substituído pelo backfill de
+            arranque — nunca é uma escolha válida de criação, e este enum não o
+            lista porque um cliente nunca deveria recebê-lo nem enviá-lo. Um valor
+            fora dos dois listados não ocorre nesta resposta: é escrito pelo
+            servidor a partir da coluna gravada, nunca lido de um pedido.
+          enum:
+            - wa_noise
+            - wa_headless
+          example: wa_noise
+          nullable: false
+          readOnly: true
+          type: string
         events:
           description: |
             Eventos subscritos, separados por vírgulas. `All` recebe todos.
@@ -10918,6 +11183,83 @@ info:
   version: 1.0.6
 openapi: 3.0.3
 paths:
+  /admin/capabilities:
+    get:
+      description: |
+        Devolve, sem filtro por sessão, a matriz inteira capacidade × engine ×
+        account_type — uma linha por combinação conhecida, cada uma com o
+        estado, a razão e a evidência da decisão.
+
+        **Diferença deliberada para `GET /session/capabilities`**: esta rota
+        devolve `reason` e `evidence` (é a superfície de diagnóstico, item 56 —
+        "admin knows engine"); a de sessão não devolve nenhum dos dois (é a
+        superfície de negócio, item 92 — "business knows capability").
+
+        **`account_type` percorre `personal`, `business` e `unknown`** — ao
+        contrário da resposta de sessão, que só mostra `unknown` (é o único
+        valor que a detecção actual produz). Esta rota lista as três porque a
+        matriz é sobre o que o registo SABE decidir, não sobre o que está
+        medido hoje para uma conta real.
+
+        **`total`** é a contagem de linhas do array `capabilities` — número de
+        capacidades × número de engines (`wa_noise`, `wa_headless`) × três
+        tipos de conta.
+
+        Uma combinação em que a decisão falhar internamente não derruba a
+        resposta inteira: essa linha vem com `status: unknown`,
+        `evidence: unknown` e `reason` com o texto do erro, e o pedido continua
+        `200`.
+
+        **Autenticação**: token de administração, no cabeçalho `Authorization`,
+        sem prefixo `Bearer`.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                code: 200
+                data:
+                  capabilities:
+                    - account_type: unknown
+                      capability: send_text
+                      engine: wa_noise
+                      evidence: confirmed
+                      reason: verificado contra conta real (HOUSEKEEP F210)
+                      status: supported
+                      supported: true
+                    - account_type: unknown
+                      capability: catalog
+                      engine: wa_noise
+                      evidence: unknown
+                      reason: nenhum use case nem rota escreve este fluxo ainda
+                      status: not_implemented
+                      supported: false
+                    - account_type: unknown
+                      capability: channel_create
+                      engine: wa_headless
+                      evidence: probable
+                      reason: a SPA não expõe este fluxo ao automatismo do Chromium
+                      status: engine_unsupported
+                      supported: false
+                  total: 3
+                success: true
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/RespostaCapacidadesAdmin'
+                    type: object
+          description: A matriz capacidade × engine × account_type inteira.
+        "401":
+          $ref: '#/components/responses/NaoAutorizado'
+        "500":
+          $ref: '#/components/responses/ErroInterno'
+      security:
+        - TokenAdmin: []
+      summary: ⬜ Consultar a matriz completa de capacidades
+      tags:
+        - Administração
   /admin/users:
     get:
       description: |
@@ -10945,6 +11287,7 @@ paths:
                 code: 200
                 data:
                   - connected: true
+                    engine: wa_noise
                     id: 918e37366f27e1125ee0482a793267e1
                     jid: 5516981818244:25@s.whatsapp.net
                     loggedIn: true
@@ -11002,6 +11345,11 @@ paths:
 
         - `name` e `token` são **obrigatórios**; a falta de qualquer um deles dá
           `400 missing_name_or_token`.
+        - `engine` é **obrigatório**: `wa_noise` ou `wa_headless`. Ausente,
+          `null`, `""` ou outro valor (incluindo `legacy_unknown`) dá
+          `400 invalid_engine`. É definido aqui e **não pode ser alterado**
+          depois — `PUT /admin/users/{id}` recusa a mudança com
+          `409 engine_immutable`.
         - `token` tem de ser único na instalação. Repetido, dá `409` — a resposta
           é o envelope antigo, com `error` em texto simples (`"conflict"`).
         - `events` é uma lista separada por vírgulas, e cada nome é validado:
@@ -11019,6 +11367,7 @@ paths:
         content:
           application/json:
             example:
+              engine: wa_noise
               events: Message,Receipt,Connected
               history: 100
               name: filarapida
@@ -11041,6 +11390,7 @@ paths:
                 code: 200
                 data:
                   connected: false
+                  engine: wa_noise
                   events: Message,Receipt,Connected
                   id: 918e37366f27e1125ee0482a793267e1
                   name: filarapida
@@ -11077,14 +11427,16 @@ paths:
               example:
                 code: 400
                 error:
-                  code: missing_name_or_token
-                  message: name and token are required
+                  code: invalid_engine
+                  message: engine é obrigatório e deve ser "wa_noise" ou "wa_headless"
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Campo obrigatório em falta, evento desconhecido, ou chave HMAC curta
-            demais.
+            Campo obrigatório em falta (`missing_name_or_token`), `engine`
+            ausente/inválido (`invalid_engine`), evento desconhecido
+            (`invalid_event_type`), ou chave HMAC curta demais
+            (`hmac_key_too_short`).
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "409":
@@ -11211,6 +11563,7 @@ paths:
                 code: 200
                 data:
                   - connected: true
+                    engine: wa_noise
                     id: 918e37366f27e1125ee0482a793267e1
                     jid: 5516981818244:25@s.whatsapp.net
                     loggedIn: true
@@ -11277,6 +11630,10 @@ paths:
         Uma alteração de `proxyConfig` com `enabled: false` limpa o `proxy_url`
         gravado.
 
+        **`engine` é imutável**: reenviar o mesmo valor já gravado é um no-op
+        tolerado; qualquer valor diferente é recusado com
+        `409 engine_immutable`, sem tocar em nenhum outro campo do corpo.
+
         **Autenticação**: token de administração, no cabeçalho `Authorization`,
         sem prefixo `Bearer`, regerado a cada arranque em `<datadir>/admin_token`.
       parameters:
@@ -11330,6 +11687,10 @@ paths:
           description: |
             Pedido sem campo nenhum a mudar (`no_fields_to_update`), evento
             desconhecido (`invalid_event_type`), ou corpo ilegível.
+
+            **`engine` diferente do gravado NÃO cai aqui — é `409
+            engine_immutable`**, não `400`: a rota reconhece o pedido como bem
+            formado e recusa-o por conflito de estado, não por forma inválida.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "404":
@@ -11347,15 +11708,32 @@ paths:
         "409":
           content:
             application/json:
-              example:
-                code: 409
-                error: conflict
-                success: false
+              examples:
+                engine_imutavel:
+                  summary: tentativa de alterar a engine
+                  value:
+                    code: 409
+                    error:
+                      code: engine_immutable
+                      message: engine não pode ser alterado após a criação da conta
+                    success: false
+                token_duplicado:
+                  summary: token já usado por outra sessão
+                  value:
+                    code: 409
+                    error: conflict
+                    success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                oneOf:
+                  - $ref: '#/components/schemas/ErroTextoSimples'
+                  - $ref: '#/components/schemas/Erro'
           description: |
-            O `token` pedido já pertence a outra sessão. Envelope ANTIGO, com
-            `error` em texto simples (F266).
+            Dois casos distintos, distinguíveis pelo `error.code`:
+
+            - `conflict` — o `token` pedido já pertence a outra sessão.
+              **Envelope ANTIGO**, com `error` em texto simples (F266).
+            - `engine_immutable` — o corpo pediu uma `engine` diferente da já
+              gravada. Envelope da taxonomia `apperr`, com `error` em objecto.
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -19229,6 +19607,88 @@ paths:
       summary: ⬜ Testar a ligação ao bucket configurado
       tags:
         - Integrações e configuração
+  /session/capabilities:
+    get:
+      description: |
+        Devolve, para a engine desta sessão autenticada, o estado de cada
+        capacidade conhecida — um mapa `nome → estado`, sem razão nem evidência.
+
+        **Quando usar**: um cliente que precisa de decidir, antes de chamar uma
+        rota, se ela vai funcionar para esta conta — por exemplo, esconder o
+        botão de "enviar catálogo" quando a engine não o suporta.
+
+        **`account_type` vem sempre `"unknown"`** nesta resposta hoje. A
+        detecção real de tipo de conta (pessoal vs. empresarial) é de uma
+        worktree em paralelo e ainda não está ligada a este manipulador — cada
+        decisão é tomada com `account_type=unknown`, que o registo trata como
+        resposta legítima (ainda que menos precisa), não como erro.
+
+        **A engine vem da sessão gravada**, não de um parâmetro do pedido. Uma
+        linha cujo `engine` ainda não foi migrado (`legacy_unknown` — coluna
+        adicionada antes do backfill de arranque correr contra ela) resolve para
+        `wa_noise`, o mesmo default documentado no backfill — o manipulador
+        nunca expõe esse estado de migração interno ao cliente.
+
+        **Autenticação**: token de sessão.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                code: 200
+                data:
+                  account_type: unknown
+                  capabilities:
+                    catalog: not_implemented
+                    channel_create: engine_unsupported
+                    group_create: supported
+                    send_carousel: supported
+                    send_media: supported
+                    send_poll: supported
+                    send_text: supported
+                success: true
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/RespostaCapacidadesSessao'
+                    type: object
+          description: Estado de cada capacidade conhecida, para a engine desta sessão.
+        "400":
+          $ref: '#/components/responses/SemSessao'
+        "401":
+          $ref: '#/components/responses/NaoAutorizado'
+        "409":
+          content:
+            application/json:
+              example:
+                code: 409
+                error:
+                  code: session_superseded
+                  message: sessão substituída por uma sessão mais recente
+                success: false
+              schema:
+                $ref: '#/components/schemas/Erro'
+          description: |
+            O token pertence a uma sessão cuja posse da conta foi reclamada por
+            outra réplica (a conta foi emparelhada outra vez, noutro processo).
+            A mensagem não diz qual sessão a substituiu nem quando, por desenho
+            (`domain.ErrSessionSuperseded`, "sem vazar detalhes da nova
+            sessão"): repetir o mesmo token não recupera, é preciso obter uma
+            sessão nova.
+
+            **Esta recusa não é exclusiva desta rota.** `session_superseded`
+            pode acontecer em qualquer rota autenticada por token de sessão, no
+            middleware de autenticação — está documentada aqui por ser a
+            primeira rota deste grupo, não porque só aconteça aqui.
+        "500":
+          $ref: '#/components/responses/ErroInterno'
+      security:
+        - TokenSessao: []
+      summary: ⬜ Consultar o que a própria sessão consegue fazer
+      tags:
+        - Sessões
   /session/connect:
     get:
       description: |

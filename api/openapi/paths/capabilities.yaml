@@ -1,0 +1,174 @@
+# Grupo: Capacidades.
+#
+# Duas rotas que respondem "o que esta engine consegue fazer", em dois
+# ângulos: `GET /session/capabilities` para a própria sessão autenticada (item
+# 92 do prompt arquitetural — "business knows capability"), e
+# `GET /admin/capabilities` para a matriz inteira capability × engine ×
+# account_type, com o diagnóstico completo (item 56 — "admin knows engine").
+#
+# As duas leem `pkg/capabilityregistry`, e a mesma decisão
+# (`CapabilityRegistry.Decide`) alimenta ambas — a diferença é só quanto da
+# decisão cada resposta expõe. Ver `pkg/presentation/http/handlers/handler_capabilities.go`.
+#
+# account_type é sempre "unknown" nas duas respostas hoje: a detecção real de
+# tipo de conta é de outra worktree (account-type-detection) e ainda não está
+# ligada aqui — está dito em cada rota, e não é para ser lido como um bug.
+
+/session/capabilities:
+  get:
+    tags: [Sessões]
+    summary: Consultar o que a própria sessão consegue fazer
+    description: |
+      Devolve, para a engine desta sessão autenticada, o estado de cada
+      capacidade conhecida — um mapa `nome → estado`, sem razão nem evidência.
+
+      **Quando usar**: um cliente que precisa de decidir, antes de chamar uma
+      rota, se ela vai funcionar para esta conta — por exemplo, esconder o
+      botão de "enviar catálogo" quando a engine não o suporta.
+
+      **`account_type` vem sempre `"unknown"`** nesta resposta hoje. A
+      detecção real de tipo de conta (pessoal vs. empresarial) é de uma
+      worktree em paralelo e ainda não está ligada a este manipulador — cada
+      decisão é tomada com `account_type=unknown`, que o registo trata como
+      resposta legítima (ainda que menos precisa), não como erro.
+
+      **A engine vem da sessão gravada**, não de um parâmetro do pedido. Uma
+      linha cujo `engine` ainda não foi migrado (`legacy_unknown` — coluna
+      adicionada antes do backfill de arranque correr contra ela) resolve para
+      `wa_noise`, o mesmo default documentado no backfill — o manipulador
+      nunca expõe esse estado de migração interno ao cliente.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Estado de cada capacidade conhecida, para a engine desta sessão.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/RespostaCapacidadesSessao'
+            example:
+              code: 200
+              data:
+                account_type: unknown
+                capabilities:
+                  send_text: supported
+                  send_media: supported
+                  send_poll: supported
+                  send_carousel: supported
+                  catalog: not_implemented
+                  group_create: supported
+                  channel_create: engine_unsupported
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: |
+          O token pertence a uma sessão cuja posse da conta foi reclamada por
+          outra réplica (a conta foi emparelhada outra vez, noutro processo).
+          A mensagem não diz qual sessão a substituiu nem quando, por desenho
+          (`domain.ErrSessionSuperseded`, "sem vazar detalhes da nova
+          sessão"): repetir o mesmo token não recupera, é preciso obter uma
+          sessão nova.
+
+          **Esta recusa não é exclusiva desta rota.** `session_superseded`
+          pode acontecer em qualquer rota autenticada por token de sessão, no
+          middleware de autenticação — está documentada aqui por ser a
+          primeira rota deste grupo, não porque só aconteça aqui.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 409
+              error:
+                code: session_superseded
+                message: sessão substituída por uma sessão mais recente
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/admin/capabilities:
+  get:
+    tags: [Administração]
+    summary: Consultar a matriz completa de capacidades
+    description: |
+      Devolve, sem filtro por sessão, a matriz inteira capacidade × engine ×
+      account_type — uma linha por combinação conhecida, cada uma com o
+      estado, a razão e a evidência da decisão.
+
+      **Diferença deliberada para `GET /session/capabilities`**: esta rota
+      devolve `reason` e `evidence` (é a superfície de diagnóstico, item 56 —
+      "admin knows engine"); a de sessão não devolve nenhum dos dois (é a
+      superfície de negócio, item 92 — "business knows capability").
+
+      **`account_type` percorre `personal`, `business` e `unknown`** — ao
+      contrário da resposta de sessão, que só mostra `unknown` (é o único
+      valor que a detecção actual produz). Esta rota lista as três porque a
+      matriz é sobre o que o registo SABE decidir, não sobre o que está
+      medido hoje para uma conta real.
+
+      **`total`** é a contagem de linhas do array `capabilities` — número de
+      capacidades × número de engines (`wa_noise`, `wa_headless`) × três
+      tipos de conta.
+
+      Uma combinação em que a decisão falhar internamente não derruba a
+      resposta inteira: essa linha vem com `status: unknown`,
+      `evidence: unknown` e `reason` com o texto do erro, e o pedido continua
+      `200`.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      sem prefixo `Bearer`.
+    security:
+      - TokenAdmin: []
+    responses:
+      '200':
+        description: A matriz capacidade × engine × account_type inteira.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/RespostaCapacidadesAdmin'
+            example:
+              code: 200
+              data:
+                capabilities:
+                  - capability: send_text
+                    engine: wa_noise
+                    account_type: unknown
+                    supported: true
+                    status: supported
+                    reason: verificado contra conta real (HOUSEKEEP F210)
+                    evidence: confirmed
+                  - capability: catalog
+                    engine: wa_noise
+                    account_type: unknown
+                    supported: false
+                    status: not_implemented
+                    reason: nenhum use case nem rota escreve este fluxo ainda
+                    evidence: unknown
+                  - capability: channel_create
+                    engine: wa_headless
+                    account_type: unknown
+                    supported: false
+                    status: engine_unsupported
+                    reason: a SPA não expõe este fluxo ao automatismo do Chromium
+                    evidence: probable
+                total: 3
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'

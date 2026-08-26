@@ -288,6 +288,26 @@ UtilizadorAdmin:
 
         Nas leituras está sempre ausente: elas não consultam a coluna.
       example: true
+    engine:
+      type: string
+      nullable: false
+      readOnly: true
+      enum: [wa_noise, wa_headless]
+      description: |
+        Transporte que serve esta sessão: `wa_noise` fala o protocolo
+        directamente pelo socket; `wa_headless` conduz o Chromium por trás da
+        SPA do WhatsApp Web. Definido na criação (`POST /admin/users`) e
+        **imutável** depois — `PUT /admin/users/{id}` recusa qualquer valor
+        diferente do já gravado com `409 engine_immutable`.
+
+        **`legacy_unknown` não aparece aqui.** É um terceiro valor interno,
+        gravado apenas em linhas cuja engine nunca foi registada (coluna
+        adicionada depois de a linha existir) e substituído pelo backfill de
+        arranque — nunca é uma escolha válida de criação, e este enum não o
+        lista porque um cliente nunca deveria recebê-lo nem enviá-lo. Um valor
+        fora dos dois listados não ocorre nesta resposta: é escrito pelo
+        servidor a partir da coluna gravada, nunca lido de um pedido.
+      example: wa_noise
 
 PedidoCriarUtilizador:
   type: object
@@ -298,8 +318,29 @@ PedidoCriarUtilizador:
     **Campos desconhecidos são ignorados** — toda a API usa
     `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
     não dá erro: dá o valor zero.
-  required: [name, token]
+  required: [name, token, engine]
   properties:
+    engine:
+      type: string
+      nullable: false
+      enum: [wa_noise, wa_headless]
+      description: |
+        Transporte que servirá a sessão. **Obrigatório** — não há default
+        silencioso.
+
+        - `wa_noise`: fala o protocolo do WhatsApp Web directamente pelo
+          socket (`internal/wa-noise`). É o transporte histórico.
+        - `wa_headless`: conduz um Chromium por trás da SPA do WhatsApp Web.
+
+        A engine é definida **aqui, uma única vez**: `PUT /admin/users/{id}`
+        recusa qualquer tentativa de a alterar depois da criação
+        (`409 engine_immutable`).
+
+        Ausente, `null`, `""` ou qualquer valor **desconhecido** deste enum
+        (fora de `{wa_noise, wa_headless}`) — incluindo `legacy_unknown`, que
+        é um estado interno de leitura e nunca uma escolha de criação — dão
+        `400 invalid_engine`.
+      example: wa_noise
     name:
       type: string
       nullable: false
@@ -448,6 +489,19 @@ PedidoEditarUtilizador:
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
   properties:
+    engine:
+      type: string
+      nullable: false
+      enum: [wa_noise, wa_headless]
+      description: |
+        **Imutável.** O campo é aceite no corpo para permitir reenviar o
+        estado actual (edição idempotente), mas qualquer valor diferente do
+        já gravado é recusado com `409 engine_immutable` — a engine só se
+        escolhe em `POST /admin/users`. Ausente é *não mencionado*, e não
+        dispara verificação nenhuma. Um valor **desconhecido** deste enum não
+        tem tratamento especial: cai na mesma comparação e é recusado como
+        diferente do gravado.
+      example: wa_noise
     name:
       type: string
       nullable: false

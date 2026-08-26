@@ -1,0 +1,194 @@
+# Esquemas do grupo de capacidades. Nomes e formas lidos directamente em
+# pkg/presentation/http/handlers/handler_capabilities.go, não da struct de
+# domínio — ver regra 3 de CONTRATO.md.
+
+RespostaCapacidadesSessao:
+  type: object
+  description: |
+    Corpo de `GET /session/capabilities`: o estado de cada capacidade
+    conhecida, para a engine da sessão autenticada.
+  properties:
+    account_type:
+      $ref: '#/components/schemas/TipoDeConta'
+    capabilities:
+      type: object
+      nullable: false
+      description: |
+        Mapa `nome da capacidade → estado`. As chaves são os valores de
+        `domain.Capability` conhecidos por este build (as constantes usadas
+        por `capabilityregistry.PortCoverage`, deduplicadas e ordenadas) — a
+        lista completa não está fixa aqui porque cresce sem alterar este
+        contrato; o valor de cada chave é sempre um dos
+        `EstadoCapacidade` abaixo.
+      additionalProperties:
+        $ref: '#/components/schemas/EstadoCapacidade'
+      example:
+        send_text: supported
+        send_media: supported
+        catalog: not_implemented
+        channel_create: engine_unsupported
+
+RespostaCapacidadesAdmin:
+  type: object
+  description: |
+    Corpo de `GET /admin/capabilities`: a matriz capacidade × engine ×
+    account_type inteira, com diagnóstico.
+  required: [capabilities, total]
+  properties:
+    capabilities:
+      type: array
+      nullable: false
+      description: |
+        Uma linha por combinação (capacidade, engine, account_type) que o
+        registo conhece. Não filtrada por sessão nenhuma.
+      items:
+        $ref: '#/components/schemas/LinhaCapacidadeAdmin'
+    total:
+      type: integer
+      nullable: false
+      minimum: 0
+      description: Número de linhas em `capabilities` — o `len()` do array, não um valor independente.
+      example: 3
+
+LinhaCapacidadeAdmin:
+  type: object
+  description: Uma célula da matriz capacidade × engine × account_type, com a decisão completa do registo.
+  required: [capability, engine, account_type, supported, status, reason, evidence]
+  properties:
+    capability:
+      type: string
+      nullable: false
+      description: Nome da capacidade avaliada, um dos valores de `domain.Capability`.
+      example: send_text
+    engine:
+      type: string
+      nullable: false
+      enum: [wa_noise, wa_headless]
+      description: |
+        Engine desta linha da matriz. Ao contrário do `engine` de
+        `UtilizadorAdmin`, este nunca é `legacy_unknown` — a matriz é
+        construída a partir de `knownEngines`, uma lista fixa das duas
+        engines que o registo tem provider, não de uma sessão gravada, e por
+        isso um valor fora dos dois listados não pode aparecer aqui.
+      example: wa_noise
+    account_type:
+      $ref: '#/components/schemas/TipoDeConta'
+    supported:
+      type: boolean
+      nullable: false
+      description: |
+        Atalho derivado de `status`: `true` **apenas** quando `status` é
+        `supported`. `partially_supported` conta como `false` aqui de
+        propósito — quem pergunta "posso fazer isto" quer um sim/não estrito,
+        e tratar um suporte parcial como sim esconderia exactamente a lacuna
+        que este campo existe para revelar.
+      example: true
+    status:
+      $ref: '#/components/schemas/EstadoCapacidade'
+    reason:
+      type: string
+      nullable: false
+      description: |
+        Explicação legível de por que a decisão é a que é. Pode vir vazia
+        quando a decisão não tem nada a acrescentar ao próprio `status`.
+      example: verificado contra conta real (HOUSEKEEP F210)
+    evidence:
+      type: string
+      nullable: false
+      enum: [confirmed, probable, not_tested, unknown]
+      description: |
+        **Eixo independente do `status`**: quão confiante o registo está na
+        decisão, não a decisão em si. Duas células podem partilhar o mesmo
+        `status` e divergir aqui — "supported, confirmed" (medido contra
+        HOUSEKEEP.md ou teste de integração real) contra "supported,
+        probable" (o adaptador existe e tem lógica real, mas ninguém
+        verificou contra um dispositivo).
+
+        - `confirmed`: medição citável existe (HOUSEKEEP.md/ARMADILHAS.md,
+          verificação de campo, teste de integração real).
+        - `probable`: o ficheiro do adaptador foi lido e tem lógica real, mas
+          ninguém confirmou o comportamento ao vivo.
+        - `not_tested`: simplificação deliberada — a dimensão (tipicamente
+          `account_type`) nunca foi exercitada porque nada no código a
+          diferencia ainda, embora a dimensão engine para a mesma capacidade
+          tenha sido verificada.
+        - `unknown`: ninguém olhou.
+
+        Um valor **desconhecido** deste enum não ocorre nesta resposta: é
+        escrito pelo servidor a partir de `domain.EvidenceStatus`, nunca lido
+        de um pedido.
+      example: confirmed
+    required_preconditions:
+      type: array
+      nullable: false
+      description: |
+        Pré-condições em falta para esta capacidade funcionar AGORA, quando
+        `status` é `account_state_unsupported` ou `permission_required` — por
+        exemplo, a conta não estar verificada, ou a sessão não ter
+        permissão de administrador do grupo. **Ausente** quando vazio
+        (`omitempty`), e é o único campo desta linha que descreve estado de
+        execução em vez de um facto estático de (engine, account_type).
+      items:
+        type: string
+      example: []
+
+EstadoCapacidade:
+  type: string
+  nullable: false
+  enum:
+    - supported
+    - partially_supported
+    - not_implemented
+    - engine_unsupported
+    - account_type_unsupported
+    - account_state_unsupported
+    - permission_required
+    - upstream_unsupported
+    - broken
+    - unknown
+  description: |
+    Classifica **por que** uma capacidade é ou não suportada para um par
+    (engine, account_type) — os valores não são sinónimos de "não", cada um
+    nomeia uma origem de falha diferente, porque quem corrige (e o quê)
+    muda com a origem:
+
+    - `supported`: verificado a funcionar como documentado.
+    - `partially_supported`: algumas variantes funcionam, outras não (ex.:
+      um subconjunto de tipos de mídia).
+    - `not_implemented`: o wa-api nunca escreveu a porta/use case/rota para
+      esta capacidade, embora nada a bloqueie. Correcção: escrevê-la aqui.
+    - `engine_unsupported`: o transporte (socket wa-noise ou a SPA do
+      wa-headless) não tem forma nenhuma de realizar esta operação.
+      Correcção: implementar no transporte, ou aceitar a lacuna.
+    - `upstream_unsupported`: o próprio WhatsApp não oferece esta operação
+      pelo protocolo que este projecto fala (WhatsApp Web multi-dispositivo),
+      independentemente do transporte. Correcção: nenhuma — é um tecto, não
+      um bug.
+    - `account_type_unsupported`: o WhatsApp restringe a operação a um tipo
+      de conta diferente (ex.: catálogo/produtos exigem conta empresarial
+      ligada à WABA, que nenhuma das duas engines aqui alcança). Correcção:
+      nenhuma dentro das engines deste projecto.
+    - `account_state_unsupported`: a conta poderia em geral fazer isto, mas
+      um estado por-conta bloqueia agora (ex.: não verificada, limitada por
+      taxa). É uma pré-condição de EXECUÇÃO, não um facto estático de
+      (engine, account_type) — ver `required_preconditions`.
+    - `permission_required`: a capacidade exige um papel/permissão que a
+      sessão não tem agora (ex.: administrador de grupo).
+    - `broken`: a capacidade está ligada de ponta a ponta mas está medida
+      (em HOUSEKEEP.md/verificação de campo) a comportar-se mal.
+    - `unknown`: ninguém verificou ainda. É o default HONESTO até alguém
+      confirmar — nunca se confunde com `not_implemented`, que afirma uma
+      conclusão que o caso `unknown` ainda não ganhou.
+  example: supported
+
+TipoDeConta:
+  type: string
+  nullable: false
+  enum: [personal, business, unknown]
+  description: |
+    Tipo de conta de WhatsApp: `personal` ou `business` (WABA). `unknown` é o
+    ÚNICO valor que a detecção actual produz — a detecção real de tipo de
+    conta é de uma worktree em paralelo (account-type-detection) e ainda não
+    está ligada às rotas deste grupo, por isso toda decisão hoje usa
+    `unknown`, que o registo trata como resposta legítima, não como erro.
+  example: unknown
