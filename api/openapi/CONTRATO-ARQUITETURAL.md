@@ -242,7 +242,27 @@ POST /user/check {"phone":[""]}   ->  200 {"data":null}
 As três formas de "lista vazia" devolvem **sucesso com `data: null`**. A rota
 não exige `minItems`, e responde `200` a um pedido que não pede nada.
 `data: null` não é `data: []` — quem iterar sobre a resposta sem verificar
-parte. Registado em **F270**.
+parte.
+
+### 4.4 A ordem de validação não é observável
+
+Medido em `POST /newsletter/create`, variando **só** o campo `picture`:
+
+```
+{"picture":"nao-e-base64!!"}  -> 400 could_not_decode_payload
+{"picture":123}               -> 400 could_not_decode_payload
+{"picture":null}              -> 400 missing_name    <- passou a descodificação
+{"picture":""}                -> 400 missing_name    <- passou
+{}                            -> 400 missing_name
+```
+
+A recusa vem do **primeiro** campo que falha, e a ordem não está documentada
+nem é observável de fora. **Nada distingue, à partida, um corpo que será
+recusado de um corpo que executa** — o que torna perigoso testar uma integração
+com "corpos inválidos". Registado em **F270**.
+
+Agrava-se com a secção 5: um corpo com o nome do campo mal escrito não é
+inválido — é um corpo **sem aquele campo**.
 
 **Onde a API usa ponteiro**, e portanto distingue:
 

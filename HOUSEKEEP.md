@@ -29322,3 +29322,78 @@ ordem correcta é `/v1` primeiro (ponto 4). As decisões estão em
 
 <!-- f-status: aberto -->
 
+## F270 — a fronteira entre "sonda recusada" e "escrita real" não é visível de fora
+
+**Data/contexto**: 2026-08-26, auditoria de semântica de campo. Um executor
+criou um canal REAL enquanto sondava o que era suposto ser um corpo inválido.
+Ele parou, avisou de imediato e **não tentou apagar** — apagar era a outra
+escrita proibida, e empilhar uma segunda violação para tapar a primeira seria
+pior. A decisão foi correcta.
+
+**O que ele fez, e por que o raciocínio falhou**:
+
+```
+POST /newsletter/create {"name":"x","picture":null,"description":null}  -> 200
+   criou 120363411747914490@newsletter
+```
+
+A hipótese dele era que `picture: null` morreria na descodificação, como os
+outros dois casos da mesma bateria. **Reproduzi sem criar nada**, omitindo o
+campo obrigatório em vez do opcional:
+
+```
+{"picture":"nao-e-base64!!"}  -> 400 could_not_decode_payload
+{"picture":123}               -> 400 could_not_decode_payload
+{"picture":null}              -> 400 missing_name      <- PASSOU a descodificação
+{"picture":""}                -> 400 missing_name      <- PASSOU
+{}                            -> 400 missing_name
+```
+
+**Cinco entradas, três resultados.** `null` e `""` num `[]byte` descodificam
+para `nil`/vazio; só valor inválido e tipo errado morrem. O executor variou o
+campo errado: com `name` preenchido, o único obstáculo que restava era o
+`picture`, e ele não obstruiu.
+
+**O achado, que é de CONTRATO e não de execução**: de fora, nada distingue um
+corpo que será recusado de um corpo que executa. A recusa vem do PRIMEIRO campo
+que falha, e a ordem de validação não está documentada nem é observável. Um
+cliente que teste a sua integração com "corpos inválidos" pode produzir efeitos
+reais sem saber — e num envio, o efeito é uma mensagem entregue a uma pessoa.
+
+Isto agrava-se com a F268 (campo desconhecido ignorado em silêncio): um corpo
+com o nome do campo mal escrito não é inválido, é um corpo **sem aquele campo**.
+
+**A regra de método que daqui sai**, e que passei aos outros seis executores:
+
+> Uma sonda só é segura se for INCONDICIONALMENTE recusada. "Espero que seja
+> recusada por causa do campo X" não basta — se X não recusar, o pedido segue
+> para o efeito real.
+>
+> Técnica: omita sempre um campo obrigatório DIFERENTE do que está a testar. O
+> pedido morre na validação em qualquer ramo, e o campo sob teste revela-se pelo
+> CÓDIGO de erro: `could_not_decode_payload` significa que morreu na
+> descodificação; qualquer outro significa que passou.
+
+E o corolário incómodo: **há rotas para as quais não existe sonda segura** —
+`GET /session/connect`, `GET /session/disconnect`, `POST /session/logout`, os
+quatro `DELETE` de configuração, e as três `/status/set/*`, que têm um só campo
+obrigatório. Nessas, a única resposta honesta é documentar a partir do código e
+dizer que não foram sondadas.
+
+**Correcção sugerida**:
+
+1. Documentar, por rota, a ORDEM de validação — qual campo é verificado
+   primeiro. É o que torna previsível se um corpo será recusado.
+2. `DisallowUnknownFields` (ver F268) reduz a superfície: um corpo com campo mal
+   escrito passaria a ser recusado em vez de executar sem ele.
+
+**Limpeza**: o canal foi apagado por mim (`DELETE /newsletter/delete`,
+confirmado `state.type: non_existing` e ausente de `GET /newsletter/list`).
+Estava vazio — zero subscritores, zero mensagens, minutos de vida —, logo
+apagá-lo REVERTEU o acidente em vez de acrescentar alteração.
+
+**Status**: não corrigido — os dois pontos da correcção sugerida mudam
+contrato observável. A regra de método está em uso.
+
+<!-- f-status: aberto -->
+
