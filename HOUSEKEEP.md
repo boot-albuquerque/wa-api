@@ -28536,12 +28536,75 @@ vazia deveria produzir um status visível para si mesmo.
 e o log escreve `published`, para um status que não existe. **Nona vez nesta
 sessão que o `200` diz menos do que aparenta.**
 
-**Correção sugerida**: apurar a causa antes de mexer no código. Se for
-limitação de contas Business, o `ENDPOINTS.md` tem de a documentar; se for
-lista de destinatários vazia, a rota deve recusar com `4xx` em vez de reportar
-sucesso.
+## Causa apurada em 2026-08-26: a lista de destinatários é `contact.FullName`, e a conta Business não tem nenhum
 
-**Status**: não corrigido — causa por apurar, e não a vou adivinhar.
+Instrumentei `getBroadcastListParticipants` (`internal/wa-noise/core/broadcast.go:12`)
+para escrever a lista calculada num ficheiro, publiquei um status pela
+`filarapida`, e reverti o build. O que saiu:
+
+```
+ownID=5516981818244@s.whatsapp.net
+addrMode=29343770251463:25@lid
+n=2
+privacy=[{Type:contacts List:[] IsDefault:true}]
+first10=[5541992421234@s.whatsapp.net 5516981818244@s.whatsapp.net]
+```
+
+**Dois destinatários.** Para uma conta com 461 contactos e privacidade
+`contacts`. O filtro que os elimina está em `getStatusBroadcastRecipients`
+(`broadcast.go:70`), e o próprio upstream marcou-o com um TODO:
+
+```go
+// TODO should there be a better way to separate contacts and found push names in the db?
+if len(contact.FullName) > 0 {
+    contactsArray = append(contactsArray, jid)
+}
+```
+
+**Contado no banco** (`wanoise_contacts`), que é o discriminador que faltava:
+
+| sessão | contactos | com `full_name` | só com `push_name` | destinatários |
+|---|---|---|---|---|
+| `filarapida` (Business, `smbi`) | 461 | **1** | 460 | 1 + self = **2** |
+| `lucas` (pessoal, `iphone`) | 1266 | **164** | 1138 | 164 + self = **165** |
+
+É por isto que a MESMA rota, no MESMO binário, funcionou para uma conta e não
+para a outra — e a diferença nunca esteve no código do status. A conta Business
+recebe os contactos por `push_name` (de mensagens e status que chegam), não por
+uma sincronização de agenda que preencha `full_name`.
+
+**E o único destinatário externo é um número que a própria conta anotou à mão**:
+`5541992421234@s.whatsapp.net`, `full_name = "wa-headless-lab B"` — a forma com
+nono dígito do mesmo número que a sessão `lucas` usa como `554192421234`. Ou
+seja, o status da `filarapida` foi para uma pessoa só, e possivelmente para uma
+forma de JID que não corresponde a conta nenhuma.
+
+**O que continua por explicar, e não vou adivinhar**: o próprio JID **está** na
+lista (`selfIndex < 0` -> `append(list, ownID)`), e mesmo assim a interface não
+mostra o status. A suspeita é a forma: `ownID` sai em **PN**
+(`5516981818244@s.whatsapp.net`) enquanto a conta é endereçada por **LID**
+(`29343770251463:25@lid`). Não medi essa metade, e a medição custaria publicar
+status pela conta `lucas` — que o utilizador restringiu para testes de
+visibilidade pública.
+
+**Ressalva sobre um observador em que confiei a mais**: o WhatsApp Web desta
+conta Business não mostra status de NINGUÉM, embora o processo registe a
+chegada de vários (`... in status@broadcast`). Um observador que mostra zero em
+todos os casos não distingue caso nenhum — a conclusão de ontem ("o status não
+existe") apoiou-se nele. Vale como reprodução do sintoma, não como prova da
+causa.
+
+**Correção sugerida** (agora com base medida):
+
+1. `getStatusBroadcastRecipients` deixa de exigir `FullName`: um contacto com
+   `push_name` é um contacto. É divergência deliberada do upstream, logo
+   entrada no `PATCHES.md`.
+2. A rota recusa com `4xx` quando a lista resolve para só o próprio: publicar
+   para ninguém não é sucesso, e é isso que o `200` de hoje afirma.
+3. Medir a metade que falta (self em PN numa conta LID) antes de mexer nela.
+
+**Status**: não corrigido — causa principal medida, correção por decidir com o
+utilizador porque toca em código vendorizado (`internal/wa-noise/core`).
 
 <!-- f-status: aberto -->
 
