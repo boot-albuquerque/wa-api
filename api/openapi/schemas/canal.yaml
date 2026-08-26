@@ -1,0 +1,503 @@
+# Grupo: Canais (newsletters) e Comunidades.
+#
+# Os pedidos das dezoito rotas de canal saem TODOS da mesma struct de fio,
+# `newsletterBody` (`pkg/presentation/http/handlers/handler_newsletter.go:44`).
+# Cada rota lê só os campos de que precisa, e quem decide o que é obrigatório é
+# a tabela `newsletterRequirements`
+# (`pkg/application/usecase/notification/newsletter_ops.go:206`). Por isso os
+# esquemas abaixo são recortes dessa struct, um por operação: enviar um campo
+# que a operação não usa não é erro, é apenas ignorado.
+#
+# As formas de resposta foram MEDIDAS em 2026-08-26 contra o servidor local,
+# nas rotas de leitura. As de escrita vêm da bateria de campo registada em
+# `docs/ENDPOINTS.md`.
+
+# --- Canais: pedidos --------------------------------------------------------
+
+PedidoCanal:
+  type: object
+  description: |
+    Pedido mínimo de canal: só o identificador. É a forma de `info`, `follow`,
+    `unfollow`, `subscribe` e `admin-invite/accept`.
+  required: [jid]
+  properties:
+    jid:
+      type: string
+      description: |
+        JID do canal, sempre no servidor `@newsletter`. Ausente, a resposta é
+        `400 missing_jid`.
+      example: 120363411025775186@newsletter
+
+PedidoCriarCanal:
+  type: object
+  description: |
+    Pedido de criação de canal. É a única operação de canal que não recebe
+    `jid` — o identificador é justamente o que ela devolve.
+  required: [name]
+  properties:
+    name:
+      type: string
+      description: Nome público do canal. Obrigatório; sem ele a resposta é `400 missing_name`.
+      example: Avisos da Fila Rápida
+    description:
+      type: string
+      description: Descrição do canal, mostrada a quem abre a página dele. Opcional.
+      example: Novidades e horários de funcionamento.
+    picture:
+      type: string
+      format: byte
+      description: |
+        Imagem de perfil do canal, em base64 (o campo é `[]byte` em Go, logo o
+        JSON leva base64 sem prefixo `data:`). Opcional.
+
+PedidoCanalPorConvite:
+  type: object
+  description: |
+    Pedido de metadados a partir do CÓDIGO de convite, não do JID. O código é a
+    parte final do link público (`https://whatsapp.com/channel/<código>`), e é
+    enviado nu.
+  required: [invite]
+  properties:
+    invite:
+      type: string
+      description: |
+        Código do convite. Não passa pela conversão de JID de propósito
+        (`adapter.go:269`): tratá-lo como JID falharia com uma mensagem sobre
+        JID inválido, que manda quem investiga para o lado errado.
+      example: 0029Vb85MPpKLaHoEUxRt01E
+
+PedidoSilenciarCanal:
+  type: object
+  description: Pedido de silenciamento, que liga ou desliga conforme `mute`.
+  required: [jid]
+  properties:
+    jid:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    mute:
+      type: boolean
+      description: |
+        `true` silencia, `false` volta a notificar. O campo é booleano simples:
+        ausente vale `false`, ou seja, dessilenciar.
+      example: true
+
+PedidoMensagensCanal:
+  type: object
+  description: Pedido de histórico do canal, paginado para trás.
+  required: [jid]
+  properties:
+    jid:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    count:
+      type: integer
+      description: |
+        Quantas mensagens trazer. Zero ou ausente **não** é um limite nosso: o
+        atributo é omitido do pedido e o servidor usa o padrão dele
+        (`adapter.go:330`).
+      example: 5
+    before:
+      type: string
+      description: |
+        `server_id` da mensagem a partir da qual paginar para trás. É lido como
+        número; texto não numérico não é recusado, é tratado como zero.
+      example: '104'
+
+PedidoAtualizacoesCanal:
+  type: object
+  description: |
+    Pedido de ATUALIZAÇÕES de mensagens já conhecidas — edições, contagens de
+    reação, remoções. Rota actualmente inoperante; ver a descrição dela.
+  required: [jid]
+  properties:
+    jid:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    count:
+      type: integer
+      description: Quantas atualizações trazer. Zero deixa o servidor decidir.
+      example: 5
+    since:
+      type: string
+      format: date-time
+      description: |
+        Instante mínimo, em RFC 3339. É o ÚNICO campo de todas as dezoito
+        rotas cuja má formatação é recusada no manipulador, antes do use case
+        (`handler_newsletter.go:129`) — e a recusa sai como `400` de decodificação.
+      example: '2026-08-26T00:00:00Z'
+    after:
+      type: string
+      description: '`server_id` a partir do qual avançar, lido como número.'
+      example: '104'
+
+PedidoMarcarVistoCanal:
+  type: object
+  description: Pedido de marcação de mensagens do canal como vistas.
+  required: [jid, serverIDs]
+  properties:
+    jid:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    serverIDs:
+      type: array
+      description: |
+        Os `server_id` a marcar. Lista vazia ou ausente é recusada com
+        `400 missing_server_ids`.
+      items:
+        type: integer
+      example: [1, 2, 3]
+
+PedidoReagirCanal:
+  type: object
+  description: |
+    Pedido de reação a uma mensagem do canal. Enviar `reaction` vazio REMOVE a
+    reação — é por isso que o campo não é obrigatório.
+  required: [jid, serverID]
+  properties:
+    jid:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    serverID:
+      type: integer
+      description: |
+        `server_id` da mensagem alvo. Zero é recusado com
+        `400 missing_server_id` — logo não há como reagir à mensagem de
+        `server_id` 0, se ela existir.
+      example: 1
+    reaction:
+      type: string
+      description: |
+        O emoji. **Vazio remove a reação**, e por isso a validação não o exige
+        (`newsletter_ops.go:234`).
+      example: 👍
+    messageID:
+      type: string
+      description: Identificador da mensagem, quando o cliente o tem. Opcional.
+      example: 3EB0A4B2AFD45E625C0917
+
+PedidoAdminCanal:
+  type: object
+  description: |
+    Pedido das operações que apontam para OUTRO utilizador: convidar para
+    administrador, revogar esse convite, despromover e transferir a posse.
+  required: [jid, userJID]
+  properties:
+    jid:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    userJID:
+      type: string
+      description: |
+        JID do utilizador alvo. Aceita **PN ou LID**: a conversão PN→LID é
+        feita antes do envio, contra o armazenamento da sessão
+        (`adapter.go:489`, F233c). A conversão é direccional — um LID nunca é
+        convertido de volta para PN. Se o armazenamento não conhecer o número,
+        o JID segue como está e é o WhatsApp que recusa.
+      example: 90937376170214@lid
+
+PedidoApagarCanal:
+  type: object
+  description: |
+    Pedido de eliminação de canal. Exige confirmação explícita: `confirmJID`
+    tem de ser **idêntico** a `jid`.
+  required: [jid, confirmJID]
+  properties:
+    jid:
+      type: string
+      description: JID do canal a apagar.
+      example: 120363411025775186@newsletter
+    confirmJID:
+      type: string
+      description: |
+        Repetição literal de `jid`. Ausente, ou diferente de `jid`, devolve
+        `400 missing_confirm_jid` e **o WhatsApp nem chega a ser contactado**
+        (`newsletter_ops.go:266`).
+      example: 120363411025775186@newsletter
+
+# --- Canais: respostas ------------------------------------------------------
+
+MetadadosCanal:
+  type: object
+  description: |
+    Metadados de um canal, medidos em `POST /newsletter/info` a 2026-08-26.
+    Repare que **os números vêm como texto** — `creation_time`,
+    `subscribers_count` e os `id` internos são strings, não inteiros. É a forma
+    do protocolo, não uma conversão nossa.
+  properties:
+    id:
+      type: string
+      description: JID do canal.
+      example: 120363411025775186@newsletter
+    state:
+      type: object
+      description: Estado do canal do ponto de vista do servidor.
+      properties:
+        type:
+          type: string
+          description: |
+            Valores observados em campo: `active` (canal em funcionamento),
+            `deleted` (apagado, ainda listado na lista do seguidor) e
+            `non_existing` (o que `info` devolve depois de um `delete`). Não
+            está fechado por enumeração no código — a lista acima é o que foi
+            medido, não o universo garantido.
+          example: active
+    thread_metadata:
+      type: object
+      description: |
+        Os dados públicos do canal. `picture` e `preview` vêm com `url` e
+        `direct_path` VAZIOS na resposta medida — para obter a imagem é preciso
+        outra chamada, e essa não é destas rotas.
+      properties:
+        creation_time:
+          type: string
+          description: Instante de criação, em segundos Unix, como texto.
+          example: '1787745654'
+        invite:
+          type: string
+          description: Código do convite público, o mesmo que `POST /newsletter/info-invite` aceita.
+          example: 0029Vb85MPpKLaHoEUxRt01E
+        name:
+          type: object
+          description: Nome do canal, com o instante da última alteração.
+          properties:
+            text:
+              type: string
+              example: Avisos da Fila Rápida
+            id:
+              type: string
+              example: '1787745654587070'
+            update_time:
+              type: string
+              example: '1787745654587070'
+        description:
+          type: object
+          description: Descrição do canal, com a mesma forma do nome.
+          properties:
+            text:
+              type: string
+              example: Novidades e horários de funcionamento.
+            id:
+              type: string
+              example: '1787745654587070'
+            update_time:
+              type: string
+              example: '1787745654587070'
+        subscribers_count:
+          type: string
+          description: Número de seguidores, como texto.
+          example: '0'
+        verification:
+          type: string
+          description: Estado de verificação do canal. Valor observado, `unverified`.
+          example: unverified
+        picture:
+          type: object
+          nullable: true
+          description: |
+            Descritor da imagem de perfil, ou `null` quando o canal não tem
+            uma. Medido `null` em `/newsletter/list` e preenchido com `url`
+            vazio em `/newsletter/info` para o MESMO canal — logo a presença
+            deste objecto não garante que haja imagem.
+          properties:
+            url:
+              type: string
+              example: ''
+            id:
+              type: string
+              example: '1787750687544878'
+            type:
+              type: string
+              example: IMAGE
+            direct_path:
+              type: string
+              example: ''
+            hash:
+              type: string
+              nullable: true
+        preview:
+          type: object
+          nullable: true
+          description: Descritor da pré-visualização, com a mesma forma de `picture`.
+          properties:
+            url:
+              type: string
+              example: ''
+            id:
+              type: string
+              example: '1787750687544880'
+            type:
+              type: string
+              example: PREVIEW
+            direct_path:
+              type: string
+              example: ''
+            hash:
+              type: string
+              nullable: true
+        settings:
+          type: object
+          description: Definições do canal. A única observada governa que reações são aceites.
+          properties:
+            reaction_codes:
+              type: object
+              properties:
+                value:
+                  type: string
+                  description: Valor observado, `ALL`.
+                  example: ALL
+    viewer_metadata:
+      type: object
+      nullable: true
+      description: |
+        O que este canal é **para quem chamou**. Vem `null` quando o chamador
+        não tem relação com o canal — medido em `/newsletter/info-invite` sobre
+        canal não seguido, e em canal apagado.
+      properties:
+        mute:
+          type: string
+          description: '`on` quando silenciado, `off` quando não. É texto, não booleano.'
+          example: 'on'
+        role:
+          type: string
+          description: |
+            Papel do chamador. Os três valores foram medidos ponta a ponta na
+            cadeia de administração de 2026-08-26 (F233): `owner`, `admin` e
+            `subscriber`.
+          example: owner
+
+ListaCanais:
+  type: object
+  description: |
+    Resposta de `GET /newsletter/list`. Repare no envelope duplo: a carga útil
+    é um objecto com a chave `newsletter`, e só dentro dela está a lista.
+  required: [newsletter]
+  properties:
+    newsletter:
+      type: array
+      description: |
+        Os canais que a sessão segue. Inclui canais em `state.type: deleted` —
+        medido a 2026-08-26 — logo um cliente que liste canais utilizáveis tem
+        de filtrar por estado.
+      items:
+        $ref: '#/components/schemas/MetadadosCanal'
+
+MensagensCanal:
+  type: array
+  description: |
+    Resposta de `POST /newsletter/messages`: uma lista de mensagens do canal,
+    directamente em `data`, sem chave intermédia. Medida `[]` num canal sem
+    publicações; **a forma de cada elemento não foi determinada com segurança**
+    — não havia canal com mensagens disponível para medir, e o tipo do vendor
+    não é o contrato desta rota.
+  items:
+    type: object
+
+# --- Comunidades ------------------------------------------------------------
+
+PedidoComunidade:
+  type: object
+  description: |
+    Pedido de leitura sobre uma comunidade. Aceita também o nome universal
+    `chat`, que preenche `communityJID` quando este vier vazio
+    (`pkg/domain/community.go:9`).
+  properties:
+    communityJID:
+      type: string
+      description: |
+        JID da comunidade — que é um JID de GRUPO (`@g.us`), porque uma
+        comunidade é um grupo-pai. Ausente, a resposta é
+        `400 missing_community_jid`.
+      example: 120363430034334401@g.us
+    chat:
+      type: string
+      description: Alias universal de destino. Só é usado se `communityJID` vier vazio.
+      example: 120363430034334401@g.us
+
+PedidoLigacaoComunidade:
+  type: object
+  description: |
+    Pedido de ligação ou desligação de um grupo a uma comunidade. Ao contrário
+    das duas rotas de leitura, **não aceita o alias `chat`**: a struct não
+    inclui `ChatTarget` (`pkg/domain/community.go:31-40`).
+  required: [communityJID, groupJID]
+  properties:
+    communityJID:
+      type: string
+      description: JID da comunidade (grupo-pai). Ausente, `400 missing_community_jid`.
+      example: 120363430034334401@g.us
+    groupJID:
+      type: string
+      description: JID do grupo a ligar ou desligar. Ausente, `400 missing_group_jid`.
+      example: 120363411669320145@g.us
+
+SubGruposComunidade:
+  type: object
+  description: Resposta de `POST /community/subgroups`.
+  required: [sub_groups]
+  properties:
+    sub_groups:
+      type: array
+      description: |
+        Os grupos ligados à comunidade. Nunca vem vazia numa comunidade real: o
+        grupo de avisos é criado com a comunidade e aparece sempre, marcado com
+        `IsDefaultSubGroup: true` (F237, medido com a transição 1 → 2 → 1).
+      items:
+        $ref: '#/components/schemas/SubGrupoComunidade'
+
+SubGrupoComunidade:
+  type: object
+  description: |
+    Um grupo ligado à comunidade. Os nomes de campo vêm em maiúscula inicial
+    porque a estrutura é serializada tal como o vendor a define — não há
+    etiquetas JSON a renomeá-la. Medido a 2026-08-26.
+  properties:
+    JID:
+      type: string
+      description: JID do sub-grupo.
+      example: 120363411669320145@g.us
+    Name:
+      type: string
+      description: Nome do sub-grupo.
+      example: Avisos
+    NameSetAt:
+      type: string
+      format: date-time
+      description: |
+        Quando o nome foi definido. Vem com o deslocamento do fuso do
+        SERVIDOR, não em UTC — medido `2026-08-26T08:08:21-04:00`.
+      example: '2026-08-26T08:08:21-04:00'
+    NameSetBy:
+      type: string
+      description: Quem definiu o nome, em LID. Vazio quando o servidor não o informa — foi o caso na medição.
+      example: ''
+    NameSetByPN:
+      type: string
+      description: O mesmo, em PN. Igualmente vazio na medição.
+      example: ''
+    IsDefaultSubGroup:
+      type: boolean
+      description: |
+        `true` no grupo de avisos, que a comunidade cria sozinha e não pode ser
+        desligado.
+      example: true
+
+ParticipantesComunidade:
+  type: object
+  description: Resposta de `POST /community/participants`.
+  required: [participants]
+  properties:
+    participants:
+      type: array
+      description: |
+        Os participantes de todos os grupos ligados, em **LID** — medido a
+        2026-08-26. Quem precisar do número tem de resolver o LID por outra
+        rota; esta não devolve PN.
+      items:
+        type: string
+      example: ['90937376170214@lid', '29343770251463@lid']
