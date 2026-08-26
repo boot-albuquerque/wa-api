@@ -141,7 +141,7 @@ func emptyCustomHandlers() *customHandlers {
 		Reaction:   &handlers.ReactionHandlers{},
 		Contact:    &handlers.ContactHandlers{},
 		GroupMgmt:  &handlers.GroupManagementHandlers{},
-		Community: &handlers.CommunityHandlers{},
+		Community:  &handlers.CommunityHandlers{},
 		Newsletter: &handlers.NewsletterHandlers{},
 		Label:      &handlers.LabelHandlers{},
 		// ChatHistory é um grupo próprio, e não um campo a mais em Storage:

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/rs/zerolog/hlog"
 

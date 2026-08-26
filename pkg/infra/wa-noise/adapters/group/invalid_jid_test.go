@@ -37,7 +37,10 @@ func TestGroupAdapter_InvalidJIDs(t *testing.T) {
 		}},
 		{"SetJoinApprovalMode", func() error { return a.SetJoinApprovalMode(context.Background(), "u1", badJID, true) }},
 		{"LeaveGroup", func() error { return a.LeaveGroup(context.Background(), "u1", badJID) }},
-		{"CreateGroup", func() error { _, e := a.CreateGroup(context.Background(), "u1", "n", []domain.JID{badJID}, domain.CreateGroupOpts{}); return e }},
+		{"CreateGroup", func() error {
+			_, e := a.CreateGroup(context.Background(), "u1", "n", []domain.JID{badJID}, domain.CreateGroupOpts{})
+			return e
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

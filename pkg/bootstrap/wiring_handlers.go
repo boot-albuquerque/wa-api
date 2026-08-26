@@ -112,7 +112,7 @@ type customHandlers struct {
 	Reaction    *handlers.ReactionHandlers
 	Contact     *handlers.ContactHandlers
 	GroupMgmt   *handlers.GroupManagementHandlers
-	Community  *handlers.CommunityHandlers
+	Community   *handlers.CommunityHandlers
 	ChatHistory *handlers.ChatHistoryHandlers
 	Newsletter  *handlers.NewsletterHandlers
 	Label       *handlers.LabelHandlers
@@ -483,7 +483,7 @@ func initCustomHandlers(s *server) {
 		Reaction:    reactionHandlers,
 		Contact:     contactHandlers,
 		GroupMgmt:   groupMgmtHandlers,
-		Community:  communityHandlers,
+		Community:   communityHandlers,
 		ChatHistory: chatHistoryHandlers,
 		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
 		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),
