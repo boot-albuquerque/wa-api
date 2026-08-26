@@ -111,12 +111,14 @@ info:
     | ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |
     | ⬜ | **não executada**, e a descrição diz porquê |
 
-    Medição de 2026-08-26, com duas sessões reais: **98 ✅, 8 🟡, 3 ❌, 32 ⬜**.
+    Medição de 2026-08-26, com duas sessões reais mais um lote de sessões
+    descartáveis: **122 ✅, 8 🟡, 4 ❌, 7 ⬜**.
 
-    As 32 por testar não são esquecimento: escreveriam configuração de uma
-    sessão em uso, derrubariam sessões vivas, criariam ou apagariam contas, ou
-    alterariam o perfil. O detalhe rota a rota está em
-    `docs/OPENAPI-EVIDENCIAS.md`.
+    As 7 por testar não são esquecimento, e nenhuma delas o é por "mexeria na
+    sessão em uso" — esse motivo caiu com as sessões descartáveis, e valeu 25
+    rotas. As que restam exigem um bucket S3 descartável, uma chamada a entrar,
+    ou uma conta emparelhada cujo perfil seria alterado. O detalhe rota a rota
+    está em `docs/OPENAPI-EVIDENCIAS.md`.
 
     **Um 🟡 não é um ✅ mais fraco por descuido** — é a recusa deliberada de
     chamar confirmado aquilo que só devolveu `2xx`.

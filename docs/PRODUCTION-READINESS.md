@@ -88,8 +88,10 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | Classificação por rota, visível no título | ✅ | ✅🟡❌⬜ no `summary` de cada operação, aplicada de `evidencias.tsv` pelo gerador |
 | Nenhuma rota sem classificação | ✅ | `TestOpenAPISummariesTrazemMarcaDeEvidencia`; **141 de 141** |
 | Tabela não pode desactualizar-se | ✅ | rota nova sem linha **falha o gerador**; linha órfã **também** — a falha por excesso é a silenciosa |
-| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **98 ✅, 8 🟡, 3 ❌, 32 ⬜** |
-| Cobertura de efeito confirmado | 🟡 | **98 de 141**. As 32 ⬜ não são esquecimento: escreveriam configuração em uso, derrubariam sessões, ou alterariam a conta — cada uma com o motivo escrito |
+| Os números batem entre as quatro fontes | ✅ | `TestEvidenceTableMatchesSpec`, `TestEvidenceLegendMatchesTable`, `TestEvidenceReportMatchesSpec` e `TestEvidenceReportSummaryMatchesTable` reconciliam tabela, spec embutida, legenda de `/docs` e relatório — **rota a rota**, não só no total (F281) |
+| Observador concreto registado por rota | 🟡 | **43 de 141**: as 25 promovidas, as 4 ❌, as 8 🟡 e as 7 ⬜. As restantes 98 ✅ trazem a frase-modelo e são inauditáveis a partir do registo (F282) |
+| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **122 ✅, 8 🟡, 4 ❌, 7 ⬜** |
+| Cobertura de efeito confirmado | 🟡 | **122 de 141**. As 7 ⬜ que restam exigem um bucket S3 descartável, uma chamada a entrar, ou uma conta emparelhada cujo perfil seria alterado — cada uma com o motivo escrito. O motivo "mexeria na sessão em uso" caiu com as sessões descartáveis, e valia 25 rotas |
 
 ## 5. Auditoria
 
@@ -147,9 +149,20 @@ e é por isso que vem depois do 1.
 
 ## Duas coisas que este scorecard NÃO afirma
 
-- **Que a API funciona.** Afirma que 98 operações tiveram efeito confirmado,
-  8 responderam sem observador, 3 falham e 32 não foram exercitadas. A
+- **Que a API funciona.** Afirma que 122 operações tiveram efeito confirmado,
+  8 responderam sem observador, 4 falham e 7 não foram exercitadas. A
   diferença entre isto e "funciona" é o assunto inteiro da coluna de evidência.
+
+  As 24 promoções desta ronda vieram de **sessões descartáveis** — criadas por
+  `POST /admin/users`, nunca emparelhadas, medidas num servidor isolado e
+  apagadas no fim —, cada uma confirmada por observador independente (SQLite,
+  rota irmã de leitura, ou quadro de WebSocket). O registo rota a rota está em
+  `CAMPANHA-DESCARTAVEL.md`. A quarta ❌ é `POST /session/logout` (F275).
+
+  **Três das quatro ❌ têm hoje causa determinada**, e é `PROTOCOL_CHANGED` nas
+  três: `INVESTIGATION-block-unblock.md` e
+  `INVESTIGATION-newsletter-updates.md`. Continuam ❌ — a marca só se move
+  quando a rota responder.
 
   Estes números subiram para 178/13/6/35 durante algumas horas, quando as
   formas antigas e canónicas estavam ambas documentadas. Voltaram ao que eram

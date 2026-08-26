@@ -30202,6 +30202,404 @@ documentada — exige decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §3.
 
 
 
+## F281 — a legenda servida em `/docs` ficou com os números de antes da padronização, com todos os gates verdes
+
+**Data**: 2026-08-26. **Contexto**: auditoria independente da classificação de
+evidência (`AUDITORIA-EVIDENCIAS.md`), sobre `2d965350`.
+
+**Onde**: `api/openapi/base.yaml:104`, `:114` e `:116` — o bloco
+`info.description`, que o gerador embute e `/docs` serve.
+
+**Problema**: `9a6b3ff` levou o `evidencias.tsv` de 141 para 232 operações
+(178 ✅ / 13 🟡 / 6 ❌ / 35 ⬜) e `2d96535` sincronizou o
+`docs/OPENAPI-EVIDENCIAS.md`. **A legenda ficou para trás em três sítios**, e é
+ela que o consumidor da API lê:
+
+```
+$ grep -n '98 ✅' api/openapi/base.yaml
+114:    Medição de 2026-08-26, com duas sessões reais: **98 ✅, 8 🟡, 3 ❌, 32 ⬜**.
+```
+
+- "As **141** estão documentadas" → são 232
+- "**98 ✅, 8 🟡, 3 ❌, 32 ⬜**" → 178 / 13 / 6 / 35
+- "As **32** por testar" → são 35
+
+E a suíte inteira passava com os três errados:
+
+```
+$ go test ./pkg/bootstrap/ -count=1
+ok  	wa-api/pkg/bootstrap	6.734s     (exit 0)
+```
+
+**Causa estrutural**, e não distracção: a marca de cada rota é GERADA da tabela,
+mas os totais da legenda são ESCRITOS À MÃO dentro do mesmo documento gerado.
+Um número à mão ao lado de um número gerado diverge no primeiro dia em que
+alguém acrescenta uma rota.
+
+**Correcção aplicada**: os três números corrigidos, e acrescentada a frase que
+explica por que 232 entradas são 141 operações distintas (91 canónicas
+partilham manipulador com a forma antiga).
+
+**Anti-regressão**: `pkg/bootstrap/openapi_reconciliation_test.go`, cinco
+testes, com `TestEvidenceLegendMatchesTable` a travar exactamente este caso.
+**Controlo negativo EXECUTADO** (178 → 179 em `base.yaml`, regenerado):
+
+```
+EXIT_APOS_MUTACAO=1
+--- FAIL: TestEvidenceLegendMatchesTable
+    legenda diz 179 ✅, mas evidencias.tsv tem 178
+```
+
+E o controlo mais forte não foi encenado: **na primeira execução o gate falhou
+contra o repositório tal como estava**, com seis erros, apanhando o defeito
+real. Os três controlos negativos estão em `AUDITORIA-EVIDENCIAS.md` §6.1.
+
+**Status**: **corrigido** — travado por `TestEvidenceLegendMatchesTable`,
+`TestEvidenceTableMatchesSpec`, `TestEvidenceReportMatchesSpec` e
+`TestEvidenceReportSummaryMatchesTable`.
+
+**Nota da integração (2026-08-26)**: o gate foi portado para a base canónica de
+`3a0b48b4`, onde o contrato voltou a 141 operações com um nome só por
+capacidade. Ele não conhece nenhum número: lê a fonte única e exige que as
+outras três a espelhem, pelo que atravessou a integração das 25 promoções sem
+ser tocado. A legenda foi ajustada ao estado final — `122 ✅, 8 🟡, 4 ❌, 7 ⬜`
+— e os três controlos negativos foram REEXECUTADOS sobre esse estado, incluindo
+um novo: a troca COMPENSADA (uma rota sobe, outra desce) mantém os quatro
+totais e mesmo assim `TestEvidenceTableMatchesSpec` acusa as duas rotas pelo
+nome. É a razão de o gate comparar rota a rota e não só o total.
+
+<!-- f-status: corrigido -->
+
+
+## F282 — as 98 ✅ têm todas a MESMA frase de evidência; nenhuma diz o que foi medido
+
+**Data**: 2026-08-26. **Contexto**: idem F281.
+
+**Onde**: `docs/OPENAPI-EVIDENCIAS.md`, coluna "Evidência" da tabela completa,
+no último commit em que ela existiu (`fea7e6e`).
+
+**Problema**: agrupando o texto de evidência das 98 ✅:
+
+```
+$ awk -F'|' 'NF>=8 {m=$7; gsub(/ /,"",m); if(m=="✅"){e=$8; gsub(/^ +| +$/,"",e); print e}}' \
+    docs/OPENAPI-EVIDENCIAS.md | sort | uniq -c
+  98  chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente.
+```
+
+**98 de 98 genéricas, 0 específicas.** Uma frase-modelo repetida, que não diz
+qual segunda leitura, nem o que foi lido, nem que valor mudou. Uma ✅ cuja prova
+é uma frase-modelo é **indistinguível de uma ✅ por decreto**, por construção.
+
+A gravidade está na assimetria — as outras marcas documentam-se:
+
+| marca | total | específicas | % |
+|---|---:|---:|---:|
+| ❌ | 3 | 3 | 100% |
+| 🟡 | 8 | 6 | 75% |
+| ⬜ | 32 | 21 | 66% |
+| ✅ | 98 | **0** | **0%** |
+
+**A marca com a afirmação mais forte é a única sem prova nenhuma.**
+
+Agrava: `git log --oneline -- api/openapi/evidencias.tsv` mostra que a tabela
+**nasceu** em `b0b8323` já com 98 ✅ (`1 file changed, 153 insertions(+)`), e que
+as 141 marcas antigas **nunca mudaram** desde então (medido: `rotas antigas
+ainda presentes: 141`, zero transições). Nenhuma ✅ deste repositório foi alguma
+vez promovida pela regra de transição — todas nasceram classificadas.
+
+**Correcção sugerida**: fazer da evidência um CAMPO da tabela versionada, com o
+que foi lido de volta e o valor observado, em vez de prosa num documento
+gerado. Enquanto isso não existir, as dez rotas listadas em
+`AUDITORIA-EVIDENCIAS.md` §3 são 🟡 por definição.
+
+**Status**: **parcialmente corrigido**. A campanha da sessão descartável
+registou o observador CONCRETO de cada uma das 25 rotas que promoveu, e a
+integração de 2026-08-26 repôs a coluna **Evidência** em
+`docs/OPENAPI-EVIDENCIAS.md` com esse texto. São hoje **43 de 141** operações
+com evidência registada — as 25 promovidas, as 4 ❌, as 8 🟡 e as 7 ⬜.
+
+As restantes 98 ✅ continuam com a frase-modelo, e o texto que abre a tabela
+completa diz agora que são elas as **inauditáveis** — a distinção que esta
+entrada pede que não se apague está escrita no próprio relatório, em vez de só
+aqui. Reclassificá-las exige as sessões de WhatsApp reais.
+
+<!-- f-status: aberto -->
+
+
+## F283 — `2d96535` apagou a coluna de evidência, e duas promessas ficaram a apontar para o vazio
+
+**Data**: 2026-08-26. **Contexto**: idem F281.
+
+**Onde**: `docs/OPENAPI-EVIDENCIAS.md:97` (cabeçalho da tabela completa);
+`api/openapi/evidencias.tsv:7` e `api/openapi/base.yaml:122` (as promessas).
+
+**Problema**: ao regenerar o relatório, `2d96535` trocou a última coluna:
+
+```
+@fea7e6e : | Grupo | Método | Endpoint | Documentado | Swagger | Teste | Evidência |
+@2d96535 : | Grupo | Método | Caminho  | Forma       | Teste   | Título |
+```
+
+Com a coluna **Evidência** desapareceram os 21 motivos específicos das ⬜ e os 6
+das 🟡 — a única parte do registo com conteúdo medido rota a rota:
+
+```
+$ grep -c 'apagaria uma sessao\|derrubaria\|alteraria o avatar' docs/OPENAPI-EVIDENCIAS.md
+0
+```
+
+E duas afirmações passaram a mentir:
+
+- `evidencias.tsv:7` — `⬜ não executada, com o motivo dito em docs/OPENAPI-EVIDENCIAS.md`
+- `base.yaml:122` — "O detalhe rota a rota está em `docs/OPENAPI-EVIDENCIAS.md`."
+
+Confirmado que o texto não migrou para as descrições das rotas: a única
+ocorrência das frases no `openapi.yaml` é a própria legenda, não uma descrição
+de rota.
+
+Um commit de documentação que **melhorou os números e destruiu a prova**. Hoje a
+contagem honesta é **0 de 232 operações com evidência registada**.
+
+**Correcção sugerida**: repor a coluna no gerador do relatório — o texto está em
+`git show fea7e6e:docs/OPENAPI-EVIDENCIAS.md` e é recuperável integralmente.
+
+**Status**: **corrigido na integração de 2026-08-26**. A coluna **Evidência**
+voltou à tabela completa de `docs/OPENAPI-EVIDENCIAS.md`, e o texto que a
+antecede diz explicitamente quais linhas ainda trazem a frase-modelo — as duas
+promessas deixam de apontar para o vazio. A contagem honesta passa de 0 de 232
+para **43 de 141** com observador concreto registado. Ver F282 para o que
+falta.
+
+<!-- f-status: corrigido -->
+
+
+## F284 — `fea7e6e` parte quatro gates e só é reparado dois commits depois (perigo de bisect)
+
+**Data**: 2026-08-26. **Contexto**: idem F281.
+
+**Onde**: commit `fea7e6eb`, `pkg/bootstrap/wiring_routes.go` e
+`api/openapi/paths/`.
+
+**Problema**: `fea7e6e` regista 91 rotas canónicas no router **sem** as
+acrescentar a `paths/`, a `evidencias.tsv`, à tabela de stdio ou aos golden.
+Medido directamente nesse commit, antes do *fast-forward*:
+
+```
+$ go test ./pkg/bootstrap/ -run 'TestOpenAPI|TestRegisteredHTTPRoutesHaveStdioEntry' -count=1
+EXIT=1
+--- FAIL: TestOpenAPICobreTodasAsRotasRegistadas
+    openapi_coverage_test.go:114: 91 rotas registadas SEM entrada na especificação OpenAPI.
+--- FAIL: TestRegisteredHTTPRoutesHaveStdioEntry
+    stdio_route_consistency_test.go:222: registered HTTP route POST /chats/archive has no stdio entry...
+```
+
+`9a6b3ff` e `2d96535` reparam tudo; em `2d96535` a suíte passa (exit 0). **Não
+há trabalho perdido** — o enunciado da auditoria supunha que o remate estivesse
+por commitar no worktree `wa-api-wa-noise`, e esse worktree está limpo, dois
+commits à frente.
+
+O que fica é o risco: qualquer `git bisect` que aterre em `fea7e6e` vê quatro
+gates vermelhos que nada têm a ver com o defeito procurado.
+
+**Nota de honestidade**: medi directamente dois dos quatro gates
+(`TestOpenAPICobreTodasAsRotasRegistadas`, `TestRegisteredHTTPRoutesHaveStdioEntry`).
+`TestGolden` e `cmd/logcov` vêm da medição de outro worker e **não os
+reexecutei** em `fea7e6e`.
+
+**Correcção sugerida**: nenhuma no código. Se a série ainda não foi publicada,
+`rebase -i` para juntar `fea7e6e`+`9a6b3ff` deixaria a história bissectável.
+
+**Status**: **fechado — não corrigir** o código; é achado de história, e
+reescrevê-la agora custaria mais do que vale. Registado para que quem bisectar
+saiba.
+
+<!-- f-status: nao-se-faz -->
+
+
+## F285 — `injectPathParams` corre em duas rotas que não precisam, e reescreve o corpo como `{}`
+
+**Data**: 2026-08-26. **Contexto**: idem F281, ao verificar se a herança de
+marca das canónicas atravessa código novo.
+
+**Onde**: `pkg/presentation/http/canonico.go:57` (a condição) e `:70` (o mapa).
+
+```go
+if strings.Contains(linha.CanonicalPath, "{") {
+    manipulador = injectPathParams(manipulador)
+}
+```
+
+```go
+var bodyFieldForPathParam = map[string]string{
+    "group_jid":     "groupJID",
+    "community_jid": "communityJID",
+}
+```
+
+**Problema**: a condição é "o caminho contém `{`", mas o mapa só conhece
+`group_jid` e `community_jid`. Medido:
+
+```
+$ awk -F'\t' '!/^#/ && NF==4 && $4 ~ /\{/ {n++} END{print n}' api/openapi/caminhos.tsv
+12                      <- embrulhadas pelo adaptador
+$ awk -F'\t' '!/^#/ && NF==4 && ($4 ~ /\{group_jid\}/ || $4 ~ /\{community_jid\}/) {n++} END{print n}' api/openapi/caminhos.tsv
+10                      <- as que precisam mesmo
+```
+
+As duas a mais são `GET /users/lid/{jid}` e `GET /users/profile/{jid}`, que já
+tinham o parâmetro no caminho na forma ANTIGA — nada sai do corpo. Nelas o
+adaptador lê o corpo, não encontra `jid` no mapa, não injecta nada, e ainda
+assim **reescreve o corpo como `{}`** e ajusta `ContentLength`. Funciona por
+acidente, porque o manipulador lê o `{jid}` de `mux.Vars` e não do corpo.
+
+É código a correr onde não devia, num caminho que ninguém mediu — e o acidente
+que o salva é exactamente o tipo de coisa que deixa de valer quando o
+manipulador mudar.
+
+**Correcção sugerida**: condicionar pelo mapa e não pela chaveta —
+`if pathParamsNeedInjection(linha.CanonicalPath)`, verificando se algum
+parâmetro do caminho está em `bodyFieldForPathParam`. E não reescrever o corpo
+quando nada foi injectado.
+
+**Status**: **não corrigido** — fora do âmbito da auditoria, e a política do
+projecto proíbe corrigir de graça defeito pré-existente sem perguntar.
+
+<!-- f-status: aberto -->
+
+
+## F286 — "as nove reestruturadas": três números para o mesmo conjunto, e pelo menos uma sem re-medição
+
+**Data**: 2026-08-26. **Contexto**: idem F285.
+
+**Onde**: mensagem de `9a6b3ff5`; `pkg/presentation/http/canonico.go:57`;
+`docs/ENDPOINTS.md:566`.
+
+**Problema**: `9a6b3ff` justifica a herança de marca dizendo que "as **nove**
+reestruturadas foram RE-MEDIDAS, porque nelas há código novo (o adaptador de
+injecção)". Três fontes dão três números para esse conjunto:
+
+| fonte | diz |
+|---|---:|
+| mensagem de `9a6b3ff` ("oito responderam; a nona deu 400") | **9** |
+| `canonico.go:57` — rotas embrulhadas pelo adaptador | **12** |
+| canónicas que precisam mesmo da injecção | **10** |
+| `docs/ENDPOINTS.md:566` — título "As **nove** que mudaram de forma" | **9**, mas a tabela lista **12** |
+
+Consequências:
+
+1. **10 rotas atravessam código novo e há 9 medições registadas.** Pelo menos
+   uma marca herdada nunca foi confirmada através do adaptador — herança
+   disfarçada de medição.
+2. **Não é possível dizer qual**, porque nenhuma fonte enumera as nove. É a
+   falha de "afirmação agregada": um número sem o conjunto não é auditável.
+3. A tabela do `ENDPOINTS.md` está sob a frase "Nestas o identificador **sai do
+   corpo** e vai para o caminho", que é **falsa** para `GET /users/lid/{jid}` e
+   `GET /users/profile/{jid}` (ver F285).
+
+Verificado que a herança em si é literal e sem excepções: cruzando as 91 linhas
+de `caminhos.tsv` com `evidencias.tsv`, as 91 canónicas têm exactamente a marca
+da forma antiga (zero divergências).
+
+**Correcção sugerida**: enumerar as dez no `ENDPOINTS.md` com o resultado da
+medição ao lado de cada nome, e corrigir o título "nove". Re-medir a que faltar.
+
+**Status**: **não corrigido** — exige as sessões reais para re-medir.
+
+<!-- f-status: aberto -->
+
+
+## F287 — `canonico.go` tem identificadores e comentários em português, contra a regra do `CLAUDE.md`
+
+**Data**: 2026-08-26. **Contexto**: idem F285.
+
+**Onde**: `pkg/presentation/http/canonico.go` — ficheiro NOVO, criado em
+`fea7e6e`.
+
+**Problema**: o `CLAUDE.md` fixa inglês para identificadores e comentários em
+todo o código novo. O ficheiro mistura: a API exportada está em inglês
+(`CanonicalRoute`, `RegisterCanonicalAliases`, `injectPathParams`,
+`bodyFieldForPathParam`), mas **todos os locais e todos os comentários estão em
+português** — `porChave`, `orfas`, `linha`, `chave`, `entrada`, `manipulador`,
+`bruto`, `corpo`, `novo`, `parametro`, `valor`, `campo`, `conhecido`, `jaVeio`,
+`tabela`.
+
+Por ser ficheiro novo, não se aplica a atenuante do "converta só o que tocou".
+
+**Correcção sugerida**: renomear os locais e traduzir os comentários, num commit
+que só faça isso — misturar renomeação com mudança de comportamento é
+exactamente o que o `CLAUDE.md` proíbe.
+
+**Status**: **não corrigido** — renomeação em massa fora do âmbito da auditoria;
+seria ruído no diff que a revisão desta auditoria tem de ler.
+
+<!-- f-status: aberto -->
+
+
+## F288 — `make check` ja' falha no HEAD por causa do HOUSEKEEP do wa-headless, ha' 466 commits
+
+**Data**: 2026-08-26. **Contexto**: auditoria de evidência (F281); apareceu ao
+correr `make check` para validar o gate novo.
+
+**Onde**: `internal/wa-headless/gate_test.go:635` e `:645`, que lêem
+`internal/wa-headless/HOUSEKEEP.md` (o `housekeepPath` do teste é relativo ao
+pacote — **não** é o `HOUSEKEEP.md` da raiz).
+
+**Problema**: `make check` termina em erro no HEAD `2d965350`, e a falha **não
+tem nada a ver com o trabalho desta auditoria**:
+
+```
+--- FAIL: TestHousekeepEntriesAreMachineReadable (0.19s)
+    gate_test.go:635: these statuses start with a word outside the vocabulary the file
+        already uses, so a scan cannot classify them:
+          H144: "H75 corrigida quanto ao diagnóstico; envio de tipos ricos co"
+    gate_test.go:645: entries with several authoritative statuses — read these by hand:
+          H5 (2 statuses), H14 (2 statuses), H90 (2 statuses)
+FAIL	wa-api/internal/wa-headless	103.387s
+make: *** [test] Error 1
+```
+
+São dois defeitos distintos no mesmo ficheiro:
+
+1. **H144** abre o `Status` com uma palavra fora do vocabulário
+   (`openStatusTokens`/`closedStatusTokens`), logo uma varredura não o consegue
+   classificar.
+2. **H5, H14 e H90** têm **dois** estados autoritativos cada um — o mesmo
+   defeito de "duas fontes de verdade" que o gate existe para impedir.
+
+**Confirmado pré-existente**, e não introduzido por mim:
+
+```
+$ git log --oneline -1 -- internal/wa-headless/HOUSEKEEP.md
+1117852d 2026-08-23 wa-headless: H75 corrigida — o primitivo genérico de envio existe e carrega
+$ git rev-list --count 1117852d..HEAD
+466
+$ git diff 2d965350..HEAD --stat -- internal/wa-headless/HOUSEKEEP.md
+(vazio — os meus commits não tocaram no ficheiro)
+```
+
+O texto de H144 (`"H75 corrigida quanto ao diagnóstico…"`) aponta directamente
+para `1117852d`, que é o commit que o introduziu.
+
+**Verificado que o resto está verde**: no `make check` final, a única falha é
+esta. `cmd/logcov` (339,99 s), `pkg/bootstrap` (70,54 s) e todos os outros
+pacotes passam.
+
+**Correcção sugerida**: reescrever o `Status` de H144 com uma palavra do
+vocabulário existente, e resolver em H5, H14 e H90 qual dos dois estados é o
+autoritativo — apagando o outro, não acrescentando um terceiro.
+
+**Referência cruzada**: o dado vive em `internal/wa-headless/HOUSEKEEP.md`, mas
+a entrada fica aqui porque quem sofre é um **gate** do build, que é âmbito da
+raiz. Quem for corrigir mexe no ficheiro do wa-headless.
+
+**Status**: **não corrigido** — pré-existente e fora do âmbito da auditoria de
+evidência. Registado porque um `make check` vermelho no HEAD faz a próxima
+sessão gastar tempo a perceber se foi ela que partiu alguma coisa.
+
+<!-- f-status: aberto -->
+
+
+
 ## F289 — `orphan-browser-check` acusa como órfão um browser cujo DONO está vivo, e por isso bloqueia qualquer `make check` concorrente noutro worktree
 
 **Data/contexto**: 2026-08-26, achado de lado ao correr o gate no fim da

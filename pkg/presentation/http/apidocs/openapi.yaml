@@ -10913,7 +10913,7 @@ components:
       name: token
       type: apiKey
 info:
-  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## Campos que a API não conhece\n\nUm campo que o servidor não reconhece é **ignorado**, e o pedido segue sem\nele. Isto é herança do decodificador de JSON do Go e vale para toda a API.\n\n**É mais perigoso do que parece**, e foi medido: um nome mal escrito não\nproduz erro — produz o valor zero. Quando o valor zero significa alguma\ncoisa, o erro de digitação vira uma escolha silenciosa. O caso real:\n`{\"mute\": true, \"duration\": \"8h\"}` em `/chat/mute` devolve `200` e cala a\nconversa **para sempre**, porque o campo é `mute_duration` e a ausência\ndele significa \"para sempre\".\n\nDesde 2026-08-26 o servidor **regista** cada campo desconhecido:\n\n```\nWRN unknown field \"duration\" route=/chat/mute unknown_fields=[\"duration\"] req_id=…\n```\n\nE há um modo **estrito**, desligado por omissão, que os recusa:\n\n```\nWA_API_STRICT_UNKNOWN_FIELDS=true\nPOST /chat/mute {\"jid\":\"…\",\"mute\":true,\"duration\":\"8h\"}\n  -> 400 {\"error\":{\"code\":\"unknown_field\",\"message\":\"unknown field \\\"duration\\\"\"}}\n```\n\nEstá desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se\nintegra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata\nde apanhar um nome errado antes de ele chegar a produção.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 141 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-26, com duas sessões reais: **98 ✅, 8 \U0001F7E1, 3 ❌, 32 ⬜**.\n\nAs 32 por testar não são esquecimento: escreveriam configuração de uma\nsessão em uso, derrubariam sessões vivas, criariam ou apagariam contas, ou\nalterariam o perfil. O detalhe rota a rota está em\n`docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
+  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## Campos que a API não conhece\n\nUm campo que o servidor não reconhece é **ignorado**, e o pedido segue sem\nele. Isto é herança do decodificador de JSON do Go e vale para toda a API.\n\n**É mais perigoso do que parece**, e foi medido: um nome mal escrito não\nproduz erro — produz o valor zero. Quando o valor zero significa alguma\ncoisa, o erro de digitação vira uma escolha silenciosa. O caso real:\n`{\"mute\": true, \"duration\": \"8h\"}` em `/chat/mute` devolve `200` e cala a\nconversa **para sempre**, porque o campo é `mute_duration` e a ausência\ndele significa \"para sempre\".\n\nDesde 2026-08-26 o servidor **regista** cada campo desconhecido:\n\n```\nWRN unknown field \"duration\" route=/chat/mute unknown_fields=[\"duration\"] req_id=…\n```\n\nE há um modo **estrito**, desligado por omissão, que os recusa:\n\n```\nWA_API_STRICT_UNKNOWN_FIELDS=true\nPOST /chat/mute {\"jid\":\"…\",\"mute\":true,\"duration\":\"8h\"}\n  -> 400 {\"error\":{\"code\":\"unknown_field\",\"message\":\"unknown field \\\"duration\\\"\"}}\n```\n\nEstá desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se\nintegra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata\nde apanhar um nome errado antes de ele chegar a produção.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 141 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-26, com duas sessões reais mais um lote de sessões\ndescartáveis: **122 ✅, 8 \U0001F7E1, 4 ❌, 7 ⬜**.\n\nAs 7 por testar não são esquecimento, e nenhuma delas o é por \"mexeria na\nsessão em uso\" — esse motivo caiu com as sessões descartáveis, e valeu 25\nrotas. As que restam exigem um bucket S3 descartável, uma chamada a entrar,\nou uma conta emparelhada cujo perfil seria alterado. O detalhe rota a rota\nestá em `docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
   title: wa-api — API HTTP para WhatsApp
   version: 1.0.6
 openapi: 3.0.3
@@ -11104,7 +11104,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: ⬜ Criar uma sessão
+      summary: ✅ Criar uma sessão
       tags:
         - Administração
   /admin/users/{id}:
@@ -11184,7 +11184,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: ⬜ Apagar o registo de uma sessão
+      summary: ✅ Apagar o registo de uma sessão
       tags:
         - Administração
     get:
@@ -11360,7 +11360,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: ⬜ Alterar uma sessão
+      summary: ✅ Alterar uma sessão
       tags:
         - Administração
   /admin/users/{id}/full:
@@ -11448,7 +11448,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenAdmin: []
-      summary: ⬜ Apagar uma sessão por completo, com ficheiros e ligação
+      summary: ✅ Apagar uma sessão por completo, com ficheiros e ligação
       tags:
         - Administração
   /call/reject:
@@ -13036,6 +13036,20 @@ paths:
         - `request_id` na resposta identifica a mensagem de pedido criada, não
           a mensagem pedida — essa continua em `message_id`.
 
+        **Como se observa o reenvio, quando ele chega** (apurado a 2026-08-26):
+        o `request_id` **R** devolvido aqui reaparece na mensagem reenviada, no
+        campo `UnavailableRequestID`
+        (`internal/wa-noise/capabilities/message/history_sync.go:250`). Há três
+        leituras que o expõem:
+
+        1. `GET /chats/history` sobre o mesmo `chat_jid` — o `data_json` do
+           elemento contém `"UnavailableRequestID":"R"`. **Exige** que a
+           gravação de histórico esteja ligada: com `History` a `0` em
+           `GET /webhook/history`, nada é gravado.
+        2. o webhook da sessão, no evento `type: "Message"` — o corpo leva o
+           evento inteiro em `event`.
+        3. `GET /session/ws`, com o mesmo payload.
+
         **Autenticação**: token de sessão.
       requestBody:
         content:
@@ -14532,9 +14546,22 @@ paths:
       description: |
         > **Substitui `POST /chat/send/sticker`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
-        Envia um autocolante. A imagem recebida é **sempre convertida para WebP**
-        pelo servidor; o que sobe ao WhatsApp é o resultado da conversão, nunca
-        os bytes de entrada.
+        Envia um autocolante.
+
+        **CORRECÇÃO medida a 2026-08-26**: esta descrição afirmava que a imagem
+        é "sempre convertida para WebP" pelo servidor. **Não é.** A conversão
+        corre em dois ramos apenas — `image/jpeg`, `image/png`, `image/jpg` num,
+        `image/gif` e `video/*` no outro; qualquer outro tipo, **incluindo
+        `image/webp`**, cai no `default` de `ConvertToWebPSticker`
+        (`pkg/infra/media/sticker/exif.go:62`) e sobe **tal e qual**, recebendo
+        só o EXIF de pacote. O tipo é decidido por `http.DetectContentType`, que
+        reconhece a assinatura WebP.
+
+        **Consequência prática**: um WebP que já vem do chamador **não é
+        redimensionado para 512×512**. Se ele não tiver as dimensões que o
+        WhatsApp desenha, a rota devolve `200`, a mensagem chega, e o cliente
+        mostra uma bolha vazia — foi exactamente isso que a bateria de campo
+        mediu. **Para que a conversão corra, envie PNG ou JPEG.** É a F279.
 
         **Quando usar**: figurinhas. Uma imagem comum enviada por aqui vira
         autocolante — o que muda o tamanho com que é desenhada e retira legenda e
@@ -14549,8 +14576,15 @@ paths:
           são metadata e não alteram a imagem.
 
         **Ressalva medida (2026-08-26)**: a rota devolveu `200` e a mensagem
-        chegou, mas com um WebP sintético o cliente desenha uma bolha vazia. A
-        rota está exercitada; o autocolante em si **não** está provado.
+        chegou, mas com um WebP sintético o cliente desenha uma bolha vazia — pela
+        razão acima: aquele WebP nunca foi convertido. A rota está exercitada; o
+        autocolante em si **não** está provado.
+
+        **Como se prova, sem olhar para o ecrã**: o autocolante enviado é gravado
+        em `message_history` (`adapters/chat/messenger.go:570`), logo
+        `GET /chats/history` devolve o descritor em `data_json`, e
+        `POST /chats/downloadsticker` traz os bytes de volta — que se verificam
+        como `RIFF`…`WEBP` de 512×512. Procedimento em `HUMAN-LAST.md` §2.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -15473,7 +15507,18 @@ paths:
 
         **Desfecho parcial**: o adaptador faz uma chamada por solicitante. Se
         algum falhar, a rota devolve erro — não há corpo que relate quais
-        passaram.
+        passaram. **E não é por o WhatsApp não dizer**: ele devolve
+        `[]types.GroupParticipant` com um `Error` por solicitante, e o adaptador
+        descarta esse valor (`adapters/group/participants.go:81`). A rota irmã
+        `POST /groups/{group_jid}/participants` expõe a mesma lista. É a F280.
+
+        **Como se observa o efeito**: por `GET /groups/{group_jid}/join-requests`, lido
+        **antes e depois** — a decisão retira o solicitante da fila —, e por
+        `POST /groups/info`, onde um aprovado passa a constar de `Participants`.
+        Um `200` contra fila VAZIA não prova nada, e foi essa a medição de
+        2026-08-26. A fila enche-se só por API: entrar por link num grupo com
+        aprovação exigida cria um pendente
+        (`capabilities/group/invite.go:117`). Procedimento em `HUMAN-LAST.md` §3.
 
         **Autenticação**: token de sessão.
       parameters:
@@ -17028,7 +17073,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Revogar a chave HMAC da sessão
+      summary: ✅ Revogar a chave HMAC da sessão
       tags:
         - Integrações e configuração
     get:
@@ -17138,7 +17183,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Gravar a chave HMAC da sessão
+      summary: ✅ Gravar a chave HMAC da sessão
       tags:
         - Integrações e configuração
   /hmac/configure:
@@ -17203,7 +17248,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Gravar a chave HMAC da sessão (caminho original)
+      summary: ✅ Gravar a chave HMAC da sessão (caminho original)
       tags:
         - Integrações e configuração
   /labels:
@@ -18279,9 +18324,23 @@ paths:
         `server_id` obtidos em `POST /newsletter/messages`.
 
         **Regras**: `jid` e `serverIDs` são obrigatórios; lista vazia é recusada
-        com `400 missing_server_ids`. `data` vem `null` em sucesso, e **não há
-        forma de confirmar o efeito por esta API** — foi por isso que a bateria
-        de campo a classificou como `200` sem observador independente.
+        com `400 missing_server_ids`. `data` vem `null` em sucesso.
+
+        **CORRECÇÃO a 2026-08-26**: esta descrição dizia que "não há forma de
+        confirmar o efeito por esta API". O observador **existe por desenho** —
+        a operação incrementa o contador de visualizações
+        (`internal/wa-noise/core/newsletter.go:52`), e esse contador é servido
+        por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`), que é
+        `POST /newsletters/updates`. O que acontece é que essa rota está
+        **inoperante** (F265: `500` ao fim de 30 s). Há uma segunda via, nunca
+        exercitada: `POST /newsletters/subscribe` entrega os mesmos dados como
+        evento `NewsletterLiveUpdate`, que chega ao webhook e a `/session/ws`
+        com `ViewsCount` por mensagem.
+
+        **O que NÃO serve como observador**: o `ViewsCount` de
+        `POST /newsletters/messages`. O campo existe e chega ao JSON, mas veio
+        `0` nas sessenta publicações medidas — um valor que nunca muda não
+        distingue caso nenhum. Ver `OBSERVADORES-AMBAR.md` §4.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -18498,21 +18557,7 @@ paths:
         - Canais
   /newsletters/react:
     post:
-      description: |
-        > **Substitui `POST /newsletter/react`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
-
-        Põe — ou tira — uma reação numa publicação do canal.
-
-        **Como se REMOVE a reação**: enviando `reaction` vazio. É por isso que
-        esse campo não é obrigatório: exigi-lo tornaria impossível desfazer
-        (`newsletter_ops.go:234`).
-
-        **Regras**: `jid` e `serverID` são obrigatórios. `serverID` a zero é
-        recusado com `400 missing_server_id`. `data` vem `null` em sucesso, e o
-        efeito não é confirmável por esta API — classificada como `200` sem
-        observador independente na bateria de campo.
-
-        **Autenticação**: token de sessão.
+      description: "> **Substitui `POST /newsletter/react`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.\n\nPõe — ou tira — uma reação numa publicação do canal.\n\n**Como se REMOVE a reação**: enviando `reaction` vazio. É por isso que\nesse campo não é obrigatório: exigi-lo tornaria impossível desfazer\n(`newsletter_ops.go:234`).\n\n**Regras**: `jid` e `serverID` são obrigatórios. `serverID` a zero é\nrecusado com `400 missing_server_id`. `data` vem `null` em sucesso.\n\n**CORRECÇÃO a 2026-08-26**: esta descrição dizia que \"o efeito não é\nconfirmável por esta API\". **É.** `POST /newsletters/messages` devolve\n`ReactionCounts` por publicação, e ele traz valores reais — o exemplo\npublicado nesta mesma documentação é `{'\U0001F44D': 3, '\U0001F602': 58}`. O efeito\nconfirma-se lendo o mesmo `MessageServerID` **antes e depois**, e\nfechando com a REMOÇÃO (`reaction` vazio) para ver o contador voltar ao\nvalor inicial: sem esse terceiro passo, um incremento pode ser de outra\npessoa.\n\nDuas armadilhas ao comparar: `count` é obrigatório de facto nas\nleituras, e **as chaves de emoji não são normalizadas** (`\"❤\"` e `\"❤️\"`\nsão entradas separadas). Ver `OBSERVADORES-AMBAR.md` §5.\n\n**Autenticação**: token de sessão.\n"
       requestBody:
         content:
           application/json:
@@ -18890,7 +18935,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Configurar o proxy de saída da sessão
+      summary: ✅ Configurar o proxy de saída da sessão
       tags:
         - Integrações e configuração
   /s3/config:
@@ -18931,7 +18976,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Remover a configuração de S3 da sessão
+      summary: ✅ Remover a configuração de S3 da sessão
       tags:
         - Integrações e configuração
     get:
@@ -19069,7 +19114,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Gravar a configuração de S3 da sessão
+      summary: ✅ Gravar a configuração de S3 da sessão
       tags:
         - Integrações e configuração
   /s3/configure:
@@ -19144,7 +19189,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Gravar a configuração de S3 da sessão (caminho original)
+      summary: ✅ Gravar a configuração de S3 da sessão (caminho original)
       tags:
         - Integrações e configuração
   /s3/test:
@@ -19301,7 +19346,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Iniciar a ligação da sessão ao WhatsApp
+      summary: ✅ Iniciar a ligação da sessão ao WhatsApp
       tags:
         - Sessões
   /session/disconnect:
@@ -19350,7 +19395,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Derrubar o transporte da sessão sem desemparelhar
+      summary: ✅ Derrubar o transporte da sessão sem desemparelhar
       tags:
         - Sessões
   /session/history:
@@ -19421,7 +19466,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Configurar quantas mensagens a sessão guarda
+      summary: ✅ Configurar quantas mensagens a sessão guarda
       tags:
         - Sessões
   /session/hmac/config:
@@ -19462,7 +19507,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Revogar a chave HMAC desta sessão
+      summary: ✅ Revogar a chave HMAC desta sessão
       tags:
         - Sessões
     get:
@@ -19580,7 +19625,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Gravar a chave HMAC de assinatura dos webhooks
+      summary: ✅ Gravar a chave HMAC de assinatura dos webhooks
       tags:
         - Sessões
   /session/logout:
@@ -19645,7 +19690,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Desvincular o aparelho da conta de WhatsApp
+      summary: ❌ Desvincular o aparelho da conta de WhatsApp
       tags:
         - Sessões
   /session/pairphone:
@@ -20000,7 +20045,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Configurar o proxy de saída desta sessão
+      summary: ✅ Configurar o proxy de saída desta sessão
       tags:
         - Sessões
   /session/qr:
@@ -20091,7 +20136,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Remover a configuração S3 desta sessão
+      summary: ✅ Remover a configuração S3 desta sessão
       tags:
         - Sessões
     get:
@@ -20235,7 +20280,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Gravar a configuração S3 desta sessão
+      summary: ✅ Gravar a configuração S3 desta sessão
       tags:
         - Sessões
   /session/s3/test:
@@ -20498,7 +20543,7 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
       security:
         - TokenSessao: []
-      summary: ⬜ Receber os eventos da sessão em tempo real (WebSocket)
+      summary: ✅ Receber os eventos da sessão em tempo real (WebSocket)
       tags:
         - Sessões
   /status/set/audio:
@@ -22174,7 +22219,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Remover o webhook da sessão
+      summary: ✅ Remover o webhook da sessão
       tags:
         - Integrações e configuração
     get:
@@ -22313,7 +22358,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Definir o webhook da sessão
+      summary: ✅ Definir o webhook da sessão
       tags:
         - Integrações e configuração
     put:
@@ -22398,7 +22443,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Actualizar ou desligar o webhook da sessão
+      summary: ✅ Actualizar ou desligar o webhook da sessão
       tags:
         - Integrações e configuração
   /webhook/history:
@@ -22511,7 +22556,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ⬜ Definir o limite de gravação de mensagens
+      summary: ✅ Definir o limite de gravação de mensagens
       tags:
         - Integrações e configuração
 security:
