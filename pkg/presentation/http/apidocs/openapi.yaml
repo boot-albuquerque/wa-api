@@ -14584,7 +14584,7 @@ paths:
         em `message_history` (`adapters/chat/messenger.go:570`), logo
         `GET /chats/history` devolve o descritor em `data_json`, e
         `POST /chats/downloadsticker` traz os bytes de volta — que se verificam
-        como `RIFF`…`WEBP` de 512×512. Procedimento em `HUMAN-LAST.md` §2.
+        como `RIFF`…`WEBP` de 512×512. Procedimento em `HUMAN-LAST.md` B.1.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -15518,7 +15518,7 @@ paths:
         Um `200` contra fila VAZIA não prova nada, e foi essa a medição de
         2026-08-26. A fila enche-se só por API: entrar por link num grupo com
         aprovação exigida cria um pendente
-        (`capabilities/group/invite.go:117`). Procedimento em `HUMAN-LAST.md` §3.
+        (`capabilities/group/invite.go:117`). Procedimento em `HUMAN-LAST.md` C.1.
 
         **Autenticação**: token de sessão.
       parameters:

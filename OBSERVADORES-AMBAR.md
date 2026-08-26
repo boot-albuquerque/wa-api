@@ -96,7 +96,7 @@ Duas armadilhas medidas no código, que quem for medir tem de saber:
 
 **Veredicto: `OBSERVADOR_EXISTE`** — três, independentes entre si
 (banco/`GET /chats/history`, webhook, WebSocket). Falta a pré-condição, que não
-é criável sem par real. Procedimento em `HUMAN-LAST.md` §1.
+é criável sem par real. Procedimento em `HUMAN-LAST.md` D.2.
 
 ---
 
@@ -187,7 +187,7 @@ produção é dependência de sistema e a sua ausência dá
 
 **Veredicto: `SÓ_FALTA_FIXTURE`** — o fixture é um PNG 512×512, e o observador
 (descarga + verificação dos bytes) já existe e é ✅. Falta só a conta
-emparelhada para correr o ciclo. Procedimento em `HUMAN-LAST.md` §2.
+emparelhada para correr o ciclo. Procedimento em `HUMAN-LAST.md` B.1.
 
 ---
 
@@ -250,7 +250,7 @@ Duas armadilhas já documentadas e que fazem esta sequência falhar se ignoradas
 **Veredicto: `OBSERVADOR_EXISTE`** — `GET /groups/{group_jid}/join-requests`, com
 transição medida antes/depois, mais `POST /groups/info` como segunda
 confirmação. Exige duas sessões emparelhadas; nada mais.
-Procedimento em `HUMAN-LAST.md` §3.
+Procedimento em `HUMAN-LAST.md` C.1.
 
 ---
 
@@ -308,7 +308,7 @@ Duas, e a segunda é a que morde:
 exercitado. A rota **fica 🟡**, mas por motivo preciso: *"o observador é
 `ViewsCount`, servido por `/newsletters/updates` (inoperante, F265) ou por
 `/newsletters/subscribe` + evento; `POST /newsletters/messages` traz o campo mas
-mediu `0` em 60/60 e não distingue"*. Procedimento em `HUMAN-LAST.md` §4.
+mediu `0` em 60/60 e não distingue"*. Procedimento em `HUMAN-LAST.md` B.2.
 
 ---
 
@@ -364,7 +364,7 @@ truque nosso.
 **Veredicto: `OBSERVADOR_EXISTE`, e é o mais barato das oito.** Uma única
 sessão emparelhada e um canal com uma publicação bastam. O que falta é
 autorização humana: reagir a uma publicação de um canal público é acto
-visível numa conta real. Procedimento em `HUMAN-LAST.md` §5.
+visível numa conta real. Procedimento em `HUMAN-LAST.md` B.3.
 
 ---
 
@@ -431,7 +431,7 @@ dígito que a F256 suspeita não corresponder a conta nenhuma.
 `GET /chats/history?chat_jid=status@broadcast` ou pelo webhook/WS dela. Não é
 `SEM_OBSERVADOR_PROGRAMATICO`: o que falta é a pré-condição da F256, e ela é
 verificável por API antes de gastar uma publicação.
-Procedimento em `HUMAN-LAST.md` §6.
+Procedimento em `HUMAN-LAST.md` C.2.
 
 ---
 

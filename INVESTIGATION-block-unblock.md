@@ -374,4 +374,4 @@ emparelhada. Ver `HUMAN-LAST.md`.
 ## Próxima pista
 
 Não é preciso: a causa está determinada. O que falta é **confirmação em campo**
-da forma nova, e o experimento exacto está em `HUMAN-LAST.md` (EXP-1 e EXP-2).
+da forma nova, e o experimento exacto está em `HUMAN-LAST.md` (E.1 e E.2).

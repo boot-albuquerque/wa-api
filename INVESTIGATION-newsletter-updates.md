@@ -340,7 +340,7 @@ Não escrito, porque nada foi corrigido. Quando for:
   código: esta rota não tem query ID.
 
 Nenhuma medição nova foi feita nesta sessão — este ambiente não tem conta
-emparelhada. Ver `HUMAN-LAST.md`, EXP-3.
+emparelhada. Ver `HUMAN-LAST.md`, B.4 (EXP-3).
 
 ## Próxima pista
 
@@ -351,5 +351,5 @@ que só a medição responde e que muda o desenho da correcção:
 > canal desta conta, ou traz uma lista de mensagens sem contadores?
 
 O port #503 diz que traz; o nosso `/newsletters/messages` devolveu `200 []`
-(canal vazio), logo nunca vimos um filho `<message>` real. É EXP-3 em
+(canal vazio), logo nunca vimos um filho `<message>` real. É B.4 (EXP-3) em
 `HUMAN-LAST.md`, e tem de correr contra um canal COM mensagens.

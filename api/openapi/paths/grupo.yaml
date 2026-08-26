@@ -1421,7 +1421,7 @@
       Um `200` contra fila VAZIA não prova nada, e foi essa a medição de
       2026-08-26. A fila enche-se só por API: entrar por link num grupo com
       aprovação exigida cria um pendente
-      (`capabilities/group/invite.go:117`). Procedimento em `HUMAN-LAST.md` §3.
+      (`capabilities/group/invite.go:117`). Procedimento em `HUMAN-LAST.md` C.1.
 
       **Autenticação**: token de sessão.
     security:

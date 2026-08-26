@@ -3180,8 +3180,8 @@ negativo EXECUTADO repondo `"jid": jid` — com a saída da falha colada aqui.
 
 **Status**: não corrigido. Causa determinada. Não aplicado porque a
 classificação não é `BUG_LOCAL` e a confirmação em campo exige conta
-emparelhada — ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md` (EXP-1,
-EXP-2).
+emparelhada — ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md` (E.1,
+E.2).
 
 <!-- f-status: aberto -->
 
@@ -3256,7 +3256,7 @@ controlo negativo EXECUTADO repondo `To: jid` — confirmando que a mutação
 COMPILA e falha com mensagem.
 
 **Status**: não corrigido. Causa determinada. Ver
-`INVESTIGATION-newsletter-updates.md` e `HUMAN-LAST.md` (EXP-3) — a confirmação
+`INVESTIGATION-newsletter-updates.md` e `HUMAN-LAST.md` (B.4) — a confirmação
 exige um canal COM mensagens, e o canal de teste estava vazio.
 
 <!-- f-status: aberto -->

@@ -29022,7 +29022,7 @@ com `getAlternateUserWid` antes de bloquear.
 **Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-02 (biblioteca)
 e F278 (adaptador). O relato completo está em
 `INVESTIGATION-block-unblock.md`; os experimentos que exigem conta real, em
-`HUMAN-LAST.md` (EXP-1, EXP-2).
+`HUMAN-LAST.md` (E.1, E.2).
 
 **Status**: não corrigido — **causa determinada** (`PROTOCOL_CHANGED`).
 
@@ -29073,7 +29073,7 @@ respondeu *"eu também não resolvo"* — código idêntico, intocado desde 2023
 
 **Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-03. Relato
 completo em `INVESTIGATION-newsletter-updates.md`; o experimento que falta, em
-`HUMAN-LAST.md` (EXP-3) — exige um canal COM mensagens, e o de teste estava
+`HUMAN-LAST.md` (B.4) — exige um canal COM mensagens, e o de teste estava
 vazio.
 
 **Status**: não corrigido — **causa determinada** (`PROTOCOL_CHANGED`).
@@ -30089,7 +30089,7 @@ formato errado (ARMADILHA #1, variante "mais SIMPLES que a produção").
 é `PROTOCOL_CHANGED`, não `BUG_LOCAL`; o CLAUDE.md proíbe corrigir de graça fora
 do escopo sem perguntar; e a confirmação em campo exige conta emparelhada, que
 este ambiente não tem. Ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md`
-(EXP-1, EXP-2).
+(E.1, E.2).
 
 <!-- f-status: aberto -->
 
@@ -30152,7 +30152,7 @@ documentação, não o desenho.
 
 **Estado**: não corrigido. Achado incidental, fora do escopo da tarefa
 (inventário de observadores), e a parte 2 muda comportamento de rota. Registado
-para decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` §2.
+para decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` B.1.
 
 <!-- f-status: aberto -->
 
