@@ -310,7 +310,7 @@ func newCapabilitiesFixtureReal(t *testing.T) *capabilitiesFixture {
 	adminRoutes.Use(authAdmin(capRouteAdminToken))
 	registerAdminRoutes(adminRoutes, ch)
 
-	registerCustomRoutes(router, alice.New(authAlice(database.DB, userinfocache)), ch)
+	registerCustomRoutes(router, alice.New(authAlice(database.DB, userinfocache, nil)), ch)
 
 	f := &capabilitiesFixture{db: database, router: router}
 	f.seedUser(t, capRouteUserWaNoise, capRouteTokenWaNoise, domain.EngineWaNoise)
