@@ -36,6 +36,21 @@ Não "corrija de graça" bugs pré-existentes fora do escopo da tarefa atual
 sem perguntar primeiro — registre no HOUSEKEEP certo e pergunte ao usuário
 se quer que a correção seja feita agora ou fique pendente.
 
+## A API oficial da Meta NÃO é a que este projecto fala
+
+`docs/REFERENCIA-META-OFICIAL.md` tem o índice verificado da WhatsApp Business
+Platform (Cloud API), com URLs.
+
+**Leia-o antes de comparar as duas.** Este projecto fala o protocolo do
+WhatsApp Web pelo fork em `internal/wa-noise`; a Cloud API é HTTP sobre o Graph
+API, com conta registada, templates obrigatórios fora das 24 horas e custo por
+conversa. A diferença mais visível: a Cloud API envia tudo por **um** endpoint
+com o tipo no corpo; aqui o tipo está no caminho, em 16 rotas.
+
+E cerca de **60 das 141 rotas** deste projecto — grupos, comunidades, canais e
+status — **não têm equivalente** na Cloud API. Uma integração futura coexistiria
+com elas, não as substituiria.
+
 ## Consultar as implementações de referência antes de resolver
 
 Antes de projetar solução para qualquer problema de protocolo WhatsApp —

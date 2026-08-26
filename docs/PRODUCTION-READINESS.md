@@ -145,6 +145,20 @@ duplica trabalho:
 Os pontos 1 a 4 são compatíveis com todos os clientes actuais. O ponto 5 não é,
 e é por isso que vem depois do 1.
 
+## Como isto se compara com a Cloud API da Meta
+
+`docs/REFERENCIA-META-OFICIAL.md` tem o levantamento oficial, com URLs.
+
+Vários ❌ do estágio 6 são coisas que a Cloud API **tem por construção**, por
+ser um serviço da Meta: rate limiting com `429`, versionamento do Graph API,
+paginação com cursor. Não é que este projecto tenha escolhido pior — é que uma
+API de plataforma nasce com essa camada e uma API sobre protocolo não.
+
+**A comparação capacidade a capacidade está por fazer**, e está dita como tal
+no ficheiro de referência. O que já se sabe: cerca de **60 das 141 rotas** —
+grupos, comunidades, canais e status — não têm equivalente na Cloud API, logo
+uma integração coexistiria com elas em vez de as substituir.
+
 ## Duas coisas que este scorecard NÃO afirma
 
 - **Que a API funciona.** Afirma que 98 operações tiveram efeito confirmado,

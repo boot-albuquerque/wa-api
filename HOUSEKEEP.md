@@ -29720,3 +29720,59 @@ da rota está correcto) e mudar a assinatura da porta toca em código fora do
 enunciado. Registado para decisão.
 
 <!-- f-status: aberto -->
+
+## F272 — a API oficial da Meta como referência, e a comparação que falta
+
+**Data/contexto**: 2026-08-26, a pedido do utilizador, com vista a comparar o
+que temos com o que a Meta fornece oficialmente e a uma integração futura.
+
+**Levantado** em `docs/REFERENCIA-META-OFICIAL.md`, das páginas oficiais, com
+URLs verificados um a um.
+
+**A diferença de fundo, que não é de detalhe**: o `wa-api` fala o protocolo do
+WhatsApp Web pelo fork em `internal/wa-noise`. A Cloud API é HTTP sobre o Graph
+API, com número registado numa WABA, templates obrigatórios fora da janela de
+24 horas e custo por conversa. Não são duas formas de fazer a mesma coisa.
+
+**A diferença de desenho mais visível**: a Cloud API envia tudo por
+`POST /{version}/{phone-number-id}/messages`, com o tipo no corpo em `type`.
+Aqui o tipo está no CAMINHO, em dezasseis rotas.
+
+Nenhuma está errada. Um endpoint dá contrato pequeno e corpo polimórfico; um
+por tipo dá contratos específicos — e é essa escolha que permitiu a esta série
+declarar, rota a rota, exactamente que campos são obrigatórios. Copiar a forma
+da Meta sem o motivo seria reescrever o desenho dela junto com as restrições
+que ela tem e nós não.
+
+**O que se sabe sem levantamento**: cerca de **60 das 141 rotas** deste
+projecto não têm equivalente na Cloud API — grupos (18), canais (18), status
+(3), comunidades (4), e a maior parte da gestão de conversa. A Cloud API não
+gere grupos, comunidades nem canais.
+
+Ou seja: **uma integração não substitui este projecto.** No máximo coexiste,
+com a Cloud API a servir o que ela sabe fazer melhor — templates aprovados,
+Flows, catálogo — e este a servir o resto.
+
+**O que NÃO foi feito, e está dito no próprio ficheiro**: a comparação
+capacidade a capacidade. A tabela do documento tem linhas marcadas
+"não verificado", e são exactamente isso — não foram inventadas para a tabela
+ficar completa.
+
+**Cinco pontos que uma integração teria de resolver**, registados para não se
+redescobrirem: identidade (JID contra E.164 e IDs do Graph), a janela de 24
+horas, o custo por conversa, o segundo formato de webhook, e as ~60 rotas sem
+equivalente.
+
+**Nota de método, que vale para a próxima actualização**: as páginas da Meta
+são renderizadas por JavaScript, e buscar o ÍNDICE devolve só o rodapé de
+navegação. As tabelas foram montadas de páginas individuais, que devolvem
+conteúdo. Onde o documento diz "não verifiquei", é porque a página não foi
+aberta — não porque a informação não exista.
+
+**Status**: referência levantada e ligada aos quatro documentos onde alguém a
+procuraria (`CLAUDE.md`, `ENDPOINTS.md`, `CONTRATO-ARQUITETURAL.md`,
+`PRODUCTION-READINESS.md`). A comparação capacidade a capacidade fica por
+fazer.
+
+<!-- f-status: aberto -->
+

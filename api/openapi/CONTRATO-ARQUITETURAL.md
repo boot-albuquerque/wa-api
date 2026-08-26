@@ -12,6 +12,22 @@ Medições de 2026-08-26, contra o binário do `HEAD`, com duas sessões reais.
 
 ---
 
+## Onde este contrato se compara com a API oficial
+
+`docs/REFERENCIA-META-OFICIAL.md` levanta a WhatsApp Business Platform da Meta,
+com URLs verificados.
+
+A escolha de desenho que mais difere: a Cloud API envia tudo por
+`POST /{version}/{phone-number-id}/messages`, com o tipo no corpo. Este
+projecto põe o tipo no caminho. As duas são defensáveis — um endpoint dá
+contrato pequeno e corpo polimórfico; um por tipo dá contratos específicos, e
+é o que permitiu a esta API declarar, rota a rota, exactamente que campos são
+obrigatórios.
+
+**Nada neste documento deve ser mudado para se parecer com a Cloud API.** São
+protocolos diferentes, e copiar a forma sem o motivo é como se reescrevem os
+defeitos dos outros.
+
 ## 0. A ordem de confiança
 
 Quando duas fontes discordarem, esta é a ordem:

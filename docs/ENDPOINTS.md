@@ -30,6 +30,12 @@ grep -oE 'registry\.Register\("(/[a-zA-Z0-9/{}._-]+)"' pkg/bootstrap/wiring_rout
   | sed 's/registry.Register("//;s/"//' | sort
 ```
 
+> **A referência oficial da Meta** está em
+> `docs/REFERENCIA-META-OFICIAL.md`, com os URLs verificados. As colunas de
+> concorrentes desta página são conhecimento geral e **não** medição; aquele
+> ficheiro é o levantamento a sério, e diz explicitamente o que não foi
+> verificado.
+
 ## Aviso de método
 
 As colunas de **concorrentes** são conhecimento geral, **não medição**. Não
