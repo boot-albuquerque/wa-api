@@ -35,8 +35,13 @@ const (
 	// second paste doubles it. One table, applied at merge time, cannot do
 	// either.
 	evidenceFile = "evidencias.tsv"
-	yamlIndent   = 2
-	defaultRoot  = "api/openapi"
+	// pathsFile carries the canonical-path standardisation. The generator
+	// clones each legacy operation onto its canonical path rather than having
+	// anyone write 91 near-duplicates by hand — duplicates drift, a
+	// transformation cannot.
+	pathsFile   = "caminhos.tsv"
+	yamlIndent  = 2
+	defaultRoot = "api/openapi"
 	// defaultOutput lives inside the package that embeds it: go:embed cannot
 	// reach outside its own directory, and a second copy of the document is a
 	// second thing to keep in step.
@@ -110,6 +115,9 @@ func Merge(root string) (map[string]any, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("nenhum caminho encontrado em %s/%s", root, pathsDir)
 	}
+	if err := applyCanonicalPaths(filepath.Join(root, pathsFile), paths); err != nil {
+		return nil, err
+	}
 	if err := applyEvidence(filepath.Join(root, evidenceFile), paths); err != nil {
 		return nil, err
 	}
@@ -165,6 +173,171 @@ func mergeDir(dir string, dst map[string]any, kind string) error {
 		}
 	}
 	return nil
+}
+
+// applyCanonicalPaths clones each legacy operation onto its canonical path and
+// marks the legacy one deprecated.
+//
+// WHY CLONE INSTEAD OF WRITING BOTH. The canonical route IS the legacy route —
+// same handler, same body, same responses. Two hand-written copies of one
+// operation drift the moment someone edits one of them, and the drift is
+// invisible: both are valid YAML, both render. Generating the second from the
+// first makes drift impossible.
+//
+// The legacy operation is NOT removed. It still works, and a spec that hid it
+// would send a reader looking for a route their existing client depends on.
+func applyCanonicalPaths(path string, paths map[string]any) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("tabela de caminhos: %w", err)
+	}
+
+	type destino struct{ metodo, caminho string }
+	clones := map[string][]destino{}
+	for lineNo, line := range strings.Split(string(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != pathTableColumns {
+			return fmt.Errorf("%s:%d: esperava %d colunas, veio %d",
+				pathsFile, lineNo+1, pathTableColumns, len(fields))
+		}
+		chave := strings.ToLower(fields[0]) + " " + fields[1]
+		clones[chave] = append(clones[chave], destino{strings.ToLower(fields[2]), fields[3]})
+	}
+
+	var ausentes []string
+	for chave, destinos := range clones {
+		partes := strings.SplitN(chave, " ", 2)
+		metodo, caminhoAntigo := partes[0], partes[1]
+
+		item, ok := paths[caminhoAntigo].(map[string]any)
+		if !ok {
+			ausentes = append(ausentes, caminhoAntigo)
+			continue
+		}
+		op, ok := item[metodo].(map[string]any)
+		if !ok {
+			ausentes = append(ausentes, strings.ToUpper(metodo)+" "+caminhoAntigo)
+			continue
+		}
+
+		for _, d := range destinos {
+			clone := deepCopy(op).(map[string]any)
+			clone["summary"] = toString(clone["summary"])
+			clone["description"] = canonicalNote(caminhoAntigo, metodo) + toString(clone["description"])
+			if parametros := pathParameters(d.caminho); len(parametros) > 0 {
+				clone["parameters"] = append(parametros, existingParameters(clone)...)
+			}
+			alvo, existe := paths[d.caminho].(map[string]any)
+			if !existe {
+				alvo = map[string]any{}
+				paths[d.caminho] = alvo
+			}
+			alvo[d.metodo] = clone
+		}
+
+		op["deprecated"] = true
+		op["description"] = legacyNote(destinos[0].metodo, destinos[0].caminho) + toString(op["description"])
+	}
+
+	sort.Strings(ausentes)
+	if len(ausentes) > 0 {
+		return fmt.Errorf("%d rotas da tabela de caminhos sem operação documentada:\n  %s",
+			len(ausentes), strings.Join(ausentes, "\n  "))
+	}
+	return nil
+}
+
+// toString reads a string field, tolerating absence.
+func toString(v any) string { s, _ := v.(string); return s }
+
+// pathTableColumns is the shape of one line: legacy method and path, canonical
+// method and path.
+const pathTableColumns = 4
+
+// canonicalNote is prepended to the canonical operation.
+func canonicalNote(caminhoAntigo, metodo string) string {
+	return "> **Forma canónica.** Substitui `" + strings.ToUpper(metodo) + " " +
+		caminhoAntigo + "`, que continua a funcionar mas está depreciado.\n\n"
+}
+
+// legacyNote is prepended to the legacy operation.
+func legacyNote(metodo, caminho string) string {
+	return "> **Depreciado.** Use `" + strings.ToUpper(metodo) + " " + caminho +
+		"`, que é a forma canónica. Esta continua a funcionar e **não há data de " +
+		"remoção anunciada** — mas é a forma antiga, e a documentação nova " +
+		"descreve a outra.\n\n"
+}
+
+// pathParameters builds the OpenAPI parameter list for a templated path.
+func pathParameters(caminho string) []any {
+	var out []any
+	for _, bruto := range strings.Split(caminho, "/") {
+		if !strings.HasPrefix(bruto, "{") || !strings.HasSuffix(bruto, "}") {
+			continue
+		}
+		nome := strings.Trim(bruto, "{}")
+		out = append(out, map[string]any{
+			"name":        nome,
+			"in":          "path",
+			"required":    true,
+			"description": pathParamDescription(nome),
+			"schema":      map[string]any{"type": "string", "example": pathParamExample(nome)},
+		})
+	}
+	return out
+}
+
+func pathParamDescription(nome string) string {
+	switch nome {
+	case "group_jid":
+		return "JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do corpo — " +
+			"se ambos vierem, o **corpo ganha**, para que um cliente a meio da migração não parta."
+	case "community_jid":
+		return "JID da comunidade, no servidor `@g.us`. Substitui o campo `communityJID` do corpo; " +
+			"se ambos vierem, o corpo ganha."
+	default:
+		return "Identificador no caminho."
+	}
+}
+
+func pathParamExample(nome string) string {
+	switch nome {
+	case "community_jid":
+		return "120363430034334401@g.us"
+	default:
+		return "120363411669320145@g.us"
+	}
+}
+
+func existingParameters(op map[string]any) []any {
+	lista, _ := op["parameters"].([]any)
+	return lista
+}
+
+// deepCopy clones a decoded YAML tree. Without it the canonical operation and
+// the legacy one would share the same maps, and marking one deprecated would
+// mark both.
+func deepCopy(no any) any {
+	switch v := no.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, filho := range v {
+			out[k] = deepCopy(filho)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, filho := range v {
+			out[i] = deepCopy(filho)
+		}
+		return out
+	default:
+		return no
+	}
 }
 
 // applyEvidence prefixes every operation summary with its evidence mark.

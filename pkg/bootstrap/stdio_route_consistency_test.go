@@ -181,6 +181,14 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		"GET /session/profile/full": true,
 	}
 
+	// origemLegada mapeia cada caminho canónico de volta à rota antiga que ele
+	// substitui, para que a cobertura stdio de uma valha pela outra.
+	origemLegada := map[string]string{}
+	for _, linha := range CaminhosCanonicos() {
+		origemLegada[linha.CanonicalMethod+" "+linha.CanonicalPath] =
+			linha.LegacyMethod + " " + linha.LegacyPath
+	}
+
 	type missing struct{ method, path string }
 	var uncovered []missing
 	routerKeys := make(map[string]bool)
@@ -202,6 +210,22 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 			}
 			if _, ok := structuralExceptions[key]; ok {
 				continue
+			}
+			// FORMA CANÓNICA (F269): um caminho canónico é a MESMA rota, com o
+			// mesmo manipulador, servida noutro caminho. O método RPC que cobre
+			// a rota antiga cobre-o também — dar-lhe RPC próprio criaria dois
+			// nomes para uma operação, que é precisamente o que a padronização
+			// existe para eliminar.
+			//
+			// Derivado da tabela em vez de listado: noventa e uma excepções à
+			// mão seriam noventa e uma linhas a desactualizar-se em silêncio.
+			if legada, ehCanonica := origemLegada[key]; ehCanonica {
+				if coveredByStdio[legada] || knownPending[legada] {
+					continue
+				}
+				if _, ok := structuralExceptions[legada]; ok {
+					continue
+				}
 			}
 			uncovered = append(uncovered, missing{method: m, path: pathTpl})
 		}

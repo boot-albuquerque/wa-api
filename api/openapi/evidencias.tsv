@@ -9,6 +9,11 @@
 # Uma rota em paths/ sem linha aqui faz o gerador FALHAR: rota nova tem de
 # ser classificada, e o silêncio não pode passar por aprovação.
 #
+# As formas CANÓNICAS herdam a marca da rota antiga que substituem: são a
+# mesma implementação, servida noutro caminho, logo a prova é a mesma. As nove
+# reestruturadas (com parâmetro no caminho) foram RE-MEDIDAS, porque nelas o
+# adaptador de injecção é código novo entre o cliente e o manipulador.
+#
 # método	caminho	marca
 GET	/admin/users	✅
 POST	/admin/users	⬜
@@ -151,3 +156,94 @@ POST	/webhook	⬜
 PUT	/webhook	⬜
 GET	/webhook/history	✅
 POST	/webhook/history	⬜
+DELETE	/communities/{community_jid}/subgroups/{group_jid}	✅
+DELETE	/groups/{group_jid}/photo	✅
+DELETE	/newsletters/delete	✅
+GET	/chats/history	✅
+GET	/chats/list	✅
+GET	/communities/{community_jid}/participants	✅
+GET	/communities/{community_jid}/subgroups	✅
+GET	/groups/{group_jid}/join-requests	✅
+GET	/newsletters/list	✅
+GET	/users/blocklist	✅
+GET	/users/contacts	✅
+GET	/users/contacts/last-activity	✅
+GET	/users/lid/{jid}	✅
+GET	/users/privacy	✅
+GET	/users/profile/{jid}	✅
+POST	/chats/archive	✅
+POST	/chats/delete/message	✅
+POST	/chats/downloadaudio	✅
+POST	/chats/downloaddocument	✅
+POST	/chats/downloadimage	✅
+POST	/chats/downloadsticker	✅
+POST	/chats/downloadvideo	✅
+POST	/chats/ephemeral	✅
+POST	/chats/ephemeral/default	✅
+POST	/chats/markread	✅
+POST	/chats/mute	✅
+POST	/chats/pin	✅
+POST	/chats/presence	✅
+POST	/chats/react	✅
+POST	/chats/request-unavailable-message	🟡
+POST	/chats/send/audio	✅
+POST	/chats/send/buttons	✅
+POST	/chats/send/carousel	✅
+POST	/chats/send/contact	✅
+POST	/chats/send/document	✅
+POST	/chats/send/edit	✅
+POST	/chats/send/forward	✅
+POST	/chats/send/image	✅
+POST	/chats/send/list	✅
+POST	/chats/send/location	✅
+POST	/chats/send/poll	✅
+POST	/chats/send/pollvote	✅
+POST	/chats/send/sticker	🟡
+POST	/chats/send/template	✅
+POST	/chats/send/text	✅
+POST	/chats/send/video	✅
+POST	/groups/announce	✅
+POST	/groups/create	✅
+POST	/groups/ephemeral	✅
+POST	/groups/info	✅
+POST	/groups/inviteinfo	✅
+POST	/groups/invitelink	✅
+POST	/groups/join	✅
+POST	/groups/leave	✅
+POST	/groups/list	✅
+POST	/groups/locked	✅
+POST	/groups/name	✅
+POST	/groups/topic	✅
+POST	/groups/{group_jid}/join-requests	🟡
+POST	/groups/{group_jid}/participants	✅
+POST	/messages/star	✅
+POST	/newsletters/admin-invite	✅
+POST	/newsletters/admin-invite/accept	✅
+POST	/newsletters/admin-invite/revoke	✅
+POST	/newsletters/change-owner	✅
+POST	/newsletters/create	✅
+POST	/newsletters/demote	✅
+POST	/newsletters/follow	✅
+POST	/newsletters/info	✅
+POST	/newsletters/info-invite	✅
+POST	/newsletters/mark-viewed	🟡
+POST	/newsletters/messages	✅
+POST	/newsletters/mute	✅
+POST	/newsletters/react	🟡
+POST	/newsletters/subscribe	✅
+POST	/newsletters/unfollow	✅
+POST	/newsletters/updates	❌
+POST	/users/avatar	⬜
+POST	/users/block	❌
+POST	/users/check	✅
+POST	/users/contacts/sync	✅
+POST	/users/history/sync	✅
+POST	/users/info	✅
+POST	/users/presence	✅
+POST	/users/presence/subscribe	✅
+POST	/users/privacy	⬜
+POST	/users/status	⬜
+POST	/users/unblock	❌
+PUT	/communities/{community_jid}/subgroups/{group_jid}	✅
+PUT	/groups/{group_jid}/photo	✅
+PUT	/groups/{group_jid}/settings/join-approval	✅

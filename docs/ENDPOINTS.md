@@ -542,6 +542,153 @@ Reabrir só com dado novo.
 
 Catálogo, produtos e Flows são superfície exclusiva da Cloud API com WABA.
 
+## Caminhos canónicos — a padronização
+
+**2026-08-26.** As rotas passaram a ter forma canónica, e **as antigas
+continuam a funcionar**. A regra está em `api/openapi/CAMINHOS-CANONICOS.md`; a
+tabela é `api/openapi/caminhos.tsv`, e é dela que saem tanto as rotas
+registadas como a documentação — não há terceira cópia a desactualizar-se.
+
+**91 rotas** ganharam forma canónica. O que fica singular — `/session/*`,
+`/health`, `/webhook`, `/s3/*`, `/hmac/*`, `/proxy/set`, `/status/set/*`,
+`/labels`, `/admin/users`, `/call/reject` — é singleton ou já era plural, e o
+motivo de cada uma está no documento da regra.
+
+**Não há data de remoção das antigas.** Marcar depreciado sem plano de remoção
+é dizer "preferimos o outro", que é verdade; anunciar remoção sem decisão seria
+mentira.
+
+### As nove que mudaram de forma, não só de número
+
+Nestas o identificador sai do corpo e vai para o caminho, e o método passa a
+dizer a operação:
+
+| antiga | canónica |
+|---|---|
+| `GET /group/requestparticipants` | `GET /groups/{group_jid}/join-requests` |
+| `GET /user/lid/{jid}` | `GET /users/lid/{jid}` |
+| `GET /user/profile/{jid}` | `GET /users/profile/{jid}` |
+| `POST /community/link` | `PUT /communities/{community_jid}/subgroups/{group_jid}` |
+| `POST /community/participants` | `GET /communities/{community_jid}/participants` |
+| `POST /community/subgroups` | `GET /communities/{community_jid}/subgroups` |
+| `POST /community/unlink` | `DELETE /communities/{community_jid}/subgroups/{group_jid}` |
+| `POST /group/joinapprovalmode` | `PUT /groups/{group_jid}/settings/join-approval` |
+| `POST /group/photo` | `PUT /groups/{group_jid}/photo` |
+| `POST /group/photo/remove` | `DELETE /groups/{group_jid}/photo` |
+| `POST /group/updateparticipants` | `POST /groups/{group_jid}/participants` |
+| `POST /group/updaterequestparticipants` | `POST /groups/{group_jid}/join-requests` |
+
+O corpo **continua a ser aceite**: se o identificador vier nos dois sítios, o
+corpo ganha. É o que permite migrar um cliente de cada vez.
+
+### As restantes, por família
+
+**`/chat` → `/chats`** (33 rotas)
+
+| antiga | canónica |
+|---|---|
+| `GET /chat/history` | `GET /chats/history` |
+| `GET /chat/list` | `GET /chats/list` |
+| `POST /chat/archive` | `POST /chats/archive` |
+| `POST /chat/delete/message` | `POST /chats/delete/message` |
+| `POST /chat/downloadaudio` | `POST /chats/downloadaudio` |
+| `POST /chat/downloaddocument` | `POST /chats/downloaddocument` |
+| `POST /chat/downloadimage` | `POST /chats/downloadimage` |
+| `POST /chat/downloadsticker` | `POST /chats/downloadsticker` |
+| `POST /chat/downloadvideo` | `POST /chats/downloadvideo` |
+| `POST /chat/ephemeral` | `POST /chats/ephemeral` |
+| `POST /chat/ephemeral/default` | `POST /chats/ephemeral/default` |
+| `POST /chat/markread` | `POST /chats/markread` |
+| `POST /chat/mute` | `POST /chats/mute` |
+| `POST /chat/pin` | `POST /chats/pin` |
+| `POST /chat/presence` | `POST /chats/presence` |
+| `POST /chat/react` | `POST /chats/react` |
+| `POST /chat/request-unavailable-message` | `POST /chats/request-unavailable-message` |
+| `POST /chat/send/audio` | `POST /chats/send/audio` |
+| `POST /chat/send/buttons` | `POST /chats/send/buttons` |
+| `POST /chat/send/carousel` | `POST /chats/send/carousel` |
+| `POST /chat/send/contact` | `POST /chats/send/contact` |
+| `POST /chat/send/document` | `POST /chats/send/document` |
+| `POST /chat/send/edit` | `POST /chats/send/edit` |
+| `POST /chat/send/forward` | `POST /chats/send/forward` |
+| `POST /chat/send/image` | `POST /chats/send/image` |
+| `POST /chat/send/list` | `POST /chats/send/list` |
+| `POST /chat/send/location` | `POST /chats/send/location` |
+| `POST /chat/send/poll` | `POST /chats/send/poll` |
+| `POST /chat/send/pollvote` | `POST /chats/send/pollvote` |
+| `POST /chat/send/sticker` | `POST /chats/send/sticker` |
+| `POST /chat/send/template` | `POST /chats/send/template` |
+| `POST /chat/send/text` | `POST /chats/send/text` |
+| `POST /chat/send/video` | `POST /chats/send/video` |
+
+**`/group` → `/groups`** (12 rotas)
+
+| antiga | canónica |
+|---|---|
+| `POST /group/announce` | `POST /groups/announce` |
+| `POST /group/create` | `POST /groups/create` |
+| `POST /group/ephemeral` | `POST /groups/ephemeral` |
+| `POST /group/info` | `POST /groups/info` |
+| `POST /group/inviteinfo` | `POST /groups/inviteinfo` |
+| `POST /group/invitelink` | `POST /groups/invitelink` |
+| `POST /group/join` | `POST /groups/join` |
+| `POST /group/leave` | `POST /groups/leave` |
+| `POST /group/list` | `POST /groups/list` |
+| `POST /group/locked` | `POST /groups/locked` |
+| `POST /group/name` | `POST /groups/name` |
+| `POST /group/topic` | `POST /groups/topic` |
+
+**`/message` → `/messages`** (1 rotas)
+
+| antiga | canónica |
+|---|---|
+| `POST /message/star` | `POST /messages/star` |
+
+**`/newsletter` → `/newsletters`** (18 rotas)
+
+| antiga | canónica |
+|---|---|
+| `DELETE /newsletter/delete` | `DELETE /newsletters/delete` |
+| `GET /newsletter/list` | `GET /newsletters/list` |
+| `POST /newsletter/admin-invite` | `POST /newsletters/admin-invite` |
+| `POST /newsletter/admin-invite/accept` | `POST /newsletters/admin-invite/accept` |
+| `POST /newsletter/admin-invite/revoke` | `POST /newsletters/admin-invite/revoke` |
+| `POST /newsletter/change-owner` | `POST /newsletters/change-owner` |
+| `POST /newsletter/create` | `POST /newsletters/create` |
+| `POST /newsletter/demote` | `POST /newsletters/demote` |
+| `POST /newsletter/follow` | `POST /newsletters/follow` |
+| `POST /newsletter/info` | `POST /newsletters/info` |
+| `POST /newsletter/info-invite` | `POST /newsletters/info-invite` |
+| `POST /newsletter/mark-viewed` | `POST /newsletters/mark-viewed` |
+| `POST /newsletter/messages` | `POST /newsletters/messages` |
+| `POST /newsletter/mute` | `POST /newsletters/mute` |
+| `POST /newsletter/react` | `POST /newsletters/react` |
+| `POST /newsletter/subscribe` | `POST /newsletters/subscribe` |
+| `POST /newsletter/unfollow` | `POST /newsletters/unfollow` |
+| `POST /newsletter/updates` | `POST /newsletters/updates` |
+
+**`/user` → `/users`** (15 rotas)
+
+| antiga | canónica |
+|---|---|
+| `GET /user/blocklist` | `GET /users/blocklist` |
+| `GET /user/contacts` | `GET /users/contacts` |
+| `GET /user/contacts/last-activity` | `GET /users/contacts/last-activity` |
+| `GET /user/privacy` | `GET /users/privacy` |
+| `POST /user/avatar` | `POST /users/avatar` |
+| `POST /user/block` | `POST /users/block` |
+| `POST /user/check` | `POST /users/check` |
+| `POST /user/contacts/sync` | `POST /users/contacts/sync` |
+| `POST /user/history/sync` | `POST /users/history/sync` |
+| `POST /user/info` | `POST /users/info` |
+| `POST /user/presence` | `POST /users/presence` |
+| `POST /user/presence/subscribe` | `POST /users/presence/subscribe` |
+| `POST /user/privacy` | `POST /users/privacy` |
+| `POST /user/status` | `POST /users/status` |
+| `POST /user/unblock` | `POST /users/unblock` |
+
+---
+
 ## Verificação em campo — bateria de 2026-08-26
 
 **Método**: chamadas reais da conta `+55 16 98181-8244` (`filarapida`, Business)
