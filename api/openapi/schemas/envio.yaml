@@ -1,0 +1,962 @@
+# Grupo: Envio de mensagens.
+#
+# Esquemas próprios das 16 rotas POST /chat/send/*. O que é partilhado —
+# Envelope, Erro, ResultadoEnvio, AlvoConversa, ContextoResposta — vive em
+# base.yaml e é referenciado, nunca copiado.
+#
+# Os campos de cada pedido saem da struct que o manipulador desserializa
+# (pkg/domain/message.go), e as regras saem do use case correspondente em
+# pkg/application/usecase/message/. Onde a bateria de campo de 2026-08-26
+# (docs/ENDPOINTS.md) mediu algo que a struct não diz, é a medição que manda.
+
+# ---------------------------------------------------------------------------
+# Peças reutilizadas dentro do grupo
+# ---------------------------------------------------------------------------
+
+MencoesEnvio:
+  type: array
+  description: |
+    JIDs a mencionar no corpo da mensagem. O texto da menção (`@554192421234`)
+    tem de estar no corpo — este campo só diz ao WhatsApp quem notificar.
+
+    Aceite pelas rotas com texto visível (CAP-47). As rotas sem texto próprio —
+    `/chat/send/audio`, `/chat/send/sticker`, `/chat/send/location`,
+    `/chat/send/contact`, `/chat/send/poll` e `/chat/send/pollvote` — não têm
+    este campo no seu payload.
+  items:
+    type: string
+  example:
+    - 554192421234@s.whatsapp.net
+
+IdCliente:
+  type: string
+  description: |
+    Identificador da mensagem escolhido pelo CLIENTE, e não pelo servidor.
+    Quando vazio, o wa-noise gera um. Serve para tornar o envio idempotente do
+    lado de quem chama: o mesmo `Id` reenviado produz a mesma mensagem no
+    servidor do WhatsApp.
+
+    Não confundir com o `message_id` da resposta — em todas as rotas de envio
+    salvo `/chat/send/edit`, os dois coincidem quando o cliente fornece `Id`.
+  example: 3EB0A4B2AFD45E625C0917
+
+BotaoInterativo:
+  type: object
+  description: |
+    Um botão de fluxo nativo, usado por `/chat/send/buttons` e por cada cartão
+    de `/chat/send/carousel`.
+
+    **O título é obrigatório na prática, e o nome do campo é `title`** — com
+    `text` e `buttonText` como sinónimos, nesta ordem de precedência. Um botão
+    sem nenhum dos três é DESCARTADO EM SILÊNCIO, e o pedido continua com os
+    restantes; se todos caírem, a rota responde `400 no_valid_buttons`. Medido
+    em 2026-08-26: um botão com `displayText` (o nome que `/chat/send/template`
+    usa) cai aqui.
+
+    O título é truncado em **20 runas** (`send_buttons.go:35`), e o corte
+    acontece ANTES de o título servir de identificador — logo o `id` que volta
+    no clique de quem recebeu já vem truncado.
+  properties:
+    type:
+      type: string
+      description: |
+        Tipo do botão. Vazio significa `reply`. Um tipo fora dos quatro abaixo
+        faz o botão ser DESCARTADO em silêncio — em particular `quickreply`,
+        que é válido em `/chat/send/template` e **não** aqui.
+      enum: [reply, cta_url, cta_call, copy]
+      example: reply
+    title:
+      type: string
+      description: Rótulo do botão. Sinónimos, nesta ordem, `text` e `buttonText`.
+      example: Confirmar
+    text:
+      type: string
+      description: Sinónimo de `title`, usado quando `title` vem vazio.
+    buttonText:
+      type: string
+      description: Segundo sinónimo de `title`, usado quando `title` e `text` vêm vazios.
+    id:
+      type: string
+      description: |
+        Identificador devolvido no clique. Sinónimo `buttonId`. Quando os dois
+        vêm vazios, o próprio título JÁ TRUNCADO vira o identificador.
+      example: confirmar
+    buttonId:
+      type: string
+      description: Sinónimo de `id`.
+    url:
+      type: string
+      description: Destino de um botão `cta_url`. Ignorado nos outros tipos.
+      example: https://exemplo.com/pedido/1234
+    phone_number:
+      type: string
+      description: Número de um botão `cta_call`. Ignorado nos outros tipos.
+      example: '+554192421234'
+    copy_code:
+      type: string
+      description: Texto que um botão `copy` põe na área de transferência. Ignorado nos outros tipos.
+      example: PEDIDO-1234
+
+BotaoModelo:
+  type: object
+  description: |
+    Um botão de modelo hidratado, usado só por `/chat/send/template`. Vocabulário
+    DIFERENTE do `BotaoInterativo`: aqui o rótulo é `DisplayText` e os tipos são
+    outros três.
+
+    Não há validação do conteúdo por tipo — um botão `url` sem `Url` é aceite e
+    produz um botão com destino vazio (`send_template.go`, comentário de
+    `Execute`). E um `Type` desconhecido **não** é recusado: cai em `quickreply`.
+  required: [DisplayText]
+  properties:
+    DisplayText:
+      type: string
+      description: Rótulo do botão.
+      example: Abrir pedido
+    Type:
+      type: string
+      description: |
+        Tipo do botão. Valor fora dos três cai em `quickreply`
+        (`pkg/domain/message.go:786-789`).
+      enum: [quickreply, url, call]
+      example: url
+    Url:
+      type: string
+      description: Destino de um botão `url`.
+      example: https://exemplo.com/pedido/1234
+    PhoneNumber:
+      type: string
+      description: Número de um botão `call`.
+      example: '+554192421234'
+    Id:
+      type: string
+      description: |
+        Identificador de um botão `quickreply`. Vazio significa "numere
+        automaticamente" — a numeração decimal é montada no adaptador.
+      example: '1'
+
+LinhaLista:
+  type: object
+  description: |
+    Uma linha de uma secção de `/chat/send/list`.
+
+    **Linha sem `title` é descartada em silêncio.** Se todas as linhas de uma
+    secção caírem, a secção cai também; se nenhuma secção sobreviver, a rota
+    responde `400 no_valid_sections` (`send_list.go:171-215`).
+  properties:
+    title:
+      type: string
+      description: Texto da linha. Obrigatório na prática — sem ele a linha é descartada.
+      example: Pizza margherita
+    desc:
+      type: string
+      description: Descrição secundária, mostrada abaixo do título.
+      example: Molho de tomate, mozzarella e manjericão
+    RowId:
+      type: string
+      description: |
+        Identificador devolvido na escolha. Sinónimos, nesta ordem de
+        precedência, `RowID`, `rowId` e `rowID`. Quando os quatro vêm vazios,
+        o próprio título (já sem espaços nas pontas) vira o identificador.
+      example: margherita
+    RowID:
+      type: string
+      description: Primeiro sinónimo de `RowId`.
+    rowId:
+      type: string
+      description: Segundo sinónimo de `RowId`.
+    rowID:
+      type: string
+      description: Terceiro sinónimo de `RowId`.
+
+SecaoLista:
+  type: object
+  description: Uma secção de `/chat/send/list`, com o seu título e as suas linhas.
+  properties:
+    title:
+      type: string
+      description: Título da secção.
+      example: Pizzas
+    rows:
+      type: array
+      description: Linhas da secção. Secção que fica sem linhas válidas é descartada.
+      items:
+        $ref: '#/components/schemas/LinhaLista'
+
+CartaoCarrossel:
+  type: object
+  description: |
+    Um cartão de `/chat/send/carousel`.
+
+    **Cada cartão exige `Body` e pelo menos um botão válido** — cartão sem um
+    dos dois é descartado em silêncio, e se nenhum sobreviver a rota responde
+    `400 no_valid_cards` (medido em 2026-08-26).
+  required: [Body, Buttons]
+  properties:
+    Title:
+      type: string
+      description: |
+        Título do cartão. **É decorativo**: o iOS não o desenha, só o Android
+        (HOUSEKEEP F217). Informação obrigatória vai em `Body`, não aqui.
+      example: Pizza margherita
+    Body:
+      type: string
+      description: Corpo do cartão. Obrigatório — cartão com corpo vazio é descartado.
+      example: Molho de tomate, mozzarella e manjericão. R$ 45,00.
+    Footer:
+      type: string
+      description: Rodapé do cartão.
+      example: Entrega em 40 minutos
+    Image:
+      type: string
+      description: |
+        Imagem do cartão, como URI de dados (`data:image/...;base64,...`) ou
+        URL http(s). Teto de 10 MB. Vazio significa cartão sem imagem.
+
+        Ao contrário do corpo e dos botões, uma imagem que falhe a obtenção
+        **não** derruba o cartão: ele segue sem imagem, e a falha fica no log.
+      example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+    Buttons:
+      type: array
+      description: Botões do cartão, com o mesmo vocabulário de `/chat/send/buttons`.
+      items:
+        $ref: '#/components/schemas/BotaoInterativo'
+
+ResultadoEnvioAudio:
+  type: object
+  description: |
+    Resposta de `/chat/send/audio`. É o `ResultadoEnvio` comum mais dois campos
+    que descrevem a LEGENDA.
+
+    A legenda vai como mensagem de texto SEPARADA, depois do áudio, porque o
+    protocolo não tem campo de legenda em áudio (HOUSEKEEP F116). O envio
+    **não é atómico**: o áudio pode sair e a legenda falhar. Nesse caso o
+    pedido continua a ser `200` — devolver erro faria o cliente reenviar e
+    duplicar um áudio que já está entregue — e `caption_status` diz o que
+    aconteceu de facto.
+
+    Ambos os campos estão AUSENTES quando não houve legenda a enviar.
+  required: [message_id, status]
+  properties:
+    message_id:
+      type: string
+      description: Identificador do ÁUDIO no servidor.
+      example: 3EB0A4B2AFD45E625C0917
+    timestamp:
+      type: integer
+      format: int64
+      description: Instante do envio do áudio, em segundos desde a época Unix.
+      example: 1787747900
+    status:
+      type: string
+      description: Estado do envio do áudio.
+      example: sent
+    caption_message_id:
+      type: string
+      description: |
+        Identificador da mensagem de legenda. Presente apenas quando
+        `caption_status` é `sent`.
+      example: 3EB0F1C9D2A74B380E1128
+    caption_status:
+      type: string
+      description: |
+        `sent` — a legenda saiu como mensagem própria.
+        `failed` — o ÁUDIO saiu, a legenda não.
+      enum: [sent, failed]
+      example: sent
+
+# ---------------------------------------------------------------------------
+# Pedidos
+# ---------------------------------------------------------------------------
+
+PedidoEnvioTexto:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Body]
+      properties:
+        Phone:
+          type: string
+          description: |
+            JID de destino — contacto, grupo ou canal. Sinónimo universal `chat`;
+            `Phone` ganha quando os dois vierem. Ausente nos dois nomes é
+            `400 missing_phone`.
+          example: 554192421234@s.whatsapp.net
+        Body:
+          type: string
+          description: Texto da mensagem. Vazio é `400 missing_body`.
+          example: Bom dia! O seu pedido saiu para entrega.
+        LinkPreview:
+          type: boolean
+          description: |
+            Quando `true`, o serviço procura a primeira URL do corpo e busca a
+            metadata Open Graph dela, enviando a mensagem como texto estendido
+            com pré-visualização. Falha na busca não é erro — a mensagem segue
+            sem pré-visualização.
+          example: true
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioImagem:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Image]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Image:
+          type: string
+          description: |
+            A imagem, num de DOIS transportes:
+
+            - **URI de dados** — tem de começar exactamente por `data:image`
+              (`send_image.go:180`). Um `data:application/pdf;...` **não** bate
+              aqui.
+            - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
+
+            Qualquer outra coisa é `400 unsupported_image_source`. Teto de
+            **16 MB** nos dois transportes.
+          example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+        Caption:
+          type: string
+          description: Legenda, desenhada com a imagem.
+          example: A etiqueta do seu pedido.
+        MimeType:
+          type: string
+          description: |
+            Força o MIME em vez de o deduzir dos bytes. Quando vazio, o tipo é
+            farejado do conteúdo DECODIFICADO — o rótulo que a própria URI de
+            dados declara **não** é usado, de propósito. Se o tipo resolvido não
+            for de imagem, é `400 invalid_image_mime_type`.
+          example: image/png
+        JPEGThumbnail:
+          type: string
+          format: byte
+          description: Miniatura JPEG, em base64. Opcional.
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioVideo:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Video]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Video:
+          type: string
+          description: |
+            O vídeo, num de DOIS transportes:
+
+            - **URI de dados** — a discriminação mais frouxa das cinco rotas de
+              mídia: bastam os quatro primeiros caracteres serem `data`, sem os
+              dois-pontos (`send_video.go`, `isDataVideo`). Qualquer MIME
+              declarado passa.
+            - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
+
+            Qualquer outra coisa é `400 unsupported_video_source`. Teto de
+            **100 MB**, e piso de **256 bytes**.
+          example: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+        Caption:
+          type: string
+          description: Legenda, desenhada com o vídeo.
+          example: O vídeo da montagem.
+        MimeType:
+          type: string
+          description: |
+            Força o MIME em vez de o deduzir dos bytes. Se o tipo resolvido não
+            for de vídeo, é `400 invalid_video_mime_type`.
+          example: video/mp4
+        JPEGThumbnail:
+          type: string
+          format: byte
+          description: Miniatura JPEG, em base64. Opcional.
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioAudio:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Audio]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Audio:
+          type: string
+          description: |
+            O áudio, num de DOIS transportes:
+
+            - **URI de dados** — tem de começar exactamente por `data:audio/`
+              (`send_audio.go`, `isDataURIAudio`). Uma imagem disfarçada de
+              áudio não passa.
+            - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
+
+            Qualquer outra coisa é `400 unsupported_audio_source`. Teto de
+            **16 MB**, e piso de **128 bytes**.
+          example: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
+        Caption:
+          type: string
+          description: |
+            Legenda. **Vai como mensagem de texto SEPARADA**, enviada DEPOIS do
+            áudio — o protocolo não tem campo de legenda em áudio. Ver
+            `ResultadoEnvioAudio` para o que a resposta diz sobre ela.
+          example: O áudio que combinámos.
+        ptt:
+          type: boolean
+          description: |
+            `true` envia como mensagem de voz (a bolha com a onda), `false` como
+            ficheiro de áudio. **Ausente significa `true`** — não `false`.
+          example: true
+        mimetype:
+          type: string
+          description: |
+            Força o MIME. Quando vazio, a precedência é: o rótulo declarado pela
+            própria URI de dados, ou o `Content-Type` remoto quando começa por
+            `audio/`; senão o tipo farejado dos bytes; senão um padrão conforme
+            `ptt`.
+          example: audio/ogg; codecs=opus
+        Seconds:
+          type: integer
+          description: Duração declarada, em segundos. Só metadata — não é verificada contra os bytes.
+          example: 12
+        Waveform:
+          type: string
+          format: byte
+          description: Onda desenhada na bolha de voz, em base64. Opcional.
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioDocumento:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Document, FileName]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Document:
+          type: string
+          description: |
+            O documento, num de DOIS transportes:
+
+            - **URI de dados** — qualquer `data:`, sem restrição de MIME: um
+              documento legitimamente carrega `application/pdf`,
+              `application/zip`, `text/plain`…
+            - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
+
+            Qualquer outra coisa é `400 unsupported_document_source`. Teto de
+            **100 MB**.
+          example: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
+        FileName:
+          type: string
+          description: |
+            Nome com que o documento aparece no cliente. **Obrigatório** — vazio
+            é `400 missing_filename`. É metadata pura: nunca vira operação de
+            ficheiro do lado do servidor.
+          example: nota-fiscal-1234.pdf
+        Caption:
+          type: string
+          description: Legenda, desenhada com o documento.
+          example: A nota fiscal do pedido.
+        MimeType:
+          type: string
+          description: |
+            Força o MIME. Quando vazio, o tipo é farejado dos bytes decodificados
+            — o rótulo da própria URI de dados não é usado.
+          example: application/pdf
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioAutocolante:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Sticker]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Sticker:
+          type: string
+          description: |
+            O autocolante, como URI de dados (prefixo `data`) ou URL http(s).
+            Teto de **16 MB**.
+
+            **A imagem é sempre CONVERTIDA para WebP pelo servidor** — o que sobe
+            é o resultado da conversão, nunca os bytes de entrada. Uma entrada que
+            não seja nenhum dos dois transportes chega à conversão tal e qual e é
+            recusada lá, com `400 sticker_processing_failed`.
+          example: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
+        MimeType:
+          type: string
+          description: MIME declarado da entrada. A saída é sempre WebP.
+        PngThumbnail:
+          type: string
+          format: byte
+          description: Miniatura PNG, em base64. Opcional.
+        PackId:
+          type: string
+          description: Identificador do pacote de autocolantes a que este pertence.
+        PackName:
+          type: string
+          description: Nome do pacote.
+        PackPublisher:
+          type: string
+          description: Editor do pacote.
+        Emojis:
+          type: array
+          description: Emojis associados ao autocolante, para busca no cliente.
+          items:
+            type: string
+          example: ['🎉']
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioLocalizacao:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Latitude, Longitude]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Latitude:
+          type: number
+          format: double
+          description: |
+            Latitude. **Zero é valor VÁLIDO** e é distinguido de "campo ausente"
+            (HOUSEKEEP F121) — omitir é `400 missing_latitude`, mandar `0` é
+            aceite.
+          example: -25.4284
+        Longitude:
+          type: number
+          format: double
+          description: |
+            Longitude. Mesma regra da latitude: `0` é aceite, ausente é
+            `400 missing_longitude`.
+          example: -49.2733
+        Name:
+          type: string
+          description: Rótulo do lugar, mostrado sobre o mapa. Opcional.
+          example: Curitiba
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioContacto:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Name, Vcard]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Name:
+          type: string
+          description: Nome mostrado no cartão. Vazio é `400 missing_name`.
+          example: Suporte DisparaZap
+        Vcard:
+          type: string
+          description: |
+            O cartão em vCard, tal e qual — o servidor **não o valida nem o
+            reescreve**, apenas o transporta. Um vCard malformado sai daqui com
+            `200` e chega quebrado ao destinatário.
+
+            Para que o cliente reconheça o contacto como utilizador de WhatsApp,
+            a linha `TEL` precisa do parâmetro `waid`.
+          example: |
+            BEGIN:VCARD
+            VERSION:3.0
+            FN:Suporte DisparaZap
+            TEL;type=CELL;waid=554192421234:+55 41 9242-1234
+            END:VCARD
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioEnquete:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Header, Options]
+      properties:
+        Group:
+          type: string
+          description: |
+            JID de destino. **O nome do campo é `Group`, e não `Phone`, mesmo
+            para uma enquete enviada a um contacto individual** — medido em
+            2026-08-26: com `Phone` a rota responde `400 missing_group`. O
+            sinónimo universal `chat` também funciona.
+          example: 120363411669320145@g.us
+        Header:
+          type: string
+          description: A pergunta da enquete. Vazio é `400 missing_header`.
+          example: Qual o melhor horário para a entrega?
+        Options:
+          type: array
+          description: |
+            As opções, em texto claro. **São precisas pelo menos duas** — menos
+            é `400 insufficient_options`.
+          minItems: 2
+          items:
+            type: string
+          example: [Manhã, Tarde, Noite]
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoVotoEnquete:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Sender, PollMessageId, PollMessageTimestamp, Options]
+      properties:
+        Phone:
+          type: string
+          description: |
+            A conversa onde a enquete está. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Sender:
+          type: string
+          description: |
+            JID de quem CRIOU a enquete. Vazio é `400 missing_sender`; um JID
+            que não parseia é `400 invalid_sender`.
+
+            Pode vir em qualquer das duas formas de identidade (PN ou LID): o
+            servidor resolve-a antes de cifrar o voto, preferindo a forma que o
+            histórico registou, com recurso ao mapeamento PN→LID quando o
+            histórico não tem a mensagem (HOUSEKEEP F228).
+          example: 554192421234@s.whatsapp.net
+        PollMessageId:
+          type: string
+          description: |
+            `message_id` da mensagem de enquete original. Vazio é
+            `400 missing_poll_message_id`.
+          example: 3EB0A4B2AFD45E625C0917
+        PollMessageTimestamp:
+          type: integer
+          format: int64
+          description: |
+            Instante da enquete original, em segundos desde a época Unix. **Zero
+            conta como ausente** e é `400 missing_poll_message_timestamp`.
+
+            É pedido — em vez de procurado no histórico — porque o voto é cifrado
+            com um segredo derivado da mensagem original, e depender do histórico
+            faria a rota falhar em silêncio quando ele tivesse sido podado.
+          example: 1787748016
+        Options:
+          type: array
+          description: |
+            O texto EXACTO das opções votadas, tal como foram criadas. Lista
+            vazia é `400 missing_options`.
+          minItems: 1
+          items:
+            type: string
+          example: [Manhã]
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioBotoes:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Body:
+          type: string
+          description: |
+            Corpo da mensagem, acima dos botões. Sinónimo `text`, usado quando
+            `Body` vem vazio.
+          example: Confirma a entrega para hoje às 15h?
+        text:
+          type: string
+          description: Sinónimo de `Body`.
+        Title:
+          type: string
+          description: |
+            Cabeçalho da mensagem. Opcional. Quando há `Image`, é a imagem que
+            ocupa o cabeçalho.
+          example: Confirmação de entrega
+        Footer:
+          type: string
+          description: Rodapé, abaixo dos botões.
+          example: DisparaZap
+        Image:
+          type: string
+          description: |
+            Imagem de cabeçalho, como URI de dados ou URL http(s). Teto de
+            **10 MB**. Uma imagem que falhe a obtenção **não** derruba o envio —
+            a mensagem segue sem cabeçalho de imagem, e a falha fica no log.
+          example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+        Buttons:
+          type: array
+          description: |
+            Os botões. Lista vazia é `400 missing_buttons_fields`; lista onde
+            todos os botões são descartados é `400 no_valid_buttons`.
+          items:
+            $ref: '#/components/schemas/BotaoInterativo'
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioLista:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Desc:
+          type: string
+          description: |
+            Corpo principal da mensagem. Sinónimos, nesta ordem de precedência,
+            `Body`, `body` e `text`. Nenhum preenchido é `400 missing_desc`.
+          example: Escolha um item do cardápio.
+        Body:
+          type: string
+          description: Primeiro sinónimo de `Desc`.
+        body:
+          type: string
+          description: Segundo sinónimo de `Desc`.
+        text:
+          type: string
+          description: Terceiro sinónimo de `Desc`.
+        ButtonText:
+          type: string
+          description: |
+            Rótulo do botão que abre a lista. Vazio significa `Select`
+            (`send_list.go:17`).
+          example: Ver cardápio
+        TopText:
+          type: string
+          description: |
+            Cabeçalho, acima do corpo. Também serve de título da secção única
+            quando se usa a forma legada `List`.
+          example: Cardápio de hoje
+        FooterText:
+          type: string
+          description: Rodapé, abaixo do botão.
+          example: Entregas até às 22h
+        Sections:
+          type: array
+          description: |
+            Forma PREFERIDA: lista com várias secções. `Sections` e `List` ambas
+            vazias é `400 missing_sections`; quando `Sections` vem preenchida,
+            `List` é ignorada.
+          items:
+            $ref: '#/components/schemas/SecaoLista'
+        List:
+          type: array
+          description: |
+            Forma LEGADA: lista plana, embrulhada numa secção única cujo título
+            vem de `TopText`, ou de `Menu` quando `TopText` vem vazio.
+          items:
+            $ref: '#/components/schemas/LinhaLista'
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioCarrossel:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Body:
+          type: string
+          description: Corpo da mensagem, acima dos cartões.
+          example: As pizzas de hoje.
+        Footer:
+          type: string
+          description: Rodapé do carrossel, abaixo de todos os cartões.
+          example: Entregas até às 22h
+        Cards:
+          type: array
+          description: |
+            Os cartões, que deslizam na horizontal. Lista vazia é
+            `400 missing_carousel_fields`; lista onde todos os cartões são
+            descartados é `400 no_valid_cards`.
+          items:
+            $ref: '#/components/schemas/CartaoCarrossel'
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEnvioModelo:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Content, Footer, Buttons]
+      properties:
+        Phone:
+          type: string
+          description: JID de destino. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Content:
+          type: string
+          description: Corpo do modelo. Vazio é `400 missing_content`.
+          example: O seu pedido 1234 está pronto para retirada.
+        Footer:
+          type: string
+          description: |
+            Rodapé. **Obrigatório nesta rota** — vazio é `400 missing_footer`.
+            É a única rota de envio em que o rodapé não é opcional.
+          example: DisparaZap
+        Buttons:
+          type: array
+          description: |
+            Os botões do modelo, com vocabulário PRÓPRIO (`DisplayText`, e os
+            tipos `quickreply`/`url`/`call`) — diferente do de
+            `/chat/send/buttons`. Lista vazia é `400 missing_buttons`.
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BotaoModelo'
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEncaminhamento:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      properties:
+        Phone:
+          type: string
+          description: |
+            JID de destino do encaminhamento — para onde a mensagem VAI.
+            Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        MessageID:
+          type: string
+          description: |
+            `message_id` da mensagem guardada a reenviar. **A presença deste
+            campo é o que escolhe a forma POR CHAVE**; quando vem vazio, a rota
+            cai na forma POR CONTEÚDO e passa a exigir `Body`.
+          example: 3EB0A4B2AFD45E625C0917
+        Chat:
+          type: string
+          description: |
+            Conversa de ONDE a mensagem original veio. Só faz sentido na forma
+            por chave, e hoje é **opcional e não usado na busca** — a mensagem é
+            procurada só por sessão e `MessageID`. Está reservado para
+            desambiguação futura.
+          example: 554192421234@s.whatsapp.net
+        Body:
+          type: string
+          description: |
+            Texto a enviar marcado como encaminhado. Obrigatório na forma por
+            conteúdo — vazio é `400 missing_body`. **Ignorado** quando
+            `MessageID` vem preenchido.
+          example: Bom dia! O seu pedido saiu para entrega.
+        ForwardingScore:
+          type: integer
+          format: int32
+          description: |
+            Quantas vezes a mensagem já foi encaminhada. Na forma por conteúdo,
+            vem do payload, com `1` por omissão — o valor que o Baileys produz
+            num primeiro encaminhamento.
+
+            **Na forma por chave é IGNORADO**: o valor é lido do contexto da
+            mensagem original e incrementado em 1.
+          example: 1
+        ReplyTo:
+          $ref: '#/components/schemas/ContextoResposta'
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
+        Id:
+          $ref: '#/components/schemas/IdCliente'
+
+PedidoEdicaoMensagem:
+  allOf:
+    - $ref: '#/components/schemas/AlvoConversa'
+    - type: object
+      required: [Body, Id]
+      properties:
+        Phone:
+          type: string
+          description: |
+            A conversa onde está a mensagem a editar. Sinónimo universal `chat`.
+          example: 554192421234@s.whatsapp.net
+        Id:
+          type: string
+          description: |
+            `message_id` da mensagem a editar. Vazio é `400 missing_id` — mas
+            só DEPOIS de `Phone` e `Body` terem passado e de `Phone` ter sido
+            parseado, o que faz um pedido com `Phone` inválido E `Id` ausente
+            responder `invalid_phone`, e não `missing_id`.
+          example: 3EB0A4B2AFD45E625C0917
+        Body:
+          type: string
+          description: O novo texto da mensagem. Vazio é `400 missing_body`.
+          example: Bom dia! O seu pedido sai para entrega às 15h.
+        StanzaId:
+          type: string
+          description: |
+            `message_id` da mensagem citada pela mensagem que está a ser editada,
+            para preservar a citação. Opcional.
+          example: 3EB0F1C9D2A74B380E1128
+        Participant:
+          type: string
+          description: JID de quem escreveu a mensagem citada. Opcional, e par de `StanzaId`.
+          example: 554192421234@s.whatsapp.net
+        MentionedJid:
+          $ref: '#/components/schemas/MencoesEnvio'
