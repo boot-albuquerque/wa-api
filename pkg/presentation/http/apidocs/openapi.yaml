@@ -289,20 +289,30 @@ components:
     CodigoQR:
       description: |
         Resposta de `GET /session/qr`. Medida no servidor vivo em 2026-08-26,
-        numa sessão já autenticada.
+        numa sessão já autenticada: `{"QRCode": ""}`.
       properties:
         QRCode:
           description: |
             Imagem do QR code em data URI (`data:image/png;base64,…`), lida da
             coluna `users.qrcode`.
 
-            **Vazio é o caso normal, não um defeito.** A coluna só tem valor
-            durante a janela de emparelhamento: o orquestrador grava a imagem a
-            cada evento `QR` (`orchestrator.go:537`) e limpa-a no timeout
-            (`orchestrator.go:552`). Numa sessão já autenticada — ou numa que
-            nunca chamou `/session/connect` — a resposta é `{"QRCode": ""}` com
-            `200`.
+            **Sempre presente, nunca ausente e nunca `null`.** Sem `omitempty` na
+            struct (`domain/session.go:29`), e o valor zero de `string` é `""`.
+
+            **Vazio é informação, não defeito.** A coluna só tem valor durante a
+            janela de emparelhamento: o orquestrador grava a imagem a cada evento
+            `QR` (`orchestrator.go:537`) e limpa-a no timeout
+            (`orchestrator.go:552`).
+
+            | estado | significa |
+            |---|---|
+            | `""` | a sessão já está emparelhada, ou nunca chamou `GET /session/connect`, ou o código expirou |
+            | `data:image/png;base64,…` | há um código válido agora; desenhe-o |
+
+            Medido em 2026-08-26 nas duas sessões autenticadas: `{"QRCode": ""}`
+            com `200` nas duas.
           example: ""
+          nullable: false
           type: string
       required:
         - QRCode
@@ -697,9 +707,15 @@ components:
             DEPOIS da resposta — este `200` significa "aceitei o pedido e a posse
             da sessão é minha", não "estou ligado". Quem confirma é
             `GET /session/status`.
+
+            **Sempre presente e nunca `null`**: é escrito à mão no mapa literal do
+            manipulador, não vem de struct. Valor fora desta lista de um só
+            elemento não existe — não há caminho no código que escreva outra
+            coisa; um valor desconhecido aqui seria defeito, não variação.
           enum:
             - connecting
           example: connecting
+          nullable: false
           type: string
       required:
         - status
@@ -739,118 +755,241 @@ components:
     EstadoSessao:
       description: |
         Retrato da sessão devolvido por `GET /session/status`. MEDIDO no servidor
-        vivo em 2026-08-26 — a forma abaixo é a resposta real, não a struct.
+        vivo em 2026-08-26 nas duas sessões reais — a forma abaixo é a resposta
+        real, não a struct.
 
         Junta o estado AO VIVO (`connected`, `loggedIn`, lidos do registo de
         clientes) com o registo PERSISTIDO da sessão (o resto).
+
+        **Nenhum campo tem `omitempty`** (`domain/session.go:53-67`): os catorze
+        aparecem SEMPRE, em toda resposta `200`, e nenhum vem `null`. O que varia
+        é o valor, nunca a presença.
       properties:
         connected:
           description: |
             Há transporte vivo para o WhatsApp. Distinto de `loggedIn`: uma
             sessão pode estar autenticada com o transporte caído
             (`GET /session/disconnect` produz exactamente isso).
+
+            Sempre presente e nunca `null`. `false` significa mesmo
+            "desconectada" — não é ausência de informação: o leitor devolve
+            `(false, false)` quando não há cliente
+            (`runtime/session/guard.go:74`), e esta rota NÃO tem guarda de sessão
+            de propósito (F196), justamente para conseguir responder o estado de
+            uma sessão caída.
           example: true
+          nullable: false
           type: boolean
         events:
           description: |
             Lista de tipos de evento subscritos, separados por vírgula. É esta
             lista que decide o que sai pelo webhook E pelo `GET /session/ws`.
+
+            Sempre presente e nunca `null`. Dois valores medidos em 2026-08-26, e
+            os dois extremos importam:
+
+            | valor | efeito |
+            |---|---|
+            | `""` | **nenhum** evento é entregue — nem por webhook nem por WebSocket |
+            | `All` | valor especial: TODOS os tipos passam (`lifecycle.go:36-46`) |
+            | `Message,Connected` | só os tipos listados |
+
+            Os nomes válidos são os de `pkg/domain/constants.go`; um nome fora
+            dessa lista é descartado ao montar a subscrição
+            (`lifecycle_webhook.go:92`) e some sem erro. `""` é o padrão, e é o
+            que faz `GET /session/ws` ligar e nunca receber nada.
           example: Message,Connected,Disconnected
+          nullable: false
           type: string
         history:
           description: |
-            Limite de mensagens gravadas em `message_history`, **como texto** —
-            o caso de uso converte o inteiro com `strconv.Itoa`
-            (`session/get_status.go:88`). `"0"` significa gravação desligada, que
-            é o valor de origem.
+            Limite de mensagens gravadas em `message_history`, **como texto** — o
+            caso de uso converte o inteiro com `strconv.Itoa`
+            (`session/get_status.go:88`).
+
+            Sempre presente e nunca `null`. `"0"` significa gravação DESLIGADA, e
+            é o valor de origem — não é "sem limite" nem "não configurado".
+            Medido em 2026-08-26: `"100"` numa sessão e `"0"` na outra.
+
+            Repare no tipo: aqui é texto; em `POST /session/history` o mesmo
+            número entra e volta como INTEIRO.
           example: "100"
+          nullable: false
           type: string
         hmac_configured:
           description: |
-            **Sempre `false`.** Como `token`, este campo não é preenchido pelo
-            caso de uso (`session/get_status.go:78-97`) e sai com o valor zero
-            mesmo quando existe chave HMAC gravada. Para saber se há chave, use
+            **Sempre presente e sempre `false`.** Como `token`, este campo não é
+            preenchido pelo caso de uso (`session/get_status.go:78-97`) e sai com o
+            valor zero mesmo quando existe chave HMAC gravada. Medido `false` nas
+            duas sessões em 2026-08-26.
+
+            Nunca vem `null` nem é omitido — o que o torna pior que ausente: um
+            `false` que parece resposta. Para saber se há chave, use
             `GET /session/hmac/config`, que reporta a presença de forma honesta.
           example: false
+          nullable: false
           type: boolean
         id:
-          description: Identificador da sessão no wa-api, hexadecimal de 32 caracteres.
+          description: |
+            Identificador da sessão no wa-api, hexadecimal de 32 caracteres.
+            Sempre presente e nunca `null` numa resposta `200`; vem da linha da
+            tabela `users`, e sem essa linha a rota responde `400 no_session` em
+            vez de devolver o campo vazio.
           example: 918e37366f27e1125ee0482a793267e1
+          nullable: false
           type: string
         jid:
           description: |
             JID da conta ligada, na forma PN e COM o sufixo de dispositivo
-            (`:25`). Vazio enquanto a sessão não estiver autenticada.
+            (`:25`). Sempre presente e nunca `null`; vem `""` enquanto a sessão
+            não estiver autenticada.
           example: 5516981818244:25@s.whatsapp.net
+          nullable: false
           type: string
         loggedIn:
-          description: A sessão está emparelhada e autenticada — é a que consegue operar.
+          description: |
+            A sessão está emparelhada e autenticada — é a que consegue operar.
+            Sempre presente e nunca `null`; `false` é resposta legítima, não
+            ausência.
           example: true
+          nullable: false
           type: boolean
         name:
-          description: Nome dado à sessão em `POST /admin/users`.
+          description: |
+            Nome dado à sessão em `POST /admin/users`. Sempre presente e nunca
+            `null`; pode vir `""` se a sessão foi criada sem nome.
           example: filarapida
+          nullable: false
           type: string
         proxy_config:
-          description: Estado do proxy, repetido em forma estruturada.
+          description: |
+            Estado do proxy, repetido em forma estruturada. É um mapa literal
+            montado pelo caso de uso (`session/get_status.go:89-92`), logo tem
+            sempre exactamente estas duas chaves, sempre presentes e nunca
+            `null`. Redundante com `proxy_url`, e mantido por compatibilidade.
+          nullable: false
           properties:
             enabled:
+              description: |
+                Há proxy configurado nesta sessão. Sempre presente e nunca `null`.
+                É `entry.HasProxyURL`, ou seja, deriva de `proxy_url` não ser
+                vazio — não é um interruptor independente.
               example: false
+              nullable: false
               type: boolean
             proxyUrl:
+              description: |
+                O mesmo valor de `proxy_url` do nível de cima, em `camelCase`.
+                Sempre presente e nunca `null`; `""` quando não há proxy.
               example: ""
+              nullable: false
               type: string
           type: object
         proxy_url:
-          description: Proxy de saída desta sessão, ou vazio.
+          description: |
+            Proxy de saída desta sessão. Sempre presente e nunca `null`; `""`
+            quando não há proxy.
           example: ""
+          nullable: false
           type: string
         qrcode:
-          description: O mesmo valor que `GET /session/qr` devolve — vazio fora da janela de emparelhamento.
+          description: |
+            O mesmo valor que `GET /session/qr` devolve. Sempre presente e nunca
+            `null`; `""` fora da janela de emparelhamento — ver `CodigoQR`.
           example: ""
+          nullable: false
           type: string
         s3_config:
           description: |
-            Resumo da configuração S3 desta sessão. É um subconjunto do que
-            `GET /session/s3/config` devolve, e não traz nem a access key
-            mascarada.
+            Resumo da configuração S3 desta sessão. Mapa literal
+            (`session/get_status.go:93-102`): as oito chaves aparecem SEMPRE e
+            nenhuma vem `null`.
+
+            É um subconjunto do que `GET /session/s3/config` devolve — **não traz
+            `access_key` nem sequer mascarada**, e essa é a diferença de propósito
+            entre as duas leituras.
+          nullable: false
           properties:
             bucket:
+              description: Bucket gravado. Sempre presente, nunca `null`; `""` quando nada foi configurado.
               example: ""
+              nullable: false
               type: string
             enabled:
+              description: A entrega de mídia para o bucket está ligada. Sempre presente, nunca `null`.
               example: false
+              nullable: false
               type: boolean
             endpoint:
+              description: Endpoint gravado. Sempre presente, nunca `null`; `""` significa o endpoint padrão da AWS.
               example: ""
+              nullable: false
               type: string
             media_delivery:
+              description: |
+                Modo de entrega de mídia GRAVADO. Sempre presente e nunca `null`.
+
+                **Não tem `enum` de propósito.** O que sai aqui é o conteúdo cru da
+                coluna, e uma sessão que nunca chamou `POST /session/s3/config`
+                tem `""` — que não é nenhum dos três valores que a escrita aceita.
+                Medido em 2026-08-26: `"base64"` numa sessão e `""` na outra.
+
+                `""` deve ser lido como "nunca configurado"; o comportamento
+                efectivo nesse estado é o padrão, `base64`
+                (`domain/storage.go:57-58`).
               example: base64
+              nullable: false
               type: string
             path_style:
+              description: |
+                Endereçamento por caminho. Sempre presente e nunca `null`.
+
+                **`false` é o valor de origem da coluna**, não o `true` que
+                `GET /session/s3/config` devolve numa sessão sem linha. Medido em
+                2026-08-26: `true` numa sessão e `false` na outra, ambas sem S3
+                configurado.
               example: true
+              nullable: false
               type: boolean
             public_url:
+              description: Prefixo público gravado. Sempre presente, nunca `null`; `""` quando não há.
               example: ""
+              nullable: false
               type: string
             region:
+              description: Região gravada. Sempre presente, nunca `null`; `""` quando nada foi configurado.
               example: ""
+              nullable: false
               type: string
             retention_days:
+              description: |
+                Dias de retenção gravados. Sempre presente e nunca `null`. `0` é o
+                valor de origem e significa "nunca configurado", não "reter zero
+                dias". Medido em 2026-08-26: `30` numa sessão e `0` na outra.
               example: 30
+              nullable: false
               type: integer
           type: object
         token:
           description: |
-            **Sempre vazio.** O caso de uso constrói o resultado sem preencher
-            este campo (`session/get_status.go:78-97`), logo ele sai com o valor
-            zero em toda resposta. Não use isto para recuperar o token da sessão
-            — ele não é recuperável depois de criado.
+            **Sempre presente e sempre vazio.** O caso de uso constrói o resultado
+            sem preencher este campo (`session/get_status.go:78-97`), logo ele sai
+            com o valor zero em toda resposta. Medido `""` nas duas sessões em
+            2026-08-26.
+
+            Não use isto para recuperar o token da sessão — ele não é recuperável
+            depois de criado. O campo nunca é `null` e nunca é omitido: é vazio, o
+            que é diferente e mais enganador, porque parece dado.
           example: ""
+          nullable: false
           type: string
         webhook:
-          description: URL do webhook desta sessão, ou vazio se não houver.
+          description: |
+            URL do webhook desta sessão. Sempre presente e nunca `null`; `""`
+            quando não há webhook configurado — medido `""` nas duas sessões em
+            2026-08-26.
           example: ""
+          nullable: false
           type: string
       type: object
     EstadoSonda:
@@ -934,46 +1073,100 @@ components:
         Forma de cada quadro de texto que `GET /session/ws` empurra. NÃO usa o
         envelope `{code,data,success}` das rotas REST: é o MESMO objecto que sai
         para o webhook da sessão, serializado uma vez e difundido a todas as
-        ligações vivas daquele token.
+        ligações vivas daquele token (`lifecycle_webhook.go:150-165`).
 
         O objecto é PLANO: `type` diz o evento, e os restantes campos são os do
-        próprio evento, na raiz.
+        próprio evento, na raiz. **Não há esquema fechado**: cada tipo de evento
+        traz o seu conjunto de campos, e os documentados abaixo são os do
+        emparelhamento, que é o fluxo que esta rota existe para servir. Um cliente
+        tem de tolerar campos que não conhece.
+
+        **A subscrição decide o que chega.** O mesmo filtro do webhook corre antes
+        do envio para o WebSocket: se `events` da sessão (ver `EstadoSessao`) não
+        incluir o tipo — nem o valor especial `All` —, o evento **não é
+        entregue**, e a ligação fica aberta sem receber nada. Uma sessão com
+        `events: ""` recebe zero quadros. Medido em 2026-08-26: uma das duas
+        sessões vivas está exactamente nesse estado.
       properties:
         code:
-          description: No evento `QR`, o texto cru do código — qualquer cliente consegue desenhá-lo sozinho.
+          description: |
+            No evento `QR`, o texto cru do código — qualquer cliente consegue
+            desenhá-lo sozinho.
+
+            **Sempre presente nos eventos `QR`, ausente em todos os outros**, e
+            nunca `null` (`orchestrator.go:753-756`). É o único campo do `QR`
+            garantido: `qrCodeBase64` e `expiresAt` podem faltar.
           example: 2@abc123...,def456...,ghi789...
+          nullable: false
           type: string
         event:
           description: |
-            Subtipo, presente nos eventos de emparelhamento: `code` no `QR`,
-            `timeout` no `QRTimeout`, `pair_success` no `PairSuccess`. É
-            redundante com `type` e existe por compatibilidade.
+            Subtipo, presente APENAS nos eventos de emparelhamento: `code` no
+            `QR`, `timeout` no `QRTimeout`, `pair_success` no `PairSuccess`.
+
+            **Ausente em todos os outros tipos**, e nunca `null` — o payload é um
+            mapa, e uma chave que não é escrita simplesmente não existe no JSON.
+            É redundante com `type` e existe por compatibilidade
+            (`orchestrator.go:742`).
           example: code
+          nullable: false
           type: string
         expiresAt:
-          description: No evento `QR`, a validade real daquele código, em RFC3339. Pode faltar quando não há validade conhecida.
+          description: |
+            No evento `QR`, a validade real daquele código, em RFC 3339.
+
+            **Pode faltar**: só é escrito quando a validade conhecida é maior que
+            zero (`orchestrator.go:786-788`). Ausente em todos os outros tipos, e
+            nunca `null`.
+
+            Use este valor em vez de assumir uma janela fixa: a constante já mudou
+            no passado e o campo é a única fonte que acompanha
+            (`orchestrator.go:770-785`).
           example: "2026-08-26T13:18:34Z"
           format: date-time
+          nullable: false
           type: string
         jid:
-          description: No `PairSuccess`, o JID da conta que acabou de emparelhar.
+          description: |
+            No `PairSuccess`, o JID da conta que acabou de emparelhar, na forma PN
+            e com sufixo de dispositivo. Ausente nos tipos que não o escrevem, e
+            nunca `null`.
           example: 5516981818244:25@s.whatsapp.net
+          nullable: false
           type: string
         qrCodeBase64:
           description: |
-            No evento `QR`, a imagem já codificada em data URI. Pode faltar: se a
-            codificação da imagem falhar, o evento sai à mesma, só com `code`.
+            No evento `QR`, a imagem já codificada em data URI.
+
+            **Pode faltar mesmo num evento `QR`**: se a codificação da imagem
+            falhar, o evento sai à mesma, só com `code`, e a falha vai para o log
+            (`orchestrator.go:758-766`). Ausente em todos os outros tipos. Nunca
+            `null` e nunca `""` — ou vem completo, ou não vem.
+
+            Trate a ausência como "desenhe o QR a partir de `code`", não como
+            erro.
           example: data:image/png;base64,iVBORw0KGgo...
+          nullable: false
           type: string
         type:
           description: |
-            Tipo do evento. Vem da mesma lista que `users.events` filtra
+            Tipo do evento. **Sempre presente e nunca `null`**: o despachante
+            recusa e regista erro se `postmap["type"]` não for texto
+            (`lifecycle_webhook.go:118-122`), logo nenhum quadro sai sem ele.
+
+            Vem da mesma lista que `users.events` filtra
             (`pkg/domain/constants.go`) — entre outros: `QR`, `QRTimeout`,
             `PairSuccess`, `Connected`, `Disconnected`, `ConnectFailure`,
             `LoggedOut`, `Message`, `Receipt`, `ReadReceipt`, `Presence`,
             `HistorySync`, `AppStateSyncComplete`, `GroupInfo`, `Picture`,
             `PushName`, `BusinessName`, `Blocklist`, `CallOffer`.
+
+            **Sem `enum` de propósito**: a lista tem cerca de cinquenta entradas e
+            cresce com a biblioteca; fixá-la aqui faria o documento envelhecer em
+            silêncio. `All` NÃO aparece como `type` — é só um valor de
+            subscrição.
           example: QR
+          nullable: false
           type: string
       required:
         - type
@@ -1956,77 +2149,192 @@ components:
       description: |
         Corpo de `POST /session/hmac/config`. `hmac_key` é o único campo do
         contrato — os campos `enabled`/`key`/`secret` que já apareceram em
-        versões antigas nunca existiram no fio.
+        versões antigas nunca existiram no fio, e hoje seriam ignorados em
+        silêncio como qualquer campo desconhecido.
+
+        Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
       properties:
         hmac_key:
           description: |
-            Chave com que os webhooks desta sessão são assinados. Mínimo de **32
-            caracteres**; abaixo disso é `400 hmac_key_too_short`. É cifrada antes
-            de ser gravada e nunca volta em nenhuma leitura.
+            Chave com que os webhooks desta sessão são assinados.
+
+            Medido em 2026-08-26:
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente (`{}`) | não | `400 hmac_key_too_short` |
+            | `null` | não | `400 hmac_key_too_short` — **indistinguível de ausente** |
+            | `""` | não | `400 hmac_key_too_short` — **indistinguível de ausente** |
+            | `"curta"` | não | `400 hmac_key_too_short`, mensagem `HMAC key must be at least 32 characters long` |
+            | 32 ou mais | sim | grava e devolve `Enabled: true` |
+
+            Repare que **não há código próprio para "em falta"**: a chave ausente
+            e a chave curta dão o MESMO erro, porque a única regra é o
+            comprimento (`storage/configure_hmac.go:71-74`).
+
+            A mensagem diz "characters", mas a verificação é `len(req.HmacKey)`,
+            que em Go conta **bytes**: uma chave de 32 caracteres com acentos
+            passa; uma de 31 caracteres com um acento também passa, por ter 32
+            bytes. Use ASCII se o comprimento importar para si.
+
+            **Só entra.** É cifrada antes de ser gravada e nunca volta em leitura
+            nenhuma — `GET /session/hmac/config` devolve apenas a PRESENÇA.
           example: uma-chave-com-pelo-menos-32-caracteres
           minLength: 32
+          nullable: false
           type: string
+          writeOnly: true
       required:
         - hmac_key
       type: object
     PedidoConfigS3:
       description: |
         Corpo de `POST /session/s3/config`. Substitui a configuração inteira —
-        não é uma actualização parcial.
+        não é uma actualização parcial, e não há `PATCH` nesta API.
+
+        **Nenhum campo é obrigatório.** `{}` é aceite e GRAVA: todos os campos
+        ficam com o valor zero, `media_delivery` assume `base64`, e o cliente S3
+        é removido do registo porque `enabled` fica `false`
+        (`storage/configure_s3.go:75-135`). Um pedido parcial não funde com o que
+        estava — apaga o que não veio.
+
+        Campos desconhecidos são IGNORADOS em silêncio. Um erro de digitação num
+        nome de campo não dá erro: dá o valor zero, e aqui isso apaga a
+        configuração daquele campo.
+
+        Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
       properties:
         access_key:
+          description: |
+            Identificador da credencial. Ausente, `null` e `""` são
+            indistinguíveis e todos gravam `""`. Não há validação.
+
+            **Só entra.** `GET /session/s3/config` devolve a constante `***` no
+            lugar deste campo, incondicionalmente — o valor real nunca volta.
           example: AKIAIOSFODNN7EXAMPLE
+          nullable: false
           type: string
+          writeOnly: true
         bucket:
+          description: |
+            Nome do bucket. Ausente, `null` e `""` são indistinguíveis e todos
+            gravam `""`. **Não há validação nenhuma**, nem sequer quando
+            `enabled: true` — uma configuração activa com bucket vazio é gravada e
+            responde `200`.
           example: wa-api-media
+          nullable: false
           type: string
         enabled:
+          default: false
           description: |
-            Liga ou desliga o envio de mídia para o bucket. Desligar **revoga**:
-            o cliente S3 construído com a credencial anterior é removido do
-            registo, senão continuaria a carregar mídia.
+            Liga ou desliga o envio de mídia para o bucket.
+
+            | estado | efeito |
+            |---|---|
+            | ausente | `false` — **indistinguível de `false` explícito** |
+            | `null` | `false` — idem |
+            | `false` | **revoga**: o cliente S3 construído com a credencial anterior é removido do registo, senão continuaria a carregar mídia |
+            | `true` | constrói o cliente com a credencial deste pedido |
+
+            Este é o caso do §4.2 do contrato arquitectural: um `bool`
+            não-ponteiro cujo `false` é uma ACÇÃO, não um padrão inerte. Omitir o
+            campo revoga o cliente, em silêncio.
           example: true
+          nullable: false
           type: boolean
         endpoint:
           description: |
-            Endpoint do serviço. Vazio significa o endpoint padrão da AWS. Quando
-            preenchido, passa pelo validador de saída — um endereço reservado ou
-            de loopback é recusado com `400 invalid_s3_endpoint`.
+            Endpoint do serviço.
+
+            | estado | efeito |
+            |---|---|
+            | ausente / `null` / `""` | endpoint padrão da AWS — os três são indistinguíveis |
+            | endereço reservado ou de loopback | `400 invalid_s3_endpoint` (medido com `http://127.0.0.1:9000`) |
+            | preenchido e público | aceite |
+
+            A validação só corre quando o valor não é vazio
+            (`storage/configure_s3.go:83-90`).
           example: https://s3.eu-west-1.amazonaws.com
+          nullable: false
           type: string
         media_delivery:
+          default: base64
           description: |
             Como a mídia recebida é entregue. `base64` embute no corpo, `s3`
-            devolve só o URL, `both` faz as duas coisas. Vazio assume `base64`;
-            qualquer outro valor é recusado com `400 invalid_media_delivery`.
+            devolve só o URL, `both` faz as duas coisas.
+
+            Medido em 2026-08-26:
+
+            | estado | efeito |
+            |---|---|
+            | ausente / `null` / `""` | assume `base64` — os três são indistinguíveis e nenhum é recusado |
+            | `base64`, `s3`, `both` | aceite |
+            | `BASE64` | **`400 invalid_media_delivery`** — a comparação é sensível a maiúsculas |
+            | qualquer outro valor desconhecido (ex.: `ftp`) | `400 invalid_media_delivery`, mensagem `media_delivery must be 'base64', 's3', or 'both'` |
+
+            O `""` está na lista porque é ACEITE, não porque seja um modo: a
+            validação só corre para valor não-vazio
+            (`storage/configure_s3.go:79-82`).
           enum:
+            - ""
             - base64
             - s3
             - both
           example: s3
+          nullable: false
           type: string
         path_style:
-          description: Endereçamento por caminho em vez de por subdomínio. Necessário na maioria dos serviços compatíveis com S3 que não são a AWS.
+          default: false
+          description: |
+            Endereçamento por caminho em vez de por subdomínio. Necessário na
+            maioria dos serviços compatíveis com S3 que não são a AWS.
+
+            Ausente, `null` e `false` são **indistinguíveis** — o padrão efectivo
+            de um pedido que omita o campo é `false`, e não o `true` que
+            `GET /session/s3/config` mostra numa sessão sem linha gravada.
           example: true
+          nullable: false
           type: boolean
         public_url:
-          description: Prefixo público usado para montar os URLs entregues ao cliente.
+          description: |
+            Prefixo público usado para montar os URLs entregues ao cliente.
+            Ausente, `null` e `""` são indistinguíveis. Sem validação de forma.
           example: https://media.exemplo.com
+          nullable: false
           type: string
         region:
+          description: |
+            Região do bucket. Ausente, `null` e `""` são indistinguíveis e todos
+            gravam `""`. **Não há validação nenhuma**: uma região inexistente é
+            gravada tal e qual, e só falha depois, no `POST /session/s3/test` ou
+            no primeiro envio de mídia.
           example: eu-west-1
+          nullable: false
           type: string
         retention_days:
-          description: Dias de retenção aplicados aos objectos gravados.
+          description: |
+            Dias de retenção aplicados aos objectos gravados. Ausente, `null` e
+            `0` são **indistinguíveis**, e `0` é o que fica gravado.
+
+            **Não há validação de mínimo**: um valor negativo é aceite e gravado
+            — ao contrário de `POST /session/history`, que recusa negativo com
+            `400 invalid_history`. Duas rotas vizinhas, duas regras.
           example: 30
+          nullable: false
           type: integer
         secret_key:
           description: |
-            Segredo da credencial. É cifrado antes de ser gravado (ADR-0009) e
-            **nunca volta** em nenhuma leitura — `GET /session/s3/config` não o
-            seleciona sequer.
+            Segredo da credencial. Ausente, `null` e `""` são indistinguíveis e
+            todos gravam um segredo vazio cifrado — não há validação de presença.
+
+            É cifrado antes de ser gravado (ADR-0009) e **nunca volta** em leitura
+            nenhuma: `GET /session/s3/config` não seleciona sequer a coluna. Nunca
+            aparece em log — o que se regista é se houve segredo, não qual
+            (`storage/configure_s3.go:137-138`).
           example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+          nullable: false
           type: string
+          writeOnly: true
       type: object
     PedidoConfiguracaoHmac:
       description: |
@@ -3381,15 +3689,35 @@ components:
         - name
       type: object
     PedidoPareamentoTelefone:
-      description: Corpo de `POST /session/pairphone`.
+      description: |
+        Corpo de `POST /session/pairphone`. Campos desconhecidos são IGNORADOS em
+        silêncio — o decodificador não usa `DisallowUnknownFields`.
       properties:
         Phone:
           description: |
             Número em formato internacional, só dígitos, com código de país e
-            SEM `+`, espaços ou `@s.whatsapp.net`. Um número nacional ou curto
-            demais é recusado pela validação do próprio wa-noise e chega ao
-            cliente como `400 pair_phone_failed` com a mensagem do SDK.
+            SEM `+`, espaços ou `@s.whatsapp.net`.
+
+            Medido em 2026-08-26:
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | corpo ausente | não | `400 could_not_decode_payload` — o decodificador não tolera `EOF` nesta rota |
+            | `{}` (campo omitido) | não | `400 missing_phone`, mensagem `missing Phone in payload` |
+            | `null` | não | `400 missing_phone` — **indistinguível de ausente** |
+            | `""` | não | `400 missing_phone` — **indistinguível de ausente** |
+            | `5541` (número JSON) | não | `400 could_not_decode_payload` — o tipo tem de ser texto |
+            | `"   "` | passa a validação do wa-api | não é vazio, logo segue para o SDK; **a recusa do SDK não foi medida** (exigiria um pedido de pareamento real) |
+            | preenchido | sim | devolve `LinkingCode` |
+
+            Não há `trim`, `pattern` nem verificação de comprimento no wa-api: a
+            única regra local é *não ser vazio*. A validação de forma do número
+            acontece no wa-noise, e a recusa chega ao cliente como
+            `400 pair_phone_failed` com a mensagem do SDK
+            (`adapters/pairing/adapter.go:65-85`).
           example: "554192421234"
+          minLength: 1
+          nullable: false
           type: string
       required:
         - Phone
@@ -3550,16 +3878,44 @@ components:
       description: |
         Corpo de `POST /user/status`. Define o **recado** do perfil (o "Sobre"),
         não uma story.
+
+        Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
+        Campos desconhecidos são ignorados em silêncio.
       properties:
         Body:
-          description: Texto do recado. Vazio é recusado com `400 missing_body`.
+          description: |
+            Texto do recado.
+
+            Medido em 2026-08-26:
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente (`{}`) | não | `400 missing_body`, mensagem `missing Body in payload` |
+            | `null` | não | `400 missing_body` — **indistinguível de ausente** |
+            | `""` | não | `400 missing_body` — **indistinguível de ausente** |
+            | `123` (número) | não | `400 could_not_decode_payload` |
+            | `"   "` | passa a validação | a única regra é `req.Body == ""` (`session/set_status_message.go:28`); **não há `trim`**, logo três espaços seguem para o WhatsApp. O efeito no par não foi medido, por ser escrita real |
+            | preenchido | sim | — |
           example: Atendimento das 9h às 18h
+          minLength: 1
+          nullable: false
           type: string
         chat:
           description: |
-            Aceite pelo decodificador como em toda rota, mas **ignorado**: esta
+            **Não faz nada, e não faz parte da struct.**
+
+            `SetStatusMessageRequest` tem um único campo, `Body`
+            (`domain/session.go:70-72`). `chat` é aceite pelo decodificador apenas
+            porque campos desconhecidos são ignorados em silêncio em TODA a API —
+            não porque esta rota o leia. Está aqui documentado, e não removido,
+            porque `chat` é o destino universal do §2 do contrato arquitectural e
+            um integrador pode mandá-lo por hábito: mandar não dá erro, e também
+            não tem efeito nenhum.
+
+            Ausente, `null`, `""` e preenchido são todos equivalentes: esta
             operação é sobre a própria conta e não tem destinatário.
           example: ""
+          nullable: false
           type: string
       required:
         - Body
@@ -3663,7 +4019,11 @@ components:
         - mute
       type: object
     PedidoSincronizacaoContactos:
-      description: Corpo de `POST /user/contacts/sync`.
+      description: |
+        Corpo de `POST /user/contacts/sync`.
+
+        Corpo ausente dá `400 could_not_decode_payload` — medido em 2026-08-26.
+        Campos desconhecidos são ignorados em silêncio.
       properties:
         mode:
           description: |
@@ -3673,14 +4033,28 @@ components:
             - `incremental` — busca barata, não apaga a versão local;
             - `full` — re-snapshot completo, caro.
 
-            Qualquer outro valor é `400 invalid_sync_mode`. Em particular,
-            `delta` **não** existe — foi a suposição que a bateria de campo
-            desmentiu.
+            Medido em 2026-08-26, e o ponto importante é que **não existe erro de
+            "campo em falta"**: a ausência cai no mesmo código do valor errado.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente (`{}`) | não | `400 invalid_sync_mode` |
+            | `null` | não | `400 invalid_sync_mode` — **indistinguível de ausente** |
+            | `""` | não | `400 invalid_sync_mode` — **indistinguível de ausente** |
+            | `"   "` | não | `400 invalid_sync_mode`; **não há `trim`** |
+            | `"FULL"` | não | `400 invalid_sync_mode` — a comparação é **sensível a maiúsculas** |
+            | `"delta"` | não | `400 invalid_sync_mode`; `delta` **não** existe — foi a suposição que a bateria de campo desmentiu |
+            | `123` (número) | não | `400 could_not_decode_payload` |
+            | um dos três válidos | sim | dispara o pull |
+
+            A mensagem de qualquer valor desconhecido é sempre a mesma e lista os
+            válidos: `mode must be one of: if_unsynced, incremental, full`.
           enum:
             - if_unsynced
             - incremental
             - full
           example: if_unsynced
+          nullable: false
           type: string
       required:
         - mode
@@ -3690,33 +4064,103 @@ components:
         Corpo de `POST /user/history/sync`. O pedido é sempre por mensagens
         ANTERIORES a uma âncora conhecida — daí os cinco campos descreverem uma
         mensagem que o chamador já tem.
+
+        **Corpo ausente é tolerado** nesta rota, ao contrário de todas as outras
+        deste grupo: o manipulador ignora o `io.EOF` do decodificador
+        (`handler_session.go:305`) e segue com o pedido vazio, que então falha em
+        `400 missing_chat_jid`. Medido em 2026-08-26.
+
+        **Corpo mal formado sai no envelope ANTIGO**, com `error` em texto simples
+        (`{"code":400,"error":"bad request","success":false}`) — este manipulador
+        passa o erro cru a `RespondJSON` em vez do `errDecodePayload` tipado que
+        as outras rotas usam. Medido com `{"count":"50"}`.
+
+        Campos desconhecidos são ignorados em silêncio.
       properties:
         chat_jid:
-          description: Conversa cujo histórico se pede. Obrigatório — sem ele, `400 missing_chat_jid`.
+          description: |
+            Conversa cujo histórico se pede.
+
+            Medido em 2026-08-26:
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / corpo vazio | não | `400 missing_chat_jid` |
+            | `null` | não | `400 missing_chat_jid` — **indistinguível de ausente** |
+            | `""` | não | `400 missing_chat_jid` — **indistinguível de ausente** |
+            | preenchido | sim | segue para a validação de `oldest_msg_id` |
+
+            É validado ANTES de `oldest_msg_id`: um pedido sem os dois revela só
+            este. A API não tem `error.details[]`, logo os campos em falta saem um
+            de cada vez.
+
+            Não há validação de FORMA do JID no wa-api — um texto que não seja JID
+            é aceite aqui e falha mais à frente.
           example: 554192421234@s.whatsapp.net
+          minLength: 1
+          nullable: false
           type: string
         count:
+          default: 50
           description: |
-            Quantas mensagens pedir. Ausente, zero ou negativo assume **50**, o
-            lote recomendado pela própria biblioteca
-            (`session/request_history_sync.go:15`).
+            Quantas mensagens pedir.
+
+            | estado | efeito |
+            |---|---|
+            | ausente / `null` / `0` | assume **50** — os três são indistinguíveis |
+            | negativo | assume **50** também; não é recusado |
+            | positivo | usado tal e qual, sem tecto |
+
+            O `50` é o lote recomendado pela própria biblioteca
+            (`session/request_history_sync.go:15`). Não há máximo validado.
           example: 50
+          nullable: false
           type: integer
         oldest_msg_from_me:
-          description: Se a mensagem-âncora foi enviada por esta conta.
+          default: false
+          description: |
+            Se a mensagem-âncora foi enviada por esta conta.
+
+            **`false` e ausente são INDISTINGUÍVEIS**, e aqui isso importa: o
+            campo é `bool` não-ponteiro (`domain/session.go:129`), e o valor segue
+            directo para a âncora do protocolo
+            (`session/request_history_sync.go:68`). Omitir o campo não é "deixa o
+            servidor decidir" — é afirmar que a mensagem NÃO é sua.
+
+            Se a âncora for uma mensagem enviada por si, mande `true`
+            explicitamente. Um `false` errado descreve outra mensagem, e o que
+            volta é outro trecho de histórico — sem erro nenhum a assinalar.
           example: true
+          nullable: false
           type: boolean
         oldest_msg_id:
           description: |
             `message_id` da mensagem mais antiga que o chamador já tem: é a
-            âncora a partir da qual se pede para trás. Obrigatório — sem ele,
-            `400 missing_oldest_msg_id`.
+            âncora a partir da qual se pede para trás.
+
+            Medido em 2026-08-26:
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_oldest_msg_id` |
+            | `null` | não | `400 missing_oldest_msg_id` — **indistinguível de ausente** |
+            | `""` | não | `400 missing_oldest_msg_id` — **indistinguível de ausente** |
+            | preenchido | sim | — |
           example: 3EB0A4B2AFD45E625C0917
+          minLength: 1
+          nullable: false
           type: string
         oldest_msg_timestamp:
-          description: Instante da mensagem-âncora, em segundos desde a época Unix.
+          default: 0
+          description: |
+            Instante da mensagem-âncora, em segundos desde a época Unix.
+
+            Ausente, `null` e `0` são **indistinguíveis**, e `0` é enviado ao
+            protocolo como a época Unix, não como "não sei". Não há validação nem
+            recusa: um pedido sem este campo é aceite com `0`.
           example: 1787747900
           format: int64
+          nullable: false
           type: integer
       required:
         - chat_jid
@@ -4076,7 +4520,7 @@ components:
     PerfilSessao:
       description: |
         Perfil da própria conta ligada, devolvido por `GET /session/profile`.
-        MEDIDO no servidor vivo em 2026-08-26.
+        MEDIDO no servidor vivo em 2026-08-26 nas duas sessões reais.
 
         Lê só o store LOCAL — não fala com o servidor do WhatsApp, e por isso
         responde em microssegundos e não está sujeito a rate limit. É a diferença
@@ -4085,82 +4529,156 @@ components:
         Os campos de identidade e os de aparelho vivem no mesmo nível: o
         resultado embute `SessionDeviceInfo` de forma anónima justamente para o
         objecto continuar plano (`profile/get_profile.go:40`).
+
+        **Nenhum campo tem `omitempty`** (`profile/get_profile.go:29-40`,
+        `domain/user.go:189-208`): os treze aparecem SEMPRE e nenhum vem `null`.
+        Vazio ou zero é o que substitui a ausência.
       properties:
         avatar_id:
-          description: Identificador da foto actual, útil para detectar troca de avatar sem rebaixar a imagem.
+          description: |
+            Identificador da foto actual, útil para detectar troca de avatar sem
+            rebaixar a imagem. Sempre presente e nunca `null`; `""` pelas mesmas
+            duas causas de `avatar_url`, e sempre em conjunto com ele — os dois
+            são preenchidos pela mesma chamada.
           example: "214830039"
+          nullable: false
           type: string
         avatar_url:
           description: |
-            URL da foto de perfil. **Vazio tem duas causas** — não haver foto, ou
-            a consulta ter falhado. As duas são indistinguíveis na resposta; a
-            falha fica no log (`profile/get_profile.go:99`).
+            URL da foto de perfil. Sempre presente e nunca `null`.
+
+            **Vazio tem duas causas, e a resposta não as separa** — não haver
+            foto, ou a consulta ter falhado. A falha fica no log
+            (`profile/get_profile.go:99`), não no corpo. Um cliente que precise
+            distinguir as duas não consegue por esta rota.
+
+            O URL é assinado e EXPIRA: trate-o como temporário, não o guarde.
           example: https://pps.whatsapp.net/v/t61.24694-24/520223213_1330652325295225_4382315407885093369_n.jpg
+          nullable: false
           type: string
         business_name:
           description: |
-            Nome comercial. Preenchido em contas Business, vazio em contas
-            pessoais — é um dos dois sinais de que o tipo de conta se deduz (ver
-            `platform`).
+            Nome comercial. Sempre presente e nunca `null`.
+
+            Preenchido em contas Business, `""` em contas pessoais — é um dos dois
+            sinais de que o tipo de conta se deduz (ver `platform`). Medido em
+            2026-08-26: `FilaRápida` na conta com `platform: smbi`, `""` na conta
+            com `platform: iphone`.
           example: FilaRápida
+          nullable: false
           type: string
         connected:
-          description: Há transporte vivo. Mesmo significado do campo homónimo de `GET /session/status`.
+          description: |
+            Há transporte vivo. Mesmo significado do campo homónimo de
+            `GET /session/status`. Sempre presente e nunca `null`.
           example: true
+          nullable: false
           type: boolean
         full_name:
-          description: Nome completo do roster local. Costuma vir vazio para a própria conta.
+          description: |
+            Nome completo do roster local. Sempre presente e nunca `null`; costuma
+            vir `""` para a própria conta — medido `""` nas duas sessões em
+            2026-08-26. Vazio aqui é o caso normal, não defeito.
           example: ""
+          nullable: false
           type: string
         initialized:
-          description: O store completou o handshake inicial.
+          description: |
+            O store completou o handshake inicial. Sempre presente e nunca `null`;
+            `false` é resposta legítima, não ausência.
           example: true
+          nullable: false
           type: boolean
         jid:
           description: |
-            JID próprio na forma PN, SEM sufixo de dispositivo. Vazio numa sessão
-            ligada e ainda não autenticada — e nesse estado os campos de aparelho
-            continuam preenchidos, o que é deliberado.
+            JID próprio na forma PN, SEM sufixo de dispositivo. Sempre presente e
+            nunca `null`.
+
+            `""` numa sessão ligada e ainda não autenticada — e nesse estado os
+            campos de aparelho continuam preenchidos, o que é deliberado
+            (`profile/get_profile.go:88-91`): o painel mostra estado de ligação
+            mesmo sem identidade.
           example: 5516981818244@s.whatsapp.net
+          nullable: false
           type: string
         lid:
-          description: Identidade da conta no espaço `@lid`, com sufixo de dispositivo.
+          description: |
+            Identidade da conta no espaço `@lid`, COM sufixo de dispositivo.
+            Sempre presente e nunca `null`; `""` antes da autenticação.
+
+            Não é intermutável com `jid`: PN e LID são espaços diferentes, e a
+            conversão que a API faz é direccional (F228/F233c).
           example: 29343770251463:25@lid
+          nullable: false
           type: string
         lid_migration_timestamp:
-          description: Quando a conta migrou para o espaço `@lid`. Zero significa que não houve migração registada.
+          description: |
+            Quando a conta migrou para o espaço `@lid`, em segundos desde a época
+            Unix. Sempre presente e nunca `null`.
+
+            **`0` significa que não houve migração registada**, não a época Unix.
+            É o valor zero do `int64` e não se distingue de "campo não preenchido"
+            — o tipo não é ponteiro.
           example: 1766149842
           format: int64
+          nullable: false
           type: integer
         logged_in:
           description: |
-            A sessão está autenticada. Repare no nome — aqui é `logged_in`, e em
-            `GET /session/status` é `loggedIn`. As duas rotas divergem na grafia
-            e ambas estão em uso.
+            A sessão está autenticada. Sempre presente e nunca `null`.
+
+            Repare no nome — aqui é `logged_in`, e em `GET /session/status` é
+            `loggedIn`. As duas rotas divergem na grafia, ambas estão em uso, e
+            `encoding/json` casa nomes ignorando maiúsculas mas **não** ignora o
+            sublinhado: são nomes diferentes no fio.
           example: true
+          nullable: false
           type: boolean
         platform:
           description: |
-            Plataforma que o WhatsApp reporta do aparelho emparelhado.
+            Plataforma que o WhatsApp reporta do aparelho emparelhado. Sempre
+            presente e nunca `null`; `""` antes do emparelhamento.
 
             **É por aqui que se deduz o tipo de conta, e a dedução é INFERÊNCIA,
             não declaração do protocolo** (achado F260 do `HOUSEKEEP.md`): não
-            existe campo nenhum na API que diga se a conta é Business ou pessoal.
-            Medido nas duas sessões vivas em 2026-08-26, `smbi` corresponde a uma
-            conta WhatsApp Business e `iphone` a uma conta pessoal. Que `smbi`
-            signifique "SMB iOS" é leitura do valor, não mapeamento medido no
-            protocolo — trate-o como pista, e confirme com `business_name` se a
-            decisão for importante.
+            existe campo nenhum nesta API que diga se a conta é Business ou
+            pessoal.
+
+            Medido nas duas sessões vivas em 2026-08-26:
+
+            | `platform` | `business_name` | conta observada |
+            |---|---|---|
+            | `smbi` | `FilaRápida` | WhatsApp Business |
+            | `iphone` | `""` | pessoal |
+
+            **Não há `enum` de propósito**: o valor vem do par, a lista de
+            plataformas possíveis não é nossa, e fixá-la aqui recusaria valores
+            legítimos que ainda não vimos. Que `smbi` signifique "SMB iOS" é
+            leitura do valor, não mapeamento medido no protocolo — trate-o como
+            pista, e confirme com `business_name` se a decisão for importante.
           example: smbi
+          nullable: false
           type: string
         pushname:
-          description: Nome que a conta anuncia nas mensagens que envia.
+          description: |
+            Nome que a conta anuncia nas mensagens que envia. Sempre presente e
+            nunca `null`; `""` numa sessão ainda não autenticada.
           example: FilaRápida
+          nullable: false
           type: string
         registration_id:
-          description: Identificador desta instalação no protocolo Signal.
+          description: |
+            Identificador desta instalação no protocolo Signal. Sempre presente e
+            nunca `null`.
+
+            É `uint32` na origem (`domain/user.go:195`) — daí o intervalo `0` a
+            `4294967295`, que NÃO cabe num inteiro de 32 bits com sinal. `0`
+            significa "não há instalação registada", não um identificador válido.
           example: 4190140233
           format: int64
+          maximum: 4294967295
+          minimum: 0
+          nullable: false
           type: integer
       type: object
     PerfilSessaoCompleto:
@@ -4168,17 +4686,31 @@ components:
         - $ref: '#/components/schemas/PerfilSessao'
         - description: |
             O que `/session/profile/full` acrescenta ao perfil local: dois blocos
-            que só a REDE sabe. MEDIDO no servidor vivo em 2026-08-26.
+            que só a REDE sabe. MEDIDO no servidor vivo em 2026-08-26 nas duas
+            sessões reais.
 
             A base local nunca falha por causa da rede — se as duas consultas
             remotas caírem, a resposta ainda traz tudo o que `/session/profile`
             traria, e `unavailable` diz o que faltou e porquê.
+
+            **Os três campos abaixo têm `omitempty`**
+            (`profile/get_profile_full.go:44-58`): ao contrário de todo o resto
+            deste grupo, eles PODEM não aparecer. Nenhum deles vem `null`.
           properties:
             privacy:
               additionalProperties: true
               description: |
                 Definições de privacidade da conta, como o servidor as reporta.
                 Chaves e valores vêm do SDK sem tradução.
+
+                **Ausente quando a consulta falhou** — e então `unavailable.privacy`
+                traz o motivo. **Nunca vem `null`**: a origem
+                (`core/privacysettings.go:14-37`) devolve ou um ponteiro válido ou
+                um erro, nunca `(nil, nil)`.
+
+                Os valores são do SDK e não têm `enum` aqui de propósito: medido
+                em 2026-08-26, `all`, `contacts`, `none`, `off` e
+                `match_last_seen` — e a lista é do par, não nossa.
               example:
                 CallAdd: all
                 Defense: "off"
@@ -4190,17 +4722,27 @@ components:
                 ReadReceipts: all
                 Status: contacts
                 Stickers: contacts
+              nullable: false
               type: object
             unavailable:
               additionalProperties:
+                description: Motivo, em texto, de o bloco correspondente não ter vindo.
                 type: string
               description: |
                 Presente APENAS quando algum bloco remoto não pôde ser obtido, com
-                o motivo por chave. Degradar em silêncio seria pior do que falhar:
-                sem isto, um `user_info` ausente por falha de rede ficaria
-                indistinguível de um ausente por não haver dado.
+                o motivo por chave. As chaves possíveis são `user_info` e
+                `privacy`.
+
+                **Ausente é a resposta normal** — o caso de uso põe o mapa a `nil`
+                quando fica vazio (`profile/get_profile_full.go:82-84`), e o
+                `omitempty` remove-o. Nunca vem `null` nem `{}`.
+
+                Degradar em silêncio seria pior do que falhar: sem isto, um
+                `user_info` ausente por falha de rede ficaria indistinguível de um
+                ausente por não haver dado.
               example:
                 user_info: sessao sem JID proprio; nada a consultar
+              nullable: false
               type: object
             user_info:
               additionalProperties: true
@@ -4208,8 +4750,21 @@ components:
                 Bloco CRU do SDK para o próprio JID, indexado pelo JID. Carrega o
                 recado (`Status`), a lista de dispositivos que o servidor conhece
                 e o LID. As chaves são as do SDK, em maiúsculas iniciais — não
-                passam por normalização nenhuma. Ausente quando a sessão não tem
-                JID próprio ou quando a consulta falhou (ver `unavailable`).
+                passam por normalização nenhuma.
+
+                | estado | quando |
+                |---|---|
+                | ausente | a sessão não tem JID próprio, ou a consulta falhou — e então `unavailable.user_info` diz qual dos dois |
+                | `{}` | o servidor respondeu sem nenhum nó de utilizador; a chamada foi bem sucedida e não trouxe dado |
+                | preenchido | o caso normal |
+
+                **Nunca vem `null`**: o construtor devolve sempre um mapa não-nulo
+                (`capabilities/user/usync.go`, `GetInfo`), e o `omitempty` do
+                campo faz a ausência ser ausência de verdade, não `null`.
+
+                Os valores DENTRO do bloco são do SDK e podem ser `null` — medido
+                `"VerifiedName": null` nas duas sessões. Isso é conteúdo do par,
+                não contrato nosso.
               example:
                 5516981818244@s.whatsapp.net:
                   Devices:
@@ -4219,6 +4774,7 @@ components:
                   PictureID: "214830039"
                   Status: conta de testes
                   VerifiedName: null
+              nullable: false
               type: object
           type: object
       description: Resposta de `GET /session/profile/full`. Perfil da conta ligada, incluindo `platform` — o único sinal de que a conta é Business (`smbi`) ou pessoal.
@@ -4408,29 +4964,58 @@ components:
     ResultadoConfigHmac:
       description: |
         Resposta de `POST /session/hmac/config` e de `DELETE /session/hmac/config`.
-        Como em S3, os dois campos são `omitempty` — a resposta do DELETE sai só
-        com `Details`, porque `Enabled` fica `false`.
+
+        Como em S3, os dois campos têm `omitempty` — a resposta do DELETE sai só
+        com `Details`, porque `Enabled` fica `false` e `false` é o valor zero.
       properties:
         Details:
+          description: |
+            Confirmação em texto: `HMAC configuration saved successfully` no POST,
+            `HMAC configuration deleted successfully` no DELETE. Tem `omitempty`,
+            mas os dois casos de uso preenchem-no sempre, logo aparece em toda
+            resposta `200`. Nunca `null`.
           example: HMAC configuration saved successfully
+          nullable: false
           type: string
         Enabled:
-          description: Estado DEPOIS da operação — `true` quando a chave ficou gravada.
+          description: |
+            Estado DEPOIS da operação — `true` quando a chave ficou gravada.
+
+            **Ausente significa `false`**, por causa do `omitempty`: a resposta do
+            DELETE não traz o campo, e isso é a revogação bem sucedida, não uma
+            resposta incompleta. Nunca vem `null`.
           example: true
+          nullable: false
           type: boolean
       type: object
     ResultadoConfigS3:
       description: |
         Resposta de `POST /session/s3/config` e de `DELETE /session/s3/config`.
-        Ambos os campos são `omitempty`, logo a resposta do DELETE — e a de um
-        POST com `enabled: false` — sai só com `Details`.
+
+        **Ambos os campos têm `omitempty`** (`domain/storage.go`), e isso muda a
+        forma da resposta conforme o resultado: a do DELETE — e a de um POST com
+        `enabled: false` — sai só com `Details`, porque `Enabled` fica `false` e
+        `false` é o valor zero de um booleano.
       properties:
         Details:
+          description: |
+            Confirmação em texto: `S3 configuration saved successfully` no POST,
+            `S3 configuration deleted successfully` no DELETE. Tem `omitempty`,
+            mas os dois casos de uso preenchem-no sempre, logo aparece em toda
+            resposta `200`. Nunca `null`.
           example: S3 configuration saved successfully
+          nullable: false
           type: string
         Enabled:
-          description: Estado DEPOIS da operação, não eco do pedido.
+          description: |
+            Estado DEPOIS da operação, não eco do pedido.
+
+            **Ausente significa `false`.** Com `omitempty`, o valor `false` faz o
+            campo desaparecer do corpo — logo `{"Details":"…"}` sem `Enabled` é a
+            resposta de uma revogação bem sucedida, não uma resposta incompleta.
+            Nunca vem `null`.
           example: true
+          nullable: false
           type: boolean
       type: object
     ResultadoConfiguracaoHmac:
@@ -4491,8 +5076,15 @@ components:
         campo não tem `omitempty`.
       properties:
         details:
-          description: Sempre a string vazia. Campo herdado; nada o preenche hoje.
+          description: |
+            Sempre a string vazia. Campo herdado; nada o preenche hoje.
+
+            **Sempre presente, nunca ausente e nunca `null`** — sem `omitempty` na
+            struct, e o valor zero de `string` é `""`. Não interprete o vazio como
+            falha: a falha viria como `4xx`/`5xx`, não como `200` com `details`
+            vazio.
           example: ""
+          nullable: false
           type: string
       required:
         - details
@@ -4584,15 +5176,33 @@ components:
     ResultadoLimiteHistorico:
       description: |
         Resposta de `POST /session/history`. As chaves são `Details` e `History`,
-        com maiúscula inicial — é o corpo histórico da rota, e `History` NÃO tem
-        `omitempty` de propósito: `0` é resposta legítima e omitir o campo
-        esconderia "gravação desligada" (F165).
+        com maiúscula inicial — é o corpo histórico da rota.
       properties:
         Details:
+          description: |
+            Confirmação em texto. Tem `omitempty` na struct
+            (`domain/webhook.go:49-52`), logo **poderia** ser omitido — mas o caso
+            de uso preenche-o sempre com a constante
+            `History configured successfully` (`storage/set_history.go:83`), então
+            na prática aparece em toda resposta `200`. Nunca vem `null`.
           example: History configured successfully
+          nullable: false
           type: string
         History:
+          description: |
+            Limite gravado, ecoado. **Sempre presente e nunca `null`**: `History`
+            NÃO tem `omitempty` de propósito — `0` é resposta legítima e omitir o
+            campo esconderia "gravação desligada" (F165).
+
+            `0` significa gravação DESLIGADA, não "sem limite". Negativo é
+            recusado antes de gravar, com `400 invalid_history`
+            (`storage/set_history.go:75-78`) — medido em 2026-08-26.
+
+            Repare no tipo: aqui é INTEIRO; o mesmo número volta como TEXTO no
+            campo `history` de `GET /session/status`.
           example: 100
+          minimum: 0
+          nullable: false
           type: integer
       required:
         - History
@@ -4665,7 +5275,13 @@ components:
             Código de oito caracteres que a pessoa digita no telemóvel, em
             *Aparelhos conectados → Conectar com número de telefone*. Tem
             validade curta; se expirar, peça outro.
+
+            **Sempre presente quando a resposta é `200`, e nunca `null`** — sem
+            `omitempty` na struct. Não vem vazio num `200`: o caminho que o
+            preenche é o mesmo que produz o `200`, e qualquer falha antes disso
+            sai como `400`.
           example: ABCD-EFGH
+          nullable: false
           type: string
       required:
         - LinkingCode
@@ -4699,7 +5315,12 @@ components:
         caso de uso devolve o resultado zerado (`session/set_status_message.go:47`).
       properties:
         details:
+          description: |
+            Sempre a string vazia. **Sempre presente, nunca ausente e nunca
+            `null`** — sem `omitempty` na struct. O vazio não indica falha: o
+            recado foi gravado, e a confirmação é o `200`.
           example: ""
+          nullable: false
           type: string
       required:
         - details
@@ -4722,13 +5343,22 @@ components:
           description: |
             Constante. Diz que o pedido foi FEITO, não que a agenda já chegou —
             os contactos entram depois, por eventos de app-state.
+
+            **Sempre presente e nunca `null`**; sem `omitempty` na struct. Valor
+            desconhecido não sai: é literal no caso de uso
+            (`session/sync_contact_roster.go:55`).
           enum:
             - contact roster sync requested
           example: contact roster sync requested
+          nullable: false
           type: string
         mode:
-          description: Eco do modo pedido.
+          description: |
+            Eco do modo pedido. **Sempre presente e nunca `null`**, e nunca vazio:
+            só chega aqui um pedido cujo `mode` já passou pela validação, logo é
+            sempre um dos três válidos.
           example: if_unsynced
+          nullable: false
           type: string
       required:
         - details
@@ -4741,32 +5371,73 @@ components:
 
         **`count` é o que foi PEDIDO, nunca o que chegou.** As mensagens vêm
         depois, como um evento `HistorySync` do tipo ON_DEMAND — que sai pelo
-        webhook e pelo `GET /session/ws`, se a sessão subscrever `HistorySync`.
+        webhook e pelo `GET /session/ws`, se a sessão subscrever `HistorySync`
+        (ou `All`).
+
+        **Nenhum campo tem `omitempty`** (`domain/session.go:136-144`): os sete
+        aparecem SEMPRE numa resposta `200` e nenhum vem `null`.
       properties:
         chat_jid:
+          description: |
+            Eco do `chat_jid` pedido. Sempre presente e nunca `null`, e nunca
+            vazio: um pedido com este campo vazio não chega a produzir `200`.
           example: 554192421234@s.whatsapp.net
+          nullable: false
           type: string
         count:
+          description: |
+            Quantas mensagens foram PEDIDAS — já com o padrão `50` aplicado quando
+            o pedido omitiu `count` ou mandou zero/negativo. Sempre presente e
+            nunca `null`. Não diz nada sobre quantas vão chegar.
           example: 50
+          nullable: false
           type: integer
         details:
-          description: Identificador da mensagem de par que carregou o pedido. Serve para casar o evento que chegar depois.
+          description: |
+            Identificador da mensagem de par que carregou o pedido. Serve para
+            casar o evento que chegar depois. Sempre presente e nunca `null`.
+
+            Repare no nome: `details` aqui é um identificador, e não a
+            confirmação em texto que o mesmo nome carrega em `ResultadoRecado` e
+            `ResultadoDesconexao`.
           example: 3EB0A4B2AFD45E625C0917
+          nullable: false
           type: string
         oldest_msg_from_me:
+          description: |
+            Eco do `oldest_msg_from_me` pedido. Sempre presente e nunca `null`.
+
+            `false` aqui não distingue "mandou `false`" de "não mandou o campo" —
+            o eco carrega a mesma ambiguidade do pedido.
           example: true
+          nullable: false
           type: boolean
         oldest_msg_id:
+          description: |
+            Eco do `oldest_msg_id` pedido. Sempre presente e nunca `null`, e nunca
+            vazio, pela mesma razão de `chat_jid`.
           example: 3EB0A4B2AFD45E625C0917
+          nullable: false
           type: string
         oldest_msg_timestamp:
+          description: |
+            Eco do `oldest_msg_timestamp` pedido. Sempre presente e nunca `null`;
+            `0` quando o pedido o omitiu, sem distinção de um `0` explícito.
           example: 1787747900
           format: int64
+          nullable: false
           type: integer
         timestamp:
-          description: Sempre `0`. O caso de uso não preenche este campo (`session/request_history_sync.go:78-85`).
+          description: |
+            **Sempre `0`, e sempre presente.** O caso de uso não preenche este
+            campo (`session/request_history_sync.go:78-85`), e como não tem
+            `omitempty` ele sai com o valor zero em toda resposta. Nunca `null`.
+
+            Não é o instante do pedido nem o da âncora — é campo morto. Para o
+            instante da âncora, leia `oldest_msg_timestamp`.
           example: 0
           format: int64
+          nullable: false
           type: integer
       type: object
     ResultadoTesteS3:
@@ -5209,17 +5880,31 @@ components:
     VistaConfigHmac:
       description: |
         Resposta de `GET /session/hmac/config`. MEDIDA no servidor vivo em
-        2026-08-26.
+        2026-08-26 nas duas sessões reais: `{"hmac_key": ""}` nas duas.
 
         O que sai é a PRESENÇA da chave, nunca a chave: devolvê-la, mesmo cifrada,
         entregaria o material que a assinatura existe para proteger.
       properties:
         hmac_key:
-          description: '`""` quando não há chave gravada; `***` quando há.'
+          description: |
+            `""` quando não há chave gravada; `***` quando há.
+
+            **Sempre presente e nunca `null`** — sem `omitempty` na struct
+            (`domain/storage.go`, `HmacConfigView`).
+
+            Um terceiro valor, desconhecido, não pode sair: o caso de uso escolhe
+            entre a constante e o vazio conforme o comprimento do que veio do
+            banco (`storage/get_hmac_config.go:47-50`). Se aparecer outra coisa,
+            é defeito, não variação de contrato.
+
+            Ao contrário de `hmac_configured` em `GET /session/status` — que é
+            sempre `false` mesmo havendo chave —, este campo reporta a presença de
+            forma honesta. É por aqui que se pergunta.
           enum:
             - ""
             - '***'
           example: ""
+          nullable: false
           type: string
       required:
         - hmac_key
@@ -5227,49 +5912,91 @@ components:
     VistaConfigS3:
       description: |
         Resposta de `GET /session/s3/config`. MEDIDA no servidor vivo em
-        2026-08-26.
+        2026-08-26 nas duas sessões reais.
 
         **O segredo não tem por onde sair**: a leitura nem seleciona a coluna
         `s3_secret_key`. A access key vem mascarada INCONDICIONALMENTE, mesmo
         quando não há nenhuma configurada — mascarar só por presença revelaria a
         presença.
 
-        Uma sessão sem configuração nenhuma responde `200` com a configuração
-        limpa (`enabled: false`, `path_style: true`, `media_delivery: base64`), e
-        não um erro: assim o chamador distingue "nada configurado" de "a leitura
-        falhou".
+        Uma sessão sem configuração responde `200` com a configuração como está na
+        linha, e não um erro: assim o chamador distingue "nada configurado" de "a
+        leitura falhou".
+
+        **Nenhum campo tem `omitempty`** (`domain/storage.go`, `S3ConfigView`): os
+        nove aparecem SEMPRE e nenhum vem `null`.
       properties:
         access_key:
-          description: Sempre a constante `***`. Nunca o valor.
+          description: |
+            **Sempre a constante `***`, e sempre presente.** Nunca o valor, nunca
+            `""`, nunca `null` — a máscara é aplicada incondicionalmente
+            (`storage/get_s3_config.go:60`), inclusive quando não há credencial
+            nenhuma gravada. Medido `"***"` nas duas sessões, ambas sem S3
+            configurado.
+
+            Consequência: **este campo não serve para saber se há credencial**.
+            Use `enabled` ou `bucket` para isso.
           example: '***'
+          nullable: false
           type: string
         bucket:
+          description: Bucket gravado. Sempre presente, nunca `null`; `""` quando nada foi configurado.
           example: ""
+          nullable: false
           type: string
         enabled:
+          description: A entrega de mídia para o bucket está ligada. Sempre presente, nunca `null`.
           example: false
+          nullable: false
           type: boolean
         endpoint:
+          description: Endpoint gravado. Sempre presente, nunca `null`; `""` significa o endpoint padrão da AWS.
           example: ""
+          nullable: false
           type: string
         media_delivery:
-          enum:
-            - base64
-            - s3
-            - both
+          description: |
+            Modo de entrega gravado. Sempre presente e nunca `null`.
+
+            **Não tem `enum` de propósito, e a razão foi medida.** A escrita só
+            aceita `base64`, `s3` ou `both`, mas a LEITURA devolve o conteúdo cru
+            da coluna: uma sessão que nunca chamou `POST /session/s3/config` tem
+            `""`. Medido em 2026-08-26: `"base64"` numa sessão e `""` na outra.
+            Declarar aqui o enum da escrita tornaria o documento falso.
+
+            `""` deve ser lido como "nunca configurado"; o comportamento efectivo
+            nesse estado é o padrão, `base64`.
           example: base64
+          nullable: false
           type: string
         path_style:
+          description: |
+            Endereçamento por caminho. Sempre presente e nunca `null`.
+
+            Medido `true` numa sessão e `false` na outra em 2026-08-26, ambas sem
+            S3 configurado: o valor é o da coluna, e o `true` do padrão só
+            aparece quando NÃO existe linha de utilizador — situação impossível
+            numa sessão autenticada, porque é a linha que autentica.
           example: true
+          nullable: false
           type: boolean
         public_url:
+          description: Prefixo público gravado. Sempre presente, nunca `null`; `""` quando não há.
           example: ""
+          nullable: false
           type: string
         region:
+          description: Região gravada. Sempre presente, nunca `null`; `""` quando nada foi configurado.
           example: ""
+          nullable: false
           type: string
         retention_days:
+          description: |
+            Dias de retenção gravados. Sempre presente e nunca `null`. `0` é o
+            valor de origem e significa "nunca configurado". Medido `30` numa
+            sessão e `0` na outra em 2026-08-26.
           example: 30
+          nullable: false
           type: integer
       type: object
   securitySchemes:
