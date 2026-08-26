@@ -318,7 +318,7 @@
           campo `Phone`), `already_paired` (a sessão já está autenticada),
           `no_session` (nenhum cliente vivo — ligue primeiro),
           `pair_phone_failed` (o número foi recusado; a mensagem traz o motivo
-          do SDK) e `decode_payload_failed` (corpo não é JSON válido).
+          do SDK) e `could_not_decode_payload` (corpo não é JSON válido).
         content:
           application/json:
             schema:
@@ -758,7 +758,7 @@
       '400':
         description: |
           `invalid_history` (valor negativo), `no_session` (nenhum cliente
-          vivo), `missing_session_id` ou `decode_payload_failed`.
+          vivo), `missing_session_id` ou `could_not_decode_payload`.
         content:
           application/json:
             schema:
@@ -845,7 +845,7 @@
           `proxy_while_connected` (desligue a sessão primeiro),
           `missing_proxy_url`, `invalid_proxy_url`,
           `unsupported_proxy_scheme`, `reserved_proxy_address`,
-          `missing_session_id` ou `decode_payload_failed`.
+          `missing_session_id` ou `could_not_decode_payload`.
         content:
           application/json:
             schema:
@@ -989,7 +989,7 @@
       '400':
         description: |
           `invalid_media_delivery`, `invalid_s3_endpoint`, `no_session`,
-          `missing_session_id` ou `decode_payload_failed`.
+          `missing_session_id` ou `could_not_decode_payload`.
         content:
           application/json:
             schema:
@@ -1226,7 +1226,7 @@
       '400':
         description: |
           `hmac_key_too_short` (menos de 32 caracteres), `no_session`,
-          `missing_session_id` ou `decode_payload_failed`.
+          `missing_session_id` ou `could_not_decode_payload`.
         content:
           application/json:
             schema:
@@ -1332,7 +1332,7 @@
                 details: ''
               success: true
       '400':
-        description: '`missing_body`, `no_session`, `missing_session_id` ou `decode_payload_failed`.'
+        description: '`missing_body`, `no_session`, `missing_session_id` ou `could_not_decode_payload`.'
         content:
           application/json:
             schema:
@@ -1420,7 +1420,7 @@
           `missing_sync_mode` (campo ausente, `null` ou `""`),
           `invalid_sync_mode` (valor não-vazio fora dos três aceites, com o
           valor recebido na mensagem), `no_session`, `missing_session_id` ou
-          `decode_payload_failed`.
+          `could_not_decode_payload`.
 
           Os dois primeiros eram o MESMO código até 2026-08-26 — quem esquecia
           o campo era informado de que o seu valor era inválido.

@@ -295,7 +295,7 @@ PedidoCriarUtilizador:
     Corpo de `POST /admin/users`. `s3Config` e `proxyConfig` são aceites também
     como `s3_config` e `proxy_config`; o camelCase vence quando ambos vierem.
 
-    **Campos desconhecidos são ignorados em silêncio** — toda a API usa
+    **Campos desconhecidos são ignorados** — toda a API usa
     `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
     não dá erro: dá o valor zero.
   required: [name, token]

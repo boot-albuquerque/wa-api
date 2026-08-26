@@ -600,7 +600,7 @@ PedidoMensagemIndisponivel:
     `missing_id` → `invalid_chat_jid` → `invalid_sender_jid`.
 
     Não há alias `jid` nem `Phone` nesta rota. Campos desconhecidos são
-    ignorados em silêncio.
+    ignorados, e **registados no log** desde 2026-08-26.
   required: [chat, sender, id]
   properties:
     chat:
@@ -761,7 +761,7 @@ PedidoTemporizadorPadrao:
 
     O manipulador declara struct própria com um único campo
     (`handler_disappearing.go:76-78`). Campos desconhecidos — incluindo
-    `chat` — são ignorados em silêncio.
+    `chat` — são ignorados, e **registados no log** desde 2026-08-26.
   required: [duration]
   properties:
     duration:

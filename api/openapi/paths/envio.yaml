@@ -2,7 +2,7 @@
 #
 # NOTA SOBRE O 400 INLINE. Este ficheiro NÃO referencia
 # `#/components/responses/CorpoInvalido` nas recusas de payload. A razão é
-# medida: o exemplo daquela resposta traz `error.code: decode_payload_failed`,
+# medida: o exemplo daquela resposta traz `error.code: could_not_decode_payload`,
 # e o servidor devolve `could_not_decode_payload`
 # (`handlers/errors.go:41`, `CodeDecodePayload`, confirmado em 2026-08-26
 # contra localhost:8080). Cada rota traz o seu 400 com os códigos que

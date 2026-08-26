@@ -27,7 +27,7 @@
 #     para `len()`. Levam `nullable: true` porque `null` passa sem erro.
 #   - Tipo ERRADO (`{"Body": 123}`) é o único estado que o desserializador
 #     recusa: `400 could_not_decode_payload`, antes de qualquer validação.
-#   - Campo DESCONHECIDO é ignorado em silêncio em todas as 16 rotas
+#   - Campo DESCONHECIDO é ignorado em todas as 16 rotas, mas REGISTADO no log
 #     (`domain.DecodeRequest` não usa `DisallowUnknownFields`). Um erro de
 #     digitação no nome não dá erro — dá o valor zero.
 #
@@ -748,7 +748,7 @@ PedidoEnvioAudio:
   description: |
     Corpo de `POST /chat/send/audio`. Áudio ou nota de voz; mínimo de 128 bytes.
     A legenda, se houver, vai como mensagem separada. Campos desconhecidos são
-    ignorados em silêncio.
+    ignorados, e **registados no log** desde 2026-08-26.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -953,7 +953,7 @@ PedidoEnvioDocumento:
 PedidoEnvioAutocolante:
   description: |
     Corpo de `POST /chat/send/sticker`. Autocolante em WebP. Campos
-    desconhecidos são ignorados em silêncio.
+    desconhecidos são ignorados, e **registados no log**.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1165,7 +1165,7 @@ PedidoEnvioEnquete:
   description: |
     Corpo de `POST /chat/send/poll`. Enquete com opções. O destino vai em
     `Group`, e não em `Phone`, mesmo para contacto individual. Campos
-    desconhecidos são ignorados em silêncio — e `Phone` é um deles.
+    desconhecidos são ignorados, e **registados no log** — e `Phone` é um deles.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1181,7 +1181,7 @@ PedidoEnvioEnquete:
 
             Medido em 2026-08-26: um pedido completo com `Phone` responde
             `400 missing_group` — `Phone` não existe nesta struct, logo cai na
-            regra do campo desconhecido e é ignorado em silêncio. O sinónimo
+            regra do campo desconhecido: é ignorado, e registado no log. O sinónimo
             universal `chat` funciona e é a saída recomendada.
 
             Ausente, `null` e `""` são indistinguíveis e dão
@@ -1229,7 +1229,7 @@ PedidoVotoEnquete:
   description: |
     Corpo de `POST /chat/send/pollvote`. Voto numa enquete existente,
     identificada pelo par `PollMessageId` mais `PollMessageTimestamp`. Campos
-    desconhecidos são ignorados em silêncio.
+    desconhecidos são ignorados, e **registados no log**.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -1721,9 +1721,9 @@ PedidoEncaminhamento:
 
             | estado | forma POR CONTEÚDO | forma POR CHAVE |
             |---|---|---|
-            | ausente / `null` / `""` | `400 missing_body` — os três são indistinguíveis | ignorado em silêncio |
-            | `"   "` | **enviado** tal e qual; não há `trim` | ignorado em silêncio |
-            | preenchido | enviado | ignorado em silêncio |
+            | ausente / `null` / `""` | `400 missing_body` — os três são indistinguíveis | ignorado, e registado no log |
+            | `"   "` | **enviado** tal e qual; não há `trim` | ignorado, e registado no log |
+            | preenchido | enviado | ignorado, e registado no log |
           example: Bom dia! O seu pedido saiu para entrega.
         ForwardingScore:
           type: integer

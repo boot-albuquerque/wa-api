@@ -26,7 +26,7 @@
 #   JID, que o recusa com `invalid_jid`. É um erro DIFERENTE do de campo em
 #   falta, e por vezes num envelope diferente.
 #
-#   Campo desconhecido é ignorado em silêncio — medido:
+#   Campo desconhecido é ignorado, e REGISTADO no log — medido:
 #   `POST /group/info {"groupJID":"…","campo_inexistente":"lixo"}` devolve
 #   `200`. Um erro de escrita no nome de um campo não dá erro: dá o valor zero.
 #
@@ -659,7 +659,8 @@ PedidoEntrarGrupo:
     (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do domínio
     recebe `400` — medido: `{"inviteLink":"IVccRoDVSbpHKNkgNxyZx4"}` devolve
     `400 "bad request"`, porque `inviteLink` é um campo DESCONHECIDO, é
-    ignorado em silêncio, e `code` fica `""`.
+    ignorado (e registado no log como `unknown field "inviteLink"`), e `code`
+    fica `""`.
 
     Este é o custo concreto de campo desconhecido não dar erro: o nome errado
     não se queixa de si próprio — queixa-se do campo certo estar em falta.
@@ -679,7 +680,7 @@ PedidoEntrarGrupo:
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente** |
         | `"   "` | **passa a guarda** | não há `trim`; segue para o WhatsApp. Por analogia com `/group/inviteinfo`, onde foi MEDIDO, o desfecho é `500`, não `400` |
-        | `inviteLink` em vez de `code` | não | `400 "bad request"` — campo desconhecido, ignorado em silêncio |
+        | `inviteLink` em vez de `code` | não | `400 "bad request"` — campo desconhecido; ignorado, mas o log nomeia-o |
         | código válido | sim | — |
 
         O URL completo também passa, porque a biblioteca corta o prefixo

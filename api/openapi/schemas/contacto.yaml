@@ -1363,7 +1363,8 @@ PedidoStatusAudio:
   description: |
     Áudio a publicar como status. **Não aceita legenda nem miniatura** — a
     struct não tem `Caption` nem `JPEGThumbnail` (`pkg/domain/session.go:117-121`),
-    e enviá-los é ignorado em silêncio, como qualquer campo desconhecido.
+    e enviá-los é ignorado, como qualquer campo desconhecido (o servidor regista
+    `unknown field "<nome>"`; ver "Campos que a API não conhece").
 
     Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
     desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o

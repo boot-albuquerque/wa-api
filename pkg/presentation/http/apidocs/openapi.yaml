@@ -4514,7 +4514,7 @@ components:
         Corpo de `POST /admin/users`. `s3Config` e `proxyConfig` são aceites também
         como `s3_config` e `proxy_config`; o camelCase vence quando ambos vierem.
 
-        **Campos desconhecidos são ignorados em silêncio** — toda a API usa
+        **Campos desconhecidos são ignorados** — toda a API usa
         `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
         não dá erro: dá o valor zero.
       properties:
@@ -5169,9 +5169,9 @@ components:
 
                 | estado | forma POR CONTEÚDO | forma POR CHAVE |
                 |---|---|---|
-                | ausente / `null` / `""` | `400 missing_body` — os três são indistinguíveis | ignorado em silêncio |
-                | `"   "` | **enviado** tal e qual; não há `trim` | ignorado em silêncio |
-                | preenchido | enviado | ignorado em silêncio |
+                | ausente / `null` / `""` | `400 missing_body` — os três são indistinguíveis | ignorado, e registado no log |
+                | `"   "` | **enviado** tal e qual; não há `trim` | ignorado, e registado no log |
+                | preenchido | enviado | ignorado, e registado no log |
               example: Bom dia! O seu pedido saiu para entrega.
               nullable: false
               type: string
@@ -5257,7 +5257,8 @@ components:
         (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do domínio
         recebe `400` — medido: `{"inviteLink":"IVccRoDVSbpHKNkgNxyZx4"}` devolve
         `400 "bad request"`, porque `inviteLink` é um campo DESCONHECIDO, é
-        ignorado em silêncio, e `code` fica `""`.
+        ignorado (e registado no log como `unknown field "inviteLink"`), e `code`
+        fica `""`.
 
         Este é o custo concreto de campo desconhecido não dar erro: o nome errado
         não se queixa de si próprio — queixa-se do campo certo estar em falta.
@@ -5273,7 +5274,7 @@ components:
             | `null` | não | **indistinguível de ausente** |
             | `""` | não | **indistinguível de ausente** |
             | `"   "` | **passa a guarda** | não há `trim`; segue para o WhatsApp. Por analogia com `/group/inviteinfo`, onde foi MEDIDO, o desfecho é `500`, não `400` |
-            | `inviteLink` em vez de `code` | não | `400 "bad request"` — campo desconhecido, ignorado em silêncio |
+            | `inviteLink` em vez de `code` | não | `400 "bad request"` — campo desconhecido; ignorado, mas o log nomeia-o |
             | código válido | sim | — |
 
             O URL completo também passa, porque a biblioteca corta o prefixo
@@ -5411,7 +5412,7 @@ components:
       description: |
         Corpo de `POST /chat/send/audio`. Áudio ou nota de voz; mínimo de 128 bytes.
         A legenda, se houver, vai como mensagem separada. Campos desconhecidos são
-        ignorados em silêncio.
+        ignorados, e **registados no log** desde 2026-08-26.
     PedidoEnvioAutocolante:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -5505,7 +5506,7 @@ components:
           type: object
       description: |
         Corpo de `POST /chat/send/sticker`. Autocolante em WebP. Campos
-        desconhecidos são ignorados em silêncio.
+        desconhecidos são ignorados, e **registados no log**.
     PedidoEnvioBotoes:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -5830,7 +5831,7 @@ components:
 
                 Medido em 2026-08-26: um pedido completo com `Phone` responde
                 `400 missing_group` — `Phone` não existe nesta struct, logo cai na
-                regra do campo desconhecido e é ignorado em silêncio. O sinónimo
+                regra do campo desconhecido: é ignorado, e registado no log. O sinónimo
                 universal `chat` funciona e é a saída recomendada.
 
                 Ausente, `null` e `""` são indistinguíveis e dão
@@ -5886,7 +5887,7 @@ components:
       description: |
         Corpo de `POST /chat/send/poll`. Enquete com opções. O destino vai em
         `Group`, e não em `Phone`, mesmo para contacto individual. Campos
-        desconhecidos são ignorados em silêncio — e `Phone` é um deles.
+        desconhecidos são ignorados, e **registados no log** — e `Phone` é um deles.
     PedidoEnvioImagem:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
@@ -6863,7 +6864,7 @@ components:
         `missing_id` → `invalid_chat_jid` → `invalid_sender_jid`.
 
         Não há alias `jid` nem `Phone` nesta rota. Campos desconhecidos são
-        ignorados em silêncio.
+        ignorados, e **registados no log** desde 2026-08-26.
       properties:
         chat:
           description: |
@@ -7904,7 +7905,8 @@ components:
       description: |
         Áudio a publicar como status. **Não aceita legenda nem miniatura** — a
         struct não tem `Caption` nem `JPEGThumbnail` (`pkg/domain/session.go:117-121`),
-        e enviá-los é ignorado em silêncio, como qualquer campo desconhecido.
+        e enviá-los é ignorado, como qualquer campo desconhecido (o servidor regista
+        `unknown field "<nome>"`; ver "Campos que a API não conhece").
 
         Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
         desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
@@ -8317,7 +8319,7 @@ components:
 
         O manipulador declara struct própria com um único campo
         (`handler_disappearing.go:76-78`). Campos desconhecidos — incluindo
-        `chat` — são ignorados em silêncio.
+        `chat` — são ignorados, e **registados no log** desde 2026-08-26.
       properties:
         duration:
           description: |
@@ -8575,7 +8577,7 @@ components:
       description: |
         Corpo de `POST /chat/send/pollvote`. Voto numa enquete existente,
         identificada pelo par `PollMessageId` mais `PollMessageTimestamp`. Campos
-        desconhecidos são ignorados em silêncio.
+        desconhecidos são ignorados, e **registados no log**.
     PedidoWebhook:
       description: |
         Corpo de `POST /webhook` e de `PUT /webhook`. Os dois verbos aceitam os
@@ -19174,7 +19176,7 @@ paths:
                 $ref: '#/components/schemas/Erro'
           description: |
             `invalid_history` (valor negativo), `no_session` (nenhum cliente
-            vivo), `missing_session_id` ou `decode_payload_failed`.
+            vivo), `missing_session_id` ou `could_not_decode_payload`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -19333,7 +19335,7 @@ paths:
                 $ref: '#/components/schemas/Erro'
           description: |
             `hmac_key_too_short` (menos de 32 caracteres), `no_session`,
-            `missing_session_id` ou `decode_payload_failed`.
+            `missing_session_id` ou `could_not_decode_payload`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -19480,7 +19482,7 @@ paths:
             campo `Phone`), `already_paired` (a sessão já está autenticada),
             `no_session` (nenhum cliente vivo — ligue primeiro),
             `pair_phone_failed` (o número foi recusado; a mensagem traz o motivo
-            do SDK) e `decode_payload_failed` (corpo não é JSON válido).
+            do SDK) e `could_not_decode_payload` (corpo não é JSON válido).
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -19753,7 +19755,7 @@ paths:
             `proxy_while_connected` (desligue a sessão primeiro),
             `missing_proxy_url`, `invalid_proxy_url`,
             `unsupported_proxy_scheme`, `reserved_proxy_address`,
-            `missing_session_id` ou `decode_payload_failed`.
+            `missing_session_id` ou `could_not_decode_payload`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -19988,7 +19990,7 @@ paths:
                 $ref: '#/components/schemas/Erro'
           description: |
             `invalid_media_delivery`, `invalid_s3_endpoint`, `no_session`,
-            `missing_session_id` ou `decode_payload_failed`.
+            `missing_session_id` ou `could_not_decode_payload`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -21043,7 +21045,7 @@ paths:
             `missing_sync_mode` (campo ausente, `null` ou `""`),
             `invalid_sync_mode` (valor não-vazio fora dos três aceites, com o
             valor recebido na mensagem), `no_session`, `missing_session_id` ou
-            `decode_payload_failed`.
+            `could_not_decode_payload`.
 
             Os dois primeiros eram o MESMO código até 2026-08-26 — quem esquecia
             o campo era informado de que o seu valor era inválido.
@@ -21754,7 +21756,7 @@ paths:
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
-          description: '`missing_body`, `no_session`, `missing_session_id` ou `decode_payload_failed`.'
+          description: '`missing_body`, `no_session`, `missing_session_id` ou `could_not_decode_payload`.'
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
