@@ -152,6 +152,7 @@ func emptyCustomHandlers() *customHandlers {
 		// (HOUSEKEEP F124). Ausente daqui, registerCustomRoutes desreferencia
 		// nil ao registrar a rota.
 		ChatHistory: &handlers.ChatHistoryHandlers{},
+		Capability:  &handlers.CapabilityHandlers{},
 	}
 }
 

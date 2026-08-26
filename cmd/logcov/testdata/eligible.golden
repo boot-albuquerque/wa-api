@@ -2711,12 +2711,12 @@ pkg/application/usecase/storage.SetProxyUseCase.disable	ELIGIBLE	covered
 pkg/application/usecase/storage.SetProxyUseCase.enable	ELIGIBLE	covered
 pkg/application/usecase/storage.SetProxyUseCase.resolveWebhookUseProxy	ELIGIBLE	covered
 pkg/application/usecase/storage.TestS3ConnectionUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/user.AddUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,add_user.go:70);uncovered:L2(S-ret,add_user.go:105);uncovered:L2(S-ret,add_user.go:142)
+pkg/application/usecase/user.AddUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,add_user.go:59);uncovered:L2(S-ret,add_user.go:85);uncovered:L2(S-ret,add_user.go:122)
 pkg/application/usecase/user.BlockUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,block_user.go:47)
 pkg/application/usecase/user.CheckUserUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.DeleteUserCompleteUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_user_complete.go:36);uncovered:L2(S-ret,delete_user_complete.go:47)
 pkg/application/usecase/user.DeleteUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_user.go:26);uncovered:L2(S-ret,delete_user.go:35)
-pkg/application/usecase/user.EditUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,edit_user.go:39);uncovered:L2(S-ret,edit_user.go:48);uncovered:L2(S-ret,edit_user.go:84)
+pkg/application/usecase/user.EditUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,edit_user.go:39);uncovered:L2(S-ret,edit_user.go:48);uncovered:L2(S-ret,edit_user.go:60)
 pkg/application/usecase/user.GetAvatarUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_avatar.go:33);uncovered:L2(S-consume,get_avatar.go:37);uncovered:L2(S-ret,get_avatar.go:38)
 pkg/application/usecase/user.GetBlocklistUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.GetContactsLastActivityUseCase.Execute	ELIGIBLE	covered
@@ -2792,7 +2792,7 @@ pkg/bootstrap.NewSessionEventDispatcher	EXCLUDED	X1
 pkg/bootstrap.NewStdioServer	EXCLUDED	X1
 pkg/bootstrap.ProcessOutgoingMedia	ELIGIBLE	covered
 pkg/bootstrap.ReadinessReport.Ready	EXCLUDED	X1
-pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:113)
+pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:111)
 pkg/bootstrap.Routes.func1	EXCLUDED	X6
 pkg/bootstrap.Routes.func2	EXCLUDED	X6
 pkg/bootstrap.UserEventHandler.GetUserID	EXCLUDED	X1
@@ -2874,7 +2874,7 @@ pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
 pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
 pkg/bootstrap.buildRouter	ELIGIBLE	covered
-pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:273)
+pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:272)
 pkg/bootstrap.buildRouter.func2	EXCLUDED	X6
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
@@ -2887,7 +2887,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:511)
+pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:514)
 pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -2993,7 +2993,7 @@ pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
 pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
-pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:220)
+pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:219)
 pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
 pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	uncovered:L2(S-ret,global_hmac_key.go:131)
@@ -3952,6 +3952,9 @@ pkg/presentation/http/devui.Handler.func1	ELIGIBLE	covered
 pkg/presentation/http/devui.deLoopback	EXCLUDED	X1
 pkg/presentation/http/devui.ehLoopback	EXCLUDED	X1
 pkg/presentation/http/handlers.ArchiveChatHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.CapabilityHandlers.Admin	ELIGIBLE	covered
+pkg/presentation/http/handlers.CapabilityHandlers.Session	ELIGIBLE	covered
+pkg/presentation/http/handlers.CapabilityHandlers.sessionEngine	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,handler_capabilities.go:93)
 pkg/presentation/http/handlers.ChatPresenceHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.CommunityLinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:114)
 pkg/presentation/http/handlers.CommunityUnlinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:148)
@@ -3999,6 +4002,7 @@ pkg/presentation/http/handlers.LogoutHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.MarkReadHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.MuteChatHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.NewArchiveChatHandler	EXCLUDED	X1
+pkg/presentation/http/handlers.NewCapabilityHandlers	EXCLUDED	X1
 pkg/presentation/http/handlers.NewChatPresenceHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewCommunityLinkGroupHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewCommunityUnlinkGroupHandler	EXCLUDED	X1
@@ -4180,6 +4184,8 @@ pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered
 pkg/presentation/http/handlers.requestAnswered	EXCLUDED	X1
 pkg/presentation/http/handlers.requirePublishUserInfo	EXCLUDED	X1
 pkg/presentation/http/handlers.sessionUser	ELIGIBLE	covered
+pkg/presentation/http/handlers.sortedCapabilities	ELIGIBLE	uncovered:L1
+pkg/presentation/http/handlers.sortedCapabilities.func1	EXCLUDED	X6
 pkg/presentation/http/handlers.strictUnknownFields	EXCLUDED	X1
 pkg/presentation/http/handlers.unknownFieldError	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,decode.go:101)
 pkg/presentation/http/handlers.unknownFieldMessage	ELIGIBLE	uncovered:L1

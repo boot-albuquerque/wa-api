@@ -61,6 +61,9 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	// a separate capability from /user/history/sync (message history), not
 	// a variant of it. See handler_session.go: SyncContactRosterHandler.
 	registry.Register("/user/contacts/sync", customChain.Then(ch.Session.SyncContactRoster), "POST")
+	// GET /session/capabilities: what the AUTHENTICATED session's engine can
+	// do, per capability. See handler_capabilities.go — CapabilityHandlers.
+	registry.Register("/session/capabilities", customChain.Then(http.HandlerFunc(ch.Capability.Session)), "GET")
 
 	// Message routes
 	registry.Register("/chat/send/text", customChain.Then(ch.Message.SendMessage), "POST")
@@ -298,4 +301,7 @@ func registerAdminRoutes(adminRoutes *mux.Router, ch *customHandlers) {
 	adminRoutes.Handle("/users/{id}", ch.User.EditUser()).Methods("PUT")
 	adminRoutes.Handle("/users/{id}", ch.User.DeleteUser()).Methods("DELETE")
 	adminRoutes.Handle("/users/{id}/full", ch.Misc.DeleteUserComplete).Methods("DELETE")
+	// GET /admin/capabilities: the full capability x engine x account_type
+	// matrix. See handler_capabilities.go — CapabilityHandlers.Admin.
+	adminRoutes.Handle("/capabilities", http.HandlerFunc(ch.Capability.Admin)).Methods("GET")
 }

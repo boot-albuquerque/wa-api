@@ -12,6 +12,7 @@ import (
 	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
+	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/egress"
@@ -116,6 +117,7 @@ type customHandlers struct {
 	ChatHistory *handlers.ChatHistoryHandlers
 	Newsletter  *handlers.NewsletterHandlers
 	Label       *handlers.LabelHandlers
+	Capability  *handlers.CapabilityHandlers
 }
 
 var customHandlerSet = &customHandlers{}
@@ -487,6 +489,7 @@ func initCustomHandlers(s *server) {
 		ChatHistory: chatHistoryHandlers,
 		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
 		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),
+		Capability:  handlers.NewCapabilityHandlers(userRepo, capabilityregistry.NewCapabilityRegistry()),
 	}
 }
 
