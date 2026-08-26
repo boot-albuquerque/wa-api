@@ -29892,3 +29892,44 @@ repositório.
 identificador. Uma linha, e o diagnóstico deixa de depender de sorte.
 
 <!-- f-status: aberto -->
+
+## F276 — `ErrSessionSuperseded` existe mas nada na fronteira HTTP o consome ainda
+
+**Data**: 2026-08-26
+**Contexto**: feature/engine-session-ownership. Implementando o item 6 do
+prompt arquitetural ("token da sessão superseded para de operar: erro
+estável `session_superseded` (409), sem vazar detalhes da nova sessão").
+
+**Onde**: `pkg/domain/account_ownership.go` (o sentinel e a doc do contrato)
+e `pkg/presentation/http/middleware/auth.go` (`AuthAlice`, linha 132 —
+onde o token vira usuário autenticado hoje).
+
+**Problema**: criei `domain.ErrSessionSuperseded` (comparável por
+`errors.Is`, sem vazar detalhe da nova sessão) e
+`AccountOwnershipRepository.CurrentStatusForSession` (resolve o status de
+posse a partir de um `session_id`), mas **não fiz a wiring no middleware de
+auth**. Hoje `AuthAlice` resolve usuário por token e não sabe nada sobre
+`account_ownership`. Uma requisição autenticada com o token de uma sessão
+já superseded continua sendo aceita normalmente — o erro 409
+`session_superseded` nunca é de fato devolvido a ninguém.
+
+A razão de não ter feito: associar token → session_id de forma segura (qual
+`session_id` uma linha de `users`/token corresponde, e como isso se
+relaciona com `session_id` em `account_ownership`) é uma decisão de design
+que atravessa `pkg/application/session` e a tabela `users`, e o prompt desta
+worktree pediu para eu não expandir escopo além do que foi medido — decidi
+não inventar essa junção sem medir o formato real do relacionamento
+token↔session_id nas duas tabelas.
+
+**Correção sugerida**: em `AuthAlice` (ou um middleware novo logo depois
+dele), depois de resolver o usuário/sessão pelo token, chamar
+`AccountOwnershipRepository.CurrentStatusForSession(ctx, sessionID)`; se
+`found && !status.IsActive()`, devolver
+`apperr.New("session_superseded", apperr.CategoryConflict, "sessão substituída por uma mais recente", false, domain.ErrSessionSuperseded)`
+(409, mensagem sem detalhe da nova sessão — não incluir
+`SupersededBySessionID` na resposta).
+
+**Status**: não corrigido nesta sessão — contrato pronto
+(`ErrSessionSuperseded`, `CurrentStatusForSession`), wiring HTTP pendente.
+Fica para quem tocar `pkg/presentation/http/middleware/auth.go` ou para uma
+sessão de continuação desta mesma feature.
