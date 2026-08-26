@@ -74,8 +74,11 @@ func presenceCases() []presenceCase {
 			build: func(d *presenceDeps) http.Handler {
 				return NewSendPresenceHandler(message.NewSendPresenceUseCase(d.presence, log))
 			},
-			validBody:    `{"type":"available"}`,
-			emptyBodyErr: "invalid presence type",
+			validBody: `{"type":"available"}`,
+			// Corpo vazio e' campo AUSENTE, nao valor invalido: os dois
+			// erros tem correcoes diferentes e por isso codigos diferentes
+			// (missing_presence_type vs invalid_presence_type).
+			emptyBodyErr: "missing type in payload",
 			failOp: func(d *presenceDeps, err error) {
 				d.presence.SendPresenceFunc = func(context.Context, string, domain.PresenceType) error { return err }
 			},

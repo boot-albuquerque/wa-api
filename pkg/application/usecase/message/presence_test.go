@@ -3,11 +3,13 @@ package message_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // errJID é a recusa do resolvedor de JID. Distinta de errSession porque os
@@ -276,5 +278,57 @@ func TestSubscribePresence_Success(t *testing.T) {
 	rec := requireLog(t, logger, contractsfake.LevelInfo, "Subscribed to presence")
 	if got, ok := rec.Keyval("jid"); !ok || got != "5511987654321@s.whatsapp.net" {
 		t.Errorf("log de sucesso nao carrega o jid: %v", rec.Keyvals)
+	}
+}
+
+// TestSendPresence_AusenteVsInvalido trava a mesma distinção do
+// /user/contacts/sync neste enum: `type` ausente e `type` errado são erros
+// com CORREÇÕES diferentes. Antes desta correção os dois davam
+// invalid_presence_type, e a mensagem não dizia o que tinha chegado.
+//
+// Em Go, ausente / null / "" colapsam no mesmo valor depois do decode, por
+// isso o caso do ausente é um só.
+func TestSendPresence_AusenteVsInvalido(t *testing.T) {
+	tests := []struct {
+		name     string
+		typ      string
+		wantCode string
+		// wantMsgPart, quando não vazio, é o eco do valor recebido.
+		wantMsgPart string
+	}{
+		{"type vazio e' AUSENTE", "", "missing_presence_type", ""},
+		{"type desconhecido", "online", "invalid_presence_type", `"online"`},
+		// Maiúsculas continuam INVÁLIDAS — a comparação é sensível a caixa.
+		{"type em maiusculas", "AVAILABLE", "invalid_presence_type", `"AVAILABLE"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pc := &contractsfake.PresenceController{}
+			logger := &contractsfake.Logger{}
+
+			err := message.NewSendPresenceUseCase(pc, logger).Execute(context.Background(), userID,
+				domain.SendPresenceRequest{Type: tt.typ})
+
+			if err == nil {
+				t.Fatalf("tipo %q foi aceito", tt.typ)
+			}
+			var appErr *apperr.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("erro nao e' um *apperr.AppError: %v", err)
+			}
+			if appErr.Code != tt.wantCode {
+				t.Fatalf("Code = %q, quero %q (mensagem: %s)", appErr.Code, tt.wantCode, appErr.Error())
+			}
+			if appErr.Category != apperr.CategoryValidation {
+				t.Errorf("Category = %q, quero %q", appErr.Category, apperr.CategoryValidation)
+			}
+			if tt.wantMsgPart != "" && !strings.Contains(appErr.Error(), tt.wantMsgPart) {
+				t.Errorf("mensagem %q nao ecoa o valor recebido %s", appErr.Error(), tt.wantMsgPart)
+			}
+			if n := len(pc.SendPresenceCalls); n != 0 {
+				t.Errorf("tipo recusado alcancou a porta %d vez(es)", n)
+			}
+		})
 	}
 }

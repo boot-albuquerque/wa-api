@@ -29451,3 +29451,31 @@ alteração de contrato observável e precisa de aval.
 
 <!-- f-status: aberto -->
 
+
+## F272 — o adaptador de infra repete a validação de `mode` e não distingue ausente de inválido
+
+**Data**: 2026-08-26. **Contexto**: correcção do `POST /user/contacts/sync`
+(ausente vs inválido nos enums).
+
+**Onde**: `pkg/infra/wa-noise/adapters/misc/adapter.go:188-198`. O `switch mode`
+do `MiscAdapter.SyncContactRoster` devolve `invalid_sync_mode` no `default`,
+incluindo para `mode == ""`.
+
+**Problema**: é a MESMA validação que o use case
+(`pkg/application/usecase/session/sync_contact_roster.go`) já faz, agora com
+duas respostas diferentes para a mesma entrada: o use case devolve
+`missing_sync_mode` para `""` e o adaptador devolve `invalid_sync_mode`. Hoje a
+divergência é inobservável — o use case corre antes e nenhum outro chamador
+alcança o adaptador — mas é exactamente o tipo de duplicação que diverge quando
+alguém acrescentar um quarto modo num sítio só.
+
+**Correcção sugerida**: ou o adaptador passa a receber um tipo já validado
+(`domain.SyncMode`) em vez de `string`, e o `default` volta a ser o erro de
+programação que é; ou a tabela de modos válidos passa para o domínio e os dois
+lados consultam a mesma.
+
+**Status**: não corrigido. Não é escopo da tarefa (o comportamento observável
+da rota está correcto) e mudar a assinatura da porta toca em código fora do
+enunciado. Registado para decisão.
+
+<!-- f-status: aberto -->

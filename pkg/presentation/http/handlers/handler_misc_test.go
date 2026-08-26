@@ -263,8 +263,11 @@ func miscBodyCases() []miscBodyCase {
 			build: func(_ *contractsfake.ChatOperations, pm *contractsfake.PrivacyManager, _ *contractsfake.JIDResolver) http.Handler {
 				return NewSetPrivacySettingHandler(user.NewSetPrivacySettingUseCase(pm, log))
 			},
-			validBody:    `{"privacy_setting":"groupadd","value":"contacts"}`,
-			emptyBodyErr: "invalid privacy setting name",
+			validBody: `{"privacy_setting":"groupadd","value":"contacts"}`,
+			// Corpo vazio e' campo AUSENTE, nao nome invalido: os dois erros
+			// tem correcoes diferentes e por isso codigos diferentes
+			// (missing_privacy_setting vs invalid_privacy_setting).
+			emptyBodyErr: "missing privacy setting name in payload",
 			failOp: func(_ *contractsfake.ChatOperations, pm *contractsfake.PrivacyManager, err error) {
 				pm.SetPrivacySettingFunc = func(context.Context, string, string, string) (any, error) { return nil, err }
 			},
