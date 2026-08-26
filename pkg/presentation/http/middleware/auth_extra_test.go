@@ -153,7 +153,7 @@ func TestAuthAliceCacheHitSkipsDatabase(t *testing.T) {
 	userCache.Set("cached-token", NewValues(map[string]string{"Id": "u1", "Name": "user-u1"}), cache.NoExpiration)
 
 	var seen string
-	handler := AuthAlice(nil, userCache)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthAlice(nil, userCache, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if v, ok := r.Context().Value(appport.UserInfoKey).(Values); ok {
 			seen = v.Get("Id")
 		}
@@ -180,7 +180,7 @@ func TestAuthAliceCachedEntryWithoutIDIsRejected(t *testing.T) {
 	userCache := cache.New(cache.NoExpiration, cache.NoExpiration)
 	userCache.Set("hollow-token", NewValues(map[string]string{"Name": "no id here"}), cache.NoExpiration)
 
-	handler := AuthAlice(nil, userCache)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+	handler := AuthAlice(nil, userCache, nil)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Error("next handler ran for a cache entry with no user id")
 	}))
 
@@ -215,7 +215,7 @@ func TestAuthAliceQueryErrorLogsAndReturns500(t *testing.T) {
 		}
 	})
 
-	handler := AuthAlice(db.DB, cache.New(cache.NoExpiration, cache.NoExpiration))(
+	handler := AuthAlice(db.DB, cache.New(cache.NoExpiration, cache.NoExpiration), nil)(
 		http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 			t.Error("next handler ran after the user lookup failed")
 		}))
@@ -313,7 +313,7 @@ func TestAuthAliceScanErrorLogsAndReturns500(t *testing.T) {
 		t.Fatalf("insert row with non-integer history: %v", err)
 	}
 
-	handler := AuthAlice(db.DB, cache.New(cache.NoExpiration, cache.NoExpiration))(
+	handler := AuthAlice(db.DB, cache.New(cache.NoExpiration, cache.NoExpiration), nil)(
 		http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 			t.Error("next handler ran after the row scan failed")
 		}))
