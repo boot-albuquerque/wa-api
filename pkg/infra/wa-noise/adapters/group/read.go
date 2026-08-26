@@ -2,9 +2,10 @@ package group
 
 import (
 	"context"
-	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
 
 	"wa-api/pkg/domain"
+	"wa-api/pkg/infra/wa-noise/errmap"
+	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
 )
 
 // GetGroupInfo devolve os metadados de um grupo.
@@ -17,7 +18,8 @@ func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group dom
 	if err != nil {
 		return nil, err
 	}
-	return client.GetGroupInfo(ctx, jid)
+	res, err := client.GetGroupInfo(ctx, jid)
+	return res, errmap.ClassifyIQ(err)
 }
 
 // GetGroupInfoFromLink devolve os metadados a partir de um código de convite.
@@ -39,7 +41,8 @@ func (a *GroupAdapter) GetGroupInviteLink(ctx context.Context, txtID string, gro
 	if err != nil {
 		return "", err
 	}
-	return client.GetGroupInviteLink(ctx, jid, false)
+	link, err := client.GetGroupInviteLink(ctx, jid, false)
+	return link, errmap.ClassifyIQ(err)
 }
 
 // ListJoinedGroups devolve os grupos de que a sessão participa e a contagem.

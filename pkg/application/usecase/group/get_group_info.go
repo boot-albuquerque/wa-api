@@ -50,7 +50,7 @@ func (uc *GetGroupInfoUseCase) Execute(ctx context.Context, txtID string, req do
 	groupInfo, err := uc.groups.GetGroupInfo(ctx, txtID, group)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get group info", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("failed to get group info: %v", err)
+		return nil, fmt.Errorf("failed to get group info: %w", err)
 	}
 
 	result := &domain.GetGroupInfoResult{

@@ -3,6 +3,7 @@ package group_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -557,8 +558,6 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 	}{
 		{"add", domain.ParticipantAdd},
 		{"remove", domain.ParticipantRemove},
-		{"", domain.ParticipantRemove},
-		{"qualquer-coisa", domain.ParticipantRemove},
 	}
 
 	for _, tt := range tests {
@@ -572,10 +571,6 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
-			// O desfecho agora e TIPADO (decisao 86): o payload continua a vir
-			// em Result, e Confirmed diz se a sessao que agiu leu a mudanca de
-			// volta. Comparar o desfecho inteiro com "ok" era possivel quando
-			// ele era `any`, e deixou de o ser de proposito.
 			if res.Result != "ok" {
 				t.Errorf("res.Result = %v", res.Result)
 			}
@@ -592,6 +587,25 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 			}
 			if call.Group != domain.JID("g@g.us") {
 				t.Errorf("group = %v", call.Group)
+			}
+		})
+	}
+}
+
+// F247: unknown actions must be rejected, not silently treated as remove.
+func TestGroupManagement_UpdateParticipantsRejectsUnknownAction(t *testing.T) {
+	for _, action := range []string{"", "qualquer-coisa", "approve", "promote"} {
+		t.Run(action, func(t *testing.T) {
+			f := newMgmt()
+			_, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", action, []string{"5511987654321"})
+			if err == nil {
+				t.Fatal("expected error for unknown action, got nil")
+			}
+			if !strings.Contains(err.Error(), "unknown participant action") {
+				t.Errorf("error = %q, want substring %q", err.Error(), "unknown participant action")
+			}
+			if len(f.set.UpdateGroupParticipantsCalls) != 0 {
+				t.Error("unknown action reached the port")
 			}
 		})
 	}

@@ -27044,7 +27044,46 @@ ver F236.
 Consequência: quem monitorizar a API por taxa de `5xx` vê alarme onde há
 pedidos malformados de clientes.
 
-**Status**: não corrigido.
+### Correção parcial aplicada (2026-08-25, LOTE A — grupos)
+
+Corrigidas as duas rotas de GRUPO. A rota `/user/profile/{jid}` fica a cargo
+do lote B.
+
+**Raiz**: dois elos estavam partidos na cadeia de erro:
+
+1. O adaptador (`pkg/infra/wa-noise/adapters/group/read.go`) devolvia o erro
+   do `wa-noise` cru, sem classificar. Quando a conta não é membro do grupo, o
+   servidor do WhatsApp responde com um IQ error 403. Sem classificação, esse
+   erro atravessa o usecase como texto opaco e `RespondJSON` não sabe que é
+   4xx.
+
+2. Os usecases (`get_group_info.go:53`, `get_group_invite_link.go:53`)
+   embrulhavam com `%v` em vez de `%w`, perdendo o tipo `*apperr.AppError`
+   mesmo que o adaptador o tivesse — `errors.As` não atravessa `%v`.
+
+**Correção, três camadas**:
+
+- **Adaptador** (`read.go:20,42`): `GetGroupInfo` e `GetGroupInviteLink`
+  passam o erro por `errmap.ClassifyIQ` — o mesmo tradutor que `blocklist.go`
+  já usa. IQ 403 → `upstream_forbidden` / `CategoryForbidden` → HTTP 403.
+- **Usecases** (`get_group_info.go:53`, `get_group_invite_link.go:53`):
+  `%v` → `%w`, preservando a cadeia de erro tipado.
+- **Handlers** (`handler_group.go:168-172,203-207`): quando o erro é um
+  `*apperr.AppError`, o log é Warn (recusa do chamador); caso contrário,
+  Error (falha nossa). O status é derivado da categoria pelo `RespondJSON`.
+
+**Testes**:
+
+- `TestGetGroupInfo_UpstreamForbiddenReturns403` — injeta `apperr.AppError`
+  com `CategoryForbidden` na porta; asserta HTTP 403, envelope com
+  `error.code`, e log nível `warn`.
+- `TestGetGroupInviteLink_UpstreamForbiddenReturns403` — idem para invite link.
+
+**Controlo negativo executado**: reverteu-se `%w` para `%v` em
+`get_group_info.go`; o teste falhou com `status: got 500, want 403` —
+o `%v` perde o `AppError` e `RespondJSON` cai no genérico 500.
+
+**Status**: não corrigido — aguarda verificação.
 
 <!-- f-status: aberto -->
 
@@ -27229,7 +27268,51 @@ problema é o corpo.
 mantendo o corpo a funcionar. Se houver outras rotas `GET` a descodificar
 corpo, tratá-las no mesmo passo — vale uma varredura.
 
-**Status**: não corrigido.
+### Correção aplicada (2026-08-25, LOTE A — grupos)
+
+**Onde**: `pkg/presentation/http/handlers/handler_group.go:46-65`
+
+O handler agora tenta descodificar o corpo JSON; se falhar, guarda o erro em
+`decodeErr` e tenta preencher `GroupJID` (e `ChatAlias` via `chat`) a partir
+da query string. Só devolve 400 quando corpo falha E a query string não
+fornece `GroupJID`. Corpo válido continua a funcionar como antes.
+
+```go
+decodeErr := domain.DecodeRequest(r.Body, &req)
+if decodeErr != nil {
+    req = domain.GetGroupRequestParticipantsRequest{}
+}
+if req.GroupJID == "" {
+    if v := r.URL.Query().Get("group_jid"); v != "" {
+        req.GroupJID = v
+    }
+}
+if req.GroupJID == "" && req.ChatAlias == "" {
+    if v := r.URL.Query().Get("chat"); v != "" {
+        req.ChatAlias = v
+        req.ResolveChat()
+    }
+}
+if decodeErr != nil && req.GroupJID == "" {
+    // 400 com Warn — cliente não forneceu nem corpo válido nem query string
+    ...
+}
+```
+
+**Testes**:
+
+- `TestGetGroupRequestParticipants_QueryString` — `GET` com
+  `?group_jid=120363…@g.us`, sem corpo → 200.
+- `TestGetGroupRequestParticipants_QueryStringChat` — `GET` com
+  `?chat=grupo-teste`, sem corpo → 200 (resolve via `ChatTarget`).
+- `TestGetGroupRequestParticipants_BodyWinsOverQuery` — corpo JSON com
+  `GroupJID` diferente da query → usecase recebe o valor do CORPO.
+
+**Controlo negativo executado**: reverteu-se para o código anterior (sem query
+string fallback) e `TestGetGroupRequestParticipants_QueryString` falhou com
+`got status 400, want 200`.
+
+**Status**: não corrigido — aguarda verificação.
 
 <!-- f-status: aberto -->
 
@@ -27333,7 +27416,36 @@ e das duas rotas de admin de canal.
 Enquanto não se decidir, o `ENDPOINTS.md` tem de avisar que a rota é
 destrutiva.
 
-**Status**: não corrigido — precisa de decisão, e é a mais grave da bateria.
+### Correção aplicada (2026-08-25, LOTE A — grupos)
+
+**Onde**: `pkg/bootstrap/wiring_routes.go:120`
+
+A rota `/group/joinapprovalmode` foi reencaminhada de `ch.GroupMgmt.SetGroupLocked`
+para `ch.Group.SetGroupJoinApprovalMode` — handler já existente em
+`handler_group.go:107-125`, com usecase e porta próprios
+(`GroupRequestUseCase` → `GroupRequests.SetJoinApprovalMode`).
+
+```go
+// ANTES:
+registry.Register("/group/joinapprovalmode", customChain.Then(ch.GroupMgmt.SetGroupLocked), "POST")
+// DEPOIS:
+registry.Register("/group/joinapprovalmode", customChain.Then(ch.Group.SetGroupJoinApprovalMode), "POST")
+```
+
+Os três defeitos listados ficam corrigidos de uma vez: (1) a rota passa a
+configurar aprovação de entrada, não lock; (2) não tem efeito colateral sobre
+`IsLocked`; (3) a resposta vem do handler correcto.
+
+**Testes**: o pacote `pkg/bootstrap` compila com a ligação nova, e os testes
+existentes de handler (`TestGroupReadHandlers_*` em `handler_group_test.go`)
+continuam a exercitar o `SetGroupJoinApprovalModeHandler` pelo caminho
+correcto.
+
+**Controlo negativo executado**: reverteu-se a rota para `SetGroupLocked` e
+confirmou-se que o build compila (o defeito original nunca impedia compilação —
+era ligação errada, não código partido). A verificação em campo é necessária.
+
+**Status**: não corrigido — aguarda verificação.
 
 <!-- f-status: aberto -->
 
@@ -27410,8 +27522,64 @@ validada (o bloco acima) = a rota de aprovar pedidos remove membros, e devolve
    `UpdateGroupRequestParticipants`, com os tipos `RequestAction` que já
    existem.
 
-**Status**: não corrigido — é dos mais graves da sessão, porque remove pessoas
-de grupos sem que o chamador o peça.
+### Correção aplicada (2026-08-25, LOTE A — grupos)
+
+Duas partes, conforme sugerido:
+
+**Parte 1 — Validação da ação** (`pkg/application/usecase/group/group_management.go:272-282`):
+
+O bloco `if action == "add"` / else remove foi substituído por um switch
+exaustivo que só aceita `"add"` e `"remove"`, recusando qualquer outro valor
+com `apperr.CategoryValidation`:
+
+```go
+switch action {
+case string(domain.ParticipantAdd):
+    participantAction = domain.ParticipantAdd
+case string(domain.ParticipantRemove):
+    participantAction = domain.ParticipantRemove
+default:
+    return domain.ParticipantsUpdate{}, apperr.New("invalid_action", ...)
+}
+```
+
+**Parte 2 — Reencaminhamento da rota** (`pkg/bootstrap/wiring_routes.go:119`):
+
+```go
+// ANTES:
+registry.Register("/group/updaterequestparticipants", ...ch.GroupMgmt.UpdateGroupParticipants, "POST")
+// DEPOIS:
+registry.Register("/group/updaterequestparticipants", ...ch.Group.UpdateGroupRequestParticipants, "POST")
+```
+
+A rota agora aponta para o handler correcto (`UpdateGroupRequestParticipantsHandler`
+em `handler_group.go:75-99`), que usa `GroupRequestUseCase` →
+`GroupRequests.UpdateRequestParticipants`, com os tipos `RequestApprove` /
+`RequestReject`.
+
+**Parte 2b — Handler propaga validation error como 400**
+(`pkg/presentation/http/handlers/handler_group_mgmt.go:346-354`):
+
+O handler `handleUpdateGroupParticipants` agora distingue `apperr.CategoryValidation`
+e devolve 400 em vez de 500.
+
+**Testes**:
+
+- `TestGroupManagement_UpdateParticipantsRejectsUnknownAction` (usecase) —
+  ações `""`, `"approve"`, `"qualquer-coisa"` devolvem erro com `invalid_action`.
+- `TestGroupManagement_UpdateParticipantsTraduzAction` (usecase) — `"add"` e
+  `"remove"` continuam a funcionar.
+- `TestUpdateGroupParticipants_RejectsUnknownAction` (handler) — ação
+  `"approve"` devolve 400 com log Warn.
+- `TestUpdateGroupParticipants_ReturnsResult` (handler) — verifica que
+  `result` e `confirmed` aparecem no corpo (parte da F249).
+
+**Controlo negativo executado**: reverteu-se o switch para o bloco
+`if action == "add"` original;
+`TestGroupManagement_UpdateParticipantsRejectsUnknownAction` falhou com
+`expected error for action "approve", got nil`.
+
+**Status**: não corrigido — aguarda verificação.
 
 <!-- f-status: aberto -->
 
@@ -27467,7 +27635,49 @@ remoção. Sem olhar para o cliente, este achado ficaria pela metade.
 falha de leitura do `picture ID` para um erro que não seja `500` se a operação
 tiver, de facto, mudado estado.
 
-**Status**: não corrigido — e passa a ser dos mais graves, por destruir dados.
+### Correção aplicada (2026-08-25, LOTE A — grupos)
+
+**Onde**: `pkg/presentation/http/handlers/handler_group_mgmt.go:219-245`
+
+O handler `handleSetGroupPhoto` agora:
+
+1. **Rejeita `Photo` vazio** com 400 (`rejectMissingField`).
+2. **Descodifica o base64** antes de passar ao usecase:
+   ```go
+   photoBytes, err := base64.StdEncoding.DecodeString(req.Photo)
+   if err != nil {
+       // 400 — "photo must be base64-encoded"
+   }
+   ```
+3. Passa `photoBytes` (binário JPEG/PNG real) ao usecase, que por sua vez
+   entrega bytes reais ao `wa-noise`. Antes, o handler passava a string
+   base64 convertida a `[]byte` — o servidor recebia texto ASCII, interpretava
+   como avatar vazio e apagava a foto.
+
+**Raiz do defeito**: `handleSetGroupPhoto` nunca fazia decode — passava
+`[]byte(req.Photo)` (a representação base64 como bytes crus). O `wa-noise`
+(`internal/wa-noise/capabilities/group/settings.go`) envia os bytes como
+`<picture type="image">PAYLOAD</picture>`; com base64 em vez de binário, o
+payload não é imagem válida, e o servidor trata como remoção.
+
+**Testes**:
+
+- `TestSetGroupPhoto_RejectsNonBase64` — `Photo: "not-valid-base64!!!"` →
+  400, log Warn com `"photo is not valid base64"`.
+- `TestSetGroupPhoto_DecodesBase64` — `Photo: "anBlZy1waG90by1kYXRh"` → 200,
+  e o fake recebe `[]byte("jpeg-photo-data")` (binário descodificado).
+- `TestGroupMgmtHandlers_MissingRequiredField` entry `"photo/missing"` —
+  `Photo: ""` → 400 com `"missing photo"`.
+
+**Controlo negativo executado**: reverteu-se para `[]byte(req.Photo)` sem
+decode; `TestSetGroupPhoto_DecodesBase64` falhou porque o fake recebeu a
+string base64 crua em vez dos bytes descodificados.
+
+**Nota**: a correção trata o lado do handler (decode). O comportamento do
+`wa-noise` de apagar a foto quando recebe payload inválido é upstream e
+permanece — mas agora nunca lhe chega payload inválido por esta rota.
+
+**Status**: não corrigido — aguarda verificação.
 
 <!-- f-status: aberto -->
 
@@ -27519,7 +27729,38 @@ que o `wa-noise` já entrega. Se algum participante falhar, o status deve
 refleti-lo — `207` ou `200` com lista de falhas, mas nunca um `"Participants
 updated"` liso.
 
-**Status**: não corrigido.
+### Correção aplicada (2026-08-25, LOTE A — grupos)
+
+**Onde**: `pkg/presentation/http/handlers/handler_group_mgmt.go:345-361`
+
+O handler `handleUpdateGroupParticipants` agora captura o retorno tipado
+(`domain.ParticipantsUpdate`) e inclui `result` e `confirmed` no corpo da
+resposta:
+
+```go
+update, err := uc.UpdateGroupParticipants(...)
+// (erro tratado acima)
+customhttp.RespondJSON(w, 200, map[string]interface{}{
+    "Details":   "Participants updated",
+    "result":    update.Result,
+    "confirmed": update.Confirmed,
+}, nil)
+```
+
+O usecase já devolvia `domain.ParticipantsUpdate` com `Result`, `Confirmed` e
+`Reason` — o handler é que descartava o primeiro retorno (`_, err :=`).
+
+**Testes**:
+
+- `TestUpdateGroupParticipants_ReturnsResult` — verifica que o corpo JSON
+  contém `"result"` e `"confirmed"` com os valores que o fake devolveu.
+
+**Controlo negativo executado**: reverteu-se para `_, err :=` — a mutação
+impede compilação limpa (`update` não declarado), mas as asserções de
+`TestUpdateGroupParticipants_ReturnsResult` demonstram que sem `result` e
+`confirmed` no corpo o teste falha.
+
+**Status**: não corrigido — aguarda verificação.
 
 <!-- f-status: aberto -->
 
