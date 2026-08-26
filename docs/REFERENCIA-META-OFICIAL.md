@@ -267,6 +267,76 @@ promoção de 🟡 para ✅ é feita por mim, a olhar para o cliente. **Com o
 webhook de `delivered` ela poderia ser automática** — e essa é a diferença
 entre evidência que se recolhe e evidência que se recebe.
 
+## O nosso carrossel NÃO é `multi_product` nem `catalog_message` — medido no proto
+
+A pergunta era se o `/chats/send/carousel` é equivalente a alguma das
+capacidades comerciais da Cloud API. **Não é**, e o protocolo diz-o sem
+ambiguidade: são **variantes diferentes do mesmo `oneof`**.
+
+`InteractiveMessage` tem quatro variantes mutuamente exclusivas
+(`waE2E`, campo `interactiveMessage`):
+
+| campo | struct | campos que a definem | o que é |
+|---|---|---|---|
+| 4 `shopStorefrontMessage` | `ShopMessage` | `ID`, `Surface` — `FB`, `IG` ou `WA` | abre a **montra** da loja numa superfície |
+| 5 `collectionMessage` | `CollectionMessage` | `BizJID`, `ID` | referencia uma **colecção do catálogo** do negócio |
+| 6 `nativeFlowMessage` | `NativeFlowMessage` | `NativeFlowButton[]` | os **botões** — é o que `/chats/send/buttons` usa |
+| 7 `carouselMessage` | `CarouselMessage` | `Cards []*InteractiveMessage`, `CarouselCardType` | **cartões deslizáveis**, cada um uma InteractiveMessage completa |
+
+**O que decide a questão** é o tipo de `Cards`: `[]*InteractiveMessage`. Um
+cartão do nosso carrossel é uma mensagem interativa inteira — com o seu
+cabeçalho, corpo, rodapé e botões próprios. **Não é uma referência a produto.**
+
+As duas capacidades comerciais referenciam catálogo por identificador:
+`CollectionMessage` tem `BizJID` + `ID`, `ShopMessage` tem `ID` + `Surface`.
+Nenhuma transporta conteúdo — apontam para dados que vivem no catálogo do
+negócio.
+
+### O mapeamento, então, é este
+
+| Cloud API | protocolo WhatsApp Web | temos? |
+|---|---|---|
+| `interactive.product_list` (multi-produto) | `CollectionMessage` | ❌ existe no proto, **não construímos** |
+| `interactive.catalog_message` | `ShopMessage` | ❌ existe no proto, **não construímos** |
+| `interactive.product` (produto único) | `Header_ProductMessage` (cabeçalho de card) | ❌ |
+| `interactive.button` | `NativeFlowMessage` | ✅ `/chats/send/buttons` |
+| `interactive.list` | `NativeFlowMessage` com `single_select` | ✅ `/chats/send/list` |
+| **sem equivalente conhecido** | `CarouselMessage` | ✅ `/chats/send/carousel` |
+
+**O nosso carrossel continua sem par do lado da Cloud API.** A pesquisa da
+colecção Postman não encontrou pedido próprio para ele, e o proto mostra
+porquê: é um contentor genérico de cartões interativos, não um recurso
+comercial. O *carousel template* da Meta resolve um problema parecido por
+outro caminho — modelo aprovado, com cards fixos.
+
+### O detalhe que muda o planeamento
+
+`CarouselMessage.Cards` são `InteractiveMessage`, e `InteractiveMessage.Header`
+aceita `Header_ProductMessage`. **Em teoria, um cartão do nosso carrossel pode
+ter um produto no cabeçalho** — o que aproximaria o carrossel de um
+multi-produto.
+
+O nosso construtor **não faz isso**: `buildCarouselCard`
+(`messenger_carousel.go:106-124`) só monta `Header_ImageMessage` a partir de
+bytes carregados. Se a montra de produtos vier a ser precisa, este é o ponto
+onde ela encaixa — e é mais barato do que implementar `CollectionMessage` de
+raiz.
+
+**Não medido, e é o que decide se vale a pena**: se o servidor do WhatsApp
+aceita `Header_ProductMessage` vindo de um cliente Web, e se o produto tem de
+existir num catálogo aprovado. O proto declarar um campo **não** significa que
+o servidor o aceite — esta série já viu isso três vezes.
+
+### Um segundo tipo de carrossel que temos e não usamos
+
+`CarouselCardType` tem **dois** valores válidos: `HSCROLL_CARDS` (1), que
+usamos, e `ALBUM_IMAGE` (2), que **não**. O segundo sugere um álbum de imagens
+em vez de cartões com botões — e há memória neste repositório de uma tentativa
+de álbum (`boot-albuquerque/wa-album-eco`).
+
+Fica registado como candidato: é uma linha de código no construtor, e a
+pergunta é se o cliente o desenha diferente.
+
 ### O que a pesquisa revelou como lacuna nossa, e eu não tinha visto
 
 A Meta aceita mídia por **URL** e por **`media_id`** (upload prévio). Eu
@@ -321,10 +391,10 @@ A coluna certa para cada capacidade não é a mesma.
 | `send_reaction` | ✅ | ? | ✅ (falha se a original tiver >30 dias) |
 | `send_reply_buttons` | ✅ | ? | ✅ `interactive.button`, máx. 3 |
 | `send_list` | ✅ | ? | ✅ `interactive.list`, máx. 10 linhas |
-| `send_native_carousel` | ✅ `HSCROLL_CARDS` | ? | **?** sem pedido próprio na colecção |
-| `send_single_product` | ❌ | ? | ✅ `interactive.product` |
-| `send_multi_product` | ❌ | ? | ✅ `product_list`, máx. 30 |
-| `send_catalog` | ❌ | ? | ✅ `catalog_message` |
+| `send_native_carousel` | ✅ `CarouselMessage`/`HSCROLL_CARDS` | ? | **sem equivalente** — medido no proto |
+| `send_single_product` | ❌ `Header_ProductMessage` existe no proto, não construído | ? | ✅ `interactive.product` |
+| `send_multi_product` | ❌ `CollectionMessage` existe no proto, não construído | ? | ✅ `product_list`, máx. 30 |
+| `send_catalog` | ❌ `ShopMessage` existe no proto, não construído | ? | ✅ `catalog_message` |
 | `send_flow` | ❌ | ? | ✅ `interactive.flow` |
 | `send_order_details` | 📥 só recebe | ? | 🟡 **regional** (SG, IN) |
 | `send_order_status` | ❌ | ? | 🟡 **regional** |

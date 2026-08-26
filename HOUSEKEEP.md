@@ -29864,6 +29864,69 @@ canais, status, enquetes — é nosso. São as duas metades do que o WhatsApp é
 se resolvem. Abrir uma tarefa "implementar `send_catalog`" seria abrir uma que
 não tem como terminar.
 
+## Respondido por medição: o nosso carrossel não é `multi_product` nem `catalog`
+
+**Pergunta do utilizador**, 2026-08-26: perceber se o `/chats/send/carousel` é
+equivalente a `multi_product`, `catalog_buttons` ou outro.
+
+**Resposta: nenhum deles**, e o protocolo di-lo sem ambiguidade. São variantes
+**mutuamente exclusivas** do mesmo `oneof` de `InteractiveMessage` (`waE2E`):
+
+| campo | struct | campos que a definem |
+|---|---|---|
+| 4 `shopStorefrontMessage` | `ShopMessage` | `ID`, `Surface` (FB/IG/WA) |
+| 5 `collectionMessage` | `CollectionMessage` | `BizJID`, `ID` |
+| 6 `nativeFlowMessage` | `NativeFlowMessage` | `NativeFlowButton[]` |
+| 7 `carouselMessage` | `CarouselMessage` | `Cards []*InteractiveMessage`, `CarouselCardType` |
+
+**O que decide**: `Cards` é `[]*InteractiveMessage`. Cada cartão é uma
+mensagem interativa **inteira**, com cabeçalho, corpo, rodapé e botões
+próprios. **Não é referência a produto.**
+
+As duas capacidades comerciais fazem o contrário: referenciam catálogo por
+identificador e **não transportam conteúdo**. `CollectionMessage` aponta para
+uma colecção; `ShopMessage` abre a montra.
+
+**Mapeamento medido:**
+
+```
+interactive.product_list   ->  CollectionMessage   existe no proto, NÃO construímos
+interactive.catalog_message->  ShopMessage         existe no proto, NÃO construímos
+interactive.product        ->  Header_ProductMessage                NÃO construímos
+interactive.button         ->  NativeFlowMessage   ✅ /chats/send/buttons
+interactive.list           ->  NativeFlowMessage   ✅ /chats/send/list
+(sem equivalente)          ->  CarouselMessage     ✅ /chats/send/carousel
+```
+
+Isto **confirma** o que a nota do carrossel já dizia e acrescenta o porquê: o
+nosso carrossel é um contentor genérico de cartões interativos, não um recurso
+comercial. Marcá-lo como `multi_product` teria sido igualar aparência a
+capacidade — o mesmo erro que a distinção `native` vs `template` evitou.
+
+## E dois achados que a medição produziu de lado
+
+**1. O carrossel pode, em teoria, carregar produtos.**
+`CarouselMessage.Cards` são `InteractiveMessage`, e `InteractiveMessage.Header`
+aceita `Header_ProductMessage`. O nosso `buildCarouselCard`
+(`messenger_carousel.go:106-124`) só monta `Header_ImageMessage`.
+
+Se a montra de produtos vier a ser precisa, **é aqui que encaixa** — e é mais
+barato que implementar `CollectionMessage` de raiz.
+
+**NÃO MEDIDO, e é o que decide se vale a pena**: se o servidor aceita
+`Header_ProductMessage` vindo de um cliente Web, e se o produto tem de existir
+num catálogo aprovado. **O proto declarar um campo não significa que o
+servidor o aceite** — esta série já viu isso três vezes (F223, F256, F265).
+
+**2. Há um segundo tipo de carrossel que temos e não usamos.**
+`CarouselCardType` tem dois valores válidos: `HSCROLL_CARDS` (1), que usamos, e
+`ALBUM_IMAGE` (2), que não. Sugere álbum de imagens em vez de cartões com
+botões, e há memória de uma tentativa neste repositório
+(`boot-albuquerque/wa-album-eco`).
+
+É **uma linha** no construtor. A pergunta que falta é se o cliente o desenha
+diferente — e essa só a medição em campo responde.
+
 <!-- f-status: aberto -->
 
 ## F272 — a API oficial da Meta como referência, e a comparação que falta
