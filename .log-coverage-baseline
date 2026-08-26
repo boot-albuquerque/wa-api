@@ -1271,7 +1271,7 @@ rules_frozen=true
 # o baseline sozinha contra o mesmo commit-base da foundation; o merge soma
 # os deltas — medido com `go run ./cmd/logcov -json ./pkg` apos o merge
 # completo, nao inferido.
-min_func_coverage=594
+min_func_coverage=595
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1578,6 +1578,10 @@ min_errpath_coverage=781
 # NewCapabilityHandlers e sortedCapabilities.func1 entram EXCLUDED (a
 # primeira e' construtor puro; a segunda e' a func literal de sort.Slice).
 # Medido com `go run ./cmd/logcov -json ./pkg`.
+#
+# account-type-detection (2026-08-26): min_eligible sobe mais (ver commit da
+# branch para o delta exato) — regenerado apos o merge completo da onda 3,
+# valor final medido abaixo.
 min_eligible=1007
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho

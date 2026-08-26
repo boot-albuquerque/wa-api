@@ -135,6 +135,8 @@ var PortCoverage = map[PortMethod]domain.Capability{
 
 	{"SessionDisconnector", "Disconnect"}: domain.CapDisconnectSession,
 	{"SessionLogouter", "Logout"}:         domain.CapLogoutSession,
+
+	{"AccountTypeDetector", "Detect"}: domain.CapDetectAccountType,
 }
 
 // EngineAgnosticPorts lists provider-dependent port methods that are

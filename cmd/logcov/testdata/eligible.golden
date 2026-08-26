@@ -1,3 +1,4 @@
+internal/wa-headless.DetectAccountKind	EXCLUDED	X7
 internal/wa-headless.IsUnresolvedIdentity	EXCLUDED	X1
 internal/wa-headless.NewAvatarFetcher	EXCLUDED	X1
 internal/wa-headless.NewBlocker	EXCLUDED	X1
@@ -16,6 +17,9 @@ internal/wa-headless.NewResolver	EXCLUDED	X1
 internal/wa-headless.NewRevoker	EXCLUDED	X1
 internal/wa-headless.NewRunner	EXCLUDED	X1
 internal/wa-headless.RefreshOwnIdentity	EXCLUDED	X7
+internal/wa-headless/capabilities/accounttype.Detect	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,accounttype.go:91);uncovered:L2(S-ret,accounttype.go:101)
+internal/wa-headless/capabilities/accounttype.Detect.func1	EXCLUDED	X6
+internal/wa-headless/capabilities/accounttype.readScript	EXCLUDED	X1
 internal/wa-headless/capabilities/avatar.Avatar.String	EXCLUDED	X4
 internal/wa-headless/capabilities/avatar.Fetcher.Fetch	ELIGIBLE	uncovered:L2(S-ret,avatar.go:181);uncovered:L2(S-consume,avatar.go:182);uncovered:L2(S-ret,avatar.go:191);uncovered:L2(S-consume,avatar.go:192)
 internal/wa-headless/capabilities/avatar.Fetcher.Fetch.func1	EXCLUDED	X6
@@ -880,6 +884,7 @@ internal/wa-noise/capabilities/tctoken.State.SetSenderTS	EXCLUDED	X5
 internal/wa-noise/capabilities/tctoken.State.TryStartDBPrune	EXCLUDED	X5
 internal/wa-noise/capabilities/tctoken.State.ValidateAndSet	EXCLUDED	X5
 internal/wa-noise/capabilities/tctoken.State.unlockedCleanup	EXCLUDED	X5
+internal/wa-noise/capabilities/user.DetectOwnAccountKind	EXCLUDED	X5
 internal/wa-noise/capabilities/user.DeviceCache.Delete	EXCLUDED	X5
 internal/wa-noise/capabilities/user.DeviceCache.DeleteLocked	EXCLUDED	X5
 internal/wa-noise/capabilities/user.DeviceCache.GetLocked	EXCLUDED	X5
@@ -941,6 +946,7 @@ internal/wa-noise/core.Client.DecryptPollVote	EXCLUDED	X5
 internal/wa-noise/core.Client.DecryptReaction	EXCLUDED	X5
 internal/wa-noise/core.Client.DecryptSecretEncryptedMessage	EXCLUDED	X5
 internal/wa-noise/core.Client.DeleteMedia	EXCLUDED	X5
+internal/wa-noise/core.Client.DetectOwnAccountKind	EXCLUDED	X5
 internal/wa-noise/core.Client.Disconnect	EXCLUDED	X5
 internal/wa-noise/core.Client.Download	EXCLUDED	X5
 internal/wa-noise/core.Client.DownloadAny	EXCLUDED	X5
@@ -2801,7 +2807,7 @@ pkg/bootstrap.UserEventHandler.decoratePollVote	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.decryptSecretEncryptedMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleAppState	EXCLUDED	X1
 pkg/bootstrap.UserEventHandler.handleAppStateChange	EXCLUDED	X1
-pkg/bootstrap.UserEventHandler.handleAppStateSyncComplete	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:28)
+pkg/bootstrap.UserEventHandler.handleAppStateSyncComplete	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:31)
 pkg/bootstrap.UserEventHandler.handleBlocklist	ELIGIBLE	uncovered:L3(zerolog,eventhandler_contact.go:61)
 pkg/bootstrap.UserEventHandler.handleBlocklistChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleBusinessName	ELIGIBLE	covered
@@ -2811,9 +2817,10 @@ pkg/bootstrap.UserEventHandler.handleCallOfferNotice	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallRelayLatency	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleCallTerminate	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleChatPresence	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleClientOutdated	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:272)
+pkg/bootstrap.UserEventHandler.handleClientOutdated	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:317)
 pkg/bootstrap.UserEventHandler.handleConnectFailure	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleConnected	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:88)
+pkg/bootstrap.UserEventHandler.handleConnected	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:133)
+pkg/bootstrap.UserEventHandler.handleConnected.func1	EXCLUDED	X6
 pkg/bootstrap.UserEventHandler.handleDisconnected	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleEvent	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleEvent.func1	EXCLUDED	X1
@@ -2822,8 +2829,8 @@ pkg/bootstrap.UserEventHandler.handleGroupInfo	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleHistorySync	ELIGIBLE	uncovered:L1
 pkg/bootstrap.UserEventHandler.handleIdentityChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleJoinedGroup	ELIGIBLE	covered
-pkg/bootstrap.UserEventHandler.handleKeepAliveRestored	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:260)
-pkg/bootstrap.UserEventHandler.handleKeepAliveTimeout	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:266)
+pkg/bootstrap.UserEventHandler.handleKeepAliveRestored	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:305)
+pkg/bootstrap.UserEventHandler.handleKeepAliveTimeout	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:311)
 pkg/bootstrap.UserEventHandler.handleLabelAssociationChat	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleLabelAssociationMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleLabelEdit	ELIGIBLE	covered
@@ -2836,8 +2843,8 @@ pkg/bootstrap.UserEventHandler.handleNewsletterLiveUpdate	ELIGIBLE	uncovered:L3(
 pkg/bootstrap.UserEventHandler.handleNewsletterMuteChange	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleOfflineSyncCompleted	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:308)
 pkg/bootstrap.UserEventHandler.handleOfflineSyncPreview	ELIGIBLE	uncovered:L3(zerolog,eventhandler_history.go:314)
-pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:290)
-pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:112)
+pkg/bootstrap.UserEventHandler.handlePairError	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:335)
+pkg/bootstrap.UserEventHandler.handlePairSuccess	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:157)
 pkg/bootstrap.UserEventHandler.handlePicture	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handlePresence	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handlePrivacySettings	ELIGIBLE	uncovered:L3(zerolog,eventhandler_contact.go:67)
@@ -2845,7 +2852,7 @@ pkg/bootstrap.UserEventHandler.handlePushName	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleReceipt	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleStreamError	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleStreamReplaced	EXCLUDED	X1
-pkg/bootstrap.UserEventHandler.handleTemporaryBan	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:278)
+pkg/bootstrap.UserEventHandler.handleTemporaryBan	ELIGIBLE	uncovered:L3(zerolog,eventhandler_session.go:323)
 pkg/bootstrap.UserEventHandler.handleUndecryptableMessage	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.handleUserAbout	ELIGIBLE	covered
 pkg/bootstrap.UserEventHandler.persistHistorySync	ELIGIBLE	covered
@@ -3214,6 +3221,7 @@ pkg/infra/db.GenerateRandomID	ELIGIBLE	covered
 pkg/infra/db.GetChatPushNamesByUser	ELIGIBLE	covered
 pkg/infra/db.GetDatabaseConfig	ELIGIBLE	covered
 pkg/infra/db.GetLastActivityByUser	ELIGIBLE	covered
+pkg/infra/db.GetUserAccountType	ELIGIBLE	covered
 pkg/infra/db.HmacConfigRepository.DeleteHmacKey	ELIGIBLE	covered
 pkg/infra/db.HmacConfigRepository.LoadHmacKey	ELIGIBLE	covered
 pkg/infra/db.HmacConfigRepository.SaveHmacKey	ELIGIBLE	covered
@@ -3248,6 +3256,7 @@ pkg/infra/db.SessionLeaseRepository.Claim	ELIGIBLE	uncovered:L1;uncovered:L2(S-c
 pkg/infra/db.SessionLeaseRepository.CurrentOwner	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:131)
 pkg/infra/db.SessionLeaseRepository.Release	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,session_lease.go:115)
 pkg/infra/db.SetDisconnectedState	ELIGIBLE	covered
+pkg/infra/db.SetUserAccountType	ELIGIBLE	covered
 pkg/infra/db.StoredMessageRepository.GetPollSenderJID	ELIGIBLE	covered
 pkg/infra/db.StoredMessageRepository.GetStoredMessage	ELIGIBLE	uncovered:L2(S-ret,stored_message_repository.go:59)
 pkg/infra/db.TrimMessageHistory	ELIGIBLE	covered
@@ -3418,6 +3427,9 @@ pkg/infra/wa-headless.Sessions.Release	EXCLUDED	X7
 pkg/infra/wa-headless.Sessions.Runner	EXCLUDED	X1
 pkg/infra/wa-headless.ToPageJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid.go:28);uncovered:L2(S-ret,jid.go:44);uncovered:L2(S-ret,jid.go:50)
 pkg/infra/wa-headless.user	EXCLUDED	X1
+pkg/infra/wa-headless/accounttype.Detector.Detect	ELIGIBLE	covered
+pkg/infra/wa-headless/accounttype.Detector.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/accounttype.NewDetector	EXCLUDED	X1
 pkg/infra/wa-headless/appstate.NewSyncer	EXCLUDED	X1
 pkg/infra/wa-headless/appstate.Syncer.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/appstate.Syncer.SyncContactRoster	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,syncer.go:68)
@@ -3544,6 +3556,11 @@ pkg/infra/wa-headless/session.Disconnector.Disconnect	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/session.Disconnector.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/session.Disconnector.SessionStatus	EXCLUDED	X1
 pkg/infra/wa-headless/session.NewDisconnector	EXCLUDED	X1
+pkg/infra/wa-noise/adapters/accounttype.Detector.Detect	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/accounttype.Detector.EnsureSession	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/accounttype.NewDetector	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/accounttype.errNoSession	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/accounttype.noSessionError.Error	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.MarkRead	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage	EXCLUDED	X5

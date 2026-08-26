@@ -150,6 +150,12 @@ var migrations = []Migration{
 		UpSQL:   accountOwnershipSQL,
 		DownSQL: accountOwnershipDownSQL,
 	},
+	{
+		ID:      migrationIDUsersAccountType,
+		Name:    migrationNameUsersAccountType,
+		UpSQL:   addUsersAccountTypeSQL,
+		DownSQL: addUsersAccountTypeDownSQL,
+	},
 }
 
 // migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
