@@ -147,6 +147,14 @@ const (
 	CapRequestPairingCode Capability = "request_pairing_code"
 	CapDisconnectSession  Capability = "disconnect_session"
 	CapLogoutSession      Capability = "logout_session"
+
+	// CapDetectAccountType asks the transport whether the session's own
+	// account is personal or Business (worktree feature/account-type-
+	// detection, items 33-35). It is engine-conditioned like every other
+	// entry in this block — wa-noise and wa-headless each read a different
+	// real signal — which is exactly the coverage_gate_test.go boundary for
+	// belonging in this registry, even though it has no HTTP route today.
+	CapDetectAccountType Capability = "detect_account_type"
 )
 
 // AccountType names the kind of WhatsApp account a session runs as.

@@ -2,6 +2,7 @@ package wanoise
 
 import (
 	"context"
+	"fmt"
 
 	"wa-api/internal/wa-noise/capabilities/user"
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
@@ -75,6 +76,20 @@ func (cli *Client) GetBusinessProfile(ctx context.Context, jid types.JID) (*type
 		return nil, ErrClientIsNil
 	}
 	return user.GetBusinessProfile(ctx, cli.userT(), jid)
+}
+
+// DetectOwnAccountKind reports whether the connected session is a WhatsApp
+// Business account, by asking the server (via usync) whether cli's own jid
+// carries a verified-name certificate. See user.DetectOwnAccountKind for why
+// that field, and not GetBusinessProfile, is the reliable signal.
+func (cli *Client) DetectOwnAccountKind(ctx context.Context) (user.AccountKind, error) {
+	if cli == nil {
+		return user.AccountKindUnknown, ErrClientIsNil
+	}
+	if cli.Store == nil || cli.Store.ID == nil {
+		return user.AccountKindUnknown, fmt.Errorf("account type: no own jid on this session's store")
+	}
+	return user.DetectOwnAccountKind(ctx, cli.userT(), *cli.Store.ID)
 }
 
 // ResolveBusinessMessageLink resolves a business message short link and returns the target JID, business name and

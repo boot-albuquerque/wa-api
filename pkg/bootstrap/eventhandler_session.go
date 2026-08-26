@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	waclientuser "wa-api/internal/wa-noise/capabilities/user"
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/pkg/domain"
+	dbpkg "wa-api/pkg/infra/db"
 
 	"github.com/rs/zerolog/log"
 )
@@ -76,6 +79,48 @@ func (evh *UserEventHandler) handleConnected(st *eventState) bool {
 		log.Error().Err(err).Msg(sqlStmt)
 		return false
 	}
+
+	// Revalidate account_type on every (re)connect — item 34 of the
+	// account-type-detection prompt.
+	//
+	// Fire-and-forget, deliberately NOT on the dispatch pool (CLAUDE.md's
+	// "nada que espere por relogio ou por par morto pode ocupar slot
+	// limitado"): a usync round-trip is exactly the kind of network wait that
+	// pool exists to protect against, and handleConnected already has no
+	// budget to block on it — a slow or dead usync response must not delay
+	// marking the session connected or hold up the webhook this function
+	// still has to fire.
+	//
+	// Errors are logged and NOT persisted over an existing classification:
+	// SetUserAccountType is only called with a value DetectOwnAccountKind
+	// actually returned, so a failed revalidation leaves the last known
+	// account_type in place rather than downgrading it to unknown on a
+	// transient failure.
+	userID, client, db := evh.UserID, evh.WAClient, evh.DB
+	safeGo("account-type-revalidate-"+userID, func() {
+		kind, err := client.DetectOwnAccountKind(context.Background())
+		if err != nil {
+			log.Warn().Err(err).Str("user_id", userID).
+				Msg("account type revalidation on connect failed; keeping last known value")
+			return
+		}
+		accountType := domain.AccountTypeUnknown
+		switch kind {
+		case waclientuser.AccountKindBusiness:
+			accountType = domain.AccountTypeBusiness
+		case waclientuser.AccountKindPersonal:
+			accountType = domain.AccountTypePersonal
+		}
+		if accountType == domain.AccountTypeUnknown {
+			// Measured and inconclusive: nothing to persist over whatever is
+			// already there (see the comment above this goroutine).
+			return
+		}
+		if err := dbpkg.SetUserAccountType(context.Background(), db, userID, accountType); err != nil {
+			log.Warn().Err(err).Str("user_id", userID).
+				Msg("failed to persist revalidated account type")
+		}
+	})
 
 	if len(evh.WAClient.Store.PushName) == 0 {
 		return true

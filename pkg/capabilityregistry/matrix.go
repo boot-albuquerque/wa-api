@@ -285,6 +285,17 @@ func NewDefaultMatrix() *matrix {
 		{domain.CapRequestPairingCode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/pairing/adapter.go. wa_headless: " + absentAdapter + " (same caveat as check_pairing_status)"},
 		{domain.CapDisconnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/session)"},
 		{domain.CapLogoutSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/user/adapter.go (or session teardown path). wa_headless: " + absentAdapter},
+
+		// wa_noise: DetectOwnAccountKind (internal/wa-noise/capabilities/user/
+		// accounttype.go) reads a verified-name certificate via usync — a
+		// structured protocol field, confirmed by unit tests with a real
+		// (marshaled) certificate fixture. wa_headless: Conn.canSetMyPushname()
+		// (WAWebConnModel), the same getter capabilities/profile already
+		// measured live on the lab account (HOUSEKEEP.md: canSetMyPushname()
+		// = false there, confirming that account is Business) — confirmed
+		// that the getter resolves and answers, not re-confirmed against a
+		// live personal account by this worktree.
+		{domain.CapDetectAccountType, domain.StatusSupported, domain.EvidenceConfirmed, domain.StatusSupported, domain.EvidenceProbable, "wa_noise: pkg/infra/wa-noise/adapters/accounttype (internal/wa-noise/capabilities/user/accounttype.go). wa_headless: pkg/infra/wa-headless/accounttype (internal/wa-headless/capabilities/accounttype), reusing the getter measured live in capabilities/profile per HOUSEKEEP.md"},
 	}
 
 	for _, r := range rows {

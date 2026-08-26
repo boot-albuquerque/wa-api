@@ -1271,7 +1271,7 @@ rules_frozen=true
 # o baseline sozinha contra o mesmo commit-base da foundation; o merge soma
 # os deltas — medido com `go run ./cmd/logcov -json ./pkg` apos o merge
 # completo, nao inferido.
-min_func_coverage=594
+min_func_coverage=595
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1568,7 +1568,7 @@ min_errpath_coverage=781
 # pkg/capabilityregistry nao esta na lista depguard de camada-de-aplicacao).
 # Medido com `go run ./cmd/logcov -json ./pkg` apos o merge completo, nao
 # inferido pela soma das branches individuais.
-min_eligible=1003
+min_eligible=1007
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

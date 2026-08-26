@@ -29994,3 +29994,105 @@ prontas.
 
 <!-- f-status: aberto -->
 
+## F277 — `user.GetInfo` calcula `VerifiedName` mas nunca o grava em `UserInfo`
+
+**Data/contexto**: worktree `feature/account-type-detection` (itens 33-35 do
+prompt arquitetural — detecção de tipo de conta). Ao investigar qual sinal do
+protocolo usar para saber se a conta própria é Business, li
+`internal/wa-noise/capabilities/user/info.go`.
+
+**Onde**: `internal/wa-noise/capabilities/user/info.go:96-108` (função
+`GetInfo`):
+
+```go
+verifiedName, err := ParseVerifiedName(child.GetChildByTag(businessNodeTag))
+if err != nil {
+    t.Log().Warnf("Failed to parse %s's verified name details: %v", jid, err)
+}
+info.Status = NodeContentString(child.GetChildByTag(statusNodeTag))
+...
+if verifiedName != nil {
+    UpdateBusinessName(ctx, t, jid, info.LID, nil, verifiedName.Details.GetVerifiedName())
+}
+respData[jid] = info
+```
+
+`types.UserInfo` (`internal/wa-noise/protocol/types/user.go:16-22`) TEM um
+campo `VerifiedName *VerifiedName`. `GetInfo` calcula o valor certo
+(`verifiedName`, a variável local) e usa-o para atualizar o nome business no
+contact store (`UpdateBusinessName`), mas nunca faz `info.VerifiedName =
+verifiedName` antes de `respData[jid] = info`. Todo chamador de `GetInfo`
+recebe sempre `VerifiedName == nil`, mesmo para uma conta Business real —
+indistinguível, a partir do valor devolvido, de uma conta pessoal.
+
+**Problema, com evidência**: é omissão de atribuição, não erro de lógica — o
+dado certo já está calculado na mesma função, a três linhas de onde deveria
+ser gravado. Não escrevi um teste de regressão para isto porque não vou
+corrigi-lo agora (ver Correção sugerida): um teste que travasse o bug atual
+("VerifiedName sempre nil") teria de ser revertido no mesmo commit que o
+corrigisse, o que não vale o ciclo para um achado fora de escopo.
+
+**Por que não usei `GetInfo` para a detecção desta worktree**: por causa
+exatamente deste bug — depender de `GetInfo` amarraria a detecção de tipo de
+conta a um caminho que já se sabe não devolver o campo. `DetectOwnAccountKind`
+(`internal/wa-noise/capabilities/user/accounttype.go`) chama `USync`
+diretamente e lê `ParseVerifiedName` no próprio resultado, sem depender de
+`GetInfo`.
+
+**Correção sugerida**: adicionar `info.VerifiedName = verifiedName` logo após
+a chamada a `ParseVerifiedName`, e um teste que popule uma resposta usync com
+`<business><verified_name>` e verifique que o `UserInfo` devolvido por
+`GetInfo` carrega o valor.
+
+**Status**: não corrigido nesta sessão — está fora do escopo de detecção de
+tipo de conta (itens 33-35), e a instrução do projeto é registrar e perguntar
+antes de corrigir bug pré-existente fora de escopo.
+
+<!-- f-status: aberto -->
+
+## F278 — `applyMigration` já estava em complexidade 51 (baseline 50) ANTES desta worktree tocar em qualquer coisa
+
+**Data/contexto**: worktree `feature/account-type-detection`. Rodando `make
+lint` depois de acrescentar a migração 21 (`users.account_type`), o gate falhou
+com "a maior funcao do repo piorou (51 > 50)", apontando `applyMigration`
+(`pkg/infra/db/migrations.go:730` — ou `:736` depois do meu diff, que só
+desloca linhas).
+
+**Onde**: `pkg/infra/db/migrations.go`, função `applyMigration`.
+
+**Problema, com evidência**: medi ANTES e DEPOIS do meu diff, com
+`git stash`/`git stash pop`, usando `gocyclo -top 3 .`:
+
+```
+# com git stash (estado do commit 60a358df, sem nenhuma mudança minha):
+51 db applyMigration pkg/infra/db/migrations.go:730:1
+50 bootstrap Main pkg/bootstrap/main.go:115:1
+50 bootstrap (*UserEventHandler).handleEvent pkg/bootstrap/eventhandler.go:26:1
+
+# com git stash pop (meu diff aplicado):
+51 db applyMigration pkg/infra/db/migrations.go:736:1
+```
+
+O meu diff em `migrations.go` só acrescenta uma entrada de DADO à lista
+`migrations` (a migração 21); não toca no corpo de `applyMigration`, cujo
+`if`/`else if` em cadeia por `migration.ID` já somava complexidade 51 antes de
+eu abrir esta worktree. O `.coverage-baseline` (`max_complexity=50`) está
+portanto desatualizado em relação ao que o repositório já continha no
+checkpoint `checkpoint/engine-capability-wave2` — não é uma regressão desta
+sessão.
+
+**Correção sugerida**: decompor `applyMigration` (ex.: extrair o `if`/`else
+if` por ID de migração para uma tabela de despacho — `map[int]func(...)
+error` — em vez da cadeia atual), ou, se a decomposição não for prioridade,
+atualizar `max_complexity` em `.coverage-baseline` para refletir o valor real
+medido (51), documentando que o número já estava errado antes desta worktree.
+
+**Status**: não corrigido nesta sessão — é achado incidental de uma tarefa de
+detecção de tipo de conta, `applyMigration` está fora do escopo (33-35), e a
+instrução do projeto é registrar e perguntar antes de corrigir bug
+pré-existente fora do escopo. `make check` desta worktree só falha em `lint`
+por causa deste item pré-existente e em `TestHousekeepEntriesAreMachineReadable`
+(H144 do wa-headless), ambos confirmados como não introduzidos por mim.
+
+<!-- f-status: aberto -->
+
