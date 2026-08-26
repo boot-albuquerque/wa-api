@@ -579,6 +579,18 @@
       Ou seja: `POST` só define; **desligar um webhook faz-se com
       `PUT {"active": false}` ou com `DELETE /webhook`**.
 
+      **Duas ressalvas ao "só define", lidas em `handler_webhook.go`:**
+
+      1. O URL resolvido é gravado **sempre**, mesmo vazio. Um
+         `POST /webhook {"events": ["Message"]}` sem nenhum dos dois nomes de
+         URL **apaga o webhook gravado** e responde `200 {"webhook": ""}`.
+         Reenvie sempre o URL.
+      2. Uma lista `events` **só com nomes desconhecidos** também é
+         "preenchida" para efeito da condição `len(events) > 0`: o `UPDATE`
+         corre com a lista de válidos vazia e **apaga a subscrição gravada**,
+         com `200`. Um único erro de digitação — `["Mesage"]` — cancela todas
+         as subscrições sem aviso nenhum na resposta.
+
       **Dois nomes para o URL**: `webhookurl` e `webhook` são ambos aceites, em
       qualquer dos dois verbos — é herança de clientes antigos. Quando os dois
       vierem no mesmo corpo, **`webhookurl` vence**.
@@ -615,7 +627,13 @@
                       properties:
                         webhook:
                           type: string
-                          description: O URL efectivamente gravado.
+                          nullable: false
+                          description: |
+                            O URL efectivamente gravado — o resultado da
+                            resolução entre `webhookurl` e `webhook`. **Sempre
+                            presente**, nunca `null`; vem `""` quando o corpo
+                            não trouxe nenhum dos dois, caso em que o webhook
+                            gravado foi apagado.
                           example: https://exemplo.com.br/wa-api/eventos
             example:
               code: 200
@@ -647,6 +665,12 @@
       verbo lê o campo `active`, e `active: false` grava URL e eventos
       **vazios**, seja qual for o resto do corpo.
 
+      **`active` é obrigatório na prática, e a omissão é destrutiva.** O campo
+      é `bool` e não `*bool` em Go, logo **ausente, `null` e `false` são
+      indistinguíveis** — e os três limpam. Um
+      `PUT /webhook {"webhook": "https://…"}` sem `active` **apaga** o webhook
+      em vez de o definir. Envie sempre `active: true` quando quiser gravar.
+
       Com `active: true` o comportamento é o do `POST`, com uma resposta mais
       completa: devolve também a lista de eventos aceites e o próprio `active`,
       o que permite ver de imediato quais dos eventos pedidos sobreviveram à
@@ -674,8 +698,13 @@
     responses:
       '200':
         description: |
-          Configuração gravada. `events` traz **apenas os eventos válidos**;
-          vem ausente quando nenhum sobreviveu à validação.
+          Configuração gravada. `events` traz **apenas os eventos válidos**.
+
+          **As três chaves aparecem sempre.** O manipulador devolve um mapa,
+          e não a struct de domínio, logo não há `omitempty`: `active` vem
+          mesmo quando `false`, e `events` vem **`null`** — não ausente, não
+          `[]` — quando nenhum evento sobreviveu à validação. Quem iterar sem
+          verificar parte.
         content:
           application/json:
             schema:
@@ -921,6 +950,14 @@
       regista o cliente S3. Uma configuração inválida nunca chega ao cifrador e
       nada é escrito.
 
+      **É uma SUBSTITUIÇÃO, não uma fusão — envie sempre o corpo completo.**
+      Todo campo omitido é gravado no seu valor zero. Medido a 2026-08-26: uma
+      sessão com `path_style: true` e `retention_days: 30` recebeu
+      `POST /s3/config {"enabled": true}` e ficou com `path_style: false` e
+      `retention_days: 0`, além de perder as credenciais gravadas. A única
+      excepção é `media_delivery`, que quando vazio assume `base64` em vez de
+      ficar `""`.
+
       **Regras** (lidas em `configure_s3.go`):
 
       - `media_delivery`, quando presente, tem de ser `base64`, `s3` ou `both`
@@ -944,8 +981,8 @@
             endpoint: https://s3.sa-east-1.amazonaws.com
             region: sa-east-1
             bucket: wa-api-midia
-            access_key: AKIAIOSFODNN7EXAMPLE
-            secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+            access_key: AKIA_EXEMPLO_NAO_USE
+            secret_key: EXEMPLO_NAO_USE_gere_a_sua_secret_key
             path_style: false
             public_url: https://midia.exemplo.com.br
             media_delivery: both
@@ -1056,8 +1093,8 @@
             endpoint: https://s3.sa-east-1.amazonaws.com
             region: sa-east-1
             bucket: wa-api-midia
-            access_key: AKIAIOSFODNN7EXAMPLE
-            secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+            access_key: AKIA_EXEMPLO_NAO_USE
+            secret_key: EXEMPLO_NAO_USE_gere_a_sua_secret_key
             path_style: false
             public_url: https://midia.exemplo.com.br
             media_delivery: both
