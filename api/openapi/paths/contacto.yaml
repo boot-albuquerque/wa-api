@@ -819,7 +819,10 @@
       `POST /chat/presence`.
 
       **Regras**: `type` só aceita `available` e `unavailable`. Qualquer outro
-      valor é recusado com `invalid_presence_type` antes de qualquer chamada
+      valor é recusado antes de qualquer chamada — `missing_presence_type` se
+      o campo vier ausente, `null` ou `""`; `invalid_presence_type`, com o
+      valor recebido na mensagem, se vier fora do conjunto (corrigido em
+      2026-08-26: até essa data os dois casos davam o mesmo código)
       ao WhatsApp.
 
       **Autenticação**: token de sessão.
@@ -1012,13 +1015,26 @@
       para `status` e é recusado em `readreceipts`, que só aceita `all` e
       `none`. A comparação é sensível a maiúsculas — `ALL` é recusado.
 
-      Nome desconhecido e valor fora do conjunto produzem erros DIFERENTES de
-      propósito (`invalid_privacy_setting` e `invalid_privacy_value`): quem
-      chama precisa de saber qual dos dois errou. A validação corre antes de
-      qualquer chamada ao WhatsApp.
+      **Quatro recusas distintas**, medidas a 2026-08-26 — quem chama precisa
+      de saber qual das quatro errou, e cada uma tem correcção diferente:
+
+      | o que enviou | código |
+      |---|---|
+      | sem `privacy_setting`, ou `null`, ou `""` | `400 missing_privacy_setting` |
+      | sem `value`, ou `null`, ou `""` | `400 missing_privacy_value` |
+      | nome fora das sete | `400 invalid_privacy_setting`, com o nome recebido |
+      | valor fora do conjunto DAQUELA definição | `400 invalid_privacy_value`, com valor e definição |
+
+      O nome é verificado antes do valor: `{"privacy_setting":"xpto","value":""}`
+      revela o nome inválido, não o valor em falta.
+
+      A validação corre antes de qualquer chamada ao WhatsApp, logo nenhuma
+      destas quatro altera a conta.
 
       **Resposta**: devolve as definições resultantes, com a mesma forma do
-      `GET`. **Não medido** — a rota altera a conta e não foi chamada.
+      `GET`. **Não medida** — a rota altera a conta e não foi chamada com um
+      pedido válido. As quatro recusas acima foram medidas, porque nenhuma
+      chega a alterar coisa nenhuma.
 
       **Autenticação**: token de sessão.
     security:

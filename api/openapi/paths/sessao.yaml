@@ -1369,9 +1369,19 @@
       `GET /user/contacts`.
 
       **Regras**: `mode` é obrigatório e aceita **exactamente** três valores —
-      `if_unsynced`, `incremental` e `full`. Qualquer outro é
-      `400 invalid_sync_mode`. Em particular `delta` **não existe**, apesar de
-      parecer plausível. Exige um cliente vivo.
+      `if_unsynced`, `incremental` e `full`. Em particular `delta` **não
+      existe**, apesar de parecer plausível. Exige um cliente vivo.
+
+      A recusa distingue os dois casos, e o código diz qual:
+
+      | o que enviou | código |
+      |---|---|
+      | nada, `null` ou `""` | `400 missing_sync_mode` |
+      | um valor fora dos três | `400 invalid_sync_mode`, com o valor recebido na mensagem |
+
+      A distinção importa para quem automatiza: "faltou o campo" e "o valor
+      está errado" têm correcções diferentes, e até 2026-08-26 davam a mesma
+      resposta. A comparação é **sensível a maiúsculas** — `FULL` é inválido.
 
       **Custo de cada modo**: `if_unsynced` não faz nada se a agenda já
       estiver sincronizada; `incremental` é uma busca barata que preserva a

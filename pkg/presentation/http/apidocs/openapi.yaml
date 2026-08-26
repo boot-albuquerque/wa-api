@@ -7642,15 +7642,17 @@ components:
             - `incremental` — busca barata, não apaga a versão local;
             - `full` — re-snapshot completo, caro.
 
-            Medido em 2026-08-26, e o ponto importante é que **não existe erro de
-            "campo em falta"**: a ausência cai no mesmo código do valor errado.
+            **Corrigido em 2026-08-26**: até essa data, ausência e valor errado
+            davam o MESMO código, e quem esquecia o campo era informado de que o
+            seu valor era inválido — sem ter mandado valor nenhum. Agora
+            distinguem-se, e a mensagem do ramo inválido ecoa o valor recebido.
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente (`{}`) | não | `400 invalid_sync_mode` |
-            | `null` | não | `400 invalid_sync_mode` — **indistinguível de ausente** |
-            | `""` | não | `400 invalid_sync_mode` — **indistinguível de ausente** |
-            | `"   "` | não | `400 invalid_sync_mode`; **não há `trim`** |
+            | ausente (`{}`) | não | `400 **missing_sync_mode**` |
+            | `null` | não | `400 **missing_sync_mode**` — **indistinguível de ausente** |
+            | `""` | não | `400 **missing_sync_mode**` — **indistinguível de ausente** |
+            | `"   "` | não | `400 invalid_sync_mode`; **não há `trim`**, logo três espaços contam como valor DADO e errado |
             | `"FULL"` | não | `400 invalid_sync_mode` — a comparação é **sensível a maiúsculas** |
             | `"delta"` | não | `400 invalid_sync_mode`; `delta` **não** existe — foi a suposição que a bateria de campo desmentiu |
             | `123` (número) | não | `400 could_not_decode_payload` |
@@ -20873,9 +20875,19 @@ paths:
         `GET /user/contacts`.
 
         **Regras**: `mode` é obrigatório e aceita **exactamente** três valores —
-        `if_unsynced`, `incremental` e `full`. Qualquer outro é
-        `400 invalid_sync_mode`. Em particular `delta` **não existe**, apesar de
-        parecer plausível. Exige um cliente vivo.
+        `if_unsynced`, `incremental` e `full`. Em particular `delta` **não
+        existe**, apesar de parecer plausível. Exige um cliente vivo.
+
+        A recusa distingue os dois casos, e o código diz qual:
+
+        | o que enviou | código |
+        |---|---|
+        | nada, `null` ou `""` | `400 missing_sync_mode` |
+        | um valor fora dos três | `400 invalid_sync_mode`, com o valor recebido na mensagem |
+
+        A distinção importa para quem automatiza: "faltou o campo" e "o valor
+        está errado" têm correcções diferentes, e até 2026-08-26 davam a mesma
+        resposta. A comparação é **sensível a maiúsculas** — `FULL` é inválido.
 
         **Custo de cada modo**: `if_unsynced` não faz nada se a agenda já
         estiver sincronizada; `incremental` é uma busca barata que preserva a
@@ -21213,7 +21225,10 @@ paths:
         `POST /chat/presence`.
 
         **Regras**: `type` só aceita `available` e `unavailable`. Qualquer outro
-        valor é recusado com `invalid_presence_type` antes de qualquer chamada
+        valor é recusado antes de qualquer chamada — `missing_presence_type` se
+        o campo vier ausente, `null` ou `""`; `invalid_presence_type`, com o
+        valor recebido na mensagem, se vier fora do conjunto (corrigido em
+        2026-08-26: até essa data os dois casos davam o mesmo código)
         ao WhatsApp.
 
         **Autenticação**: token de sessão.
@@ -21405,13 +21420,26 @@ paths:
         para `status` e é recusado em `readreceipts`, que só aceita `all` e
         `none`. A comparação é sensível a maiúsculas — `ALL` é recusado.
 
-        Nome desconhecido e valor fora do conjunto produzem erros DIFERENTES de
-        propósito (`invalid_privacy_setting` e `invalid_privacy_value`): quem
-        chama precisa de saber qual dos dois errou. A validação corre antes de
-        qualquer chamada ao WhatsApp.
+        **Quatro recusas distintas**, medidas a 2026-08-26 — quem chama precisa
+        de saber qual das quatro errou, e cada uma tem correcção diferente:
+
+        | o que enviou | código |
+        |---|---|
+        | sem `privacy_setting`, ou `null`, ou `""` | `400 missing_privacy_setting` |
+        | sem `value`, ou `null`, ou `""` | `400 missing_privacy_value` |
+        | nome fora das sete | `400 invalid_privacy_setting`, com o nome recebido |
+        | valor fora do conjunto DAQUELA definição | `400 invalid_privacy_value`, com valor e definição |
+
+        O nome é verificado antes do valor: `{"privacy_setting":"xpto","value":""}`
+        revela o nome inválido, não o valor em falta.
+
+        A validação corre antes de qualquer chamada ao WhatsApp, logo nenhuma
+        destas quatro altera a conta.
 
         **Resposta**: devolve as definições resultantes, com a mesma forma do
-        `GET`. **Não medido** — a rota altera a conta e não foi chamada.
+        `GET`. **Não medida** — a rota altera a conta e não foi chamada com um
+        pedido válido. As quatro recusas acima foram medidas, porque nenhuma
+        chega a alterar coisa nenhuma.
 
         **Autenticação**: token de sessão.
       requestBody:

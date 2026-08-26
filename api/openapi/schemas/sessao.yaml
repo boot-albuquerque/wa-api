@@ -1153,15 +1153,17 @@ PedidoSincronizacaoContactos:
         - `incremental` — busca barata, não apaga a versão local;
         - `full` — re-snapshot completo, caro.
 
-        Medido em 2026-08-26, e o ponto importante é que **não existe erro de
-        "campo em falta"**: a ausência cai no mesmo código do valor errado.
+        **Corrigido em 2026-08-26**: até essa data, ausência e valor errado
+        davam o MESMO código, e quem esquecia o campo era informado de que o
+        seu valor era inválido — sem ter mandado valor nenhum. Agora
+        distinguem-se, e a mensagem do ramo inválido ecoa o valor recebido.
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente (`{}`) | não | `400 invalid_sync_mode` |
-        | `null` | não | `400 invalid_sync_mode` — **indistinguível de ausente** |
-        | `""` | não | `400 invalid_sync_mode` — **indistinguível de ausente** |
-        | `"   "` | não | `400 invalid_sync_mode`; **não há `trim`** |
+        | ausente (`{}`) | não | `400 **missing_sync_mode**` |
+        | `null` | não | `400 **missing_sync_mode**` — **indistinguível de ausente** |
+        | `""` | não | `400 **missing_sync_mode**` — **indistinguível de ausente** |
+        | `"   "` | não | `400 invalid_sync_mode`; **não há `trim`**, logo três espaços contam como valor DADO e errado |
         | `"FULL"` | não | `400 invalid_sync_mode` — a comparação é **sensível a maiúsculas** |
         | `"delta"` | não | `400 invalid_sync_mode`; `delta` **não** existe — foi a suposição que a bateria de campo desmentiu |
         | `123` (número) | não | `400 could_not_decode_payload` |
