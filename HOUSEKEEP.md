@@ -27074,6 +27074,11 @@ Go, e bloquear "não sei" quando a maioria dos vídeos reais devolve exactamente
 isso seria pior que o problema original. A guarda só rejeita quando o MIME É
 determinado e NÃO é vídeo.
 
+
+### Verificação em campo — 2026-08-25, lote C
+
+vídeo de 32 bytes → `400 video_too_small`; áudio lixo → `400 audio_too_small`; **áudio válido continua `200`** — a metade que prova que a validação não partiu o caminho feliz.
+
 <!-- f-status: aberto -->
 
 ## F241 — erro do CHAMADOR a virar `500` em três rotas
@@ -27643,6 +27648,11 @@ prefere `webhookurl` quando ambos estiverem presentes. Testes de cross-field:
 Controles negativos executados: quebrar `ResolveURL` para ignorar
 `WebhookURLField` faz os testes de PUT e precedência falharem.
 
+
+### Verificação em campo — 2026-08-25, lote C
+
+POST `{"webhook"}` e PUT `{"webhookurl"}` gravam a URL — antes ambos a ignoravam em silêncio.
+
 <!-- f-status: aberto -->
 
 ## F251 — ler e escrever configuração usam CAMINHOS diferentes
@@ -27703,6 +27713,11 @@ Mesmo handler de `/s3/configure` e `/hmac/configure` respectivamente. Golden
 files actualizados. Structural exceptions adicionadas em
 `stdio_route_consistency_test.go` (alias sem entrada stdio própria).
 Documentação em `ENDPOINTS.md` actualizada.
+
+
+### Verificação em campo — 2026-08-25, lote C
+
+`POST /hmac/config` → `200`; `POST /s3/config` → `400 invalid_s3_endpoint`, ou seja chega à validação (antes ambos `404` do router).
 
 <!-- f-status: aberto -->
 
@@ -28003,6 +28018,11 @@ Removido o registo de `/chat/delete` em `wiring_routes.go:236`. A rota canónica
 Controle negativo executado: reverter o stdio para `/chat/delete` causa
 `TestStdioRoutesMatchRegisteredHTTPRoutes` a falhar com *"não existe rota HTTP
 para esse caminho"*.
+
+
+### Verificação em campo — 2026-08-25, lote C
+
+`POST /chat/delete` → `404`; `/chat/delete/message` continua a responder. Removida também da superfície stdio.
 
 <!-- f-status: aberto -->
 
