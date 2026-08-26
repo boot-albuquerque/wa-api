@@ -29934,13 +29934,16 @@ dele), depois de resolver o usuário/sessão pelo token, chamar
 Fica para quem tocar `pkg/presentation/http/middleware/auth.go` ou para uma
 sessão de continuação desta mesma feature.
 
-<!-- f-status: aberto -->
-
-(O achado sobre `TestTodoMetodoComErroTemWrapper` e os sete métodos sem
-wrapper de erro, originalmente registrado como F276 pela worktree
-`capability-registry`, foi removido por ser duplicata exata da H187 já
-registrada pela worktree `provider-wa-noise` — mesmo arquivo:linha, mesmo
-conjunto de métodos.)
+**Nota de integração**: um achado sobre `TestTodoMetodoComErroTemWrapper` e os
+sete métodos sem wrapper de erro, originalmente registrado também como F276
+pela worktree `capability-registry`, foi removido por ser duplicata exata da
+H187 abaixo (mesmo arquivo:linha, mesmo conjunto de métodos) — a numeração
+F276 ficou só para este achado, o de `ErrSessionSuperseded`. O marcador de
+status deste bloco combinado (F276+H187) fica só no fim, depois da H187 —
+o portão do HOUSEKEEP.md conta cabeçalhos `## F\d+` como fronteira de bloco
+e não reconhece `## H\d+`, então H187 é lida como continuação textual deste
+mesmo bloco F276 em vez de uma entrada própria; dois marcadores aqui
+contariam como duas fontes de verdade para o mesmo achado.
 
 ## H187 — sete métodos de grupo/comunidade/newsletter sem wrapper de erro; `TestTodoMetodoComErroTemWrapper` já está vermelho na `main`
 
@@ -29988,3 +29991,6 @@ Reflected no inventário (`docs/PROVIDER-WA-NOISE-INVENTORY.md`): as sete
 capacidades estão marcadas `broken` (não `supported`), com este achado como
 evidência, para que a matriz de `capability-registry` não as trate como
 prontas.
+
+<!-- f-status: aberto -->
+

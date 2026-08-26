@@ -1261,7 +1261,17 @@ rules_frozen=true
 # ClaimAccountIdentity, CurrentActiveOwner, CurrentStatusForSession), todas
 # com log.Error estruturado nos caminhos de erro (query/identity/engine/
 # session_id como campos), entao covered SOBE junto e a razao melhora.
-min_func_coverage=592
+#
+# feature/engine-capability-integration (2026-08-26): merge das quatro
+# branches da onda 2 (engine-session-ownership, capability-registry,
+# provider-wa-noise, provider-wa-headless) sobre o checkpoint da foundation.
+# func_coverage SOBE 592->594 (+2, ratchet-UP): capability-registry
+# instrumentou 6 funcoes elegiveis novas em pkg/capabilityregistry/*.go com
+# zerolog direto (mesmo padrao de pkg/domain/privacy.go). Cada branch bumpou
+# o baseline sozinha contra o mesmo commit-base da foundation; o merge soma
+# os deltas — medido com `go run ./cmd/logcov -json ./pkg` apos o merge
+# completo, nao inferido.
+min_func_coverage=594
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1515,7 +1525,12 @@ min_func_coverage=592
 # pkg/infra/db/account_ownership.go (transacao de ClaimAccountIdentity,
 # CurrentActiveOwner, CurrentStatusForSession) chegam com log.Error(...).Msg
 # em cada branch de erro, entao a razao sobe junto com o denominador.
-min_errpath_coverage=780
+#
+# feature/engine-capability-integration (2026-08-26): merge da onda 2 (ver
+# justificativa de min_func_coverage acima). errpath_coverage SOBE 780->781
+# (+1, ratchet-UP): capability-registry acrescenta mais um caminho de saida
+# coberto em pkg/capabilityregistry. Medido apos o merge completo.
+min_errpath_coverage=781
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1544,7 +1559,16 @@ min_errpath_coverage=780
 # mesmo arquivo/feature (construtores, tipos, funcoes de pacote domain) sao
 # EXCLUDED pelas mesmas regras que ja excluiam construtores e utilitarios
 # analogos nas entradas acima.
-min_eligible=997
+#
+# feature/engine-capability-integration (2026-08-26): merge da onda 2 (ver
+# justificativa de min_func_coverage acima). min_eligible SOBE 997->1003
+# (+6, ratchet-UP): capability-registry acrescenta 6 funcoes elegiveis novas
+# em pkg/capabilityregistry/*.go (decision, coverage, matrix, provider,
+# registry), todas publicas com corpo >2 statements e log direto (zerolog,
+# pkg/capabilityregistry nao esta na lista depguard de camada-de-aplicacao).
+# Medido com `go run ./cmd/logcov -json ./pkg` apos o merge completo, nao
+# inferido pela soma das branches individuais.
+min_eligible=1003
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
