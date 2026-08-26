@@ -29933,3 +29933,11 @@ dele), depois de resolver o usuário/sessão pelo token, chamar
 (`ErrSessionSuperseded`, `CurrentStatusForSession`), wiring HTTP pendente.
 Fica para quem tocar `pkg/presentation/http/middleware/auth.go` ou para uma
 sessão de continuação desta mesma feature.
+
+<!-- f-status: aberto -->
+
+(O achado sobre `TestTodoMetodoComErroTemWrapper` e os sete métodos sem
+wrapper de erro, originalmente registrado como F276 pela worktree
+`capability-registry`, foi removido por ser duplicata exata da H187 já
+registrada pela worktree `provider-wa-noise` — mesmo arquivo:linha, mesmo
+conjunto de métodos.)
