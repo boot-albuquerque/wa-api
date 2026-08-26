@@ -29816,17 +29816,26 @@ migração morde).
 
 <!-- f-status: aberto -->
 
-## F275 — o portão do HOUSEKEEP recusa o status da H144, e isso trava `make check` e `coverage-gate` inteiros
+## F275 — o portão do HOUSEKEEP recusa o status da H144 **do wa-headless**, e isso trava `make check` e `coverage-gate` inteiros
 
 **Data**: 2026-08-26. **Contexto**: worktree `engine-capability-foundation`,
 achado ao correr `make check` — nada a ver com o trabalho de engine.
 
-**Onde**: `HOUSEKEEP.md:4935` (entrada **H144**) e o portão em
-`internal/wa-headless/gate_test.go:635`
-(`TestHousekeepEntriesAreMachineReadable`).
+**Onde**: `internal/wa-headless/HOUSEKEEP.md:11038`, entrada **H144 — a H75
+fechou uma busca com base numa inferência errada**. O portão é
+`TestHousekeepEntriesAreMachineReadable`, em
+`internal/wa-headless/gate_test.go:635`, que lê
+`const housekeepPath = "HOUSEKEEP.md"` (linha 486) **relativo ao diretório do
+próprio pacote** — portanto o ficheiro do wa-headless, NÃO o da raiz.
 
-**Problema**: o status da H144 começa por `"H75 corrigida quanto ao
-diagnóstico; ..."`, e `H75` não está em `openStatusTokens` nem em
+**Problema**: o status daquela entrada é
+
+```
+**Status**: H75 corrigida quanto ao diagnóstico; envio de tipos ricos continua
+NÃO entregue, agora por falta de sessão para medir, e não por falta de caminho.
+```
+
+e começa por `H75`, que não está em `openStatusTokens` nem em
 `closedStatusTokens`. O portão falha, e como corre dentro de
 `internal/wa-headless`, derruba o alvo `test` E o `coverage-gate` — dois gates
 do `make check` ficam vermelhos por uma frase num documento.
@@ -29840,23 +29849,46 @@ Saída medida:
     gate_test.go:645: entries with several authoritative statuses — read these by hand: H5 (2 statuses), H14 (2 statuses), H90 (2 statuses)
 ```
 
-**É PRÉ-EXISTENTE, e foi provado**: com `HOUSEKEEP.md` restaurado à versão do
-commit base (`git show 3a0b48b4:HOUSEKEEP.md > HOUSEKEEP.md`) o portão falha
-exatamente igual. O diff desta worktree sobre o ficheiro é `95 0` — só linhas
-acrescentadas no fim, nenhuma removida ou alterada. É a mesma família de
-armadilha que `ARMADILHAS.md` já cataloga ("O portão do HOUSEKEEP casa `Status`
-no meio de um identificador"), mas uma ocorrência NOVA e de causa diferente: o
-status é real, o vocabulário é que não o cobre.
+**É PRÉ-EXISTENTE, e foi provado**: com o `HOUSEKEEP.md` da RAIZ restaurado à
+versão do commit base (`git show 3a0b48b4:HOUSEKEEP.md > HOUSEKEEP.md`) o portão
+falha exatamente igual — o que, visto agora, é o próprio sinal de que o ficheiro
+da raiz nunca esteve envolvido. O diff desta worktree sobre a raiz é `95 0`.
 
-**Correcção sugerida**: reescrever o status da H144 para começar por uma
-palavra do vocabulário (`corrigido ...` / `parcialmente corrigido ...`) movendo
-a referência à H75 para depois — é a mudança de uma linha e não toca no portão.
-As três entradas com dois status (H5, H14, H90) são um segundo achado da mesma
-saída e pedem leitura à mão.
+**Assunto: wa-headless, integralmente.** A H144 trata de envio de tipos ricos
+(botões, lista, enquete, carrossel, template) no build da SPA, da
+`LEDGER-WWEBJS.md` e da H75 daquele mesmo ficheiro. Não toca `pkg/` nem o
+wa-noise em ponto nenhum.
 
-**Status**: **não corrigido** — é documento fora do escopo desta tarefa, e a
-regra do projeto proíbe corrigir de graça achado pré-existente sem perguntar.
-Registado para decisão. Enquanto durar, `make check` não fecha verde neste
-repositório por razão nenhuma do código.
+**Correcção sugerida**: reescrever aquele status para começar por palavra do
+vocabulário (`parcialmente corrigido — a H75 estava errada no diagnóstico; ...`),
+movendo a referência à H75 para depois. É a mudança de uma linha e não toca no
+portão. As três entradas com dois status (H5, H14, H90) são um segundo achado da
+mesma saída e pedem leitura à mão.
+
+**Status**: **não corrigido — fechado para esta worktree por decisão do
+usuário**: nesta sessão só se corrige achado de wa-noise/`pkg/`, e este é de
+wa-headless. Fica pendente para quem trabalhar naquele módulo. Enquanto durar,
+`make check` não fecha verde neste repositório por razão nenhuma do código.
+
+### A armadilha que me custou o diagnóstico errado: DOIS ficheiros têm uma H144
+
+A primeira versão desta entrada apontava para `HOUSEKEEP.md:4935`, da raiz — que
+também tem uma **H144**, sobre presença e sessão dupla
+(`internal/wa-headless/probe_presence2_test.go`). É outra entrada, de outro
+assunto, com outro status (`não corrigido`), e não é a que o portão recusa.
+
+A causa do engano: **o portão reporta só o identificador da entrada, `H144`, sem
+dizer de que ficheiro** — e há pelo menos dois `HOUSEKEEP.md` no repositório com
+numerações `H` independentes que colidem. Procurar `^## H144` no ficheiro da raiz
+encontra uma entrada plausível, e a leitura para aí.
+
+O que desfez o engano foi procurar o TEXTO do status (`grep "H75 corrigida"`) em
+vez do identificador: ele não existia na raiz, o que provou que o ficheiro lido
+era outro. **Regra**: quando um portão citar um identificador de entrada, case
+pelo TEXTO que ele imprimiu, não pelo número — o número não é único neste
+repositório.
+
+**Correcção sugerida para o portão**: imprimir o caminho do ficheiro junto do
+identificador. Uma linha, e o diagnóstico deixa de depender de sorte.
 
 <!-- f-status: aberto -->

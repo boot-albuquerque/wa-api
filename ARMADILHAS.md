@@ -1322,6 +1322,37 @@ E o teste usa o **mesmo** `housekeepStatusLine` que o portão, não uma cópia:
 copiar o padrão faria um dublê incapaz de divergir do original por construção,
 que é a primeira armadilha deste arquivo.
 
+### O portão diz `H144` e não diz de QUAL ficheiro — e há mais de um
+
+**Medido em 2026-08-26, na F275.**
+
+`TestHousekeepEntriesAreMachineReadable` vive em `internal/wa-headless/` e lê
+`const housekeepPath = "HOUSEKEEP.md"` (`gate_test.go:486`) **relativo ao
+diretório do próprio pacote** — ou seja,
+`internal/wa-headless/HOUSEKEEP.md`, e nunca o da raiz.
+
+Mas a mensagem de falha imprime só o identificador da entrada:
+
+```
+H144: "H75 corrigida quanto ao diagnóstico; envio de tipos ricos co"
+```
+
+Há pelo menos dois `HOUSEKEEP.md` neste repositório, com numerações `H`
+**independentes que colidem**. Procurar `^## H144` no ficheiro da raiz encontra
+uma entrada real e plausível — outra data, outro assunto (presença), outro
+status — e a leitura para aí, com um diagnóstico inteiramente errado que
+*parece* confirmado.
+
+**O que desfaz o engano**: procurar o **TEXTO** que o portão imprimiu
+(`grep "H75 corrigida"`), não o número. Ele não existia na raiz, e foi isso que
+provou que o ficheiro lido era outro.
+
+**Regra**: quando um portão citar identificador de entrada de HOUSEKEEP, case
+pelo texto, nunca pelo número — o número não é único neste repositório.
+
+**Conserto certo, não aplicado**: o portão imprimir o caminho do ficheiro junto
+do identificador. Uma linha, e o diagnóstico deixa de depender de sorte.
+
 ## Quando as três técnicas falham juntas, falta um INSTRUMENTO
 
 **Medido em 2026-08-21 (H73).**
