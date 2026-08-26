@@ -3,6 +3,14 @@
 # Os campos e os nomes vêm do MANIPULADOR e do use case, não da struct de
 # domínio, e os exemplos vêm da bateria de 2026-08-26 contra a instância
 # local sempre que a rota pôde ser chamada.
+#
+# A REGRA DE NULABILIDADE deste grupo, medida e não teórica: o `encoding/json`
+# do Go trata `null` num campo NÃO-PONTEIRO como *nada a fazer* — o campo fica
+# com o valor zero, exactamente como se não tivesse vindo. Logo, para quase
+# todos os campos de pedido daqui, **ausente ≡ `null` ≡ `""` ≡ `0` ≡ `false`**,
+# e o que muda é apenas o que o use case faz com esse valor zero. Onde a
+# implementação usa `*T` — `webhookUseProxy`, `webhook_use_proxy` e `history`
+# na edição — a distinção existe de verdade, e está dita campo a campo.
 UtilizadorAdmin:
   type: object
   description: |
@@ -12,102 +20,273 @@ UtilizadorAdmin:
     e na consulta por identificador vem sempre `""`, deliberadamente: devolver
     o token de todas as sessões transformava uma leitura na fuga de todas as
     credenciais da instalação.
+
+    Campo nenhum desta resposta vem `null`: os que existem são tipos simples
+    de Go, e os que não têm valor são **omitidos** (`omitempty`) ou vêm no
+    valor zero. Quando uma propriedade abaixo diz "ausente", é ausência da
+    chave — nunca `null`.
   properties:
     id:
       type: string
-      description: Identificador da sessão, hexadecimal de 32 caracteres. É o `{id}` das rotas `/admin/users/{id}`.
+      nullable: false
+      readOnly: true
+      minLength: 32
+      maxLength: 32
+      pattern: '^[0-9a-f]{32}$'
+      description: |
+        Identificador da sessão, hexadecimal de 32 caracteres. É o `{id}` das
+        rotas `/admin/users/{id}`.
+
+        **Sempre presente**, e nunca `null`: é gerado pelo servidor e não tem
+        `omitempty`.
       example: 918e37366f27e1125ee0482a793267e1
     name:
       type: string
-      description: Nome dado à sessão na criação. Não é o nome da conta de WhatsApp.
+      nullable: false
+      readOnly: true
+      description: |
+        Nome dado à sessão na criação. Não é o nome da conta de WhatsApp.
+
+        **Sempre presente** (sem `omitempty`); vem `""` se a linha do banco
+        estiver com o nome vazio. Nunca `null`.
       example: filarapida
     token:
       type: string
+      nullable: false
+      readOnly: true
       description: |
-        Token de sessão. **Só vem preenchido na criação**; nas leituras é
-        sempre `""`.
+        Token de sessão. **Sempre presente** (sem `omitempty`), mas o valor
+        depende da rota:
+
+        | rota | valor |
+        |---|---|
+        | `POST /admin/users` | o token em claro, **uma única vez** |
+        | `GET /admin/users` | `""` — sempre |
+        | `GET /admin/users/{id}` | `""` — sempre |
+
+        Nunca `null`. Perdido o token da criação, não há como o recuperar:
+        cria-se outra sessão.
       example: ''
     webhook:
       type: string
-      description: URL do webhook desta sessão. Vazio quando não há nenhum.
+      nullable: false
+      readOnly: true
+      description: |
+        URL do webhook desta sessão. **Sempre presente** (sem `omitempty`);
+        vem `""` quando não há nenhum configurado. Nunca `null`.
       example: ''
     jid:
       type: string
+      nullable: false
+      readOnly: true
       description: |
         JID da conta de WhatsApp emparelhada, com o sufixo do aparelho
-        (`:25`). Ausente enquanto a sessão não estiver emparelhada.
+        (`:25`). **Ausente** — a chave não aparece — enquanto a sessão não
+        estiver emparelhada, porque o campo tem `omitempty`. Nunca `null`, e
+        nunca `""`: ou vem preenchido, ou não vem.
       example: 5516981818244:25@s.whatsapp.net
     qrcode:
       type: string
-      description: QR code pendente de leitura, quando o emparelhamento está a decorrer. Ausente fora disso.
+      nullable: false
+      readOnly: true
+      description: |
+        QR code pendente de leitura, quando o emparelhamento está a decorrer.
+        **Ausente** fora disso (`omitempty`). Nunca `null`.
+
+        Na resposta de `POST /admin/users` está sempre ausente: criar a sessão
+        não inicia o emparelhamento.
+      example: 2@Wt3F0k...
     connected:
       type: boolean
-      description: Se o transporte para o WhatsApp está de pé neste instante.
+      nullable: false
+      readOnly: true
+      description: |
+        Se o transporte para o WhatsApp está de pé neste instante.
+
+        **Sempre presente**, incluindo quando `false` — é o único booleano
+        desta resposta sem `omitempty`. Nunca `null`. Na resposta de criação
+        vem `false`, porque criar não liga.
       example: true
     loggedIn:
       type: boolean
+      nullable: false
+      readOnly: true
       description: |
         Se a sessão está autenticada. Distinto de `connected`: pode haver
         credencial válida com o transporte caído.
+
+        **Ausente quando `false`** (`omitempty`) — a ausência da chave e o
+        valor `false` são a mesma informação, e `null` não ocorre.
       example: true
     expiration:
       type: integer
       format: int64
-      description: Instante de expiração da sessão, em segundos desde a época Unix. Ausente quando não expira.
+      nullable: false
+      readOnly: true
+      minimum: 0
+      description: |
+        Instante de expiração da sessão, em segundos desde a época Unix.
+
+        **Ausente quando `0`** (`omitempty`), e `0` significa *não expira* —
+        logo a ausência da chave é a resposta normal. Nunca `null`.
+      example: 1790000000
     proxy_config:
       type: object
+      nullable: false
+      readOnly: true
       description: |
-        Proxy de saída desta sessão. **Repare na assimetria de nomes**: aqui a
-        chave é `proxy_config` em snake_case, mas o corpo de escrita usa
-        `proxyConfig` em camelCase — os dois são aceites na escrita.
+        Proxy de saída desta sessão. **Ausente** quando o mapa é vazio
+        (`omitempty`); na prática vem sempre, porque o servidor o constrói
+        com as três chaves. Nunca `null`.
+
+        **Repare na assimetria de nomes**: aqui a chave é `proxy_config` em
+        snake_case, mas o corpo de escrita usa `proxyConfig` em camelCase —
+        os dois são aceites na escrita.
       properties:
         enabled:
           type: boolean
-          description: Derivado de haver ou não um `proxyUrl` gravado.
+          nullable: false
+          readOnly: true
+          description: |
+            **Derivado**, não gravado: é `proxy_url != ""`. Na resposta de
+            `POST /admin/users` isto significa que o `enabled` que você
+            enviou em `proxyConfig` **não é ecoado** — o que decide é ter ou
+            não URL. Sempre presente, nunca `null`.
           example: false
         proxyUrl:
           type: string
-          description: URL do proxy. Vazio quando não há.
+          nullable: false
+          readOnly: true
+          description: |
+            URL do proxy gravado. `""` quando não há nenhum. Sempre presente,
+            nunca `null`.
           example: ''
         webhookUseProxy:
           type: boolean
-          description: Se a entrega dos webhooks também sai por este proxy.
+          nullable: false
+          readOnly: true
+          description: |
+            Se a entrega dos webhooks também sai por este proxy. Sempre
+            presente, nunca `null` — a resolução acontece no servidor, que
+            escolhe entre o valor pedido, o gravado e o padrão da instalação.
           example: true
     s3_config:
       type: object
+      nullable: false
+      readOnly: true
       description: |
-        Armazenamento em S3 desta sessão. `access_key` vem **sempre** como
-        `***`, mesmo quando não há chave, e `secret_key` não aparece de todo.
-        Mesma assimetria de nomes do proxy: `s3_config` na resposta,
-        `s3Config` no corpo de escrita.
+        Armazenamento em S3 desta sessão. **Ausente** quando o mapa é vazio
+        (`omitempty`); na prática vem sempre. Nunca `null`.
+
+        `access_key` vem **sempre** como `***`, mesmo quando não há chave, e
+        `secret_key` não aparece de todo. Mesma assimetria de nomes do proxy:
+        `s3_config` na resposta, `s3Config` no corpo de escrita.
       properties:
-        enabled: {type: boolean, example: false}
-        endpoint: {type: string, example: ''}
-        region: {type: string, example: ''}
-        bucket: {type: string, example: ''}
+        enabled:
+          type: boolean
+          nullable: false
+          readOnly: true
+          description: Se o armazenamento em S3 está ligado. Sempre presente, nunca `null`.
+          example: false
+        endpoint:
+          type: string
+          nullable: false
+          readOnly: true
+          description: Endereço do serviço. `""` quando não configurado. Sempre presente, nunca `null`.
+          example: ''
+        region:
+          type: string
+          nullable: false
+          readOnly: true
+          description: Região. `""` quando não configurada. Sempre presente, nunca `null`.
+          example: ''
+        bucket:
+          type: string
+          nullable: false
+          readOnly: true
+          description: Bucket de destino. `""` quando não configurado. Sempre presente, nunca `null`.
+          example: ''
         access_key:
           type: string
-          description: Sempre `***`. Mascarada por presença revelaria a presença.
+          nullable: false
+          readOnly: true
+          enum: ['***']
+          description: |
+            **Sempre a constante `***`**, e nunca o valor real — mesmo quando
+            não há chave nenhuma configurada, porque mascarar só quando
+            existe revelaria a existência. Não há valor desconhecido possível
+            aqui: o servidor escreve esta constante incondicionalmente.
+            Sempre presente, nunca `null`.
           example: '***'
-        path_style: {type: boolean, example: true}
-        public_url: {type: string, example: ''}
+        path_style:
+          type: boolean
+          nullable: false
+          readOnly: true
+          description: |
+            Endereçamento por caminho em vez de subdomínio. Sempre presente,
+            nunca `null`. `false` é o valor de uma linha que nunca gravou
+            configuração de S3.
+          example: true
+        public_url:
+          type: string
+          nullable: false
+          readOnly: true
+          description: Base pública da mídia. `""` quando não configurada. Sempre presente, nunca `null`.
+          example: ''
         media_delivery:
           type: string
-          enum: [base64, s3, both]
-          description: Como a mídia recebida é entregue.
+          nullable: false
+          readOnly: true
+          enum: ['', base64, s3, both]
+          description: |
+            Como a mídia recebida é entregue.
+
+            **`""` está na lista de propósito, e foi medido**: esta resposta
+            devolve a coluna **tal e qual**, sem aplicar o padrão. Uma sessão
+            criada por `POST /admin/users` sem `mediaDelivery`, ou uma linha
+            antiga, devolve `""` aqui — enquanto `GET /s3/config` da mesma
+            sessão devolve `""` também, e só o caminho de ESCRITA
+            (`POST /s3/config`) substitui o vazio por `base64`. Trate `""`
+            como `base64`.
+
+            Um valor desconhecido não chega aqui por esta via: `POST /s3/config`
+            recusa-o com `400 invalid_media_delivery` antes de gravar. Mas
+            `POST /admin/users` e `PUT /admin/users/{id}` **não validam**, e um
+            valor arbitrário gravado por ali sai aqui tal e qual.
+
+            Sempre presente, nunca `null`.
           example: base64
-        retention_days: {type: integer, example: 30}
+        retention_days:
+          type: integer
+          nullable: false
+          readOnly: true
+          minimum: 0
+          description: |
+            Dias de retenção dos objectos. Sempre presente, nunca `null`.
+            `0` é o valor de uma linha que nunca gravou configuração de S3 e
+            não é validado em lado nenhum.
+          example: 30
     events:
       type: string
+      nullable: false
+      readOnly: true
       description: |
         Eventos subscritos, separados por vírgulas. `All` recebe todos.
-        **Ausente quando a sessão não tem nenhum** — medido a 2026-08-26.
+
+        **Ausente quando a sessão não tem nenhum** (`omitempty`) — medido a
+        2026-08-26, em que uma das duas sessões traz `"All"` e a outra não
+        traz a chave. Nunca `null`, e nunca `""`.
       example: Message,Receipt,Connected
     hmac_configured:
       type: boolean
+      nullable: false
+      readOnly: true
       description: |
-        Se a sessão nasceu com chave HMAC. Só aparece na resposta de criação, e
-        só quando `true`.
+        Se a sessão nasceu com chave HMAC. **Ausente quando `false`**
+        (`omitempty`), logo só aparece na resposta de `POST /admin/users` e
+        só quando uma `hmacKey` foi enviada. Nunca `null`.
+
+        Nas leituras está sempre ausente: elas não consultam a coluna.
       example: true
 
 PedidoCriarUtilizador:
@@ -115,17 +294,41 @@ PedidoCriarUtilizador:
   description: |
     Corpo de `POST /admin/users`. `s3Config` e `proxyConfig` são aceites também
     como `s3_config` e `proxy_config`; o camelCase vence quando ambos vierem.
+
+    **Campos desconhecidos são ignorados em silêncio** — toda a API usa
+    `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
+    não dá erro: dá o valor zero.
   required: [name, token]
   properties:
     name:
       type: string
-      description: Nome da sessão. Obrigatório.
+      nullable: false
+      minLength: 1
+      description: |
+        Nome da sessão. Obrigatório.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_name_or_token` |
+        | `null` | não | `400 missing_name_or_token` — **indistinguível de ausente** |
+        | `""` | não | `400 missing_name_or_token` — **indistinguível de ausente** |
+        | `"   "` | **sim** | gravado tal e qual; **não há `trim`** |
+        | tipo errado (número, objecto) | não | `400 could_not_decode_payload` |
       example: filarapida
     token:
       type: string
+      nullable: false
+      writeOnly: true
+      minLength: 1
       description: |
         Token de sessão a atribuir. Obrigatório e **único na instalação** —
-        repetido dá `409`. É devolvido uma única vez, nesta resposta.
+        repetido dá `409`, no envelope ANTIGO (`"error": "conflict"`, uma
+        string, e não um objecto com `code`). É devolvido uma única vez, na
+        resposta desta chamada.
+
+        Ausente, `null` e `""` são **indistinguíveis** e dão os três
+        `400 missing_name_or_token`. `"   "` é aceite e gravado tal e qual —
+        não há `trim`, e um token de espaços autentica.
 
         **É um segredo.** Trate-o como palavra-passe: quem o tiver opera a
         conta de WhatsApp inteira. Não o registe em log, não o ponha em URL, e
@@ -134,75 +337,204 @@ PedidoCriarUtilizador:
       example: tk_EXEMPLO_NAO_USE_gere_o_seu
     webhook:
       type: string
-      description: URL de webhook inicial. Pode ficar para depois, em `POST /webhook`.
+      nullable: false
+      description: |
+        URL de webhook inicial. **Opcional**: ausente, `null` e `""` são
+        indistinguíveis e gravam a coluna vazia. Pode ficar para depois, em
+        `POST /webhook`.
+
+        **Não é validado aqui** — nem como URL, nem contra endereços
+        reservados. A validação de saída só acontece na entrega.
       example: https://exemplo.com.br/wa-api/eventos
     expiration:
       type: integer
-      description: Expiração da sessão, em segundos desde a época Unix. Zero significa sem expiração.
+      nullable: false
+      minimum: 0
+      default: 0
+      description: |
+        Expiração da sessão, em segundos desde a época Unix. Ausente, `null`
+        e `0` são **indistinguíveis** e significam os três *sem expiração*.
+
+        Negativo não é recusado: é gravado como veio.
       example: 0
     events:
       type: string
+      nullable: false
       description: |
-        Eventos subscritos, separados por vírgulas. **Cada nome é validado**:
-        um desconhecido dá `400 invalid_event_type`. `All` recebe todos.
+        Eventos subscritos, **numa única string separada por vírgulas** — não
+        é um array aqui, ao contrário de `POST /webhook`.
+
+        Ausente, `null` e `""` são indistinguíveis e gravam a coluna vazia,
+        sem erro. Quando vier preenchida, **cada nome é validado**: um
+        desconhecido dá `400 invalid_event_type`, dizendo qual. `All` recebe
+        todos.
+
+        Cada nome sofre `trim` antes da validação, e um item **vazio é
+        saltado** — `"Message,,Receipt"` e `"Message, Receipt"` passam os
+        dois, e a string é gravada tal e qual, com os espaços.
       example: Message,Receipt,Connected
     history:
       type: integer
-      description: Quantas mensagens gravar por conversa. `0` desactiva a gravação.
+      nullable: false
+      minimum: 0
+      default: 0
+      description: |
+        Quantas mensagens gravar por conversa. Ausente, `null` e `0` são
+        **indistinguíveis** e desactivam a gravação — que é o valor de origem.
+
+        **Não é validado na criação**: um negativo é gravado como veio. Só
+        `POST /session/history` recusa negativo (`400 invalid_history`).
       example: 100
     hmacKey:
       type: string
+      nullable: false
+      writeOnly: true
+      minLength: 32
       description: |
-        Chave de assinatura dos webhooks. Mínimo de **32 caracteres**
-        (`400 hmac_key_too_short`). Guardada cifrada; nunca é devolvida.
+        Chave de assinatura dos webhooks. Ausente, `null` e `""` são
+        indistinguíveis e criam a sessão **sem** chave, sem erro.
+
+        Quando vier preenchida, tem de ter no mínimo **32 bytes** — a
+        verificação é `len()` em Go, que conta bytes e não caracteres, logo
+        uma chave com acentos ou emoji atinge o mínimo com menos letras.
+        Abaixo disso, `400 hmac_key_too_short`.
+
+        Guardada cifrada; **nunca é devolvida** por rota nenhuma. A criação
+        confirma apenas a presença, em `hmac_configured: true`.
       example: chave-de-assinatura-com-32-carac
     proxyConfig:
-      $ref: '#/components/schemas/ConfiguracaoProxyUtilizador'
+      allOf: [$ref: '#/components/schemas/ConfiguracaoProxyUtilizador']
+      nullable: true
+      description: |
+        Proxy de saída. **Ausente e `null` são o mesmo** (o campo é ponteiro
+        em Go) e ambos significam *sem proxy*: o servidor substitui por uma
+        configuração vazia. Aceite também como `proxy_config`.
     s3Config:
-      $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
+      allOf: [$ref: '#/components/schemas/ConfiguracaoS3Utilizador']
+      nullable: true
+      description: |
+        Armazenamento em S3. **Ausente e `null` são o mesmo** e ambos
+        significam *sem S3*: o servidor substitui por uma configuração vazia.
+        Aceite também como `s3_config`.
 
 PedidoEditarUtilizador:
   type: object
   description: |
     Corpo de `PUT /admin/users/{id}`. **Só os campos enviados mudam.**
 
-    Para os campos de texto e para `expiration`, o vazio significa *"não
-    informado"*, e não *"limpe"*. A excepção é `history`: `0` é um valor
-    legítimo e **desactiva** a gravação. Um corpo sem nenhum campo útil
-    responde `400 no_fields_to_update`.
+    A regra, medida em `edit_user.go`: para os campos de texto e para
+    `expiration`, a condição de "foi informado" é `!= ""` / `!= 0`. Logo
+    **ausente, `null` e `""` são indistinguíveis**, e os três significam *não
+    informado* — nunca *limpe*. Consequências que surpreendem:
+
+    - **não há como esvaziar `webhook`, `name`, `token` ou `events` por aqui**;
+      para o webhook, use `DELETE /webhook` ou `PUT /webhook {"active": false}`;
+    - **não há como voltar `expiration` a `0`** depois de a ter definido: `0`
+      é lido como "não informado".
+
+    As duas excepções:
+
+    - `history` é `*int`: ausente/`null` é *não mexer*, e `0` **desactiva** a
+      gravação (F218);
+    - `s3Config`/`proxyConfig` são ponteiros: ausente/`null` é *não mexer*,
+      mas quando presentes **substituem o bloco inteiro**, e cada subcampo
+      omitido dentro deles é gravado no valor zero.
+
+    Um corpo sem nenhum campo útil responde `400 no_fields_to_update` — e
+    `{}` e `{"token": ""}` dão o mesmo, medido a 2026-08-26.
 
     `s3Config`/`proxyConfig` são aceites também em `snake_case`; o camelCase
-    vence quando ambos vierem.
+    vence quando ambos vierem. Campos desconhecidos são ignorados em silêncio.
   properties:
     name:
       type: string
+      nullable: false
+      description: |
+        Novo nome da sessão. Ausente, `null` e `""` são indistinguíveis e
+        significam *não informado*. `"   "` é informado, e é gravado — não há
+        `trim`.
       example: filarapida
     token:
       type: string
-      description: Substitui o token de sessão. Tem de continuar único (`409` se colidir).
+      nullable: false
+      writeOnly: true
+      description: |
+        Substitui o token de sessão. Tem de continuar único: colidir dá `409`
+        no envelope antigo (`"error": "conflict"`).
+
+        Ausente, `null` e `""` são indistinguíveis e significam *não
+        informado* — não há como apagar o token, e um corpo que só traga
+        `{"token": ""}` responde `400 no_fields_to_update`.
+
+        **É um segredo**: nunca em log nem em URL, e o valor de exemplo não
+        deve ser usado.
       example: tk_EXEMPLO_NAO_USE_gere_o_seu_2
     webhook:
       type: string
+      nullable: false
+      description: |
+        Novo URL de webhook. Ausente, `null` e `""` são indistinguíveis e
+        significam *não informado* — **`""` NÃO apaga o webhook**. Para o
+        apagar, `DELETE /webhook`.
       example: https://exemplo.com.br/wa-api/eventos
     expiration:
       type: integer
-      example: 0
+      nullable: false
+      minimum: 0
+      description: |
+        Nova expiração, em segundos desde a época Unix. Ausente, `null` e `0`
+        são indistinguíveis e significam *não informado*.
+
+        **Logo, `0` não volta a ser gravável por esta rota** depois de a
+        expiração ter sido definida — ao contrário de `history`, que ganhou
+        ponteiro precisamente para resolver esta assimetria (F218).
+      example: 1790000000
     events:
       type: string
-      description: Validado como na criação — nome desconhecido dá `400 invalid_event_type`.
+      nullable: false
+      description: |
+        Nova lista de eventos, separada por vírgulas. Ausente, `null` e `""`
+        são indistinguíveis e significam *não informado* — **não há como
+        cancelar todas as subscrições por aqui**.
+
+        Validado como na criação: nome desconhecido dá
+        `400 invalid_event_type`, e a validação corre **depois** de a sessão
+        ser encontrada (uma sessão inexistente dá `404 user_not_found`
+        primeiro).
       example: Message,Receipt
     history:
       type: integer
       nullable: true
+      minimum: 0
       description: |
-        Limite de gravação de mensagens. **Ausente** significa não mexer;
-        `0` **desactiva** — a distinção existe de propósito, e é o que permite
-        voltar a desligar a gravação depois de a ter ligado.
+        Limite de gravação de mensagens por conversa. **É o único campo desta
+        rota que distingue ausência de zero**, porque é `*int` em Go (F218):
+
+        | estado | efeito |
+        |---|---|
+        | ausente | não mexe no valor gravado |
+        | `null` | não mexe — **indistinguível de ausente** |
+        | `0` | **desactiva** a gravação |
+        | `> 0` | passa a gravar esse número de mensagens |
+
+        É o que permite voltar a desligar a gravação depois de a ter ligado.
+        Negativo não é recusado aqui.
       example: 0
     proxyConfig:
-      $ref: '#/components/schemas/ConfiguracaoProxyUtilizador'
+      allOf: [$ref: '#/components/schemas/ConfiguracaoProxyUtilizador']
+      nullable: true
+      description: |
+        Proxy de saída. Ausente e `null` são indistinguíveis e significam
+        *não mexer*. Quando presente, **substitui**: com `enabled: false` (ou
+        `enabled` omitido, que dá o mesmo) o `proxy_url` gravado é apagado.
     s3Config:
-      $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
+      allOf: [$ref: '#/components/schemas/ConfiguracaoS3Utilizador']
+      nullable: true
+      description: |
+        Armazenamento em S3. Ausente e `null` são indistinguíveis e significam
+        *não mexer*. Quando presente, **substitui o bloco inteiro**: todo
+        subcampo omitido é gravado no seu valor zero (`""`, `false`, `0`).
+        Não há fusão com o que já estava gravado.
 
 ConfiguracaoProxyUtilizador:
   type: object
@@ -210,21 +542,51 @@ ConfiguracaoProxyUtilizador:
     Proxy de saída, no formato de ESCRITA das rotas `/admin/users` — camelCase,
     diferente do snake_case da resposta e do corpo de `POST /proxy/set`.
 
-    Na edição, `enabled: false` limpa o `proxy_url` gravado.
+    **Este bloco não valida nada**: ao contrário de `POST /proxy/set`, o
+    `proxyUrl` daqui não passa por verificação de esquema nem de endereço
+    reservado, e não é recusado por a sessão estar ligada.
   properties:
     enabled:
       type: boolean
-      description: Quando `false` na edição, o URL gravado é apagado.
+      nullable: false
+      default: false
+      description: |
+        Ausente, `null` e `false` são **indistinguíveis** (é `bool`, não
+        `*bool`), e o efeito depende da rota:
+
+        | rota | `enabled: true` | ausente / `null` / `false` |
+        |---|---|---|
+        | `POST /admin/users` | **ignorado** — o campo não é lido de todo | idem |
+        | `PUT /admin/users/{id}` | grava `proxyUrl` | **apaga** o `proxy_url` gravado |
+
+        Na criação, o `enabled` da resposta é recalculado como
+        `proxyUrl != ""`, e não ecoa o que você enviou.
       example: false
     proxyUrl:
       type: string
+      nullable: false
+      writeOnly: true
       description: |
-        URL do proxy. Costuma trazer credenciais no userinfo — nunca é
-        devolvido nem registado em log.
+        URL do proxy. Ausente, `null` e `""` são indistinguíveis.
+
+        Costuma trazer credenciais no userinfo
+        (`socks5://utilizador:segredo@servidor:1080`) — **nunca é devolvido
+        em claro nem registado em log** por esta API. Na edição, só é gravado
+        quando `enabled` for `true`.
       example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
     webhookUseProxy:
       type: boolean
-      description: Se a entrega dos webhooks também sai por este proxy. Ausente preserva o valor gravado.
+      nullable: true
+      description: |
+        Se a entrega dos webhooks também sai por este proxy. **É `*bool`**,
+        logo os três estados distinguem-se:
+
+        | estado | efeito |
+        |---|---|
+        | ausente | na criação assume `true`; na edição **preserva** o gravado |
+        | `null` | **indistinguível de ausente** |
+        | `false` | grava `false` explicitamente |
+        | `true` | grava `true` |
       example: true
 
 ConfiguracaoS3Utilizador:
@@ -233,23 +595,98 @@ ConfiguracaoS3Utilizador:
     Armazenamento S3, no formato de ESCRITA das rotas `/admin/users` —
     camelCase, diferente do snake_case de `POST /s3/config` e da resposta de
     leitura.
+
+    **Nada aqui é validado**: ao contrário de `POST /s3/config`, nem
+    `mediaDelivery` nem `endpoint` passam por verificação — um
+    `mediaDelivery` inválido é gravado tal e qual, e um `endpoint` que não é
+    URL também. Em qualquer subcampo, ausente, `null` e o valor zero são
+    indistinguíveis.
   properties:
-    enabled: {type: boolean, example: true}
-    endpoint: {type: string, example: 'https://s3.sa-east-1.amazonaws.com'}
-    region: {type: string, example: sa-east-1}
-    bucket: {type: string, example: wa-api-midia}
-    accessKey: {type: string, example: AKIAIOSFODNN7EXAMPLE}
+    enabled:
+      type: boolean
+      nullable: false
+      default: false
+      description: |
+        Liga o armazenamento em S3. Ausente, `null` e `false` são
+        indistinguíveis. Quando `false`, o cliente S3 em memória desta sessão
+        é **removido** — a configuração fica gravada, mas deixa de ser usada.
+      example: true
+    endpoint:
+      type: string
+      nullable: false
+      description: |
+        Endereço do serviço. Ausente, `null` e `""` são indistinguíveis e
+        significam o endpoint padrão da AWS. **Não é validado por esta rota.**
+      example: 'https://s3.sa-east-1.amazonaws.com'
+    region:
+      type: string
+      nullable: false
+      description: Região. Ausente, `null` e `""` são indistinguíveis e gravam a coluna vazia.
+      example: sa-east-1
+    bucket:
+      type: string
+      nullable: false
+      description: Bucket de destino. Ausente, `null` e `""` são indistinguíveis e gravam a coluna vazia.
+      example: wa-api-midia
+    accessKey:
+      type: string
+      nullable: false
+      writeOnly: true
+      description: |
+        Chave de acesso. Ausente, `null` e `""` são indistinguíveis.
+
+        **Nunca é devolvida**: nas leituras aparece sempre a constante `***`,
+        e o valor real não sai da API. Não use o valor de exemplo.
+      example: AKIA_EXEMPLO_NAO_USE
     secretKey:
       type: string
-      description: Cifrada antes de tocar no banco. Nunca é devolvida por nenhuma rota.
-      example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-    pathStyle: {type: boolean, example: false}
-    publicUrl: {type: string, example: 'https://midia.exemplo.com.br'}
+      nullable: false
+      writeOnly: true
+      description: |
+        Segredo de acesso. Ausente, `null` e `""` são indistinguíveis.
+
+        Cifrada antes de tocar no banco e **nunca devolvida por nenhuma
+        rota** — nem sequer mascarada, porque a leitura não consulta a
+        coluna. Não use o valor de exemplo.
+      example: EXEMPLO_NAO_USE_gere_a_sua_secret_key
+    pathStyle:
+      type: boolean
+      nullable: false
+      default: false
+      description: |
+        Endereçamento por caminho em vez de subdomínio (necessário em MinIO e
+        afins). Ausente, `null` e `false` são indistinguíveis.
+      example: false
+    publicUrl:
+      type: string
+      nullable: false
+      description: |
+        Base pública por onde a mídia guardada é servida. Ausente, `null` e
+        `""` são indistinguíveis.
+      example: 'https://midia.exemplo.com.br'
     mediaDelivery:
       type: string
+      nullable: false
       enum: [base64, s3, both]
+      description: |
+        Como a mídia recebida é entregue. Ausente, `null` e `""` são
+        indistinguíveis.
+
+        Um valor desconhecido **NÃO é recusado por esta rota** — ao contrário
+        de `POST /s3/config`, que devolve `400 invalid_media_delivery`. Aqui ele
+        é gravado tal e qual e sai depois nas leituras, sem erro em momento
+        nenhum. E o vazio **não** é substituído por `base64` aqui: a coluna
+        fica `""`, que é o que `GET /s3/config` e `GET /admin/users` devolvem.
       example: both
-    retentionDays: {type: integer, example: 30}
+    retentionDays:
+      type: integer
+      nullable: false
+      minimum: 0
+      default: 0
+      description: |
+        Dias de retenção dos objectos. Ausente, `null` e `0` são
+        indistinguíveis. Não há mínimo nem máximo aplicados pela API.
+      example: 30
 
 DadosUtilizadorApagado:
   type: object
@@ -257,90 +694,213 @@ DadosUtilizadorApagado:
     Identificação da sessão removida por `DELETE /admin/users/{id}/full`, para
     o registo de quem chamou.
 
-    `name` e `jid` são lidos ANTES da remoção; se essa leitura falhar, a
-    remoção prossegue e estes campos vêm vazios.
+    **As três propriedades vêm sempre**, sem `omitempty` e nunca `null`:
+    `name` e `jid` são lidos ANTES da remoção e, se essa leitura falhar, a
+    remoção prossegue e os dois chegam `""`.
+  required: [id, name, jid]
   properties:
     id:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Identificador da sessão removida — é o `{id}` do caminho, ecoado.
+        Sempre presente e sempre preenchido: é a única das três que não
+        depende da leitura prévia. Nunca `null`.
       example: 918e37366f27e1125ee0482a793267e1
     name:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Nome da sessão removida. Sempre presente; vem `""` se a leitura
+        anterior à remoção falhou, ou se a sessão não tinha nome. Nunca
+        `null`.
       example: filarapida
     jid:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        JID da conta emparelhada. Sempre presente; vem `""` quando a sessão
+        não estava emparelhada ou quando a leitura anterior falhou — os dois
+        casos são indistinguíveis. Nunca `null`.
       example: 5516981818244:25@s.whatsapp.net
 
 ConfiguracaoWebhook:
   type: object
-  description: Resposta de `GET /webhook` — o que está gravado no banco para esta sessão.
+  description: |
+    Resposta de `GET /webhook` — o que está gravado no banco para esta sessão.
+
+    O manipulador devolve um **mapa** com exactamente estas duas chaves, e não
+    a struct de domínio: as duas estão **sempre presentes**, e nenhuma vem
+    `null`. Não há aqui `events`, `active` nem `Details`.
   required: [webhook, subscribe]
   properties:
     webhook:
       type: string
-      description: URL de destino. Vazio quando não há webhook configurado.
+      nullable: false
+      readOnly: true
+      description: |
+        URL de destino. `""` quando não há webhook configurado — e `""`
+        também quando a sessão não existe, porque a consulta não distingue os
+        dois casos. Sempre presente, nunca `null`.
       example: https://exemplo.com.br/wa-api/eventos
     subscribe:
       type: array
+      nullable: false
+      readOnly: true
+      minItems: 1
       items:
         type: string
+        nullable: false
+        description: |
+          Nome de um evento subscrito, ou `""` no caso da lista de um só
+          elemento vazio descrito acima. Nunca `null`.
+        example: Message
       description: |
-        Eventos subscritos. **Armadilha medida**: sem eventos subscritos, esta
-        lista vem como `[""]` — uma lista com uma string vazia, e não uma lista
+        Eventos subscritos.
+
+        **Armadilha medida a 2026-08-26**: sem eventos subscritos, esta lista
+        vem como `[""]` — uma lista com uma string vazia, e **não** uma lista
         vazia, porque é o resultado de partir por vírgula uma coluna vazia.
+        Nunca vem `null` e nunca vem `[]`: tem sempre pelo menos um elemento.
+
+        Quem contar `subscribe.length` para saber se há subscrição conta `1`
+        onde não há nenhuma. A verificação correcta é
+        `subscribe.filter(Boolean).length`.
       example: [Message, Receipt]
 
 PedidoWebhook:
   type: object
   description: |
     Corpo de `POST /webhook` e de `PUT /webhook`. Os dois verbos aceitam os
-    mesmos campos, mas **`active` só é lido pelo `PUT`**.
+    mesmos campos, mas **`active` só é lido pelo `PUT`**, e as respostas têm
+    formas diferentes.
+
+    Um corpo que não seja JSON válido, ou com um campo de tipo errado, é
+    recusado com `400` **no envelope ANTIGO** (`"error": "bad request"`, uma
+    string) — medido a 2026-08-26, e divergente do
+    `400 could_not_decode_payload` do resto da API.
+
+    Campos desconhecidos são ignorados em silêncio.
   properties:
     webhookurl:
       type: string
+      nullable: false
       description: |
         URL de destino. **Vence sobre `webhook`** quando os dois vierem no
-        mesmo corpo. Os dois nomes existem por herança de clientes antigos.
+        mesmo corpo, e a comparação é `!= ""` — logo `webhookurl: ""` cede a
+        vez a `webhook`. Os dois nomes existem por herança de clientes
+        antigos.
+
+        Ausente, `null` e `""` são indistinguíveis.
+
+        **Atenção**: o URL resolvido é gravado SEMPRE, mesmo vazio. Um
+        `POST /webhook {"events": [...]}` sem nenhum dos dois nomes **apaga o
+        webhook gravado**, respondendo `200 {"webhook": ""}`.
       example: https://exemplo.com.br/wa-api/eventos
     webhook:
       type: string
-      description: O outro nome do URL de destino. Perde para `webhookurl`.
+      nullable: false
+      description: |
+        O outro nome do URL de destino. Perde para `webhookurl` sempre que
+        este vier não-vazio. Ausente, `null` e `""` são indistinguíveis, e
+        valem as mesmas consequências descritas em `webhookurl`.
       example: https://exemplo.com.br/wa-api/eventos
     events:
       type: array
+      nullable: true
       items:
         type: string
+        nullable: false
+        description: |
+          Nome de um evento. Um nome desconhecido — ou `""` — é **descartado
+          em silêncio**, com aviso apenas no log do servidor.
+        example: Message
       description: |
-        Eventos a subscrever. **Nomes desconhecidos são descartados em
-        silêncio**, com aviso apenas no log do servidor — a chamada devolve
-        `200`. Lista ausente ou vazia deixa a subscrição gravada como está.
-        `All` recebe todos os eventos.
+        Eventos a subscrever, **como array** — ao contrário de
+        `POST /admin/users`, onde o mesmo conceito é uma string com vírgulas.
+
+        | estado | efeito |
+        |---|---|
+        | ausente | a subscrição gravada **não é tocada** |
+        | `null` | **indistinguível de ausente** |
+        | `[]` | **indistinguível de ausente** — a condição é `len(...) > 0` |
+        | só nomes desconhecidos | **APAGA a subscrição gravada**, e responde `200` |
+        | nomes válidos e inválidos misturados | grava só os válidos; os outros somem sem aviso |
+
+        A quarta linha é a que surpreende: `["Mesage"]`, com um erro de
+        digitação, não dá erro nenhum — **cancela todas as subscrições**.
+        Confira em `GET /webhook` o que ficou.
+
+        `All` recebe todos os eventos. A validação é sensível a maiúsculas.
+
+        Repare no contraste deliberado com `POST /admin/users`, onde o mesmo
+        nome desconhecido é **recusado** com `400 invalid_event_type`.
       example: [Message, Receipt, ReadReceipt]
     active:
       type: boolean
+      nullable: false
+      default: false
       description: |
-        **Lido apenas pelo `PUT`.** `false` limpa URL e eventos, seja qual for
-        o resto do corpo. No `POST` este campo é ignorado.
+        **Lido apenas pelo `PUT`.** No `POST` é ignorado por completo.
+
+        É `bool` e não `*bool`, logo **ausente, `null` e `false` são
+        indistinguíveis** — e os três, num `PUT`, **limpam URL e eventos**,
+        seja qual for o resto do corpo. Um `PUT /webhook {"webhook": "..."}`
+        sem `active` apaga o webhook em vez de o definir.
+
+        É o mesmo mecanismo da F268 noutro campo: um `false` que é uma acção,
+        e não um padrão inerte, devia ser ponteiro.
       example: true
 
 RespostaWebhookAtualizado:
   type: object
-  description: Resposta de `PUT /webhook`.
+  description: |
+    Resposta de `PUT /webhook`.
+
+    O manipulador devolve um **mapa** com exactamente estas três chaves, e não
+    a struct de domínio (`WebhookConfigResult`), que tem `omitempty`. Num mapa
+    não há `omitempty`: **as três chaves aparecem sempre**, e `events` vem
+    `null` — não ausente, não `[]` — quando nenhum evento sobreviveu à
+    validação.
+
+    A resposta de `POST /webhook` é **outra**: só `{"webhook": "..."}`.
+  required: [webhook, events, active]
   properties:
     webhook:
       type: string
-      description: URL que ficou em vigor. Vazio quando `active` era `false`.
+      nullable: false
+      readOnly: true
+      description: |
+        URL que ficou em vigor. `""` quando `active` era `false`, ausente ou
+        `null` — os três casos limpam. Sempre presente, nunca `null`.
       example: https://exemplo.com.br/wa-api/eventos
     events:
       type: array
+      nullable: true
+      readOnly: true
       items:
         type: string
+        nullable: false
+        description: Nome de um evento que passou na validação. Nunca `null`.
+        example: Message
       description: |
         **Apenas os eventos que passaram na validação** — é aqui que se confere
-        o que sobreviveu. Ausente quando nenhum sobreviveu.
+        o que sobreviveu ao descarte silencioso de `events` no pedido.
+
+        **Vem `null`, e não `[]` nem ausente**, quando nenhum sobreviveu: é
+        uma fatia `nil` de Go dentro de um mapa. Quem iterar sem verificar
+        parte. A chave está sempre presente.
       example: [Message, Receipt]
     active:
       type: boolean
-      description: Eco do `active` enviado. Ausente quando `false`.
+      nullable: false
+      readOnly: true
+      description: |
+        Eco exacto do `active` enviado. **Sempre presente**, incluindo quando
+        `false` — a chave não é omitida. Nunca `null`.
       example: true
 
 LimiteHistorico:
@@ -349,32 +909,65 @@ LimiteHistorico:
     Limite de gravação de MENSAGENS por conversa (coluna `users.history`) —
     apesar de as rotas se chamarem `/webhook/history`, isto não tem que ver com
     entregas de webhook (HOUSEKEEP F252).
+
+    É a resposta de `GET /webhook/history` e das escritas. Nenhum campo vem
+    `null`.
   required: [History]
   properties:
     Details:
       type: string
-      description: Confirmação textual. Só aparece na escrita.
+      nullable: false
+      readOnly: true
+      description: |
+        Confirmação textual. **Só aparece na escrita** — na leitura a chave
+        está ausente (`omitempty`), medido a 2026-08-26:
+        `GET /webhook/history` devolve apenas `{"History": 100}`. Nunca
+        `null`.
       example: History configured successfully
     History:
       type: integer
+      nullable: false
+      readOnly: true
+      minimum: 0
       description: |
         Quantas mensagens são gravadas por conversa. **`0` significa gravação
-        desactivada**, e o campo vem sempre presente para que o zero seja
-        distinguível de um campo ausente.
+        desactivada.**
+
+        **Sempre presente**, incluindo quando `0`: o campo perdeu o
+        `omitempty` de propósito (F165), porque sem isso um limite desactivado
+        era indistinguível de um campo que não veio. Nunca `null`.
       example: 100
 
 PedidoLimiteHistorico:
   type: object
-  description: Corpo de `POST /session/history`.
+  description: |
+    Corpo de `POST /webhook/history` e de `POST /session/history` — a mesma
+    operação. Campos desconhecidos são ignorados em silêncio.
   required: [history]
   properties:
     history:
       type: integer
+      nullable: false
       minimum: 0
+      default: 0
       description: |
-        Quantas mensagens gravar por conversa em `message_history`. `0`
-        desliga a gravação, e é o valor de origem de uma instalação nova.
-        Negativo é recusado com `400 invalid_history`.
+        Quantas mensagens gravar por conversa em `message_history`.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | **sim** | grava `0` — **desliga a gravação** |
+        | `null` | **sim** | grava `0` — **indistinguível de ausente** |
+        | `0` | sim | desliga a gravação |
+        | `-1` | não | `400 invalid_history` |
+        | `> 0` | sim | passa a gravar esse número |
+
+        As duas primeiras linhas são a armadilha, e foram medidas a
+        2026-08-26: `POST /session/history {}` responde
+        `200 {"History": 0}` e **apaga o limite que estava gravado**. Não há
+        aqui a distinção entre ausência e zero que
+        `PUT /admin/users/{id}` ganhou (F218).
+
+        `0` é também o valor de origem de uma instalação nova.
       example: 100
 
 PedidoConfiguracaoS3:
@@ -383,50 +976,123 @@ PedidoConfiguracaoS3:
     Corpo de `POST /s3/config` e de `POST /s3/configure` — a mesma operação em
     dois caminhos. Nomes em snake_case, ao contrário do camelCase que as rotas
     `/admin/users` usam para a mesma configuração.
+
+    **É uma SUBSTITUIÇÃO, não uma fusão.** Todo campo omitido é gravado no seu
+    valor zero: um `POST /s3/config {"enabled": true}` apaga `endpoint`,
+    `region`, `bucket`, as credenciais, `public_url` e zera `retention_days` e
+    `path_style`. Medido a 2026-08-26. Envie sempre a configuração completa.
+
+    A única excepção é `media_delivery`, que quando vazio assume `base64` em
+    vez de ficar `""`.
+
+    Campos desconhecidos são ignorados em silêncio.
   properties:
     enabled:
       type: boolean
-      description: Liga o armazenamento em S3 para esta sessão.
+      nullable: false
+      default: false
+      description: |
+        Liga o armazenamento em S3 para esta sessão. Ausente, `null` e `false`
+        são **indistinguíveis**, e os três **desligam** — e, mais do que
+        isso, **revogam** o cliente S3 em memória, para que a credencial
+        anterior deixe de conseguir enviar mídia.
+
+        Quando `true`, o cliente é construído no momento; uma falha aí
+        responde `500` com a configuração **já gravada**.
       example: true
     endpoint:
       type: string
+      nullable: false
       description: |
-        Endereço do serviço. Quando presente, tem de ser um URL analisável —
-        caso contrário `400 invalid_s3_endpoint`.
+        Endereço do serviço. Ausente, `null` e `""` são indistinguíveis e
+        significam o endpoint padrão da AWS.
+
+        Quando presente, é validado contra o validador de saída: um valor que
+        não seja URL utilizável, ou que aponte para endereço reservado ou de
+        loopback, dá `400 invalid_s3_endpoint`.
       example: https://s3.sa-east-1.amazonaws.com
     region:
       type: string
+      nullable: false
+      description: |
+        Região. Ausente, `null` e `""` são indistinguíveis e gravam a coluna
+        vazia — não há validação nem valor por omissão.
       example: sa-east-1
     bucket:
       type: string
+      nullable: false
+      description: |
+        Bucket de destino. Ausente, `null` e `""` são indistinguíveis e gravam
+        a coluna vazia. **Não é validado**, nem sequer quando `enabled` é
+        `true`: a verificação real acontece em `POST /s3/test`.
       example: wa-api-midia
     access_key:
       type: string
-      example: AKIAIOSFODNN7EXAMPLE
+      nullable: false
+      writeOnly: true
+      description: |
+        Chave de acesso. Ausente, `null` e `""` são indistinguíveis, e
+        **apagam** a chave gravada (a escrita substitui o bloco inteiro).
+
+        Nunca é devolvida: `GET /s3/config` responde sempre `***`. Não use o
+        valor de exemplo.
+      example: AKIA_EXEMPLO_NAO_USE
     secret_key:
       type: string
+      nullable: false
+      writeOnly: true
       description: |
+        Segredo de acesso. Ausente, `null` e `""` são indistinguíveis, e
+        **apagam** o segredo gravado.
+
         Cifrada antes de tocar no banco, e **nunca devolvida** por nenhuma
-        rota — nem sequer mascarada, porque a leitura não a consulta.
-      example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+        rota — nem sequer mascarada, porque a leitura não a consulta. Não use
+        o valor de exemplo.
+      example: EXEMPLO_NAO_USE_gere_a_sua_secret_key
     path_style:
       type: boolean
-      description: Usa endereçamento por caminho em vez de subdomínio (necessário em MinIO e afins).
+      nullable: false
+      default: false
+      description: |
+        Usa endereçamento por caminho em vez de subdomínio (necessário em
+        MinIO e afins). Ausente, `null` e `false` são indistinguíveis.
       example: false
     public_url:
       type: string
-      description: Base pública por onde a mídia guardada é servida.
+      nullable: false
+      description: |
+        Base pública por onde a mídia guardada é servida. Ausente, `null` e
+        `""` são indistinguíveis. Não é validado.
       example: https://midia.exemplo.com.br
     media_delivery:
       type: string
+      nullable: false
       enum: [base64, s3, both]
+      default: base64
       description: |
-        Como a mídia recebida é entregue. Valor fora destes três dá
-        `400 invalid_media_delivery`; **vazio assume `base64`**.
+        Como a mídia recebida é entregue.
+
+        | estado | efeito |
+        |---|---|
+        | ausente | grava `base64` |
+        | `null` | grava `base64` — **indistinguível de ausente** |
+        | `""` | grava `base64` — **indistinguível de ausente** |
+        | `base64` / `s3` / `both` | grava o valor |
+        | qualquer outro | `400 invalid_media_delivery`, e **nada é gravado** |
+
+        O valor desconhecido é recusado com a mensagem
+        `media_delivery must be 'base64', 's3', or 'both'`. A comparação é
+        exacta e sensível a maiúsculas: `Base64` é recusado.
       example: both
     retention_days:
       type: integer
-      description: Dias de retenção dos objectos.
+      nullable: false
+      minimum: 0
+      default: 0
+      description: |
+        Dias de retenção dos objectos. Ausente, `null` e `0` são
+        indistinguíveis. **Não há validação**: negativo é gravado como veio, e
+        o valor não é usado por nenhuma limpeza automática desta API.
       example: 30
 
 ConfiguracaoS3Lida:
@@ -435,78 +1101,202 @@ ConfiguracaoS3Lida:
     Resposta de `GET /s3/config`. **Não tem `secret_key`**, e a ausência é
     deliberada: a leitura nunca consulta essa coluna, portanto o segredo não
     tem por onde sair.
+
+    Todos os campos abaixo **vêm sempre** — nenhum tem `omitempty` — e nenhum
+    vem `null`. Uma sessão sem linha no banco recebe a configuração limpa, com
+    `path_style: true` e `media_delivery: base64`, e não um erro: é o que
+    distingue "nada configurado" de "leitura falhou".
+  required: [enabled, endpoint, region, bucket, access_key, path_style, public_url, media_delivery, retention_days]
   properties:
-    enabled: {type: boolean, example: false}
-    endpoint: {type: string, example: ''}
-    region: {type: string, example: ''}
-    bucket: {type: string, example: ''}
+    enabled:
+      type: boolean
+      nullable: false
+      readOnly: true
+      description: Se o armazenamento em S3 está ligado. Sempre presente, nunca `null`.
+      example: false
+    endpoint:
+      type: string
+      nullable: false
+      readOnly: true
+      description: Endereço do serviço; `""` quando não configurado. Sempre presente, nunca `null`.
+      example: ''
+    region:
+      type: string
+      nullable: false
+      readOnly: true
+      description: Região; `""` quando não configurada. Sempre presente, nunca `null`.
+      example: ''
+    bucket:
+      type: string
+      nullable: false
+      readOnly: true
+      description: Bucket de destino; `""` quando não configurado. Sempre presente, nunca `null`.
+      example: ''
     access_key:
       type: string
+      nullable: false
+      readOnly: true
+      enum: ['***']
       description: |
-        **Sempre `***`**, mesmo sem chave configurada — mascarar só quando
-        existe revelaria a existência.
+        **Sempre a constante `***`**, mesmo sem chave configurada — mascarar
+        só quando existe revelaria a existência. Não há valor desconhecido
+        possível: o servidor escreve esta constante incondicionalmente, sem
+        olhar para a coluna. Sempre presente, nunca `null`.
       example: '***'
-    path_style: {type: boolean, example: true}
-    public_url: {type: string, example: ''}
+    path_style:
+      type: boolean
+      nullable: false
+      readOnly: true
+      description: |
+        Endereçamento por caminho em vez de subdomínio. Sempre presente, nunca
+        `null`. Numa sessão sem linha gravada vem `true`; numa que gravou
+        configuração sem o campo, vem `false`.
+      example: true
+    public_url:
+      type: string
+      nullable: false
+      readOnly: true
+      description: Base pública da mídia; `""` quando não configurada. Sempre presente, nunca `null`.
+      example: ''
     media_delivery:
       type: string
-      enum: [base64, s3, both]
+      nullable: false
+      readOnly: true
+      enum: ['', base64, s3, both]
+      description: |
+        Como a mídia recebida é entregue.
+
+        **`""` está na lista de propósito, e foi medido a 2026-08-26**: esta
+        leitura devolve a coluna **tal e qual**, e só o caminho de escrita
+        substitui o vazio por `base64`. Uma sessão configurada por
+        `POST /admin/users` sem `mediaDelivery` devolve `""` aqui. Trate `""`
+        como `base64`.
+
+        Outro valor desconhecido não ocorre por esta via: `POST /s3/config`
+        recusa-o com `400 invalid_media_delivery`. Mas `POST /admin/users` e
+        `PUT /admin/users/{id}` **não validam**, e um valor arbitrário gravado
+        por ali sai aqui tal e qual.
+
+        Sempre presente, nunca `null`.
       example: base64
-    retention_days: {type: integer, example: 30}
+    retention_days:
+      type: integer
+      nullable: false
+      readOnly: true
+      minimum: 0
+      description: |
+        Dias de retenção dos objectos. Sempre presente, nunca `null`. `0` é o
+        valor de uma sessão que nunca gravou configuração de S3.
+      example: 30
 
 ResultadoConfiguracaoS3:
   type: object
-  description: Resposta das escritas de S3 — `POST /s3/config`, `POST /s3/configure` e `DELETE /s3/config`.
+  description: |
+    Resposta das escritas de S3 — `POST /s3/config`, `POST /s3/configure` e
+    `DELETE /s3/config`. Nenhum campo vem `null`.
   properties:
     Details:
       type: string
-      description: Confirmação textual da operação.
+      nullable: false
+      readOnly: true
+      description: |
+        Confirmação textual da operação: `S3 configuration saved successfully`
+        na escrita, `S3 configuration deleted successfully` na remoção.
+        **Sempre presente** nestas três rotas — o `omitempty` da struct nunca
+        dispara, porque o texto nunca é vazio. Nunca `null`.
       example: S3 configuration saved successfully
     Enabled:
       type: boolean
+      nullable: false
+      readOnly: true
       description: |
-        Estado DEPOIS da operação. **Ausente quando `false`** — logo, a remoção
-        responde só com `Details`, e a ausência deste campo é a confirmação de
-        que ficou desligado.
+        Estado DEPOIS da operação. **Ausente quando `false`** (`omitempty`) —
+        logo a remoção, e a gravação com `enabled: false`, respondem só com
+        `Details`, e a ausência desta chave é a confirmação de que ficou
+        desligado. Medido a 2026-08-26. Nunca `null`.
       example: true
 
 ResultadoTesteS3:
   type: object
   description: |
-    Resposta de `POST /session/s3/test`. `Bucket` e `Region` ecoam a
-    configuração que foi TESTADA — é o que distingue "testei o que gravou" de
-    "respondi 200".
+    Resposta de `POST /session/s3/test` e de `POST /s3/test`.
+
+    **A rota testa o que está GRAVADO**, não o que o corpo do pedido traz — o
+    corpo é ignorado. `Bucket` e `Region` ecoam a configuração que foi
+    testada, e é o que distingue "testei o que gravou" de "respondi 200".
+    Nenhuma credencial aparece aqui, e nenhum campo vem `null`.
   required: [connected]
   properties:
     connected:
       type: boolean
+      nullable: false
+      readOnly: true
+      enum: [true]
       description: |
-        Só aparece `true`: qualquer falha do teste sai como erro, não como
-        `connected: false`.
+        **Sempre presente e sempre `true`**: qualquer falha do teste sai como
+        erro HTTP, e não como `connected: false`. Não existe outro valor —
+        um `400 s3_not_enabled` é o que se recebe quando o S3 está desligado.
+        Nunca `null`.
       example: true
     Details:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Confirmação textual. **Sempre presente** neste corpo, porque só existe
+        no caminho de sucesso, onde o texto nunca é vazio. Nunca `null`.
       example: S3 connection test successful
     Bucket:
       type: string
-      example: wa-api-media
+      nullable: false
+      readOnly: true
+      description: |
+        Bucket que foi testado, lido da configuração gravada. **Ausente
+        quando `""`** (`omitempty`). Nunca `null`.
+      example: wa-api-midia
     Region:
       type: string
-      example: eu-west-1
+      nullable: false
+      readOnly: true
+      description: |
+        Região que foi testada, lida da configuração gravada. **Ausente
+        quando `""`** (`omitempty`). Nunca `null`.
+      example: sa-east-1
 
 PedidoConfiguracaoHmac:
   type: object
   description: |
     Corpo de `POST /hmac/config` e de `POST /hmac/configure` — a mesma
-    operação. **`hmac_key` é o único campo lido**; qualquer outro é ignorado.
+    operação. **`hmac_key` é o único campo lido**; qualquer outro é ignorado
+    em silêncio.
   required: [hmac_key]
   properties:
     hmac_key:
       type: string
+      nullable: false
+      writeOnly: true
       minLength: 32
       description: |
-        Chave que assina os webhooks desta sessão. **Mínimo de 32 caracteres**
-        (`400 hmac_key_too_short`). Guardada cifrada e nunca devolvida.
+        Chave que assina os webhooks desta sessão.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 hmac_key_too_short` |
+        | `null` | não | `400 hmac_key_too_short` — **indistinguível de ausente** |
+        | `""` | não | `400 hmac_key_too_short` — **indistinguível de ausente** |
+        | `"   "` (< 32) | não | `400 hmac_key_too_short` |
+        | 32 espaços | **sim** | aceite; **não há `trim`** nem exigência de entropia |
+        | tipo errado | não | `400 could_not_decode_payload` |
+
+        Todas medidas a 2026-08-26. Repare que **não há como revogar a chave
+        por aqui** — mandar `""` dá `400`; a revogação é
+        `DELETE /hmac/config`.
+
+        O mínimo é de **32 bytes**: a verificação é `len()` em Go, que conta
+        bytes e não caracteres, logo uma chave com acentos ou emoji atinge o
+        mínimo com menos letras.
+
+        Guardada cifrada e **nunca devolvida**.
       example: chave-de-assinatura-com-32-carac
 
 ConfiguracaoHmacLida:
@@ -518,24 +1308,42 @@ ConfiguracaoHmacLida:
   properties:
     hmac_key:
       type: string
+      nullable: false
+      readOnly: true
+      enum: ['', '***']
       description: |
-        `""` quando não há chave configurada, `"***"` quando há. Nenhum outro
-        valor é possível.
+        `""` quando não há chave configurada, `***` quando há.
+
+        Um valor desconhecido é impossível: o servidor escolhe entre estas
+        duas constantes e nunca devolve a chave. Sempre presente, nunca
+        `null`.
       example: ''
 
 ResultadoConfiguracaoHmac:
   type: object
-  description: Resposta das escritas de HMAC — `POST /hmac/config`, `POST /hmac/configure` e `DELETE /hmac/config`.
+  description: |
+    Resposta das escritas de HMAC — `POST /hmac/config`, `POST /hmac/configure`
+    e `DELETE /hmac/config`. Nenhum campo vem `null`.
   properties:
     Details:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Confirmação textual: `HMAC configuration saved successfully` na
+        gravação, `HMAC configuration deleted successfully` na revogação.
+        **Sempre presente** nestas rotas — o `omitempty` nunca dispara,
+        porque o texto nunca é vazio. Nunca `null`.
       example: HMAC configuration saved successfully
     Enabled:
       type: boolean
+      nullable: false
+      readOnly: true
       description: |
         Estado DEPOIS da operação: `true` quando a chave ficou gravada.
-        **Ausente quando `false`**, portanto a revogação responde só com
-        `Details`.
+        **Ausente quando `false`** (`omitempty`), portanto a revogação
+        responde só com `Details`, e a ausência desta chave é a confirmação
+        de que a chave saiu. Nunca `null`.
       example: true
 
 PedidoProxy:
@@ -545,156 +1353,343 @@ PedidoProxy:
     caminhos são a MESMA operação, servida pelo mesmo manipulador. O segundo é
     a forma nova; o primeiro fica por compatibilidade.
 
-    `enable` decide o ramo: ligar valida o URL, desligar limpa o proxy gravado
-    sem sequer olhar para ele.
+    **A primeira coisa que esta rota faz é recusar uma sessão LIGADA**, antes
+    de olhar para o corpo: com a sessão ligada, qualquer pedido responde
+    `400 proxy_while_connected`, e nenhuma das validações abaixo chega a
+    correr. Medido a 2026-08-26 nas duas sessões. Desligue primeiro
+    (`GET /session/disconnect`).
+
+    Depois disso, `enable` decide o ramo: ligar valida o URL, desligar limpa o
+    proxy gravado sem sequer olhar para ele.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [enable]
   properties:
     enable:
       type: boolean
+      nullable: false
+      default: false
       description: |
-        `true` grava o proxy; `false` remove-o. No ramo de remoção o
-        `proxy_url` é IGNORADO de propósito — recusar a remoção porque a URL
-        que vai ser deitada fora está malformada tornaria uma configuração
-        estragada impossível de apagar.
+        Escolhe o ramo. É `bool` e não `*bool`, logo **ausente, `null` e
+        `false` são indistinguíveis** — e os três **removem** o proxy gravado.
+
+        | estado | efeito (com a sessão desligada) |
+        |---|---|
+        | ausente | remove o proxy — **indistinguível de `false`** |
+        | `null` | remove o proxy — **indistinguível de ausente** |
+        | `false` | remove o proxy |
+        | `true` | valida e grava |
+        | tipo errado | `400 could_not_decode_payload` |
+
+        No ramo de remoção o `proxy_url` é IGNORADO de propósito — recusar a
+        remoção porque a URL que vai ser deitada fora está malformada tornaria
+        uma configuração estragada impossível de apagar.
+
+        É o mesmo mecanismo da F268: um `false` que é uma acção destrutiva, e
+        não um padrão inerte, devia ser ponteiro.
       example: true
     proxy_url:
       type: string
+      nullable: false
+      writeOnly: true
       description: |
-        URL do proxy. Só `http` e `socks5` são aceites — `https` é recusado
-        com `400 unsupported_proxy_scheme`, porque exige um transporte que
-        este processo não monta. Credenciais vão no userinfo
-        (`socks5://utilizador:segredo@servidor:1080`) e nunca aparecem em log
-        nem em mensagem de erro.
+        URL do proxy. Só é lido quando `enable` for `true`; ausente, `null` e
+        `""` são indistinguíveis.
+
+        Com `enable: true`, as recusas, **nesta ordem**:
+
+        | condição | erro |
+        |---|---|
+        | ausente / `null` / `""` | `400 missing_proxy_url` |
+        | não analisável como URL | `400 invalid_proxy_url` |
+        | esquema diferente de `http` ou `socks5` | `400 unsupported_proxy_scheme` |
+        | endereço reservado ou de loopback, com a entrega de webhook pelo proxy | `400 reserved_proxy_address` |
+
+        `https` **é recusado**, apesar de parecer óbvio que devia passar: um
+        proxy HTTPS exige um transporte que este processo não monta. A
+        comparação de esquema é exacta e sensível a maiúsculas.
+
+        Credenciais vão no userinfo
+        (`socks5://utilizador:segredo@servidor:1080`) e **nunca aparecem em
+        log nem em mensagem de erro** — só o esquema é registado, e só depois
+        de a análise ter tido sucesso. Não use o valor de exemplo.
       example: 'socks5://proxy.interno:1080'
     webhook_use_proxy:
       type: boolean
+      nullable: true
       description: |
-        Se a entrega de WEBHOOK também sai por este proxy. Omitido, herda o
-        valor gravado e, na falta dele, o padrão da instalação.
+        Se a entrega de WEBHOOK também sai por este proxy. **É `*bool`**, logo
+        os três estados distinguem-se:
+
+        | estado | efeito |
+        |---|---|
+        | ausente | **preserva** o valor gravado; na falta dele, o padrão da instalação |
+        | `null` | **indistinguível de ausente** |
+        | `false` | grava `false` |
+        | `true` | grava `true` |
 
         **Muda a validação**: com este modo ligado, um endereço reservado ou
         de loopback é recusado com `400 reserved_proxy_address` — de outra
         forma, o proxy indicado pelo inquilino seria um caminho à volta do
         validador de saída. Com ele desligado, o proxy só carrega o tráfego
         do próprio WhatsApp e um endereço interno é permitido.
+
+        Detalhe deliberado: se o valor gravado **não puder ser lido**, a
+        guarda de segurança assume o modo mais estrito e recusa o endereço
+        reservado, mas o valor persistido continua a ser o padrão da
+        instalação. Os dois divergirem nesse caminho é de propósito — uma
+        falha de banco não deve abrir o caminho de loopback.
       example: false
 
 ResultadoProxy:
   type: object
   description: |
-    Resposta de `POST /proxy/set`. **A forma difere entre os dois ramos**:
-    ligar traz `Set`, `ProxyURL` e `webhook_use_proxy`; desligar responde só
-    `Details`.
+    Resposta de `POST /proxy/set` e de `POST /session/proxy`. **A forma difere
+    entre os dois ramos**: ligar traz `Details`, `Set`, `ProxyURL` e
+    `webhook_use_proxy`; desligar responde só `Details`.
   properties:
     Details:
       type: string
-      description: '`Proxy configured successfully` ao ligar, `Proxy disabled successfully` ao desligar.'
+      nullable: false
+      readOnly: true
+      description: |
+        `Proxy configured successfully` ao ligar, `Proxy disabled successfully`
+        ao desligar. **Sempre presente** nos dois ramos — o `omitempty` nunca
+        dispara, porque o texto nunca é vazio. Nunca `null`.
       example: Proxy configured successfully
     Set:
       type: boolean
-      description: Presente só no ramo de ligar.
+      nullable: false
+      readOnly: true
+      description: |
+        Presente só no ramo de ligar, e aí sempre `true`. **Ausente no ramo de
+        desligar**, porque `false` é omitido (`omitempty`) — a ausência desta
+        chave é a confirmação de que o proxy saiu. Nunca `null`.
       example: true
     ProxyURL:
       type: string
-      description: Eco do URL gravado. Presente só no ramo de ligar.
+      nullable: false
+      readOnly: true
+      description: |
+        Eco do URL gravado, **tal e qual foi enviado, incluindo as credenciais
+        do userinfo**. Presente só no ramo de ligar; ausente no de desligar
+        (`omitempty`).
+
+        É o único ponto da API em que um `proxy_url` volta em claro. Trate
+        esta resposta como contendo segredo: não a registe em log nem a
+        mostre em interface. Nunca `null`.
       example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
     webhook_use_proxy:
       type: boolean
-      description: Valor efectivamente persistido. Presente só no ramo de ligar.
+      nullable: true
+      readOnly: true
+      description: |
+        Valor efectivamente persistido pela resolução do servidor — o pedido,
+        ou o gravado, ou o padrão da instalação, nessa ordem.
+
+        Presente só no ramo de ligar. **Ausente no de desligar**, porque o
+        campo é `*bool` com `omitempty` e ali fica `nil`. Quando presente,
+        nunca vem `null`.
       example: false
 
 Etiqueta:
   type: object
   description: |
-    Uma etiqueta do WhatsApp Business, recolhida dos eventos que os outros
-    aparelhos anunciam. O wa-api **não as cria** — a biblioteca não sabe
-    fazê-lo.
+    Uma etiqueta do WhatsApp Business, como `GET /labels` a devolve.
+
+    As etiquetas são recolhidas dos eventos que os outros aparelhos anunciam.
+    O wa-api **não as cria** — a biblioteca não sabe fazê-lo — e não há rota
+    de escrita.
+
+    As seis propriedades vêm **sempre**: são campos de uma linha do banco, sem
+    `omitempty`, e nenhuma vem `null`.
+  required: [label_id, name, color, predefined_id, deleted, updated_at]
   properties:
     label_id:
       type: string
+      nullable: false
+      readOnly: true
       description: |
         Identificador da etiqueta. É um número curto atribuído pelo WhatsApp
-        Business, não um UUID — na instância medida, `"3"`. É este valor que
-        entra em `GET /labels/{id}/chats`.
+        Business, **transportado como string** — na instância medida a
+        2026-08-26, `"3"`, e não `3`. É este valor que entra em
+        `GET /labels/{id}/chats`. Sempre presente, nunca `null`.
       example: '3'
     name:
       type: string
+      nullable: false
+      readOnly: true
       description: |
         Nome da etiqueta. **Pode vir com caracteres invisíveis de marcação de
         direcção do texto** no início, postos pelo próprio WhatsApp — foi o
-        caso na medição de 2026-08-26.
+        caso na medição de 2026-08-26, em que `"Grupos"` chegou precedido de
+        `U+200E`. Compare por igualdade só depois de os remover.
+
+        Sempre presente; pode ser `""` se o aparelho anunciou uma etiqueta sem
+        nome. Nunca `null`.
       example: Grupos
     color:
       type: integer
-      description: Índice da cor na paleta do WhatsApp Business.
+      nullable: false
+      readOnly: true
+      description: |
+        Índice da cor na paleta do WhatsApp Business. Sempre presente, nunca
+        `null`. A API não valida nem interpreta o valor: é o que o aparelho
+        anunciou, e `0` é um índice legítimo, não "sem cor".
       example: 0
     predefined_id:
       type: integer
-      description: Índice da etiqueta predefinida de origem. `0` quando não vem de nenhuma.
+      nullable: false
+      readOnly: true
+      description: |
+        Índice da etiqueta predefinida de origem. `0` quando não vem de
+        nenhuma. Sempre presente, nunca `null`.
       example: 0
     deleted:
       type: boolean
+      nullable: false
+      readOnly: true
+      enum: [false]
       description: |
-        Etiquetas apagadas **continuam na lista**, marcadas aqui. Filtre por
-        este campo se só quiser as activas.
+        Se a etiqueta foi apagada no aparelho.
+
+        **Nesta listagem vem sempre `false`**, e não há outro valor possível:
+        a consulta filtra por `deleted = false`. As etiquetas apagadas
+        **ficam** na tabela — o registo de que existiram tem valor para quem
+        reconstrói histórico — mas **não saem por esta rota**. Não filtre por
+        este campo à espera de reduzir a lista: ela já vem reduzida.
+
+        Sempre presente, nunca `null`.
       example: false
     updated_at:
       type: string
       format: date-time
-      description: Instante da última alteração anunciada, com o fuso do aparelho que a anunciou.
+      nullable: false
+      readOnly: true
+      description: |
+        Instante da última alteração anunciada. **Vem com o fuso do aparelho
+        que a anunciou**, e não em UTC — na medição de 2026-08-26,
+        `-04:00`. Normalize antes de comparar com outros instantes desta API,
+        que usam UTC.
+
+        Sempre presente, nunca `null`; uma linha sem instante conhecido traz o
+        zero de Go (`0001-01-01T00:00:00Z`).
       example: '2026-07-20T05:28:22.008-04:00'
 
 EtiquetaConversa:
   type: object
-  description: Associação entre uma etiqueta e uma conversa, como `GET /labels/{id}/chats` a devolve.
+  description: |
+    Associação entre uma etiqueta e uma conversa, como `GET /labels/{id}/chats`
+    a devolve.
+
+    As quatro propriedades vêm **sempre**, e nenhuma vem `null`. A lista pode
+    vir `[]` — nunca `null` —, e vem `[]` tanto para uma etiqueta sem
+    conversas como para **um `{id}` que não existe**: a rota não devolve `404`,
+    medido a 2026-08-26.
+  required: [label_id, chat_jid, labeled, updated_at]
   properties:
     label_id:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Identificador da etiqueta — o `{id}` do caminho, ecoado. Sempre
+        presente, nunca `null`.
       example: '3'
     chat_jid:
       type: string
-      description: JID da conversa — contacto, grupo ou canal.
+      nullable: false
+      readOnly: true
+      description: |
+        JID da conversa — contacto (`@s.whatsapp.net` ou `@lid`), grupo
+        (`@g.us`) ou canal (`@newsletter`). Sempre presente, nunca `null`.
       example: 120363411669320145@g.us
     labeled:
       type: boolean
+      nullable: false
+      readOnly: true
+      enum: [true]
       description: |
-        Se a etiqueta está **aplicada** neste instante. Uma associação retirada
-        continua na tabela com `false`.
+        Se a etiqueta está aplicada neste instante.
+
+        **Nesta listagem vem sempre `true`**, e não há outro valor possível: a
+        consulta filtra por `labeled = true`. Uma associação retirada
+        continua na tabela com `false` — o instante em que foi retirada tem
+        valor —, mas **não sai por esta rota**.
+
+        Sempre presente, nunca `null`.
       example: true
     updated_at:
       type: string
       format: date-time
+      nullable: false
+      readOnly: true
+      description: |
+        Instante em que a associação foi anunciada, **com o fuso do aparelho
+        que a anunciou**, e não em UTC. Sempre presente, nunca `null`.
       example: '2026-07-20T05:28:22.008-04:00'
 
 PedidoRecusarChamada:
   type: object
   description: |
     Corpo de `POST /call/reject`. **Os dois campos vêm do evento `CallOffer`** —
-    não são inventáveis, e sem esse evento a rota não tem alvo.
+    não são inventáveis, e sem esse evento a rota não tem alvo. Subscreva
+    `CallOffer` (ou `All`) e leia-os de lá.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [call_from, call_id]
   properties:
     call_from:
       type: string
+      nullable: false
+      minLength: 1
       description: |
         Quem está a ligar, como veio no evento. Aceita telefone nu, JID de
-        telefone ou LID — a resolução é feita pelo servidor. Em falta dá
-        `400 missing_call_from`; irresolúvel dá `400 invalid_call_from`.
+        telefone (`@s.whatsapp.net`) ou LID (`@lid`) — a resolução é feita
+        pelo servidor.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_call_from` |
+        | `null` | não | `400 missing_call_from` — **indistinguível de ausente** |
+        | `""` | não | `400 missing_call_from` — **indistinguível de ausente** |
+        | irresolúvel (ex.: `lixo!!!`) | não | `400 invalid_call_from` |
+        | tipo errado | não | `400 could_not_decode_payload` |
+
+        Todas medidas a 2026-08-26.
       example: 554192421234@s.whatsapp.net
     call_id:
       type: string
+      nullable: false
+      minLength: 1
       description: |
         Identificador da chamada, **gerado pelo WhatsApp** e entregue no evento
-        `CallOffer`. Em falta dá `400 missing_call_id`.
+        `CallOffer`. Ausente, `null` e `""` são indistinguíveis e dão os três
+        `400 missing_call_id` — medido a 2026-08-26.
+
+        A validação de `call_from` corre **antes** desta: um corpo vazio
+        responde `missing_call_from`, não `missing_call_id`.
       example: 3EB0A4B2AFD45E625C0917
 
 ResultadoRecusarChamada:
   type: object
-  description: Resposta de `POST /call/reject`.
+  description: |
+    Resposta de `POST /call/reject`. **As duas propriedades vêm sempre** — não
+    há `omitempty` em nenhuma — e nenhuma vem `null`.
+  required: [Details, CallID]
   properties:
     Details:
       type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Confirmação textual da recusa. Sempre presente, nunca `null`.
       example: Call rejected
     CallID:
       type: string
-      description: Eco do `call_id` recusado, para casar com o evento de origem.
+      nullable: false
+      readOnly: true
+      description: |
+        Eco do `call_id` recusado, para casar com o evento de origem. Sempre
+        presente, nunca `null`.
       example: 3EB0A4B2AFD45E625C0917
