@@ -2641,7 +2641,8 @@ pkg/application/usecase/notification.newsletterRequirements.func7	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func8	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func9	EXCLUDED	X6
 pkg/application/usecase/notification.requireJID.func1	EXCLUDED	X6
-pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:291);uncovered:L2(S-ret,newsletter_ops.go:296)
+pkg/application/usecase/notification.requireNewsletterServer.func1	EXCLUDED	X6
+pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:326);uncovered:L2(S-ret,newsletter_ops.go:331)
 pkg/application/usecase/profile.GetProfileFullUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherPrivacidade	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherUserInfo	ELIGIBLE	covered
@@ -3093,6 +3094,7 @@ pkg/domain.IsSupportedProxyScheme	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1
 pkg/domain.IsValidMediaDelivery	EXCLUDED	X1
 pkg/domain.JID.IsLID	EXCLUDED	X1
+pkg/domain.JID.IsNewsletter	EXCLUDED	X1
 pkg/domain.JID.IsPN	EXCLUDED	X1
 pkg/domain.JID.Namespace	EXCLUDED	X1
 pkg/domain.JID.Server	ELIGIBLE	uncovered:L1
