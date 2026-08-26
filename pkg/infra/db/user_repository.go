@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -55,11 +56,18 @@ func isUniqueViolation(err error) bool {
 // passavam ambas pela checagem e ambas inseriam. Quem decide é o índice
 // UNIQUE de token_hash, atomicamente.
 func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) (bool, error) {
+	engine, err := engineForCreate(rec.Engine)
+	if err != nil {
+		log.Warn().Err(err).Str("table", "users").Str("user_id", rec.ID).
+			Str("column", usersEngineColumn).Msg("create user rejected: invalid engine")
+		return false, err
+	}
+
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO users (id, name, token, token_hash, webhook, expiration, events, jid, qrcode, proxy_url,
 		 webhook_use_proxy, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key,
-		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history, engine)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		 ON CONFLICT DO NOTHING`,
 		// A coluna `token` recebe VAZIO: o texto claro deixa de ser gravado
 		// (F97 etapa 1). Ela continua existindo porque e NOT NULL e porque as
@@ -74,7 +82,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) 
 		rec.ProxyURL, rec.WebhookUseProxy,
 		rec.S3.Enabled, rec.S3.Endpoint, rec.S3.Region, rec.S3.Bucket,
 		rec.S3.AccessKey, rec.S3.SecretKey, rec.S3.PathStyle, rec.S3.PublicURL,
-		rec.S3.MediaDelivery, rec.S3.RetentionDays, rec.HmacKey, rec.History)
+		rec.S3.MediaDelivery, rec.S3.RetentionDays, rec.HmacKey, rec.History, engine)
 
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -151,6 +159,18 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 	if upd.WebhookUseProxy != nil {
 		addField("webhook_use_proxy", *upd.WebhookUseProxy)
 	}
+	if upd.Engine != nil {
+		// Validated, not coerced: an update that names an engine nobody serves
+		// has to fail saying so. legacy_unknown is refused here too — it
+		// describes history and can never be an intent.
+		if !upd.Engine.IsValidForCreate() {
+			log.Warn().Str("table", "users").Str("user_id", id).
+				Str("column", usersEngineColumn).Str("engine", upd.Engine.String()).
+				Msg("update user rejected: invalid engine")
+			return fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, upd.Engine.String())
+		}
+		addField(usersEngineColumn, upd.Engine.String())
+	}
 	if upd.S3 != nil {
 		addField("s3_enabled", upd.S3.Enabled)
 		addField("s3_endpoint", upd.S3.Endpoint)
@@ -193,7 +213,7 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 // ListUsers devolve todos os usuários, ou apenas o de id informado.
 func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.UserListEntry, error) {
 	const base = `SELECT id, name, webhook, jid, qrcode, connected, expiration, proxy_url,
-				 COALESCE(webhook_use_proxy, true) AS webhook_use_proxy, events, history
+				 COALESCE(webhook_use_proxy, true) AS webhook_use_proxy, events, history, engine
 				 FROM users`
 
 	query := base
@@ -232,6 +252,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			WebhookUseProxy bool           `db:"webhook_use_proxy"`
 			Events          string         `db:"events"`
 			History         sql.NullInt64  `db:"history"`
+			Engine          string         `db:"engine"`
 		}
 		if err := rows.StructScan(&row); err != nil {
 			log.Error().Err(err).Str("table", "users").Str("query", "list_users").
@@ -251,6 +272,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			WebhookUseProxy: row.WebhookUseProxy,
 			Events:          row.Events,
 			History:         int(row.History.Int64),
+			Engine:          domain.Engine(row.Engine),
 		}
 
 		// A configuração de S3 vem numa segunda consulta, como antes. Falha
@@ -306,3 +328,24 @@ func (r *UserRepository) DeleteUser(ctx context.Context, id string) (bool, error
 
 // Verificação em tempo de compilação de que o repositório implementa a porta.
 var _ appport.UserRepository = (*UserRepository)(nil)
+
+// engineForCreate decides what goes into users.engine on INSERT.
+//
+// The empty value is the DOCUMENTED zero value of domain.UserRecord.Engine, not
+// an unknown one: no caller can express an engine yet, and wa_noise is exactly
+// what WA_API_ENGINE defaults to today, so writing it keeps new rows agreeing
+// with the running configuration instead of inventing legacy_unknown for a row
+// that is being created right now.
+//
+// Anything else that is not valid for creation is an ERROR. This is the
+// difference the repository must keep: a zero value is absence, a wrong value
+// is a mistake, and only the first has a default.
+func engineForCreate(e domain.Engine) (domain.Engine, error) {
+	if e == "" {
+		return domain.EngineWaNoise, nil
+	}
+	if !e.IsValidForCreate() {
+		return "", fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, e.String())
+	}
+	return e, nil
+}

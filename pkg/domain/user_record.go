@@ -24,6 +24,15 @@ type UserRecord struct {
 	S3              S3Config
 	HmacKey         []byte
 	History         int
+
+	// Engine is the transport that will serve this session.
+	//
+	// The ZERO VALUE is meaningful and documented: no HTTP route can set this
+	// field yet (that belongs to the session-model worktree), so every caller
+	// today leaves it empty and the repository writes EngineWaNoise — the same
+	// default WA_API_ENGINE already has. A non-empty value that is not valid
+	// for creation is an ERROR, never a silent correction.
+	Engine Engine
 }
 
 // UserUpdate descreve uma alteração parcial de usuário. Campo nil é campo
@@ -39,6 +48,10 @@ type UserUpdate struct {
 	ProxyURL        *string
 	WebhookUseProxy *bool
 	S3              *S3Config
+
+	// Engine changes which transport serves the session. nil means unchanged,
+	// like every other field here.
+	Engine *Engine
 }
 
 // UserListEntry é uma linha da listagem de usuários, já lida do banco.
@@ -66,4 +79,11 @@ type UserListEntry struct {
 	// reached this struct, so GetStatus answered with a hardcoded "0" for
 	// everyone (F219). Reading it here is what makes the API tell the truth.
 	History int
+
+	// Engine is the transport recorded for this session.
+	//
+	// It can legitimately read back as EngineLegacyUnknown on a database whose
+	// backfill has not run yet, which is why the read path checks IsKnown and
+	// not IsValidForCreate.
+	Engine Engine
 }

@@ -1,0 +1,230 @@
+package db
+
+import (
+	"context"
+	"fmt"
+	"sort"
+
+	"wa-api/pkg/domain"
+
+	"github.com/jmoiron/sqlx"
+	"github.com/rs/zerolog/log"
+)
+
+// migrationIDUsersEngine records, per session row, which transport serves it.
+//
+// Until now the answer lived only in process configuration (WA_API_ENGINE and
+// WA_API_ENGINE_HEADLESS_SESSIONS, read in pkg/bootstrap/engine_selection.go),
+// which means no query could answer "what is this session running on?" and two
+// replicas started with different environments disagreed silently.
+const migrationIDUsersEngine = 19
+
+const migrationNameUsersEngine = "add_users_engine"
+
+const (
+	usersTable = "users"
+
+	// usersEngineColumn is the column name. It appears in the DDL, in the
+	// backfill and in every read, so it is a constant (ADR-0004).
+	usersEngineColumn = "engine"
+
+	// usersEngineColumnDef is the SQLite column definition.
+	//
+	// NOT NULL with a DEFAULT is what makes the ALTER TABLE safe on a table
+	// that already has rows: without a default, SQLite refuses the statement
+	// outright. The default is legacy_unknown and NOT wa_noise on purpose —
+	// the ALTER must not claim to know something it does not. BackfillUserEngines
+	// is what replaces it, and it runs right after.
+	usersEngineColumnDef = "TEXT NOT NULL DEFAULT '" + string(domain.EngineLegacyUnknown) + "'"
+)
+
+// addUsersEngineSQL is the PostgreSQL side of migration 19.
+//
+// Guarded by information_schema like every other column migration in this file:
+// re-running it on a database that already has the column is a no-op instead of
+// an error.
+const addUsersEngineSQL = `
+-- PostgreSQL version
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'engine'
+    ) THEN
+        ALTER TABLE users ADD COLUMN engine TEXT NOT NULL DEFAULT 'legacy_unknown';
+    END IF;
+END $$;
+
+-- SQLite version (handled in code)
+`
+
+const addUsersEngineDownSQL = `
+ALTER TABLE users DROP COLUMN engine;
+`
+
+// EngineBackfillReport is what the backfill DID, so the operator can read the
+// numbers instead of inferring them from the absence of an error.
+type EngineBackfillReport struct {
+	// TotalUsers is how many rows the users table held when the backfill ran.
+	TotalUsers int
+
+	// PendingBefore is how many of those rows still said legacy_unknown.
+	PendingBefore int
+
+	// ToWaHeadless and ToWaNoise are rows this run actually changed.
+	ToWaHeadless int
+	ToWaNoise    int
+
+	// ListedButAbsent are ids present in WA_API_ENGINE_HEADLESS_SESSIONS that
+	// matched no row. Reported and NOT an error: an operator may list a
+	// session before creating it, and failing startup over it would be worse
+	// than saying it.
+	ListedButAbsent []string
+
+	// RemainingLegacyUnknown must be zero after a successful run. It is
+	// measured, not assumed — see ErrEngineBackfillIncomplete.
+	RemainingLegacyUnknown int
+}
+
+// ErrEngineBackfillIncomplete is returned when rows would be left saying
+// legacy_unknown after the backfill.
+//
+// legacy_unknown exists for robustness of the type, not as a steady state of
+// this database. A row left in it is a session whose transport nothing can
+// answer for, and discovering that later — from a routing failure — is strictly
+// worse than discovering it here.
+var ErrEngineBackfillIncomplete = fmt.Errorf(
+	"engine backfill incomplete: rows remain at %q", domain.EngineLegacyUnknown)
+
+// BackfillUserEngines writes users.engine for every row that does not have it
+// yet, reproducing EXACTLY the rule that runs in production today:
+//
+//	id listed in WA_API_ENGINE_HEADLESS_SESSIONS -> wa_headless
+//	everything else                              -> the default engine (wa_noise)
+//
+// # Why this is Go and not SQL
+//
+// The rule depends on an environment variable, which is an application
+// decision, not a schema one. Putting it in the migration's UpSQL would mean
+// the migration behaves differently depending on who ran it — the same reason
+// migrations 11 and 16 already run in Go.
+//
+// # Why it is idempotent, and how
+//
+// It only touches rows still at legacy_unknown. Running it again is a no-op,
+// which matters because it runs on EVERY startup, not once: there is no
+// "already applied" flag to trust, and there must not be — once the API can set
+// engine per session, a backfill that rewrote every row would silently undo
+// that choice on the next restart.
+//
+// headlessSessionIDs are the ids explicitly placed on headless.
+// defaultEngine is what every other row gets, and it must be valid for
+// creation: a default of legacy_unknown would leave the table in the exact
+// state this function exists to remove.
+func BackfillUserEngines(
+	ctx context.Context,
+	db *sqlx.DB,
+	headlessSessionIDs []string,
+	defaultEngine domain.Engine,
+) (EngineBackfillReport, error) {
+	var report EngineBackfillReport
+
+	if !defaultEngine.IsValidForCreate() {
+		log.Error().Str("default_engine", defaultEngine.String()).
+			Msg("engine backfill rejected: default engine is not valid for creation")
+		return report, fmt.Errorf("%w (default engine %q)", domain.ErrInvalidEngine, defaultEngine)
+	}
+
+	if err := db.GetContext(ctx, &report.TotalUsers,
+		`SELECT COUNT(*) FROM users`); err != nil {
+		log.Error().Err(err).Str("table", usersTable).Str("query", "count_users").
+			Msg("failed to count users before engine backfill")
+		return report, err
+	}
+	if err := db.GetContext(ctx, &report.PendingBefore,
+		`SELECT COUNT(*) FROM users WHERE engine = $1`, domain.EngineLegacyUnknown); err != nil {
+		log.Error().Err(err).Str("table", usersTable).Str("query", "count_pending_engine").
+			Msg("failed to count rows pending engine backfill")
+		return report, err
+	}
+
+	// The headless ids go FIRST, and the order is load-bearing: the second
+	// statement claims "everything still unknown", so running it first would
+	// hand every listed session to the default engine and leave the first
+	// statement with nothing to match.
+	//
+	// Sorted so that the log line and the report are stable across runs — map
+	// iteration order in Go is randomized by design.
+	ids := append([]string(nil), headlessSessionIDs...)
+	sort.Strings(ids)
+
+	for _, id := range ids {
+		res, err := db.ExecContext(ctx,
+			`UPDATE users SET engine = $1 WHERE id = $2 AND engine = $3`,
+			domain.EngineWaHeadless, id, domain.EngineLegacyUnknown)
+		if err != nil {
+			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
+				Str("query", "backfill_engine_headless").
+				Msg("failed to set headless engine during backfill")
+			return report, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
+				Msg("failed to read rows affected during engine backfill")
+			return report, err
+		}
+		if affected > 0 {
+			report.ToWaHeadless += int(affected)
+			continue
+		}
+		// Zero rows means either "no such session" or "already recorded".
+		// Only the first is worth telling the operator about.
+		var exists int
+		if err := db.GetContext(ctx, &exists,
+			`SELECT COUNT(*) FROM users WHERE id = $1`, id); err != nil {
+			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
+				Str("query", "user_exists_engine_backfill").
+				Msg("failed to check session listed for headless")
+			return report, err
+		}
+		if exists == 0 {
+			report.ListedButAbsent = append(report.ListedButAbsent, id)
+		}
+	}
+
+	res, err := db.ExecContext(ctx,
+		`UPDATE users SET engine = $1 WHERE engine = $2`,
+		defaultEngine, domain.EngineLegacyUnknown)
+	if err != nil {
+		log.Error().Err(err).Str("table", usersTable).Str("query", "backfill_engine_default").
+			Str("default_engine", defaultEngine.String()).
+			Msg("failed to set default engine during backfill")
+		return report, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		log.Error().Err(err).Str("table", usersTable).
+			Msg("failed to read rows affected for default engine backfill")
+		return report, err
+	}
+	if defaultEngine == domain.EngineWaHeadless {
+		report.ToWaHeadless += int(affected)
+	} else {
+		report.ToWaNoise += int(affected)
+	}
+
+	if err := db.GetContext(ctx, &report.RemainingLegacyUnknown,
+		`SELECT COUNT(*) FROM users WHERE engine = $1`, domain.EngineLegacyUnknown); err != nil {
+		log.Error().Err(err).Str("table", usersTable).Str("query", "count_remaining_engine").
+			Msg("failed to verify engine backfill completion")
+		return report, err
+	}
+	if report.RemainingLegacyUnknown > 0 {
+		log.Error().Int("remaining", report.RemainingLegacyUnknown).
+			Str("table", usersTable).Msg("engine backfill left rows without an engine")
+		return report, ErrEngineBackfillIncomplete
+	}
+
+	return report, nil
+}

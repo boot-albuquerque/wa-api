@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -166,6 +167,11 @@ func setupEngineSelection(s *server) {
 		log.Fatal().Err(err).Msg("invalid headless engine configuration")
 	}
 	s.Headless = hcfg
+
+	// A gravação do engine por sessão vem LOGO a seguir à leitura da seleção,
+	// e nunca antes: é esta seleção que decide o que gravar. Ver
+	// runEngineBackfill.
+	runEngineBackfill(context.Background(), s.DB, sel)
 
 	emHeadless := sel.SessoesEmHeadless()
 	log.Info().
