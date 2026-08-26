@@ -113,6 +113,12 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		"POST /community/link":         {reason: "F237: new community route; stdio entry deferred"},
 		"POST /community/unlink":       {reason: "F237: new community route; stdio entry deferred"},
 
+		// Capability HTTP endpoints (items 55/56 of the architectural
+		// prompt): new routes; stdio entry deferred, same precedent as the
+		// community routes above (F237).
+		"GET /session/capabilities": {reason: "new capability route; stdio entry deferred"},
+		"GET /admin/capabilities":   {reason: "new capability route; stdio entry deferred"},
+
 		"GET /user/lid/{jid}":           {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "user.lid", httpMethod: "GET"},
 		"GET /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.get", httpMethod: "GET"},
 		"PUT /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.edit", httpMethod: "PUT"},

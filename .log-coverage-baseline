@@ -1568,7 +1568,17 @@ min_errpath_coverage=781
 # pkg/capabilityregistry nao esta na lista depguard de camada-de-aplicacao).
 # Medido com `go run ./cmd/logcov -json ./pkg` apos o merge completo, nao
 # inferido pela soma das branches individuais.
-min_eligible=1003
+#
+# capability-http-endpoints (2026-08-26): min_eligible SOBE 1003->1007 (+4,
+# ratchet-UP honesto). ENTRAM (4), todas em
+# pkg/presentation/http/handlers/handler_capabilities.go: CapabilityHandlers.
+# Admin, CapabilityHandlers.Session, CapabilityHandlers.sessionEngine e a
+# funcao de pacote sortedCapabilities — publicas (ou metodo publico) com
+# corpo >2 statements e log via hlog.FromRequest nos caminhos de erro.
+# NewCapabilityHandlers e sortedCapabilities.func1 entram EXCLUDED (a
+# primeira e' construtor puro; a segunda e' a func literal de sort.Slice).
+# Medido com `go run ./cmd/logcov -json ./pkg`.
+min_eligible=1007
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
