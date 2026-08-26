@@ -301,26 +301,59 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 	}
 }
 
+// TestGetUserInfo_NormalizaBarePhone: telefone sem @s.whatsapp.net e'
+// normalizado pelo handler ANTES de chegar ao use case. O resolver em
+// producao (mapping/jid/resolver.go) REJEITA telefone nu — este teste
+// usa um resolver que faz o mesmo, e confirma que o handler acrescenta
+// o sufixo. (F242)
+func TestGetUserInfo_NormalizaBarePhone(t *testing.T) {
+	f := chNewFakes()
+
+	var received []string
+	f.jids.ResolveQualifiedJIDFunc = func(_ context.Context, raw string) (domain.JID, error) {
+		received = append(received, raw)
+		if !strings.Contains(raw, "@") {
+			return "", errors.New("bare number rejected")
+		}
+		return domain.JID(raw), nil
+	}
+
+	rec, _ := uhServe(f.userInfoHandler(),
+		withUser(uhRequest(http.MethodPost, "/user/info",
+			`{"phone":["554192421234"]}`, nil), "u-1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if len(received) != 1 {
+		t.Fatalf("resolver called %d times, want 1: %v", len(received), received)
+	}
+	if received[0] != "554192421234@s.whatsapp.net" {
+		t.Fatalf("resolver received %q, want %q — handler did not normalize",
+			received[0], "554192421234@s.whatsapp.net")
+	}
+}
+
 // TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada: um telefone que nao
 // parseia e' PULADO, nao vira erro — comportamento preservado do upstream. A
 // chamada segue e responde 200.
+//
+// Com a F242, o handler normaliza telefones nus (acrescenta @s.whatsapp.net).
+// Por isso o "invalido" de antes agora vira "invalido@s.whatsapp.net" e ja'
+// nao e' rejeitado pelo resolver. Para testar o skip, usamos uma entrada
+// com @ que o resolver ainda rejeite (server desconhecido).
 func TestGetUserInfo_TelefoneInvalidoNaoDerrubaAChamada(t *testing.T) {
 	f := chNewFakes()
 	f.jids.ResolveQualifiedJIDFunc = func(_ context.Context, raw string) (domain.JID, error) {
-		if raw == "invalido" {
+		if raw == "invalido@bogus.server" {
 			return "", errors.New("bad jid")
-		}
-		// Aplica o servidor por omissão como a produção faz
-		// (mapping/jid/resolver.go:21). O stub devolvia o texto cru, e a
-		// asserção descrevia um JID que a produção nunca produz.
-		if !strings.Contains(raw, "@") {
-			return domain.JID(raw + "@s.whatsapp.net"), nil
 		}
 		return domain.JID(raw), nil
 	}
 
 	rec, capture := uhServe(f.userInfoHandler(),
-		withUser(uhRequest(http.MethodPost, "/user/info", `{"phone":["invalido","5511999"]}`, nil), "u-1"))
+		withUser(uhRequest(http.MethodPost, "/user/info",
+			`{"phone":["invalido@bogus.server","5511999@s.whatsapp.net"]}`, nil), "u-1"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
