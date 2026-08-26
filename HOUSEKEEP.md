@@ -26776,8 +26776,11 @@ um handler.
 mecânico e não muda comportamento — só acrescenta o campo que falta. Fazer
 isso ANTES de alguém escrever um cliente que dependa da forma string.
 
-**Status**: não corrigido — descoberto ao verificar a F224, e fora do âmbito
-dela.
+**Correção aplicada (F236)**: os cinco sentinels foram convertidos de
+`*simpleErr` para `*apperr.AppError` no ponto de DEFINIÇÃO
+(`pkg/presentation/http/handlers/errors.go`). Como `RespondJSON` já trata
+`*apperr.AppError` com o envelope estruturado, os 244 chamadores não
+precisaram de mudar — zero edições fora de `errors.go` e dos testes.
 
 <!-- f-status: aberto -->
 
@@ -27937,4 +27940,4 @@ com aval por pedir.
 das minhas próprias conclusões erradas (F240 sobre o carrossel, F249 sobre a
 adição de participante, F245 retirada por inteiro).
 
-<!-- f-status: nao-se-faz -->
+<!-- f-status: corrigido -->
