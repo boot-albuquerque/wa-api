@@ -2051,3 +2051,98 @@ os forks divergem precisamente nos recursos interativos. Verifique sempre
 contra o repositório oficial — no mesmo dia, uma busca disse que o Baileys
 suporta legenda em áudio, e o código de `WhiskeySockets/Baileys` mostra que ele
 a aceita e nunca a aplica.
+
+## 27. Documento embutido no binário: regenerar o ficheiro NÃO actualiza o que é servido
+
+**Encontrada em 2026-08-26**, ao verificar `http://localhost:8080/docs` a
+pedido do utilizador.
+
+A especificação OpenAPI é gerada por `go run ./cmd/openapidoc` e **embutida com
+`go:embed`** em `pkg/presentation/http/apidocs`. Isso significa que existem
+**três** cópias, e elas divergem em silêncio:
+
+```
+api/openapi/*.yaml                            as fontes que se editam
+pkg/.../apidocs/openapi.yaml                  o gerado, que o go:embed lê
+o binário em execução                         a cópia que a página serve
+```
+
+Regenerar actualiza a segunda. **A terceira só muda com `go build` E reinício.**
+
+**O que a página estava a mostrar**, quando o repositório já estava correcto:
+
+```
+8 x decode_payload_failed      código que não existe no repositório
+3 x internal_error             idem
+48 x "ignorados em silêncio"   já falso havia horas
+0 x invalid_newsletter_jid     correcção nova, ausente
+```
+
+**Por que nada acusou.** Todos os gates passavam: eles leem
+`apidocs.Specification()`, que em TESTE resolve para o ficheiro do disco. Só o
+processo em execução tinha a cópia velha, e nenhum teste fala com o processo.
+`TestOpenAPIGeradoEstaAtualizado` compara fontes com o gerado — não com o que
+está a correr, porque não pode.
+
+**A regra**: qualquer verificação contra `localhost` é uma verificação **do
+binário**, não do repositório. Antes de tirar conclusões de uma página, de uma
+resposta ou de um log, confirme que o binário é do `HEAD`:
+
+```
+go build -o /tmp/wa-novo ./cmd/core && pkill -f "<binario-anterior>" && ...
+curl -s localhost:8080/docs/openapi.yaml | cmp - pkg/.../apidocs/openapi.yaml
+```
+
+O `cmp` é a prova. Sem ele, "a página mostra X" pode significar "a página
+mostrava X há duas horas".
+
+**Vale para tudo o que é embutido**, não só para esta especificação: activos
+estáticos, migrações, ficheiros de configuração por omissão, o painel devui.
+
+## 28. A mesma frase, verdades diferentes — substituição em bloco cria a mentira
+
+**Encontrada em 2026-08-26**, ao actualizar a documentação depois de a
+detecção de campos desconhecidos passar a registar no log.
+
+Havia **59** ocorrências de "ignorado em silêncio" na especificação. A
+tentação é `sed`. Seria errado em duas delas, e o erro seria invisível:
+
+| frase | ainda é verdade? | porquê |
+|---|---|---|
+| "campo **desconhecido** é ignorado em silêncio" | **não** | passou a ser registado (F268) |
+| "`chat` é ignorado quando `communityJID` vem preenchido" | **sim** | o campo é CONHECIDO e perde para outro; nada é registado |
+| "o nome em snake_case **era** ignorado em silêncio com 200" | **sim** | está no passado, descreve um defeito já corrigido |
+
+Três frases quase iguais, três estados diferentes: uma falsa, uma verdadeira no
+presente, uma verdadeira no passado.
+
+**A regra**: antes de uma substituição em massa numa documentação, classifique
+as ocorrências por **sujeito**, não por texto. A pergunta que separa é sempre a
+mesma — *de que exactamente esta frase está a falar?* Aqui: campo desconhecido,
+campo conhecido em conflito, ou história.
+
+**Corolário**: quanto mais uniforme for a redacção de um repositório, mais
+perigosa é a substituição global — porque a uniformidade da FRASE esconde a
+diversidade do ASSUNTO.
+
+## 29. Gate que lê estrutura não vê prosa
+
+**Encontrada em 2026-08-26.** O gate `TestContratoCodigosDeErroExistemNoCodigo`
+verifica que todo `error.code` citado num EXEMPLO da especificação existe como
+literal no código Go. Passou a verde — e a especificação continuava a citar
+`decode_payload_failed` em **oito** descrições em texto corrido.
+
+O código real é `could_not_decode_payload`. O gate não o viu porque a menção
+não estava num campo `error.code`; estava numa frase.
+
+**A regra**: um gate estrutural mede o que consegue endereçar. Quando a
+informação que interessa também vive em prosa — e numa documentação vive
+sempre —, o gate cobre metade, e **é preciso dizer qual metade**. Escreva a
+limitação no comentário do próprio gate, senão o verde dele passa por garantia
+completa.
+
+**O que se pode fazer**, por ordem de custo: procurar por *grep* os códigos
+conhecidos no texto (barato, e apanha o caso acima); ou fazer o gate extrair
+identificadores de qualquer campo `description` com uma heurística (caro, e
+gera falsos positivos). Aqui escolheu-se o primeiro, executado à mão, e a
+limitação ficou registada.

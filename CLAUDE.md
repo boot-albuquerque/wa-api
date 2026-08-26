@@ -228,6 +228,30 @@ inteiro. Conversão em massa mistura renomeação com mudança de comportamento 
 mesmo diff, e aí a revisão não consegue separar as duas — é exatamente o tipo
 de mudança em que um defeito passa despercebido.
 
+## Documentação da API — leia antes de mexer em rotas ou contrato
+
+| ficheiro | o que é |
+|---|---|
+| `api/openapi/CONTRATO-ARQUITETURAL.md` | as regras globais do contrato HTTP, cada uma com o **estado medido** ao lado do alvo |
+| `api/openapi/CONTRATO.md` | como se escreve a documentação de um grupo de rotas |
+| `api/openapi/evidencias.tsv` | a marca ✅🟡❌⬜ de cada rota; **fonte única**, aplicada ao título pelo gerador |
+| `docs/PRODUCTION-READINESS.md` | o scorecard: o que está pronto para produção e o que não está |
+| `docs/OPENAPI-EVIDENCIAS.md` | tabela por rota, com a evidência de cada classificação |
+
+**A especificação é GERADA.** Edite `api/openapi/{base,paths/,schemas/}` e corra
+`go run ./cmd/openapidoc`. Nunca edite `pkg/presentation/http/apidocs/openapi.yaml`.
+
+**E o documento é EMBUTIDO no binário.** Regenerar o ficheiro não muda o que
+`/docs` serve — é preciso `go build` e reiniciar. Confirme sempre com:
+
+```
+curl -s localhost:8080/docs/openapi.yaml | cmp - pkg/presentation/http/apidocs/openapi.yaml
+```
+
+Sem esse `cmp`, "a página mostra X" pode significar "mostrava X há duas horas".
+Ver ARMADILHAS #27 — foi assim que uma página serviu códigos de erro
+inexistentes durante horas, com todos os gates verdes.
+
 ## Armadilhas conhecidas — leia `ARMADILHAS.md`
 
 `ARMADILHAS.md` (raiz) cataloga defeitos que **já passaram por revisão e por
