@@ -26829,6 +26829,11 @@ precisaram de mudar — zero edições fora de `errors.go` e dos testes.
 `error field is a bare string "unauthorized", want structured object`.
 Restaurado.
 
+
+### Verificação em campo — 2026-08-25, lote B
+
+o `401` passou a `{"code":401,"error":{"code":"unauthorized","message":"unauthorized"}}`. Inclui o caminho do `middleware/auth.go`, que a primeira tentativa deixara de fora — era o que produzia a maioria dos `401`.
+
 <!-- f-status: aberto -->
 
 ## F237 — 62 dos 136 métodos do wa-noise nunca são chamados, e entre eles estão as COMUNIDADES
@@ -26957,6 +26962,11 @@ e LID (`…@lid`).
 **Controle negativo:** removida a guarda `isPlausibleJIDOrPhone` —
 `TestGetUserProfile_MalformedJID_Returns400` falhou com `status 500, want
 400`. Restaurada.
+
+
+### Verificação em campo — 2026-08-25, lote B
+
+`GET /user/profile/xxx-nao-e-jid` → `400 invalid_jid`, *"jid must be a phone number or a qualified JID (user@server)"*. Antes `500`.
 
 <!-- f-status: aberto -->
 
@@ -27245,6 +27255,11 @@ números sem `@` eram pulados e o resultado voltava vazio.
 **Controle negativo:** removida a chamada `normalizePhones` — teste falhou
 com `resolver received "554192421234", want
 "554192421234@s.whatsapp.net" — handler did not normalize`. Restaurada.
+
+
+### Verificação em campo — 2026-08-25, lote B
+
+`POST /user/info {"Phone":["554192421234"]}` devolve os dados. Com JID completo **continua** a devolver — a segunda metade prova que aceitar a forma nova não quebrou a antiga.
 
 <!-- f-status: aberto -->
 
@@ -28241,6 +28256,11 @@ a família toda de uma vez.
 
 **Nota**: a varredura completa de outras rotas com o mesmo padrão não foi
 feita — a bateria não o procurava. Pode haver outros.
+
+
+### Verificação em campo — 2026-08-25, lote B
+
+`DELETE /admin/users/{id}/full` devolve `{"code":200,"data":{"id":…}}` — sem o envelope dentro do envelope.
 
 <!-- f-status: aberto -->
 
