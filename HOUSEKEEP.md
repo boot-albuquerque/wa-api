@@ -30037,6 +30037,10 @@ corpo que `DELETE /s3/config` deixa.
 
 **Status**: não corrigido — é alteração de documentação gerada e de taxonomia,
 fora do escopo desta tarefa. Registado para decisão.
+
+<!-- f-status: aberto -->
+
+
 ## F278 — o adaptador da blocklist resolve identidade no sentido INVERSO ao que o protocolo passou a exigir, e apaga a variável que a F264 julgava estar a medir
 
 **Data/contexto**: 2026-08-26, investigação da F264. Causa raiz na biblioteca
