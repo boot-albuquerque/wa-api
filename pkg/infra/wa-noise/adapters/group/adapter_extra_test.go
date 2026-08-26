@@ -82,7 +82,7 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 				}}
 			},
 			call: func(a *GroupAdapter) error {
-				_, err := a.CreateGroup(context.Background(), "u1", "n", nil)
+				_, err := a.CreateGroup(context.Background(), "u1", "n", nil, domain.CreateGroupOpts{})
 				return err
 			},
 		}},

@@ -108,12 +108,13 @@ func (f *GroupDirectory) ListJoinedGroups(ctx context.Context, txtID string) (an
 
 // --- GroupLifecycle ----------------------------------------------------
 
-// GroupLifecycleCreateGroupCall é uma chamada a CreateGroup.
+// GroupLifecycleCreateGroupCall records a CreateGroup invocation.
 type GroupLifecycleCreateGroupCall struct {
 	Ctx          context.Context
 	TxtID        string
 	Name         string
 	Participants []domain.JID
+	Opts         domain.CreateGroupOpts
 }
 
 // GroupLifecycleJoinGroupCall é uma chamada a JoinGroup.
@@ -134,7 +135,7 @@ type GroupLifecycleLeaveGroupCall struct {
 type GroupLifecycle struct {
 	SessionGuard
 
-	CreateGroupFunc  func(ctx context.Context, txtID, name string, participants []domain.JID) (any, error)
+	CreateGroupFunc  func(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error)
 	CreateGroupCalls []GroupLifecycleCreateGroupCall
 
 	JoinGroupFunc  func(ctx context.Context, txtID, code string) (any, error)
@@ -146,11 +147,11 @@ type GroupLifecycle struct {
 
 var _ port.GroupLifecycle = (*GroupLifecycle)(nil)
 
-// CreateGroup implementa port.GroupLifecycle.
-func (f *GroupLifecycle) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID) (any, error) {
-	f.CreateGroupCalls = append(f.CreateGroupCalls, GroupLifecycleCreateGroupCall{Ctx: ctx, TxtID: txtID, Name: name, Participants: participants})
+// CreateGroup implements port.GroupLifecycle.
+func (f *GroupLifecycle) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+	f.CreateGroupCalls = append(f.CreateGroupCalls, GroupLifecycleCreateGroupCall{Ctx: ctx, TxtID: txtID, Name: name, Participants: participants, Opts: opts})
 	if f.CreateGroupFunc != nil {
-		return f.CreateGroupFunc(ctx, txtID, name, participants)
+		return f.CreateGroupFunc(ctx, txtID, name, participants, opts)
 	}
 	return nil, nil
 }

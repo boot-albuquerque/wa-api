@@ -72,13 +72,24 @@ type GroupLeaveResult struct {
 	Details string `json:"details"`
 }
 
-// CreateGroupRequest representa a requisição para criar um grupo
+// CreateGroupRequest is the request to create a group (or community).
 type CreateGroupRequest struct {
 	Name         string   `json:"name"`
 	Participants []string `json:"participants"`
 }
 
-// CreateGroupResult representa o resultado da criação de grupo
+// CreateGroupOpts carries optional flags for group creation that alter the
+// kind of group being created. Zero value = normal group.
+type CreateGroupOpts struct {
+	// IsParent creates a community instead of a normal group. When true the
+	// WhatsApp server creates the announcement sub-group automatically.
+	IsParent bool
+	// LinkedParentJID, when set, creates the group as a child of the given
+	// community. Mutually exclusive with IsParent.
+	LinkedParentJID JID
+}
+
+// CreateGroupResult wraps the group creation response.
 type CreateGroupResult struct {
 	GroupInfo interface{} `json:"group_info"`
 }

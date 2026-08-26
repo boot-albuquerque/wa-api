@@ -118,6 +118,16 @@ type Client interface {
 	UpdateGroupRequestParticipants(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error)
 	SetGroupJoinApprovalMode(ctx context.Context, jid types.JID, mode bool) error
 
+	// Community operations — CAP-F237: the library already has these
+	// primitives; the narrow interface lacked them because they had zero
+	// callers in pkg/. Does not widen the facade: internal/wa-noise/main.go
+	// exports `Client = core.Client` (type alias, full method set), so
+	// *wanoise.Client satisfies these signatures already.
+	GetSubGroups(ctx context.Context, community types.JID) ([]*types.GroupLinkTarget, error)
+	GetLinkedGroupsParticipants(ctx context.Context, community types.JID) ([]types.JID, error)
+	LinkGroup(ctx context.Context, parent, child types.JID) error
+	UnlinkGroup(ctx context.Context, parent, child types.JID) error
+
 	// Família de contatos/usuários (note que GetLIDForPN/Store.Contacts
 	// ficam de fora — o adapter acede-os via Store, não via Client).
 	IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)

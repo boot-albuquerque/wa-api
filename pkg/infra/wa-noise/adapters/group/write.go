@@ -10,8 +10,8 @@ import (
 	wa "wa-api/internal/wa-noise"
 )
 
-// CreateGroup cria um grupo com os participantes informados.
-func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID) (any, error) {
+// CreateGroup creates a group, community, or group-inside-community.
+func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -20,7 +20,18 @@ func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, part
 	if err != nil {
 		return nil, err
 	}
-	return client.CreateGroup(ctx, wa.ReqCreateGroup{Name: name, Participants: jids})
+	req := wa.ReqCreateGroup{Name: name, Participants: jids}
+	if opts.IsParent {
+		req.IsParent = true
+	}
+	if opts.LinkedParentJID != "" {
+		parentJID, err := wajid.ToJID(opts.LinkedParentJID)
+		if err != nil {
+			return nil, err
+		}
+		req.LinkedParentJID = parentJID
+	}
+	return client.CreateGroup(ctx, req)
 }
 
 // JoinGroup entra num grupo por código de convite.

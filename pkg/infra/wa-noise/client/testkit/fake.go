@@ -53,6 +53,10 @@ type Fake struct {
 	GetGroupRequestParticipantsFn    func(ctx context.Context, jid types.JID) ([]types.GroupParticipantRequest, error)
 	UpdateGroupRequestParticipantsFn func(ctx context.Context, jid types.JID, participantChanges []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error)
 	SetGroupJoinApprovalModeFn       func(ctx context.Context, jid types.JID, mode bool) error
+	GetSubGroupsFn                   func(ctx context.Context, community types.JID) ([]*types.GroupLinkTarget, error)
+	GetLinkedGroupsParticipantsFn    func(ctx context.Context, community types.JID) ([]types.JID, error)
+	LinkGroupFn                      func(ctx context.Context, parent, child types.JID) error
+	UnlinkGroupFn                    func(ctx context.Context, parent, child types.JID) error
 	IsOnWhatsAppFn                   func(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
 	GetUserInfoFn                    func(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error)
 	GetProfilePictureInfoFn          func(ctx context.Context, jid types.JID, params *wanoise.GetProfilePictureParams) (*types.ProfilePictureInfo, error)

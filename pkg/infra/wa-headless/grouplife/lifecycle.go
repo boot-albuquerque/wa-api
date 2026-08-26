@@ -46,7 +46,7 @@ func (m *Manager) EnsureSession(ctx context.Context, txtID string) error {
 // campo Created: um grupo com o mesmo nome que já exista é DEVOLVIDO em vez de
 // duplicado. Achatar isso faria duas chamadas iguais parecerem ter criado dois
 // grupos quando criaram um.
-func (m *Manager) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID) (any, error) {
+func (m *Manager) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, _ domain.CreateGroupOpts) (any, error) {
 	if name == "" {
 		return nil, fmt.Errorf("waheadless: group name is empty")
 	}

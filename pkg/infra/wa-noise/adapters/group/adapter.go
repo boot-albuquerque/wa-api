@@ -33,8 +33,10 @@ var bgCtx = context.Background()
 
 // Verificações em tempo de compilação de que o adapter implementa as portas.
 var (
-	_ appport.GroupDirectory = (*GroupAdapter)(nil)
-	_ appport.GroupLifecycle = (*GroupAdapter)(nil)
-	_ appport.GroupSettings  = (*GroupAdapter)(nil)
-	_ appport.GroupRequests  = (*GroupAdapter)(nil)
+	_ appport.GroupDirectory      = (*GroupAdapter)(nil)
+	_ appport.GroupLifecycle      = (*GroupAdapter)(nil)
+	_ appport.GroupSettings       = (*GroupAdapter)(nil)
+	_ appport.GroupRequests       = (*GroupAdapter)(nil)
+	_ appport.CommunityDirectory = (*GroupAdapter)(nil)
+	_ appport.CommunityLifecycle = (*GroupAdapter)(nil)
 )

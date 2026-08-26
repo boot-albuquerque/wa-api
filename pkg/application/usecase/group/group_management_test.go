@@ -44,7 +44,7 @@ func failJID(err error) *contractsfake.JIDResolver {
 func TestGroupManagement_SemSessaoRecusaAntesDeEscrever(t *testing.T) {
 	ops := map[string]func(*group.GroupManagementUseCase) error{
 		"CreateGroup": func(uc *group.GroupManagementUseCase) error {
-			_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"})
+			_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"}, domain.CreateGroupOpts{})
 			return err
 		},
 		"JoinGroup": func(uc *group.GroupManagementUseCase) error {
@@ -177,7 +177,7 @@ func TestGroupManagement_JIDInvalidoRecusaComLog(t *testing.T) {
 		{
 			name: "CreateGroup passa pela lista de participantes",
 			call: func(uc *group.GroupManagementUseCase) error {
-				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"ok", "@@"})
+				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"ok", "@@"}, domain.CreateGroupOpts{})
 				return err
 			},
 			wantMsg: "could not parse participant list",
@@ -222,7 +222,7 @@ func TestGroupManagement_ParseJIDsLogaOIndiceQueReprovou(t *testing.T) {
 	}
 	f.uc = group.NewGroupManagementUseCase(f.life, f.set, f.set, f.set, f.set, f.jids, f.log)
 
-	if _, err := f.uc.CreateGroup(context.Background(), "u1", "g", []string{"a", "b", "ruim"}); err == nil {
+	if _, err := f.uc.CreateGroup(context.Background(), "u1", "g", []string{"a", "b", "ruim"}, domain.CreateGroupOpts{}); err == nil {
 		t.Fatal("esperava erro")
 	}
 	rec, ok := f.log.FindLevel(contractsfake.LevelError, "could not parse participant list")
@@ -255,14 +255,14 @@ func TestGroupManagement_FalhaDaPortaLogaEPropaga(t *testing.T) {
 		{
 			name: "CreateGroup",
 			arrange: func(f *mgmtFakes) {
-				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID) (any, error) { return nil, boom }
+				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) { return nil, boom }
 			},
 			call: func(uc *group.GroupManagementUseCase) error {
-				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"})
+				_, err := uc.CreateGroup(context.Background(), "u1", "g", []string{"5511987654321"}, domain.CreateGroupOpts{})
 				return err
 			},
 			wantMsg: "failed to create group",
-			wantKey: []string{"txtID", "name", "participants", "error"},
+			wantKey: []string{"txtID", "name", "participants", "is_parent", "error"},
 		},
 		{
 			name: "JoinGroup",
@@ -403,9 +403,9 @@ func TestGroupManagement_CaminhoFeliz(t *testing.T) {
 
 	t.Run("CreateGroup repassa nome e participantes resolvidos", func(t *testing.T) {
 		f := newMgmt()
-		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID) (any, error) { return "created", nil }
+		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) { return "created", nil }
 
-		res, err := f.uc.CreateGroup(ctx, "u1", "meu grupo", []string{"5511987654321", "5522987654321"})
+		res, err := f.uc.CreateGroup(ctx, "u1", "meu grupo", []string{"5511987654321", "5522987654321"}, domain.CreateGroupOpts{})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
@@ -639,15 +639,49 @@ func TestGroupManagement_UpdateParticipantsListaInvalida(t *testing.T) {
 // aceita — parseJIDs devolve slice vazio, não erro.
 func TestGroupManagement_CreateGroupSemParticipantes(t *testing.T) {
 	f := newMgmt()
-	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, p []domain.JID) (any, error) {
+	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, p []domain.JID, _ domain.CreateGroupOpts) (any, error) {
 		if len(p) != 0 {
 			t.Errorf("participantes = %v, quero vazio", p)
 		}
 		return "created", nil
 	}
 
-	if _, err := f.uc.CreateGroup(context.Background(), "u1", "só eu", nil); err != nil {
+	if _, err := f.uc.CreateGroup(context.Background(), "u1", "só eu", nil, domain.CreateGroupOpts{}); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
 	assertNoLevel(t, f.log, contractsfake.LevelError)
+}
+
+// F237: CreateGroup passes community opts through to the port.
+func TestGroupManagement_CreateGroupPassesOpts(t *testing.T) {
+	f := newMgmt()
+	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+		if !opts.IsParent {
+			t.Error("opts.IsParent not forwarded")
+		}
+		return "community", nil
+	}
+	opts := domain.CreateGroupOpts{IsParent: true}
+	if _, err := f.uc.CreateGroup(context.Background(), "u1", "community", nil, opts); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	call := f.life.CreateGroupCalls[0]
+	if !call.Opts.IsParent {
+		t.Error("CreateGroupCalls[0].Opts.IsParent = false")
+	}
+}
+
+// F237: CreateGroup forwards LinkedParentJID through opts.
+func TestGroupManagement_CreateGroupLinkedParent(t *testing.T) {
+	f := newMgmt()
+	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+		if opts.LinkedParentJID != "120363@g.us" {
+			t.Errorf("LinkedParentJID = %q", opts.LinkedParentJID)
+		}
+		return "child", nil
+	}
+	opts := domain.CreateGroupOpts{LinkedParentJID: "120363@g.us"}
+	if _, err := f.uc.CreateGroup(context.Background(), "u1", "sub", []string{"5511987654321"}, opts); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

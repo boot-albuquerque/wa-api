@@ -119,6 +119,7 @@ func newS3RouteFixture(t *testing.T) *s3RouteFixture {
 		Reaction:    &handlers.ReactionHandlers{},
 		Contact:     &handlers.ContactHandlers{},
 		GroupMgmt:   &handlers.GroupManagementHandlers{},
+		Community:   &handlers.CommunityHandlers{},
 		Newsletter:  &handlers.NewsletterHandlers{},
 		Label:       &handlers.LabelHandlers{},
 		ChatHistory: &handlers.ChatHistoryHandlers{},

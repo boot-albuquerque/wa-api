@@ -78,8 +78,8 @@ func (uc *GroupManagementUseCase) parseJIDs(ctx context.Context, in []string) ([
 	return out, nil
 }
 
-// CreateGroup creates a new WhatsApp group.
-func (uc *GroupManagementUseCase) CreateGroup(ctx context.Context, txtID string, name string, phones []string) (interface{}, error) {
+// CreateGroup creates a new WhatsApp group, community, or group-inside-community.
+func (uc *GroupManagementUseCase) CreateGroup(ctx context.Context, txtID string, name string, phones []string, opts domain.CreateGroupOpts) (interface{}, error) {
 	if err := uc.ensure(ctx, txtID); err != nil {
 		return nil, err
 	}
@@ -87,9 +87,9 @@ func (uc *GroupManagementUseCase) CreateGroup(ctx context.Context, txtID string,
 	if err != nil {
 		return nil, err
 	}
-	res, err := uc.lifecycle.CreateGroup(ctx, txtID, name, jids)
+	res, err := uc.lifecycle.CreateGroup(ctx, txtID, name, jids, opts)
 	if err != nil {
-		uc.logger.Error(ctx, "failed to create group", "txtID", txtID, "name", name, "participants", len(jids), "error", err)
+		uc.logger.Error(ctx, "failed to create group", "txtID", txtID, "name", name, "participants", len(jids), "is_parent", opts.IsParent, "error", err)
 		return nil, err
 	}
 	return res, nil

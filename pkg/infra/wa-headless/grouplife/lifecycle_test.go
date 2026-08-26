@@ -78,7 +78,7 @@ func TestEntradaPENDENTENaoViraAdesao(t *testing.T) {
 // dois grupos foram criados quando foi um.
 func TestCreatedDistingueCriarDeEncontrar(t *testing.T) {
 	got, err := com(&duplo{criado: waheadless.GroupCreated{JID: "120363@g.us", Created: false}}).
-		CreateGroup(context.Background(), "s1", "Laboratório", nil)
+		CreateGroup(context.Background(), "s1", "Laboratório", nil, domain.CreateGroupOpts{})
 	if err != nil {
 		t.Fatalf("CreateGroup: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestCreatedDistingueCriarDeEncontrar(t *testing.T) {
 func TestParticipantesChegamConvertidos(t *testing.T) {
 	d := &duplo{}
 	if _, err := com(d).CreateGroup(context.Background(), "s1", "Equipa",
-		[]domain.JID{"5511999999999@s.whatsapp.net"}); err != nil {
+		[]domain.JID{"5511999999999@s.whatsapp.net"}, domain.CreateGroupOpts{}); err != nil {
 		t.Fatalf("CreateGroup: %v", err)
 	}
 	if len(d.jids) != 1 || strings.HasSuffix(d.jids[0], "@s.whatsapp.net") {
@@ -106,7 +106,7 @@ func TestParticipantesChegamConvertidos(t *testing.T) {
 // Entradas inválidas são recusadas antes de tocar na página.
 func TestEntradasInvalidasSaoRecusadas(t *testing.T) {
 	d := &duplo{}
-	if _, err := com(d).CreateGroup(context.Background(), "s1", "", nil); err == nil {
+	if _, err := com(d).CreateGroup(context.Background(), "s1", "", nil, domain.CreateGroupOpts{}); err == nil {
 		t.Fatal("nome vazio foi aceito")
 	}
 	if _, err := com(d).JoinGroup(context.Background(), "s1", ""); err == nil {
