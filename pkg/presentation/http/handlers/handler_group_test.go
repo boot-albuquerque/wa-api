@@ -11,6 +11,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/group"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // Cobertura dos handlers de LEITURA de grupo (handler_group.go).
@@ -327,5 +328,109 @@ func TestGroupReadHandlers_RejectWithoutSession(t *testing.T) {
 				t.Fatalf("requisicao sem sessao alcancou a porta %d vez(es)", n)
 			}
 		})
+	}
+}
+
+// F244: GET /group/requestparticipants must accept group_jid via query string.
+func TestGetGroupRequestParticipants_QueryString(t *testing.T) {
+	f := newGrpFakes()
+	h, _ := logassert.Wrap(NewGetGroupRequestParticipantsHandler(
+		group.NewGroupRequestUseCase(f.requests, f.jids, f.logger)))
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/group/requestparticipants?group_jid=120363@g.us", nil)
+	h.ServeHTTP(rec, withUser(r, "user-1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("query string group_jid: status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if len(f.requests.GetRequestParticipantsCalls) != 1 {
+		t.Fatal("query string did not reach the port")
+	}
+	if f.requests.GetRequestParticipantsCalls[0].Group != "120363@g.us" {
+		t.Errorf("group = %q", f.requests.GetRequestParticipantsCalls[0].Group)
+	}
+}
+
+// F244: chat alias via query string.
+func TestGetGroupRequestParticipants_QueryStringChat(t *testing.T) {
+	f := newGrpFakes()
+	h, _ := logassert.Wrap(NewGetGroupRequestParticipantsHandler(
+		group.NewGroupRequestUseCase(f.requests, f.jids, f.logger)))
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/group/requestparticipants?chat=120363@g.us", nil)
+	h.ServeHTTP(rec, withUser(r, "user-1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("query string chat: status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// F244: body group_jid wins over query string.
+func TestGetGroupRequestParticipants_BodyWinsOverQuery(t *testing.T) {
+	f := newGrpFakes()
+	h, _ := logassert.Wrap(NewGetGroupRequestParticipantsHandler(
+		group.NewGroupRequestUseCase(f.requests, f.jids, f.logger)))
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/group/requestparticipants?group_jid=query@g.us",
+		strings.NewReader(`{"groupJID":"body@g.us"}`))
+	h.ServeHTTP(rec, withUser(r, "user-1"))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("body vs query: status %d, want 200", rec.Code)
+	}
+	if f.requests.GetRequestParticipantsCalls[0].Group != "body@g.us" {
+		t.Errorf("body should win over query: got %q", f.requests.GetRequestParticipantsCalls[0].Group)
+	}
+}
+
+// F241: upstream forbidden (not a member) must surface as 403 with named code,
+// not as 500 internal server error.
+func TestGetGroupInfo_UpstreamForbiddenReturns403(t *testing.T) {
+	f := newGrpFakes()
+	portErr := apperr.New("upstream_forbidden", apperr.CategoryForbidden,
+		"WhatsApp does not permit this operation on that target", false, nil)
+	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) {
+		return nil, portErr
+	}
+
+	h, capture := logassert.Wrap(NewGetGroupInfoHandler(
+		group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger)))
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/group/info",
+		strings.NewReader(`{"groupJID":"120363@g.us"}`))
+	h.ServeHTTP(rec, withUser(r, "user-1"))
+
+	assertErrorEnvelope(t, rec, http.StatusForbidden)
+
+	got := logassert.OutcomeLogged(t, capture.Records(t), portErr.Message)
+	if got.str("level") != "warn" {
+		t.Fatalf("upstream refusal logged at %q, want warn", got.str("level"))
+	}
+}
+
+// F241: same for invite link.
+func TestGetGroupInviteLink_UpstreamForbiddenReturns403(t *testing.T) {
+	f := newGrpFakes()
+	portErr := apperr.New("upstream_forbidden", apperr.CategoryForbidden,
+		"WhatsApp does not permit this operation on that target", false, nil)
+	f.directory.GetGroupInviteLinkFunc = func(context.Context, string, domain.JID) (string, error) {
+		return "", portErr
+	}
+
+	h, capture := logassert.Wrap(NewGetGroupInviteLinkHandler(
+		group.NewGetGroupInviteLinkUseCase(f.directory, f.jids, f.logger)))
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/group/invitelink",
+		strings.NewReader(`{"groupJID":"120363@g.us"}`))
+	h.ServeHTTP(rec, withUser(r, "user-1"))
+
+	assertErrorEnvelope(t, rec, http.StatusForbidden)
+
+	got := logassert.OutcomeLogged(t, capture.Records(t), portErr.Message)
+	if got.str("level") != "warn" {
+		t.Fatalf("upstream refusal logged at %q, want warn", got.str("level"))
 	}
 }

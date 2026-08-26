@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -10,6 +12,7 @@ import (
 
 	"wa-api/pkg/application/usecase/group"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // GroupManagementHandlers groups all group write-operation handlers.
@@ -223,7 +226,17 @@ func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter
 		return
 	}
 	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
-	if err := uc.SetGroupPhoto(r.Context(), id, req.GroupJID, []byte(req.Photo)); err != nil {
+	if req.Photo == "" {
+		rejectMissingField(w, r, "photo", "set group photo request rejected")
+		return
+	}
+	photoBytes, err := base64.StdEncoding.DecodeString(req.Photo)
+	if err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("photo is not valid base64")
+		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("photo must be base64-encoded: %w", err))
+		return
+	}
+	if err := uc.SetGroupPhoto(r.Context(), id, req.GroupJID, photoBytes); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group photo failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -329,11 +342,21 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 		rejectMissingField(w, r, "groupjid", "update group participants request rejected")
 		return
 	}
-	_, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)
+	update, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)
 	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("update group participants failed")
-		customhttp.RespondJSON(w, 500, nil, err)
+		var appErr *apperr.AppError
+		if errors.As(err, &appErr) && appErr.Category == apperr.CategoryValidation {
+			hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("update group participants rejected")
+			customhttp.RespondJSON(w, 400, nil, err)
+		} else {
+			hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("update group participants failed")
+			customhttp.RespondJSON(w, 500, nil, err)
+		}
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Participants updated"}, nil)
+	customhttp.RespondJSON(w, 200, map[string]interface{}{
+		"Details":   "Participants updated",
+		"result":    update.Result,
+		"confirmed": update.Confirmed,
+	}, nil)
 }

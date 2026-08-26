@@ -149,10 +149,13 @@ func grpMgmtCases() []grpMgmtCase {
 		{
 			name: "SetGroupPhoto",
 			path: "/group/photo",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Photo":"bytes"}`,
+			body: `{"GroupJID":"` + grpMgmtJID + `","Photo":"anBlZy1waG90by1kYXRh"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupPhoto },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupPhotoFunc = func(context.Context, string, domain.JID, []byte) error { return err }
+			},
+			missing: []grpMgmtMissing{
+				{"sem Photo", `{"GroupJID":"` + grpMgmtJID + `"}`, "missing photo"},
 			},
 		},
 		{
@@ -459,6 +462,102 @@ func TestGroupMgmtHandlers_ChatAlias_LegacyWins(t *testing.T) {
 	}
 	if !strings.HasPrefix(captured, "legacy") {
 		t.Fatalf("legacy field should win: got %q", captured)
+	}
+}
+
+// F247: unknown participant action returns 400 from the handler, not 500.
+func TestUpdateGroupParticipants_RejectsUnknownAction(t *testing.T) {
+	for _, action := range []string{"approve", "promote", "qualquer-coisa"} {
+		t.Run(action, func(t *testing.T) {
+			f := newGrpMgmtFakes()
+			body := `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"` + action + `"}`
+			rec, capture := grpMgmtServe(grpMgmtCase{
+				name: "UpdateGroupParticipants",
+				path: "/group/updateparticipants",
+				body: body,
+				pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
+			}, f, body)
+
+			assertErrorEnvelope(t, rec, http.StatusBadRequest)
+			got := logassert.OutcomeLogged(t, capture.Records(t), "unknown participant action")
+			if got.str("level") != "warn" {
+				t.Fatalf("client error logged at %q, want warn", got.str("level"))
+			}
+			if len(f.settings.UpdateGroupParticipantsCalls) != 0 {
+				t.Fatal("unknown action reached the port")
+			}
+		})
+	}
+}
+
+// F249: successful UpdateGroupParticipants includes per-participant result.
+func TestUpdateGroupParticipants_ReturnsResult(t *testing.T) {
+	f := newGrpMgmtFakes()
+	f.settings.UpdateGroupParticipantsFunc = func(_ context.Context, _ string, _ domain.JID, _ []domain.JID, _ domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+		return domain.ParticipantsUpdate{
+			Result:    []string{"added-ok"},
+			Confirmed: true,
+		}, nil
+	}
+	body := `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`
+	rec, _ := grpMgmtServe(grpMgmtCase{
+		name: "UpdateGroupParticipants",
+		path: "/group/updateparticipants",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
+	}, f, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	respBody := rec.Body.String()
+	if !strings.Contains(respBody, "added-ok") {
+		t.Errorf("response should contain per-participant result: %s", respBody)
+	}
+	if !strings.Contains(respBody, `"confirmed":true`) {
+		t.Errorf("response should contain confirmed field: %s", respBody)
+	}
+}
+
+// F248: SetGroupPhoto rejects non-base64 input with 400.
+func TestSetGroupPhoto_RejectsNonBase64(t *testing.T) {
+	f := newGrpMgmtFakes()
+	body := `{"GroupJID":"` + grpMgmtJID + `","Photo":"not-valid-base64!!!"}`
+	rec, capture := grpMgmtServe(grpMgmtCase{
+		name: "SetGroupPhoto",
+		path: "/group/photo",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupPhoto },
+	}, f, body)
+
+	assertErrorEnvelope(t, rec, http.StatusBadRequest)
+	logassert.OutcomeLogged(t, capture.Records(t), "base64")
+	if len(f.settings.SetGroupPhotoCalls) != 0 {
+		t.Fatal("invalid base64 reached the port")
+	}
+}
+
+// F248: SetGroupPhoto decodes base64 before passing to the port.
+func TestSetGroupPhoto_DecodesBase64(t *testing.T) {
+	f := newGrpMgmtFakes()
+	var captured []byte
+	f.settings.SetGroupPhotoFunc = func(_ context.Context, _ string, _ domain.JID, data []byte) error {
+		captured = data
+		return nil
+	}
+	body := `{"GroupJID":"` + grpMgmtJID + `","Photo":"anBlZy1waG90by1kYXRh"}`
+	rec, _ := grpMgmtServe(grpMgmtCase{
+		name: "SetGroupPhoto",
+		path: "/group/photo",
+		body: body,
+		pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupPhoto },
+	}, f, body)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if string(captured) != "jpeg-photo-data" {
+		t.Errorf("port received %q, want %q", string(captured), "jpeg-photo-data")
 	}
 }
 

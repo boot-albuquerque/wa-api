@@ -50,7 +50,7 @@ func (uc *GetGroupInviteLinkUseCase) Execute(ctx context.Context, txtID string, 
 	link, err := uc.groups.GetGroupInviteLink(ctx, txtID, group)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get group invite link", "txtID", txtID, "groupJID", req.GroupJID, "error", err)
-		return nil, fmt.Errorf("failed to get group invite link: %v", err)
+		return nil, fmt.Errorf("failed to get group invite link: %w", err)
 	}
 
 	result := &domain.GetGroupInviteLinkResult{

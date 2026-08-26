@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
 
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -42,8 +44,24 @@ func (h *GetGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r 
 		return
 	}
 	var req domain.GetGroupRequestParticipantsRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
-		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode group request participants payload")
+
+	decodeErr := domain.DecodeRequest(r.Body, &req)
+	if decodeErr != nil {
+		req = domain.GetGroupRequestParticipantsRequest{}
+	}
+	if req.GroupJID == "" {
+		if v := r.URL.Query().Get("group_jid"); v != "" {
+			req.GroupJID = v
+		}
+	}
+	if req.GroupJID == "" && req.ChatAlias == "" {
+		if v := r.URL.Query().Get("chat"); v != "" {
+			req.ChatAlias = v
+			req.ResolveChat()
+		}
+	}
+	if decodeErr != nil && req.GroupJID == "" {
+		hlog.FromRequest(r).Warn().Err(decodeErr).Str("route", r.URL.Path).Msg("could not decode group request participants payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
@@ -147,7 +165,12 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group info failed")
+		var appErr *apperr.AppError
+		if errors.As(err, &appErr) {
+			hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("get group info rejected")
+		} else {
+			hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group info failed")
+		}
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -175,7 +198,12 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 	rsp, err := h.usecase.Execute(r.Context(), id, req)
 	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group invite link failed")
+		var appErr *apperr.AppError
+		if errors.As(err, &appErr) {
+			hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("get group invite link rejected")
+		} else {
+			hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group invite link failed")
+		}
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

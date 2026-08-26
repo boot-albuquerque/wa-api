@@ -269,11 +269,16 @@ func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, t
 		return domain.ParticipantsUpdate{}, err
 	}
 
-	// Qualquer ação diferente de "add" é remoção — regra preservada do
-	// upstream, que não validava o valor recebido.
-	participantAction := domain.ParticipantRemove
-	if action == "add" {
+	var participantAction domain.ParticipantAction
+	switch action {
+	case string(domain.ParticipantAdd):
 		participantAction = domain.ParticipantAdd
+	case string(domain.ParticipantRemove):
+		participantAction = domain.ParticipantRemove
+	default:
+		uc.logger.Warn(ctx, "unknown participant action", "txtID", txtID, "groupJID", groupJID, "action", action)
+		return domain.ParticipantsUpdate{}, apperr.New("invalid_action", apperr.CategoryValidation,
+			fmt.Sprintf("unknown participant action %q (must be %q or %q)", action, domain.ParticipantAdd, domain.ParticipantRemove), false, nil)
 	}
 	res, err := uc.parts.UpdateGroupParticipants(ctx, txtID, jid, jids, participantAction)
 	if err != nil {
