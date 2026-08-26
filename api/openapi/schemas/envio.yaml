@@ -5,9 +5,41 @@
 # base.yaml e é referenciado, nunca copiado.
 #
 # Os campos de cada pedido saem da struct que o manipulador desserializa
-# (pkg/domain/message.go), e as regras saem do use case correspondente em
+# (pkg/domain/message.go — os 16 manipuladores desserializam a struct de
+# DOMÍNIO, nenhum declara struct anónima própria, logo a F267 não toca este
+# grupo), e as regras saem do use case correspondente em
 # pkg/application/usecase/message/. Onde a bateria de campo de 2026-08-26
-# (docs/ENDPOINTS.md) mediu algo que a struct não diz, é a medição que manda.
+# mediu algo que a struct não diz, é a medição que manda.
+#
+# SEMÂNTICA DE PRESENÇA, a regra que vale para TODO campo deste ficheiro e que
+# não se repete campo a campo salvo quando o resultado surpreende:
+#
+#   - Campo de tipo NÃO-PONTEIRO em Go (`string`, `int`, `bool`): `null` é
+#     aceite pelo desserializador e deixa o campo com o valor zero. Logo
+#     **ausente, `null` e `""` (ou `0`, ou `false`) são o MESMO pedido** para o
+#     servidor, e é por isso que estes campos levam `nullable: false`: `null`
+#     não é um valor com significado próprio, é a ausência escrita por extenso.
+#   - Campo de tipo PONTEIRO (`*float64`, `*bool`, `*uint32`, `*string`):
+#     ausente e `null` dão `nil`, e isso DISTINGUE-SE do valor zero. Estes
+#     levam `nullable: true`, e a descrição diz o que `nil` significa.
+#   - Campo de tipo ARRAY: `null` é aceite e dá lista nil, indistinguível de
+#     `[]` e de ausente — nenhuma rota deste grupo olha para a diferença, só
+#     para `len()`. Levam `nullable: true` porque `null` passa sem erro.
+#   - Tipo ERRADO (`{"Body": 123}`) é o único estado que o desserializador
+#     recusa: `400 could_not_decode_payload`, antes de qualquer validação.
+#   - Campo DESCONHECIDO é ignorado em silêncio em todas as 16 rotas
+#     (`domain.DecodeRequest` não usa `DisallowUnknownFields`). Um erro de
+#     digitação no nome não dá erro — dá o valor zero.
+#
+# TRIM: o wa-api não faz `trim` por omissão, mas **estas rotas divergem entre
+# si** e a divergência é observável. `/chat/send/text` envia `"   "` tal e
+# qual; `/chat/send/buttons`, `/chat/send/carousel` e `/chat/send/list` aplicam
+# `strings.TrimSpace` ao corpo ANTES de o validar, logo `"   "` ali é recusado.
+# Cada campo afectado di-lo na sua descrição.
+#
+# IDEMPOTÊNCIA: não existe. `Id` é escolhido pelo cliente mas **não** é chave
+# de idempotência — não há medição de que o servidor ou o WhatsApp deduplique
+# por ele. Chamar a mesma rota duas vezes envia duas mensagens.
 
 # ---------------------------------------------------------------------------
 # Peças reutilizadas dentro do grupo
@@ -15,29 +47,48 @@
 
 MencoesEnvio:
   type: array
+  nullable: true
   description: |
     JIDs a mencionar no corpo da mensagem. O texto da menção (`@554192421234`)
     tem de estar no corpo — este campo só diz ao WhatsApp quem notificar.
 
+    **Sempre opcional.** Ausente, `null` e `[]` são indistinguíveis entre si e
+    significam "sem menções"; o use case só olha para `len()`. Os JIDs não são
+    validados aqui: um JID que não exista é transportado e o cliente de quem
+    recebe simplesmente não desenha a menção.
+
     Aceite pelas rotas com texto visível (CAP-47). As rotas sem texto próprio —
     `/chat/send/audio`, `/chat/send/sticker`, `/chat/send/location`,
     `/chat/send/contact`, `/chat/send/poll` e `/chat/send/pollvote` — não têm
-    este campo no seu payload.
+    este campo no seu payload; enviá-lo lá é campo desconhecido, e é ignorado
+    em silêncio.
   items:
     type: string
+    nullable: false
+    description: |
+      Um JID a mencionar, em forma PN (`…@s.whatsapp.net`) ou LID (`…@lid`).
+      `null` dentro da lista vira `""`, que é transportado tal e qual.
   example:
     - 554192421234@s.whatsapp.net
 
 IdCliente:
   type: string
+  nullable: false
   description: |
     Identificador da mensagem escolhido pelo CLIENTE, e não pelo servidor.
-    Quando vazio, o wa-noise gera um. Serve para tornar o envio idempotente do
-    lado de quem chama: o mesmo `Id` reenviado produz a mesma mensagem no
-    servidor do WhatsApp.
+
+    **Sempre opcional.** Ausente, `null` e `""` são indistinguíveis, e nos três
+    casos o wa-noise gera um identificador. Não há formato imposto nem
+    validação: o valor é passado ao wa-noise tal e qual.
+
+    **NÃO é chave de idempotência.** Não foi medido que o servidor ou o
+    WhatsApp deduplique por este campo; enviar o mesmo `Id` duas vezes envia
+    duas mensagens. Ver a secção 18 do contrato arquitectural.
 
     Não confundir com o `message_id` da resposta — em todas as rotas de envio
     salvo `/chat/send/edit`, os dois coincidem quando o cliente fornece `Id`.
+    Em `/chat/send/edit` o `message_id` devolvido é o da mensagem EDITADA, que
+    é o próprio campo `Id` do pedido, com outro significado.
   example: 3EB0A4B2AFD45E625C0917
 
 BotaoInterativo:
@@ -53,48 +104,102 @@ BotaoInterativo:
     em 2026-08-26: um botão com `displayText` (o nome que `/chat/send/template`
     usa) cai aqui.
 
-    O título é truncado em **20 runas** (`send_buttons.go:35`), e o corte
-    acontece ANTES de o título servir de identificador — logo o `id` que volta
-    no clique de quem recebeu já vem truncado.
+    O título é truncado em **20 runas** (`buttonTitleMaxRunes`,
+    `send_buttons.go:35`), e o corte acontece ANTES de o título servir de
+    identificador — logo o `id` que volta no clique de quem recebeu já vem
+    truncado.
+
+    **Objecto vazio (`{}`) é aceite pelo desserializador e descartado na
+    normalização**, como qualquer botão sem título. `null` dentro da lista dá
+    um botão com todos os campos vazios — mesmo efeito. Nenhum destes casos
+    produz erro por si só.
   properties:
     type:
       type: string
+      nullable: false
       description: |
-        Tipo do botão. Vazio significa `reply`. Um tipo fora dos quatro abaixo
-        faz o botão ser DESCARTADO em silêncio — em particular `quickreply`,
-        que é válido em `/chat/send/template` e **não** aqui.
+        Tipo do botão. Comparado depois de `TrimSpace` e `ToLower`, logo
+        `"  Reply "` e `"REPLY"` funcionam.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente / `null` / `""` | sim | vale `reply` |
+        | um dos quatro da lista | sim | — |
+        | **qualquer outro valor** | **não** | o BOTÃO é DESCARTADO em silêncio |
+
+        O descarte por valor desconhecido é comportamento preservado por
+        decisão (HOUSEKEEP F148) e diverge de `/chat/send/template`, onde tipo
+        desconhecido cai em `quickreply`. Em particular `quickreply` é válido
+        lá e **descartado aqui**. Se todos os botões caírem, a rota responde
+        `400 no_valid_buttons`, e a mensagem de erro lista os quatro aceites.
       enum: [reply, cta_url, cta_call, copy]
       example: reply
     title:
       type: string
-      description: Rótulo do botão. Sinónimos, nesta ordem, `text` e `buttonText`.
+      nullable: false
+      maxLength: 20
+      description: |
+        Rótulo do botão. Sinónimos, nesta ordem, `text` e `buttonText`.
+
+        Passa por `TrimSpace` antes de ser avaliado, logo `"   "` conta como
+        vazio e faz o botão cair para o sinónimo seguinte. Ausente, `null` e
+        `""` são indistinguíveis. Vazio nos três nomes = botão DESCARTADO em
+        silêncio.
+
+        `maxLength` é informativo: um título mais longo **não** é recusado, é
+        TRUNCADO em 20 runas (não bytes).
       example: Confirmar
     text:
       type: string
-      description: Sinónimo de `title`, usado quando `title` vem vazio.
+      nullable: false
+      description: |
+        Sinónimo de `title`, usado quando `title` está ausente, `null`, `""` ou
+        só espaços. Mesmo `trim` e mesmo truncamento.
     buttonText:
       type: string
-      description: Segundo sinónimo de `title`, usado quando `title` e `text` vêm vazios.
+      nullable: false
+      description: |
+        Segundo sinónimo de `title`, usado quando `title` e `text` estão ambos
+        ausentes, `null`, `""` ou só espaços. Mesmo `trim` e mesmo truncamento.
     id:
       type: string
+      nullable: false
       description: |
-        Identificador devolvido no clique. Sinónimo `buttonId`. Quando os dois
-        vêm vazios, o próprio título JÁ TRUNCADO vira o identificador.
+        Identificador devolvido no clique. Sinónimo `buttonId`. Passa por
+        `TrimSpace`; ausente, `null`, `""` e `"   "` são indistinguíveis.
+
+        Quando `id` e `buttonId` estão ambos vazios, **o próprio título JÁ
+        TRUNCADO vira o identificador** — nunca fica vazio no fio.
       example: confirmar
     buttonId:
       type: string
-      description: Sinónimo de `id`.
+      nullable: false
+      description: |
+        Sinónimo de `id`, usado quando `id` está ausente, `null`, `""` ou só
+        espaços.
     url:
       type: string
-      description: Destino de um botão `cta_url`. Ignorado nos outros tipos.
+      nullable: false
+      description: |
+        Destino de um botão `cta_url`. Ignorado em silêncio nos outros tipos.
+
+        **Não é validado.** Ausente, `null` e `""` são indistinguíveis, e um
+        botão `cta_url` sem URL é enviado com destino vazio em vez de recusado.
       example: https://exemplo.com/pedido/1234
     phone_number:
       type: string
-      description: Número de um botão `cta_call`. Ignorado nos outros tipos.
+      nullable: false
+      description: |
+        Número de um botão `cta_call`. Ignorado em silêncio nos outros tipos.
+        Não é validado: vazio produz um botão de chamada sem número.
       example: '+554192421234'
     copy_code:
       type: string
-      description: Texto que um botão `copy` põe na área de transferência. Ignorado nos outros tipos.
+      nullable: false
+      description: |
+        Texto que um botão `copy` põe na área de transferência. Ignorado em
+        silêncio nos outros tipos. Não é validado: vazio produz um botão que
+        copia nada.
       example: PEDIDO-1234
 
 BotaoModelo:
@@ -104,35 +209,68 @@ BotaoModelo:
     DIFERENTE do `BotaoInterativo`: aqui o rótulo é `DisplayText` e os tipos são
     outros três.
 
-    Não há validação do conteúdo por tipo — um botão `url` sem `Url` é aceite e
-    produz um botão com destino vazio (`send_template.go`, comentário de
-    `Execute`). E um `Type` desconhecido **não** é recusado: cai em `quickreply`.
-  required: [DisplayText]
+    **Nenhum campo deste objecto é validado, e nenhum botão é descartado.** Ao
+    contrário de `/chat/send/buttons`, o use case entrega a lista ao adaptador
+    tal e qual (`send_template.go`, `Execute` — só `len(Buttons) < 1` é
+    verificado). Um `{}` vira um botão de resposta rápida com rótulo vazio, e
+    um botão `url` sem `Url` produz um botão com destino vazio. `null` dentro
+    da lista tem o mesmo efeito de `{}`.
   properties:
     DisplayText:
       type: string
-      description: Rótulo do botão.
+      nullable: false
+      description: |
+        Rótulo do botão. **Obrigatório na prática, e NÃO validado**: ausente,
+        `null` e `""` são indistinguíveis e produzem um botão sem rótulo, com
+        `200`. Não há `trim` e não há truncamento — ao contrário do `title` de
+        `BotaoInterativo`.
       example: Abrir pedido
     Type:
       type: string
+      nullable: false
       description: |
-        Tipo do botão. Valor fora dos três cai em `quickreply`
-        (`pkg/domain/message.go:786-789`).
+        Tipo do botão. **Sensível a maiúsculas e a espaços**: a comparação é
+        literal, sem `TrimSpace` e sem `ToLower`
+        (`adapters/chat/messenger.go`, `templateButtons`).
+
+        | estado | efeito |
+        |---|---|
+        | ausente / `null` / `""` | `quickreply` |
+        | `url` | botão de URL |
+        | `call` | botão de chamada |
+        | `quickreply` | botão de resposta rápida |
+        | `URL`, `Url`, `" url"` | **`quickreply`** — a caixa não bate |
+        | qualquer outro valor desconhecido | **`quickreply`**, sem erro |
+
+        Valor fora da lista NÃO é recusado nem descartado: cai no ramo
+        `default`, que é `quickreply` (`pkg/domain/message.go:786-789`). É o
+        oposto de `/chat/send/buttons`, onde o botão sumiria.
       enum: [quickreply, url, call]
       example: url
     Url:
       type: string
-      description: Destino de um botão `url`.
+      nullable: false
+      description: |
+        Destino de um botão `url`. Ignorado nos outros tipos. Não é validado:
+        ausente, `null` e `""` são indistinguíveis e dão um botão sem destino.
       example: https://exemplo.com/pedido/1234
     PhoneNumber:
       type: string
-      description: Número de um botão `call`.
+      nullable: false
+      description: |
+        Número de um botão `call`. Ignorado nos outros tipos. Não é validado:
+        ausente, `null` e `""` dão um botão de chamada sem número.
       example: '+554192421234'
     Id:
       type: string
+      nullable: false
       description: |
-        Identificador de um botão `quickreply`. Vazio significa "numere
-        automaticamente" — a numeração decimal é montada no adaptador.
+        Identificador de um botão `quickreply`. Ausente, `null` e `""` são
+        indistinguíveis e significam "numere automaticamente".
+
+        A numeração decimal é montada no adaptador e conta **todos** os botões
+        da lista, não só os de resposta rápida: num pedido `[url, quickreply]`
+        o segundo botão recebe `"2"`, e não `"1"`.
       example: '1'
 
 LinhaLista:
@@ -142,44 +280,89 @@ LinhaLista:
 
     **Linha sem `title` é descartada em silêncio.** Se todas as linhas de uma
     secção caírem, a secção cai também; se nenhuma secção sobreviver, a rota
-    responde `400 no_valid_sections` (`send_list.go:171-215`).
+    responde `400 no_valid_sections` (`send_list.go`, `normalizeRows` e
+    `normalizeListSections`). `{}` e `null` dentro da lista são ambos linhas
+    sem título, logo ambos descartados.
   properties:
     title:
       type: string
-      description: Texto da linha. Obrigatório na prática — sem ele a linha é descartada.
+      nullable: false
+      description: |
+        Texto da linha. Passa por `TrimSpace` antes de ser avaliado.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | a LINHA é descartada em silêncio |
+        | `null` | não | idem — indistinguível de ausente |
+        | `""` | não | idem |
+        | `"   "` | não | idem — aqui **há** `trim` |
+        | preenchido | sim | vai no fio já sem espaços nas pontas |
       example: Pizza margherita
     desc:
       type: string
-      description: Descrição secundária, mostrada abaixo do título.
+      nullable: false
+      description: |
+        Descrição secundária, mostrada abaixo do título. Sempre opcional:
+        ausente, `null`, `""` e `"   "` são indistinguíveis e dão linha sem
+        descrição (também passa por `TrimSpace`).
       example: Molho de tomate, mozzarella e manjericão
     RowId:
       type: string
+      nullable: false
       description: |
         Identificador devolvido na escolha. Sinónimos, nesta ordem de
-        precedência, `RowID`, `rowId` e `rowID`. Quando os quatro vêm vazios,
-        o próprio título (já sem espaços nas pontas) vira o identificador.
+        precedência, `RowID`, `rowId` e `rowID`. Cada candidato passa por
+        `TrimSpace`, logo `"   "` conta como vazio e cai para o seguinte.
+
+        Quando os quatro estão ausentes, `null`, `""` ou só espaços, **o
+        próprio título (já sem espaços nas pontas) vira o identificador** —
+        nunca fica vazio no fio.
       example: margherita
     RowID:
       type: string
-      description: Primeiro sinónimo de `RowId`.
+      nullable: false
+      description: |
+        Primeiro sinónimo de `RowId`, usado quando `RowId` está ausente,
+        `null`, `""` ou só espaços.
     rowId:
       type: string
-      description: Segundo sinónimo de `RowId`.
+      nullable: false
+      description: |
+        Segundo sinónimo de `RowId`, usado quando `RowId` e `RowID` estão ambos
+        vazios pelo mesmo critério.
     rowID:
       type: string
-      description: Terceiro sinónimo de `RowId`.
+      nullable: false
+      description: |
+        Terceiro sinónimo de `RowId`, o último antes de o título ser usado.
 
 SecaoLista:
   type: object
-  description: Uma secção de `/chat/send/list`, com o seu título e as suas linhas.
+  description: |
+    Uma secção de `/chat/send/list`, com o seu título e as suas linhas.
+
+    Secção que fique sem nenhuma linha válida é descartada em silêncio —
+    incluindo a secção que já chegou com `rows` ausente, `null` ou `[]`.
+    `{}` e `null` dentro de `Sections` são ambos secções sem linhas, logo
+    ambos descartados.
   properties:
     title:
       type: string
-      description: Título da secção.
+      nullable: false
+      description: |
+        Título da secção. Sempre opcional: ausente, `null`, `""` e `"   "` são
+        indistinguíveis e dão secção sem título (passa por `TrimSpace`).
+
+        **Não** herda `TopText`: esse padrão só vale para a forma legada
+        `List`.
       example: Pizzas
     rows:
       type: array
-      description: Linhas da secção. Secção que fica sem linhas válidas é descartada.
+      nullable: true
+      description: |
+        Linhas da secção. Ausente, `null` e `[]` são indistinguíveis, e nos
+        três casos a SECÇÃO é descartada em silêncio — o mesmo destino de uma
+        secção cujas linhas foram todas descartadas por falta de título.
       items:
         $ref: '#/components/schemas/LinhaLista'
 
@@ -190,35 +373,71 @@ CartaoCarrossel:
 
     **Cada cartão exige `Body` e pelo menos um botão válido** — cartão sem um
     dos dois é descartado em silêncio, e se nenhum sobreviver a rota responde
-    `400 no_valid_cards` (medido em 2026-08-26).
+    `400 no_valid_cards` (medido em 2026-08-26). `{}` e `null` dentro de
+    `Cards` são ambos cartões sem corpo, logo ambos descartados.
   required: [Body, Buttons]
   properties:
     Title:
       type: string
+      nullable: false
       description: |
         Título do cartão. **É decorativo**: o iOS não o desenha, só o Android
         (HOUSEKEEP F217). Informação obrigatória vai em `Body`, não aqui.
+
+        Sempre opcional: ausente, `null`, `""` e `"   "` são indistinguíveis e
+        dão cartão sem título (passa por `TrimSpace`).
       example: Pizza margherita
     Body:
       type: string
-      description: Corpo do cartão. Obrigatório — cartão com corpo vazio é descartado.
+      nullable: false
+      minLength: 1
+      description: |
+        Corpo do cartão. Passa por `TrimSpace` antes de ser avaliado.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | o CARTÃO é descartado em silêncio |
+        | `null` | não | idem — indistinguível de ausente |
+        | `""` | não | idem |
+        | `"   "` | não | idem — aqui **há** `trim` |
+        | preenchido | sim | vai no fio já sem espaços nas pontas |
+
+        Se todos os cartões forem descartados, a rota responde
+        `400 no_valid_cards`.
       example: Molho de tomate, mozzarella e manjericão. R$ 45,00.
     Footer:
       type: string
-      description: Rodapé do cartão.
+      nullable: false
+      description: |
+        Rodapé do cartão. Sempre opcional: ausente, `null`, `""` e `"   "` são
+        indistinguíveis e dão cartão sem rodapé (passa por `TrimSpace`).
       example: Entrega em 40 minutos
     Image:
       type: string
+      nullable: false
       description: |
         Imagem do cartão, como URI de dados (`data:image/...;base64,...`) ou
-        URL http(s). Teto de 10 MB. Vazio significa cartão sem imagem.
+        URL http(s). Teto de 10 MB.
 
-        Ao contrário do corpo e dos botões, uma imagem que falhe a obtenção
-        **não** derruba o cartão: ele segue sem imagem, e a falha fica no log.
+        Sempre opcional: ausente, `null` e `""` são indistinguíveis e dão
+        cartão sem imagem.
+
+        Ao contrário do corpo e dos botões, **nenhuma falha aqui derruba o
+        cartão nem o pedido**: uma URI que não decodifica, uma busca que falha,
+        um valor que não é nem URI de dados nem URL, ou bytes acima do teto —
+        todos deixam o cartão seguir SEM imagem, com `200`, e a falha fica só
+        no log.
       example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
     Buttons:
       type: array
-      description: Botões do cartão, com o mesmo vocabulário de `/chat/send/buttons`.
+      nullable: true
+      description: |
+        Botões do cartão, com o mesmo vocabulário e as mesmas regras de
+        descarte de `/chat/send/buttons`.
+
+        Ausente, `null` e `[]` são indistinguíveis, e nos três casos o CARTÃO é
+        descartado em silêncio — o mesmo destino de um cartão cujos botões
+        foram todos descartados por tipo desconhecido ou falta de título.
       items:
         $ref: '#/components/schemas/BotaoInterativo'
 
@@ -235,33 +454,62 @@ ResultadoEnvioAudio:
     duplicar um áudio que já está entregue — e `caption_status` diz o que
     aconteceu de facto.
 
-    Ambos os campos estão AUSENTES quando não houve legenda a enviar.
+    Nenhum campo desta resposta vem `null` em circunstância nenhuma: os que têm
+    `omitempty` na struct ou vêm preenchidos, ou não aparecem.
   required: [message_id, status]
   properties:
     message_id:
       type: string
-      description: Identificador do ÁUDIO no servidor.
+      nullable: false
+      description: |
+        Identificador do ÁUDIO no servidor. **Sempre presente** — sem
+        `omitempty` na struct (`pkg/domain/message.go`, `SendAudioResult`),
+        logo aparece mesmo que viesse vazio. Nunca `null`.
       example: 3EB0A4B2AFD45E625C0917
     timestamp:
       type: integer
       format: int64
-      description: Instante do envio do áudio, em segundos desde a época Unix.
+      nullable: false
+      description: |
+        Instante do envio do áudio, em segundos desde a época Unix.
+
+        **Pode não aparecer**: tem `omitempty`, logo é omitido quando vale `0`.
+        Nunca `null`.
       example: 1787747900
     status:
       type: string
-      description: Estado do envio do áudio.
+      nullable: false
+      description: |
+        Estado do envio do áudio. **Sempre presente** e sempre `sent` — o use
+        case só o preenche depois de o envio ter tido sucesso, e qualquer falha
+        vira erro em vez de resposta. Nunca `null`.
       example: sent
     caption_message_id:
       type: string
+      nullable: false
       description: |
-        Identificador da mensagem de legenda. Presente apenas quando
-        `caption_status` é `sent`.
+        Identificador da mensagem de legenda.
+
+        **AUSENTE** quando não houve legenda a enviar, e também quando a
+        legenda falhou — só aparece com `caption_status: sent`. Tem `omitempty`
+        e nunca vem `null` nem `""`.
       example: 3EB0F1C9D2A74B380E1128
     caption_status:
       type: string
+      nullable: false
       description: |
-        `sent` — a legenda saiu como mensagem própria.
-        `failed` — o ÁUDIO saiu, a legenda não.
+        O que aconteceu à legenda.
+
+        | estado | significado |
+        |---|---|
+        | **ausente** | não havia legenda a enviar (`Caption` vazio no pedido) |
+        | `sent` | a legenda saiu como mensagem própria; o id dela vem em `caption_message_id` |
+        | `failed` | o ÁUDIO saiu, a legenda não — e não há como desfazer o áudio |
+
+        Tem `omitempty`, logo nunca vem `""` nem `null`. Um valor fora dos dois
+        da lista não é produzido pela implementação: os dois são constantes de
+        domínio (`domain.CaptionSent` / `domain.CaptionFailed`) e não há
+        terceiro caminho.
       enum: [sent, failed]
       example: sent
 
@@ -270,7 +518,9 @@ ResultadoEnvioAudio:
 # ---------------------------------------------------------------------------
 
 PedidoEnvioTexto:
-  description: "Corpo de `POST /chat/send/text`. Mensagem de texto, com pré-visualização de link opcional."
+  description: |
+    Corpo de `POST /chat/send/text`. Mensagem de texto, com pré-visualização de
+    link opcional. Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -278,22 +528,54 @@ PedidoEnvioTexto:
       properties:
         Phone:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            JID de destino — contacto, grupo ou canal. Sinónimo universal `chat`;
-            `Phone` ganha quando os dois vierem. Ausente nos dois nomes é
-            `400 missing_phone`.
+            JID de destino — contacto, grupo ou canal. Sinónimo universal
+            `chat`; `Phone` ganha quando os dois vierem preenchidos.
+
+            | estado (nos DOIS nomes) | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_phone` |
+            | `null` | não | `400 missing_phone` — indistinguível de ausente |
+            | `""` | não | `400 missing_phone` — indistinguível de ausente |
+            | `"   "` | **sim** aqui | passa a validação e falha depois em `400 invalid_phone` |
+            | preenchido, mas não parseia | não | `400 invalid_phone` |
           example: 554192421234@s.whatsapp.net
         Body:
           type: string
-          description: Texto da mensagem. Vazio é `400 missing_body`.
+          nullable: false
+          minLength: 1
+          description: |
+            Texto da mensagem.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_body` |
+            | `null` | não | `400 missing_body` — indistinguível de ausente |
+            | `""` | não | `400 missing_body` — indistinguível de ausente |
+            | `"   "` | **sim** | ENVIADA tal e qual; **não há `trim` nesta rota** |
+            | tipo errado (`123`) | não | `400 could_not_decode_payload` |
+
+            Medido em 2026-08-26 contra `localhost:8080`. Não há limite de
+            comprimento imposto pela API — o corpo do pedido tem um teto de
+            bytes no middleware, não neste campo.
           example: Bom dia! O seu pedido saiu para entrega.
         LinkPreview:
           type: boolean
+          nullable: false
+          default: false
           description: |
             Quando `true`, o serviço procura a primeira URL do corpo e busca a
             metadata Open Graph dela, enviando a mensagem como texto estendido
-            com pré-visualização. Falha na busca não é erro — a mensagem segue
-            sem pré-visualização.
+            com pré-visualização.
+
+            **Ausente, `null` e `false` são indistinguíveis** — o campo é
+            `bool` e não `*bool`, logo `null` vira `false` em silêncio. Não há
+            forma de dizer "decide tu".
+
+            Falha na busca não é erro: a mensagem segue sem pré-visualização,
+            com `200`.
           example: true
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
@@ -303,7 +585,9 @@ PedidoEnvioTexto:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioImagem:
-  description: "Corpo de `POST /chat/send/image`. Imagem com legenda opcional; aceita URI de dados ou base64."
+  description: |
+    Corpo de `POST /chat/send/image`. Imagem com legenda opcional; aceita URI de
+    dados ou URL http(s). Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -311,37 +595,66 @@ PedidoEnvioImagem:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Image:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             A imagem, num de DOIS transportes:
 
             - **URI de dados** — tem de começar exactamente por `data:image`
-              (`send_image.go:180`). Um `data:application/pdf;...` **não** bate
-              aqui.
+              (`send_image.go`, `dataImagePrefix`). Um
+              `data:application/pdf;...` **não** bate aqui (medido).
             - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
 
-            Qualquer outra coisa é `400 unsupported_image_source`. Teto de
-            **16 MB** nos dois transportes.
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_image` — os três são indistinguíveis |
+            | outra coisa qualquer | não | `400 unsupported_image_source` |
+            | URI de dados que não decodifica | não | `400 invalid_data_uri` |
+            | decodifica para zero bytes | não | `400 empty_image_body` |
+            | acima de 16 MB | não | `400 image_too_large` |
+            | URL que falha a busca | não | `400 image_fetch_failed` |
+
+            Teto de **16 MB** nos dois transportes.
           example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
         Caption:
           type: string
-          description: Legenda, desenhada com a imagem.
+          nullable: false
+          description: |
+            Legenda, desenhada com a imagem. Sempre opcional: ausente, `null` e
+            `""` são indistinguíveis e dão imagem sem legenda. Não há `trim` —
+            `"   "` vai no fio como legenda de três espaços.
           example: A etiqueta do seu pedido.
         MimeType:
           type: string
+          nullable: false
           description: |
-            Força o MIME em vez de o deduzir dos bytes. Quando vazio, o tipo é
-            farejado do conteúdo DECODIFICADO — o rótulo que a própria URI de
-            dados declara **não** é usado, de propósito. Se o tipo resolvido não
-            for de imagem, é `400 invalid_image_mime_type`.
+            Força o MIME em vez de o deduzir dos bytes. Ausente, `null` e `""`
+            são indistinguíveis e significam "deduz tu".
+
+            Quando vazio, o tipo é farejado do conteúdo DECODIFICADO — o rótulo
+            que a própria URI de dados declara **não** é usado, de propósito. Se
+            o tipo resolvido não for de imagem, é
+            `400 invalid_image_mime_type`. O valor dado não é validado contra os
+            bytes: declarar `image/png` sobre bytes de JPEG é aceite.
           example: image/png
         JPEGThumbnail:
           type: string
           format: byte
-          description: Miniatura JPEG, em base64. Opcional.
+          nullable: true
+          description: |
+            Miniatura JPEG, em base64 cru (sem prefixo `data:`). Sempre
+            opcional: ausente, `null` e `""` são indistinguíveis e significam
+            "sem miniatura". Não é validada nem convertida — os bytes vão tal e
+            qual para o protocolo.
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
         MentionedJid:
@@ -350,7 +663,9 @@ PedidoEnvioImagem:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioVideo:
-  description: "Corpo de `POST /chat/send/video`. Vídeo com legenda; mínimo de 256 bytes, recusado antes do envio."
+  description: |
+    Corpo de `POST /chat/send/video`. Vídeo com legenda; mínimo de 256 bytes,
+    recusado antes do envio. Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -358,36 +673,64 @@ PedidoEnvioVideo:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Video:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             O vídeo, num de DOIS transportes:
 
             - **URI de dados** — a discriminação mais frouxa das cinco rotas de
               mídia: bastam os quatro primeiros caracteres serem `data`, sem os
               dois-pontos (`send_video.go`, `isDataVideo`). Qualquer MIME
-              declarado passa.
+              declarado passa — medido em 2026-08-26,
+              `data:application/pdf;base64,...` **passa** esta porta e só morre
+              depois, em `video_too_small`.
             - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
 
-            Qualquer outra coisa é `400 unsupported_video_source`. Teto de
-            **100 MB**, e piso de **256 bytes**.
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_video` — os três são indistinguíveis |
+            | `"dat"` ou outra coisa | não | `400 unsupported_video_source` |
+            | URI de dados que não decodifica | não | `400 invalid_data_uri` |
+            | zero bytes | não | `400 empty_video_body` |
+            | menos de **256 bytes** | não | `400 video_too_small` |
+            | acima de 100 MB | não | `400 video_too_large` |
+
+            Teto de **100 MB**, e piso de **256 bytes** (`minVideoBytes`,
+            `send_video.go:36`).
           example: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
         Caption:
           type: string
-          description: Legenda, desenhada com o vídeo.
+          nullable: false
+          description: |
+            Legenda, desenhada com o vídeo. Sempre opcional: ausente, `null` e
+            `""` são indistinguíveis e dão vídeo sem legenda. Não há `trim`.
           example: O vídeo da montagem.
         MimeType:
           type: string
+          nullable: false
           description: |
-            Força o MIME em vez de o deduzir dos bytes. Se o tipo resolvido não
-            for de vídeo, é `400 invalid_video_mime_type`.
+            Força o MIME em vez de o deduzir dos bytes. Ausente, `null` e `""`
+            são indistinguíveis e significam "deduz tu". Se o tipo resolvido não
+            for de vídeo, é `400 invalid_video_mime_type`. O valor dado não é
+            validado contra os bytes.
           example: video/mp4
         JPEGThumbnail:
           type: string
           format: byte
-          description: Miniatura JPEG, em base64. Opcional.
+          nullable: true
+          description: |
+            Miniatura JPEG, em base64 cru. Sempre opcional: ausente, `null` e
+            `""` são indistinguíveis e significam "sem miniatura". Não é
+            validada nem convertida.
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
         MentionedJid:
@@ -396,7 +739,10 @@ PedidoEnvioVideo:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioAudio:
-  description: "Corpo de `POST /chat/send/audio`. Áudio ou nota de voz; mínimo de 128 bytes. A legenda, se houver, vai como mensagem separada."
+  description: |
+    Corpo de `POST /chat/send/audio`. Áudio ou nota de voz; mínimo de 128 bytes.
+    A legenda, se houver, vai como mensagem separada. Campos desconhecidos são
+    ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -404,57 +750,120 @@ PedidoEnvioAudio:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Audio:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             O áudio, num de DOIS transportes:
 
             - **URI de dados** — tem de começar exactamente por `data:audio/`
               (`send_audio.go`, `isDataURIAudio`). Uma imagem disfarçada de
-              áudio não passa.
+              áudio não passa: medido, `data:image/png;...` dá
+              `400 unsupported_audio_source`.
             - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
 
-            Qualquer outra coisa é `400 unsupported_audio_source`. Teto de
-            **16 MB**, e piso de **128 bytes**.
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_audio` — os três são indistinguíveis |
+            | outra coisa qualquer | não | `400 unsupported_audio_source` |
+            | URI de dados que não decodifica | não | `400 invalid_data_uri` |
+            | zero bytes | não | `400 empty_audio_body` |
+            | menos de **128 bytes** | não | `400 audio_too_small` |
+            | acima de 16 MB | não | `400 audio_too_large` |
+
+            Teto de **16 MB**, e piso de **128 bytes** (`minAudioBytes`,
+            `send_audio.go:34`).
           example: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
         Caption:
           type: string
+          nullable: false
           description: |
             Legenda. **Vai como mensagem de texto SEPARADA**, enviada DEPOIS do
-            áudio — o protocolo não tem campo de legenda em áudio. Ver
-            `ResultadoEnvioAudio` para o que a resposta diz sobre ela.
+            áudio — o protocolo não tem campo de legenda em áudio (F116).
+
+            Sempre opcional: ausente, `null` e `""` são indistinguíveis e
+            significam "não mandes segunda mensagem". Não há `trim`: `"   "` é
+            legenda preenchida e faz sair uma segunda mensagem com três
+            espaços.
+
+            Ver `ResultadoEnvioAudio` para o que a resposta diz sobre ela — o
+            envio não é atómico.
           example: O áudio que combinámos.
         ptt:
           type: boolean
+          nullable: true
           description: |
             `true` envia como mensagem de voz (a bolha com a onda), `false` como
-            ficheiro de áudio. **Ausente significa `true`** — não `false`.
+            ficheiro de áudio.
+
+            É `*bool` na struct, logo os três estados distinguem-se:
+
+            | estado | efeito |
+            |---|---|
+            | **ausente** | `true` — nota de voz. **Não `false`** |
+            | **`null`** | `true` — indistinguível de ausente |
+            | `false` | ficheiro de áudio |
+            | `true` | nota de voz |
+
+            O padrão também decide o MIME de último recurso: `audio/ogg;
+            codecs=opus` quando `ptt`, `audio/mpeg` quando não.
           example: true
         mimetype:
           type: string
+          nullable: false
           description: |
-            Força o MIME. Quando vazio, a precedência é: o rótulo declarado pela
-            própria URI de dados, ou o `Content-Type` remoto quando começa por
-            `audio/`; senão o tipo farejado dos bytes; senão um padrão conforme
-            `ptt`.
+            Força o MIME. Ausente, `null` e `""` são indistinguíveis e
+            significam "resolve tu", com esta precedência de quatro níveis
+            (`resolveAudioMimeType`):
+
+            1. este campo, quando não vazio;
+            2. o rótulo declarado pela própria URI de dados, ou o `Content-Type`
+               remoto quando começa por `audio/`;
+            3. o tipo farejado dos bytes, salvo quando dá
+               `application/octet-stream` — que é tratado como "não consegui";
+            4. o padrão conforme `ptt`.
+
+            O valor dado não é validado: ao contrário de imagem e vídeo, esta
+            rota não tem `invalid_audio_mime_type`.
           example: audio/ogg; codecs=opus
         Seconds:
           type: integer
-          description: Duração declarada, em segundos. Só metadata — não é verificada contra os bytes.
+          format: int32
+          minimum: 0
+          nullable: false
+          description: |
+            Duração declarada, em segundos. É `uint32`, logo negativo é
+            `400 could_not_decode_payload`.
+
+            **Só metadata — não é verificada contra os bytes.** Ausente, `null`
+            e `0` são indistinguíveis e significam "duração não declarada": o
+            cliente de quem recebe mostra o que conseguir deduzir.
           example: 12
         Waveform:
           type: string
           format: byte
-          description: Onda desenhada na bolha de voz, em base64. Opcional.
+          nullable: true
+          description: |
+            Onda desenhada na bolha de voz, em base64 cru. Sempre opcional:
+            ausente, `null` e `""` são indistinguíveis e significam "sem onda".
+            Não é validada nem gerada pelo servidor.
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
         Id:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioDocumento:
-  description: "Corpo de `POST /chat/send/document`. Ficheiro com nome próprio, mostrado como anexo descarregável."
+  description: |
+    Corpo de `POST /chat/send/document`. Ficheiro com nome próprio, mostrado
+    como anexo descarregável. Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -462,10 +871,17 @@ PedidoEnvioDocumento:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Document:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             O documento, num de DOIS transportes:
 
@@ -474,25 +890,50 @@ PedidoEnvioDocumento:
               `application/zip`, `text/plain`…
             - **URL http(s)** — buscada pelo servidor, com protecção contra SSRF.
 
-            Qualquer outra coisa é `400 unsupported_document_source`. Teto de
-            **100 MB**.
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_document` — os três são indistinguíveis |
+            | outra coisa qualquer | não | `400 unsupported_document_source` |
+            | URI de dados que não decodifica | não | `400 invalid_data_uri` |
+            | zero bytes | não | `400 empty_document_body` |
+            | acima de 100 MB | não | `400 document_too_large` |
+
+            Teto de **100 MB**. Não há verificação de MIME: esta é a única rota
+            de mídia sem `invalid_*_mime_type`.
           example: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
         FileName:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            Nome com que o documento aparece no cliente. **Obrigatório** — vazio
-            é `400 missing_filename`. É metadata pura: nunca vira operação de
-            ficheiro do lado do servidor.
+            Nome com que o documento aparece no cliente.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_filename` |
+            | `null` | não | `400 missing_filename` — indistinguível de ausente |
+            | `""` | não | `400 missing_filename` — indistinguível de ausente |
+            | `"   "` | **sim** | vai tal e qual; não há `trim` |
+
+            É metadata pura: nunca vira operação de ficheiro do lado do
+            servidor, e não é higienizado nem validado contra o MIME.
           example: nota-fiscal-1234.pdf
         Caption:
           type: string
-          description: Legenda, desenhada com o documento.
+          nullable: false
+          description: |
+            Legenda, desenhada com o documento. Sempre opcional: ausente,
+            `null` e `""` são indistinguíveis e dão documento sem legenda. Não
+            há `trim`.
           example: A nota fiscal do pedido.
         MimeType:
           type: string
+          nullable: false
           description: |
-            Força o MIME. Quando vazio, o tipo é farejado dos bytes decodificados
-            — o rótulo da própria URI de dados não é usado.
+            Força o MIME. Ausente, `null` e `""` são indistinguíveis e
+            significam "deduz tu": o tipo é farejado dos bytes decodificados —
+            o rótulo da própria URI de dados não é usado. O valor dado não é
+            validado.
           example: application/pdf
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
@@ -502,7 +943,9 @@ PedidoEnvioDocumento:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioAutocolante:
-  description: "Corpo de `POST /chat/send/sticker`. Autocolante em WebP."
+  description: |
+    Corpo de `POST /chat/send/sticker`. Autocolante em WebP. Campos
+    desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -510,40 +953,82 @@ PedidoEnvioAutocolante:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Sticker:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            O autocolante, como URI de dados (prefixo `data`) ou URL http(s).
-            Teto de **16 MB**.
+            O autocolante, como URI de dados (prefixo `data`, a discriminação
+            frouxa do vídeo) ou URL http(s). Teto de **16 MB**.
 
-            **A imagem é sempre CONVERTIDA para WebP pelo servidor** — o que sobe
-            é o resultado da conversão, nunca os bytes de entrada. Uma entrada que
-            não seja nenhum dos dois transportes chega à conversão tal e qual e é
-            recusada lá, com `400 sticker_processing_failed`.
+            **A imagem é sempre CONVERTIDA para WebP pelo servidor** — o que
+            sobe é o resultado da conversão, nunca os bytes de entrada.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_sticker` — os três são indistinguíveis |
+            | nem URI de dados nem URL | não | `400 sticker_processing_failed` — **e não `unsupported_*_source`**, ao contrário das outras rotas de mídia (medido) |
+            | acima de 16 MB | não | `400 sticker_too_large` |
+            | conversão falha | não | `500 sticker_conversion_failed` |
           example: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
         MimeType:
           type: string
-          description: MIME declarado da entrada. A saída é sempre WebP.
+          nullable: false
+          description: |
+            MIME declarado da entrada. **Não é só declaração: é o que ESCOLHE o
+            caminho de conversão** (`sticker/exif.go`, `ConvertToWebPSticker`).
+            `video/*` e `image/gif` vão pela conversão de vídeo; `image/jpeg`,
+            `image/png` e `image/jpg` pela de imagem.
+
+            Ausente, `null` e `""` são indistinguíveis e significam "fareja dos
+            bytes". Um valor errado aqui manda os bytes pelo conversor errado e
+            termina em `sticker_conversion_failed`. A saída é sempre WebP.
         PngThumbnail:
           type: string
           format: byte
-          description: Miniatura PNG, em base64. Opcional.
+          nullable: true
+          description: |
+            Miniatura PNG, em base64 cru. Sempre opcional: ausente, `null` e
+            `""` são indistinguíveis e significam "sem miniatura". Não é
+            validada nem gerada pelo servidor.
         PackId:
           type: string
-          description: Identificador do pacote de autocolantes a que este pertence.
+          nullable: false
+          description: |
+            Identificador do pacote de autocolantes a que este pertence.
+            Gravado no EXIF do WebP resultante. Ausente, `null` e `""` são
+            indistinguíveis e gravam campo vazio — não é validado nem
+            verificado contra pacote nenhum.
         PackName:
           type: string
-          description: Nome do pacote.
+          nullable: false
+          description: |
+            Nome do pacote, gravado no EXIF. Ausente, `null` e `""` são
+            indistinguíveis e gravam campo vazio.
         PackPublisher:
           type: string
-          description: Editor do pacote.
+          nullable: false
+          description: |
+            Editor do pacote, gravado no EXIF. Ausente, `null` e `""` são
+            indistinguíveis e gravam campo vazio.
         Emojis:
           type: array
-          description: Emojis associados ao autocolante, para busca no cliente.
+          nullable: true
+          description: |
+            Emojis associados ao autocolante, para busca no cliente. Gravados no
+            EXIF. Ausente, `null` e `[]` são indistinguíveis e significam "sem
+            emojis". O conteúdo não é validado: qualquer texto é aceite.
           items:
             type: string
+            nullable: false
+            description: Um emoji. `null` dentro da lista vira `""`.
           example: ['🎉']
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
@@ -551,7 +1036,10 @@ PedidoEnvioAutocolante:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioLocalizacao:
-  description: "Corpo de `POST /chat/send/location`. Ponto no mapa, com nome e morada opcionais."
+  description: |
+    Corpo de `POST /chat/send/location`. Ponto no mapa, com nome opcional. Não
+    há campo de morada — só `Latitude`, `Longitude` e `Name` chegam ao
+    protocolo. Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -559,26 +1047,48 @@ PedidoEnvioLocalizacao:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Latitude:
           type: number
           format: double
+          nullable: true
           description: |
-            Latitude. **Zero é valor VÁLIDO** e é distinguido de "campo ausente"
-            (HOUSEKEEP F121) — omitir é `400 missing_latitude`, mandar `0` é
-            aceite.
+            Latitude. É `*float64` de propósito (HOUSEKEEP F121), logo **zero é
+            valor VÁLIDO e distingue-se de ausente**:
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_latitude` |
+            | **`null`** | **não** | `400 missing_latitude` — medido; `null` dá `nil`, igual a ausente |
+            | `0` | **sim** | coordenada válida — o Golfo da Guiné |
+            | preenchido | sim | — |
+
+            Não há verificação de intervalo: `-999` é aceite pela API e vai
+            para o WhatsApp.
           example: -25.4284
         Longitude:
           type: number
           format: double
+          nullable: true
           description: |
-            Longitude. Mesma regra da latitude: `0` é aceite, ausente é
-            `400 missing_longitude`.
+            Longitude. Mesma regra da latitude: `*float64`, `0` é aceite,
+            ausente e `null` dão `400 missing_longitude` (medido, e a latitude é
+            validada PRIMEIRO — um pedido sem as duas responde
+            `missing_latitude`). Sem verificação de intervalo.
           example: -49.2733
         Name:
           type: string
-          description: Rótulo do lugar, mostrado sobre o mapa. Opcional.
+          nullable: false
+          description: |
+            Rótulo do lugar, mostrado sobre o mapa. Sempre opcional: ausente,
+            `null` e `""` são indistinguíveis e dão ponto sem rótulo. Não há
+            `trim`.
           example: Curitiba
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
@@ -586,7 +1096,9 @@ PedidoEnvioLocalizacao:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioContacto:
-  description: "Corpo de `POST /chat/send/contact`. Cartão de contacto em vCard, que o destinatário pode guardar."
+  description: |
+    Corpo de `POST /chat/send/contact`. Cartão de contacto em vCard, que o
+    destinatário pode guardar. Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -594,18 +1106,35 @@ PedidoEnvioContacto:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Name:
           type: string
-          description: Nome mostrado no cartão. Vazio é `400 missing_name`.
+          nullable: false
+          minLength: 1
+          description: |
+            Nome mostrado no cartão. Ausente, `null` e `""` são indistinguíveis
+            e dão `400 missing_name`; `"   "` **passa** — não há `trim`. Não é
+            confrontado com o `FN` do vCard.
           example: Suporte DisparaZap
         Vcard:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             O cartão em vCard, tal e qual — o servidor **não o valida nem o
-            reescreve**, apenas o transporta. Um vCard malformado sai daqui com
-            `200` e chega quebrado ao destinatário.
+            reescreve**, apenas o transporta.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_vcard` — os três são indistinguíveis |
+            | `"   "` | **sim** | enviado; não há `trim` |
+            | vCard malformado | **sim** | `200`, e chega quebrado ao destinatário |
 
             Para que o cliente reconheça o contacto como utilizador de WhatsApp,
             a linha `TEL` precisa do parâmetro `waid`.
@@ -621,7 +1150,10 @@ PedidoEnvioContacto:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioEnquete:
-  description: "Corpo de `POST /chat/send/poll`. Enquete com opções. O destino vai em `Group`, e não em `Phone`, mesmo para contacto individual."
+  description: |
+    Corpo de `POST /chat/send/poll`. Enquete com opções. O destino vai em
+    `Group`, e não em `Phone`, mesmo para contacto individual. Campos
+    desconhecidos são ignorados em silêncio — e `Phone` é um deles.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -629,24 +1161,52 @@ PedidoEnvioEnquete:
       properties:
         Group:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             JID de destino. **O nome do campo é `Group`, e não `Phone`, mesmo
-            para uma enquete enviada a um contacto individual** — medido em
-            2026-08-26: com `Phone` a rota responde `400 missing_group`. O
-            sinónimo universal `chat` também funciona.
+            para uma enquete enviada a um contacto individual.**
+
+            Medido em 2026-08-26: um pedido completo com `Phone` responde
+            `400 missing_group` — `Phone` não existe nesta struct, logo cai na
+            regra do campo desconhecido e é ignorado em silêncio. O sinónimo
+            universal `chat` funciona e é a saída recomendada.
+
+            Ausente, `null` e `""` são indistinguíveis e dão
+            `400 missing_group`; preenchido mas impossível de parsear dá
+            `400 invalid_group`.
           example: 120363411669320145@g.us
         Header:
           type: string
-          description: A pergunta da enquete. Vazio é `400 missing_header`.
+          nullable: false
+          minLength: 1
+          description: |
+            A pergunta da enquete. Ausente, `null` e `""` são indistinguíveis e
+            dão `400 missing_header`; `"   "` **passa** — não há `trim`.
           example: Qual o melhor horário para a entrega?
         Options:
           type: array
-          description: |
-            As opções, em texto claro. **São precisas pelo menos duas** — menos
-            é `400 insufficient_options`.
+          nullable: true
           minItems: 2
+          description: |
+            As opções, em texto claro.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `[]` | não | `400 insufficient_options` — os três são indistinguíveis (medido) |
+            | um só elemento | não | `400 insufficient_options` |
+            | dois ou mais | sim | — |
+
+            Não há teto de número de opções imposto pela API, e **duplicados e
+            strings vazias não são recusados**: `["", ""]` é aceite e produz uma
+            enquete com duas opções em branco. A escolha é sempre ÚNICA — o
+            número de opções seleccionáveis não é exposto no payload.
           items:
             type: string
+            nullable: false
+            description: |
+              O texto de uma opção. `null` dentro da lista vira `""`, que conta
+              como opção válida para o mínimo de duas.
           example: [Manhã, Tarde, Noite]
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
@@ -654,7 +1214,10 @@ PedidoEnvioEnquete:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoVotoEnquete:
-  description: "Corpo de `POST /chat/send/pollvote`. Voto numa enquete existente, identificada pelo par `PollMessageId` mais `PollMessageTimestamp`."
+  description: |
+    Corpo de `POST /chat/send/pollvote`. Voto numa enquete existente,
+    identificada pelo par `PollMessageId` mais `PollMessageTimestamp`. Campos
+    desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -662,14 +1225,21 @@ PedidoVotoEnquete:
       properties:
         Phone:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            A conversa onde a enquete está. Sinónimo universal `chat`.
+            A conversa onde a enquete está. Sinónimo universal `chat`. Ausente,
+            `null` e `""` são indistinguíveis e dão `400 missing_phone`;
+            preenchido mas impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Sender:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            JID de quem CRIOU a enquete. Vazio é `400 missing_sender`; um JID
-            que não parseia é `400 invalid_sender`.
+            JID de quem CRIOU a enquete. Ausente, `null` e `""` são
+            indistinguíveis e dão `400 missing_sender`; um JID que não parseia
+            dá `400 invalid_sender`.
 
             Pode vir em qualquer das duas formas de identidade (PN ou LID): o
             servidor resolve-a antes de cifrar o voto, preferindo a forma que o
@@ -678,74 +1248,149 @@ PedidoVotoEnquete:
           example: 554192421234@s.whatsapp.net
         PollMessageId:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            `message_id` da mensagem de enquete original. Vazio é
-            `400 missing_poll_message_id`.
+            `message_id` da mensagem de enquete original. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_poll_message_id`. Não é
+            confrontado com o histórico antes do envio: um id inexistente é
+            aceite aqui e o voto simplesmente não aparece na enquete de ninguém.
           example: 3EB0A4B2AFD45E625C0917
         PollMessageTimestamp:
           type: integer
           format: int64
+          minimum: 1
+          nullable: false
           description: |
-            Instante da enquete original, em segundos desde a época Unix. **Zero
-            conta como ausente** e é `400 missing_poll_message_timestamp`.
+            Instante da enquete original, em segundos desde a época Unix.
 
-            É pedido — em vez de procurado no histórico — porque o voto é cifrado
-            com um segredo derivado da mensagem original, e depender do histórico
-            faria a rota falhar em silêncio quando ele tivesse sido podado.
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_poll_message_timestamp` |
+            | `null` | não | idem — `null` num `int64` vira `0` |
+            | **`0`** | **não** | idem — **`0` conta como ausente** (medido) |
+            | preenchido | sim | — |
+
+            É pedido — em vez de procurado no histórico — porque o voto é
+            cifrado com um segredo derivado da mensagem original, e depender do
+            histórico faria a rota falhar em silêncio quando ele tivesse sido
+            podado.
           example: 1787748016
         Options:
           type: array
-          description: |
-            O texto EXACTO das opções votadas, tal como foram criadas. Lista
-            vazia é `400 missing_options`.
+          nullable: true
           minItems: 1
+          description: |
+            O texto EXACTO das opções votadas, tal como foram criadas — a
+            correspondência é por texto, não por índice.
+
+            Ausente, `null` e `[]` são indistinguíveis e dão
+            `400 missing_options`. O conteúdo não é confrontado com a enquete
+            original: um texto que não corresponda a opção nenhuma é aceite e
+            produz um voto que não conta para nada.
           items:
             type: string
+            nullable: false
+            description: |
+              O texto de uma opção votada. `null` dentro da lista vira `""`, que
+              conta para o mínimo de um.
           example: [Manhã]
         Id:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioBotoes:
-  description: "Corpo de `POST /chat/send/buttons`. Mensagem interativa com botões. Cada botão exige `title` — `displayText` é ignorado e o botão cai em silêncio."
+  description: |
+    Corpo de `POST /chat/send/buttons`. Mensagem interativa com botões. Cada
+    botão exige `title` — `displayText` é ignorado e o botão cai em silêncio.
+    Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`.
+
+            **Esta rota não tem `missing_phone`**: destino, corpo e botões são
+            validados JUNTOS, numa recusa só. Ausente, `null` e `""` são
+            indistinguíveis e dão `400 missing_buttons_fields`, com a mensagem
+            `missing Phone, Body or Buttons` — que não diz qual dos três
+            faltou. Preenchido mas impossível de parsear dá
+            `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Body:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             Corpo da mensagem, acima dos botões. Sinónimo `text`, usado quando
-            `Body` vem vazio.
+            `Body` fica vazio depois do `trim`.
+
+            | estado (nos DOIS nomes) | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_buttons_fields` |
+            | `null` | não | idem — indistinguível de ausente |
+            | `""` | não | idem |
+            | **`"   "`** | **não** | idem — **esta rota FAZ `trim`**, ao contrário de `/chat/send/text` (medido) |
+            | preenchido | sim | vai no fio já sem espaços nas pontas |
           example: Confirma a entrega para hoje às 15h?
         text:
           type: string
-          description: Sinónimo de `Body`.
+          nullable: false
+          description: |
+            Sinónimo de `Body`, usado quando `Body` está ausente, `null`, `""`
+            ou só espaços. Mesmo `trim`.
         Title:
           type: string
+          nullable: false
           description: |
-            Cabeçalho da mensagem. Opcional. Quando há `Image`, é a imagem que
-            ocupa o cabeçalho.
+            Cabeçalho da mensagem. Sempre opcional: ausente, `null` e `""` são
+            indistinguíveis e dão mensagem sem cabeçalho de texto. Não passa
+            por `trim`, ao contrário do corpo.
+
+            Quando há `Image`, é a imagem que ocupa o cabeçalho e este campo
+            deixa de ser desenhado.
           example: Confirmação de entrega
         Footer:
           type: string
-          description: Rodapé, abaixo dos botões.
+          nullable: false
+          description: |
+            Rodapé, abaixo dos botões. Sempre opcional: ausente, `null` e `""`
+            são indistinguíveis e dão mensagem sem rodapé. Sem `trim`.
           example: DisparaZap
         Image:
           type: string
+          nullable: false
           description: |
-            Imagem de cabeçalho, como URI de dados ou URL http(s). Teto de
-            **10 MB**. Uma imagem que falhe a obtenção **não** derruba o envio —
-            a mensagem segue sem cabeçalho de imagem, e a falha fica no log.
+            Imagem de cabeçalho, como URI de dados (`data:image…`) ou URL
+            http(s). Teto de **10 MB**.
+
+            Sempre opcional: ausente, `null` e `""` são indistinguíveis e dão
+            mensagem sem cabeçalho de imagem.
+
+            **Nenhuma falha aqui derruba o envio**: URI que não decodifica,
+            busca que falha, valor que não é nem URI nem URL, ou bytes acima do
+            teto — todos deixam a mensagem seguir SEM imagem, com `200`, e a
+            falha fica só no log.
           example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
         Buttons:
           type: array
+          nullable: true
+          minItems: 1
           description: |
-            Os botões. Lista vazia é `400 missing_buttons_fields`; lista onde
-            todos os botões são descartados é `400 no_valid_buttons`.
+            Os botões.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `[]` | não | `400 missing_buttons_fields` — os três são indistinguíveis (medido) |
+            | todos descartados na normalização | não | `400 no_valid_buttons`, com a lista dos tipos aceites |
+            | alguns descartados | **sim** | `200`, e **quem manda três pode receber dois sem ser avisado** |
+
+            Não há teto de número de botões imposto pela API. Ver
+            `BotaoInterativo` para o que faz um botão ser descartado.
           items:
             $ref: '#/components/schemas/BotaoInterativo'
         ReplyTo:
@@ -756,59 +1401,115 @@ PedidoEnvioBotoes:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioLista:
-  description: "Corpo de `POST /chat/send/list`. Lista de seleção, agrupada em secções, aberta por um botão."
+  description: |
+    Corpo de `POST /chat/send/list`. Lista de seleção, agrupada em secções,
+    aberta por um botão. Campos desconhecidos são ignorados em silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone` — e essa verificação
+            acontece **depois** das de corpo e de secções, logo um pedido com
+            destino inválido E sem secções responde `missing_sections`.
           example: 554192421234@s.whatsapp.net
         Desc:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             Corpo principal da mensagem. Sinónimos, nesta ordem de precedência,
-            `Body`, `body` e `text`. Nenhum preenchido é `400 missing_desc`.
+            `Body`, `body` e `text`.
+
+            | estado (nos QUATRO nomes) | aceite? | efeito |
+            |---|---|---|
+            | ausente | não | `400 missing_desc` |
+            | `null` | não | idem — indistinguível de ausente |
+            | `""` | não | idem |
+            | **`"   "`** | **não** | idem — **esta rota FAZ `trim`** |
+            | preenchido | sim | vai no fio já sem espaços nas pontas |
+
+            Atenção ao par `Body`/`body`: são DUAS chaves distintas na struct, e
+            o `encoding/json` casa nomes ignorando maiúsculas — mandar as duas
+            no mesmo objecto JSON é ambíguo e o resultado depende da ordem em
+            que aparecem no corpo.
           example: Escolha um item do cardápio.
         Body:
           type: string
-          description: Primeiro sinónimo de `Desc`.
+          nullable: false
+          description: |
+            Primeiro sinónimo de `Desc`, usado quando `Desc` está ausente,
+            `null`, `""` ou só espaços.
         body:
           type: string
-          description: Segundo sinónimo de `Desc`.
+          nullable: false
+          description: |
+            Segundo sinónimo de `Desc`, usado quando `Desc` e `Body` estão ambos
+            vazios pelo mesmo critério.
         text:
           type: string
-          description: Terceiro sinónimo de `Desc`.
+          nullable: false
+          description: |
+            Terceiro sinónimo de `Desc`, o último da cadeia.
         ButtonText:
           type: string
+          nullable: false
+          default: Select
           description: |
-            Rótulo do botão que abre a lista. Vazio significa `Select`
-            (`send_list.go:17`).
+            Rótulo do botão que abre a lista. Passa por `TrimSpace`: ausente,
+            `null`, `""` e `"   "` são indistinguíveis e todos significam
+            `Select` (`defaultListButtonText`, `send_list.go:17`).
           example: Ver cardápio
         TopText:
           type: string
+          nullable: false
           description: |
-            Cabeçalho, acima do corpo. Também serve de título da secção única
-            quando se usa a forma legada `List`.
+            Cabeçalho, acima do corpo. Sempre opcional: ausente, `null`, `""` e
+            `"   "` são indistinguíveis e dão mensagem sem cabeçalho (passa por
+            `TrimSpace`).
+
+            **Tem um segundo papel**: na forma legada `List`, é o título da
+            secção única, e quando está vazio esse título passa a ser `Menu`
+            (`defaultLegacySectionTitle`). Não afecta os títulos de `Sections`.
           example: Cardápio de hoje
         FooterText:
           type: string
-          description: Rodapé, abaixo do botão.
+          nullable: false
+          description: |
+            Rodapé, abaixo do botão. Sempre opcional: ausente, `null`, `""` e
+            `"   "` são indistinguíveis e dão mensagem sem rodapé (passa por
+            `TrimSpace`).
           example: Entregas até às 22h
         Sections:
           type: array
+          nullable: true
           description: |
-            Forma PREFERIDA: lista com várias secções. `Sections` e `List` ambas
-            vazias é `400 missing_sections`; quando `Sections` vem preenchida,
-            `List` é ignorada.
+            Forma PREFERIDA: lista com várias secções.
+
+            | estado de `Sections` e `List` | aceite? | efeito |
+            |---|---|---|
+            | ambas ausentes / `null` / `[]` | não | `400 missing_sections` — os três estados são indistinguíveis |
+            | `Sections` preenchida | sim | **`List` é ignorada em silêncio** |
+            | todas as secções descartadas | não | `400 no_valid_sections` |
+            | algumas descartadas | **sim** | `200`, sem aviso do que sumiu |
           items:
             $ref: '#/components/schemas/SecaoLista'
         List:
           type: array
+          nullable: true
           description: |
             Forma LEGADA: lista plana, embrulhada numa secção única cujo título
-            vem de `TopText`, ou de `Menu` quando `TopText` vem vazio.
+            vem de `TopText`, ou de `Menu` quando `TopText` está vazio.
+
+            Só é lida quando `Sections` está ausente, `null` ou `[]`. Ausente,
+            `null` e `[]` são indistinguíveis. As linhas passam pelo mesmo
+            descarte silencioso de `Sections`.
           items:
             $ref: '#/components/schemas/LinhaLista'
         ReplyTo:
@@ -819,29 +1520,65 @@ PedidoEnvioLista:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioCarrossel:
-  description: "Corpo de `POST /chat/send/carousel`. Cartões deslizáveis na horizontal; cada cartão exige `Buttons`."
+  description: |
+    Corpo de `POST /chat/send/carousel`. Cartões deslizáveis na horizontal;
+    cada cartão exige `Buttons`. Campos desconhecidos são ignorados em
+    silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`.
+
+            **Esta rota não tem `missing_phone`**: destino, corpo e cartões são
+            validados JUNTOS. Ausente, `null` e `""` são indistinguíveis e dão
+            `400 missing_carousel_fields`, que não diz qual dos três faltou.
+            Preenchido mas impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Body:
           type: string
-          description: Corpo da mensagem, acima dos cartões.
+          nullable: false
+          minLength: 1
+          description: |
+            Corpo da mensagem, acima dos cartões.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `""` | não | `400 missing_carousel_fields` |
+            | **`"   "`** | **não** | idem — **esta rota FAZ `trim`** |
+            | preenchido | sim | vai no fio já sem espaços nas pontas |
+
+            Ao contrário de `/chat/send/buttons` e `/chat/send/list`, aqui
+            **não há sinónimo**: `text` é campo desconhecido e é ignorado.
           example: As pizzas de hoje.
         Footer:
           type: string
-          description: Rodapé do carrossel, abaixo de todos os cartões.
+          nullable: false
+          description: |
+            Rodapé do carrossel, abaixo de todos os cartões. Sempre opcional:
+            ausente, `null`, `""` e `"   "` são indistinguíveis e dão carrossel
+            sem rodapé (passa por `TrimSpace`).
           example: Entregas até às 22h
         Cards:
           type: array
+          nullable: true
+          minItems: 1
           description: |
-            Os cartões, que deslizam na horizontal. Lista vazia é
-            `400 missing_carousel_fields`; lista onde todos os cartões são
-            descartados é `400 no_valid_cards`.
+            Os cartões, que deslizam na horizontal.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente / `null` / `[]` | não | `400 missing_carousel_fields` — os três são indistinguíveis |
+            | todos descartados | não | `400 no_valid_cards` (medido) |
+            | alguns descartados | **sim** | `200`, sem aviso do que sumiu |
+
+            A apresentação é sempre `hscroll_cards`; o modo de álbum existe no
+            protocolo e **não** é exposto (HOUSEKEEP F211).
           items:
             $ref: '#/components/schemas/CartaoCarrossel'
         ReplyTo:
@@ -852,7 +1589,10 @@ PedidoEnvioCarrossel:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEnvioModelo:
-  description: "Corpo de `POST /chat/send/template`. Mensagem de modelo com botões de URL, de chamada ou de resposta rápida."
+  description: |
+    Corpo de `POST /chat/send/template`. Mensagem de modelo com botões de URL,
+    de chamada ou de resposta rápida. Campos desconhecidos são ignorados em
+    silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -860,25 +1600,47 @@ PedidoEnvioModelo:
       properties:
         Phone:
           type: string
-          description: JID de destino. Sinónimo universal `chat`.
+          nullable: false
+          minLength: 1
+          description: |
+            JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+            são indistinguíveis e dão `400 missing_phone`; preenchido mas
+            impossível de parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Content:
           type: string
-          description: Corpo do modelo. Vazio é `400 missing_content`.
+          nullable: false
+          minLength: 1
+          description: |
+            Corpo do modelo. Ausente, `null` e `""` são indistinguíveis e dão
+            `400 missing_content`; `"   "` **passa** — esta rota não faz `trim`,
+            ao contrário de `/chat/send/buttons`.
           example: O seu pedido 1234 está pronto para retirada.
         Footer:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            Rodapé. **Obrigatório nesta rota** — vazio é `400 missing_footer`.
-            É a única rota de envio em que o rodapé não é opcional.
+            Rodapé. **Obrigatório nesta rota** — é a única rota de envio em que
+            o rodapé não é opcional.
+
+            Ausente, `null` e `""` são indistinguíveis e dão
+            `400 missing_footer` (medido); `"   "` **passa** — não há `trim`.
           example: DisparaZap
         Buttons:
           type: array
+          nullable: true
+          minItems: 1
           description: |
             Os botões do modelo, com vocabulário PRÓPRIO (`DisplayText`, e os
             tipos `quickreply`/`url`/`call`) — diferente do de
-            `/chat/send/buttons`. Lista vazia é `400 missing_buttons`.
-          minItems: 1
+            `/chat/send/buttons`.
+
+            Ausente, `null` e `[]` são indistinguíveis e dão
+            `400 missing_buttons`. **Nenhum botão é descartado e nenhum campo
+            de botão é validado**: `[{}]` é um pedido válido e produz um botão
+            de resposta rápida sem rótulo. Não há teto de número de botões
+            imposto pela API.
           items:
             $ref: '#/components/schemas/BotaoModelo'
         ReplyTo:
@@ -889,49 +1651,88 @@ PedidoEnvioModelo:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEncaminhamento:
-  description: "Corpo de `POST /chat/send/forward`. Duas formas — por chave de mensagem (`MessageID` mais `Chat`) ou por conteúdo (`Phone` mais `Body`)."
+  description: |
+    Corpo de `POST /chat/send/forward`. Duas formas — POR CHAVE (`MessageID`) ou
+    POR CONTEÚDO (`Body`). **A presença de `MessageID` é o que escolhe a
+    forma**, e os campos que não pertencem à forma escolhida são ignorados em
+    silêncio. Campos desconhecidos também.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
       properties:
         Phone:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             JID de destino do encaminhamento — para onde a mensagem VAI.
-            Sinónimo universal `chat`.
+            Sinónimo universal `chat`. Obrigatório nas DUAS formas: ausente,
+            `null` e `""` são indistinguíveis e dão `400 missing_phone`
+            (validado antes da escolha de forma); preenchido mas impossível de
+            parsear dá `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         MessageID:
           type: string
+          nullable: false
           description: |
-            `message_id` da mensagem guardada a reenviar. **A presença deste
-            campo é o que escolhe a forma POR CHAVE**; quando vem vazio, a rota
-            cai na forma POR CONTEÚDO e passa a exigir `Body`.
+            `message_id` da mensagem guardada a reenviar.
+
+            | estado | forma escolhida |
+            |---|---|
+            | ausente / `null` / `""` | **POR CONTEÚDO** — os três são indistinguíveis, e `Body` passa a ser obrigatório |
+            | preenchido | **POR CHAVE** — a mensagem é procurada no histórico |
+
+            Na forma por chave, um id que o histórico não tem faz a busca
+            falhar e a rota devolve o erro da busca, não `200`.
           example: 3EB0A4B2AFD45E625C0917
         Chat:
           type: string
+          nullable: false
           description: |
-            Conversa de ONDE a mensagem original veio. Só faz sentido na forma
-            por chave, e hoje é **opcional e não usado na busca** — a mensagem é
-            procurada só por sessão e `MessageID`. Está reservado para
-            desambiguação futura.
+            Conversa de ONDE a mensagem original veio.
+
+            **Não é usado por caminho nenhum da implementação actual**
+            (`send_forward.go`, `forwardByKey`): a mensagem é procurada só por
+            sessão e `MessageID`. Ausente, `null`, `""` e preenchido com
+            qualquer valor produzem exactamente o mesmo resultado. Está
+            reservado para desambiguação futura.
           example: 554192421234@s.whatsapp.net
         Body:
           type: string
+          nullable: false
           description: |
-            Texto a enviar marcado como encaminhado. Obrigatório na forma por
-            conteúdo — vazio é `400 missing_body`. **Ignorado** quando
-            `MessageID` vem preenchido.
+            Texto a enviar marcado como encaminhado.
+
+            | estado | forma POR CONTEÚDO | forma POR CHAVE |
+            |---|---|---|
+            | ausente / `null` / `""` | `400 missing_body` — os três são indistinguíveis | ignorado em silêncio |
+            | `"   "` | **enviado** tal e qual; não há `trim` | ignorado em silêncio |
+            | preenchido | enviado | ignorado em silêncio |
           example: Bom dia! O seu pedido saiu para entrega.
         ForwardingScore:
           type: integer
           format: int32
+          minimum: 0
+          nullable: true
           description: |
-            Quantas vezes a mensagem já foi encaminhada. Na forma por conteúdo,
-            vem do payload, com `1` por omissão — o valor que o Baileys produz
-            num primeiro encaminhamento.
+            Quantas vezes a mensagem já foi encaminhada. É `*uint32`, logo
+            ausente e `null` distinguem-se de `0` no desserializador — **mas a
+            implementação volta a colapsá-los**:
 
-            **Na forma por chave é IGNORADO**: o valor é lido do contexto da
-            mensagem original e incrementado em 1.
+            | estado | forma POR CONTEÚDO | forma POR CHAVE |
+            |---|---|---|
+            | ausente | vale `1` | ignorado |
+            | `null` | vale `1` — indistinguível de ausente | ignorado |
+            | **`0`** | **vale `1`** — a condição é `!= nil && > 0`, logo o zero explícito cai no padrão | ignorado |
+            | maior que `0` | é usado tal e qual | ignorado |
+            | negativo | `400 could_not_decode_payload` — o tipo é `uint32` | idem |
+
+            Ou seja: **não há maneira de pedir score `0`** por esta rota. Na
+            forma POR CHAVE o valor é lido do contexto da mensagem original e
+            incrementado em 1, e o que o cliente mandar é ignorado.
+
+            `1` é o valor que o Baileys produz num primeiro encaminhamento.
+          default: 1
           example: 1
         ReplyTo:
           $ref: '#/components/schemas/ContextoResposta'
@@ -941,7 +1742,10 @@ PedidoEncaminhamento:
           $ref: '#/components/schemas/IdCliente'
 
 PedidoEdicaoMensagem:
-  description: "Corpo de `POST /chat/send/edit`. Substitui o texto de uma mensagem já enviada, identificada por `Id`."
+  description: |
+    Corpo de `POST /chat/send/edit`. Substitui o texto de uma mensagem já
+    enviada, identificada por `Id`. Campos desconhecidos são ignorados em
+    silêncio.
   allOf:
     - $ref: '#/components/schemas/AlvoConversa'
     - type: object
@@ -949,30 +1753,67 @@ PedidoEdicaoMensagem:
       properties:
         Phone:
           type: string
+          nullable: false
+          minLength: 1
           description: |
             A conversa onde está a mensagem a editar. Sinónimo universal `chat`.
+            Ausente, `null` e `""` são indistinguíveis e dão
+            `400 missing_phone`; preenchido mas impossível de parsear dá
+            `400 invalid_phone`.
           example: 554192421234@s.whatsapp.net
         Id:
           type: string
+          nullable: false
+          minLength: 1
           description: |
-            `message_id` da mensagem a editar. Vazio é `400 missing_id` — mas
-            só DEPOIS de `Phone` e `Body` terem passado e de `Phone` ter sido
-            parseado, o que faz um pedido com `Phone` inválido E `Id` ausente
-            responder `invalid_phone`, e não `missing_id`.
+            `message_id` da mensagem a editar. Ausente, `null` e `""` são
+            indistinguíveis e dão `400 missing_id`.
+
+            **A ordem de validação é observável**: `Phone` e `Body` são
+            verificados primeiro, e o `Phone` chega a ser PARSEADO antes de este
+            campo ser olhado. Logo um pedido com `Phone` inválido E `Id` ausente
+            responde `invalid_phone`, e não `missing_id`.
+
+            Não é confrontado com o histórico: um id que não existe é aceite
+            aqui e a edição simplesmente não aparece em lado nenhum.
           example: 3EB0A4B2AFD45E625C0917
         Body:
           type: string
-          description: O novo texto da mensagem. Vazio é `400 missing_body`.
+          nullable: false
+          minLength: 1
+          description: |
+            O novo texto da mensagem. Ausente, `null` e `""` são
+            indistinguíveis e dão `400 missing_body`; `"   "` **passa** — não há
+            `trim`, e a mensagem fica editada para três espaços.
           example: Bom dia! O seu pedido sai para entrega às 15h.
         StanzaId:
           type: string
+          nullable: true
           description: |
-            `message_id` da mensagem citada pela mensagem que está a ser editada,
-            para preservar a citação. Opcional.
+            `message_id` da mensagem citada pela mensagem que está a ser
+            editada, para preservar a citação.
+
+            É `*string`, e aqui a diferença **é observável**:
+
+            | estado | efeito |
+            |---|---|
+            | ausente | não contribui para o bloco de contexto |
+            | `null` | idem — indistinguível de ausente |
+            | **`""`** | **cria** o bloco de contexto, com `StanzaID` vazio |
+            | preenchido | cria o bloco de contexto com o valor |
+
+            A condição na implementação é `req.StanzaID != nil`, e não
+            `*req.StanzaID != ""` (`send_edit_message.go`). Mandar `""` não é o
+            mesmo que omitir.
           example: 3EB0F1C9D2A74B380E1128
         Participant:
           type: string
-          description: JID de quem escreveu a mensagem citada. Opcional, e par de `StanzaId`.
+          nullable: true
+          description: |
+            JID de quem escreveu a mensagem citada. Par de `StanzaId`, e com a
+            mesma semântica de ponteiro: ausente e `null` não contribuem;
+            **`""` cria o bloco de contexto** com participante vazio. Não é
+            validado como JID.
           example: 554192421234@s.whatsapp.net
         MentionedJid:
           $ref: '#/components/schemas/MencoesEnvio'
