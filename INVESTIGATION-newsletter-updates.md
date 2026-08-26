@@ -250,6 +250,23 @@ para ler mensagens, nem para contadores de visualização.
 Consequência para esta investigação: **não há evidência de Nível A possível**, e
 o teto é Nível C/D. Nenhuma afirmação aqui deve ser lida como "a Meta diz".
 
+> **Correcção posterior — a ausência na Cloud API não é evidência de nada.**
+>
+> `docs/REFERENCIA-META-OFICIAL.md` regista que os canais/newsletters existem
+> aqui em **18 rotas** e têm **"não"** na Cloud API — e que isso vale para
+> cerca de **60 das 141 rotas** deste projecto (grupos, comunidades, canais,
+> status). As duas são **superfícies diferentes**: a Cloud API é HTTP sobre o
+> Graph API; aqui fala-se o protocolo do WhatsApp Web.
+>
+> A ausência lá é, portanto, **esperada por desenho** — não é observação
+> sobre a capacidade, e não pode apoiar `UNSUPPORTED_CONFIRMED`. A linha
+> correspondente foi rebaixada de **B** para **sem nível**.
+>
+> A classificação **não muda**: o `PROTOCOL_CHANGED` assenta na medição de
+> campo (Nível B) e no repro público do Baileys #2555 com o PR #2620 (Nível
+> D), reforçados pelo port mergeado em `rsalcara/InfiniteAPI` #503 (Nível C).
+> Nenhum desses elos passa pela Cloud API.
+
 ## Graduação da evidência
 
 | afirmação | nível | fonte |
@@ -263,7 +280,7 @@ o teto é Nível C/D. Nenhuma afirmação aqui deve ser lida como "a Meta diz".
 | A forma nova traz `reactions`/`views`/`forwards` | **D** | port #503 (lista os campos) |
 | Um derivado mergeou e lançou a correcção | **C** | rsalcara/InfiniteAPI #503, mergeado 2026-06-06 |
 | A hipótese do query ID é falsa | **B** | `GetMessageUpdates` não passa por `queryids.go` |
-| Não há doc oficial | **B** (ausência verificada) | Canais ausentes da Cloud API |
+| Não há doc oficial do protocolo Web | **sem nível** | a ausência de canais na Cloud API é esperada por desenho (superfície diferente) e **não é evidência**; ver a correcção acima e `docs/REFERENCIA-META-OFICIAL.md` |
 
 **Onde a evidência é mais fraca**: o Nível D do PR #2620. Ele alega captura do
 WA Web e validação ponta-a-ponta, mas foi fechado por stale sem revisão. O que o

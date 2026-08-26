@@ -284,6 +284,27 @@ evidência de Nível A possível para esta rota**, e que o teto de evidência aq
 Nível C (implementações de referência maduras concordantes) + Nível B (medição).
 Nenhuma afirmação deste documento deve ser lida como "a Meta diz".
 
+> **Correcção posterior — a ausência na Cloud API não é evidência de nada.**
+>
+> `docs/REFERENCIA-META-OFICIAL.md` estabelece que a Cloud API e este projecto
+> são **superfícies diferentes**: a Cloud API é HTTP sobre o Graph API, com
+> conta registada, templates obrigatórios fora das 24 horas e custo por
+> conversa; aqui fala-se o protocolo do WhatsApp Web pelo fork em
+> `internal/wa-noise`. Cerca de **60 das 141 rotas** deste projecto não têm
+> equivalente lá, **por desenho**.
+>
+> Logo, *"a Cloud API não expõe bloquear/desbloquear"* **não sustenta nem
+> enfraquece** nenhuma hipótese sobre o protocolo Web. É a constatação de que
+> se procurou no sítio errado, não uma observação sobre a capacidade. A linha
+> correspondente na tabela abaixo foi rebaixada de **B** para **sem nível**.
+>
+> Isto **não altera a classificação** desta investigação: o
+> `PROTOCOL_CHANGED` assenta em Nível C (whatsmeow `8d023aa973` + Baileys
+> `8ca9316a10`, independentes e concordantes) e Nível B (a medição de campo),
+> nunca na ausência da Cloud API. Fica registado para que ninguém leia a
+> ausência como apoio a `UNSUPPORTED_CONFIRMED` — seria precisamente a
+> inferência que o `CLAUDE.md` proíbe.
+
 ## Graduação da evidência
 
 | afirmação | nível | fonte |
@@ -293,7 +314,7 @@ Nenhuma afirmação deste documento deve ser lida como "a Meta diz".
 | O stanza correcto usa `jid`=LID e `pn_jid`=PN no block | **C** | whatsmeow `8d023aa973`, Baileys `8ca9316a10`, wwebjs `Contact.js` |
 | A mudança é de 2026 (Abr–Ago) | **C/D** | datas dos commits das duas bibliotecas |
 | Nós enviamos PN em 4/4 dos casos medidos | **B** (leitura de código determinística) | `blocklist.go:50` + `blocklist.go:103-116` |
-| Não há doc oficial | **B** (ausência verificada) | Cloud API não expõe a capacidade |
+| Não há doc oficial do protocolo Web | **sem nível** | a ausência na Cloud API é esperada por desenho (superfície diferente) e **não é evidência**; ver a correcção acima e `docs/REFERENCIA-META-OFICIAL.md` |
 | Bloquear contacto PN sem conversa é recusado pela app | **C** | string lida do bundle vivo, `block.go:15` |
 
 ---

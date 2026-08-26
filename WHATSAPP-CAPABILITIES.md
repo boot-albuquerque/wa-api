@@ -66,3 +66,25 @@ Não existe documentação pública da Meta para nenhuma das capacidades acima:
 Consequência: **nenhuma linha desta tabela pode atingir Nível A**, e o teto
 prático é C/D. Isto é uma propriedade do domínio, não uma falha da pesquisa, e
 está aqui escrito para que ninguém volte a procurar o que não existe.
+
+### A ausência na Cloud API não tem valor probatório — em nenhuma direcção
+
+Os dois pontos sobre a Cloud API, acima, dizem **onde não se encontrou**, não o
+que existe. `docs/REFERENCIA-META-OFICIAL.md` estabelece que a Cloud API e este
+projecto são **superfícies diferentes** — Graph API com conta registada,
+templates e custo por conversa, contra o protocolo do WhatsApp Web falado pelo
+fork em `internal/wa-noise` — e que cerca de **60 das 141 rotas** daqui (grupos,
+comunidades, canais, status) não têm equivalente lá **por desenho**.
+
+Portanto:
+
+- a ausência **não é** evidência de `UNSUPPORTED_CONFIRMED`;
+- a ausência **não é** evidência de Nível B, apesar de "verificada": verificar
+  que algo não está num sítio onde nunca estaria não mede a capacidade;
+- `UNSUPPORTED_CONFIRMED` continua a exigir o que sempre exigiu — doc oficial
+  **da superfície certa** mais comportamento medido, ou várias implementações
+  de referência maduras a concordar.
+
+As classificações desta tabela não dependem da Cloud API em nenhum ponto; esta
+nota existe para que uma leitura futura não lhes empreste um apoio que elas não
+têm nem precisam.
