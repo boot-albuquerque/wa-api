@@ -33,6 +33,9 @@ func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 	if headless.Status != domain.StatusUnknown {
 		t.Fatalf("send_carousel on wa_headless: got Status=%v, want unknown", headless.Status)
 	}
+	if headless.Evidence != domain.EvidenceUnknown {
+		t.Fatalf("send_carousel on wa_headless: got Evidence=%v, want unknown (grep found no adapter at all, not \"probable\" code that plausibly implements it)", headless.Evidence)
+	}
 }
 
 // TestDecide_ConfirmedEngineUnsupported exercises the one row this pass
