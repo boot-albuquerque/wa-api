@@ -1,0 +1,1702 @@
+# Grupo: infraestrutura — administração de sessões e integrações.
+#
+# Duas etiquetas: `Administração` para as seis rotas /admin/*, que usam o
+# token de ADMINISTRAÇÃO, e `Integrações e configuração` para as restantes
+# dezanove, que usam o token de sessão.
+#
+# Os corpos e as respostas abaixo são os medidos na bateria de 2026-08-26
+# contra a instância local, ou lidos no manipulador e no use case quando a
+# rota escreve configuração e não podia ser chamada.
+/admin/users:
+  get:
+    tags: [Administração]
+    summary: Listar as sessões existentes
+    description: |
+      Devolve **todas** as sessões do wa-api, com o estado de ligação de cada
+      uma, a configuração de proxy e de S3, e a subscrição de eventos.
+
+      **O `token` vem SEMPRE vazio**, e é de propósito: esta listagem devolvia
+      o token em claro de todas as sessões da instalação, o que transformava
+      uma leitura numa fuga de todas as credenciais. O token só existe uma vez,
+      na resposta de `POST /admin/users`, e não é recuperável depois. Perdido o
+      token, cria-se outra sessão.
+
+      **Quando usar**: em painéis de operação, para saber que sessões existem e
+      quais estão ligadas e autenticadas.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      enviado tal e qual, sem o prefixo `Bearer`. Ele é **regerado a cada
+      arranque do processo** e fica em `<datadir>/admin_token` — um token
+      guardado de uma execução anterior responde `401`.
+    security:
+      - TokenAdmin: []
+    responses:
+      '200':
+        description: Lista de sessões. Vazia se não houver nenhuma.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/UtilizadorAdmin'
+            example:
+              code: 200
+              data:
+                - id: 918e37366f27e1125ee0482a793267e1
+                  name: filarapida
+                  token: ''
+                  webhook: ''
+                  jid: 5516981818244:25@s.whatsapp.net
+                  connected: true
+                  loggedIn: true
+                  proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                  s3_config:
+                    access_key: '***'
+                    bucket: ''
+                    enabled: false
+                    endpoint: ''
+                    media_delivery: base64
+                    path_style: true
+                    public_url: ''
+                    region: ''
+                    retention_days: 30
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  post:
+    tags: [Administração]
+    summary: Criar uma sessão
+    description: |
+      Cria uma sessão do wa-api e **é onde nasce o token de sessão**. Todas as
+      outras rotas da API usam esse token no cabeçalho `token`.
+
+      **Guarde o token no momento da resposta.** Ele é devolvido UMA vez e não
+      é recuperável depois: `GET /admin/users` devolve `token: ""` para todas
+      as sessões, deliberadamente. Se o token se perder, a única saída é apagar
+      a sessão e criar outra.
+
+      Criar a sessão **não** a emparelha com o WhatsApp: isso é
+      `GET /session/connect` seguido da leitura do QR code.
+
+      **Regras** (lidas em `add_user.go`):
+
+      - `name` e `token` são **obrigatórios**; a falta de qualquer um deles dá
+        `400 missing_name_or_token`.
+      - `token` tem de ser único na instalação. Repetido, dá `409` — a resposta
+        é o envelope antigo, com `error` em texto simples (`"conflict"`).
+      - `events` é uma lista separada por vírgulas, e cada nome é validado:
+        um nome desconhecido dá `400 invalid_event_type`, indicando qual.
+        `All` recebe todos os eventos.
+      - `hmacKey`, quando presente, tem de ter pelo menos **32 caracteres**
+        (`400 hmac_key_too_short`). É guardada cifrada e nunca mais sai.
+      - `s3Config`/`proxyConfig` são aceites também em `snake_case`
+        (`s3_config`, `proxy_config`); o camelCase vence quando ambos vierem.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      sem prefixo `Bearer`. É regerado a cada arranque e fica em
+      `<datadir>/admin_token`.
+    security:
+      - TokenAdmin: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoCriarUtilizador'
+          example:
+            name: filarapida
+            token: tok_fila
+            events: Message,Receipt,Connected
+            history: 100
+            proxyConfig: {enabled: false, proxyUrl: ''}
+            s3Config: {enabled: false, mediaDelivery: base64, retentionDays: 30}
+    responses:
+      '200':
+        description: |
+          Sessão criada. **Esta é a única resposta em que `token` traz o valor
+          real** — copie-o antes de fechar a chamada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/UtilizadorAdmin'
+            example:
+              code: 200
+              data:
+                id: 918e37366f27e1125ee0482a793267e1
+                name: filarapida
+                token: tok_fila
+                webhook: ''
+                connected: false
+                events: Message,Receipt,Connected
+                proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                s3_config:
+                  access_key: '***'
+                  bucket: ''
+                  enabled: false
+                  endpoint: ''
+                  media_delivery: base64
+                  path_style: false
+                  public_url: ''
+                  region: ''
+                  retention_days: 30
+              success: true
+      '400':
+        description: |
+          Campo obrigatório em falta, evento desconhecido, ou chave HMAC curta
+          demais.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_name_or_token
+                message: name and token are required
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        description: |
+          Já existe sessão com este `token`. **Devolve o envelope ANTIGO**, com
+          `error` em texto simples e não o objecto `{code, message}` — este erro
+          não passa pela taxonomia `apperr` (F266).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 409
+              error: conflict
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/admin/users/{id}:
+  get:
+    tags: [Administração]
+    summary: Consultar uma sessão pelo identificador
+    description: |
+      O mesmo manipulador da listagem, filtrado por `id`. Por isso **devolve um
+      ARRAY**, e não um objecto — com um elemento quando a sessão existe.
+
+      **Sessão inexistente responde `200` com `data: null`, e não `404`.**
+      Medido a 2026-08-26 contra
+      `/admin/users/00000000000000000000000000000000`. Um cliente que espere
+      `404` para "não existe" não o vai receber aqui; teste `data`.
+
+      Tal como na listagem, `token` vem sempre vazio.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      sem prefixo `Bearer`, regerado a cada arranque em `<datadir>/admin_token`.
+    security:
+      - TokenAdmin: []
+    parameters:
+      - $ref: '#/components/parameters/IdNoCaminho'
+    responses:
+      '200':
+        description: |
+          Array com a sessão pedida, ou `null` quando o identificador não
+          corresponde a nenhuma.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      nullable: true
+                      items:
+                        $ref: '#/components/schemas/UtilizadorAdmin'
+            example:
+              code: 200
+              data:
+                - id: 918e37366f27e1125ee0482a793267e1
+                  name: filarapida
+                  token: ''
+                  webhook: ''
+                  jid: 5516981818244:25@s.whatsapp.net
+                  connected: true
+                  loggedIn: true
+                  proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                  s3_config:
+                    access_key: '***'
+                    bucket: ''
+                    enabled: false
+                    endpoint: ''
+                    media_delivery: base64
+                    path_style: true
+                    public_url: ''
+                    region: ''
+                    retention_days: 30
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  put:
+    tags: [Administração]
+    summary: Alterar uma sessão
+    description: |
+      Altera **apenas os campos enviados**. O que não vier no corpo fica como
+      está.
+
+      **Como se apaga um valor, e por que nem sempre dá**: para os campos de
+      texto e para `expiration`, o vazio significa *"não informado"*, não
+      *"limpe"* — `{"token": ""}` não apaga o token, é um pedido sem campos.
+      A excepção é `history`, que é ponteiro: `{"history": 0}` **desactiva** a
+      gravação de mensagens, e é distinguível de não mencionar o campo.
+
+      **Um pedido sem nenhum campo útil** (`{}` ou só campos vazios) responde
+      `400 no_fields_to_update`, e não `500`.
+
+      **`s3Config` e `proxyConfig` são aceites também em `snake_case`**
+      (`s3_config`, `proxy_config`) porque a resposta de leitura usa
+      snake_case, e o ciclo natural — ler, alterar um campo, reenviar — chegava
+      com o nome da resposta e era **ignorado em silêncio com `200`**. O
+      camelCase vence quando os dois nomes vierem no mesmo corpo.
+
+      Uma alteração de `proxyConfig` com `enabled: false` limpa o `proxy_url`
+      gravado.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      sem prefixo `Bearer`, regerado a cada arranque em `<datadir>/admin_token`.
+    security:
+      - TokenAdmin: []
+    parameters:
+      - $ref: '#/components/parameters/IdNoCaminho'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoEditarUtilizador'
+          example:
+            name: filarapida
+            events: Message,Receipt
+            history: 0
+    responses:
+      '200':
+        description: |
+          Alteração gravada. O corpo é apenas uma confirmação — não devolve a
+          sessão actualizada. Para a ver, chame `GET /admin/users/{id}`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum: [ok]
+                          example: ok
+            example:
+              code: 200
+              data: {status: ok}
+              success: true
+      '400':
+        description: |
+          Pedido sem campo nenhum a mudar (`no_fields_to_update`), evento
+          desconhecido (`invalid_event_type`), ou corpo ilegível.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: no_fields_to_update
+                message: request has no field to update
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: Não existe sessão com este identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: user_not_found
+                message: user not found
+              success: false
+      '409':
+        description: |
+          O `token` pedido já pertence a outra sessão. Envelope ANTIGO, com
+          `error` em texto simples (F266).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 409
+              error: conflict
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  delete:
+    tags: [Administração]
+    summary: Apagar o registo de uma sessão
+    description: |
+      Apaga a **linha da sessão no banco** e nada mais.
+
+      **A diferença face a `DELETE /admin/users/{id}/full`**, lida em
+      `delete_user.go` e `delete_user_complete.go`:
+
+      | | esta rota | `/full` |
+      |---|---|---|
+      | linha em `users` | apaga | apaga |
+      | termina a ligação ao WhatsApp | **não** | faz `logout` e `disconnect` antes |
+      | ficheiros em `<datadir>/files/<id>` | **deixa** | apaga a pasta inteira |
+      | objectos no S3 | não apaga | **também não apaga** — ver abaixo |
+      | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid}` |
+
+      Ou seja: esta rota deixa para trás a sessão viva na memória do processo e
+      a mídia em disco. Use `/full` quando a intenção for remover o
+      utilizador por completo.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      sem prefixo `Bearer`, regerado a cada arranque em `<datadir>/admin_token`.
+    security:
+      - TokenAdmin: []
+    parameters:
+      - $ref: '#/components/parameters/IdNoCaminho'
+    responses:
+      '200':
+        description: Registo apagado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        status:
+                          type: string
+                          enum: [deleted]
+                          example: deleted
+            example:
+              code: 200
+              data: {status: deleted}
+              success: true
+      '400':
+        description: Identificador em falta no caminho.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_user_id
+                message: user ID is required
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: Não existe sessão com este identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: user_not_found
+                message: user not found
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/admin/users/{id}/full:
+  delete:
+    tags: [Administração]
+    summary: Apagar uma sessão por completo, com ficheiros e ligação
+    description: |
+      A remoção completa. Pela ordem em que acontece
+      (`delete_user_complete.go`):
+
+      1. confirma que a sessão existe — se não, `404 user_not_found`;
+      2. se estiver ligada, faz **`logout` e `disconnect`** do WhatsApp,
+         desemparelhando o aparelho;
+      3. apaga a linha em `users`;
+      4. apaga do disco a pasta `<datadir>/files/<id>`, com a mídia e o
+         histórico gravados.
+
+      **O que ela NÃO faz, apesar do nome**: os objectos guardados no S3
+      **não são apagados**. O código regista *"S3 deletion needed - to be
+      handled by handler"* e nenhuma camada seguinte o faz. Se a sessão usava
+      S3, a limpeza do bucket é sua.
+
+      As falhas dos passos 2 e 4 são **toleradas**: um erro a desligar ou a
+      apagar ficheiros fica no log e a operação continua, porque a linha do
+      banco já é a fonte de verdade. Um `200` aqui garante que a linha saiu,
+      não que o disco ficou limpo.
+
+      **Irreversível**, e mais destrutivo que `DELETE /admin/users/{id}`, que
+      só apaga a linha.
+
+      **Autenticação**: token de administração, no cabeçalho `Authorization`,
+      sem prefixo `Bearer`, regerado a cada arranque em `<datadir>/admin_token`.
+    security:
+      - TokenAdmin: []
+    parameters:
+      - $ref: '#/components/parameters/IdNoCaminho'
+    responses:
+      '200':
+        description: |
+          Sessão removida. O corpo traz a identificação de quem foi apagado,
+          para o registo de auditoria de quem chamou.
+
+          Repare que o use case constrói também um `details` e um `success`
+          próprios que **não chegam ao fio**: o manipulador entrega apenas o
+          `data` ao envelope comum.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DadosUtilizadorApagado'
+            example:
+              code: 200
+              data:
+                id: 918e37366f27e1125ee0482a793267e1
+                name: filarapida
+                jid: 5516981818244:25@s.whatsapp.net
+              success: true
+      '400':
+        description: Identificador em falta no caminho.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_id
+                message: missing ID
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: Não existe sessão com este identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: user_not_found
+                message: user not found
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/webhook:
+  get:
+    tags: [Integrações e configuração]
+    summary: Consultar o webhook da sessão
+    description: |
+      Devolve o URL configurado e a lista de eventos subscritos, lidos
+      directamente do banco.
+
+      **Armadilha medida a 2026-08-26**: quando não há eventos subscritos,
+      `subscribe` vem como `[""]` — uma lista com **uma string vazia**, e não
+      uma lista vazia. É o resultado de partir por vírgula uma coluna vazia. Um
+      cliente que conte `subscribe.length` vê `1` onde devia ver `0`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Configuração de webhook em vigor para esta sessão.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ConfiguracaoWebhook'
+            example:
+              code: 200
+              data:
+                webhook: ''
+                subscribe: ['']
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  post:
+    tags: [Integrações e configuração]
+    summary: Definir o webhook da sessão
+    description: |
+      Grava o URL para onde os eventos desta sessão passam a ser entregues, e
+      opcionalmente a lista de eventos.
+
+      **Em que difere de `PUT /webhook`**, lido nos dois manipuladores:
+
+      | | `POST` | `PUT` |
+      |---|---|---|
+      | campo `active` | **ignorado** | respeitado: `false` **limpa** URL e eventos |
+      | `events` ausente ou vazio | não toca na coluna de eventos | idem |
+      | corpo da resposta | só `{webhook}` | `{webhook, events, active}` |
+
+      Ou seja: `POST` só define; **desligar um webhook faz-se com
+      `PUT {"active": false}` ou com `DELETE /webhook`**.
+
+      **Dois nomes para o URL**: `webhookurl` e `webhook` são ambos aceites, em
+      qualquer dos dois verbos — é herança de clientes antigos. Quando os dois
+      vierem no mesmo corpo, **`webhookurl` vence**.
+
+      **Eventos desconhecidos são DESCARTADOS em silêncio**, com um aviso no
+      log, e a chamada devolve `200`. Não há `400` aqui — ao contrário de
+      `POST /admin/users`, que recusa. Confira em `GET /webhook` o que ficou
+      efectivamente subscrito.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoWebhook'
+          example:
+            webhookurl: https://exemplo.com.br/wa-api/eventos
+            events: [Message, Receipt, ReadReceipt]
+    responses:
+      '200':
+        description: URL gravado. O corpo ecoa o URL que ficou em vigor.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: object
+                      properties:
+                        webhook:
+                          type: string
+                          description: O URL efectivamente gravado.
+                          example: https://exemplo.com.br/wa-api/eventos
+            example:
+              code: 200
+              data: {webhook: 'https://exemplo.com.br/wa-api/eventos'}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível. **Envelope ANTIGO**: `error` é a string
+          `"bad request"`, e não o objecto `{code, message}` — esta recusa usa
+          `fmt.Errorf` e não passa pela taxonomia (F266).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  put:
+    tags: [Integrações e configuração]
+    summary: Actualizar ou desligar o webhook da sessão
+    description: |
+      A variante que sabe **desligar**: ao contrário de `POST /webhook`, este
+      verbo lê o campo `active`, e `active: false` grava URL e eventos
+      **vazios**, seja qual for o resto do corpo.
+
+      Com `active: true` o comportamento é o do `POST`, com uma resposta mais
+      completa: devolve também a lista de eventos aceites e o próprio `active`,
+      o que permite ver de imediato quais dos eventos pedidos sobreviveram à
+      validação.
+
+      **Eventos desconhecidos são descartados em silêncio** e não aparecem em
+      `events` na resposta — é aí que se confirma o que ficou.
+
+      **Os dois nomes de URL** valem aqui também: `webhookurl` e `webhook`, com
+      `webhookurl` a vencer quando ambos vierem.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoWebhook'
+          example:
+            webhook: https://exemplo.com.br/wa-api/eventos
+            events: [Message, Receipt]
+            active: true
+    responses:
+      '200':
+        description: |
+          Configuração gravada. `events` traz **apenas os eventos válidos**;
+          vem ausente quando nenhum sobreviveu à validação.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/RespostaWebhookAtualizado'
+            example:
+              code: 200
+              data:
+                webhook: https://exemplo.com.br/wa-api/eventos
+                events: [Message, Receipt]
+                active: true
+              success: true
+      '400':
+        description: |
+          Corpo ilegível. **Envelope ANTIGO**, com `error` em texto simples
+          (F266).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  delete:
+    tags: [Integrações e configuração]
+    summary: Remover o webhook da sessão
+    description: |
+      Limpa o URL **e** a lista de eventos desta sessão numa só operação. É o
+      caminho directo para o mesmo efeito de `PUT /webhook {"active": false}`,
+      sem precisar de corpo.
+
+      Não recebe corpo nenhum, e o que for enviado é ignorado.
+
+      Depois desta chamada, `GET /webhook` devolve `webhook: ""` e
+      `subscribe: [""]` — a lista com uma string vazia descrita naquela rota.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Webhook e eventos removidos.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data: {Details: Webhook and events deleted successfully}
+              success: true
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/webhook/history:
+  get:
+    tags: [Integrações e configuração]
+    summary: Consultar o limite de gravação de mensagens
+    description: |
+      **O nome engana, e isto é um achado registado (HOUSEKEEP F252.)** Esta
+      rota **não** tem nada que ver com um registo de entregas de webhook: ela
+      lê a coluna `users.history`, que é **quantas mensagens são gravadas** por
+      conversa no banco local.
+
+      `0` significa gravação **desactivada**, e é resposta legítima — o campo
+      `History` vem sempre presente, sem `omitempty`, exactamente para que o
+      zero seja distinguível de "campo ausente".
+
+      **Para LER o histórico de mensagens de uma conversa** use
+      `GET /chat/history`, que é outro manipulador e outra coisa.
+
+      Lê o **banco**, e não a cache de sessão: um valor recém-escrito noutro
+      processo aparece aqui.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Limite em vigor. Medido a 2026-08-26 na sessão `filarapida`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/LimiteHistorico'
+            example:
+              code: 200
+              data: {History: 100}
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  post:
+    tags: [Integrações e configuração]
+    summary: Definir o limite de gravação de mensagens
+    description: |
+      **Leia isto antes de chamar**: apesar do caminho, esta rota **configura o
+      histórico de MENSAGENS**, não um registo de entregas de webhook. Ela
+      escreve a coluna `users.history`, a mesma que governa a gravação em
+      `message_history`. O achado está registado como **F252** no `HOUSEKEEP.md`.
+
+      **É o mesmo manipulador de `POST /session/history`** — os dois caminhos
+      são a mesma operação. O caminho antigo mantém-se para não partir clientes
+      existentes.
+
+      **Regras** (lidas em `set_history.go`):
+
+      - `history` **não pode ser negativo**: dá `400 invalid_history`.
+      - `0` é válido e significa **desactivar** a gravação.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoLimiteHistorico'
+          example:
+            history: 100
+    responses:
+      '200':
+        description: Limite gravado. O corpo ecoa o valor que ficou em vigor.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/LimiteHistorico'
+            example:
+              code: 200
+              data: {Details: History configured successfully, History: 100}
+              success: true
+      '400':
+        description: |
+          Corpo ilegível (`could_not_decode_payload`), sessão sem identificador
+          (`missing_session_id`), ou valor negativo (`invalid_history`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_history
+                message: history cannot be negative
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/s3/config:
+  get:
+    tags: [Integrações e configuração]
+    summary: Consultar a configuração de S3 da sessão
+    description: |
+      Devolve a configuração de armazenamento em S3 desta sessão.
+
+      **Nenhum segredo sai por aqui, e isso é por desenho**: `access_key` vem
+      sempre como `***` — **mesmo quando não há chave nenhuma configurada**,
+      porque mascarar só quando existe já revelaria a existência. E
+      `secret_key` **não aparece de todo**: a leitura nunca a consulta.
+
+      `media_delivery` diz como a mídia recebida é entregue: `base64` no corpo
+      da resposta, `s3` só por URL, ou `both`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Configuração em vigor. Medida a 2026-08-26, sessão sem S3 activo.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ConfiguracaoS3Lida'
+            example:
+              code: 200
+              data:
+                enabled: false
+                endpoint: ''
+                region: ''
+                bucket: ''
+                access_key: '***'
+                path_style: true
+                public_url: ''
+                media_delivery: base64
+                retention_days: 30
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  post:
+    tags: [Integrações e configuração]
+    summary: Gravar a configuração de S3 da sessão
+    description: |
+      **É exactamente a mesma operação de `POST /s3/configure`** — o mesmo
+      manipulador, registado em dois caminhos. Não procure diferença: não há.
+      Este caminho mais curto foi acrescentado por causa do achado **F251**, em
+      que ler era `/config` e escrever era `/configure`, e quem descobria a
+      leitura levava `404 page not found` — sem corpo JSON e sem pista — ao
+      tentar escrever no mesmo caminho.
+
+      **A ordem das operações é o contrato**: valida, cifra, grava e só então
+      regista o cliente S3. Uma configuração inválida nunca chega ao cifrador e
+      nada é escrito.
+
+      **Regras** (lidas em `configure_s3.go`):
+
+      - `media_delivery`, quando presente, tem de ser `base64`, `s3` ou `both`
+        (`400 invalid_media_delivery`). Vazio assume `base64`.
+      - `endpoint`, quando presente, tem de ser um URL analisável
+        (`400 invalid_s3_endpoint`).
+      - `secret_key` é cifrada antes de tocar no banco e **nunca é devolvida**
+        por nenhuma rota.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoConfiguracaoS3'
+          example:
+            enabled: true
+            endpoint: https://s3.sa-east-1.amazonaws.com
+            region: sa-east-1
+            bucket: wa-api-midia
+            access_key: AKIAIOSFODNN7EXAMPLE
+            secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+            path_style: false
+            public_url: https://midia.exemplo.com.br
+            media_delivery: both
+            retention_days: 30
+    responses:
+      '200':
+        description: Configuração gravada. `Enabled` ecoa o estado pedido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfiguracaoS3'
+            example:
+              code: 200
+              data: {Details: S3 configuration saved successfully, Enabled: true}
+              success: true
+      '400':
+        description: |
+          `media_delivery` fora dos três valores, `endpoint` inválido, corpo
+          ilegível, ou sessão sem identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_media_delivery
+                message: media_delivery must be 'base64', 's3', or 'both'
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  delete:
+    tags: [Integrações e configuração]
+    summary: Remover a configuração de S3 da sessão
+    description: |
+      Apaga a configuração de S3 desta sessão e desliga o armazenamento
+      externo. Depois disto, `GET /s3/config` devolve `enabled: false` e a
+      entrega de mídia volta a `base64`.
+
+      **Não apaga os objectos já guardados no bucket** — só a configuração que
+      apontava para ele. A limpeza do que lá está é sua.
+
+      Não recebe corpo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Configuração removida. `Enabled` vem `false`, logo omitido do corpo.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfiguracaoS3'
+            example:
+              code: 200
+              data: {Details: S3 configuration deleted successfully}
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/s3/configure:
+  post:
+    tags: [Integrações e configuração]
+    summary: Gravar a configuração de S3 da sessão (caminho original)
+    description: |
+      **O mesmo manipulador de `POST /s3/config`**, no caminho original. As
+      duas rotas são a mesma operação, com o mesmo corpo, as mesmas validações
+      e a mesma resposta — documentadas em duplicado apenas para que ninguém
+      suponha que existe diferença.
+
+      Historicamente este era o **único** caminho de escrita, enquanto a
+      leitura vivia em `/s3/config`; `POST /s3/config` respondia
+      `404 page not found`. O alias curto nasceu do achado **F251**, e este
+      caminho fica para não partir os clientes que já o usam.
+
+      Consulte `POST /s3/config` para as regras de `media_delivery`, de
+      `endpoint` e do tratamento do segredo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoConfiguracaoS3'
+          example:
+            enabled: true
+            endpoint: https://s3.sa-east-1.amazonaws.com
+            region: sa-east-1
+            bucket: wa-api-midia
+            access_key: AKIAIOSFODNN7EXAMPLE
+            secret_key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+            path_style: false
+            public_url: https://midia.exemplo.com.br
+            media_delivery: both
+            retention_days: 30
+    responses:
+      '200':
+        description: Configuração gravada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfiguracaoS3'
+            example:
+              code: 200
+              data: {Details: S3 configuration saved successfully, Enabled: true}
+              success: true
+      '400':
+        description: |
+          `media_delivery` fora dos três valores, `endpoint` inválido, corpo
+          ilegível, ou sessão sem identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_s3_endpoint
+                message: invalid S3 endpoint
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/s3/test:
+  post:
+    tags: [Integrações e configuração]
+    summary: Testar a ligação ao bucket configurado
+    description: |
+      Faz um teste **real** contra o S3: lê a configuração GRAVADA, decifra o
+      segredo, monta o cliente e contacta o bucket, com **10 segundos** de
+      limite.
+
+      **Não recebe corpo** — nem sequer o desserializa. Testa o que está
+      guardado, não o que você mandar. Envie o pedido sem corpo.
+
+      **Regras e falhas reais** (lidas em `test_s3_connection.go`):
+
+      - Sem sessão de WhatsApp para este token: `400 no_session`.
+      - S3 ausente ou com `enabled: false`: `400 s3_not_enabled` — o teste nem
+        chega a sair para a rede.
+      - Segredo gravado que não decifra (por exemplo, uma linha antiga em texto
+        claro): `500`, e **de propósito** — usar o valor como se fosse a
+        credencial esconderia a linha por decifrar para sempre.
+      - Bucket inacessível, credencial errada ou tempo esgotado: `500`. O corpo
+        é o genérico `internal server error`; **a causa fica no log do
+        servidor**, e não na resposta, porque a mensagem do S3 pode conter o
+        endpoint e o bucket.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          O bucket respondeu. `Bucket` e `Region` ecoam a configuração
+          **testada** — é o que distingue "testei o que gravaste" de "respondi
+          200". Nenhuma credencial aparece.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoTesteS3'
+            example:
+              code: 200
+              data:
+                connected: true
+                Details: S3 connection test successful
+                Bucket: wa-api-midia
+                Region: sa-east-1
+              success: true
+      '400':
+        description: |
+          Sem sessão (`no_session`), sessão sem identificador
+          (`missing_session_id`), ou S3 desligado para esta sessão
+          (`s3_not_enabled`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: s3_not_enabled
+                message: S3 is not enabled for this user
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        description: |
+          O teste saiu e falhou: bucket inacessível, credencial recusada, tempo
+          esgotado aos 10 segundos, ou segredo gravado que não decifra. O corpo
+          é o genérico; a causa está no log do servidor.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 500
+              error:
+                code: internal_error
+                message: internal server error
+              success: false
+
+/hmac/config:
+  get:
+    tags: [Integrações e configuração]
+    summary: Consultar se há chave HMAC configurada
+    description: |
+      Diz apenas se **existe** chave de assinatura para os webhooks desta
+      sessão. `hmac_key` vem `""` quando não há chave e `"***"` quando há.
+
+      **A chave nunca sai daqui**, nem em claro nem cifrada: devolvê-la
+      transformaria uma leitura de configuração na fuga do segredo que assina
+      todos os webhooks.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Presença de chave. Medido a 2026-08-26 na sessão `filarapida`, que
+          não tem chave configurada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ConfiguracaoHmacLida'
+            example:
+              code: 200
+              data: {hmac_key: ''}
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  post:
+    tags: [Integrações e configuração]
+    summary: Gravar a chave HMAC da sessão
+    description: |
+      **É exactamente a mesma operação de `POST /hmac/configure`** — o mesmo
+      manipulador em dois caminhos, sem qualquer diferença de comportamento.
+      O caminho curto nasceu do achado **F251**, em que ler era `/config`,
+      escrever era `/configure`, e `POST /hmac/config` respondia
+      `404 page not found` sem corpo nem pista.
+
+      A chave assina os webhooks entregues por esta sessão, para que o
+      destinatário possa verificar que o pedido veio mesmo daqui.
+
+      **Regras** (lidas em `configure_hmac.go`):
+
+      - `hmac_key` é o **único** campo do corpo. Nenhum outro é lido.
+      - Mínimo de **32 caracteres**: abaixo disso, `400 hmac_key_too_short`.
+      - A chave é cifrada antes de tocar no banco, e **nunca é devolvida** por
+        nenhuma rota — `GET /hmac/config` só reporta que existe.
+      - A ordem é contrato: valida, cifra, grava. Uma falha a cifrar não
+        escreve nada.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoConfiguracaoHmac'
+          example:
+            hmac_key: chave-de-assinatura-com-32-carac
+    responses:
+      '200':
+        description: 'Chave gravada. `Enabled: true` reporta o estado DEPOIS da operação.'
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
+            example:
+              code: 200
+              data: {Details: HMAC configuration saved successfully, Enabled: true}
+              success: true
+      '400':
+        description: |
+          Chave com menos de 32 caracteres (`hmac_key_too_short`), corpo
+          ilegível, ou sessão sem identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: hmac_key_too_short
+                message: HMAC key must be at least 32 characters long
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+  delete:
+    tags: [Integrações e configuração]
+    summary: Revogar a chave HMAC da sessão
+    description: |
+      Apaga a chave de assinatura desta sessão. A partir daí os webhooks
+      passam a sair **sem assinatura**, e um destinatário que verifique a
+      assinatura vai recusá-los — desligue a verificação do lado dele antes,
+      ou a entrega deixa de funcionar em silêncio.
+
+      Depois desta chamada, `GET /hmac/config` volta a devolver
+      `hmac_key: ""`.
+
+      Não recebe corpo.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Chave revogada. `Enabled` vem `false` — logo, omitido do corpo, e a
+          sua ausência é a confirmação.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
+            example:
+              code: 200
+              data: {Details: HMAC configuration deleted successfully}
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/hmac/configure:
+  post:
+    tags: [Integrações e configuração]
+    summary: Gravar a chave HMAC da sessão (caminho original)
+    description: |
+      **O mesmo manipulador de `POST /hmac/config`**, no caminho original. As
+      duas rotas são a mesma operação, com o mesmo corpo, a mesma validação de
+      32 caracteres e a mesma resposta — estão documentadas em duplicado apenas
+      para que ninguém suponha que existe diferença entre elas.
+
+      Este era historicamente o único caminho de escrita, enquanto a leitura
+      vivia em `/hmac/config`. O alias curto veio com o achado **F251**, e este
+      caminho fica para não partir clientes existentes.
+
+      Consulte `POST /hmac/config` para as regras completas e para o que
+      acontece à chave depois de gravada.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoConfiguracaoHmac'
+          example:
+            hmac_key: chave-de-assinatura-com-32-carac
+    responses:
+      '200':
+        description: Chave gravada.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
+            example:
+              code: 200
+              data: {Details: HMAC configuration saved successfully, Enabled: true}
+              success: true
+      '400':
+        description: |
+          Chave com menos de 32 caracteres (`hmac_key_too_short`), corpo
+          ilegível, ou sessão sem identificador.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: hmac_key_too_short
+                message: HMAC key must be at least 32 characters long
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/proxy/set:
+  post:
+    tags: [Integrações e configuração]
+    summary: Configurar o proxy de saída da sessão
+    description: |
+      Define por onde sai o tráfego desta sessão — e, conforme
+      `webhook_use_proxy`, também a entrega dos webhooks.
+
+      **Só funciona com a sessão DESLIGADA.** Com a sessão ligada, a resposta é
+      `400 proxy_while_connected` e nada é gravado: o transporte é montado no
+      arranque da ligação, e trocá-lo a meio não teria efeito. Faça
+      `GET /session/disconnect`, configure, e volte a ligar.
+
+      **Ligar e desligar são o mesmo pedido**, distinguidos por `enable`:
+
+      - `enable: true` → valida `proxy_url` e grava.
+      - `enable: false` → limpa o proxy gravado. O `proxy_url` do corpo **não é
+        validado** neste ramo, de propósito: uma configuração partida tem de
+        poder ser removida.
+
+      **Regras do URL** (lidas em `set_proxy.go`), só no ramo de ligar:
+
+      - `proxy_url` obrigatório (`400 missing_proxy_url`);
+      - tem de ser analisável como URL (`400 invalid_proxy_url`);
+      - o esquema tem de ser **`http` ou `socks5`**, e mais nenhum
+        (`400 unsupported_proxy_scheme`). **`https` NÃO é aceite** — parece
+        óbvio que fosse, e não é: exige um transporte que este processo não
+        monta.
+      - com `webhook_use_proxy` ligado, o endereço **não pode ser reservado nem
+        de loopback** (`400 reserved_proxy_address`): a entrega de webhooks
+        sairia por ele, e isso contornaria a validação de saída. Com a opção
+        desligada, um endereço interno é permitido — é a forma normal de correr
+        o tráfego do WhatsApp por um proxy da própria rede.
+
+      `webhook_use_proxy` ausente **preserva** o valor gravado; enviá-lo
+      explicitamente é que o muda.
+
+      **O `proxy_url` costuma trazer credenciais** (`socks5://utilizador:senha@host:porta`).
+      Ele nunca é escrito no log nem devolvido numa mensagem de erro; só o
+      esquema aparece.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoProxy'
+          example:
+            proxy_url: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+            enable: true
+            webhook_use_proxy: false
+    responses:
+      '200':
+        description: |
+          Configuração gravada. O corpo **difere entre os dois ramos**: ligar
+          ecoa `Set`, `ProxyURL` e `webhook_use_proxy`; desligar responde só
+          `Details`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoProxy'
+            example:
+              code: 200
+              data:
+                Details: Proxy configured successfully
+                Set: true
+                ProxyURL: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+                webhook_use_proxy: false
+              success: true
+      '400':
+        description: |
+          Sessão ligada (`proxy_while_connected`), `proxy_url` em falta
+          (`missing_proxy_url`), URL inanalisável (`invalid_proxy_url`),
+          esquema fora de `http`/`socks5` (`unsupported_proxy_scheme`),
+          endereço reservado com entrega de webhook pelo proxy
+          (`reserved_proxy_address`), ou corpo ilegível.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: proxy_while_connected
+                message: cannot set proxy while connected. Please disconnect first
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/labels:
+  get:
+    tags: [Integrações e configuração]
+    summary: Listar as etiquetas da conta
+    description: |
+      Devolve as etiquetas do **WhatsApp Business** desta conta, tal como o
+      wa-api as recolheu dos eventos que o telemóvel e os outros aparelhos
+      anunciam.
+
+      **É LEITURA, e não existe rota de escrita de etiquetas.** Não é
+      esquecimento: a biblioteca que fala com o WhatsApp não sabe criar nem
+      editar etiquetas, portanto uma rota de escrita responderia `200` sem
+      fazer nada — que é um defeito, não uma funcionalidade. Crie e edite
+      etiquetas na aplicação do WhatsApp Business; elas aparecem aqui a seguir.
+
+      Numa conta que não seja Business, ou que nunca tenha sincronizado, a
+      lista vem **vazia** (`[]`, nunca `null`).
+
+      Etiquetas apagadas continuam na lista, marcadas com `deleted: true`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          Etiquetas conhecidas. Medido a 2026-08-26 na sessão `filarapida` —
+          repare que o `name` real traz um caractere invisível de marcação de
+          direcção do texto antes da palavra.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Etiqueta'
+            example:
+              code: 200
+              data:
+                - label_id: '3'
+                  name: Grupos
+                  color: 0
+                  predefined_id: 0
+                  deleted: false
+                  updated_at: '2026-07-20T05:28:22.008-04:00'
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/labels/{id}/chats:
+  get:
+    tags: [Integrações e configuração]
+    summary: Listar as conversas de uma etiqueta
+    description: |
+      Devolve as conversas associadas a uma etiqueta, pelo `label_id` que
+      `GET /labels` traz.
+
+      **O identificador NÃO é um UUID nem hexadecimal**: é o número curto que o
+      WhatsApp Business atribui à etiqueta — na instância medida, `3`.
+
+      **Etiqueta inexistente devolve `200` com lista vazia, e não `404`.**
+      Medido a 2026-08-26 com `/labels/999/chats`. É a mesma resposta de uma
+      etiqueta que existe e não tem conversas, portanto esta rota não serve
+      para saber se uma etiqueta existe — para isso use `GET /labels`.
+
+      A lista vazia sai como `[]` e nunca como `null`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: |
+          `label_id` da etiqueta, como vem em `GET /labels` — um número curto
+          atribuído pelo WhatsApp Business, e não um identificador longo.
+        schema:
+          type: string
+          example: '3'
+    responses:
+      '200':
+        description: |
+          Associações da etiqueta. Vazia quando a etiqueta não tem conversas —
+          ou quando não existe.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/EtiquetaConversa'
+            example:
+              code: 200
+              data:
+                - label_id: '3'
+                  chat_jid: 120363411669320145@g.us
+                  labeled: true
+                  updated_at: '2026-07-20T05:28:22.008-04:00'
+              success: true
+      '400':
+        description: |
+          Sessão sem identificador (`missing_session_id`), ou `id` ausente no
+          caminho. **A recusa por `id` ausente usa o envelope ANTIGO**, com
+          `error` em texto simples: vem de `rejectMissingField` (F266).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 400
+              error: bad request
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/call/reject:
+  post:
+    tags: [Integrações e configuração]
+    summary: Recusar uma chamada a entrar
+    description: |
+      Recusa uma chamada de voz ou vídeo que está a tocar.
+
+      **Depende de um evento, e sem ele a rota é inutilizável.** Os dois campos
+      obrigatórios — `call_from` e `call_id` — **não são inventáveis**: o
+      `call_id` é gerado pelo WhatsApp e só chega à sua aplicação no evento
+      `CallOffer`, entregue pelo webhook ou pelo WebSocket da sessão. Portanto o
+      uso real é: subscrever `CallOffer` (ou `All`) em `POST /webhook`, e
+      chamar esta rota **de dentro do manipulador desse evento**, com os valores
+      que ele traz. Fora dessa janela, a chamada já terminou e a recusa não tem
+      alvo.
+
+      `call_from` é o JID de quem liga, e aceita telefone nu, JID de telefone ou
+      LID — a resolução é feita aqui.
+
+      **Regras** (lidas em `reject_call.go`), pela ordem em que recusam:
+
+      1. sem sessão de WhatsApp para este token: `400 no_session`;
+      2. `call_from` em falta: `400 missing_call_from`;
+      3. `call_id` em falta: `400 missing_call_id`;
+      4. `call_from` que não resolve para um JID: `400 invalid_call_from`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoRecusarChamada'
+          example:
+            call_from: 554192421234@s.whatsapp.net
+            call_id: 3EB0A4B2AFD45E625C0917
+    responses:
+      '200':
+        description: |
+          A recusa foi aceite pelo WhatsApp. O `CallID` ecoa o identificador
+          recusado, para casar com o evento de origem.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoRecusarChamada'
+            example:
+              code: 200
+              data:
+                Details: Call rejected
+                CallID: 3EB0A4B2AFD45E625C0917
+              success: true
+      '400':
+        description: |
+          Sem sessão (`no_session`), `call_from` ou `call_id` em falta
+          (`missing_call_from`, `missing_call_id`), `call_from` que não resolve
+          (`invalid_call_from`), ou corpo ilegível.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_call_id
+                message: missing call_id in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'

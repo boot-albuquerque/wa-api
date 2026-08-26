@@ -1,0 +1,686 @@
+# Esquemas do grupo de infraestrutura — administração de sessões e integrações.
+#
+# Os campos e os nomes vêm do MANIPULADOR e do use case, não da struct de
+# domínio, e os exemplos vêm da bateria de 2026-08-26 contra a instância
+# local sempre que a rota pôde ser chamada.
+UtilizadorAdmin:
+  type: object
+  description: |
+    Uma sessão do wa-api, como as rotas `/admin/users` a devolvem.
+
+    **`token` só traz valor na resposta de `POST /admin/users`.** Na listagem
+    e na consulta por identificador vem sempre `""`, deliberadamente: devolver
+    o token de todas as sessões transformava uma leitura na fuga de todas as
+    credenciais da instalação.
+  properties:
+    id:
+      type: string
+      description: Identificador da sessão, hexadecimal de 32 caracteres. É o `{id}` das rotas `/admin/users/{id}`.
+      example: 918e37366f27e1125ee0482a793267e1
+    name:
+      type: string
+      description: Nome dado à sessão na criação. Não é o nome da conta de WhatsApp.
+      example: filarapida
+    token:
+      type: string
+      description: |
+        Token de sessão. **Só vem preenchido na criação**; nas leituras é
+        sempre `""`.
+      example: ''
+    webhook:
+      type: string
+      description: URL do webhook desta sessão. Vazio quando não há nenhum.
+      example: ''
+    jid:
+      type: string
+      description: |
+        JID da conta de WhatsApp emparelhada, com o sufixo do aparelho
+        (`:25`). Ausente enquanto a sessão não estiver emparelhada.
+      example: 5516981818244:25@s.whatsapp.net
+    qrcode:
+      type: string
+      description: QR code pendente de leitura, quando o emparelhamento está a decorrer. Ausente fora disso.
+    connected:
+      type: boolean
+      description: Se o transporte para o WhatsApp está de pé neste instante.
+      example: true
+    loggedIn:
+      type: boolean
+      description: |
+        Se a sessão está autenticada. Distinto de `connected`: pode haver
+        credencial válida com o transporte caído.
+      example: true
+    expiration:
+      type: integer
+      format: int64
+      description: Instante de expiração da sessão, em segundos desde a época Unix. Ausente quando não expira.
+    proxy_config:
+      type: object
+      description: |
+        Proxy de saída desta sessão. **Repare na assimetria de nomes**: aqui a
+        chave é `proxy_config` em snake_case, mas o corpo de escrita usa
+        `proxyConfig` em camelCase — os dois são aceites na escrita.
+      properties:
+        enabled:
+          type: boolean
+          description: Derivado de haver ou não um `proxyUrl` gravado.
+          example: false
+        proxyUrl:
+          type: string
+          description: URL do proxy. Vazio quando não há.
+          example: ''
+        webhookUseProxy:
+          type: boolean
+          description: Se a entrega dos webhooks também sai por este proxy.
+          example: true
+    s3_config:
+      type: object
+      description: |
+        Armazenamento em S3 desta sessão. `access_key` vem **sempre** como
+        `***`, mesmo quando não há chave, e `secret_key` não aparece de todo.
+        Mesma assimetria de nomes do proxy: `s3_config` na resposta,
+        `s3Config` no corpo de escrita.
+      properties:
+        enabled: {type: boolean, example: false}
+        endpoint: {type: string, example: ''}
+        region: {type: string, example: ''}
+        bucket: {type: string, example: ''}
+        access_key:
+          type: string
+          description: Sempre `***`. Mascarada por presença revelaria a presença.
+          example: '***'
+        path_style: {type: boolean, example: true}
+        public_url: {type: string, example: ''}
+        media_delivery:
+          type: string
+          enum: [base64, s3, both]
+          description: Como a mídia recebida é entregue.
+          example: base64
+        retention_days: {type: integer, example: 30}
+    events:
+      type: string
+      description: |
+        Eventos subscritos, separados por vírgulas. `All` recebe todos.
+        **Ausente quando a sessão não tem nenhum** — medido a 2026-08-26.
+      example: Message,Receipt,Connected
+    hmac_configured:
+      type: boolean
+      description: |
+        Se a sessão nasceu com chave HMAC. Só aparece na resposta de criação, e
+        só quando `true`.
+      example: true
+
+PedidoCriarUtilizador:
+  type: object
+  description: |
+    Corpo de `POST /admin/users`. `s3Config` e `proxyConfig` são aceites também
+    como `s3_config` e `proxy_config`; o camelCase vence quando ambos vierem.
+  required: [name, token]
+  properties:
+    name:
+      type: string
+      description: Nome da sessão. Obrigatório.
+      example: filarapida
+    token:
+      type: string
+      description: |
+        Token de sessão a atribuir. Obrigatório e **único na instalação** —
+        repetido dá `409`. É devolvido uma única vez, nesta resposta.
+      example: tok_fila
+    webhook:
+      type: string
+      description: URL de webhook inicial. Pode ficar para depois, em `POST /webhook`.
+      example: https://exemplo.com.br/wa-api/eventos
+    expiration:
+      type: integer
+      description: Expiração da sessão, em segundos desde a época Unix. Zero significa sem expiração.
+      example: 0
+    events:
+      type: string
+      description: |
+        Eventos subscritos, separados por vírgulas. **Cada nome é validado**:
+        um desconhecido dá `400 invalid_event_type`. `All` recebe todos.
+      example: Message,Receipt,Connected
+    history:
+      type: integer
+      description: Quantas mensagens gravar por conversa. `0` desactiva a gravação.
+      example: 100
+    hmacKey:
+      type: string
+      description: |
+        Chave de assinatura dos webhooks. Mínimo de **32 caracteres**
+        (`400 hmac_key_too_short`). Guardada cifrada; nunca é devolvida.
+      example: chave-de-assinatura-com-32-carac
+    proxyConfig:
+      $ref: '#/components/schemas/ConfiguracaoProxyUtilizador'
+    s3Config:
+      $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
+
+PedidoEditarUtilizador:
+  type: object
+  description: |
+    Corpo de `PUT /admin/users/{id}`. **Só os campos enviados mudam.**
+
+    Para os campos de texto e para `expiration`, o vazio significa *"não
+    informado"*, e não *"limpe"*. A excepção é `history`: `0` é um valor
+    legítimo e **desactiva** a gravação. Um corpo sem nenhum campo útil
+    responde `400 no_fields_to_update`.
+
+    `s3Config`/`proxyConfig` são aceites também em `snake_case`; o camelCase
+    vence quando ambos vierem.
+  properties:
+    name:
+      type: string
+      example: filarapida
+    token:
+      type: string
+      description: Substitui o token de sessão. Tem de continuar único (`409` se colidir).
+      example: tok_fila_novo
+    webhook:
+      type: string
+      example: https://exemplo.com.br/wa-api/eventos
+    expiration:
+      type: integer
+      example: 0
+    events:
+      type: string
+      description: Validado como na criação — nome desconhecido dá `400 invalid_event_type`.
+      example: Message,Receipt
+    history:
+      type: integer
+      nullable: true
+      description: |
+        Limite de gravação de mensagens. **Ausente** significa não mexer;
+        `0` **desactiva** — a distinção existe de propósito, e é o que permite
+        voltar a desligar a gravação depois de a ter ligado.
+      example: 0
+    proxyConfig:
+      $ref: '#/components/schemas/ConfiguracaoProxyUtilizador'
+    s3Config:
+      $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
+
+ConfiguracaoProxyUtilizador:
+  type: object
+  description: |
+    Proxy de saída, no formato de ESCRITA das rotas `/admin/users` — camelCase,
+    diferente do snake_case da resposta e do corpo de `POST /proxy/set`.
+
+    Na edição, `enabled: false` limpa o `proxy_url` gravado.
+  properties:
+    enabled:
+      type: boolean
+      description: Quando `false` na edição, o URL gravado é apagado.
+      example: false
+    proxyUrl:
+      type: string
+      description: |
+        URL do proxy. Costuma trazer credenciais no userinfo — nunca é
+        devolvido nem registado em log.
+      example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+    webhookUseProxy:
+      type: boolean
+      description: Se a entrega dos webhooks também sai por este proxy. Ausente preserva o valor gravado.
+      example: true
+
+ConfiguracaoS3Utilizador:
+  type: object
+  description: |
+    Armazenamento S3, no formato de ESCRITA das rotas `/admin/users` —
+    camelCase, diferente do snake_case de `POST /s3/config` e da resposta de
+    leitura.
+  properties:
+    enabled: {type: boolean, example: true}
+    endpoint: {type: string, example: 'https://s3.sa-east-1.amazonaws.com'}
+    region: {type: string, example: sa-east-1}
+    bucket: {type: string, example: wa-api-midia}
+    accessKey: {type: string, example: AKIAIOSFODNN7EXAMPLE}
+    secretKey:
+      type: string
+      description: Cifrada antes de tocar no banco. Nunca é devolvida por nenhuma rota.
+      example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    pathStyle: {type: boolean, example: false}
+    publicUrl: {type: string, example: 'https://midia.exemplo.com.br'}
+    mediaDelivery:
+      type: string
+      enum: [base64, s3, both]
+      example: both
+    retentionDays: {type: integer, example: 30}
+
+DadosUtilizadorApagado:
+  type: object
+  description: |
+    Identificação da sessão removida por `DELETE /admin/users/{id}/full`, para
+    o registo de quem chamou.
+
+    `name` e `jid` são lidos ANTES da remoção; se essa leitura falhar, a
+    remoção prossegue e estes campos vêm vazios.
+  properties:
+    id:
+      type: string
+      example: 918e37366f27e1125ee0482a793267e1
+    name:
+      type: string
+      example: filarapida
+    jid:
+      type: string
+      example: 5516981818244:25@s.whatsapp.net
+
+ConfiguracaoWebhook:
+  type: object
+  description: Resposta de `GET /webhook` — o que está gravado no banco para esta sessão.
+  required: [webhook, subscribe]
+  properties:
+    webhook:
+      type: string
+      description: URL de destino. Vazio quando não há webhook configurado.
+      example: https://exemplo.com.br/wa-api/eventos
+    subscribe:
+      type: array
+      items:
+        type: string
+      description: |
+        Eventos subscritos. **Armadilha medida**: sem eventos subscritos, esta
+        lista vem como `[""]` — uma lista com uma string vazia, e não uma lista
+        vazia, porque é o resultado de partir por vírgula uma coluna vazia.
+      example: [Message, Receipt]
+
+PedidoWebhook:
+  type: object
+  description: |
+    Corpo de `POST /webhook` e de `PUT /webhook`. Os dois verbos aceitam os
+    mesmos campos, mas **`active` só é lido pelo `PUT`**.
+  properties:
+    webhookurl:
+      type: string
+      description: |
+        URL de destino. **Vence sobre `webhook`** quando os dois vierem no
+        mesmo corpo. Os dois nomes existem por herança de clientes antigos.
+      example: https://exemplo.com.br/wa-api/eventos
+    webhook:
+      type: string
+      description: O outro nome do URL de destino. Perde para `webhookurl`.
+      example: https://exemplo.com.br/wa-api/eventos
+    events:
+      type: array
+      items:
+        type: string
+      description: |
+        Eventos a subscrever. **Nomes desconhecidos são descartados em
+        silêncio**, com aviso apenas no log do servidor — a chamada devolve
+        `200`. Lista ausente ou vazia deixa a subscrição gravada como está.
+        `All` recebe todos os eventos.
+      example: [Message, Receipt, ReadReceipt]
+    active:
+      type: boolean
+      description: |
+        **Lido apenas pelo `PUT`.** `false` limpa URL e eventos, seja qual for
+        o resto do corpo. No `POST` este campo é ignorado.
+      example: true
+
+RespostaWebhookAtualizado:
+  type: object
+  description: Resposta de `PUT /webhook`.
+  properties:
+    webhook:
+      type: string
+      description: URL que ficou em vigor. Vazio quando `active` era `false`.
+      example: https://exemplo.com.br/wa-api/eventos
+    events:
+      type: array
+      items:
+        type: string
+      description: |
+        **Apenas os eventos que passaram na validação** — é aqui que se confere
+        o que sobreviveu. Ausente quando nenhum sobreviveu.
+      example: [Message, Receipt]
+    active:
+      type: boolean
+      description: Eco do `active` enviado. Ausente quando `false`.
+      example: true
+
+LimiteHistorico:
+  type: object
+  description: |
+    Limite de gravação de MENSAGENS por conversa (coluna `users.history`) —
+    apesar de as rotas se chamarem `/webhook/history`, isto não tem que ver com
+    entregas de webhook (HOUSEKEEP F252).
+  required: [History]
+  properties:
+    Details:
+      type: string
+      description: Confirmação textual. Só aparece na escrita.
+      example: History configured successfully
+    History:
+      type: integer
+      description: |
+        Quantas mensagens são gravadas por conversa. **`0` significa gravação
+        desactivada**, e o campo vem sempre presente para que o zero seja
+        distinguível de um campo ausente.
+      example: 100
+
+PedidoLimiteHistorico:
+  type: object
+  description: Corpo de `POST /webhook/history` — e de `POST /session/history`, que é o mesmo manipulador.
+  required: [history]
+  properties:
+    history:
+      type: integer
+      minimum: 0
+      description: |
+        Quantas mensagens gravar por conversa. `0` desactiva. **Negativo é
+        recusado** com `400 invalid_history`.
+      example: 100
+
+PedidoConfiguracaoS3:
+  type: object
+  description: |
+    Corpo de `POST /s3/config` e de `POST /s3/configure` — a mesma operação em
+    dois caminhos. Nomes em snake_case, ao contrário do camelCase que as rotas
+    `/admin/users` usam para a mesma configuração.
+  properties:
+    enabled:
+      type: boolean
+      description: Liga o armazenamento em S3 para esta sessão.
+      example: true
+    endpoint:
+      type: string
+      description: |
+        Endereço do serviço. Quando presente, tem de ser um URL analisável —
+        caso contrário `400 invalid_s3_endpoint`.
+      example: https://s3.sa-east-1.amazonaws.com
+    region:
+      type: string
+      example: sa-east-1
+    bucket:
+      type: string
+      example: wa-api-midia
+    access_key:
+      type: string
+      example: AKIAIOSFODNN7EXAMPLE
+    secret_key:
+      type: string
+      description: |
+        Cifrada antes de tocar no banco, e **nunca devolvida** por nenhuma
+        rota — nem sequer mascarada, porque a leitura não a consulta.
+      example: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+    path_style:
+      type: boolean
+      description: Usa endereçamento por caminho em vez de subdomínio (necessário em MinIO e afins).
+      example: false
+    public_url:
+      type: string
+      description: Base pública por onde a mídia guardada é servida.
+      example: https://midia.exemplo.com.br
+    media_delivery:
+      type: string
+      enum: [base64, s3, both]
+      description: |
+        Como a mídia recebida é entregue. Valor fora destes três dá
+        `400 invalid_media_delivery`; **vazio assume `base64`**.
+      example: both
+    retention_days:
+      type: integer
+      description: Dias de retenção dos objectos.
+      example: 30
+
+ConfiguracaoS3Lida:
+  type: object
+  description: |
+    Resposta de `GET /s3/config`. **Não tem `secret_key`**, e a ausência é
+    deliberada: a leitura nunca consulta essa coluna, portanto o segredo não
+    tem por onde sair.
+  properties:
+    enabled: {type: boolean, example: false}
+    endpoint: {type: string, example: ''}
+    region: {type: string, example: ''}
+    bucket: {type: string, example: ''}
+    access_key:
+      type: string
+      description: |
+        **Sempre `***`**, mesmo sem chave configurada — mascarar só quando
+        existe revelaria a existência.
+      example: '***'
+    path_style: {type: boolean, example: true}
+    public_url: {type: string, example: ''}
+    media_delivery:
+      type: string
+      enum: [base64, s3, both]
+      example: base64
+    retention_days: {type: integer, example: 30}
+
+ResultadoConfiguracaoS3:
+  type: object
+  description: Resposta das escritas de S3 — `POST /s3/config`, `POST /s3/configure` e `DELETE /s3/config`.
+  properties:
+    Details:
+      type: string
+      description: Confirmação textual da operação.
+      example: S3 configuration saved successfully
+    Enabled:
+      type: boolean
+      description: |
+        Estado DEPOIS da operação. **Ausente quando `false`** — logo, a remoção
+        responde só com `Details`, e a ausência deste campo é a confirmação de
+        que ficou desligado.
+      example: true
+
+ResultadoTesteS3:
+  type: object
+  description: |
+    Resposta de `POST /s3/test`. `Bucket` e `Region` ecoam a configuração
+    **testada** — é o que distingue "testei o que gravaste" de "respondi 200".
+    Nenhuma credencial aparece aqui.
+  properties:
+    connected:
+      type: boolean
+      description: '`true` quando o bucket respondeu dentro dos 10 segundos.'
+      example: true
+    Details:
+      type: string
+      example: S3 connection test successful
+    Bucket:
+      type: string
+      example: wa-api-midia
+    Region:
+      type: string
+      example: sa-east-1
+
+PedidoConfiguracaoHmac:
+  type: object
+  description: |
+    Corpo de `POST /hmac/config` e de `POST /hmac/configure` — a mesma
+    operação. **`hmac_key` é o único campo lido**; qualquer outro é ignorado.
+  required: [hmac_key]
+  properties:
+    hmac_key:
+      type: string
+      minLength: 32
+      description: |
+        Chave que assina os webhooks desta sessão. **Mínimo de 32 caracteres**
+        (`400 hmac_key_too_short`). Guardada cifrada e nunca devolvida.
+      example: chave-de-assinatura-com-32-carac
+
+ConfiguracaoHmacLida:
+  type: object
+  description: |
+    Resposta de `GET /hmac/config`. Reporta **presença**, não valor: a chave
+    nunca sai daqui, nem em claro nem cifrada.
+  required: [hmac_key]
+  properties:
+    hmac_key:
+      type: string
+      description: |
+        `""` quando não há chave configurada, `"***"` quando há. Nenhum outro
+        valor é possível.
+      example: ''
+
+ResultadoConfiguracaoHmac:
+  type: object
+  description: Resposta das escritas de HMAC — `POST /hmac/config`, `POST /hmac/configure` e `DELETE /hmac/config`.
+  properties:
+    Details:
+      type: string
+      example: HMAC configuration saved successfully
+    Enabled:
+      type: boolean
+      description: |
+        Estado DEPOIS da operação: `true` quando a chave ficou gravada.
+        **Ausente quando `false`**, portanto a revogação responde só com
+        `Details`.
+      example: true
+
+PedidoProxy:
+  type: object
+  description: |
+    Corpo de `POST /proxy/set`. **`enable` decide o ramo**: ligar valida o URL,
+    desligar limpa o proxy gravado sem sequer olhar para ele.
+  properties:
+    proxy_url:
+      type: string
+      description: |
+        URL do proxy. Obrigatório quando `enable` é `true`
+        (`400 missing_proxy_url`); tem de ser analisável
+        (`400 invalid_proxy_url`) e o esquema tem de ser **`http` ou
+        `socks5`** (`400 unsupported_proxy_scheme`) — **`https` não é
+        aceite**.
+
+        Costuma trazer credenciais no userinfo; nunca é devolvido em erro nem
+        escrito no log.
+      example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+    enable:
+      type: boolean
+      description: |
+        `true` grava o proxy, `false` remove-o. No ramo de remoção o
+        `proxy_url` **não é validado**, para que uma configuração partida possa
+        ser apagada.
+      example: true
+    webhook_use_proxy:
+      type: boolean
+      nullable: true
+      description: |
+        Se a entrega dos webhooks também sai por este proxy. **Ausente preserva
+        o valor gravado** — a distinção entre ausente e `false` é deliberada.
+
+        Com esta opção ligada, um endereço reservado ou de loopback é recusado
+        com `400 reserved_proxy_address`; com ela desligada é permitido.
+      example: false
+
+ResultadoProxy:
+  type: object
+  description: |
+    Resposta de `POST /proxy/set`. **A forma difere entre os dois ramos**:
+    ligar traz `Set`, `ProxyURL` e `webhook_use_proxy`; desligar responde só
+    `Details`.
+  properties:
+    Details:
+      type: string
+      description: '`Proxy configured successfully` ao ligar, `Proxy disabled successfully` ao desligar.'
+      example: Proxy configured successfully
+    Set:
+      type: boolean
+      description: Presente só no ramo de ligar.
+      example: true
+    ProxyURL:
+      type: string
+      description: Eco do URL gravado. Presente só no ramo de ligar.
+      example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+    webhook_use_proxy:
+      type: boolean
+      description: Valor efectivamente persistido. Presente só no ramo de ligar.
+      example: false
+
+Etiqueta:
+  type: object
+  description: |
+    Uma etiqueta do WhatsApp Business, recolhida dos eventos que os outros
+    aparelhos anunciam. O wa-api **não as cria** — a biblioteca não sabe
+    fazê-lo.
+  properties:
+    label_id:
+      type: string
+      description: |
+        Identificador da etiqueta. É um número curto atribuído pelo WhatsApp
+        Business, não um UUID — na instância medida, `"3"`. É este valor que
+        entra em `GET /labels/{id}/chats`.
+      example: '3'
+    name:
+      type: string
+      description: |
+        Nome da etiqueta. **Pode vir com caracteres invisíveis de marcação de
+        direcção do texto** no início, postos pelo próprio WhatsApp — foi o
+        caso na medição de 2026-08-26.
+      example: Grupos
+    color:
+      type: integer
+      description: Índice da cor na paleta do WhatsApp Business.
+      example: 0
+    predefined_id:
+      type: integer
+      description: Índice da etiqueta predefinida de origem. `0` quando não vem de nenhuma.
+      example: 0
+    deleted:
+      type: boolean
+      description: |
+        Etiquetas apagadas **continuam na lista**, marcadas aqui. Filtre por
+        este campo se só quiser as activas.
+      example: false
+    updated_at:
+      type: string
+      format: date-time
+      description: Instante da última alteração anunciada, com o fuso do aparelho que a anunciou.
+      example: '2026-07-20T05:28:22.008-04:00'
+
+EtiquetaConversa:
+  type: object
+  description: Associação entre uma etiqueta e uma conversa, como `GET /labels/{id}/chats` a devolve.
+  properties:
+    label_id:
+      type: string
+      example: '3'
+    chat_jid:
+      type: string
+      description: JID da conversa — contacto, grupo ou canal.
+      example: 120363411669320145@g.us
+    labeled:
+      type: boolean
+      description: |
+        Se a etiqueta está **aplicada** neste instante. Uma associação retirada
+        continua na tabela com `false`.
+      example: true
+    updated_at:
+      type: string
+      format: date-time
+      example: '2026-07-20T05:28:22.008-04:00'
+
+PedidoRecusarChamada:
+  type: object
+  description: |
+    Corpo de `POST /call/reject`. **Os dois campos vêm do evento `CallOffer`** —
+    não são inventáveis, e sem esse evento a rota não tem alvo.
+  required: [call_from, call_id]
+  properties:
+    call_from:
+      type: string
+      description: |
+        Quem está a ligar, como veio no evento. Aceita telefone nu, JID de
+        telefone ou LID — a resolução é feita pelo servidor. Em falta dá
+        `400 missing_call_from`; irresolúvel dá `400 invalid_call_from`.
+      example: 554192421234@s.whatsapp.net
+    call_id:
+      type: string
+      description: |
+        Identificador da chamada, **gerado pelo WhatsApp** e entregue no evento
+        `CallOffer`. Em falta dá `400 missing_call_id`.
+      example: 3EB0A4B2AFD45E625C0917
+
+ResultadoRecusarChamada:
+  type: object
+  description: Resposta de `POST /call/reject`.
+  properties:
+    Details:
+      type: string
+      example: Call rejected
+    CallID:
+      type: string
+      description: Eco do `call_id` recusado, para casar com o evento de origem.
+      example: 3EB0A4B2AFD45E625C0917
