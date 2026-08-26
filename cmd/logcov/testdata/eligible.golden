@@ -2487,7 +2487,7 @@ pkg/application/usecase/chat.GetChatHistoryUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/chat.GetChatHistoryUseCase.WithLIDResolver	EXCLUDED	X1
 pkg/application/usecase/chat.GetChatHistoryUseCase.mergeAlternateKey	ELIGIBLE	covered
 pkg/application/usecase/chat.GetChatHistoryUseCase.mergeAlternateKey.func1	EXCLUDED	X6
-pkg/application/usecase/chat.MuteChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,mute_chat.go:41);uncovered:L2(S-consume,mute_chat.go:45);uncovered:L2(S-ret,mute_chat.go:46);uncovered:L2(S-ret,mute_chat.go:55)
+pkg/application/usecase/chat.MuteChatUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,mute_chat.go:46);uncovered:L2(S-consume,mute_chat.go:50);uncovered:L2(S-ret,mute_chat.go:51);uncovered:L2(S-ret,mute_chat.go:83)
 pkg/application/usecase/chat.NewArchiveChatUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewGetChatHistoryUseCase	EXCLUDED	X1
 pkg/application/usecase/chat.NewMuteChatUseCase	EXCLUDED	X1
@@ -2595,7 +2595,7 @@ pkg/application/usecase/message.SendLocationUseCase.Execute	ELIGIBLE	uncovered:L
 pkg/application/usecase/message.SendMessageUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_message.go:34);uncovered:L2(S-ret,send_message.go:37)
 pkg/application/usecase/message.SendPollUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll.go:52);uncovered:L2(S-ret,send_poll.go:55);uncovered:L2(S-ret,send_poll.go:58)
 pkg/application/usecase/message.SendPollVoteUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_poll_vote.go:29);uncovered:L2(S-ret,send_poll_vote.go:32);uncovered:L2(S-ret,send_poll_vote.go:35);uncovered:L2(S-ret,send_poll_vote.go:38);uncovered:L2(S-ret,send_poll_vote.go:41)
-pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:37)
+pkg/application/usecase/message.SendPresenceUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_presence.go:50);uncovered:L2(S-ret,send_presence.go:60)
 pkg/application/usecase/message.SendStickerUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_sticker.go:60);uncovered:L2(S-ret,send_sticker.go:63)
 pkg/application/usecase/message.SendTemplateUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_template.go:58);uncovered:L2(S-ret,send_template.go:61);uncovered:L2(S-ret,send_template.go:64);uncovered:L2(S-ret,send_template.go:67)
 pkg/application/usecase/message.SendVideoUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,send_video.go:92);uncovered:L2(S-ret,send_video.go:95);uncovered:L2(S-ret,send_video.go:131);uncovered:L2(S-ret,send_video.go:136);uncovered:L2(S-ret,send_video.go:139);uncovered:L2(S-ret,send_video.go:147)
@@ -3079,6 +3079,7 @@ pkg/domain.BlockUserRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ChatPresenceRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
 pkg/domain.DecodeRequest	ELIGIBLE	uncovered:L1
+pkg/domain.DecodeRequestWithUnknownFields	ELIGIBLE	uncovered:L1
 pkg/domain.DeleteMessageRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
 pkg/domain.EditUserRequest.UnmarshalJSON	EXCLUDED	X4
@@ -3141,6 +3142,8 @@ pkg/domain.ValidatePrivacySetting	ELIGIBLE	covered
 pkg/domain.WebhookConfigRequest.ResolveURL	EXCLUDED	X1
 pkg/domain.hasSuffix	EXCLUDED	X1
 pkg/domain.init	EXCLUDED	X3
+pkg/domain.isUnknownField	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,decode_unknown_fields.go:116)
+pkg/domain.unknownTopLevelFields	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,decode_unknown_fields.go:82)
 pkg/domain/apperr.AppError.Error	EXCLUDED	X4
 pkg/domain/apperr.AppError.Is	ELIGIBLE	uncovered:L1
 pkg/domain/apperr.AppError.Unwrap	EXCLUDED	X2
@@ -3905,8 +3908,8 @@ pkg/presentation/http/devui.deLoopback	EXCLUDED	X1
 pkg/presentation/http/devui.ehLoopback	EXCLUDED	X1
 pkg/presentation/http/handlers.ArchiveChatHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ChatPresenceHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.CommunityLinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:105)
-pkg/presentation/http/handlers.CommunityUnlinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:136)
+pkg/presentation/http/handlers.CommunityLinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:114)
+pkg/presentation/http/handlers.CommunityUnlinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:148)
 pkg/presentation/http/handlers.ConfigureHmacHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConfigureS3Handler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:110);uncovered:L2(S-http,handler_session.go:116)
@@ -3926,14 +3929,14 @@ pkg/presentation/http/handlers.DownloadVideoHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetAvatarHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetBlocklistHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.GetCommunityParticipantsHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:74)
-pkg/presentation/http/handlers.GetCommunitySubGroupsHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:42)
+pkg/presentation/http/handlers.GetCommunityParticipantsHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:80)
+pkg/presentation/http/handlers.GetCommunitySubGroupsHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:45)
 pkg/presentation/http/handlers.GetContactsHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetContactsLastActivityHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.GetGroupInfoHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_group.go:167);uncovered:L2(S-http,handler_group.go:174)
+pkg/presentation/http/handlers.GetGroupInfoHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_group.go:179);uncovered:L2(S-http,handler_group.go:186)
 pkg/presentation/http/handlers.GetGroupInviteInfoHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.GetGroupInviteLinkHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_group.go:200);uncovered:L2(S-http,handler_group.go:207)
-pkg/presentation/http/handlers.GetGroupRequestParticipantsHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_group.go:49)
+pkg/presentation/http/handlers.GetGroupInviteLinkHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_group.go:215);uncovered:L2(S-http,handler_group.go:222)
+pkg/presentation/http/handlers.GetGroupRequestParticipantsHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_group.go:52)
 pkg/presentation/http/handlers.GetHealthHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetHistoryHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetHmacConfigHandler.ServeHTTP	ELIGIBLE	covered
@@ -4103,6 +4106,7 @@ pkg/presentation/http/handlers.UserHandlers.UnblockUser.func1	ELIGIBLE	covered
 pkg/presentation/http/handlers.WSHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session_ws.go:71)
 pkg/presentation/http/handlers.WebhookHandlerContext.publishValues	EXCLUDED	X1
 pkg/presentation/http/handlers.decodeAndRespond	ELIGIBLE	covered
+pkg/presentation/http/handlers.decodeRequest	ELIGIBLE	covered
 pkg/presentation/http/handlers.firstEmpty	EXCLUDED	X1
 pkg/presentation/http/handlers.groupHandler.ServeHTTP	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.handleCreateGroup	ELIGIBLE	covered
@@ -4115,8 +4119,8 @@ pkg/presentation/http/handlers.handleSetGroupLocked	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupName	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupPhoto	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupTopic	ELIGIBLE	covered
-pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	uncovered:L2(S-consume,handler_group_mgmt.go:358)
-pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:422)
+pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	uncovered:L2(S-consume,handler_group_mgmt.go:361)
+pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:434)
 pkg/presentation/http/handlers.isClientCausedSessionError	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.isPlausibleJIDOrPhone	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.listLabelChatsHandler.ServeHTTP	ELIGIBLE	covered
@@ -4128,8 +4132,12 @@ pkg/presentation/http/handlers.newsletterOpHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.normalizePhones	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.rejectEmptyElement	ELIGIBLE	covered
 pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered
+pkg/presentation/http/handlers.requestAnswered	EXCLUDED	X1
 pkg/presentation/http/handlers.requirePublishUserInfo	EXCLUDED	X1
 pkg/presentation/http/handlers.sessionUser	ELIGIBLE	covered
+pkg/presentation/http/handlers.strictUnknownFields	EXCLUDED	X1
+pkg/presentation/http/handlers.unknownFieldError	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,decode.go:101)
+pkg/presentation/http/handlers.unknownFieldMessage	ELIGIBLE	uncovered:L1
 pkg/presentation/http/middleware.AuthAdmin	EXCLUDED	X1
 pkg/presentation/http/middleware.AuthAdmin.func1	EXCLUDED	X1
 pkg/presentation/http/middleware.AuthAdmin.func2	ELIGIBLE	covered
