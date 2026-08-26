@@ -3824,9 +3824,9 @@ components:
             | ausente | não | `400 missing_jid` |
             | `null` | não | `400 missing_jid` — **indistinguível de ausente** |
             | `""` | não | `400 missing_jid` — **indistinguível de ausente** |
-            | `"   "` | passa a validação | mas depois `500 newsletter_failed`: o JID não se consegue interpretar, e essa falha **não** vira `400` |
-            | `"nao-e-jid"` | passa a validação | idem, `500 newsletter_failed` |
-            | `"…@s.whatsapp.net"` | passa a validação | idem, `500` — o servidor do JID **não é verificado** por nós |
+            | `"   "` | não | `400 invalid_newsletter_jid` — corrigido em 2026-08-26 (F271); até essa data dava `500` |
+            | `"nao-e-jid"` | não | `400 invalid_newsletter_jid` |
+            | `"…@s.whatsapp.net"` | não | `400 invalid_newsletter_jid` — o servidor tem de ser `@newsletter` |
             | tipo não-texto | não | `400 could_not_decode_payload` |
             | `@newsletter` bem formado mas inexistente | **sim** | `200`, com `state.type: non_existing` e `id: ""` — **não é erro** |
             | `@newsletter` real | sim | — |

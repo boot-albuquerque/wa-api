@@ -29528,9 +29528,58 @@ elegível nenhuma: `eligible=978`, `covered=582`, `func_coverage=595`,
 `cmd/logcov/testdata/eligible.golden` ganhou duas linhas `EXCLUDED` e foi
 regenerado.
 
-**Status**: corrigido.
+## O que a correcção NÃO cobriu, medido depois de integrar
 
-<!-- f-status: corrigido -->
+O mesmo defeito continua vivo noutros dois campos da mesma família:
+
+```
+POST /newsletter/admin-invite {"jid":"<válido>","userJID":"nao-e-jid"}
+  -> 500 newsletter_failed        <- devia ser 400
+POST /newsletter/admin-invite {"jid":"<válido>","userJID":"   "}
+  -> 500 newsletter_failed        <- idem
+POST /newsletter/info-invite  {"invite":"codigo-que-nao-existe"}
+  -> 500 newsletter_failed        <- devia ser 404
+```
+
+`userJID` é exigido por quatro operações (`admin-invite`, `revoke`,
+`change-owner`, `demote`) e não ganhou regra de forma.
+
+O `invite` inexistente é um caso **diferente**, e a distinção importa: não é
+malformado — é um código bem formado que não corresponde a canal nenhum. O
+código honesto aí é `404`, não `400`, e confundi-los seria repetir o erro que
+esta entrada corrige.
+
+Ficam registados em vez de corrigidos no mesmo lote: cada um muda o estado de
+outra classe de pedidos, e misturá-los tornaria impossível dizer qual mudança
+causou o quê se algo corresse mal.
+
+**Verificação em campo da correcção**, nas catorze operações que exigem `jid`
+— não só na `info` onde o defeito foi encontrado:
+
+```
+follow, unfollow, mute, messages, subscribe, mark-viewed, react, demote,
+change-owner, admin-invite, admin-invite/accept, admin-invite/revoke,
+updates, delete   ->  todas 400 invalid_newsletter_jid
+
+{}                                       -> 400 missing_jid   (inalterado)
+{"jid":"120363411025775186@newsletter"}  -> 200               (sucesso passa)
+```
+
+**Controlo negativo, e o primeiro não valeu**: a minha mutação partiu a
+sintaxe, e build partido não prova nada (ARMADILHAS #3). Refeito trocando o
+corpo da função por `return false`, que compila:
+
+```
+--- FAIL: TestNewsletter_MalformedJID_IsValidation/info/___
+--- FAIL: TestNewsletter_MalformedJID_IsValidation/info/nao-e-jid
+--- FAIL: TestNewsletter_MalformedJID_IsValidation/info/554192421234@s.whatsapp.net
+--- FAIL: TestNewsletter_MalformedJID_IsValidation/follow/___
+```
+
+**Status**: corrigido para `jid` nas catorze operações. `userJID` e `invite`
+continuam a devolver `500` — medidos, e à espera de decisão.
+
+<!-- f-status: aberto -->
 
 
 ## F272 — o adaptador de infra repete a validação de `mode` e não distingue ausente de inválido
