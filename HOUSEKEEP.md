@@ -29002,18 +29002,29 @@ failed to unblock user: … info query returned status 400: bad-request
 `GET /user/blocklist` responde `200 {"Blocklist":[],"DHash":"…"}` — logo o
 caminho de leitura da lista funciona e é só a escrita que o servidor recusa.
 
-**O que isto elimina**: não é o número (testado inexistente e real), não é a
-forma do JID (testado PN e LID), e não é o tipo de conta (testado Business e
-pessoal). Sobra a forma do próprio IQ que enviamos.
+**O que isto elimina**: não é o número (testado inexistente e real) e não é o
+tipo de conta (testado Business e pessoal). Sobra a forma do próprio IQ que
+enviamos.
 
-**O que NÃO foi feito**: comparar o nosso IQ com o que o Baileys e o
-whatsapp-web.js enviam. É o passo seguinte e é o que a regra do projeto manda
-fazer antes de projetar — as três referências já estiveram aqui.
+**CORREÇÃO desta entrada (2026-08-26, investigação)**: a linha *"não é a forma
+do JID (testado PN e LID)"* estava ERRADA. As duas entradas atravessam
+`resolveBlocklistPNJID` (`pkg/infra/wa-noise/adapters/user/blocklist.go:103`),
+que converte LID → PN, e produzem o MESMO stanza no fio. **A linha "testado em
+LID" não testou LID.** Ver F278.
 
-**Correção sugerida**: ler `blocklist`/`block` nas referências, comparar o
-atributo `action` e a forma do `<item>`, e só então mexer.
+**O que NÃO foi feito → FOI FEITO**: as três referências foram consultadas e
+concordam. Causa determinada: `PROTOCOL_CHANGED` — o WhatsApp migrou a ESCRITA
+da blocklist para endereçamento por LID (`jid` em `@lid`, mais `pn_jid` no
+`block`). Baileys migrou em 2026-04-24 (`8ca9316a10`), whatsmeow em 2026-08-13
+(`8d023aa973`), 13 dias antes desta medição; o whatsapp-web.js converte PN→LID
+com `getAlternateUserWid` antes de bloquear.
 
-**Status**: não corrigido — causa por apurar.
+**Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-02 (biblioteca)
+e F278 (adaptador). O relato completo está em
+`INVESTIGATION-block-unblock.md`; os experimentos que exigem conta real, em
+`HUMAN-LAST.md` (EXP-1, EXP-2).
+
+**Status**: não corrigido — **causa determinada** (`PROTOCOL_CHANGED`).
 
 <!-- f-status: aberto -->
 
@@ -29034,16 +29045,38 @@ Os 30 s são exactamente `waclient.RequestTimeout`: o servidor **não responde**
 não é ele a recusar. `POST /newsletter/messages` sobre o MESMO canal e no mesmo
 segundo devolve `200 []` — logo a sessão, o canal e o transporte estão bons.
 
-**Hipótese, NÃO medida**: o query ID do `updates` está desactualizado. O
-WhatsApp roda-os, e um ID que não existe não produz erro — produz silêncio, que
-é exactamente o sintoma. O extractor está versionado em
-`scripts/mex-query-ids/` justamente para isto.
+**~~Hipótese, NÃO medida~~: o query ID do `updates` está desactualizado.**
 
-**Correção sugerida**: correr o extractor contra o bundle actual, comparar o ID
-do `updates` com o que está em `queryids.go`, e trocar se divergir. Se o ID
-bater, a hipótese cai e a causa é outra — registar isso em vez de insistir.
+**A HIPÓTESE CAIU (2026-08-26, investigação), por leitura de código.**
+`GetMessageUpdates` **não é uma query MEX** — é um IQ binário simples com
+namespace `newsletter` (`internal/wa-noise/capabilities/newsletter/messages.go:89-97`).
+Não passa por `queryids.go` e **não tem query ID nenhum**. Correr o extractor de
+`scripts/mex-query-ids/` não teria produzido informação sobre esta rota. Um
+achado com diagnóstico errado é pior que nenhum, e por isso esta correcção fica
+aqui em vez de a hipótese ser silenciosamente removida.
 
-**Status**: não corrigido.
+**Causa determinada**: `PROTOCOL_CHANGED`. O servidor deixou de atender
+`<message_updates>` endereçado ao JID do canal — ignora-o, e por isso o sintoma
+é silêncio até ao timeout e não um `400`. A forma que o WA Web usa hoje é
+`<messages type='jid' jid=… count=… [before]>` para `s.whatsapp.net`, que é
+exactamente o que `/newsletter/messages` já envia com sucesso; os contadores
+vêm dentro dos filhos `<message>`.
+
+Controlo que fecha a hipótese "resposta assíncrona / servidor não roteia para
+canal": `POST /newsletter/subscribe` faz um IQ `set` para o MESMO `@newsletter`
+JID (`actions.go:14`) e responde `200`.
+
+Referências: Baileys issue #2555 (**aberta** desde 2026-05-13, mesmo sintoma
+com repro), PR #2620 (stanza capturado do WA Web; fechado por stale-bot, nunca
+revisto), port mergeado em rsalcara/InfiniteAPI #503 (2026-06-06). whatsmeow
+respondeu *"eu também não resolvo"* — código idêntico, intocado desde 2023.
+
+**Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-03. Relato
+completo em `INVESTIGATION-newsletter-updates.md`; o experimento que falta, em
+`HUMAN-LAST.md` (EXP-3) — exige um canal COM mensagens, e o de teste estava
+vazio.
+
+**Status**: não corrigido — **causa determinada** (`PROTOCOL_CHANGED`).
 
 <!-- f-status: aberto -->
 
@@ -30004,5 +30037,134 @@ corpo que `DELETE /s3/config` deixa.
 
 **Status**: não corrigido — é alteração de documentação gerada e de taxonomia,
 fora do escopo desta tarefa. Registado para decisão.
+## F278 — o adaptador da blocklist resolve identidade no sentido INVERSO ao que o protocolo passou a exigir, e apaga a variável que a F264 julgava estar a medir
+
+**Data/contexto**: 2026-08-26, investigação da F264. Causa raiz na biblioteca
+vendorizada — ver `internal/wa-noise/HOUSEKEEP.md`, LIB-02. Esta entrada é a
+parte que é NOSSA.
+
+**Onde**: `pkg/infra/wa-noise/adapters/user/blocklist.go:103-116`
+
+```go
+func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
+	switch jid.Server {
+	case types.DefaultUserServer:  return jid, nil          // PN passa
+	case types.HiddenUserServer:   … GetPNForLID …          // LID VIRA PN
+	}
+}
+```
+
+**Problema, em duas camadas.**
+
+**(1) O sentido está invertido.** O upstream (whatsmeow `8d023aa973`,
+2026-08-13) e o Baileys (`8ca9316a10`, 2026-04-24) resolvem **PN → LID** para
+este stanza. Nós resolvemos **LID → PN**. O comentário da função ainda diz
+*"traduz um LID para o número de telefone, que é a forma que a lista de bloqueio
+aceita"* — era verdade quando foi escrito, e deixou de ser.
+
+**(2) E isto invalida uma linha da tabela da F264.** A F264 registou quatro
+combinações medidas e concluiu *"não é a forma do JID (testado PN e LID)"*. Mas
+as duas entradas atravessam esta função e produzem o **MESMO** stanza no fio,
+com `jid` em `@s.whatsapp.net`. A linha "testado em LID" **não testou LID**.
+
+É a ARMADILHA #1 na sua forma mais cara: a medição não estava a medir a variável
+que julgava medir, e a conclusão negativa que ela produziu — *"sobra a forma do
+próprio IQ"* — foi por acaso na direcção certa pela razão errada.
+
+**Correção sugerida**, e há uma barata e uma completa:
+
+- **Barata, e só nossa**: para `unblock`, a forma nova é
+  `<item jid='…@lid' action='unblock'/>` — sem `pn_jid`. Se esta função parar de
+  degradar o LID que o cliente já nos deu, a biblioteca vendorizada emite o
+  stanza CORRECTO sem ser tocada. São três linhas.
+- **Completa**: inverter a resolução para PN → LID e guardar o PN para o
+  `pn_jid`, em conjunto com o port do LIB-02. A função deixa de ter o nome certo.
+
+**Anti-regressão exigida**: a asserção que trava a CAUSA é *"`resolveBlocklist…`
+recebendo `@lid` devolve `@lid`"* — não o sintoma. E o dublê do `Transport` tem
+de atravessar `types.JID.String()` como o codificador real, senão abençoa o
+formato errado (ARMADILHA #1, variante "mais SIMPLES que a produção").
+
+**Status**: não corrigido, e não corrigido POR DECISÃO. A classificação da F264
+é `PROTOCOL_CHANGED`, não `BUG_LOCAL`; o CLAUDE.md proíbe corrigir de graça fora
+do escopo sem perguntar; e a confirmação em campo exige conta emparelhada, que
+este ambiente não tem. Ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md`
+(EXP-1, EXP-2).
+
+<!-- f-status: aberto -->
+
+## F289 — `orphan-browser-check` acusa como órfão um browser cujo DONO está vivo, e por isso bloqueia qualquer `make check` concorrente noutro worktree
+
+**Data/contexto**: 2026-08-26, achado de lado ao correr o gate no fim da
+investigação da F264/F265. **Fora do escopo dessa tarefa** — registado, não
+corrigido.
+
+**Onde**: `scripts/orphan-browser-check.sh:17-21`
+
+```bash
+principais=$(ps -Ao pid,ppid,etime,command 2>/dev/null \
+  | grep -i "Google Chrome" \
+  | grep -E "$padrao" \        # user-data-dir sob .../T/Test
+  | grep -v -- "--type=" \
+  | grep -v grep || true)
+```
+
+**Problema**: o recorte é feito SÓ pelo `--user-data-dir`. O script nunca olha
+para o `ppid`, e portanto não distingue *"browser que sobreviveu a uma execução
+anterior"* de *"browser que uma execução EM CURSO acabou de abrir"*. Os dois
+casam o padrão.
+
+O próprio texto de erro do script enuncia o critério que ele não aplica:
+
+> `ppid=1` significa que o processo DONO morreu antes de o parar
+
+**Evidência medida**, duas execuções seguidas de `make check` neste worktree:
+
+```
+orphan-browser-check: 1 browser(s) de teste SOBREVIVERAM a execucoes anteriores.
+  pid=32481 ppid=32190 idade=00:16     # 1.ª corrida
+  pid=34339 ppid=32190 idade=00:41     # 2.ª corrida, PID novo, MESMO ppid
+make: *** [orphan-browser-check] Error 1
+```
+
+O `ppid` **não é 1**, e o dono estava vivo:
+
+```
+32190 32145  …/wa-headless.test -test.paniconexit0 -test.count=1 …
+32145 23386  go test -race -count=1 -timeout=20m -p 1 wa-api/internal/wa-headless …
+```
+
+Ou seja: um `go test` de OUTRO worktree estava a correr, o seu binário de teste
+detinha o browser legitimamente, e o gate deste worktree declarou-o órfão. O PID
+mudou entre as duas corridas com o mesmo pai — a assinatura de uma suíte a
+progredir, não de um vazamento parado.
+
+**Consequência, e é a que dói**: o remédio que o próprio gate sugere
+(`make orphan-browser-clean`) **mataria a suíte do outro worktree**. Quem seguir
+a instrução sabota trabalho alheio e não fica a saber. E enquanto qualquer
+sessão correr testes headless, **nenhum outro worktree consegue fechar o
+`make check`** — que é exactamente o caso de "escopo disjunto de ficheiro não é
+escopo disjunto de gate".
+
+**Correção sugerida**: acrescentar ao recorte a verificação de que o `ppid` já
+não existe (ou é 1). Um browser cujo pai está vivo e é um binário `*.test` não é
+um órfão por definição — é a execução a decorrer. O `etime` sozinho **não**
+serve como discriminante: uma suíte headless legítima demora minutos, e um
+limiar de idade voltaria a apanhar o caso vivo.
+
+**Anti-regressão exigida**: o teste tem de exercitar os DOIS lados — pai morto
+(acusa) e pai vivo (não acusa). É a variante do "teste o caminho de SUCESSO, não
+só a recusa": hoje o gate só foi validado no caso em que deve falhar, e é por
+isso que o falso positivo sobreviveu.
+
+**Status**: não corrigido, e **não corrigido por decisão**. É achado incidental
+fora do escopo da tarefa (investigação da F264/F265), e o CLAUDE.md proíbe
+corrigir de graça sem perguntar. O browser acusado NÃO foi morto, pelo mesmo
+motivo: pertence a outra sessão.
+
+**Impacto no gate desta sessão**: `make check` parou aqui com `EXIT=2` nas duas
+corridas. Os alvos anteriores — `build`, `vet`, `fmt-gate` — passaram nas duas.
+Os commits desta sessão tocam **zero ficheiros `.go`** (7 ficheiros, todos
+Markdown), pelo que não há alteração de código por validar.
 
 <!-- f-status: aberto -->
