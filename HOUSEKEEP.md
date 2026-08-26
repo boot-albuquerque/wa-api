@@ -27240,6 +27240,11 @@ As outras duas linhas (`POST /group/info` e `POST /group/invitelink` com
 grupo de que não é membro) **não foram corrigidas neste lote** — os ficheiros
 `handler_group*.go` estão fora do escopo (pertencem a outro lote).
 
+
+### Verificação em campo — 2026-08-25, lote A
+
+`/group/info` e `/group/invitelink` com grupo alheio → `403 upstream_forbidden`, *"WhatsApp does not permit this operation on that target"*. Antes `500`.
+
 <!-- f-status: aberto -->
 
 ## F242 — `/user/info` devolve `200` com resultado VAZIO quando o formato está errado
@@ -27552,6 +27557,11 @@ string fallback) e `TestGetGroupRequestParticipants_QueryString` falhou com
 
 **Status**: não corrigido — aguarda verificação.
 
+
+### Verificação em campo — 2026-08-25, lote A
+
+`GET /group/requestparticipants?group_jid=…` → `200`. Antes exigia corpo JSON e dava `400 "bad request"` sem código.
+
 <!-- f-status: aberto -->
 
 ## F245 — RETIRADA: `/health` autenticado é desenho deliberado, e existe `/livez` público
@@ -27684,6 +27694,11 @@ confirmou-se que o build compila (o defeito original nunca impedia compilação 
 era ligação errada, não código partido). A verificação em campo é necessária.
 
 **Status**: não corrigido — aguarda verificação.
+
+
+### Verificação em campo — 2026-08-25, lote A
+
+Sequência medida: inicial `IsLocked=False`; `/group/locked` → `True`; `/group/joinapprovalmode` → `IsLocked` **continua `True`** e `IsJoinApprovalRequired` passa a `True`. **No registo do grupo**: *"Você ativou a autorização de admins para entrar neste grupo"* — mensagem PRÓPRIA, em vez de reescrever o lock.
 
 <!-- f-status: aberto -->
 
@@ -27819,6 +27834,11 @@ e devolve 400 em vez de 500.
 
 **Status**: não corrigido — aguarda verificação.
 
+
+### Verificação em campo — 2026-08-25, lote A
+
+`Action:"approve"` → `400 invalid_action`, *"unknown participant action \"approve\" (must be \"add\" or \"remove\")"*. **No registo do grupo**: `Você adicionou ~AulaPrática` **sem** o `Você removeu` que antes se seguia. Grupo com 3 membros.
+
 <!-- f-status: aberto -->
 
 ## F248 — `POST /group/photo` devolve `500` e a foto NÃO é definida
@@ -27917,6 +27937,11 @@ permanece — mas agora nunca lhe chega payload inválido por esta rota.
 
 **Status**: não corrigido — aguarda verificação.
 
+
+### Verificação em campo — 2026-08-25, lote A
+
+`POST /group/photo` com PNG que o WhatsApp recusa → `422 upstream_rejected`, e o log acrescenta *"the given data is not a valid image"*. **No registo do grupo NÃO aparece `Você apagou a imagem deste grupo`** — a operação deixou de destruir a foto antes de falhar. Era essa a parte grave.
+
 <!-- f-status: aberto -->
 
 ## F249 — o resultado POR PARTICIPANTE é descartado, e por isso não sabemos o que aconteceu
@@ -27999,6 +28024,11 @@ impede compilação limpa (`update` não declarado), mas as asserções de
 `confirmed` no corpo o teste falha.
 
 **Status**: não corrigido — aguarda verificação.
+
+
+### Verificação em campo — 2026-08-25, lote A
+
+O corpo passa a trazer `confirmed:true` e `result` por participante, com JID, `PhoneNumber`, `LID`, `IsAdmin` e campo de erro. A informação que antes era descartada.
 
 <!-- f-status: aberto -->
 
