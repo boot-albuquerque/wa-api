@@ -40,10 +40,10 @@ var (
 )
 
 const (
-	CodeUnauthorized    = "unauthorized"
+	CodeUnauthorized     = "unauthorized"
 	CodeMissingSessionID = "missing_session_id"
-	CodeMissingID       = "missing_id"
-	CodeDecodePayload   = "could_not_decode_payload"
-	CodeMissingJID      = "missing_jid"
-	CodeInvalidJID      = "invalid_jid"
+	CodeMissingID        = "missing_id"
+	CodeDecodePayload    = "could_not_decode_payload"
+	CodeMissingJID       = "missing_jid"
+	CodeInvalidJID       = "invalid_jid"
 )
