@@ -116,6 +116,7 @@ Messaging
 ├── ✅ send_location        POST /chats/send/location
 ├── 🟡 send_contacts        POST /chats/send/contact — aceita ARRAY, nome no singular
 ├── ✅ send_reaction        POST /chats/react
+├── ✅ send_native_carousel POST /chats/send/carousel — NÃO é template (ver nota)
 │
 ├── Interactive
 │   ├── ✅ send_reply_buttons    POST /chats/send/buttons
@@ -132,15 +133,18 @@ Messaging
 │   ├── 🟡 send_template_buttons  o MESMO endpoint, campo `Buttons`
 │   ├── ❌ send_catalog_template
 │   ├── ❌ send_flow_template
-│   └── 🟡 send_carousel_template POST /chats/send/carousel — é `InteractiveMessage`
-│                                 com `CarouselMessage`, NÃO um template aprovado
+│   └── ❌ send_carousel_template  ver a nota abaixo: são DUAS capacidades
 │
 └── Message Operations
     ├── ✅ reply_to_message   campo `ReplyTo` em TODAS as rotas de envio
     └── ✅ mark_read          POST /chats/markread
 ```
 
-**Contagem: 12 ✅, 4 🟡, 1 📥, 6 ❌** — de 23 folhas.
+**Contagem: 13 ✅, 3 🟡, 1 📥, 7 ❌** — de 24 folhas.
+
+A árvore ganhou uma folha e perdeu uma ambiguidade: `send_carousel_template`
+era 🟡 por partilhar a palavra "carousel" com o que temos. São **duas
+capacidades distintas**, e separá-las mostra que temos uma e não a outra.
 
 ### O que cada estado significa aqui, com precisão
 
@@ -156,12 +160,23 @@ array. É inconsistência de NOME, não de capacidade. Registada em F269.
 diferem dos de `/chats/send/buttons` — e essa divergência está documentada
 como armadilha.
 
-**🟡 `send_carousel_template`** — e esta é a distinção mais importante da
-árvore. O nosso carrossel é um `InteractiveMessage` com
-`CarouselMessage_HSCROLL_CARDS` (`messenger_carousel.go:66`), construído no
-momento. Um **carousel template** da Meta é outra coisa: um modelo submetido e
-aprovado antes de existir conversa. **Não é o mesmo recurso com nome
-diferente.**
+**✅ `send_native_carousel` e ❌ `send_carousel_template`** — a distinção mais
+importante da árvore, e ela obrigou a **dividir uma folha em duas**.
+
+O nosso carrossel é um `InteractiveMessage` com `CarouselMessage_HSCROLL_CARDS`
+(`messenger_carousel.go:66`), montado no momento do envio. Um **carousel
+template** da Meta é um modelo submetido e **aprovado antes de existir
+conversa**.
+
+Uma pesquisa da colecção oficial no Postman **não encontrou** um pedido
+independente de "Send Carousel Message", ao contrário do que existe para
+botões, lista, produto e Flow — o carrossel aparece como *message template com
+múltiplos cards*. Ou seja: o que temos pode ser capacidade do protocolo
+WhatsApp Web **sem equivalente directo** na Cloud API.
+
+Enquanto o contrato oficial não for confirmado, ficam como capacidades
+separadas. Marcá-las como uma só, em qualquer sentido, seria igualar nomes em
+vez de capacidades.
 
 **📥 `send_order_details`** — sabemos **receber**: `message_classify.go:146`
 classifica `OrderMessage` e `ProductMessage` à chegada. Enviar é outro
@@ -178,6 +193,94 @@ não tem:
 | `send_flow` · `send_flow_template` | **WhatsApp Flows** é recurso da plataforma Meta, definido e publicado no painel dela. Atenção ao falso positivo: há 59 ocorrências de `Flow` em `pkg/`, e são **todas** `NativeFlowButton` — o mecanismo interno dos botões, sem relação com Flows |
 | `send_catalog_template` | template aprovado **e** catálogo. Depende dos dois anteriores |
 | `send_order_status` | não há construtor, e o fluxo de encomenda pressupõe catálogo |
+
+## Como a Cloud API modela isto — e o que valida o nosso desenho
+
+Levantamento da colecção oficial da Meta no Postman (2026-08-26). **Onde não
+consegui cruzar com `developers.facebook.com`, está dito**: a página de
+referência da Message API é renderizada por JavaScript e não expõe os schemas.
+
+### O endpoint é transporte, não capacidade
+
+Quase tudo passa por um só:
+
+```
+POST /{version}/{phone_number_id}/messages
+```
+
+O que muda é `type` no corpo e, nas interativas, `interactive.type`:
+
+| capacidade | `type` | `interactive.type` |
+|---|---|---|
+| texto, imagem, áudio, vídeo, documento, sticker, localização, contactos, reação | o próprio nome | — |
+| template | `template` | — |
+| botões de resposta | `interactive` | `button` |
+| lista | `interactive` | `list` |
+| produto único | `interactive` | `product` |
+| multi-produto | `interactive` | `product_list` |
+| catálogo | `interactive` | `catalog_message` |
+| Flow | `interactive` | `flow` |
+| cobrança | `interactive` | `order_details` |
+| estado da encomenda | `interactive` | `order_status` |
+
+**A consequência para o nosso registo de capacidades**: `POST /messages`
+existir **não significa** que as capacidades de mensagem estejam
+implementadas. Uma tabela que contasse endpoints daria 1 do lado da Meta e 16
+do nosso, e não diria nada.
+
+### Três coisas que ela modela melhor do que eu tinha escrito
+
+**1. "Botões" não é uma capacidade — são duas.** `interactive.button` (até 3
+botões de resposta, título ≤ 20 caracteres, `id` devolvido no webhook) é
+diferente de **botões de template**, que são criados em
+`POST /{waba_id}/message_templates` e passam por aprovação, com subtipos
+`QUICK_REPLY`, `URL`, `PHONE_NUMBER`, `OTP`, `CATALOG` e `FLOW`.
+
+Isto valida a divergência que já tínhamos medido e documentado como armadilha:
+os tipos aceites em `/chats/send/buttons` (`reply`, `cta_url`, `cta_call`,
+`copy`) diferem dos de `/chats/send/template` (`quickreply`, `url`, `call`).
+**Não era inconsistência nossa — é a diferença entre dois recursos.**
+
+**2. "Template" também são duas**: gerir (`POST`/`GET`/`DELETE`
+`/{waba_id}/message_templates`) e enviar (`type: "template"` em `/messages`).
+Nós não temos nem uma nem outra — o nosso `/chats/send/template` monta um
+`TemplateMessage` do protocolo, sem aprovação prévia.
+
+**3. Pagamentos são regionais.** A colecção traz exemplos específicos de
+**Singapura e Índia**. Não é capacidade global, e tratá-la como tal no registo
+seria prometer o que não existe no Brasil.
+
+### E duas que confirmam o desenho que já tínhamos
+
+**Resposta não é um tipo de mensagem.** A Meta acrescenta
+`context.message_id` ao tipo normal, em vez de ter `reply_text`,
+`reply_image`, … É exactamente o nosso `ReplyTo`, presente em **todas** as
+rotas de envio. Dois desenhos independentes chegaram à mesma forma.
+
+**O `200` não é entrega.** A resposta devolve um `wamid`; os estados reais —
+`sent`, `delivered`, `read`, `failed` — chegam por **webhook**. É o mesmo que
+esta série mediu à força: o nosso `200` com `message_id` vale 🟡, e só a
+observação independente promove a ✅.
+
+Isso sugere uma melhoria concreta ao nosso modelo de evidência: hoje a
+promoção de 🟡 para ✅ é feita por mim, a olhar para o cliente. **Com o
+webhook de `delivered` ela poderia ser automática** — e essa é a diferença
+entre evidência que se recolhe e evidência que se recebe.
+
+### O que a pesquisa revelou como lacuna nossa, e eu não tinha visto
+
+A Meta aceita mídia por **URL** e por **`media_id`** (upload prévio). Eu
+supus que só aceitávamos base64 — **errado, e medido**: `send_image.go:254`
+aceita URL `http(s)`, com protecção contra SSRF, além do URI de dados.
+
+Falta-nos o terceiro: **não há upload prévio com ID reutilizável**. Enviar a
+mesma imagem a cem destinatários envia-a cem vezes. Não é defeito — é uma
+capacidade que a Cloud API tem e nós não, e fica registada como tal.
+
+**Nuance por confirmar**: a colecção mostra `audio.voice: true` para nota de
+voz. Nós usamos `ptt`, com padrão `true`. Parecem o mesmo conceito com nomes
+diferentes, **mas não cruzei os dois** — e igualar por semelhança de
+significado é o erro que a nota do carrossel acabou de evitar.
 
 ### O que isto revela sobre a fronteira com a Cloud API
 
@@ -196,6 +299,64 @@ sugere que a leitura é possível; **o envio não foi investigado**. Antes de
 planear qualquer uma das seis, é essa a medição a fazer — e as três
 referências do `CLAUDE.md` (Baileys, Evolution, whatsapp-web.js) são onde
 procurar, porque uma resposta negativa delas também é informação.
+
+## Matriz de capacidades por motor
+
+O projecto tem **dois** motores — `wa-noise` (protocolo WhatsApp Web, o que
+serve hoje) e `wa-headless` (dirige a SPA) — e a Cloud API seria um terceiro.
+A coluna certa para cada capacidade não é a mesma.
+
+`wa-noise` medido nesta série. `wa-headless` **não medido** — está fora do
+âmbito por instrução, e um `?` é mais honesto que uma suposição.
+
+| capacidade | wa-noise | wa-headless | meta_cloud |
+|---|---|---|---|
+| `send_text` | ✅ | ? | ✅ |
+| `send_image` · `send_video` · `send_document` | ✅ | ? | ✅ |
+| `send_audio` | ✅ | ? | ✅ |
+| `send_voice` | 🟡 `ptt`, padrão `true` | ? | 🟡 `audio.voice` — equivalência **não cruzada** |
+| `send_sticker` | ✅ | ? | ✅ |
+| `send_location` | ✅ | ? | ✅ |
+| `send_contacts` | 🟡 rota no singular, aceita array | ? | ✅ `contacts` |
+| `send_reaction` | ✅ | ? | ✅ (falha se a original tiver >30 dias) |
+| `send_reply_buttons` | ✅ | ? | ✅ `interactive.button`, máx. 3 |
+| `send_list` | ✅ | ? | ✅ `interactive.list`, máx. 10 linhas |
+| `send_native_carousel` | ✅ `HSCROLL_CARDS` | ? | **?** sem pedido próprio na colecção |
+| `send_single_product` | ❌ | ? | ✅ `interactive.product` |
+| `send_multi_product` | ❌ | ? | ✅ `product_list`, máx. 30 |
+| `send_catalog` | ❌ | ? | ✅ `catalog_message` |
+| `send_flow` | ❌ | ? | ✅ `interactive.flow` |
+| `send_order_details` | 📥 só recebe | ? | 🟡 **regional** (SG, IN) |
+| `send_order_status` | ❌ | ? | 🟡 **regional** |
+| `send_template` | 🟡 sem aprovação prévia | ? | ✅ com aprovação |
+| `send_template_buttons` | 🟡 tipos diferentes de `/buttons` | ? | ✅ 6 subtipos |
+| `send_catalog_template` · `send_flow_template` · `send_carousel_template` | ❌ | ? | ✅ |
+| **gestão** de templates | ❌ | ? | ✅ `/{waba_id}/message_templates` |
+| **gestão** de Flows | ❌ | ? | ✅ `/{waba_id}/flows` |
+| upload de mídia com ID reutilizável | ❌ | ? | ✅ |
+| `reply_to_message` | ✅ `ReplyTo` | ? | ✅ `context.message_id` |
+| `mark_read` | ✅ rota própria | ? | ✅ mesmo endpoint, outro método |
+| **grupos** (18 rotas) | ✅ | ? | ❌ |
+| **comunidades** (4) | ✅ | ? | ❌ |
+| **canais** (18) | ✅ | ? | ❌ |
+| **status** (3) | 🟡 F256 | ? | ❌ |
+| **enquetes** | ✅ | ? | ❌ não consta dos tipos |
+
+### O que a matriz mostra que a árvore sozinha escondia
+
+**A linha divisória não é "quem tem mais".** É clara e tem nome: tudo o que
+depende do **Commerce Manager** e do **painel da Meta** — catálogo, produtos,
+encomendas, Flows, templates aprovados — está do lado deles. Tudo o que
+depende do **protocolo social** — grupos, comunidades, canais, status,
+enquetes — está do nosso.
+
+Não é acidente: são as duas metades do que o WhatsApp é. Uma API de plataforma
+comercial não expõe grupos; um cliente de protocolo não tem catálogo aprovado.
+
+**A consequência para o planeamento**: as 7 lacunas da árvore **não se
+resolvem escrevendo rotas**. Resolvem-se por integração, ou não se resolvem.
+Confundir as duas coisas faria alguém abrir uma tarefa "implementar
+send_catalog" que não tem como terminar.
 
 ## Comparação com o que temos — **por fazer**
 

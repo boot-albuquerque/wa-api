@@ -28,11 +28,21 @@ Métricas da campanha:
 | incógnitas (⬜) eliminadas | **25** |
 | 🟡 promovidos a ✅ | 0 (nenhum era honesto — ver §4) |
 | ❌ com causa determinada | **3 de 3** |
-| bugs achados | **17** (F273–F289) |
+| bugs achados | **22** (F273–F294) |
 | bugs corrigidos | 1 (legenda `base.yaml`, com gate) |
-| gates novos de regressão | **5** (`openapi_reconciliation_test.go`) |
-| itens que ainda exigem humano | **13** (`HUMAN-LAST.md`) |
+| gates novos de regressão | **9** (5 de reconciliação + 4 de concorrência sob `-race`) |
+| itens que ainda exigem humano | **16** (`HUMAN-LAST.md`) |
 | irreversíveis ainda pendentes | 3 (`IRREVERSIBLE-LAST.md`) |
+| afirmações do scorecard derrubadas por medição | **3 de 4** (§12) |
+
+**Nota sobre espelhamento de rota.** Este placar é sobre as **141 operações
+canónicas**. Durante a campanha o tronco passou por um estado intermédio com 232
+operações (141 canónicas + 91 formas antigas), em que ✅ saltava de 98 para 178 —
+mas isso era **duplicação de caminho**, não medição nova: as canónicas herdam a
+prova por serem o mesmo handler noutro caminho. `3a0b48b4` retirou as formas
+antigas do contrato e o número voltou a 141. **Nada aqui conta espelhamento como
+progresso**: as 24 promoções são medição nova contra servidor local com fixtures
+descartáveis.
 
 ---
 
@@ -132,6 +142,24 @@ negativas**. Aqui elas foram decisivas:
 - **whatsapp-web.js**, no mesmo caso, respondeu *"isto não é comigo"*: dirige a SPA, não emite stanza — a inversão exacta do caso do `sendText`.
 - **Evolution API** **não é opinião independente**: consome o Baileys sem lógica de identidade própria.
 - **Meta/WhatsApp:** **não há documentação oficial pública** de nenhuma das duas capacidades. Registado como informação válida — **nenhuma afirmação aqui atinge Nível A**.
+
+**Correcção posterior, sobre a graduação dessa ausência.** As três primeiras
+versões destes documentos graduavam *"a Cloud API não expõe esta capacidade"*
+como **Nível B — ausência verificada**. Estava errado.
+`docs/REFERENCIA-META-OFICIAL.md` estabelece que a Cloud API e este projecto são
+**superfícies diferentes** — Graph API com conta registada, templates e custo por
+conversa, contra o protocolo do WhatsApp Web falado pelo fork em
+`internal/wa-noise` — e que cerca de **60 das 141 rotas** daqui (grupos,
+comunidades, canais, status) não têm equivalente lá **por desenho**. Os canais,
+em particular, são 18 rotas aqui e *"não"* na Cloud API.
+
+Verificar que algo não está num sítio onde nunca estaria **não mede a
+capacidade**. As três linhas passaram de **B** para **sem nível**. Isto **não
+altera classificação nenhuma**: os três `PROTOCOL_CHANGED` assentam em medição
+de campo (B) e em implementações de referência (C/D), e **nenhum desses elos
+passa pela Cloud API**. A correcção existe para que uma leitura futura não
+empreste à ausência um apoio a `UNSUPPORTED_CONFIRMED` que ela não dá — seria
+exactamente a inferência que o `CLAUDE.md` proíbe.
 
 ### Duas linhas do registo anterior estavam erradas
 
@@ -290,7 +318,7 @@ sem ficar a saber.
 
 ## 10. Onde está o trabalho
 
-**Ramo integrado: `campaign/evidence-integration`** (7 commits sobre `3a0b48b4`).
+**Ramo integrado: `campaign/evidence-integration`** (12 commits sobre `3a0b48b4`).
 
 Ramos de origem preservados para revisão — os worktrees foram removidos, as
 branches ficam:
@@ -301,6 +329,7 @@ branches ficam:
 | `campaign/evidence-failures` | os dois `INVESTIGATION-*.md` + `WHATSAPP-CAPABILITIES.md` |
 | `campaign/evidence-amber-observers` | `OBSERVADORES-AMBAR.md` |
 | `campaign/evidence-audit` | `AUDITORIA-EVIDENCIAS.md` + o gate de reconciliação |
+| `campaign/evidence-production-gaps` | `MEDICAO-PRODUCAO.md` + os testes de concorrência sob `-race` |
 
 Documentos produzidos, todos no ramo integrado: `CAMPANHA-DESCARTAVEL.md`,
 `AUDITORIA-EVIDENCIAS.md`, `OBSERVADORES-AMBAR.md`,
@@ -310,7 +339,54 @@ matriz inventada), `HUMAN-LAST.md`, `IRREVERSIBLE-LAST.md`.
 
 ---
 
-## 11. Limite honesto desta campanha
+## 11. O segundo eixo: as quatro ❌ de produção, medidas
+
+O eixo por rota é só metade. O scorecard de prontidão tinha quatro linhas ❌
+**arquitecturais** — paginação, idempotência, limitação de ritmo, concorrência.
+A regra do projecto manda **medir antes de projectar**, e o teste dessa regra é
+que *uma medição útil produz pelo menos um "eu não teria adivinhado"*.
+
+Produziu seis. **Três das quatro afirmações estavam erradas.**
+
+| linha | veredicto | o que a medição mostrou |
+|---|---|---|
+| **Paginação** | **CAI como generalização** | `/chats/list` **pagina** — `limit` (padrão 50, tecto 500), `offset` e `total`, medido com 2 000 conversas — e paginava desde `9d9dd7ec`, **18 dias antes** de a frase *"nenhuma colecção é paginada"* ter sido escrita. `/chats/history` tem `limit` **sem tecto**; `/users/contacts` é que continua sem nada. |
+| **Limitação de ritmo** | **as DUAS metades falsas** | o `x/time/rate` **não** protege a conta no envio: protege o **servidor, por IP** (10 r/s, rajada 20), e está em **observe-only** (`router.go:257`) — 4 rajadas de 60 concorrentes deram **60×`200`, 0×`429`**, só avisos. E a API **responde `429`**, em 64 sítios via `errmap.ClassifyIQ`, como relais do WhatsApp — documentado em **0 de 141** operações. |
+| **Idempotência** | confirma-se na letra, **reescreve-se no conteúdo** | zero `Idempotency-Key`, verdade. Mas configuração **é** idempotente (medido), `POST /admin/users` deduplica por `token_hash` → `409` (medido), e o envio já tem `Id` de cliente que vira stanza ID, com dedup local por `UNIQUE(user_id, message_id)` + `ON CONFLICT`. A lacuna real é menor e mais precisa do que a linha dizia. |
+| **Concorrência** | **confirma-se no efeito, corrige-se no mecanismo** | não é falta de `ETag` no geral: `UpdateUser` e `SaveProxyConfig` escrevem em `UPDATE` único. A janela real é o par leitura→escrita de `resolveWebhookUseProxy` (`set_proxy.go`) — um `POST /session/proxy` que **omite** `webhook_use_proxy` lê a coluna e reescreve-a, **apagando o valor que um pedido concorrente acabou de declarar e recebeu `200` a confirmar**. |
+
+A concorrência é a única das quatro que ficou **travada em teste**:
+`pkg/application/usecase/storage/session_config_concurrency_test.go`, 4 testes
+com repositório real sobre SQLite real, sob `-race`. A hipótese "é a cache" foi
+testada e **descartada** — `RepublishUser` invalida e relê, converge.
+
+### Os "eu não teria adivinhado"
+
+1. A evidência que *"provava"* que `/chats/list` não pagina — 7 144 bytes — era a **primeira página de 50 de 2 000**, lida como se fosse o total. A resposta trazia `total` e `limit` no próprio corpo.
+2. O `x/time/rate` faz o **oposto** do que o scorecard dizia sobre ele.
+3. A API responde `429` e o contrato documenta-o em **zero** operações.
+4. **0 perdas em 200 rodadas** concorrentes sem controlo de escalonamento — um teste ingénuo teria declarado o sistema seguro. A perda só aparece com encontro marcado.
+5. `limit=-1` devolve tudo **só em SQLite** (`LIMIT -1` = sem limite); em Postgres seria `500`. *Não medido contra Postgres* — afirmado da semântica documentada, e dito como tal.
+6. `/webhook/history` **não é colecção** apesar do nome: devolve o escalar `users.history`.
+
+O controlo negativo foi executado e **uma das variantes não valeu**: fazer B
+declarar o flag faz o teste falhar, mas **noutra asserção** (a de ordem), o que
+não prova que a asserção da perda morde. Está dito no documento e no HOUSEKEEP
+em vez de contado como controlo válido.
+
+### A verificação servido-vs-repo (ARMADILHAS #27)
+
+Feita como o `CLAUDE.md` prescreve, com o binário a correr:
+`curl -s localhost:8093/docs/openapi.yaml | cmp - pkg/…/openapi.yaml` → **exit 0**,
+idênticos byte a byte, 963 862 bytes. O binário serve **122 caminhos, 141
+operações, 0 `deprecated`** — o que **contradiz** a linha 67 do scorecard
+(*"as antigas continuam a funcionar, marcadas `deprecated`"*), corrigida.
+
+Medições em `MEDICAO-PRODUCAO.md`; achados **F290–F294**.
+
+---
+
+## 12. Limite honesto desta campanha
 
 **Não existe conta WhatsApp emparelhada neste ambiente.** Nenhuma medição contra
 o servidor real do WhatsApp foi feita nesta campanha, e **nenhuma foi

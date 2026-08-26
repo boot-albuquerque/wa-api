@@ -29767,6 +29767,70 @@ envio não foi investigado. As três referências do `CLAUDE.md` são onde
 procurar — e uma resposta negativa delas também é informação, como a F233 já
 mostrou.
 
+## Levantamento da colecção oficial no Postman — quatro correcções ao que eu escrevi
+
+**Data**: 2026-08-26, com pesquisa trazida pelo utilizador sobre a colecção
+oficial da Meta no Postman. Verifiquei o que consegui cruzar e **atribuí o
+resto à origem**: a página de referência em `developers.facebook.com` é
+renderizada por JavaScript e não expõe os schemas, logo não pude confirmar ali
+o método de `mark_read` nem o campo `audio.voice`.
+
+**1. O carrossel eram DUAS capacidades, e eu tinha-o como uma 🟡.** Uma
+pesquisa da colecção não encontra pedido independente de "Send Carousel
+Message", ao contrário do que existe para botões, lista, produto e Flow. O
+nosso é `InteractiveMessage` com `CarouselMessage_HSCROLL_CARDS`, montado no
+momento; o da Meta é template aprovado. Separados em `send_native_carousel`
+(✅ nosso) e `send_carousel_template` (❌). **A árvore passou de 23 para 24
+folhas, e de 12 ✅ para 13** — não por termos ganho capacidade, mas por eu ter
+parado de contar duas coisas como uma.
+
+**2. Supus que só aceitávamos mídia em base64. Errado, e medido**:
+`send_image.go:254` aceita URL `http(s)`, com protecção contra SSRF, além do
+URI de dados. A lacuna real é outra: **não temos upload prévio com ID
+reutilizável**, que a Cloud API tem. Enviar a mesma imagem a cem destinatários
+envia-a cem vezes.
+
+**3. "Botões" e "template" não são uma capacidade cada — são duas cada.** A
+Meta separa `interactive.button` (máx. 3, título ≤ 20) de botões de template
+(criados em `/{waba_id}/message_templates`, com aprovação, subtipos
+`QUICK_REPLY`, `URL`, `PHONE_NUMBER`, `OTP`, `CATALOG`, `FLOW`). Isto
+**valida** a divergência que já tínhamos documentado como armadilha — os tipos
+aceites em `/chats/send/buttons` diferem dos de `/chats/send/template`. Não era
+inconsistência nossa; é a diferença entre dois recursos.
+
+**4. Pagamentos são REGIONAIS** (Singapura e Índia na colecção). Tratá-los
+como capacidade global no registo seria prometer o que não existe no Brasil.
+
+## E duas confirmações do desenho que já tínhamos
+
+**Resposta não é tipo de mensagem.** A Meta acrescenta `context.message_id` ao
+tipo normal, em vez de ter `reply_text`, `reply_image`, … É exactamente o nosso
+`ReplyTo`, em todas as rotas de envio. Dois desenhos independentes na mesma
+forma é o sinal mais forte de que a forma está certa.
+
+**O `200` não é entrega, e eles modelam-no assim.** A resposta devolve `wamid`;
+os estados `sent`, `delivered`, `read`, `failed` chegam por **webhook**. É o
+que esta série mediu à força — e sugere uma melhoria concreta: hoje a promoção
+de 🟡 para ✅ é feita por mim a olhar para o cliente; **com o webhook de
+`delivered` poderia ser automática**. É a diferença entre evidência que se
+recolhe e evidência que se recebe.
+
+## A matriz por motor, e o que ela mostra
+
+Escrita em `docs/REFERENCIA-META-OFICIAL.md`, com colunas `wa-noise` (medido),
+`wa-headless` (**não medido** — fora do âmbito, e `?` é mais honesto que uma
+suposição) e `meta_cloud`.
+
+**A linha divisória tem nome.** Tudo o que depende do **Commerce Manager e do
+painel da Meta** — catálogo, produtos, encomendas, Flows, templates aprovados
+— é deles. Tudo o que depende do **protocolo social** — grupos, comunidades,
+canais, status, enquetes — é nosso. São as duas metades do que o WhatsApp é.
+
+**Consequência de planeamento, e é o achado accionável**: as 7 lacunas da
+árvore **não se resolvem escrevendo rotas**. Resolvem-se por integração, ou não
+se resolvem. Abrir uma tarefa "implementar `send_catalog`" seria abrir uma que
+não tem como terminar.
+
 <!-- f-status: aberto -->
 
 ## F272 — a API oficial da Meta como referência, e a comparação que falta

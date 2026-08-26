@@ -57,9 +57,21 @@ encomendas, Flows — caem exactamente onde a Cloud API é forte, e as ~60 só
 nossas caem onde ela não chega. **As duas superfícies são quase
 complementares.**
 
-Aviso de falso positivo que já custou tempo: há 59 ocorrências de `Flow` em
-`pkg/`, e são **todas** `NativeFlowButton` — o mecanismo interno dos botões.
-Nada a ver com WhatsApp Flows.
+O ficheiro tem também a **matriz de capacidades por motor** (`wa-noise`,
+`wa-headless`, `meta_cloud`) e a lição que ela dá: a linha divisória tem nome.
+O que depende do **Commerce Manager e do painel da Meta** — catálogo,
+produtos, encomendas, Flows, templates aprovados — é deles. O que depende do
+**protocolo social** — grupos, comunidades, canais, status, enquetes — é
+nosso. **As 7 lacunas não se resolvem escrevendo rotas**; resolvem-se por
+integração, ou não se resolvem.
+
+Dois avisos de falso positivo que já custaram tempo:
+
+- há 59 ocorrências de `Flow` em `pkg/`, e são **todas** `NativeFlowButton` —
+  o mecanismo interno dos botões. Nada a ver com WhatsApp Flows;
+- o nosso `/chats/send/carousel` **não** é um *carousel template* da Meta. É
+  `InteractiveMessage` montado no momento; o outro é modelo aprovado antes de
+  existir conversa. Partilham a palavra e não a capacidade.
 
 ## Consultar as implementações de referência antes de resolver
 
