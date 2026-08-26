@@ -27,35 +27,25 @@ const (
 	// usersEngineColumn is the column name. It appears in the DDL, in the
 	// backfill and in every read, so it is a constant (ADR-0004).
 	usersEngineColumn = "engine"
-
-	// usersEngineColumnDef is the SQLite column definition.
-	//
-	// NOT NULL with a DEFAULT is what makes the ALTER TABLE safe on a table
-	// that already has rows: without a default, SQLite refuses the statement
-	// outright. The default is legacy_unknown and NOT wa_noise on purpose —
-	// the ALTER must not claim to know something it does not. BackfillUserEngines
-	// is what replaces it, and it runs right after.
-	usersEngineColumnDef = "TEXT NOT NULL DEFAULT '" + string(domain.EngineLegacyUnknown) + "'"
 )
 
-// addUsersEngineSQL is the PostgreSQL side of migration 19.
+// addUsersEngineSQL adds the column, and runs UNCHANGED on both SQLite and
+// PostgreSQL.
 //
-// Guarded by information_schema like every other column migration in this file:
-// re-running it on a database that already has the column is a no-op instead of
-// an error.
+// No information_schema guard and no separate SQLite branch, following
+// migration 17 (addLeaseOwnerAddrSQL): a plain ALTER is valid in both dialects,
+// and the migrations table is what stops it from running twice. A driver branch
+// here would have to live in applyMigration's if/else chain, which the lint
+// ratchet already caps at its current complexity — and the guard would buy
+// nothing the migrations table does not already provide.
+//
+// NOT NULL with a DEFAULT is what makes this safe on a table that already has
+// rows: without a default, SQLite refuses the statement outright. The default
+// is legacy_unknown and NOT wa_noise on purpose — the ALTER must not claim to
+// know something it did not measure. BackfillUserEngines is what replaces it,
+// and it runs right after.
 const addUsersEngineSQL = `
--- PostgreSQL version
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'users' AND column_name = 'engine'
-    ) THEN
-        ALTER TABLE users ADD COLUMN engine TEXT NOT NULL DEFAULT 'legacy_unknown';
-    END IF;
-END $$;
-
--- SQLite version (handled in code)
+ALTER TABLE users ADD COLUMN engine TEXT NOT NULL DEFAULT '` + string(domain.EngineLegacyUnknown) + `';
 `
 
 const addUsersEngineDownSQL = `
@@ -158,40 +148,12 @@ func BackfillUserEngines(
 	ids := append([]string(nil), headlessSessionIDs...)
 	sort.Strings(ids)
 
-	for _, id := range ids {
-		res, err := db.ExecContext(ctx,
-			`UPDATE users SET engine = $1 WHERE id = $2 AND engine = $3`,
-			domain.EngineWaHeadless, id, domain.EngineLegacyUnknown)
-		if err != nil {
-			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
-				Str("query", "backfill_engine_headless").
-				Msg("failed to set headless engine during backfill")
-			return report, err
-		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
-				Msg("failed to read rows affected during engine backfill")
-			return report, err
-		}
-		if affected > 0 {
-			report.ToWaHeadless += int(affected)
-			continue
-		}
-		// Zero rows means either "no such session" or "already recorded".
-		// Only the first is worth telling the operator about.
-		var exists int
-		if err := db.GetContext(ctx, &exists,
-			`SELECT COUNT(*) FROM users WHERE id = $1`, id); err != nil {
-			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
-				Str("query", "user_exists_engine_backfill").
-				Msg("failed to check session listed for headless")
-			return report, err
-		}
-		if exists == 0 {
-			report.ListedButAbsent = append(report.ListedButAbsent, id)
-		}
+	headlessCount, absent, err := backfillHeadlessSessions(ctx, db, ids)
+	if err != nil {
+		return report, err
 	}
+	report.ToWaHeadless += headlessCount
+	report.ListedButAbsent = absent
 
 	res, err := db.ExecContext(ctx,
 		`UPDATE users SET engine = $1 WHERE engine = $2`,
@@ -227,4 +189,53 @@ func BackfillUserEngines(
 	}
 
 	return report, nil
+}
+
+// backfillHeadlessSessions sets wa_headless on each listed id that is still
+// unrecorded, and reports which listed ids matched no row at all.
+//
+// Extracted from BackfillUserEngines so that neither function has to carry both
+// the per-id bookkeeping and the whole-table sweep; the order between the two
+// is what BackfillUserEngines keeps, and it is the load-bearing part.
+func backfillHeadlessSessions(
+	ctx context.Context,
+	db *sqlx.DB,
+	ids []string,
+) (headlessCount int, absent []string, err error) {
+	for _, id := range ids {
+		res, err := db.ExecContext(ctx,
+			`UPDATE users SET engine = $1 WHERE id = $2 AND engine = $3`,
+			domain.EngineWaHeadless, id, domain.EngineLegacyUnknown)
+		if err != nil {
+			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
+				Str("query", "backfill_engine_headless").
+				Msg("failed to set headless engine during backfill")
+			return 0, nil, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
+				Msg("failed to read rows affected during engine backfill")
+			return 0, nil, err
+		}
+		if affected > 0 {
+			headlessCount += int(affected)
+			continue
+		}
+		// Zero rows means either "no such session" or "already recorded".
+		// Only the first is worth telling the operator about.
+		var exists int
+		if err := db.GetContext(ctx, &exists,
+			`SELECT COUNT(*) FROM users WHERE id = $1`, id); err != nil {
+			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
+				Str("query", "user_exists_engine_backfill").
+				Msg("failed to check session listed for headless")
+			return 0, nil, err
+		}
+		if exists == 0 {
+			absent = append(absent, id)
+		}
+	}
+
+	return headlessCount, absent, nil
 }

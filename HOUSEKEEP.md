@@ -29808,10 +29808,55 @@ backfill não correu" são indistinguíveis num log que fica calado.
 
 **Status**: **não corrigido** quanto ao ponto 2 (réplicas com ambiente
 divergente), que fica registado como pendência. O resto está **corrigido e
-travado** por `pkg/infra/db/user_engine_test.go` — sete testes, com três
+travado** por `pkg/infra/db/user_engine_test.go` — doze testes, com três
 controlos negativos EXECUTADOS: backfill neutralizado (as quatro linhas ficam em
 `legacy_unknown`), ordem dos dois `UPDATE` invertida (a lista de headless vai
 toda para o padrão) e `DEFAULT` da coluna trocado para `wa_noise` (o teste da
 migração morde).
+
+<!-- f-status: aberto -->
+
+## F275 — o portão do HOUSEKEEP recusa o status da H144, e isso trava `make check` e `coverage-gate` inteiros
+
+**Data**: 2026-08-26. **Contexto**: worktree `engine-capability-foundation`,
+achado ao correr `make check` — nada a ver com o trabalho de engine.
+
+**Onde**: `HOUSEKEEP.md:4935` (entrada **H144**) e o portão em
+`internal/wa-headless/gate_test.go:635`
+(`TestHousekeepEntriesAreMachineReadable`).
+
+**Problema**: o status da H144 começa por `"H75 corrigida quanto ao
+diagnóstico; ..."`, e `H75` não está em `openStatusTokens` nem em
+`closedStatusTokens`. O portão falha, e como corre dentro de
+`internal/wa-headless`, derruba o alvo `test` E o `coverage-gate` — dois gates
+do `make check` ficam vermelhos por uma frase num documento.
+
+Saída medida:
+
+```
+--- FAIL: TestHousekeepEntriesAreMachineReadable (0.17s)
+    gate_test.go:635: these statuses start with a word outside the vocabulary
+          H144: "H75 corrigida quanto ao diagnóstico; envio de tipos ricos co"
+    gate_test.go:645: entries with several authoritative statuses — read these by hand: H5 (2 statuses), H14 (2 statuses), H90 (2 statuses)
+```
+
+**É PRÉ-EXISTENTE, e foi provado**: com `HOUSEKEEP.md` restaurado à versão do
+commit base (`git show 3a0b48b4:HOUSEKEEP.md > HOUSEKEEP.md`) o portão falha
+exatamente igual. O diff desta worktree sobre o ficheiro é `95 0` — só linhas
+acrescentadas no fim, nenhuma removida ou alterada. É a mesma família de
+armadilha que `ARMADILHAS.md` já cataloga ("O portão do HOUSEKEEP casa `Status`
+no meio de um identificador"), mas uma ocorrência NOVA e de causa diferente: o
+status é real, o vocabulário é que não o cobre.
+
+**Correcção sugerida**: reescrever o status da H144 para começar por uma
+palavra do vocabulário (`corrigido ...` / `parcialmente corrigido ...`) movendo
+a referência à H75 para depois — é a mudança de uma linha e não toca no portão.
+As três entradas com dois status (H5, H14, H90) são um segundo achado da mesma
+saída e pedem leitura à mão.
+
+**Status**: **não corrigido** — é documento fora do escopo desta tarefa, e a
+regra do projeto proíbe corrigir de graça achado pré-existente sem perguntar.
+Registado para decisão. Enquanto durar, `make check` não fecha verde neste
+repositório por razão nenhuma do código.
 
 <!-- f-status: aberto -->

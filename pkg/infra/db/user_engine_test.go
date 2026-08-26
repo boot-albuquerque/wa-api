@@ -95,23 +95,22 @@ func TestBackfillReproducesHeadlessSessionList(t *testing.T) {
 		}
 	}
 
-	if report.TotalUsers != 4 {
-		t.Errorf("TotalUsers = %d, want 4", report.TotalUsers)
+	counts := []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"TotalUsers", report.TotalUsers, 4},
+		{"PendingBefore", report.PendingBefore, 4},
+		{"ToWaHeadless", report.ToWaHeadless, 2},
+		{"ToWaNoise", report.ToWaNoise, 2},
+		{"RemainingLegacyUnknown", report.RemainingLegacyUnknown, 0},
+		{"len(ListedButAbsent)", len(report.ListedButAbsent), 0},
 	}
-	if report.PendingBefore != 4 {
-		t.Errorf("PendingBefore = %d, want 4", report.PendingBefore)
-	}
-	if report.ToWaHeadless != 2 {
-		t.Errorf("ToWaHeadless = %d, want 2", report.ToWaHeadless)
-	}
-	if report.ToWaNoise != 2 {
-		t.Errorf("ToWaNoise = %d, want 2", report.ToWaNoise)
-	}
-	if report.RemainingLegacyUnknown != 0 {
-		t.Errorf("RemainingLegacyUnknown = %d, want 0", report.RemainingLegacyUnknown)
-	}
-	if len(report.ListedButAbsent) != 0 {
-		t.Errorf("ListedButAbsent = %v, want empty", report.ListedButAbsent)
+	for _, c := range counts {
+		if c.got != c.want {
+			t.Errorf("%s = %d, want %d", c.name, c.got, c.want)
+		}
 	}
 }
 

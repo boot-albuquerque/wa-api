@@ -912,12 +912,6 @@ func applyMigration(db *sqlx.DB, migration Migration) error {
 		} else {
 			_, err = tx.Exec(migration.UpSQL)
 		}
-	} else if migration.ID == migrationIDUsersEngine {
-		if db.DriverName() == "sqlite" {
-			err = addColumnIfNotExistsSQLite(tx, usersTable, usersEngineColumn, usersEngineColumnDef)
-		} else {
-			_, err = tx.Exec(migration.UpSQL)
-		}
 	} else {
 		_, err = tx.Exec(migration.UpSQL)
 	}

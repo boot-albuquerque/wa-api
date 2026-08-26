@@ -3239,6 +3239,7 @@ pkg/infra/db.applyBlankPlaintextTokenMigration	ELIGIBLE	covered
 pkg/infra/db.applyMigration	ELIGIBLE	covered
 pkg/infra/db.applyMigration.func1	ELIGIBLE	covered
 pkg/infra/db.applyTokenHashMigration	ELIGIBLE	covered
+pkg/infra/db.backfillHeadlessSessions	ELIGIBLE	covered
 pkg/infra/db.createMigrationsTable	ELIGIBLE	covered
 pkg/infra/db.createTableIfNotExistsSQLite	ELIGIBLE	covered
 pkg/infra/db.engineForCreate	ELIGIBLE	covered
