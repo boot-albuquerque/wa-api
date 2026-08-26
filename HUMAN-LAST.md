@@ -20,7 +20,7 @@ base, o depois não significa nada.
 | lote | o que é preciso ter | entradas |
 |---|---|---|
 | **A** | nada além de infraestrutura — nenhuma conta de WhatsApp | A.1 |
-| **B** | **uma** sessão emparelhada, descartável | B.1 · B.2 · B.3 · B.4 · B.5 |
+| **B** | **uma** sessão emparelhada, descartável | B.1 · B.2 · B.3 · B.4 · B.5 · B.6 · B.7 · B.8 |
 | **C** | **duas** sessões emparelhadas | C.1 · C.2 |
 | **D** | uma sessão emparelhada **e um terceiro a interagir** | D.1 · D.2 |
 | **E** | alteração de código ANTES de medir | E.1 · E.2 |
@@ -321,6 +321,119 @@ observador independente `GET /session/status` a passar de `loggedIn: true` para
 `loggedIn: false`, **mais** a entrada a desaparecer de *Aparelhos conectados*
 no telemóvel. As duas: a primeira prova o estado local, a segunda prova que o
 `remove-companion-device` chegou mesmo ao WhatsApp.
+
+---
+
+### B.6 — `POST /chats/send/text` com o MESMO `Id` duas vezes: o WhatsApp deduplica?
+
+**Origem**: medição das quatro lacunas de produção, 2026-08-26
+(`MEDICAO-PRODUCAO.md` §3). É a pergunta que decide se a lacuna de idempotência
+é grande ou pequena.
+
+**O que já foi medido sem conta**, por leitura de código e contra o servidor
+local:
+
+| facto | onde |
+|---|---|
+| o `Id` do cliente vira o **stanza ID** do WhatsApp | `pkg/infra/wa-noise/adapters/chat/messenger.go:298`, `SendRequestExtra{ID: types.MessageID(id)}` |
+| a nossa escrita local **já deduplica** por ele | `pkg/infra/db/message_history.go:41`, `ON CONFLICT (user_id, message_id)` sobre `UNIQUE(user_id, message_id)` |
+| as rotas de **configuração** são idempotentes | medido: `POST /webhook`, `PUT /webhook`, `POST /session/proxy` repetidos deixam o mesmo estado |
+| `POST /admin/users` deduplica por `token_hash` | medido: 2.ª chamada devolve `409`, não um segundo inquilino |
+
+**O que a especificação afirma hoje**, e que ninguém mediu: o esquema
+`IdCliente` diz "**NÃO é chave de idempotência**. Não foi medido que o servidor
+ou o WhatsApp deduplique por este campo; enviar o mesmo `Id` duas vezes envia
+duas mensagens". As duas frases não podem ser ambas verdade — a segunda é uma
+afirmação sem medição, e é essa que esta entrada existe para resolver.
+
+**A resposta negativa das referências também é informação**: o Baileys reenvia
+com o MESMO id no caminho de *retry receipt*, o que torna a deduplicação na
+recepção plausível. Plausível não é medido, e copiar a conclusão deles sem
+medir é exactamente o que o `CLAUDE.md` proíbe.
+
+**Por que a automação não resolve**: enviar exige sessão emparelhada e um
+destinatário real que possa ser inspeccionado.
+
+**Que acção humana falta**:
+
+1. emparelhar uma sessão **descartável**;
+2. `POST /chats/send/text` com `{"Phone":"<destino>","Body":"idem-1","Id":"3EB0IDEMPOTENCIA01"}`;
+3. repetir **o mesmo corpo, byte a byte**;
+4. olhar para o telemóvel de destino.
+
+**Evidência que o humano deve produzir**, e são três observadores distintos:
+
+- **o destinatário**: **uma** bolha ou **duas** no ecrã. É a resposta à pergunta.
+- **`GET /chats/history?chat_jid=<destino>`** na sessão de origem: quantas
+  linhas com `message_id = 3EB0IDEMPOTENCIA01`. Esperado **uma**, pelo
+  `ON CONFLICT` — se forem duas, o achado é maior do que se pensava.
+- **os dois corpos de resposta**: se o segundo devolver `message_id` diferente
+  do `Id` enviado, o campo não chegou ao wire e a experiência não mediu nada.
+
+**Risco**: baixo. Duas mensagens de texto para um destino escolhido pelo
+operador. Nada é apagado, nada é irreversível.
+
+---
+
+### B.7 — um `500` de `POST /chats/send/text` chegou a enviar?
+
+**Origem**: a mesma medição. É a metade da linha "Idempotência" do scorecard
+que continua sem prova: *"um `500` pode ter enviado"*.
+
+**O que já se sabe sem conta**: o prazo contra o WhatsApp é de **30 s por
+operação, uniforme e não configurável por rota** (linha 117 do scorecard). Um
+`500` por expiração desse prazo é exactamente o caso ambíguo: o `SendMessage`
+foi para o wire e a resposta é que não voltou a tempo.
+
+**Por que a automação não resolve**: provocar o timeout de forma controlada
+exige uma sessão emparelhada **e** degradar a rede entre o processo e o
+WhatsApp — não é reproduzível contra um servidor sem conta.
+
+**Que acção humana falta**: com uma sessão descartável emparelhada, cortar a
+saída de rede do processo (ou apontá-lo a um proxy que engula a resposta)
+**depois** de o `POST /chats/send/text` partir, deixar o prazo de 30 s expirar,
+e ver o telemóvel de destino.
+
+**Evidência que o humano deve produzir**: o corpo `500` da API **e** o estado do
+destinatário. Se a mensagem chegou, está provado que repetir cegamente duplica,
+e o `Idempotency-Key` deixa de ser opcional para quem tem retries automáticos.
+Se não chegou, a repetição é segura para este caso concreto — o que é uma
+informação diferente e menos alarmante do que a linha do scorecard sugere.
+
+**Risco**: médio. Cortar a rede do processo afecta todas as sessões que ele
+serve. **Faça-o num processo isolado**, com a sessão descartável e mais nada —
+como o servidor da porta 8093 desta medição.
+
+---
+
+### B.8 — a curva de `GET /users/contacts`: o ponto de 1 266 contactos precisa de um segundo
+
+**Origem**: medição da linha "Paginação" (`MEDICAO-PRODUCAO.md` §2).
+
+**O que já foi medido sem conta**: nada, e é essa a questão.
+`GetContactsUseCase` chama `EnsureSession` antes de qualquer coisa
+(`pkg/application/usecase/user/get_contacts.go:23`), e uma sessão descartável
+**não emparelhada** responde `500` — o cliente wa-noise existe mas não tem
+device JID. O adaptador devolve o mapa inteiro sem limite nenhum
+(`pkg/infra/wa-noise/adapters/user/adapter.go:80-90`).
+
+O único ponto que existe é o histórico: **61 459 bytes com 1 266 contactos**,
+≈48,5 bytes por contacto. **Um ponto não é uma curva**, e a linearidade está
+inferida do código, não medida.
+
+**Que acção humana falta**: com uma sessão emparelhada cuja agenda tenha
+tamanho conhecido, medir `curl -s -o /dev/null -w '%{size_download}'` em
+`GET /users/contacts` e comparar com o número de contactos devolvido. Duas
+contas de tamanhos diferentes dariam dois pontos; a mesma conta antes e depois
+de um `HistorySync` daria dois também.
+
+**Evidência que o humano deve produzir**: os pares (bytes, nº de contactos), e
+o **RSS do processo** antes e depois da chamada — porque `RespondJSON`
+materializa o corpo inteiro com `json.Marshal` antes de escrever
+(`pkg/presentation/http/response.go:83`), e foi essa amplificação que levou o
+processo a 264 MB no teste equivalente com `/chats/history` (F291).
+
+**Risco**: nulo. É uma leitura.
 
 ---
 
@@ -670,7 +783,13 @@ nenhuma entrada. A contagem, antes e depois:
 | `disposable-session` | 3 | A.1, B.5, D.1 |
 | `failures` (EXP-1…EXP-4) | 4 | E.1, E.2, B.4, F.1 |
 | `amber-observers` (§1…§6) | 6 | D.2, B.1, C.1, B.2, B.3, C.2 |
-| **total** | **13** | **13** — nenhuma perdida, nenhuma duplicada |
+| **subtotal da fusão** | **13** | **13** — nenhuma perdida, nenhuma duplicada |
+| `evidence-production-gaps` (26/08) | 3 | B.6, B.7, B.8 |
+| **total** | **16** | — |
+
+As três de 26/08 vieram da medição das quatro lacunas de produção
+(`MEDICAO-PRODUCAO.md`) e são todas do **mesmo tipo**: perguntas cuja resposta
+está do outro lado do wire do WhatsApp, e que nenhum servidor local responde.
 
 F.2 (*o que NÃO precisa de humano*) veio do `failures` e não é uma entrada
 accionável: é a lista do que ficaria por engano. O Lote G não vinha de nenhum
