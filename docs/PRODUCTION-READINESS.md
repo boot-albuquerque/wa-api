@@ -145,6 +145,24 @@ duplica trabalho:
 Os pontos 1 a 4 são compatíveis com todos os clientes actuais. O ponto 5 não é,
 e é por isso que vem depois do 1.
 
+## Cobertura de mensagens face ao alvo
+
+O alvo — 23 folhas, de `send_text` a `send_order_status` — está em
+`docs/REFERENCIA-META-OFICIAL.md` com o estado medido de cada uma:
+
+```
+12 ✅ existe e foi exercitada       4 🟡 existe em forma parcial
+ 1 📥 sabemos receber, não enviar    6 ❌ não existe
+```
+
+As seis em falta são **catálogo, produtos, encomendas e Flows** — e não são
+"uma rota a mais": dependem de um catálogo associado à conta e, no caso dos
+Flows, de um recurso definido no painel da Meta. A capability `catalog` do
+`wa-noise` existe e **não está ligada** a rota nenhuma.
+
+**Não conta como lacuna deste scorecard** porque não é prontidão operacional —
+é alcance de produto. Está aqui para que os dois não se confundam.
+
 ## Como isto se compara com a Cloud API da Meta
 
 `docs/REFERENCIA-META-OFICIAL.md` tem o levantamento oficial, com URLs.

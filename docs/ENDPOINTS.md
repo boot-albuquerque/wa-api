@@ -30,6 +30,11 @@ grep -oE 'registry\.Register\("(/[a-zA-Z0-9/{}._-]+)"' pkg/bootstrap/wiring_rout
   | sed 's/registry.Register("//;s/"//' | sort
 ```
 
+> **O alvo de cobertura de mensagens** — as 23 folhas que este projecto deve
+> alcançar — está em `docs/REFERENCIA-META-OFICIAL.md`, com o estado medido de
+> cada uma: **12 ✅, 4 🟡, 1 📥, 6 ❌**. As seis em falta são catálogo,
+> produtos, encomendas e Flows.
+>
 > **A referência oficial da Meta** está em
 > `docs/REFERENCIA-META-OFICIAL.md`, com os URLs verificados. As colunas de
 > concorrentes desta página são conhecimento geral e **não** medição; aquele

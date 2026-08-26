@@ -29719,6 +29719,54 @@ lados consultam a mesma.
 da rota está correcto) e mudar a assinatura da porta toca em código fora do
 enunciado. Registado para decisão.
 
+## O alvo de cobertura de mensagens, medido
+
+O utilizador definiu a árvore de 23 capacidades de mensagem a alcançar. Medida
+contra o código a 2026-08-26:
+
+```
+12 ✅   existe, com rota própria, exercitada em campo
+ 4 🟡   existe em forma parcial ou por outro caminho
+ 1 📥   sabemos RECEBER e classificar; não sabemos enviar
+ 6 ❌   não existe
+```
+
+**As quatro 🟡 não são lacunas de capacidade**, e vale distingui-las:
+
+- `send_voice` — é `/chats/send/audio` com `ptt`, cujo padrão já é `true`
+  (`message.go:170-187`). Falta a rota separada, não o comportamento.
+- `send_contacts` — a rota chama-se `contact` no singular e aceita array.
+  Inconsistência de nome (F269), não de função.
+- `send_template_buttons` — é o campo `Buttons` de `/chats/send/template`.
+- `send_carousel_template` — **e esta merece cuidado**: o nosso carrossel é um
+  `InteractiveMessage` com `CarouselMessage_HSCROLL_CARDS`
+  (`messenger_carousel.go:66`), montado no momento. Um *carousel template* da
+  Meta é um modelo submetido e aprovado antes de existir conversa. Marcar isto
+  como ✅ por partilhar a palavra "carousel" seria o erro clássico de igualar
+  nomes em vez de capacidades.
+
+**A 📥 é a distinção mais útil que esta medição produziu**: `message_classify.go:146-152`
+classifica `OrderMessage` e `ProductMessage` à CHEGADA. Saber receber não é
+saber enviar, e uma tabela que não separasse as duas daria por resolvida uma
+capacidade que não temos.
+
+**As seis ❌ dependem de infraestrutura, não de rota**: produto, catálogo e
+encomenda exigem um catálogo associado à conta; Flows é recurso do painel da
+Meta. A capability `catalog` do `wa-noise` **existe e não está ligada** a rota
+nenhuma — é uma das 62 da F237.
+
+**Falso positivo apanhado durante a medição, e registado porque enganaria
+outra sessão**: `grep Flow pkg/` devolve 59 ocorrências, e são **todas**
+`NativeFlowButton` — o mecanismo interno que constrói os botões. Nada a ver
+com WhatsApp Flows. Contá-las teria dado a impressão de que a capacidade já
+existe.
+
+**O que fica por medir, e é o passo seguinte**: se o protocolo do WhatsApp Web
+permite ENVIAR produto, catálogo e encomenda de todo. A leitura é possível; o
+envio não foi investigado. As três referências do `CLAUDE.md` são onde
+procurar — e uma resposta negativa delas também é informação, como a F233 já
+mostrou.
+
 <!-- f-status: aberto -->
 
 ## F272 — a API oficial da Meta como referência, e a comparação que falta

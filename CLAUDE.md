@@ -51,6 +51,16 @@ E cerca de **60 das 141 rotas** deste projecto — grupos, comunidades, canais e
 status — **não têm equivalente** na Cloud API. Uma integração futura coexistiria
 com elas, não as substituiria.
 
+O mesmo ficheiro traz o **alvo de cobertura de mensagens** (23 folhas) com o
+estado medido: 12 ✅, 4 🟡, 1 📥, 6 ❌. As seis em falta — catálogo, produtos,
+encomendas, Flows — caem exactamente onde a Cloud API é forte, e as ~60 só
+nossas caem onde ela não chega. **As duas superfícies são quase
+complementares.**
+
+Aviso de falso positivo que já custou tempo: há 59 ocorrências de `Flow` em
+`pkg/`, e são **todas** `NativeFlowButton` — o mecanismo interno dos botões.
+Nada a ver com WhatsApp Flows.
+
 ## Consultar as implementações de referência antes de resolver
 
 Antes de projetar solução para qualquer problema de protocolo WhatsApp —

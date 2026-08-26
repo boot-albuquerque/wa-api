@@ -92,6 +92,111 @@ localização, template, interactive e reaction. O `interactive.type` aceita
 `button`, `list`, `product`, `product_list`, `catalog_message`,
 `call_permission_request` e `flow`.
 
+## O alvo de cobertura de mensagens
+
+Esta é a árvore que este projecto deve alcançar. Cada folha traz o estado
+**medido a 2026-08-26**, não o pretendido.
+
+| marca | significa |
+|---|---|
+| ✅ | existe, com rota própria, e foi exercitada em campo |
+| 🟡 | existe, mas em forma parcial ou por outro caminho — a coluna diz qual |
+| 📥 | sabemos **receber** e classificar; **não** sabemos enviar |
+| ❌ | não existe |
+
+```
+Messaging
+├── ✅ send_text            POST /chats/send/text
+├── ✅ send_image           POST /chats/send/image
+├── ✅ send_audio           POST /chats/send/audio
+├── 🟡 send_voice           a MESMA rota, com "ptt": true
+├── ✅ send_video           POST /chats/send/video
+├── ✅ send_document        POST /chats/send/document
+├── ✅ send_sticker         POST /chats/send/sticker
+├── ✅ send_location        POST /chats/send/location
+├── 🟡 send_contacts        POST /chats/send/contact — aceita ARRAY, nome no singular
+├── ✅ send_reaction        POST /chats/react
+│
+├── Interactive
+│   ├── ✅ send_reply_buttons    POST /chats/send/buttons
+│   ├── ✅ send_list             POST /chats/send/list
+│   ├── ❌ send_single_product
+│   ├── ❌ send_multi_product
+│   ├── ❌ send_catalog
+│   ├── ❌ send_flow
+│   ├── 📥 send_order_details    classificamos OrderMessage à chegada
+│   └── ❌ send_order_status
+│
+├── Templates
+│   ├── ✅ send_template          POST /chats/send/template
+│   ├── 🟡 send_template_buttons  o MESMO endpoint, campo `Buttons`
+│   ├── ❌ send_catalog_template
+│   ├── ❌ send_flow_template
+│   └── 🟡 send_carousel_template POST /chats/send/carousel — é `InteractiveMessage`
+│                                 com `CarouselMessage`, NÃO um template aprovado
+│
+└── Message Operations
+    ├── ✅ reply_to_message   campo `ReplyTo` em TODAS as rotas de envio
+    └── ✅ mark_read          POST /chats/markread
+```
+
+**Contagem: 12 ✅, 4 🟡, 1 📥, 6 ❌** — de 23 folhas.
+
+### O que cada estado significa aqui, com precisão
+
+**🟡 `send_voice`** — não falta nada: `POST /chats/send/audio` aceita `ptt`, e
+o valor por omissão é **`true`** (`pkg/domain/message.go:170-187`), logo o
+comportamento padrão já é nota de voz. Só não há rota separada.
+
+**🟡 `send_contacts`** — a rota chama-se `contact` no singular mas aceita um
+array. É inconsistência de NOME, não de capacidade. Registada em F269.
+
+**🟡 `send_template_buttons`** — o `POST /chats/send/template` já leva
+`Buttons` com tipos `url`, `call` e `quickreply`. Repare que os tipos aceites
+diferem dos de `/chats/send/buttons` — e essa divergência está documentada
+como armadilha.
+
+**🟡 `send_carousel_template`** — e esta é a distinção mais importante da
+árvore. O nosso carrossel é um `InteractiveMessage` com
+`CarouselMessage_HSCROLL_CARDS` (`messenger_carousel.go:66`), construído no
+momento. Um **carousel template** da Meta é outra coisa: um modelo submetido e
+aprovado antes de existir conversa. **Não é o mesmo recurso com nome
+diferente.**
+
+**📥 `send_order_details`** — sabemos **receber**: `message_classify.go:146`
+classifica `OrderMessage` e `ProductMessage` à chegada. Enviar é outro
+trabalho, e nenhum dos dois tem construtor no nosso lado.
+
+### Os seis ❌, e o que cada um exige
+
+Nenhum é "uma rota a mais". Todos dependem de infraestrutura que este projecto
+não tem:
+
+| folha | o que falta |
+|---|---|
+| `send_single_product` · `send_multi_product` · `send_catalog` | um **catálogo** associado à conta, com produtos de ID conhecido. O `wa-noise` tem a capability `catalog`, e ela **não está ligada** a rota nenhuma — é uma das 62 da F237 |
+| `send_flow` · `send_flow_template` | **WhatsApp Flows** é recurso da plataforma Meta, definido e publicado no painel dela. Atenção ao falso positivo: há 59 ocorrências de `Flow` em `pkg/`, e são **todas** `NativeFlowButton` — o mecanismo interno dos botões, sem relação com Flows |
+| `send_catalog_template` | template aprovado **e** catálogo. Depende dos dois anteriores |
+| `send_order_status` | não há construtor, e o fluxo de encomenda pressupõe catálogo |
+
+### O que isto revela sobre a fronteira com a Cloud API
+
+As seis lacunas concentram-se **exactamente** onde a Cloud API é forte:
+catálogo, produtos, encomendas e Flows são recursos da plataforma comercial da
+Meta, não do protocolo do WhatsApp Web.
+
+É o simétrico das ~60 rotas que só nós temos — grupos, comunidades, canais,
+status. **As duas superfícies são quase complementares**, e é isso que torna a
+integração futura interessante em vez de redundante: não é escolher uma, é
+usar cada uma onde ela tem alcance.
+
+**O que fica por determinar**: se o protocolo do WhatsApp Web permite enviar
+produto, catálogo e encomenda de todo. A capability `catalog` do `wa-noise`
+sugere que a leitura é possível; **o envio não foi investigado**. Antes de
+planear qualquer uma das seis, é essa a medição a fazer — e as três
+referências do `CLAUDE.md` (Baileys, Evolution, whatsapp-web.js) são onde
+procurar, porque uma resposta negativa delas também é informação.
+
 ## Comparação com o que temos — **por fazer**
 
 Uma comparação a sério exige levantar, endpoint a endpoint, o que cada lado
