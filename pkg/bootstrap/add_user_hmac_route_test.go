@@ -116,7 +116,7 @@ func (f *addUserRouteFixture) storedHmacKey(t *testing.T, token string) ([]byte,
 func TestAdminAddUser_ChaveHmacGravadaCifradaEDecifraDeVolta(t *testing.T) {
 	f := newAddUserRouteFixture(t)
 
-	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestPlainKey+`"}`)
+	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestPlainKey+`","engine":"wa_noise"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -170,7 +170,7 @@ func TestAdminAddUser_CifraFalhaNaoCriaUsuario(t *testing.T) {
 	// (pkg/infra/auth/hmac.go:39), não um erro inventado por dublê.
 	appCtx.GlobalEncryptionKey = ""
 
-	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestPlainKey+`"}`)
+	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestPlainKey+`","engine":"wa_noise"}`)
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusInternalServerError, rec.Body.String())
 	}
@@ -199,7 +199,7 @@ func TestAdminAddUser_ChaveHmacCurtaERecusada(t *testing.T) {
 func TestAdminAddUser_SemChaveHmacCriaUsuario(t *testing.T) {
 	f := newAddUserRouteFixture(t)
 
-	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`"}`)
+	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","engine":"wa_noise"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusOK, rec.Body.String())
 	}
