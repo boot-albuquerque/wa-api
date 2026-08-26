@@ -350,7 +350,7 @@ Publicar texto como story (status efémero) não é uma capability existente.
 | método | rota | o que faz |
 |---|---|---|
 | GET/POST/PUT/DELETE | `/webhook` | configurar webhook da sessão |
-| GET/POST | `/webhook/history` | histórico de entregas |
+| GET/POST | `/webhook/history` | **limite de gravação de MENSAGENS** (`users.history`) — nome enganador, ver F252 |
 | GET | `/s3/config` | ler configuração S3 global |
 | POST | `/s3/configure` | definir configuração S3 global |
 | POST | `/s3/config` | alias de `/s3/configure` (F251) |
@@ -592,3 +592,16 @@ Só o dono pode apagar. Depois de apagado:
 - o link público de convite passa a `Link de convite inválido`.
 
 Não há como desfazer.
+
+> **`/webhook/history` configura o histórico de MENSAGENS** (HOUSEKEEP F252).
+> O nome sugere um registo de entregas de webhook; o efeito é sobre a coluna
+> `users.history`, a mesma que `POST /session/history` altera e que governa a
+> gravação em `message_history` (F227, F230).
+>
+> As duas rotas são o mesmo handler. O caminho público mantém-se para não
+> quebrar clientes existentes — a decisão está registada em
+> `wiring_routes.go:133-137`.
+>
+> Para ler o histórico de mensagens de uma conversa, use `GET /chat/history`,
+> que é outro handler (a distinção é travada por
+> `TestChatHistoryAndWebhookHistoryAreDistinctHandlers`, criado pela F124).

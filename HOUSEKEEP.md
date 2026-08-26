@@ -26834,7 +26834,7 @@ Restaurado.
 
 o `401` passou a `{"code":401,"error":{"code":"unauthorized","message":"unauthorized"}}`. Inclui o caminho do `middleware/auth.go`, que a primeira tentativa deixara de fora — era o que produzia a maioria dos `401`.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F237 — 62 dos 136 métodos do wa-noise nunca são chamados, e entre eles estão as COMUNIDADES
 
@@ -26968,7 +26968,7 @@ e LID (`…@lid`).
 
 `GET /user/profile/xxx-nao-e-jid` → `400 invalid_jid`, *"jid must be a phone number or a qualified JID (user@server)"*. Antes `500`.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F239 — mapa de estado funcional das rotas wa-noise (inventário, 2026-08-25)
 
@@ -27165,7 +27165,7 @@ determinado e NÃO é vídeo.
 
 vídeo de 32 bytes → `400 video_too_small`; áudio lixo → `400 audio_too_small`; **áudio válido continua `200`** — a metade que prova que a validação não partiu o caminho feliz.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F241 — erro do CHAMADOR a virar `500` em três rotas
 
@@ -27245,7 +27245,7 @@ grupo de que não é membro) **não foram corrigidas neste lote** — os ficheir
 
 `/group/info` e `/group/invitelink` com grupo alheio → `403 upstream_forbidden`, *"WhatsApp does not permit this operation on that target"*. Antes `500`.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F242 — `/user/info` devolve `200` com resultado VAZIO quando o formato está errado
 
@@ -27305,7 +27305,7 @@ com `resolver received "554192421234", want
 
 `POST /user/info {"Phone":["554192421234"]}` devolve os dados. Com JID completo **continua** a devolver — a segunda metade prova que aceitar a forma nova não quebrou a antiga.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F243 — pontos de atenção: o que esta sessão ensinou sobre MEDIR
 
@@ -27562,7 +27562,7 @@ string fallback) e `TestGetGroupRequestParticipants_QueryString` falhou com
 
 `GET /group/requestparticipants?group_jid=…` → `200`. Antes exigia corpo JSON e dava `400 "bad request"` sem código.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F245 — RETIRADA: `/health` autenticado é desenho deliberado, e existe `/livez` público
 
@@ -27700,7 +27700,7 @@ era ligação errada, não código partido). A verificação em campo é necess�
 
 Sequência medida: inicial `IsLocked=False`; `/group/locked` → `True`; `/group/joinapprovalmode` → `IsLocked` **continua `True`** e `IsJoinApprovalRequired` passa a `True`. **No registo do grupo**: *"Você ativou a autorização de admins para entrar neste grupo"* — mensagem PRÓPRIA, em vez de reescrever o lock.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F247 — `/group/updaterequestparticipants` também está no handler errado
 
@@ -27839,7 +27839,7 @@ e devolve 400 em vez de 500.
 
 `Action:"approve"` → `400 invalid_action`, *"unknown participant action \"approve\" (must be \"add\" or \"remove\")"*. **No registo do grupo**: `Você adicionou ~AulaPrática` **sem** o `Você removeu` que antes se seguia. Grupo com 3 membros.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F248 — `POST /group/photo` devolve `500` e a foto NÃO é definida
 
@@ -27942,7 +27942,7 @@ permanece — mas agora nunca lhe chega payload inválido por esta rota.
 
 `POST /group/photo` com PNG que o WhatsApp recusa → `422 upstream_rejected`, e o log acrescenta *"the given data is not a valid image"*. **No registo do grupo NÃO aparece `Você apagou a imagem deste grupo`** — a operação deixou de destruir a foto antes de falhar. Era essa a parte grave.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F249 — o resultado POR PARTICIPANTE é descartado, e por isso não sabemos o que aconteceu
 
@@ -28030,7 +28030,7 @@ impede compilação limpa (`update` não declarado), mas as asserções de
 
 O corpo passa a trazer `confirmed:true` e `result` por participante, com JID, `PhoneNumber`, `LID`, `IsAdmin` e campo de erro. A informação que antes era descartada.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F250 — `POST /webhook` define por `webhookurl` mas devolve por `webhook`, e ignora `webhook` em silêncio
 
@@ -28103,7 +28103,7 @@ Controles negativos executados: quebrar `ResolveURL` para ignorar
 
 POST `{"webhook"}` e PUT `{"webhookurl"}` gravam a URL — antes ambos a ignoravam em silêncio.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F251 — ler e escrever configuração usam CAMINHOS diferentes
 
@@ -28169,7 +28169,7 @@ Documentação em `ENDPOINTS.md` actualizada.
 
 `POST /hmac/config` → `200`; `POST /s3/config` → `400 invalid_s3_endpoint`, ou seja chega à validação (antes ambos `404` do router).
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F252 — `POST /webhook/history` altera o limite de histórico de MENSAGENS
 
@@ -28224,7 +28224,12 @@ users.history), NOT a webhook delivery log. [...]
 Clarificação documental apenas — o comportamento não mudou, e a decisão de
 separar (ou não) continua pendente.
 
-<!-- f-status: aberto -->
+
+### Verificação em campo — 2026-08-25
+
+**Decidida pelo lote C, não ignorada.** O `wiring_routes.go:133-137` passou a documentar no ponto de registo que `POST /webhook/history` configura o limite de gravação de mensagens (`users.history`), e **manteve o caminho público** para não quebrar clientes. Medido depois: `{"history":42}` continua a alterar a coluna — que é agora o comportamento *documentado*, não o acidente. O `ENDPOINTS.md` passou a dizê-lo.
+
+<!-- f-status: corrigido -->
 
 ## F253 — cobertura REAL da bateria: 102 de 133 rotas, e o que ficou de fora
 
@@ -28333,7 +28338,12 @@ do handler de audio — `TestClassifyDownload` (no pacote errmap) continua
 a passar (testa a função, não o handler), mas o handler voltaria a devolver
 500. Restaurada.
 
-<!-- f-status: aberto -->
+
+### Verificação em campo — 2026-08-25
+
+Com áudio de **2024-10-21** (mídia expirada no CDN): `404 media_unavailable`, *"media is no longer available; it may have expired on the WhatsApp CDN"*. Antes `500 internal server error`. A primeira tentativa de medição usou um áudio recente e devolveu `200` — foi preciso procurar o mais antigo do histórico para exercitar o caminho.
+
+<!-- f-status: corrigido -->
 
 ## F255 — as 13 rotas destrutivas, exercitadas e confirmadas na interface
 
@@ -28506,7 +28516,7 @@ para esse caminho"*.
 
 `POST /chat/delete` → `404`; `/chat/delete/message` continua a responder. Removida também da superfície stdio.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F258 — envelope de resposta com aninhamento DUPLO
 
@@ -28580,7 +28590,7 @@ feita — a bateria não o procurava. Pode haver outros.
 
 `DELETE /admin/users/{id}/full` devolve `{"code":200,"data":{"id":…}}` — sem o envelope dentro do envelope.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F259 — bateria REAL: encerramento em 126 de 133
 
