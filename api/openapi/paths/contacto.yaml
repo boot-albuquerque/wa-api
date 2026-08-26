@@ -1,0 +1,1245 @@
+# Grupo: Contactos e utilizadores (14 rotas /user/*) + Status (3 rotas
+# /status/set/*).
+#
+# As respostas de leitura foram MEDIDAS contra o servidor vivo em 2026-08-26
+# pela sessão `filarapida`. As rotas de escrita não foram chamadas, e as suas
+# respostas vêm do código — cada uma diz isso na descrição.
+
+# =============================================================== contactos
+
+/user/check:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Verificar se números têm WhatsApp
+    description: |
+      Pergunta ao WhatsApp, em lote, quais dos números dados têm conta, e
+      devolve o JID resolvido de cada um.
+
+      **Quando usar**: antes de enviar para um número que veio de um
+      formulário ou de uma importação de agenda. É a forma barata de
+      descobrir que um número não existe, em vez de o descobrir num envio
+      falhado.
+
+      **Regras**: `phone` é sempre um ARRAY, mesmo para um número só. O valor
+      pode ir NU (`554192421234`) — foi assim que foi medido. Um número sem
+      conta devolve `is_in_whatsapp: false` dentro de um `200`: **não é
+      erro**, é a resposta.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoVerificacaoNumero'
+          example:
+            phone: ['554192421234']
+    responses:
+      '200':
+        description: Uma entrada por número consultado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/ResultadoVerificacaoNumero'
+            example:
+              code: 200
+              data:
+                - query: '554192421234'
+                  is_in_whatsapp: true
+                  jid: 554192421234@s.whatsapp.net
+                  verified_name: ''
+              success: true
+      '400':
+        $ref: '#/components/responses/CorpoInvalido'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/info:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Consultar aparelhos, recado e identidade de contas
+    description: |
+      Devolve, por JID consultado, os aparelhos ligados àquela conta, o recado
+      do perfil, o identificador da foto e o LID correspondente.
+
+      **Quando usar**: quando é preciso saber em quantos aparelhos uma conta
+      está, ou obter o LID de um número sem depender do mapeamento local que
+      `GET /user/lid/{jid}` consulta.
+
+      **Regras**: `phone` é um ARRAY. O manipulador acrescenta
+      `@s.whatsapp.net` a todo valor sem `@` antes de resolver
+      (`handler_user.go:normalizePhones`), pelo que número nu e JID completo
+      funcionam os dois. Um valor que não parseia é **saltado em silêncio**,
+      não recusado — a resposta simplesmente não o traz, e não há sinal
+      distinguindo isso de "o servidor não sabe".
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoInfoUtilizadores'
+          example:
+            phone: ['554192421234@s.whatsapp.net']
+    responses:
+      '200':
+        description: Bloco `users`, indexado pelo JID consultado.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/InfoUtilizadores'
+            example:
+              code: 200
+              data:
+                users:
+                  554192421234@s.whatsapp.net:
+                    VerifiedName: null
+                    Status: ''
+                    PictureID: ''
+                    Devices:
+                      - 554192421234@s.whatsapp.net
+                      - 554192421234:41@s.whatsapp.net
+                      - 554192421234:76@s.whatsapp.net
+                    LID: 90937376170214@lid
+              success: true
+      '400':
+        $ref: '#/components/responses/CorpoInvalido'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/contacts:
+  get:
+    tags: [Contactos e utilizadores]
+    summary: Listar o roster inteiro da conta
+    description: |
+      Devolve todos os contactos que a sessão conhece, num objecto indexado
+      por JID.
+
+      **Quando usar**: para construir uma agenda local, ou para dar nome a
+      JIDs que chegam em eventos. Não há paginação — vem tudo de uma vez.
+
+      **Regra que muda o que se faz com isto**: **nas contas com endereçamento
+      LID as chaves vêm em `@lid`**, não em número. Medido: numa conta com 461
+      contactos, a totalidade das chaves era `@lid`. Quem quiser casar isto
+      com uma agenda por telefone precisa de resolver cada LID —
+      `GET /user/profile/{jid}` faz a tradução nos dois sentidos.
+
+      **Segunda ressalva medida**: `FullName` costuma vir VAZIO e o nome real
+      está em `PushName`. Numa conta WhatsApp Business, 460 dos 461 contactos
+      tinham só `PushName`. Um cliente que leia apenas `FullName` vê uma
+      agenda sem nomes.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: O roster inteiro, indexado por JID.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Roster'
+            example:
+              code: 200
+              data:
+                90937376170214@lid:
+                  Found: true
+                  FirstName: ''
+                  FullName: ''
+                  PushName: Janio Gonzalez
+                  BusinessName: ''
+                  RedactedPhone: ''
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/contacts/last-activity:
+  get:
+    tags: [Contactos e utilizadores]
+    summary: Consultar o instante da última mensagem de cada conversa
+    description: |
+      Devolve, por JID, o instante da mensagem mais recente daquela conversa.
+
+      **De onde vem o dado**: do histórico LOCAL — o `HistorySync` que chega
+      depois do pareamento, mais as mensagens correntes. **Não** é uma
+      consulta ao WhatsApp, e por isso responde depressa e não depende de a
+      sessão estar ligada.
+
+      **Quando usar**: para ordenar uma lista de conversas por actividade sem
+      pedir o histórico de cada uma.
+
+      **Regras**: as chaves são normalizadas para o espaço LID quando o
+      mapeamento é conhecido, de propósito, para casarem com as de
+      `GET /user/contacts` — sem isso os dois lados vivem em espaços de
+      identidade diferentes e quase nada casa (medido: 0 de 1141 contactos
+      casavam por telefone). Um número sem LID conhecido mantém a chave em
+      `@s.whatsapp.net`, e grupos aparecem em `@g.us`. Quando a sessão está
+      em espera, a normalização é saltada e o dado sai cru — **degrada, não
+      falha**.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: Instante da última mensagem, por JID de conversa.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/UltimaAtividadePorConversa'
+            example:
+              code: 200
+              data:
+                90937376170214@lid: '2026-08-24T18:56:53.836029-04:00'
+                554192421234@s.whatsapp.net: '2026-08-24T18:56:53.796034-04:00'
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/avatar:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Obter a foto de perfil de um contacto
+    description: |
+      **Esta rota LÊ.** Apesar do método `POST` e do nome, ela não altera a
+      foto de conta nenhuma: devolve o URL da foto de perfil do contacto
+      indicado (`GetAvatarUseCase`, `pkg/application/usecase/user/get_avatar.go`).
+      O `POST` existe só porque o alvo vai no corpo.
+
+      **Quando usar**: para mostrar a foto de um contacto. A imagem NÃO vem no
+      corpo — vem o URL, temporário e assinado pelo WhatsApp, e é dele que se
+      baixa.
+
+      **Regras**: `Phone` é obrigatório e aceita número nu, JID de telefone ou
+      LID. `Preview: true` devolve a miniatura; o padrão é a imagem em tamanho
+      cheio.
+
+      **As duas recusas que não são falhas**, e que são distintas de propósito:
+      `404` quando o contacto **não tem** foto pública, e `403` quando **tem**
+      mas a escondeu por privacidade. A diferença importa: a primeira não muda
+      se se voltar a tentar, a segunda muda se a pessoa mudar a definição.
+
+      **Ressalva de formato**: nessas duas respostas o campo `error` é uma
+      STRING (`"not found"`, `"forbidden"`) e não o objecto `{code,message}` —
+      os sentinelas de avatar não passam pela taxonomia `apperr`. É o mesmo
+      desvio catalogado como F266. Medido.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoAvatar'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+            Preview: true
+    responses:
+      '200':
+        description: Ponteiro para a foto. A imagem baixa-se do `url`.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Avatar'
+            example:
+              code: 200
+              data:
+                id: '1735689600'
+                url: https://pps.whatsapp.net/v/t61.24694-24/000000_0000000000000000_0000000000000000000_n.jpg
+              success: true
+      '400':
+        description: |
+          `Phone` ausente (`missing_phone`), corpo ilegível
+          (`could_not_decode_payload`), identificador que não parseia
+          (`invalid_phone`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_phone
+                message: missing Phone in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '403':
+        description: |
+          O contacto TEM foto, mas escondeu-a por privacidade. Medido — e
+          repare no `error` em string, não no objecto.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 403
+              error: forbidden
+              success: false
+      '404':
+        description: |
+          O contacto não tem foto de perfil pública. É o caso comum, não uma
+          falha do servidor. `error` em string, como no `403`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErroTextoSimples'
+            example:
+              code: 404
+              error: not found
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/profile/{jid}:
+  get:
+    tags: [Contactos e utilizadores]
+    summary: Reunir num pedido só tudo o que se sabe de um contacto
+    description: |
+      Junta identidades (número e LID), presença na rede, aparelhos, recado e
+      foto de perfil, a partir de QUALQUER uma das identidades do contacto.
+
+      **Quando usar**: quando se recebe um `@lid` de um evento e se quer o
+      perfil sem saber de antemão qual endpoint chamar. É a rota que dispensa
+      o cliente de encadear `/user/lid`, `/user/info` e `/user/avatar`.
+
+      **Regras**: o identificador vai no CAMINHO e aceita número nu, JID de
+      telefone ou LID — a resolução é leniente e aplica o servidor por omissão
+      quando falta o `@`. Uma cadeia que não é nem número (7 a 20 dígitos) nem
+      contém `@` é recusada com `invalid_jid` antes de chegar ao WhatsApp
+      (F238, onde uma cadeia de lixo provocava um `500`).
+
+      **A regra que muda o cliente**: cada peça do perfil é obtida
+      separadamente e **degrada em vez de falhar**. O que não se conseguiu
+      obter aparece em `unavailable`, com o motivo, e o pedido devolve `200`
+      na mesma. Por isso `on_whatsapp` é `null` quando a pergunta não pôde ser
+      feita — `null` e `false` significam coisas diferentes aqui.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    parameters:
+      - $ref: '#/components/parameters/JidNoCaminho'
+    responses:
+      '200':
+        description: |
+          O perfil consolidado. Medido: o exemplo abaixo é uma resposta real,
+          com a foto indisponível por privacidade e o resto obtido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/PerfilUtilizador'
+            example:
+              code: 200
+              data:
+                jid: 554192421234@s.whatsapp.net
+                lid: 90937376170214@lid
+                query: 554192421234@s.whatsapp.net
+                on_whatsapp: true
+                verified_name: ''
+                avatar_url: ''
+                avatar_id: ''
+                user_info:
+                  554192421234@s.whatsapp.net:
+                    VerifiedName: null
+                    Status: ''
+                    PictureID: ''
+                    Devices:
+                      - 554192421234@s.whatsapp.net
+                      - 554192421234:41@s.whatsapp.net
+                    LID: 90937376170214@lid
+                unavailable:
+                  avatar: avatar hidden by privacy settings
+              success: true
+      '400':
+        description: |
+          Identificador ausente no caminho (`missing_jid`), identificador que
+          não é nem número nem JID (`invalid_jid`), ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_jid
+                message: jid must be a phone number or a qualified JID (user@server)
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/lid/{jid}:
+  get:
+    tags: [Contactos e utilizadores]
+    summary: Resolver o LID de um número
+    description: |
+      Devolve o identificador de privacidade (`@lid`) correspondente a um
+      número, consultando o mapeamento que a sessão mantém localmente.
+
+      **Quando usar**: quando se tem um número e se precisa do LID para casar
+      com dados que vêm em espaço LID — o roster de `GET /user/contacts`, por
+      exemplo.
+
+      **Regras**: a rota resolve o LID **DE** um número, logo o caminho tem de
+      trazer um JID `@s.whatsapp.net`. Passar um `@lid` é recusado com
+      `jid_not_pn` e `400` — não é falha nossa, é o pedido invertido (F182;
+      antes disto o mesmo caso dava `500`).
+
+      **A distinção entre `404` e `500`**: quando o mapeamento simplesmente
+      não existe, a resposta é `404 lid_not_found`. Quando o armazenamento
+      falha, é `500` — de propósito, porque nesse caso o cliente NÃO sabe se
+      aquele número tem LID, e dizer-lhe "não encontrado" fá-lo-ia parar de
+      tentar diante de uma falha passageira.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    parameters:
+      - $ref: '#/components/parameters/JidNoCaminho'
+    responses:
+      '200':
+        description: O par número/LID. Medido.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResolucaoLID'
+            example:
+              code: 200
+              data:
+                jid: 554192421234@s.whatsapp.net
+                lid: 90937376170214@lid
+              success: true
+      '400':
+        description: |
+          Identificador ausente (`missing_jid`), mal formado (`invalid_jid`),
+          em LID quando devia ser número (`jid_not_pn`), ou sessão inexistente
+          (`no_session`). O exemplo abaixo é a resposta medida ao passar um
+          `@lid`.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: jid_not_pn
+                message: 'this route resolves the LID OF a phone number: pass a @s.whatsapp.net jid, not @lid'
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '404':
+        description: Não há LID conhecido para este número.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 404
+              error:
+                code: lid_not_found
+                message: LID not found for this number
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+# ================================================================= bloqueio
+
+/user/blocklist:
+  get:
+    tags: [Contactos e utilizadores]
+    summary: Listar os contactos bloqueados
+    description: |
+      Devolve os JIDs bloqueados pela conta, com o hash com que o WhatsApp
+      versiona a lista.
+
+      **Quando usar**: para saber, antes de enviar, se um destino está
+      bloqueado; e para detectar mudanças na lista comparando o `DHash` em
+      vez de percorrer as entradas.
+
+      **Ressalva de formato, medida**: esta é a única rota do grupo que **NÃO
+      usa o envelope comum**. O manipulador serializa o resultado e escreve-o
+      directamente (`handler_blocklist.go:66-73`), portanto a resposta é
+      `{"Blocklist":[…],"DHash":"…"}` — sem `code`, sem `data`, sem `success`.
+      Um cliente que leia `data` encontra `undefined` aqui.
+
+      **Contraste com a escrita**: esta LEITURA funciona. As duas rotas que
+      alteram a lista (`POST /user/block` e `POST /user/unblock`) estão hoje
+      inoperantes — ver a descrição delas.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: |
+          A lista de bloqueados, **sem envelope**. Medido: numa conta sem
+          bloqueios, `Blocklist` vem como array vazio.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListaBloqueados'
+            example:
+              Blocklist: []
+              DHash: '1787412261963655'
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/block:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Bloquear um contacto
+    description: |
+      Acrescenta um contacto à lista de bloqueados da conta.
+
+      **ESTA ROTA ESTÁ INOPERANTE HOJE.** Medida em 2026-08-26 em quatro
+      combinações — conta WhatsApp Business e conta pessoal, número real e
+      número inexistente, identificador em número e em LID — e as quatro
+      devolveram `422 upstream_rejected`. O log mostra o WhatsApp a responder
+      `info query returned status 400: bad-request`. Não é o número, não é a
+      forma do identificador e não é o tipo de conta: as quatro variáveis
+      foram isoladas. **A causa está por apurar** e está registada como F264
+      no `HOUSEKEEP.md`; a hipótese em aberto é a forma da consulta que
+      enviamos. `GET /user/blocklist` continua a funcionar — é só a escrita
+      que é recusada.
+
+      **Regras**, para quando voltar a funcionar: basta um de `JID` ou
+      `Phone`, com `JID` a ganhar quando os dois vierem. A resolução é
+      LENIENTE por decisão registada (F203): um número nu é aceite.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoBloqueio'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+    responses:
+      '200':
+        description: |
+          Bloqueio aceite. **Nunca observado em campo** — a forma abaixo vem
+          do código (`block_user.go:71-81`), não de medição.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoBloqueio'
+            example:
+              code: 200
+              data:
+                Details: User blocked
+                JID: 554192421234@s.whatsapp.net
+                Blocklist: [554192421234@s.whatsapp.net]
+                DHash: '1787412261963655'
+              success: true
+      '400':
+        description: |
+          Nem `Phone` nem `JID` no corpo (`missing_phone_or_jid`),
+          identificador que não parseia (`invalid_phone_or_jid`), corpo
+          ilegível (`could_not_decode_payload`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_phone_or_jid
+                message: missing Phone or JID
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        description: |
+          **É o que esta rota devolve hoje, em todas as combinações medidas.**
+          O pedido chegou ao WhatsApp e foi recusado; repeti-lo sem mudança
+          não ajuda. Ver F264.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 422
+              error:
+                code: upstream_rejected
+                message: WhatsApp refused this request; repeating it unchanged will not help
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/unblock:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Desbloquear um contacto
+    description: |
+      Retira um contacto da lista de bloqueados da conta.
+
+      **ESTA ROTA ESTÁ INOPERANTE HOJE**, exactamente como `POST /user/block`:
+      as mesmas quatro combinações medidas em 2026-08-26 devolveram `422
+      upstream_rejected`, com o mesmo `info query returned status 400:
+      bad-request` no log. As duas partilham o mesmo caminho de escrita da
+      lista, e por isso falham juntas. Causa por apurar — F264 no
+      `HOUSEKEEP.md`.
+
+      **Regras**, para quando voltar a funcionar: basta um de `JID` ou
+      `Phone`, com `JID` a ganhar quando os dois vierem, e a resolução aceita
+      número nu (F203).
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoBloqueio'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+    responses:
+      '200':
+        description: |
+          Desbloqueio aceite. **Nunca observado em campo** — forma derivada do
+          código (`unblock_user.go:70-80`).
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoBloqueio'
+            example:
+              code: 200
+              data:
+                Details: User unblocked
+                JID: 554192421234@s.whatsapp.net
+                Blocklist: []
+                DHash: '1787412261963655'
+              success: true
+      '400':
+        description: |
+          Nem `Phone` nem `JID` no corpo (`missing_phone_or_jid`),
+          identificador que não parseia (`invalid_phone_or_jid`), corpo
+          ilegível (`could_not_decode_payload`) ou sessão inexistente
+          (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_phone_or_jid
+                message: missing Phone or JID
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '422':
+        description: |
+          **É o que esta rota devolve hoje, em todas as combinações medidas.**
+          Ver F264.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 422
+              error:
+                code: upstream_rejected
+                message: WhatsApp refused this request; repeating it unchanged will not help
+              success: false
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+# ================================================================= presença
+
+/user/presence:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Definir a presença da própria conta
+    description: |
+      Marca a conta como online ou offline perante o WhatsApp.
+
+      **Quando usar**: ao arrancar um serviço que vai atender conversas
+      (`available`), e ao encerrá-lo (`unavailable`). É a conta INTEIRA, não
+      uma conversa — para "a escrever…" numa conversa específica existe
+      `POST /chat/presence`.
+
+      **Regras**: `type` só aceita `available` e `unavailable`. Qualquer outro
+      valor é recusado com `invalid_presence_type` antes de qualquer chamada
+      ao WhatsApp.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoPresenca'
+          example:
+            type: available
+    responses:
+      '200':
+        description: Presença enviada ao WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data:
+                Details: Presence sent
+              success: true
+      '400':
+        description: |
+          `type` fora do conjunto (`invalid_presence_type`), corpo ilegível
+          (`could_not_decode_payload`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_presence_type
+                message: "invalid presence type. Allowed values: 'available', 'unavailable'"
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/user/presence/subscribe:
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Subscrever a presença de um contacto
+    description: |
+      Pede ao WhatsApp para passar a enviar notificações quando aquele
+      contacto fica online ou offline.
+
+      **Quando usar**: quando se quer saber que um contacto ficou disponível
+      sem estar a perguntar em ciclo. As notificações chegam depois pelos
+      canais de eventos (WebSocket, webhook), **não** nesta resposta.
+
+      **Regras**: `Phone` é obrigatório e aceita número nu, JID de telefone ou
+      LID. O `200` diz que a subscrição foi pedida — não garante que alguma
+      notificação venha a chegar, que depende também da privacidade do
+      contacto.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoSubscricaoPresenca'
+          example:
+            Phone: 554192421234@s.whatsapp.net
+    responses:
+      '200':
+        description: Subscrição pedida ao WhatsApp.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/Detalhes'
+            example:
+              code: 200
+              data:
+                Details: Presence subscription updated
+              success: true
+      '400':
+        description: |
+          `Phone` ausente (`missing_phone`), identificador que não parseia
+          (`invalid_phone`), corpo ilegível (`could_not_decode_payload`) ou
+          sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_phone
+                message: missing Phone in Payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+# =============================================================== privacidade
+
+/user/privacy:
+  get:
+    tags: [Contactos e utilizadores]
+    summary: Ler as definições de privacidade da conta
+    description: |
+      Devolve as definições de privacidade em vigor na conta ligada.
+
+      **Quando usar**: para saber quem vê o último acesso, a foto e os status
+      antes de contar com uma dessas coisas. A privacidade de status, em
+      particular, é o que decide para quem uma publicação em
+      `POST /status/set/*` pode ir.
+
+      **A ressalva que apanha quem escreve um cliente**: leitura e escrita
+      usam **vocabulários diferentes**. Aqui as chaves vêm em `PascalCase`
+      (`GroupAdd`, `LastSeen`, `ReadReceipts`…); o `POST` neste mesmo caminho
+      recebe o nome em minúsculas (`groupadd`, `last`, `readreceipts`…). E a
+      leitura devolve TRÊS chaves que a escrita não conhece — `Messages`,
+      `Defense` e `Stickers` não constam da tabela de validação
+      (`pkg/domain/privacy.go:54-62`), logo não são definíveis por esta API.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    responses:
+      '200':
+        description: As definições em vigor. O exemplo é uma resposta medida.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DefinicoesPrivacidade'
+            example:
+              code: 200
+              data:
+                GroupAdd: all
+                LastSeen: contacts
+                Status: contacts
+                Profile: all
+                ReadReceipts: all
+                CallAdd: all
+                Online: all
+                Messages: all
+                Defense: 'off'
+                Stickers: contacts
+              success: true
+      '400':
+        $ref: '#/components/responses/SemSessao'
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+  post:
+    tags: [Contactos e utilizadores]
+    summary: Alterar uma definição de privacidade
+    description: |
+      Altera UMA definição de privacidade da conta ligada. O caminho é o mesmo
+      da leitura, e o manipulador despacha por método
+      (`pkg/bootstrap/wiring_routes.go:209-215`).
+
+      **Quando usar**: com cuidado — isto muda a conta real, e o efeito é
+      visível para terceiros.
+
+      **Regras**: `privacy_setting` vai em MINÚSCULAS e é uma das sete que a
+      tabela do domínio conhece: `groupadd`, `last`, `status`, `profile`,
+      `readreceipts`, `online`, `calladd`. Não são as chaves que o `GET`
+      devolve.
+
+      O conjunto de valores válidos **depende da definição**, e é por isso que
+      um valor correto noutro sítio pode ser recusado aqui: `contacts` vale
+      para `status` e é recusado em `readreceipts`, que só aceita `all` e
+      `none`. A comparação é sensível a maiúsculas — `ALL` é recusado.
+
+      Nome desconhecido e valor fora do conjunto produzem erros DIFERENTES de
+      propósito (`invalid_privacy_setting` e `invalid_privacy_value`): quem
+      chama precisa de saber qual dos dois errou. A validação corre antes de
+      qualquer chamada ao WhatsApp.
+
+      **Resposta**: devolve as definições resultantes, com a mesma forma do
+      `GET`. **Não medido** — a rota altera a conta e não foi chamada.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoDefinicaoPrivacidade'
+          example:
+            privacy_setting: status
+            value: contacts
+    responses:
+      '200':
+        description: |
+          Definição alterada; devolve as definições resultantes. A forma vem
+          do caso de uso, que propaga o que o WhatsApp devolve — **não foi
+          observada em campo**, porque a rota altera a conta.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/DefinicoesPrivacidade'
+            example:
+              code: 200
+              data:
+                GroupAdd: all
+                LastSeen: contacts
+                Status: contacts
+                Profile: all
+                ReadReceipts: all
+                CallAdd: all
+                Online: all
+              success: true
+      '400':
+        description: |
+          Nome desconhecido (`invalid_privacy_setting`), valor fora do
+          conjunto daquele nome (`invalid_privacy_value`), corpo ilegível
+          (`could_not_decode_payload`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: invalid_privacy_value
+                message: invalid value "contacts" for privacy setting "readreceipts"
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+# ==================================================================== status
+
+/status/set/image:
+  post:
+    tags: [Status]
+    summary: Publicar um status com imagem
+    description: |
+      Publica uma imagem como status — as "novidades" que expiram em 24 horas.
+
+      **Quando usar**: para difundir um aviso visual aos contactos, sem
+      escolher destinatários um a um. Quem vê é decidido pela privacidade de
+      status da conta, legível em `GET /user/privacy`.
+
+      **Regras**: `Image` aceita URI de dados começado por `data:image` **ou**
+      URL `http(s)://`; qualquer outra coisa é recusada com
+      `unsupported_image_source`. O limite é de 16 MiB depois de
+      descodificada, verificado ANTES da descodificação quando o URI declara
+      `;base64`. O tipo resolvido tem de começar por `image/`, senão o pedido
+      é recusado com `invalid_image_mime_type`.
+
+      **A ressalva que o `200` esconde, e que foi medida**: um `200` com
+      `message_id` **não garante que o status chegue a alguém**. A lista de
+      destinatários é construída a partir do campo `FullName` de cada contacto
+      (`internal/wa-noise/core/broadcast.go`), e uma conta WhatsApp Business
+      recebe os contactos por `PushName`, não por sincronização de agenda. O
+      número medido: numa conta Business com 461 contactos, apenas 1 tinha
+      `FullName`, e a publicação foi para **dois** destinatários (esse mais a
+      própria conta); numa conta pessoal com 1266 contactos, foi para 165.
+      Registado como F256 no `HOUSEKEEP.md`. Antes de contar com esta rota,
+      confirme visualmente numa conta como a sua.
+
+      **Não existe `/status/set/text`.** O recado textual do perfil é outra
+      coisa, e faz-se em `POST /user/status`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoStatusImagem'
+          example:
+            Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+            Caption: Estamos abertos até às 20h.
+    responses:
+      '200':
+        description: |
+          O WhatsApp aceitou a publicação. Leia a ressalva da descrição: isto
+          **não** significa que algum contacto a veja.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data:
+                message_id: 3EB0890CAD5493C9B10E75
+                timestamp: 1787747900
+                status: sent
+              success: true
+      '400':
+        description: |
+          `Image` ausente (`missing_image`), origem que não é URI de dados nem
+          URL (`unsupported_image_source`), URI de dados ilegível
+          (`invalid_data_uri`), imagem acima do limite (`image_too_large`),
+          corpo descodificado vazio (`empty_image_body`), tipo resolvido que
+          não é imagem (`invalid_image_mime_type`), falha ao baixar o URL
+          (`image_fetch_failed`), corpo ilegível (`could_not_decode_payload`)
+          ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: unsupported_image_source
+                message: Image data should start with "data:image/png;base64," or be an http(s) URL
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/status/set/video:
+  post:
+    tags: [Status]
+    summary: Publicar um status com vídeo
+    description: |
+      Publica um vídeo como status, com as mesmas regras de difusão da rota de
+      imagem.
+
+      **Regras**: `Video` aceita URI de dados **ou** URL `http(s)://`. Repare
+      em duas diferenças reais face à rota de imagem: o prefixo aceite é
+      `data:` (e não `data:video`), e o tipo resolvido **não** é verificado
+      contra `video/` — um URI de dados de outro tipo passa por aqui. O limite
+      é de 100 MiB depois de descodificado.
+
+      **A mesma ressalva do `200`, medida**: a lista de destinatários vem do
+      campo `FullName` dos contactos, e numa conta WhatsApp Business quase
+      nenhum contacto o tem — 461 contactos produziram **dois** destinatários,
+      contra 165 numa conta pessoal com 1266. O `200` diz que o WhatsApp
+      aceitou, não que alguém veja. Ver F256 no `HOUSEKEEP.md`.
+
+      **Não existe `/status/set/text`** — o recado textual é `POST /user/status`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoStatusVideo'
+          example:
+            Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+            Caption: Bastidores de hoje.
+    responses:
+      '200':
+        description: |
+          O WhatsApp aceitou a publicação. Não significa que algum contacto a
+          veja — leia a ressalva da descrição.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data:
+                message_id: 3EB0C8877B176B85F162E2
+                timestamp: 1787747900
+                status: sent
+              success: true
+      '400':
+        description: |
+          `Video` ausente (`missing_video`), origem que não é URI de dados nem
+          URL (`unsupported_video_source`), URI de dados ilegível
+          (`invalid_data_uri`), vídeo acima do limite (`video_too_large`),
+          corpo descodificado vazio (`empty_video_body`), falha ao baixar o
+          URL (`video_fetch_failed`), corpo ilegível
+          (`could_not_decode_payload`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: missing_video
+                message: missing Video in payload
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
+
+/status/set/audio:
+  post:
+    tags: [Status]
+    summary: Publicar um status com áudio
+    description: |
+      Publica um áudio como status. Não aceita legenda — o áudio de status não
+      a tem.
+
+      **Regras**: `Audio` aceita URI de dados começado por `data:audio/`
+      **ou** URL `http(s)://`. O limite é de 16 MiB depois de descodificado.
+      O campo de tipo chama-se `mimetype`, em minúsculas, e não `MimeType`
+      como nas rotas de imagem e vídeo — é divergência real da implementação
+      (`pkg/domain/session.go:120`), embora o casamento de nomes do Go, que
+      ignora maiúsculas, aceite as duas grafias.
+
+      **A mesma ressalva do `200`, medida**: os destinatários saem do campo
+      `FullName` dos contactos, e numa conta WhatsApp Business isso deu
+      **dois** destinatários para 461 contactos, contra 165 para 1266 numa
+      conta pessoal. Ver F256 no `HOUSEKEEP.md`.
+
+      **Não existe `/status/set/text`** — o recado textual é `POST /user/status`.
+
+      **Autenticação**: token de sessão.
+    security:
+      - TokenSessao: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PedidoStatusAudio'
+          example:
+            Audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
+    responses:
+      '200':
+        description: |
+          O WhatsApp aceitou a publicação. Não significa que algum contacto a
+          ouça — leia a ressalva da descrição.
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ResultadoEnvio'
+            example:
+              code: 200
+              data:
+                message_id: 3EB01671E10F412B3DF41C
+                timestamp: 1787747900
+                status: sent
+              success: true
+      '400':
+        description: |
+          `Audio` ausente (`missing_audio`), origem que não é URI de dados
+          `data:audio/` nem URL (`unsupported_audio_source`), URI de dados
+          ilegível (`invalid_data_uri`), áudio acima do limite
+          (`audio_too_large`), corpo descodificado vazio (`empty_audio_body`),
+          falha ao baixar o URL (`audio_fetch_failed`), corpo ilegível
+          (`could_not_decode_payload`) ou sessão inexistente (`no_session`).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Erro'
+            example:
+              code: 400
+              error:
+                code: unsupported_audio_source
+                message: audio must be base64 (data:audio/) or valid HTTP URL
+              success: false
+      '401':
+        $ref: '#/components/responses/NaoAutorizado'
+      '500':
+        $ref: '#/components/responses/ErroInterno'
