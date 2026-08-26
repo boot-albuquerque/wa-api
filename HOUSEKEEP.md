@@ -28930,3 +28930,212 @@ texto de resposta, portanto contrato observável — merece ir num commit só se
 fora do âmbito da tarefa, logo fica registado em vez de corrigido de graça.
 
 <!-- f-status: aberto -->
+
+## F263 — `/group/updateparticipants` só expõe `add` e `remove`; promover e despromover admin não têm rota
+
+**Data/contexto**: 2026-08-26, bateria de campo para o `docs/ENDPOINTS.md`.
+
+**Medido**:
+
+```
+POST /group/updateparticipants {"groupJID":"…","Phone":["554192421234"],"Action":"promote"}
+  -> 400 invalid_action  "unknown participant action \"promote\" (must be \"add\" or \"remove\")"
+POST … "Action":"demote"   -> 400 invalid_action
+POST … "Action":"add"      -> 200
+POST … "Action":"remove"   -> 200
+```
+
+**Onde**: `pkg/application/usecase/group/group_management.go:272-281` — o
+`switch` aceita dois valores e recusa o resto.
+
+**A biblioteca sabe fazer**, e há três anos:
+
+```go
+// internal/wa-noise/capabilities/group/participants.go:18-19
+ChangePromote ParticipantChange = "promote"
+ChangeDemote  ParticipantChange = "demote"
+```
+
+**Consequência**: um cliente que use só esta API cria grupo, adiciona e remove,
+mas **não consegue dar nem tirar admin a ninguém**. É o mesmo buraco que a
+F233 tinha nos canais, na família dos grupos — e ali já sabemos o que custou:
+sem segundo administrador, metade das operações de posse ficam inalcançáveis.
+
+**Ressalva de proveniência**: a recusa de valores desconhecidos é a correção da
+**F247**, e é correcta — antes deste `switch`, qualquer valor diferente de
+`add` era tratado como remoção silenciosa. O defeito não é a guarda; é o
+conjunto que ela guarda ser pequeno demais.
+
+**Correção sugerida**: acrescentar `ParticipantPromote` e `ParticipantDemote` a
+`pkg/domain/group.go:214-217`, os dois casos ao `switch`, e o mapeamento no
+adaptador. Sem tocar na guarda.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F264 — `/user/block` e `/user/unblock` são recusados pelo WhatsApp nas DUAS contas, com PN e com LID
+
+**Data/contexto**: 2026-08-26, bateria de campo.
+
+**Medido**, quatro combinações:
+
+| conta | destinatário | resultado |
+|---|---|---|
+| `filarapida` (Business) | `5511999999999@s.whatsapp.net` (inexistente) | `422 upstream_rejected` |
+| `filarapida` | `554192421234@s.whatsapp.net` (real) | `422 upstream_rejected` |
+| `filarapida` | `90937376170214@lid` (o LID do mesmo) | `422 upstream_rejected` |
+| `lucas` (pessoal) | `5511987654321@s.whatsapp.net` | `422 upstream_rejected` |
+
+O erro por baixo, do log:
+
+```
+failed to unblock user: … info query returned status 400: bad-request
+```
+
+`GET /user/blocklist` responde `200 {"Blocklist":[],"DHash":"…"}` — logo o
+caminho de leitura da lista funciona e é só a escrita que o servidor recusa.
+
+**O que isto elimina**: não é o número (testado inexistente e real), não é a
+forma do JID (testado PN e LID), e não é o tipo de conta (testado Business e
+pessoal). Sobra a forma do próprio IQ que enviamos.
+
+**O que NÃO foi feito**: comparar o nosso IQ com o que o Baileys e o
+whatsapp-web.js enviam. É o passo seguinte e é o que a regra do projeto manda
+fazer antes de projetar — as três referências já estiveram aqui.
+
+**Correção sugerida**: ler `blocklist`/`block` nas referências, comparar o
+atributo `action` e a forma do `<item>`, e só então mexer.
+
+**Status**: não corrigido — causa por apurar.
+
+<!-- f-status: aberto -->
+
+## F265 — `/newsletter/updates` nunca responde: `500` ao fim de 30 s
+
+**Data/contexto**: 2026-08-26, bateria de campo. É a **única** das dezoito
+rotas de newsletter que falha.
+
+**Medido**:
+
+```
+POST /newsletter/updates {"jid":"1203…@newsletter","count":5}
+  -> 500 newsletter_failed   (duração 30001 ms)
+log: ERR newsletter operation failed error="context deadline exceeded" op=updates
+```
+
+Os 30 s são exactamente `waclient.RequestTimeout`: o servidor **não responde**,
+não é ele a recusar. `POST /newsletter/messages` sobre o MESMO canal e no mesmo
+segundo devolve `200 []` — logo a sessão, o canal e o transporte estão bons.
+
+**Hipótese, NÃO medida**: o query ID do `updates` está desactualizado. O
+WhatsApp roda-os, e um ID que não existe não produz erro — produz silêncio, que
+é exactamente o sintoma. O extractor está versionado em
+`scripts/mex-query-ids/` justamente para isto.
+
+**Correção sugerida**: correr o extractor contra o bundle actual, comparar o ID
+do `updates` com o que está em `queryids.go`, e trocar se divergir. Se o ID
+bater, a hipótese cai e a causa é outra — registar isso em vez de insistir.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F266 — o envelope de erro da F236 não é universal: catorze pontos ainda respondem com `error` em string
+
+**Data/contexto**: 2026-08-26, bateria de campo. Apanhado porque o extractor da
+bateria lia `error.code` e rebentou em duas rotas.
+
+**Medido**:
+
+```
+POST /group/join   {"inviteLink":"https://chat.whatsapp.com/…"}
+  -> {"code":400,"error":"bad request","success":false}
+POST /group/photo  (base64 com prefixo data:)
+  -> {"code":400,"error":"bad request","success":false}
+```
+
+`error` é uma **string**, não o objecto `{code,message}` que o
+`docs/ENDPOINTS.md` documenta como universal.
+
+**A extensão, contada**:
+
+| origem | ocorrências |
+|---|---|
+| `rejectMissingField` (`handler_group_mgmt.go:99`) | **11** |
+| `RespondJSON(w, 4xx, nil, fmt.Errorf(...))` avulsos | 3 |
+| **total** | **14** |
+
+`rejectMissingField` faz `fmt.Errorf("missing %s", field)` e entrega-o ao
+`RespondJSON`. Como não é `*apperr.AppError`, a serialização cai no ramo
+genérico. Por vir de uma função partilhada, **todas** as recusas de campo
+obrigatório das rotas de grupo têm este formato.
+
+**Por que passou na F236**: a F236 converteu os cinco sentinelas de fronteira
+(`errors.go`) e as rotas que os usavam. `rejectMissingField` é de um ficheiro
+diferente, nasceu depois, e nenhum teste afirma o FORMATO do erro — só o
+status. Um `400` continua a ser um `400`.
+
+**Correção sugerida**: `rejectMissingField` passa a construir
+`apperr.New("missing_"+field, apperr.CategoryValidation, "missing "+field, false, nil)`;
+os três avulsos idem. E um teste que percorra as rotas registadas e afirme que
+todo corpo de erro tem `error.code` — sem ele, o próximo `fmt.Errorf` volta a
+entrar sem ninguém dar por isso.
+
+**Status**: não corrigido.
+
+<!-- f-status: aberto -->
+
+## F267 — a struct de domínio não é o contrato da rota, e documentar a partir dela erra em dez sítios
+
+**Data/contexto**: 2026-08-26. Achado de MÉTODO, apanhado ao escrever o
+`docs/ENDPOINTS.md`: a primeira passagem da bateria deu **oito `400`** porque
+eu derivei os corpos de exemplo das structs de `pkg/domain` em vez de os medir.
+
+**O que divergiu**, medido rota a rota:
+
+| rota | o que a struct de domínio sugere | o que a rota lê |
+|---|---|---|
+| `/group/join` | `inviteLink` (`GroupJoinRequest`) | `code` (`handler_group_mgmt.go:148`) |
+| `/group/inviteinfo` | — | `Code`, o código nu e não o URL |
+| `/group/photo` | `photo` como os outros media | base64 **cru**, sem `data:…;base64,`, e **JPEG** |
+| `/chat/send/poll` | `Phone` como os outros envios | `Group` |
+| `/chat/send/buttons` | — | `title`, não `displayText` |
+| `/chat/mute` | `mute_duration` | `*time.Duration` = **nanossegundos**, não `"8h"` |
+| `/message/star` | — | `sender` obrigatório |
+| `/chat/history` | — | query `chat_jid`, não `chat` |
+| `/user/contacts/sync` | `mode` livre | só `if_unsynced`, `incremental`, `full` |
+| `GET /group/requestparticipants` | — | lê **corpo JSON** num `GET` |
+
+**A causa estrutural**: onze handlers de `handler_group_mgmt.go` declaram
+`var req struct { … }` anónimas, próprias, em vez de usar o tipo de
+`pkg/domain`. O domínio declara `SetGroupPhotoRequest`, `GroupJoinRequest` e
+companhia, e **ninguém os desserializa**.
+
+**Por que metade das divergências não aparece**: o `encoding/json` do Go casa
+nomes de campo **ignorando maiúsculas**. `groupJID` casa com `GroupJID`, e
+`name` com `Name`. Isso esconde a divergência de CAIXA e deixa passar só a de
+PALAVRA (`code` vs `inviteLink`) — que é a que rebenta, e sem pista nenhuma,
+porque o campo simplesmente fica vazio e a rota diz "falta o campo" a quem o
+enviou.
+
+**O risco documental, que é o que motivou esta entrada**: qualquer geração de
+documentação, SDK ou cliente a partir de `pkg/domain` produz uma referência
+**errada em dez rotas** e certa nas outras cento e tal — que é a pior
+proporção possível, porque parece de confiança.
+
+**Correção sugerida**, por ordem de custo:
+
+1. Um teste que, para cada rota, compare as tags `json` da struct que o handler
+   desserializa com as do tipo de domínio homónimo e falhe na divergência. É o
+   que trava o problema, e não obriga a mexer em nada agora.
+2. Fazer os onze handlers desserializar os tipos de `pkg/domain`. Muda
+   comportamento observável (nomes aceites), portanto commit próprio.
+3. `/group/photo` aceitar o URI de dados como `/chat/send/image`.
+
+**Status**: não corrigido. O `docs/ENDPOINTS.md` foi escrito a partir da
+MEDIÇÃO e não das structs, e diz isso na secção "O que a bateria corrigiu nos
+meus próprios exemplos".
+
+<!-- f-status: aberto -->
+

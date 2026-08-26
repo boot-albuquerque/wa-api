@@ -1,7 +1,21 @@
 # Endpoints do wa-api — inventário e comparação
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
-**Total**: 121 rotas registadas em `pkg/bootstrap/wiring_routes.go`.
+**Bateria em campo**: 2026-08-26 — ver "Verificação em campo".
+**Total**: 141 entradas de rota (método + caminho) sobre **125 caminhos
+distintos**, registadas em `pkg/bootstrap/wiring_routes.go`. Eram 121 no
+levantamento de 24/08: entraram 4 de comunidade e 3 de convite de admin de
+canal, e a contagem antiga não separava método de caminho.
+
+**Estado por caminho, contado da tabela de verificação** (não estimado):
+
+| | caminhos |
+|---|---|
+| ✅ chamada real com efeito confirmado | **98** |
+| 🟡 `200` sem observador independente | **8** |
+| ❌ falhou, com o erro medido | **3** — `/user/block`, `/user/unblock`, `/newsletter/updates` |
+| ⬜ não testada, com o motivo dito | **16** |
+| | **125** |
 
 Reproduzir a lista:
 
@@ -382,7 +396,7 @@ projeto sem medir (F222).
 
 | | natureza | acesso |
 |---|---|---|
-| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 121 rotas REST |
+| **wa-api** | serviço HTTP sobre fork Go do protocolo WA Web | 141 rotas REST |
 | **Evolution API** | serviço HTTP sobre Baileys | REST + webhooks |
 | **Baileys** | **biblioteca** TypeScript | API de programa, não HTTP |
 | **Open WA** | automação de **Puppeteer** sobre a SPA do WhatsApp Web | REST (EASY API) ou biblioteca |
@@ -528,51 +542,329 @@ Reabrir só com dado novo.
 
 Catálogo, produtos e Flows são superfície exclusiva da Cloud API com WABA.
 
-## Verificação em campo
+## Verificação em campo — bateria de 2026-08-26
 
-Rota registada e gate verde **não provam** que o cliente desenha a mensagem.
-Neste projeto isso divergiu três vezes: carrossel, álbum e PIX devolveram todos
-`200` com `message_id`, e só o carrossel renderizou.
+**Método**: chamadas reais da conta `+55 16 98181-8244` (`filarapida`, Business)
+para `+55 41 9242-1234` (`lucas`), contra o binário construído do `HEAD` de
+`feature/wa-noise`, com confirmação visual no `web.whatsapp.com` para tudo o
+que produz mensagem. Cada corpo abaixo é o corpo **que foi enviado**, não um
+corpo derivado da struct — a diferença importa, e a secção
+"O que a bateria corrigiu nos meus próprios exemplos" diz porquê.
 
-| capability | gates | funcional |
+**Legenda**
+
+| marca | significa |
+|---|---|
+| ✅ | chamada real, `200`, **e** efeito confirmado (visual, ou transição de estado medida) |
+| 🟡 | chamada real, `200`, efeito **não** confirmado por observador independente |
+| ❌ | chamada real, **falhou** — com o erro medido |
+| ⬜ | **não testada**, com o motivo dito |
+
+Todos os exemplos assumem `-H 'token: <TOKEN>' -H 'Content-Type: application/json'`.
+
+---
+
+### chat — envio (15 rotas)
+
+| rota | | corpo enviado |
 |---|---|---|
-| Botões, lista | ✅ | ✅ fotografado |
-| Carrossel HSCROLL | ✅ | ✅ fotografado, 6 direções, iOS e Android |
-| Reply-to | ✅ | ✅ fotografado, com par de controlo (F222) |
-| Menções | ✅ | ✅ confirmado pelo utilizador |
-| Encaminhar | ✅ | ✅ confirmado pelo utilizador |
-| Votar em enquete | ✅ | ✅ confirmado pelo utilizador |
-| Mensagens temporárias | ✅ | ✅ confirmado pelo utilizador |
-| Status com média | ✅ | ✅ confirmado pelo utilizador |
-| Fixar conversa | ✅ | ✅ **200 em campo** (`pin` e `unpin`) |
-| Silenciar conversa | ✅ | ❌ **409 em campo** — F223 |
-| Favoritar mensagem | ✅ | ❌ **409 em campo** — F223 |
+| `POST /chat/send/text` | ✅ | `{"Phone":"554192421234@s.whatsapp.net","Body":"texto"}` |
+| `POST /chat/send/image` | ✅ | `{"Phone":"…","Image":"data:image/png;base64,iVBOR…","Caption":"legenda"}` |
+| `POST /chat/send/video` | ✅ | `{"Phone":"…","Video":"data:video/mp4;base64,AAAA…","Caption":"legenda"}` |
+| `POST /chat/send/audio` | ✅ | `{"Phone":"…","Audio":"data:audio/mp4;base64,AAAA…"}` |
+| `POST /chat/send/document` | ✅ | `{"Phone":"…","Document":"data:application/pdf;base64,JVBER…","FileName":"ficheiro.pdf"}` |
+| `POST /chat/send/sticker` | 🟡 | `{"Phone":"…","Sticker":"data:image/webp;base64,UklGR…"}` |
+| `POST /chat/send/location` | ✅ | `{"Phone":"…","Latitude":-25.4284,"Longitude":-49.2733,"Name":"Curitiba"}` |
+| `POST /chat/send/contact` | ✅ | `{"Phone":"…","Name":"Contacto","Vcard":"BEGIN:VCARD\nVERSION:3.0\nFN:Contacto\nTEL;type=CELL;waid=554192421234:+55 41 9242-1234\nEND:VCARD"}` |
+| `POST /chat/send/poll` | ✅ | `{"Group":"554192421234@s.whatsapp.net","Header":"Pergunta","Options":["A","B"]}` |
+| `POST /chat/send/pollvote` | ✅ | `{"Phone":"…","Sender":"…","PollMessageId":"3EB0…","PollMessageTimestamp":1787748016,"Options":["A"]}` |
+| `POST /chat/send/buttons` | ✅ | `{"Phone":"…","Title":"t","Body":"corpo","Footer":"rodapé","Buttons":[{"type":"reply","title":"Sim","id":"s"}]}` |
+| `POST /chat/send/list` | ✅ | `{"Phone":"…","ButtonText":"Ver","TopText":"topo","Desc":"corpo","FooterText":"rodapé","Sections":[{"title":"S1","rows":[{"title":"Op1","desc":"d1","RowId":"r1"}]}]}` |
+| `POST /chat/send/carousel` | ✅ | `{"Phone":"…","Body":"corpo","Cards":[{"Title":"C1","Body":"b1","Buttons":[{"type":"reply","title":"Ok","id":"o1"}]}]}` |
+| `POST /chat/send/template` | ✅ | `{"Phone":"…","Content":"texto","Footer":"rodapé","Buttons":[{"DisplayText":"Abrir","Url":"https://exemplo.com","Type":"url"}]}` |
+| `POST /chat/send/forward` | ✅ | por chave: `{"Phone":"…","MessageID":"3EB0…","Chat":"554192421234@s.whatsapp.net"}` — por conteúdo: `{"Phone":"…","Body":"texto"}` |
 
-**Toda a superfície de ENVIO está funcional.** Das três capabilities de
-app-state, só o `pin` funciona — as outras duas estão bloqueadas pela F223.
+**Três regras de payload que a bateria mediu**, e que nenhuma leitura das
+structs teria dado:
 
-Nota de proveniência, porque a distinção custou caro a este projeto: as três
-primeiras linhas foram medidas por fotografia do telemóvel durante a
-implementação, com par de controlo onde havia hipótese a refutar. As cinco
-últimas são **confirmação do utilizador** (2026-08-24), não medição minha —
-registado assim para que ninguém as leia como prova de campo que eu não
-recolhi.
+1. **`Buttons` quer `title`, não `displayText`.** Um botão sem `title`/`text`/
+   `buttonText` é descartado em silêncio, e se todos forem descartados a rota
+   devolve `400 no_valid_buttons`. Os tipos aceites são `reply`, `cta_url`,
+   `cta_call`, `copy` — `quickreply` vale em `/chat/send/template` e **não**
+   aqui.
+2. **`/chat/send/poll` usa `Group`, não `Phone`** — mesmo para enquete enviada
+   a um contacto individual. Com `Phone` responde `400 missing_group`.
+3. **Vídeo e áudio têm mínimo de bytes**: `256` para vídeo
+   (`send_video.go:36`) e `128` para áudio (`send_audio.go:34`). Abaixo disso
+   é `400 video_too_small` / `audio_too_small` **antes** de qualquer envio.
 
-> **Estado das três rotas de administração de canal** (medido 2026-08-25):
->
-> | rota | estado |
-> |---|---|
-> | `DELETE /newsletter/delete` | **funcional, verificado ponta a ponta** |
-> | `POST /newsletter/change-owner` | implementada; devolve `403 newsletter_new_owner_not_admin` porque o novo dono tem de já ser admin — e **não expomos o fluxo de convite de admin** (ver abaixo) |
-> | `POST /newsletter/demote` | implementada; devolve `403 newsletter_cannot_demote_owner` ao apontar ao dono. Não verificada sobre um admin não-dono, pela mesma razão |
->
-> O `userJID` pode vir em PN ou LID — o servidor resolve PN→LID antes de enviar
-> (HOUSEKEEP F233c). Enviar PN sem essa resolução produzia `400 Bad Request`.
->
-> **Lacuna conhecida**: a interface do WhatsApp oferece **Convidar admins**, e
-> nós não. Sem isso, um cliente que use só esta API não consegue levar um canal
-> de "criado" a "com segundo admin" — logo não consegue transferir posse nem
-> sair sem apagar (HOUSEKEEP F233).
+**Nota sobre o `sticker` (🟡)**: a rota devolveu `200` e a mensagem chegou, mas
+o WebP que usei é sintético e o cliente desenha uma bolha vazia com "25 B".
+A rota está exercitada; o autocolante não está provado.
+
+**Nota sobre o carrossel no Web**: o cliente Web desenha *"Não foi possível
+carregar a mensagem. Use seu celular para acessá-la."* — é limitação do Web
+para tipos interativos, e não falha do envio. Está fotografado a funcionar no
+telemóvel (F240).
+
+### chat — ações sobre mensagem (4)
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /chat/send/edit` | ✅ | `{"Phone":"…","Id":"3EB0…","Body":"texto corrigido"}` |
+| `POST /chat/react` | ✅ | `{"Phone":"…","Id":"3EB0…","Body":"👍"}` (`"Body":""` remove) |
+| `POST /chat/delete/message` | ✅ | `{"Phone":"…","Id":"3EB0…"}` |
+| `POST /message/star` | ✅ | `{"chat":"…","sender":"5516981818244@s.whatsapp.net","message_id":"3EB0…","from_me":true,"star":true}` |
+
+`star` exige `sender` — sem ele é `400 missing_sender`. Era `409` até à F223;
+com o CAP-54 responde `200`.
+
+### chat — descarga de média (5)
+
+Todas ✅. O corpo é o descritor de média, tirado do `data_json` da mensagem em
+`GET /chat/history` (campos `URL`, `directPath`, `mediaKey`, `mimetype`,
+`fileEncSha256`, `fileSha256`, `fileLength`):
+
+```json
+{"Url":"https://mmg.whatsapp.net/o1/v/t24/…","DirectPath":"/o1/v/t24/…",
+ "MediaKey":"JZdDIuwqVp1Z…","Mimetype":"image/png",
+ "FileEncSHA256":"…","FileSHA256":"…","FileLength":74}
+```
+
+| rota | | medido |
+|---|---|---|
+| `POST /chat/downloadimage` | ✅ | `image/png`, 122 B de base64 |
+| `POST /chat/downloadvideo` | ✅ | `video/mp4`, 2 010 098 B — ida e volta de 1,5 MB real |
+| `POST /chat/downloaddocument` | ✅ | `application/pdf`, 48 B |
+| `POST /chat/downloadsticker` | ✅ | `image/webp`, 59 B |
+| `POST /chat/downloadaudio` | ✅ | `audio/mp4`, 14 130 B |
+
+### chat — gestão de conversa (10)
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /chat/markread` | ✅ | `{"Chat":"…","Id":["3EB0…"]}` |
+| `POST /chat/presence` | ✅ | `{"Phone":"…","State":"composing","Media":""}` |
+| `POST /chat/archive` | ✅ | `{"jid":"…","archive":true}` |
+| `POST /chat/pin` | ✅ | `{"jid":"…","pin":true}` |
+| `POST /chat/mute` | ✅ | `{"jid":"…","mute":true,"mute_duration":28800000000000}` |
+| `POST /chat/ephemeral` | ✅ | `{"chat":"…","duration":"24h"}` |
+| `POST /chat/ephemeral/default` | ✅ | `{"duration":"0"}` |
+| `POST /chat/request-unavailable-message` | 🟡 | `{"chat":"…","sender":"…","id":"3EB0…"}` |
+| `GET /chat/list` | ✅ | — |
+| `GET /chat/history` | ✅ | `?chat_jid=554192421234@s.whatsapp.net&limit=40` |
+
+**`mute_duration` é NANOSSEGUNDOS, não uma string de duração.** É um
+`*time.Duration` (`pkg/domain/mute.go:17`), logo `"8h"` devolve
+`400 could_not_decode_payload` e `28800000000000` funciona. É a única rota do
+inventário com esta forma — `/chat/ephemeral` aceita `"24h"` como texto.
+
+**O parâmetro de `GET /chat/history` chama-se `chat_jid`**, não `chat`
+(`handler_chat_history.go:60`). Com `chat` é `400 missing_chat_jid`.
+
+### group — 18 rotas
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /group/create` | ✅ | `{"name":"Grupo","participants":["554192421234"]}` |
+| `POST /group/create` (comunidade) | ✅ | `{"name":"Comunidade","is_parent":true}` |
+| `POST /group/create` (subgrupo) | 🟡 | `{"name":"Sub","participants":["…"],"linked_parent_jid":"1203…@g.us"}` |
+| `POST /group/info` | ✅ | `{"groupJID":"1203…@g.us"}` |
+| `POST /group/list` | ✅ | `{}` |
+| `POST /group/name` | ✅ | `{"groupJID":"…","name":"Novo nome"}` |
+| `POST /group/topic` | ✅ | `{"groupJID":"…","topic":"Novo tópico"}` |
+| `POST /group/photo` | ✅ | `{"groupJID":"…","photo":"<base64 CRU, JPEG>"}` |
+| `POST /group/photo/remove` | ✅ | `{"groupjid":"…"}` |
+| `POST /group/announce` | ✅ | `{"groupJID":"…","announce":true}` |
+| `POST /group/locked` | ✅ | `{"groupJID":"…","locked":true}` |
+| `POST /group/ephemeral` | ✅ | `{"groupjid":"…","duration":"24h"}` |
+| `POST /group/invitelink` | ✅ | `{"groupJID":"…"}` |
+| `POST /group/inviteinfo` | ✅ | `{"Code":"IVccRoDVSbpHKNkgNxyZx4"}` |
+| `POST /group/join` | ✅ | `{"code":"IVccRoDVSbpHKNkgNxyZx4"}` |
+| `POST /group/leave` | ✅ | `{"groupJID":"…"}` |
+| `POST /group/updateparticipants` | ✅ | `{"groupJID":"…","Phone":["554192421234"],"Action":"add"}` |
+| `POST /group/joinapprovalmode` | ✅ | `{"groupjid":"…","mode":true}` |
+| `GET /group/requestparticipants` | ✅ | corpo JSON, apesar de ser `GET`: `{"groupJID":"…"}` |
+| `POST /group/updaterequestparticipants` | 🟡 | `{"groupJID":"…","Phone":["554192421234"],"Action":"approve"}` |
+
+**Quatro armadilhas de payload medidas nesta família:**
+
+1. **`/group/photo` quer base64 CRU**, sem o prefixo `data:image/jpeg;base64,`.
+   Isolado numa medição com uma só variável: os mesmos nomes de campo e a mesma
+   imagem, com prefixo dão `400` e sem prefixo dão `200`. É divergente de
+   `/chat/send/image`, que aceita o URI de dados. E a imagem tem de ser
+   **JPEG** — PNG produz `422 upstream_rejected`.
+2. **`/group/join` quer `code`**, o código nu, não `inviteLink` nem o URL
+   completo (`handler_group_mgmt.go:148`). O `GroupJoinRequest` do domínio
+   declara `inviteLink` e **não é o que a rota lê**.
+3. **`/group/inviteinfo` quer `Code`** — também o código nu, não o link.
+4. **`GET /group/requestparticipants` lê o corpo**, não a query string. Um
+   `GET` com corpo é servido pelo `curl`, mas quebra clientes que assumem que
+   `GET` não o tem.
+
+**`Action` só aceita `add` e `remove`.** `promote` e `demote` devolvem
+`400 invalid_action` — ver HOUSEKEEP F263: a biblioteca sabe fazê-lo
+(`internal/wa-noise/capabilities/group/participants.go:18-19`), a rota não o
+expõe.
+
+### community — 4 rotas (F237)
+
+Todas ✅, com a transição de sub-grupos medida `1 → 2 → 1` e o log de sistema
+do grupo de avisos a confirmar no cliente.
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /community/subgroups` | ✅ | `{"communityJID":"1203…@g.us"}` |
+| `POST /community/participants` | ✅ | `{"communityJID":"1203…@g.us"}` |
+| `POST /community/link` | ✅ | `{"communityJID":"1203…@g.us","groupJID":"1203…@g.us"}` |
+| `POST /community/unlink` | ✅ | `{"communityJID":"1203…@g.us","groupJID":"1203…@g.us"}` |
+
+**Comunidade criada por conta WhatsApp Business.** A ajuda oficial diz que não
+é possível; é afirmação sobre o CLIENTE. Pelo protocolo funciona — medido, e a
+F260 do HOUSEKEEP foi corrigida por causa disto.
+
+### newsletter (canais) — 18 rotas
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /newsletter/create` | ✅ | `{"name":"Canal","description":"descrição"}` |
+| `POST /newsletter/info` | ✅ | `{"jid":"1203…@newsletter"}` |
+| `POST /newsletter/info-invite` | ✅ | `{"invite":"0029Vb8NIrODZ4LhzncjL82W"}` |
+| `GET /newsletter/list` | ✅ | — |
+| `POST /newsletter/follow` | ✅ | `{"jid":"1203…@newsletter"}` |
+| `POST /newsletter/unfollow` | ✅ | `{"jid":"1203…@newsletter"}` |
+| `POST /newsletter/subscribe` | ✅ | `{"jid":"1203…@newsletter"}` |
+| `POST /newsletter/mute` | ✅ | `{"jid":"1203…@newsletter","mute":true}` |
+| `POST /newsletter/messages` | ✅ | `{"jid":"1203…@newsletter","count":5}` |
+| `POST /newsletter/mark-viewed` | 🟡 | `{"jid":"1203…@newsletter","serverIDs":[1]}` |
+| `POST /newsletter/react` | 🟡 | `{"jid":"1203…@newsletter","serverID":1,"reaction":"👍"}` |
+| `POST /newsletter/admin-invite` | ✅ | `{"jid":"1203…@newsletter","userJID":"90937376170214@lid"}` |
+| `POST /newsletter/admin-invite/accept` | ✅ | `{"jid":"1203…@newsletter"}` |
+| `POST /newsletter/admin-invite/revoke` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
+| `POST /newsletter/change-owner` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
+| `POST /newsletter/demote` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
+| `DELETE /newsletter/delete` | ✅ | `{"jid":"1203…@newsletter","confirmJID":"1203…@newsletter"}` |
+| `POST /newsletter/updates` | ❌ | `{"jid":"1203…@newsletter","count":5}` → **`500` ao fim de 30 s**, `context deadline exceeded`. Ver HOUSEKEEP F265. |
+
+**A cadeia de administração de canal está fechada** (F233), e é a única forma
+de chegar a segundo administrador:
+
+```
+create → admin-invite → admin-invite/accept → change-owner → demote → delete
+ owner      (convite)        role=admin         role=owner    subscriber  non_existing
+```
+
+O `userJID` pode ir em PN ou LID — a resolução PN→LID é feita antes do envio
+(F233c).
+
+### user — 16 rotas
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /user/check` | ✅ | `{"phone":["554192421234"]}` |
+| `POST /user/info` | ✅ | `{"Phone":["554192421234@s.whatsapp.net"]}` |
+| `GET /user/contacts` | ✅ | — |
+| `GET /user/contacts/last-activity` | ✅ | — |
+| `GET /user/privacy` | ✅ | — |
+| `GET /user/profile/{jid}` | ✅ | `/user/profile/554192421234@s.whatsapp.net` |
+| `GET /user/lid/{jid}` | ✅ | `/user/lid/554192421234@s.whatsapp.net` |
+| `GET /user/blocklist` | ✅ | — |
+| `POST /user/presence` | ✅ | `{"type":"available"}` |
+| `POST /user/presence/subscribe` | ✅ | `{"Phone":"554192421234@s.whatsapp.net"}` |
+| `POST /user/contacts/sync` | ✅ | `{"mode":"if_unsynced"}` — só `if_unsynced`, `incremental`, `full` |
+| `POST /user/history/sync` | ✅ | `{"count":5,"chat_jid":"…","oldest_msg_id":"3EB0…","oldest_msg_from_me":true,"oldest_msg_timestamp":1787747900}` |
+| `POST /user/block` | ❌ | `{"Phone":"554192421234@s.whatsapp.net"}` → **`422 upstream_rejected`** |
+| `POST /user/unblock` | ❌ | idem |
+| `POST /user/avatar` | ⬜ | altera o avatar da conta — proibido nesta sessão |
+| `POST /user/status` | ⬜ | altera o recado da conta — não testado sem aval |
+| `POST /user/privacy` | ⬜ | altera definições da conta — não testado sem aval |
+
+**`/user/block` e `/user/unblock` falham nas DUAS contas**, com PN e com LID:
+o WhatsApp devolve `info query returned status 400: bad-request`. Não é
+específico do número nem do tipo de conta — ver HOUSEKEEP F264.
+
+### status (stories) — 3 rotas
+
+| rota | | corpo enviado |
+|---|---|---|
+| `POST /status/set/image` | 🟡 | `{"Image":"data:image/png;base64,…","Caption":"legenda"}` |
+| `POST /status/set/video` | 🟡 | `{"Video":"data:video/mp4;base64,…","Caption":"legenda"}` |
+| `POST /status/set/audio` | 🟡 | `{"Audio":"data:audio/mp4;base64,…"}` |
+
+**Não há `POST /status/set/text`** — a rota não existe (`404`). O recado de
+texto é `POST /user/status`, que é outra coisa.
+
+**Os três `200` são enganadores numa conta Business.** A lista de destinatários
+é construída a partir de `contact.FullName`, e uma conta Business recebe os
+contactos por `push_name`: 461 contactos produzem **dois** destinatários.
+Medido, com o comparativo da conta pessoal (1266 contactos → 165
+destinatários). Detalhe em HOUSEKEEP F256.
+
+### infraestrutura — 19 rotas
+
+| rota | | nota |
+|---|---|---|
+| `GET /health` | ✅ | autenticada |
+| `GET /health/live`, `GET /health/ready`, `GET /livez` | ✅ | **sem** autenticação |
+| `GET /admin/users`, `GET /admin/users/{id}` | ✅ | `-H 'Authorization: <ADMIN_TOKEN>'`. O token é **regerado a cada arranque** e está em `<datadir>/admin_token` |
+| `GET /labels`, `GET /labels/{id}/chats` | ✅ | — |
+| `GET /webhook`, `GET /webhook/history` | ✅ | leitura |
+| `GET /s3/config`, `GET /session/s3/config` | ✅ | leitura |
+| `GET /hmac/config`, `GET /session/hmac/config` | ✅ | leitura |
+| `GET /session/status`, `/session/profile`, `/session/profile/full`, `/session/qr` | ✅ | leitura |
+| `POST/PUT/DELETE /webhook`, `POST /webhook/history` | ⬜ | escreve configuração — não testado sem aval |
+| `POST/DELETE /s3/config`, `POST /s3/configure`, `POST /s3/test`, `POST/DELETE /session/s3/config`, `POST /session/s3/test` | ⬜ | idem |
+| `POST/DELETE /hmac/config`, `/hmac/configure` | ⬜ | idem |
+| `POST /session/history` | ⬜ | idem |
+| `POST /admin/users`, `PUT /admin/users/{id}`, `DELETE /admin/users/{id}`, `DELETE /admin/users/{id}/full` | ⬜ | cria/apaga utilizadores |
+| `GET /session/connect`, `/session/disconnect`, `POST /session/logout`, `/session/pairphone` | ⬜ | derrubaria as sessões vivas |
+| `POST /proxy/set`, `POST /session/proxy` | ⬜ | mudaria a rede da sessão |
+| `GET /session/ws` | ⬜ | WebSocket, fora do alcance de `curl` |
+| `POST /call/reject` | ⬜ | exige chamada a entrar |
+
+---
+
+## O que a bateria corrigiu nos meus próprios exemplos
+
+Esta secção existe porque a primeira passagem da bateria produziu **oito**
+`400` que eu tinha escrito como se fossem corpos válidos. Todos vinham de eu
+ter derivado o exemplo da struct de domínio em vez de o medir:
+
+| rota | o que eu escrevi | o que a rota quer |
+|---|---|---|
+| `/chat/send/buttons` | `"displayText"` | `"title"` |
+| `/chat/send/carousel` | cartão sem `Buttons` | `Buttons` obrigatório por cartão |
+| `/chat/send/poll` | `"Phone"` | `"Group"` |
+| `/chat/mute` | `"mute_duration":"8h"` | nanossegundos: `28800000000000` |
+| `/message/star` | sem `sender` | `sender` obrigatório |
+| `/chat/history` | `?chat=` | `?chat_jid=` |
+| `/group/join` | `"inviteLink"` + URL | `"code"` + código nu |
+| `/group/inviteinfo` | `"inviteLink"` | `"Code"` |
+| `/group/photo` | `data:image/…;base64,` | base64 cru, e JPEG |
+| `/user/contacts/sync` | `"delta"` | `if_unsynced` \| `incremental` \| `full` |
+
+**A regra que daqui sai**: a struct do domínio **não é** o contrato da rota.
+Onze handlers de grupo declaram structs anónimas próprias
+(`handler_group_mgmt.go`), e onde o nome do campo diverge é essa struct que
+manda — o `encoding/json` do Go casa nomes ignorando maiúsculas, o que
+esconde metade das divergências e deixa as outras (`code` vs `inviteLink`) a
+falhar sem pista. Documentar a partir do código-fonte das structs produziria
+uma referência errada em dez rotas.
+
+## O envelope de erro não é universal (F266)
+
+O formato da secção "Envelope de erro (F236)" vale para os erros que passam
+por `*apperr.AppError`. **Catorze pontos** de `pkg/presentation/http/handlers`
+ainda respondem com `fmt.Errorf`, e esses produzem:
+
+```json
+{"code":400,"error":"bad request","success":false}
+```
+
+com `error` a ser uma **string** e não o objecto `{code,message}`. Onze deles
+vêm da mesma função, `rejectMissingField` (`handler_group_mgmt.go:99`), logo
+todas as recusas de campo obrigatório das rotas de grupo têm este formato. Um
+cliente que leia `error.code` parte aqui.
 
 ### `DELETE /newsletter/delete` — irreversível
 
