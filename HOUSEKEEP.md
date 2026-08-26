@@ -29720,3 +29720,289 @@ da rota está correcto) e mudar a assinatura da porta toca em código fora do
 enunciado. Registado para decisão.
 
 <!-- f-status: aberto -->
+
+
+
+
+## F273 — o token de uma sessão APAGADA continua a autenticar
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis), a validar o observador do `DELETE /admin/users/{id}`.
+
+**Onde**: caminho de autenticação por token de sessão
+(`pkg/presentation/http/middleware`, cache de token→utilizador alimentada por
+`pkg/bootstrap/user_info_cache.go`) contra
+`pkg/application/usecase/user/delete_user.go` e
+`delete_user_complete.go`, que apagam a linha em `users` e **não** invalidam a
+entrada de cache do token.
+
+**Problema**: depois de a sessão ser apagada, o seu token continua a passar o
+middleware. Medido contra o binário do `HEAD` desta branch, servidor isolado na
+porta 8091, base SQLite própria:
+
+```
+# sessão descartavel-2, id 80eeb48bdff35433626c7268551288d1, token tok-desc-2
+$ curl -s -X DELETE -H 'Authorization: evadmin123' localhost:8091/admin/users/80eeb48bdff35433626c7268551288d1
+{"code":200,"data":{"status":"deleted"},"success":true}
+
+$ sqlite3 evdata/dbdata/users.db "select count(*) from users where id='80eeb48bdff35433626c7268551288d1';"
+0
+
+# token que NUNCA existiu — comportamento correcto
+$ curl -s -H 'token: token-que-nunca-existiu' localhost:8091/session/status
+{"code":401,"error":{"code":"unauthorized","message":"unauthorized"},"success":false}
+
+# token da sessão APAGADA — passa a autenticação
+$ curl -s -H 'token: tok-desc-2' localhost:8091/webhook
+{"code":200,"data":{"subscribe":[""],"webhook":""},"success":true}
+
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+```
+
+Esperado: `401 unauthorized`, igual ao token inexistente. Obtido: `200` em
+`GET /webhook` e em `GET /session/connect`, este último a lançar um arranque
+que só falha, de forma assíncrona, no log:
+
+```
+{"level":"error","error":"failed to resolve device jid: sql: no rows in result set",
+ "userid":"80eeb48bdff35433626c7268551288d1","message":"failed to start session"}
+```
+
+O mesmo acontece com `DELETE /admin/users/{id}/full` (medido com a sessão
+`descartavel-4`, token `tok-desc-4`: `GET /webhook` respondeu `200` depois do
+`/full`). Ou seja, **nenhum** dos dois caminhos de remoção fecha o token.
+
+A janela dura enquanto a entrada viver na cache. Não houve escrita de dados
+novos nas medições — os handlers que tocam no banco morrem em `no_session` —
+mas a fronteira de autenticação está a aceitar uma credencial revogada, e
+rotas de leitura que não consultam `users` (como `GET /webhook`, que respondeu
+`200`) devolvem corpo a quem já não é utilizador.
+
+**Correcção sugerida**: os dois use cases de remoção passam a invalidar a
+entrada de cache do token (a mesma porta que o `publish_userinfo` usa para
+escrever), na ORDEM: apagar a linha primeiro, invalidar depois — invalidar
+antes deixaria uma janela em que uma leitura concorrente repovoa a cache a
+partir da linha que ainda existe. Alternativa mais forte: a resolução do token
+deixar de ser servida por cache sem revalidação, e passar a confirmar a
+existência da linha.
+
+**Status**: não corrigido. Fora do escopo da tarefa (medição de evidências),
+e o conserto toca na fronteira de autenticação — exige teste do defeito, teste
+da ORDEM (apagar antes de invalidar) e controlo negativo executado, nos termos
+do `CLAUDE.md`. Registado para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F274 — `GET /session/connect` depois de `/session/disconnect` devolve `200` e não religa
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis), ao medir `/session/connect` e `/session/disconnect`.
+
+**Onde**: `pkg/bootstrap` — a guarda de "start em voo" do arranque de sessão
+(mensagem `start already in flight for this user; not starting a second
+pairing flow`) contra o `DisconnectUseCase`, que derruba o transporte sem
+limpar essa marca.
+
+**Problema**: numa sessão **nunca emparelhada**, a sequência
+`connect → disconnect → connect` devolve `200 {"status":"connecting"}` na
+segunda chamada e **nada volta a ligar**. Reproduzido duas vezes, com sessões
+descartáveis diferentes:
+
+```
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+# 4 s depois
+connected= True   (GET /session/status)
+
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/disconnect
+{"code":200,"data":{"details":""},"success":true}
+connected= False
+
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+# 6 s depois
+connected= False
+```
+
+O log diz o que a resposta não diz:
+
+```
+{"level":"warn","message":"start already in flight for this user; not starting a second pairing flow"}
+{"level":"error","error":"a session start is already in flight for this user; read the current QR from GET /session/qr","message":"failed to start session"}
+```
+
+São dois problemas, e o segundo é o grave:
+
+1. o `disconnect` derruba o socket mas deixa em voo o fluxo de emparelhamento
+   iniciado pelo `connect` anterior, pelo que a religação fica bloqueada até o
+   QR expirar;
+2. **o `200` é para um arranque que nunca acontece** — exactamente a classe da
+   F108, que a documentação de `/session/connect` declara fechada ("antes disso
+   o cliente recebia `200` para um arranque que nunca ia acontecer"). A F108
+   fechou a verificação de POSSE; este ramo, o de start duplicado, continua a
+   responder sucesso a uma falha.
+
+Contradiz também a descrição de `/session/disconnect`
+(`api/openapi/paths/sessao.yaml:98`): *"volta a ligar-se com
+`GET /session/connect`, sem QR novo"*.
+
+**Limite da medição, dito de propósito**: só foi medido em sessões **nunca
+emparelhadas**, onde o `connect` abre um fluxo de QR. Numa sessão já
+emparelhada o arranque pode não passar pela mesma guarda — não foi medido, e
+não se afirma nada sobre isso.
+
+**Correcção sugerida**: o `DisconnectUseCase` limpa a marca de start em voo ao
+derrubar o transporte; e, independentemente disso, o handler de `connect`
+deixa de responder `200` quando `startSession` devolve erro — devolve `409`
+com o código que o próprio erro já traz (`read the current QR from
+GET /session/qr`).
+
+**Status**: não corrigido. Fora do escopo (medição de evidências) e o conserto
+mexe no ciclo de vida da sessão. Registado para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F275 — `POST /session/logout` numa sessão ligada mas nunca emparelhada responde `500` com envelope de texto simples
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis).
+
+**Onde**: `pkg/application/usecase/session/logout.go:43` — o ramo de falha de
+`uc.sessions.Logout` só reconhece `apperr.CodeSessionNotConnected`; qualquer
+outro erro sobe cru e é mapeado para `500`.
+
+**Problema**: com o transporte VIVO mas sem aparelho emparelhado, o logout
+morre em `the store doesn't contain a device JID` e a rota responde:
+
+```
+$ curl -s -w ' [HTTP %{http_code}]' -X POST -H 'token: tok-desc-3' localhost:8091/session/logout
+{"code":500,"error":"internal server error","success":false} [HTTP 500]
+```
+
+Log correspondente:
+
+```
+{"level":"warn","txtID":"0970ba6c8bee9efe377178dd2c58a0ee",
+ "error":"the store doesn't contain a device JID","message":"logout failed"}
+```
+
+Duas coisas erradas na mesma resposta:
+
+1. é um **erro de cliente** — a sessão não tem o que desemparelhar — servido
+   como `500`. O par natural seria `409`, ao lado do `session_not_connected`
+   que a rota já sabe devolver;
+2. o corpo traz `error` como **string**, e não o objecto `{code, message}` da
+   taxonomia. É mais um ponto da F266, que essa entrada não enumera.
+
+**Correcção sugerida**: acrescentar ao `switch` do ramo de falha o caso "sem
+device JID no store", mapeado para um `apperr` tipado (`session_not_paired`,
+`409`), à semelhança do que a F93 fez para `session_not_connected`. Cuidado com
+a ordem: o `Detach` do ramo `session_not_connected` é deliberado (F93) e não
+deve ser estendido cegamente ao caso novo — uma sessão viva sem par não está a
+mentir sobre `users.connected`.
+
+**Status**: não corrigido. Fora do escopo. Consequência directa: a rota fica
+classificada **❌** em `api/openapi/evidencias.tsv`, com este erro como
+evidência — o caminho de `200` exige conta emparelhada e é doutro lote.
+
+<!-- f-status: aberto -->
+
+
+## F276 — `POST /s3/test` transforma recusa do upstream em `500` com envelope de texto simples
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis), ao tentar promover `/s3/test`.
+
+**Onde**: o use case de teste de ligação S3 (`pkg/application/usecase/storage`,
+caminho que loga `S3 connection test failed`) — o erro do SDK da AWS sobe cru
+e é mapeado para `500`.
+
+**Problema**: com credenciais inválidas — a resposta mais provável de um
+operador que se engana a configurar — a rota devolve `500`:
+
+```
+$ curl -s -w ' [HTTP %{http_code}]' -X POST -H 'token: tok-desc-3' localhost:8091/s3/test
+{"code":500,"error":"internal server error","success":false} [HTTP 500]
+```
+
+O log tem o diagnóstico completo, que a resposta não dá:
+
+```
+"error":"operation error S3: ListObjectsV2, https response error StatusCode: 403,
+ api error InvalidAccessKeyId: The AWS Access Key Id you provided does not exist in our records."
+```
+
+Mesma classe da F275 e da F271: erro do lado do pedido servido como erro do
+servidor, e `error` em string em vez do objecto da taxonomia (F266). Quem chama
+`/s3/test` chama-o precisamente para saber SE a configuração está boa; um `500`
+opaco é a resposta menos útil possível para essa pergunta. O comportamento é o
+mesmo em `POST /session/s3/test`, que é o mesmo manipulador.
+
+**Correcção sugerida**: mapear a falha do teste de ligação para `422
+upstream_rejected` (o código que `/users/block` já usa) e levar a mensagem do
+upstream — sem credenciais — para o corpo.
+
+**Status**: não corrigido. Fora do escopo. Nota de classificação: a rota
+mantém-se **⬜**, e não passa a ❌, porque a falha medida foi provocada por
+credenciais deliberadamente falsas — é o meu input, não um defeito do
+percurso. O percurso em si foi exercitado até ao servidor da AWS e voltou.
+
+<!-- f-status: aberto -->
+
+
+## F277 — a documentação de `endpoint` do S3 diz "URL analisável" e a validação real recusa loopback e faixas reservadas
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências — a
+tentar levantar um MinIO local descartável para testar `/s3/test`.
+
+**Onde**: `api/openapi/paths/infra.yaml:965` (bloco de regras do
+`POST /s3/config`) contra
+`pkg/application/usecase/storage/configure_s3.go:87-91`, que chama
+`egress.ValidateOutboundURL`.
+
+**Problema**: a documentação diz apenas
+
+> `endpoint`, quando presente, tem de ser um URL analisável
+> (`400 invalid_s3_endpoint`).
+
+`http://127.0.0.1:9000` **é** um URL analisável, e é recusado:
+
+```
+$ curl -s -X POST -H 'token: tok-desc-1' -H 'Content-Type: application/json' \
+    -d '{"enabled":true,"endpoint":"http://127.0.0.1:9000", ...}' localhost:8091/s3/config
+{"code":400,"error":{"code":"invalid_s3_endpoint","message":"invalid S3 endpoint"},"success":false}
+```
+
+A regra verdadeira é a do validador de saída (sec/F24): esquema `http`/`https`,
+host presente, e **nenhum** dos endereços resolvidos em faixa reservada ou
+loopback (`pkg/infra/egress`). A mensagem de erro é a mesma nos dois casos e
+não distingue "não analisei" de "recusei o destino", o que deixa quem configura
+sem saber o que corrigir.
+
+Consequência prática, e a razão de isto ter aparecido: **não é possível apontar
+a configuração para um MinIO local**, o que fecha a porta ao único fixture
+descartável barato para `/s3/test` e `/session/s3/test`. Essas duas rotas ficam
+⬜ por causa desta regra, e não por falta de vontade de as medir.
+
+Achado menor no mesmo terreno: `DELETE /s3/config` não zera a configuração —
+deixa `path_style: true`, `media_delivery: "base64"` e `retention_days: 30`
+(valores por omissão), enquanto o estado de uma sessão que nunca configurou S3
+é `path_style: false`, `media_delivery: ""` e `retention_days: 0`. Medido nos
+dois estados. A documentação só promete `enabled: false` e a volta ao `base64`,
+portanto não há contradição — mas "apagar" e "nunca ter tido" não são o mesmo
+corpo, e quem compara os dois não é avisado.
+
+**Correcção sugerida**: (a) a descrição de `endpoint` passa a dizer a regra
+real, citando o validador de saída e nomeando loopback e faixas reservadas;
+(b) opcionalmente, separar o código de erro em `invalid_s3_endpoint` (não
+analisável) e `reserved_s3_endpoint` (destino recusado), como
+`POST /session/proxy` já faz com `reserved_proxy_address`; (c) documentar o
+corpo que `DELETE /s3/config` deixa.
+
+**Status**: não corrigido — é alteração de documentação gerada e de taxonomia,
+fora do escopo desta tarefa. Registado para decisão.
+
+<!-- f-status: aberto -->
