@@ -1150,6 +1150,10 @@
       - Os tipos são **`quickreply`, `url` e `call`**, e não `reply`/`cta_url`/
         `cta_call`/`copy`. Um `Type` desconhecido **não** é recusado nem
         descartado: cai em `quickreply`.
+      - `Type` é comparado **literalmente**, sem `trim` e sem baixar a caixa:
+        `URL` e `" url"` não batem em `url` e caem em `quickreply` sem aviso.
+      - `DisplayText` **não é validado**: um botão sem rótulo é aceite e sai com
+        o rótulo em branco.
       - **Não há validação do conteúdo por tipo**: um botão `url` sem `Url` é
         aceite e produz um botão com destino vazio.
       - `Footer` é **obrigatório** aqui — é a única rota de envio em que o
@@ -1232,8 +1236,9 @@
       futura.
 
       **Por conteúdo** (`Phone` + `Body`): a API cria uma mensagem de texto NOVA
-      marcada como encaminhada. O `ForwardingScore` do payload é respeitado, com
-      `1` por omissão.
+      marcada como encaminhada. O `ForwardingScore` do payload é respeitado
+      apenas quando é MAIOR que zero; ausente, `null` e `0` caem todos no
+      padrão `1`, logo **não há maneira de pedir score `0`** por esta rota.
 
       **Regras**:
       - Sem `MessageID`, `Body` passa a ser obrigatório — vazio é
