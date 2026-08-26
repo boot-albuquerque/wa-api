@@ -29720,3 +29720,98 @@ da rota está correcto) e mudar a assinatura da porta toca em código fora do
 enunciado. Registado para decisão.
 
 <!-- f-status: aberto -->
+
+## F273 — dois vocabulários de engine convivem: `"wanoise"/"headless"` (configuração) e `wa_noise/wa_headless` (domínio)
+
+**Data**: 2026-08-26. **Contexto**: worktree `engine-capability-foundation`,
+que criou o tipo `domain.Engine` e a coluna `users.engine` (migração 19).
+
+**Onde**:
+
+- `pkg/bootstrap/engine_selection.go:29-32` — `EngineWaNoise = "wanoise"`,
+  `EngineWaHeadless = "headless"`. São os valores que `WA_API_ENGINE` e
+  `WA_API_ENGINE_HEADLESS_SESSIONS` já carregam nos ambientes em produção.
+- `pkg/domain/engine.go:31-35` — `EngineWaNoise Engine = "wa_noise"`,
+  `EngineWaHeadless Engine = "wa_headless"`. É o contrato público, em
+  snake_case, e é o que fica GRAVADO em `users.engine`.
+- `pkg/bootstrap/engine_backfill.go:35-45` — `engineDomainFor`, a única
+  travessia entre os dois.
+
+**Problema**: o mesmo conceito tem dois nomes, e nada no compilador liga um ao
+outro — `domain.Engine("headless")` compila e é silenciosamente inválido.
+Enquanto houver uma travessia só, o dano está contido; quando o roteamento
+passar a consumir `domain.Engine`, cada ponto novo de contacto é uma chance de
+alguém escrever o vocabulário errado e o processo servir pelo transporte que
+ninguém pediu — exactamente o que a decisão 94 proíbe.
+
+Medido: `pkg/bootstrap/engine_routing.go` (`rotaDeEngine`, `ErrEngineSemPort`) e
+`pkg/infra/enginerouter/groupinfo.go` continuam a falar SÓ o vocabulário de
+configuração, e `pkg/bootstrap/wiring_handlers.go:425` nem sequer passa pelo
+router por capability — aponta directo ao adaptador wa-noise. Nada disto foi
+tocado aqui.
+
+**Correcção sugerida**: unificar num vocabulário só, com `domain.Engine` a
+ganhar, e `engineValido` a aceitar os nomes antigos como ALIAS de leitura
+durante uma janela — mudar o valor aceite em `WA_API_ENGINE` sem alias partiria
+ambientes que já existem. O trabalho pertence à worktree que fizer o roteamento
+consumir `domain.Engine` (capability-registry / routing), porque só lá se vê o
+conjunto todo dos pontos de contacto.
+
+**Status**: **não corrigido** — é dualidade DELIBERADA e temporária, não
+descuido. O que esta worktree fez foi confiná-la a uma função e travá-la:
+`engineDomainFor` erra em vez de cair no padrão, e
+`pkg/bootstrap/engine_backfill_test.go` (`TestEngineDomainForCoversEveryConfiguredEngine`,
+`TestEngineDomainForRejectsUnknown`) prova as duas metades. Referência cruzada
+com F274, que descreve o backfill que depende desta travessia.
+
+<!-- f-status: aberto -->
+
+## F274 — o backfill de `users.engine` corre no arranque e não na migração, e isso tem consequências
+
+**Data**: 2026-08-26. **Contexto**: o mesmo da F273.
+
+**Onde**: `pkg/infra/db/user_engine.go` (`BackfillUserEngines`) e
+`pkg/bootstrap/engine_backfill.go` (`runEngineBackfill`, chamado por
+`setupEngineSelection` em `pkg/bootstrap/engine_selection.go`).
+
+**Problema**: a regra de backfill depende de `WA_API_ENGINE_HEADLESS_SESSIONS`,
+que é decisão de aplicação e não de esquema, portanto não cabe no `UpSQL` da
+migração 19 — pelo mesmo motivo das migrações 11 e 16, que também correm em Go.
+A consequência é que o backfill NÃO tem linha na tabela `migrations`: corre em
+todo arranque, e a sua idempotência é uma propriedade do `WHERE`
+(`engine = 'legacy_unknown'`), não um registo de que já foi aplicado.
+
+Duas coisas decorrem disso, e ambas foram tratadas de propósito:
+
+1. **Não pode reescrever linha já decidida.** Quando a API souber definir
+   engine por sessão, um backfill que reescrevesse tudo desfaria essa escolha
+   em cada reinício. Por isso só toca linhas em `legacy_unknown`, e há teste
+   (`TestBackfillIsIdempotent`) que muda o engine de uma linha DEPOIS do
+   primeiro backfill e exige que o segundo a preserve.
+2. **Cada réplica corre o seu.** Não há coordenação: em `multi`, N réplicas
+   correm o mesmo `UPDATE` idempotente ao mesmo tempo. É seguro porque a
+   escrita é `SET engine=X WHERE engine='legacy_unknown'` — a segunda a chegar
+   não casa nada. Mas se réplicas subirem com `WA_API_ENGINE_HEADLESS_SESSIONS`
+   DIFERENTES, a que chegar primeiro decide, e as outras não notam. **Isto não
+   foi medido em campo** e é o risco por descrever desta entrada.
+
+**Correcção sugerida**: para o ponto 2, ou a lista deixa de vir do ambiente
+quando a API passar a ser fonte de verdade (o caminho pretendido), ou o arranque
+recusa subir se a sua lista divergir do que já está gravado. A segunda é barata
+e detecta o desalinhamento no sítio onde ele é diagnosticável.
+
+**Como ler os números**: `runEngineBackfill` imprime em TODO arranque a linha
+`"session engine backfill"` com `total_sessions`, `pending_before`,
+`to_wa_noise`, `to_wa_headless`, `listed_but_absent` e `default_engine`. É
+impressa mesmo quando nada mudou, de propósito: "zero linhas migradas" e "o
+backfill não correu" são indistinguíveis num log que fica calado.
+
+**Status**: **não corrigido** quanto ao ponto 2 (réplicas com ambiente
+divergente), que fica registado como pendência. O resto está **corrigido e
+travado** por `pkg/infra/db/user_engine_test.go` — sete testes, com três
+controlos negativos EXECUTADOS: backfill neutralizado (as quatro linhas ficam em
+`legacy_unknown`), ordem dos dois `UPDATE` invertida (a lista de headless vai
+toda para o padrão) e `DEFAULT` da coluna trocado para `wa_noise` (o teste da
+migração morde).
+
+<!-- f-status: aberto -->
