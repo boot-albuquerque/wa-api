@@ -13,17 +13,39 @@
 
 ## Como isto NÃO parte clientes
 
-Cada caminho antigo continua registado e a funcionar. O que muda:
+Cada caminho antigo continua **registado e a responder**. O que muda:
 
 | | canónico | antigo |
 |---|---|---|
-| existe? | sim | sim |
-| no OpenAPI | operação principal | `deprecated: true`, a apontar para o canónico |
-| no `ENDPOINTS.md` | é o que se documenta | listado na tabela de equivalência |
-| tempo de vida | permanente | até uma remoção **anunciada**, que ainda não foi decidida |
+| é servido? | sim | **sim** |
+| está no OpenAPI | sim | **não** |
+| onde se encontra | na página `/docs` | na tabela de equivalência do `docs/ENDPOINTS.md` |
+| tempo de vida | permanente | sem data de remoção |
 
-Não há data de remoção. Marcar `deprecated` sem plano de remoção é dizer
-"preferimos o outro", que é verdade; anunciar remoção sem decisão seria mentira.
+### Por que o antigo saiu do contrato, em vez de ficar `deprecated`
+
+A primeira versão desta padronização documentava as duas formas, com a antiga
+marcada `deprecated: true`. Ficaram **232 operações para 141 capacidades** — e
+o leitor passava a ter de escolher entre `/chat/list` e `/chats/list` em cada
+grupo que abrisse.
+
+Documentar as duas contradiz aquilo que a padronização existe para resolver:
+**uma operação, um nome**. Um contrato com dois nomes para a mesma coisa não é
+mais informativo — é mais ambíguo, e a ambiguidade é o defeito original.
+
+**A distinção que importa**: o caminho antigo foi removido do **contrato**, não
+do **serviço**. Um cliente existente continua a funcionar exactamente como
+antes; o que deixa de existir é a promessa documentada de que continuará. Quem
+integrar de novo lê um nome só.
+
+**Onde o antigo vive agora**: na tabela de equivalência do `docs/ENDPOINTS.md`,
+e na nota que abre cada operação canónica — *"Substitui `GET /chat/list`"* —
+para que quem chegue com o nome que conhece encontre onde ele foi parar.
+
+**O que o gate garante**: uma rota antiga conta como coberta **apenas** se a
+gémea canónica estiver documentada. Apagar a canónica acusa as duas, com a
+mensagem a dizê-lo. Nunca há um estado em que uma capacidade servida fique
+sem nome nenhum no contrato.
 
 ## O que fica singular, e porquê
 

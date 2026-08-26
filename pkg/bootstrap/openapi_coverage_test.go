@@ -103,11 +103,29 @@ func TestOpenAPICobreTodasAsRotasRegistadas(t *testing.T) {
 	registadas := rotasRegistadas(t)
 	documentadas := operacoesDaEspecificacao(t, carregarEspecificacao(t))
 
+	// Uma rota LEGADA não é documentada de propósito: o contrato descreve um
+	// nome por operação, e o nome documentado é o canónico. Ela conta como
+	// coberta quando a gémea canónica está no documento — o que também
+	// significa que apagar a canónica faz o gate acusar as DUAS.
+	canonicaDe := map[string]string{}
+	for _, linha := range CaminhosCanonicos() {
+		canonicaDe[linha.LegacyMethod+" "+linha.LegacyPath] =
+			linha.CanonicalMethod + " " + linha.CanonicalPath
+	}
+
 	var faltam []string
 	for _, chave := range registadas {
-		if _, ok := documentadas[chave]; !ok {
-			faltam = append(faltam, chave)
+		if _, ok := documentadas[chave]; ok {
+			continue
 		}
+		if canonica, ehLegada := canonicaDe[chave]; ehLegada {
+			if _, ok := documentadas[canonica]; ok {
+				continue
+			}
+			faltam = append(faltam, chave+" (legada) e "+canonica+" (canónica): NENHUMA documentada")
+			continue
+		}
+		faltam = append(faltam, chave)
 	}
 	sort.Strings(faltam)
 	if len(faltam) > 0 {

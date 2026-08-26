@@ -2,8 +2,9 @@
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
 **Bateria em campo**: 2026-08-26 — ver "Verificação em campo".
-**Total**: **234 entradas de rota** (método + caminho) sobre **212 caminhos
-distintos**.
+**Total**: **234 entradas de rota** servidas, das quais **141 documentadas**
+sobre **122 caminhos distintos**. As outras 91 são as formas antigas: continuam
+a responder e saíram do contrato.
 
 O número duplicou a 26/08 com a padronização: 143 rotas antigas, mais 91
 formas canónicas registadas ao lado delas. As antigas continuam a funcionar e
@@ -16,11 +17,11 @@ admin → 143 → **234** com a padronização.
 
 | | caminhos |
 |---|---|
-| ✅ chamada real com efeito confirmado | **178** |
-| 🟡 sucesso sem observador independente | **13** |
-| ❌ falhou, com o erro medido | **6** — três defeitos, cada um em forma antiga e canónica |
-| ⬜ não testada, com o motivo dito | **35** |
-| | **232** |
+| ✅ chamada real com efeito confirmado | **98** |
+| 🟡 sucesso sem observador independente | **8** |
+| ❌ falhou, com o erro medido | **3** — `/users/block`, `/users/unblock`, `/newsletters/updates` |
+| ⬜ não testada, com o motivo dito | **32** |
+| | **141** |
 
 Reproduzir a lista:
 
@@ -559,9 +560,15 @@ registadas como a documentação — não há terceira cópia a desactualizar-se
 `/labels`, `/admin/users`, `/call/reject` — é singleton ou já era plural, e o
 motivo de cada uma está no documento da regra.
 
-**Não há data de remoção das antigas.** Marcar depreciado sem plano de remoção
-é dizer "preferimos o outro", que é verdade; anunciar remoção sem decisão seria
-mentira.
+**As antigas continuam a ser servidas — e saíram do OpenAPI.** Não há data de
+remoção; o que há é a decisão de o contrato descrever **um nome por operação**.
+Documentar as duas formas punha 232 operações para 141 capacidades, e obrigava
+quem lê a escolher entre `/chat/list` e `/chats/list` sem elemento para decidir
+— que é a ambiguidade que esta padronização existe para eliminar.
+
+**Esta tabela é, a partir de agora, a única referência do nome antigo.** Se tem
+um cliente a chamar `/chat/list`, ele continua a funcionar; procure aqui a
+forma nova quando quiser migrar.
 
 ### As nove que mudaram de forma, não só de número
 

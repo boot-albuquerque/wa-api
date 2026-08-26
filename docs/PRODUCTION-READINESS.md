@@ -53,7 +53,7 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 
 | propriedade | estado | prova / lacuna |
 |---|---|---|
-| Cobertura OpenAPI | ✅ | **232 de 232** operações (234 rotas − 2 de `/docs`, excluídas de propósito) |
+| Cobertura OpenAPI | ✅ | **141 de 141** operações documentadas. O router serve 234 rotas: 141 canónicas mais 91 formas antigas que continuam a responder e **saíram do contrato** — uma operação, um nome |
 | Toda operação tem tag, título e descrição | ✅ | `TestOpenAPIOperacoesEstaoCompletas` |
 | **Toda propriedade tem semântica de presença** | ✅ | **694 de 694** com `description` **e** `nullable`. `TestTodaPropriedadeDeclaraNulabilidade` |
 | Enums dizem o que acontece fora da lista | ✅ | `TestTodoEnumDizOQueAconteceComValorDesconhecido` |
@@ -74,7 +74,7 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | propriedade | estado | prova / lacuna |
 |---|---|---|
 | Especificação está em dia com as fontes | ✅ | `TestOpenAPIGeradoEstaAtualizado` |
-| Respostas reais batem com o documentado | ✅ | `TestContratoRespostaDeRecusaBateComOEsquema` — **232 operações exercitadas** contra o router |
+| Respostas reais batem com o documentado | ✅ | `TestContratoRespostaDeRecusaBateComOEsquema` — **141 operações exercitadas** contra o router |
 | Os testes de contrato não podem ficar cegos | ✅ | piso mínimo em cada um; falham se exercitarem menos do que o esperado |
 | Controlo negativo em cada gate novo | ✅ | executado e colado nos commits. Duas vezes o primeiro não valeu por partir o build — refeito com mutação que compila (ARMADILHAS #4) |
 | Suite passa | ✅ | 116 pacotes verdes |
@@ -86,10 +86,10 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | propriedade | estado | prova / lacuna |
 |---|---|---|
 | Classificação por rota, visível no título | ✅ | ✅🟡❌⬜ no `summary` de cada operação, aplicada de `evidencias.tsv` pelo gerador |
-| Nenhuma rota sem classificação | ✅ | `TestOpenAPISummariesTrazemMarcaDeEvidencia`; **232 de 232** |
+| Nenhuma rota sem classificação | ✅ | `TestOpenAPISummariesTrazemMarcaDeEvidencia`; **141 de 141** |
 | Tabela não pode desactualizar-se | ✅ | rota nova sem linha **falha o gerador**; linha órfã **também** — a falha por excesso é a silenciosa |
-| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **178 ✅, 13 🟡, 6 ❌, 35 ⬜** |
-| Cobertura de efeito confirmado | 🟡 | **178 de 232**. As 35 ⬜ não são esquecimento: escreveriam configuração em uso, derrubariam sessões, ou alterariam a conta — cada uma com o motivo escrito |
+| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **98 ✅, 8 🟡, 3 ❌, 32 ⬜** |
+| Cobertura de efeito confirmado | 🟡 | **98 de 141**. As 32 ⬜ não são esquecimento: escreveriam configuração em uso, derrubariam sessões, ou alterariam a conta — cada uma com o motivo escrito |
 
 ## 5. Auditoria
 
@@ -147,15 +147,15 @@ e é por isso que vem depois do 1.
 
 ## Duas coisas que este scorecard NÃO afirma
 
-- **Que a API funciona.** Afirma que 178 operações tiveram efeito confirmado,
-  13 responderam sem observador, 6 falham e 35 não foram exercitadas. A
+- **Que a API funciona.** Afirma que 98 operações tiveram efeito confirmado,
+  8 responderam sem observador, 3 falham e 32 não foram exercitadas. A
   diferença entre isto e "funciona" é o assunto inteiro da coluna de evidência.
 
-  E note-se de onde vem o salto de 98 para 178: **não** de mais medição, mas de
-  as rotas terem duplicado com a padronização. As 91 canónicas herdam a prova
-  da antiga que substituem, porque são o mesmo manipulador noutro caminho. Um
-  número maior que não representa mais trabalho de verificação — e dizê-lo é o
-  que impede a tabela de parecer melhor do que é.
+  Estes números subiram para 178/13/6/35 durante algumas horas, quando as
+  formas antigas e canónicas estavam ambas documentadas. Voltaram ao que eram
+  quando as antigas saíram do contrato — e o episódio vale como aviso: **um
+  total que cresce sem mais verificação não é progresso**. Era a mesma prova,
+  contada duas vezes.
 - **Que os gates cobrem tudo.** Eles leem estrutura, não prosa
   (ARMADILHAS #29), e verificam o repositório, não o binário em execução
   (ARMADILHAS #27). As duas limitações estão escritas nos próprios gates.

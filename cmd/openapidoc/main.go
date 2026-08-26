@@ -175,17 +175,22 @@ func mergeDir(dir string, dst map[string]any, kind string) error {
 	return nil
 }
 
-// applyCanonicalPaths clones each legacy operation onto its canonical path and
-// marks the legacy one deprecated.
+// applyCanonicalPaths MOVES each legacy operation onto its canonical path.
 //
-// WHY CLONE INSTEAD OF WRITING BOTH. The canonical route IS the legacy route —
-// same handler, same body, same responses. Two hand-written copies of one
-// operation drift the moment someone edits one of them, and the drift is
-// invisible: both are valid YAML, both render. Generating the second from the
-// first makes drift impossible.
+// WHY MOVE INSTEAD OF DUPLICATING. The canonical route IS the legacy route —
+// same handler, same body, same responses. Documenting both would put two
+// names for one operation in front of the reader, which is exactly what the
+// standardisation exists to remove: a consumer choosing between `/chat/list`
+// and `/chats/list` has to guess which one is preferred, and the answer is
+// never in the operation itself.
 //
-// The legacy operation is NOT removed. It still works, and a spec that hid it
-// would send a reader looking for a route their existing client depends on.
+// THE LEGACY ROUTE CONTINUES TO BE SERVED. It is removed from the CONTRACT,
+// not from the service. An existing client keeps working; what changes is that
+// the documentation describes one name, and the equivalence table in
+// docs/ENDPOINTS.md is where the old name is looked up.
+//
+// The gate TestOpenAPICobreTodasAsRotasRegistadas knows this: a legacy route
+// counts as covered when its canonical twin is documented.
 func applyCanonicalPaths(path string, paths map[string]any) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -239,8 +244,13 @@ func applyCanonicalPaths(path string, paths map[string]any) error {
 			alvo[d.metodo] = clone
 		}
 
-		op["deprecated"] = true
-		op["description"] = legacyNote(destinos[0].metodo, destinos[0].caminho) + toString(op["description"])
+		// A operação antiga sai do contrato. Se o caminho ficar sem métodos,
+		// sai também — um caminho vazio no documento seria uma entrada que o
+		// Swagger desenha sem nada dentro.
+		delete(item, metodo)
+		if len(item) == 0 {
+			delete(paths, caminhoAntigo)
+		}
 	}
 
 	sort.Strings(ausentes)
@@ -258,18 +268,17 @@ func toString(v any) string { s, _ := v.(string); return s }
 // method and path.
 const pathTableColumns = 4
 
-// canonicalNote is prepended to the canonical operation.
+// canonicalNote is prepended to the canonical operation, naming the old path
+// it replaces.
+//
+// The note stays even though the old operation is gone from the document: a
+// reader arriving from an existing integration searches for the name they
+// know, and finding it here is what tells them where it went.
 func canonicalNote(caminhoAntigo, metodo string) string {
-	return "> **Forma canónica.** Substitui `" + strings.ToUpper(metodo) + " " +
-		caminhoAntigo + "`, que continua a funcionar mas está depreciado.\n\n"
-}
-
-// legacyNote is prepended to the legacy operation.
-func legacyNote(metodo, caminho string) string {
-	return "> **Depreciado.** Use `" + strings.ToUpper(metodo) + " " + caminho +
-		"`, que é a forma canónica. Esta continua a funcionar e **não há data de " +
-		"remoção anunciada** — mas é a forma antiga, e a documentação nova " +
-		"descreve a outra.\n\n"
+	return "> **Substitui `" + strings.ToUpper(metodo) + " " + caminhoAntigo +
+		"`.** O caminho antigo **continua a ser servido** e não tem data de " +
+		"remoção, mas deixou de ser documentado: uma operação, um nome. A " +
+		"tabela de equivalência completa está em `docs/ENDPOINTS.md`.\n\n"
 }
 
 // pathParameters builds the OpenAPI parameter list for a templated path.
