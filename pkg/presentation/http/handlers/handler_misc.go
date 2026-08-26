@@ -112,7 +112,10 @@ func (h *RejectCallHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.RejectCallRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -164,7 +167,10 @@ func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req domain.SetPrivacySettingRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -194,7 +200,10 @@ func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *h
 		return
 	}
 	var req domain.RequestUnavailableMessageRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -222,7 +231,10 @@ func (h *MuteChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.MuteChatRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -250,7 +262,10 @@ func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.ArchiveChatRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -278,7 +293,10 @@ func (h *PinChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.PinChatRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(errDecodePayload).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return

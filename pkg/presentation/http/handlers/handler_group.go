@@ -45,7 +45,10 @@ func (h *GetGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r 
 	}
 	var req domain.GetGroupRequestParticipantsRequest
 
-	decodeErr := domain.DecodeRequest(r.Body, &req)
+	decodeErr := decodeRequest(w, r, &req)
+	if requestAnswered(decodeErr) {
+		return
+	}
 	if decodeErr != nil {
 		req = domain.GetGroupRequestParticipantsRequest{}
 	}
@@ -86,7 +89,10 @@ func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter,
 		return
 	}
 	var req domain.UpdateGroupRequestParticipantsRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode update group request participants payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -112,7 +118,10 @@ func (h *SetGroupJoinApprovalModeHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		return
 	}
 	var req domain.SetGroupJoinApprovalModeRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode set group join approval mode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -158,7 +167,10 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var req domain.GetGroupInfoRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode get group info payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -191,7 +203,10 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req domain.GetGroupInviteLinkRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode get group invite link payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
@@ -224,7 +239,10 @@ func (h *GetGroupInviteInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var req domain.GetGroupInviteInfoRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("could not decode get group invite info payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return

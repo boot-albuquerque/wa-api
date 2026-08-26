@@ -52,7 +52,10 @@ func (h *SendButtonsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendButtonsRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("route", route).
 			Str("user_id", txtID).

@@ -42,7 +42,10 @@ func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendContactRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -87,7 +90,10 @@ func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req domain.SendLocationRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -132,7 +138,10 @@ func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendPollRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -177,7 +186,10 @@ func (h *SendPollVoteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req domain.SendPollVoteRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return

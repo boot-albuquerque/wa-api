@@ -23,7 +23,10 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.GetAvatarRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("user_id", id).
 			Msg("could not decode get avatar payload")
@@ -121,7 +124,10 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req domain.CheckUserRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("user_id", id).
 			Msg("could not decode get user info payload")

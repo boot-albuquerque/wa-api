@@ -82,7 +82,10 @@ func (h *UserHandlers) ListUsers() http.Handler {
 func (h *UserHandlers) AddUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req domain.AddUserRequest
-		if err := domain.DecodeRequest(r.Body, &req); err != nil {
+		if err := decodeRequest(w, r, &req); err != nil {
+			if requestAnswered(err) {
+				return
+			}
 			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("could not decode payload")
@@ -119,7 +122,10 @@ func (h *UserHandlers) EditUser() http.Handler {
 		vars := mux.Vars(r)
 		var req domain.EditUserRequest
 		req.UserID = vars["id"]
-		if err := domain.DecodeRequest(r.Body, &req); err != nil {
+		if err := decodeRequest(w, r, &req); err != nil {
+			if requestAnswered(err) {
+				return
+			}
 			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("could not decode payload")
@@ -173,7 +179,10 @@ func (h *UserHandlers) CheckUser() http.Handler {
 			return
 		}
 		var req domain.CheckUserRequest
-		if err := domain.DecodeRequest(r.Body, &req); err != nil {
+		if err := decodeRequest(w, r, &req); err != nil {
+			if requestAnswered(err) {
+				return
+			}
 			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("could not decode payload")
@@ -212,7 +221,10 @@ func (h *UserHandlers) GetUser() http.Handler {
 			return
 		}
 		var req domain.CheckUserRequest
-		if err := domain.DecodeRequest(r.Body, &req); err != nil {
+		if err := decodeRequest(w, r, &req); err != nil {
+			if requestAnswered(err) {
+				return
+			}
 			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("could not decode payload")
@@ -445,7 +457,10 @@ func (h *UserHandlers) BlockUser() http.Handler {
 			return
 		}
 		var req domain.BlockUserRequest
-		if err := domain.DecodeRequest(r.Body, &req); err != nil {
+		if err := decodeRequest(w, r, &req); err != nil {
+			if requestAnswered(err) {
+				return
+			}
 			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("could not decode payload")
@@ -484,7 +499,10 @@ func (h *UserHandlers) UnblockUser() http.Handler {
 			return
 		}
 		var req domain.UnblockUserRequest
-		if err := domain.DecodeRequest(r.Body, &req); err != nil {
+		if err := decodeRequest(w, r, &req); err != nil {
+			if requestAnswered(err) {
+				return
+			}
 			hlog.FromRequest(r).Warn().Err(err).
 				Str("path", r.URL.Path).
 				Msg("could not decode payload")

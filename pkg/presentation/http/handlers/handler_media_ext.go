@@ -40,7 +40,10 @@ func (h *SendStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendStickerRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
@@ -83,7 +86,10 @@ func (h *SendVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req domain.SendVideoRequest
-	if err := domain.DecodeRequest(r.Body, &req); err != nil {
+	if err := decodeRequest(w, r, &req); err != nil {
+		if requestAnswered(err) {
+			return
+		}
 		hlog.FromRequest(r).Warn().Err(err).Msg("media send payload rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
