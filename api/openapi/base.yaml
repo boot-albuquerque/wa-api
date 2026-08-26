@@ -232,9 +232,20 @@ components:
           nullable: false
           type: boolean
           enum: [false]
+          description: |
+            **Sempre presente e sempre `false`** num corpo de erro. Campo
+            legado — a forma correcta de detectar erro é o estado HTTP.
           example: false
         error:
           type: object
+          nullable: false
+          description: |
+            **Sempre presente** num corpo de erro produzido pela taxonomia
+            `apperr`. Nunca `null`, nunca `{}`.
+
+            Repare que existe uma segunda forma em que este campo é uma
+            **string** e não um objecto — ver `ErroTextoSimples`. Um cliente
+            que leia `error.code` sem verificar o tipo parte nessas rotas.
           required: [code, message]
           properties:
             code:
@@ -262,14 +273,29 @@ components:
         code:
           nullable: false
           type: integer
+          description: Estado HTTP, repetido no corpo. **Sempre presente.**
           example: 400
         error:
           type: string
+          nullable: false
+          description: |
+            **Texto genérico do estado HTTP**, em minúsculas — `bad request`,
+            `unauthorized`, `internal server error`. **Sempre presente.**
+
+            Ao contrário da forma canónica, aqui `error` é uma **string** e não
+            um objecto: não há `error.code` nem `error.message`. É o resultado
+            de o erro não ter passado pela taxonomia `apperr` (F266).
+
+            O texto **nunca** traz detalhe interno: `RespondJSON` descarta a
+            mensagem do erro original e devolve só o texto do estado, o que
+            impede fuga de caminho de ficheiro, consulta SQL ou valor de
+            `panic`. Travado por `TestRespondJSONNaoVazaDetalheDeErroInterno`.
           example: bad request
         success:
           nullable: false
           type: boolean
           enum: [false]
+          description: '**Sempre presente e sempre `false`.** Campo legado.'
           example: false
 
     ResultadoEnvio:
