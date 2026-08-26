@@ -3,6 +3,14 @@
 # Esquemas próprios das 18 rotas de `paths/conversa.yaml`. Tudo o que é comum
 # — Envelope, Erro, ResultadoEnvio, SucessoMensagem, AlvoConversa — vive em
 # base.yaml e é referenciado, nunca copiado.
+#
+# SEMÂNTICA DE PRESENÇA, a regra que atravessa este ficheiro inteiro:
+# quase todos os campos de pedido deste grupo são tipos NÃO-PONTEIRO em Go,
+# logo `ausente`, `null` e o valor zero (`""`, `0`, `false`) são
+# INDISTINGUÍVEIS para o servidor. Onde isso muda — `mute_duration` e
+# `duration` são ponteiros — a descrição diz o que `null` faz de diferente.
+# Campo desconhecido é IGNORADO em silêncio em toda a API
+# (`domain.DecodeRequest` não usa `DisallowUnknownFields`).
 
 # ---------------------------------------------------------------------------
 # Gestão da conversa (arquivar, fixar, silenciar)
@@ -13,21 +21,48 @@ PedidoArquivarConversa:
   description: |
     Arquiva ou desarquiva uma conversa. O destino é `jid`; `chat` é aceite
     como nome universal e só vale quando `jid` vier ausente ou vazio.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [archive]
   properties:
     jid:
       type: string
-      description: JID da conversa — contacto, grupo ou canal.
+      nullable: false
+      description: |
+        JID da conversa — contacto, grupo ou canal.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | depende | cai para `chat`; sem os dois é `400 missing_jid` |
+        | `null` | depende | idêntico a ausente — o campo é `string`, não ponteiro |
+        | `""` | depende | idêntico a ausente |
+        | `"   "` | sim (chega ao resolvedor) | `400 invalid_chat_jid`; não há `trim` |
+        | preenchido mal formado | não | `400 invalid_chat_jid` |
+        | JID válido | sim | — |
       example: 554192421234@s.whatsapp.net
     chat:
       type: string
+      nullable: false
       description: |
-        Nome universal do destino. `jid` tem precedência quando os dois
-        vierem preenchidos.
+        Nome universal do destino. Só é usado quando `jid` estiver ausente,
+        `null` ou `""` — os três são o mesmo estado. `jid` preenchido tem
+        precedência e `chat` é então ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
     archive:
       type: boolean
-      description: '`true` arquiva, `false` desarquiva.'
+      nullable: false
+      description: |
+        `true` arquiva, `false` desarquiva.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | vale `false` — **DESARQUIVA** |
+        | `null` | sim | vale `false`, indistinguível de ausente |
+        | `false` | sim | desarquiva |
+        | `true` | sim | arquiva |
+
+        É `bool` não-ponteiro, logo não existe "não decidi": omitir o campo
+        é pedir o desarquivamento, com `200 "Chat unarchived"`.
       example: true
 
 PedidoFixarConversa:
@@ -36,19 +71,39 @@ PedidoFixarConversa:
     Fixa ou desafixa a CONVERSA no topo da lista. Não fixa uma mensagem
     dentro dela — isso é outro mecanismo (`PinInChatMessage`), e não está
     exposto nesta API.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [pin]
   properties:
     jid:
       type: string
-      description: JID da conversa a fixar.
+      nullable: false
+      description: |
+        JID da conversa a fixar. Ausente, `null` e `""` são o mesmo estado e
+        fazem cair para `chat`; sem os dois é `400 missing_jid`, e mal
+        formado é `400 invalid_chat_jid` (medido).
       example: 554192421234@s.whatsapp.net
     chat:
       type: string
-      description: Nome universal do destino; `jid` tem precedência.
+      nullable: false
+      description: |
+        Nome universal do destino. Só vale quando `jid` estiver ausente,
+        `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
     pin:
       type: boolean
-      description: '`true` fixa, `false` desafixa.'
+      nullable: false
+      description: |
+        `true` fixa, `false` desafixa.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | vale `false` — **DESAFIXA** |
+        | `null` | sim | vale `false`, indistinguível de ausente |
+        | `false` | sim | desafixa |
+        | `true` | sim | fixa |
+
+        É `bool` não-ponteiro; omitir não é "não decidi".
       example: true
 
 PedidoSilenciarConversa:
@@ -60,19 +115,46 @@ PedidoSilenciarConversa:
     string de duração — é um `*time.Duration` do Go
     (`pkg/domain/mute.go:17`). Enviar `"8h"` devolve
     `400 could_not_decode_payload`, medido.
+
+    **Ordem das recusas, medida**: `missing_jid` → `invalid_chat_jid` →
+    `invalid_mute_duration`. Um pedido com destino mal formado E duração
+    inválida revela só o primeiro.
+
+    Campos desconhecidos são ignorados em silêncio — ver o aviso em
+    `mute_duration`, que é onde isso faz estrago.
   required: [mute]
   properties:
     jid:
       type: string
-      description: JID da conversa a silenciar.
+      nullable: false
+      description: |
+        JID da conversa a silenciar. Ausente, `null` e `""` são o mesmo
+        estado e fazem cair para `chat`; sem os dois é `400 missing_jid`
+        (medido), e mal formado é `400 invalid_chat_jid` (medido).
       example: 554192421234@s.whatsapp.net
     chat:
       type: string
-      description: Nome universal do destino; `jid` tem precedência.
+      nullable: false
+      description: |
+        Nome universal do destino. Só vale quando `jid` estiver ausente,
+        `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
     mute:
       type: boolean
-      description: '`true` silencia, `false` dessilencia (imediato).'
+      nullable: false
+      description: |
+        `true` silencia, `false` dessilencia (imediato).
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | vale `false` — **DESSILENCIA**, `200 "Chat unmuted"` |
+        | `null` | sim | vale `false`; medido: `{"jid":"…","mute":null}` → `200 "Chat unmuted"` |
+        | `false` | sim | dessilencia; `mute_duration` nem é validado |
+        | `true` | sim | silencia pela duração dada |
+        | `"sim"` | não | `400 could_not_decode_payload` — tipo errado é o ÚNICO estado distinguido |
+
+        É `bool` não-ponteiro. `null` não significa "não decidi": significa
+        `false`, e `false` aqui é uma AÇÃO.
       example: true
     mute_duration:
       type: integer
@@ -81,15 +163,29 @@ PedidoSilenciarConversa:
       description: |
         Por quanto tempo silenciar, em NANOSSEGUNDOS. O WhatsApp oferece
         exactamente três opções, e o servidor recusa qualquer outro valor
-        com `400 invalid_mute_duration`:
+        com `400 invalid_mute_duration`, cuja mensagem ecoa o recebido
+        (medido: `mute_duration: 1` → *"mute_duration must be 8h, 168h
+        (1 week), or omitted (forever); got 1ns"*).
 
         | opção | valor a enviar |
         |---|---|
         | 8 horas | `28800000000000` |
         | 1 semana | `604800000000000` |
-        | para sempre | `0`, ou o campo ausente |
+        | para sempre | `0`, ou `null`, ou o campo ausente |
 
-        Ignorado quando `mute` é `false`.
+        É `*time.Duration` (ponteiro) porque `0` tem significado próprio —
+        mas os três estados acima COLAPSAM mesmo assim: ausente, `null` e
+        `0` produzem todos "para sempre". O ponteiro não é aproveitado para
+        os separar.
+
+        **Armadilha (F268), e é a mais cara deste grupo.** Um nome de campo
+        errado — `duration` em vez de `mute_duration` — é ignorado em
+        silêncio, o ponteiro fica `nil`, `nil` vira `0`, e `0` é **para
+        sempre**. Quem pediu 8 horas recebe `200 "Chat muted"` e cala a
+        conversa indefinidamente, sem nenhum sinal de que o campo não foi
+        lido. Confirme sempre o nome exacto.
+
+        Ignorado — e nem sequer validado — quando `mute` é `false`.
       enum: [0, 28800000000000, 604800000000000]
       example: 28800000000000
 
@@ -102,30 +198,83 @@ PedidoFavoritarMensagem:
   description: |
     Favorita ou desfavorita uma mensagem. Os três identificadores são
     obrigatórios: a conversa, quem escreveu a mensagem e a própria mensagem.
+
+    **Esta rota NÃO tem alias.** `chat` aqui é o campo real, e não o nome
+    universal de `AlvoConversa`: `jid` não é aceite, e um pedido com `jid`
+    devolve `400 missing_chat` (medido).
+
+    **Ordem das recusas, medida**: `missing_chat` → `missing_message_id` →
+    `missing_sender` → `invalid_chat_jid` → `invalid_sender_jid`.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [chat, sender, message_id]
   properties:
     chat:
       type: string
-      description: JID da conversa onde a mensagem está.
+      nullable: false
+      description: |
+        JID da conversa onde a mensagem está.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_chat` |
+        | `null` | não | `400 missing_chat` — indistinguível de ausente (medido) |
+        | `""` | não | `400 missing_chat` — indistinguível de ausente |
+        | mal formado | não | `400 invalid_chat_jid` |
+        | JID válido | sim | — |
       example: 554192421234@s.whatsapp.net
     sender:
       type: string
+      nullable: false
       description: |
-        JID de quem ESCREVEU a mensagem. Obrigatório — sem ele a resposta é
-        `400 missing_sender`. Em conversa individual com uma mensagem
-        própria, é o JID da própria conta.
+        JID de quem ESCREVEU a mensagem. Obrigatório — ausente, `null` e
+        `""` dão todos `400 missing_sender`, e mal formado dá
+        `400 invalid_sender_jid` (medido). Em conversa individual com uma
+        mensagem própria, é o JID da própria conta.
       example: 554192421234@s.whatsapp.net
     message_id:
       type: string
-      description: '`message_id` da mensagem a favoritar.'
+      nullable: false
+      description: |
+        `message_id` da mensagem a favoritar. Ausente, `null` e `""` dão
+        todos `400 missing_message_id`. Não há verificação de que o id
+        exista.
       example: 3EB0A4B2AFD45E625C0917
     from_me:
       type: boolean
-      description: '`true` quando a mensagem foi escrita pela própria sessão.'
+      nullable: false
+      description: |
+        `true` quando a mensagem foi escrita pela própria sessão.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | vale `false` — a mensagem é tratada como de OUTRA pessoa |
+        | `null` | sim | vale `false`, indistinguível de ausente |
+        | `false` | sim | mensagem de outra pessoa |
+        | `true` | sim | mensagem própria |
+        | `"true"` | não | `400 could_not_decode_payload` |
+
+        **É `bool` não-ponteiro** (`pkg/domain/star.go:9`), e aqui `false`
+        tem significado próprio: identifica a mensagem no lado errado da
+        conversa. Ausente e `false` são o mesmo pedido, logo esquecer o
+        campo numa mensagem própria endereça a chave errada em silêncio.
+        Pelo critério da secção 4 do contrato arquitectural este campo
+        DEVIA ser `*bool`; não é.
       example: true
     star:
       type: boolean
-      description: '`true` favorita, `false` desfavorita.'
+      nullable: false
+      description: |
+        `true` favorita, `false` desfavorita.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | vale `false` — **DESFAVORITA**, `200 "Message unstarred"` |
+        | `null` | sim | vale `false`, indistinguível de ausente |
+        | `false` | sim | desfavorita |
+        | `true` | sim | favorita |
+
+        É `bool` não-ponteiro; omitir não é "não decidi".
       example: true
 
 PedidoApagarMensagem:
@@ -133,19 +282,36 @@ PedidoApagarMensagem:
   description: |
     Revoga ("apagar para todos") uma mensagem própria. `Phone` é o destino da
     conversa; `chat` é aceite como alias e só vale quando `Phone` faltar.
+
+    **Ordem das recusas, medida**: `missing_phone` → `missing_id` →
+    `invalid_phone`.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [Id]
   properties:
     Phone:
       type: string
-      description: JID ou número da conversa onde a mensagem foi enviada.
+      nullable: false
+      description: |
+        JID ou número da conversa onde a mensagem foi enviada. Ausente,
+        `null` e `""` são o mesmo estado e fazem cair para `chat`; sem os
+        dois é `400 missing_phone` (medido), e mal formado é
+        `400 invalid_phone` (medido).
       example: 554192421234@s.whatsapp.net
     chat:
       type: string
-      description: Nome universal do destino; `Phone` tem precedência.
+      nullable: false
+      description: |
+        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
     Id:
       type: string
-      description: '`message_id` da mensagem a revogar.'
+      nullable: false
+      description: |
+        `message_id` da mensagem a revogar. Ausente, `null` e `""` dão todos
+        `400 missing_id` (medido). Um id INEXISTENTE não é recusado: o
+        WhatsApp aceita a revogação e nada acontece do outro lado.
       example: 3EB0A4B2AFD45E625C0917
 
 ResultadoApagarMensagem:
@@ -158,52 +324,107 @@ ResultadoApagarMensagem:
   properties:
     message_id:
       type: string
+      nullable: false
+      description: |
+        `message_id` da mensagem revogada — o mesmo `Id` que entrou, ecoado.
+        **Sempre presente**: não tem `omitempty`
+        (`pkg/domain/message.go:723`). Nunca `null`.
       example: 3EB0A4B2AFD45E625C0917
     timestamp:
       type: integer
       format: int64
-      description: Instante da revogação, em segundos desde a época Unix.
+      nullable: false
+      description: |
+        Instante da revogação, em segundos desde a época Unix.
+
+        **Pode não aparecer.** Tem `omitempty` na struct, logo é OMITIDO
+        quando vale `0` — o que acontece se o WhatsApp devolver um instante
+        zero. Nunca vem `null`; ou vem preenchido, ou não vem.
       example: 1787747900
     status:
       type: string
+      nullable: false
       enum: [deleted]
-      description: Constante `deleted`.
+      description: |
+        Constante `deleted`. É literal no código, não vem do WhatsApp, logo
+        nenhum outro valor é possível — um valor desconhecido aqui seria
+        defeito nosso, não um estado novo do protocolo. Sempre presente,
+        nunca `null`.
       example: deleted
 
 PedidoReagir:
   type: object
   description: |
     Reage a uma mensagem com um emoji, ou remove a reação existente.
+
+    **Ordem das recusas, medida**: `missing_phone` → `missing_body` →
+    `invalid_phone` → `missing_id`.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [Body, Id]
   properties:
     Phone:
       type: string
-      description: JID ou número da conversa onde a mensagem está.
+      nullable: false
+      description: |
+        JID ou número da conversa onde a mensagem está. Ausente, `null` e
+        `""` são o mesmo estado e fazem cair para `chat`; sem os dois é
+        `400 missing_phone` (medido), e mal formado é `400 invalid_phone`
+        (medido).
       example: 554192421234@s.whatsapp.net
     chat:
       type: string
-      description: Nome universal do destino; `Phone` tem precedência.
+      nullable: false
+      description: |
+        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
     Body:
       type: string
+      nullable: false
       description: |
-        O emoji da reação. Dois valores têm significado especial:
-        `"remove"` retira a reação, e string vazia é RECUSADA com
-        `400 missing_body` — para remover, envie `"remove"`.
+        O emoji da reação.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_body` |
+        | `null` | não | `400 missing_body` — indistinguível de ausente |
+        | `""` | não | `400 missing_body` (medido) — para REMOVER, envie `"remove"` |
+        | `"remove"` | sim | traduzido internamente para texto vazio: retira a reação |
+        | `"   "` | sim | enviado tal e qual; não há `trim` nem validação de emoji |
+        | qualquer texto | sim | enviado tal e qual — não é verificado que seja um emoji |
+
+        Não há lista fechada: o servidor não valida o conteúdo.
       example: 👍
     Id:
       type: string
+      nullable: false
       description: |
-        `message_id` da mensagem reagida. Um prefixo `me:` marca a mensagem
-        como própria — `me:3EB0A4B2AFD45E625C0917` — e o prefixo é removido
-        antes de chegar ao WhatsApp.
+        `message_id` da mensagem reagida. Ausente, `null` e `""` dão todos
+        `400 missing_id` (medido).
+
+        Um prefixo `me:` marca a mensagem como própria —
+        `me:3EB0A4B2AFD45E625C0917` — e o prefixo é removido antes de chegar
+        ao WhatsApp. É a única forma de dizer "a mensagem é minha" nesta
+        rota; não há campo booleano para isso.
       example: 3EB0A4B2AFD45E625C0917
     Participant:
       type: string
+      nullable: false
       description: |
-        JID de quem escreveu a mensagem reagida, em conversa de grupo. Um
-        `Participant` que não resolve é IGNORADO em silêncio, não recusado —
-        comportamento preservado do código histórico.
+        JID de quem escreveu a mensagem reagida, em conversa de grupo.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | reage sem participante |
+        | `null` | sim | idêntico a ausente |
+        | `""` | sim | idêntico a ausente |
+        | mal formado | sim | **DESCARTADO EM SILÊNCIO** — não é `400` |
+        | válido | sim | usado, salvo se o `Id` trouxer o prefixo `me:` |
+
+        Duas formas de ser ignorado sem aviso: um JID que não resolve é
+        descartado (comportamento preservado do upstream), e o campo inteiro
+        é ignorado quando `Id` começa por `me:`.
       example: 554192421234@s.whatsapp.net
 
 PedidoMarcarLida:
@@ -216,80 +437,181 @@ PedidoMarcarLida:
     por implementar (`mark_read.go:41`, `jidChat = ""`) e faz a conversa
     seguir vazia para o WhatsApp. Sem nenhum dos dois é
     `400 missing_chatphone`, medido.
+
+    **Ordem das recusas, medida**: `missing_chatphone` →
+    `invalid_chatphone` → `invalid_senderphone` → `missing_id`. Um pedido só
+    com `Chat` (o campo antigo) passa a guarda do destino e cai em
+    `missing_id`, o que confirma que `Chat` é aceite sem ser usado.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [Id]
   properties:
     Id:
       type: array
-      description: Lista de `message_id` a marcar como lidos. Vazia é `400 missing_id`.
+      nullable: false
+      minItems: 1
+      description: |
+        Lista de `message_id` a marcar como lidos.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_id` |
+        | `null` | não | `400 missing_id` (medido) — indistinguível de ausente |
+        | `[]` | não | `400 missing_id` (medido) |
+        | `[""]` | sim | um id vazio conta como item; segue para o WhatsApp |
+        | preenchida | sim | — |
+
+        Sem tecto de tamanho. Itens duplicados não são removidos. A ordem
+        não é significativa. Nenhum item é validado, logo nenhum é
+        descartado — a lista chega inteira ao protocolo.
       items:
         type: string
+        nullable: false
+        description: '`message_id` de uma mensagem. Não é verificado que exista.'
       example: [3EB0A4B2AFD45E625C0917]
     ChatPhone:
       type: string
-      description: JID ou número da conversa. É o campo que a implementação resolve.
+      nullable: false
+      description: |
+        JID ou número da conversa. É o campo que a implementação resolve.
+        Ausente, `null` e `""` são o mesmo estado e fazem cair para `Chat`;
+        sem os dois é `400 missing_chatphone` (medido), e mal formado é
+        `400 invalid_chatphone` (medido).
       example: 554192421234@s.whatsapp.net
     SenderPhone:
       type: string
+      nullable: false
       description: |
-        JID de quem escreveu as mensagens, em conversa de grupo. Opcional.
+        JID de quem escreveu as mensagens, em conversa de grupo. Opcional:
+        ausente, `null` e `""` são o mesmo estado e a marcação segue sem
+        remetente. Preenchido mal formado é `400 invalid_senderphone`.
       example: 554192421234@s.whatsapp.net
     Chat:
       type: string
+      nullable: false
       description: |
-        Nome antigo de `ChatPhone`. Aceite, mas NÃO resolvido — ver a
-        descrição do esquema.
+        Nome antigo de `ChatPhone`. **Aceite, mas NÃO resolvido**: quando é
+        o único destino, o pedido passa a validação e a conversa segue VAZIA
+        para o WhatsApp. Ausente, `null` e `""` são o mesmo estado. Não use.
       example: 554192421234@s.whatsapp.net
     Sender:
       type: string
-      description: Nome antigo de `SenderPhone`. Aceite, mas não resolvido.
+      nullable: false
+      description: |
+        Nome antigo de `SenderPhone`. Aceite, mas não resolvido — mesmo
+        buraco de `Chat`. Ausente, `null` e `""` são o mesmo estado.
       example: 554192421234@s.whatsapp.net
 
 PedidoPresencaNaConversa:
   type: object
   description: |
-    Anuncia "a escrever" ou "a gravar" numa conversa. É um sinal efémero: o
-    WhatsApp deixa de o mostrar sozinho passado pouco tempo, e não há rota
-    para o retirar — envie `paused` para isso.
+    Anuncia "a escrever" numa conversa. É um sinal efémero: o WhatsApp deixa
+    de o mostrar sozinho passado pouco tempo, e não há rota para o retirar —
+    envie `paused` para isso.
+
+    **Ordem das recusas, medida**: `missing_phone` → `missing_state` →
+    `invalid_phone`.
+
+    Campos desconhecidos são ignorados em silêncio.
   required: [State]
   properties:
     Phone:
       type: string
-      description: JID ou número da conversa onde o estado é anunciado.
+      nullable: false
+      description: |
+        JID ou número da conversa onde o estado é anunciado. Ausente, `null`
+        e `""` são o mesmo estado e fazem cair para `chat`; sem os dois é
+        `400 missing_phone` (medido), e mal formado é `400 invalid_phone`
+        (medido).
       example: 554192421234@s.whatsapp.net
     chat:
       type: string
-      description: Nome universal do destino; `Phone` tem precedência.
+      nullable: false
+      description: |
+        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
     State:
       type: string
+      nullable: false
       description: |
-        O estado a anunciar. Os valores documentados na implementação são
-        `composing` (a escrever), `recording` (a gravar) e `paused` (parou).
+        O estado a anunciar.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_state` |
+        | `null` | não | `400 missing_state` — indistinguível de ausente |
+        | `""` | não | `400 missing_state` (medido) |
+        | `composing` | sim | "a escrever" |
+        | `paused` | sim | parou de escrever |
+        | qualquer outro texto | **sim** | NÃO é validado: vai como está para o protocolo |
+
+        **Não há enum no servidor.** A cadeia é usada directamente como
+        nome da etiqueta enviada ao WhatsApp
+        (`internal/wa-noise/core/presence.go:141`), logo um valor
+        desconhecido não devolve `400` — é o WhatsApp que decide o que fazer
+        com ele, e o resultado não foi medido aqui.
+
+        As duas constantes que a biblioteca define são `composing` e
+        `paused` (`internal/wa-noise/protocol/types/presence.go:17-18`).
+        **Não existe um estado `recording`**: "a gravar" exprime-se como
+        `State: composing` com `Media: audio`.
       example: composing
     Media:
       type: string
+      nullable: false
       description: |
-        Qualificador opcional do estado, passado tal e qual ao WhatsApp.
-        Envie string vazia quando não se aplicar.
+        Qualificador do estado.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim | igual a `""` — mensagem de texto |
+        | `null` | sim | igual a `""` |
+        | `""` | sim | mensagem de texto |
+        | `audio` | sim | com `State: composing`, anuncia "a gravar" |
+        | qualquer outro texto | sim | não é validado; segue para o protocolo |
+
+        **Só tem efeito quando `State` é `composing`**: em qualquer outro
+        estado o valor é descartado sem aviso
+        (`internal/wa-noise/core/presence.go:142`). As duas constantes
+        conhecidas são `""` (texto) e `audio`.
       example: ''
 
 PedidoMensagemIndisponivel:
   type: object
   description: |
     Pede ao par o REENVIO de uma mensagem que não se conseguiu decifrar.
+
+    **Ordem das recusas, medida**: `missing_chat` → `missing_sender` →
+    `missing_id` → `invalid_chat_jid` → `invalid_sender_jid`.
+
+    Não há alias `jid` nem `Phone` nesta rota. Campos desconhecidos são
+    ignorados em silêncio.
   required: [chat, sender, id]
   properties:
     chat:
       type: string
-      description: JID da conversa onde a mensagem indecifrável apareceu.
+      nullable: false
+      description: |
+        JID da conversa onde a mensagem indecifrável apareceu. Ausente,
+        `null` e `""` dão todos `400 missing_chat` (medido); mal formado dá
+        `400 invalid_chat_jid` (medido).
       example: 554192421234@s.whatsapp.net
     sender:
       type: string
-      description: JID de quem escreveu a mensagem indecifrável.
+      nullable: false
+      description: |
+        JID de quem escreveu a mensagem indecifrável. Ausente, `null` e `""`
+        dão todos `400 missing_sender` (medido); mal formado dá
+        `400 invalid_sender_jid`.
       example: 554192421234@s.whatsapp.net
     id:
       type: string
-      description: '`message_id` da mensagem a pedir de volta.'
+      nullable: false
+      description: |
+        `message_id` da mensagem a pedir de volta. Ausente, `null` e `""`
+        dão todos `400 missing_id` (medido). Não é verificado que o id
+        exista.
       example: 3EB0A4B2AFD45E625C0917
 
 ResultadoMensagemIndisponivel:
@@ -297,34 +619,65 @@ ResultadoMensagemIndisponivel:
   description: |
     Confirmação de que o PEDIDO foi enviado ao par. Não diz que a mensagem
     voltou: o reenvio, se acontecer, chega depois como mensagem normal.
-  required: [success, message]
+
+    Nenhum campo desta resposta tem `omitempty`
+    (`pkg/domain/unavailable_message.go:14-22`), logo **todos aparecem
+    sempre**, mesmo vazios, e nenhum vem `null`.
+  required: [success, message, request_id, chat, sender, message_id, timestamp]
   properties:
     success:
       type: boolean
+      nullable: false
+      description: |
+        Constante `true` — este corpo só é construído no caminho de sucesso.
+        Sempre presente, nunca `null`. Não é o sinal de erro: para isso use
+        o `success` do envelope e o código HTTP.
       example: true
     message:
       type: string
+      nullable: false
+      description: |
+        Texto fixo `Unavailable message request sent successfully`, literal
+        no código. Sempre presente, nunca `null`. Não parseie este texto.
       example: Unavailable message request sent successfully
     request_id:
       type: string
-      description: Identificador da mensagem de pedido criada pelo envio.
+      nullable: false
+      description: |
+        Identificador da mensagem de PEDIDO criada pelo envio — não é o id
+        da mensagem pedida de volta. Sempre presente; pode vir `""` se o
+        protocolo não devolver id. Nunca `null`.
       example: 3EB0C7D1F94A62B15D4488
     chat:
       type: string
-      description: Ecoa o `chat` enviado.
+      nullable: false
+      description: |
+        Ecoa o `chat` enviado, tal e qual entrou — **antes** da resolução de
+        JID, logo pode não coincidir com a forma que o protocolo usou.
+        Sempre presente, nunca `null`.
       example: 554192421234@s.whatsapp.net
     sender:
       type: string
-      description: Ecoa o `sender` enviado.
+      nullable: false
+      description: |
+        Ecoa o `sender` enviado, tal e qual entrou, antes da resolução de
+        JID. Sempre presente, nunca `null`.
       example: 554192421234@s.whatsapp.net
     message_id:
       type: string
-      description: Ecoa o `id` enviado — a mensagem pedida de volta.
+      nullable: false
+      description: |
+        Ecoa o `id` enviado — a mensagem pedida de volta. Sempre presente,
+        nunca `null`.
       example: 3EB0A4B2AFD45E625C0917
     timestamp:
       type: integer
       format: int64
-      description: Instante do pedido, em segundos desde a época Unix.
+      nullable: false
+      description: |
+        Instante do pedido, em segundos desde a época Unix. Sempre presente
+        (não tem `omitempty`), nunca `null`. Pode vir `0` se o protocolo não
+        devolver instante — `0` aqui significa "não informado", não 1970.
       example: 1787747900
 
 # ---------------------------------------------------------------------------
@@ -336,19 +689,51 @@ PedidoTemporizadorDaConversa:
   description: |
     Define o temporizador de mensagens temporárias de UMA conversa.
     Ao contrário de `/chat/mute`, aqui a duração é TEXTO.
+
+    **Ordem das recusas, medida**: `missing_chat` → `missing_duration` →
+    `invalid_jid` → `invalid_duration`. O destino é validado ANTES da
+    duração, logo um pedido com os dois errados revela só o JID.
+
+    O manipulador declara struct própria (`handler_disappearing.go:29-32`),
+    e é ela que manda. Campos desconhecidos são ignorados em silêncio.
   required: [chat, duration]
   properties:
     chat:
       type: string
+      nullable: false
       description: |
-        JID da conversa — contacto ou grupo. Obrigatório e sem alias:
-        ausente é `400 missing_chat`.
+        JID da conversa — contacto ou grupo. Obrigatório e **sem alias**:
+        `jid` não é aceite aqui.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_chat` (medido) |
+        | `null` | não | `400 missing_chat` — indistinguível de ausente |
+        | `""` | não | `400 missing_chat` — indistinguível de ausente |
+        | mal formado | não | `400 invalid_jid` (medido) |
+        | JID válido | sim | — |
       example: 554192421234@s.whatsapp.net
     duration:
       type: string
+      nullable: true
       description: |
-        Uma das cinco palavras que o servidor aceita. Qualquer outra é
-        `400 invalid_duration`, medido.
+        Uma das cinco palavras que o servidor aceita.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_duration` |
+        | `null` | não | `400 missing_duration` (medido) — **igual a ausente** |
+        | `""` | não | `400 invalid_duration` (medido) — **DIFERENTE de `null`** |
+        | `"0"` / `"off"` | sim | desliga as mensagens temporárias |
+        | `"24h"` / `"7d"` / `"90d"` | sim | — |
+        | qualquer outro valor | não | `400 invalid_duration` — não há valor desconhecido aceite |
+
+        É `*string` (ponteiro) no manipulador, e é por isso que `null` e
+        `""` DIVERGEM aqui — o único campo deste grupo em que os cinco
+        estados de presença não colapsam. `0` é a palavra `"0"`, entre
+        aspas: um `0` numérico dá `400 could_not_decode_payload`.
+
+        Sensível a maiúsculas: `"OFF"` é recusado.
       enum: ['0', 'off', '24h', '7d', '90d']
       example: 24h
 
@@ -357,14 +742,29 @@ PedidoTemporizadorPadrao:
   description: |
     Define o temporizador padrão da CONTA, aplicado às conversas novas. Não
     altera conversa nenhuma que já exista.
+
+    O manipulador declara struct própria com um único campo
+    (`handler_disappearing.go:76-78`). Campos desconhecidos — incluindo
+    `chat` — são ignorados em silêncio.
   required: [duration]
   properties:
     duration:
       type: string
+      nullable: true
       description: |
-        Mesmo conjunto de `/chat/ephemeral`. Ausente é
-        `400 missing_duration`; valor fora do conjunto é
-        `400 invalid_duration`.
+        Mesmo conjunto de `/chat/ephemeral`.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | não | `400 missing_duration` (medido) |
+        | `null` | não | `400 missing_duration` — **igual a ausente** |
+        | `""` | não | `400 invalid_duration` (medido) — **DIFERENTE de `null`** |
+        | `"0"` / `"off"` | sim | desliga o padrão da conta |
+        | `"24h"` / `"7d"` / `"90d"` | sim | — |
+        | qualquer outro valor | não | `400 invalid_duration` — não há valor desconhecido aceite |
+
+        É `*string` (ponteiro), daí a divergência entre `null` e `""`.
+        Sensível a maiúsculas.
       enum: ['0', 'off', '24h', '7d', '90d']
       example: '0'
 
@@ -380,74 +780,176 @@ PedidoDescargaDeMidia:
     de `Message.imageMessage` / `videoMessage` / `audioMessage` /
     `documentMessage` / `stickerMessage`, com estes nomes de origem:
 
-    | campo daqui | campo no `data_json` |
-    |---|---|
-    | `Url` | `URL` |
-    | `DirectPath` | `directPath` |
-    | `MediaKey` | `mediaKey` |
-    | `Mimetype` | `mimetype` |
-    | `FileEncSHA256` | `fileEncSha256` |
-    | `FileSHA256` | `fileSha256` |
-    | `FileLength` | `fileLength` |
+    | campo daqui | campo no `data_json` | obrigatório de verdade? |
+    |---|---|---|
+    | `Url` | `URL` | um dos dois |
+    | `DirectPath` | `directPath` | um dos dois |
+    | `MediaKey` | `mediaKey` | sim, para mídia cifrada |
+    | `Mimetype` | `mimetype` | **sim** — vazio ou mal formado derruba a resposta |
+    | `FileEncSHA256` | `fileEncSha256` | sim, para mídia cifrada |
+    | `FileSHA256` | `fileSha256` | não |
+    | `FileLength` | `fileLength` | **sim** — tem de ser EXACTO |
 
-    **Pelo menos um entre `Url` e `DirectPath`** tem de vir; faltarem os dois
-    é `400 missing_url_or_direct_path`, medido. Só `DirectPath` é caminho
-    válido, e é a forma em que os metadados chegam em vários eventos.
+    **Só uma coisa é validada na fronteira HTTP**: pelo menos um entre `Url`
+    e `DirectPath`. Faltarem os dois — ausentes, `null` ou `""`, que são o
+    mesmo estado — é `400 missing_url_or_direct_path`, medido nas cinco
+    rotas. Todos os outros campos passam sem verificação e falham depois com
+    `500 media_download_failed`, que não distingue a causa.
+
+    **Aviso medido em campo**: nas 25 mensagens de mídia gravadas de uma
+    sessão real (40 conversas), **zero** traziam `fileEncSha256` ou
+    `fileSha256` no `data_json` — vinham `null`. O descritor montado a
+    partir do histórico, tal e qual, não completa o download nessas
+    mensagens.
+
+    Campos desconhecidos são ignorados em silêncio.
   properties:
     Url:
       type: string
-      description: URL da mídia na CDN do WhatsApp.
+      nullable: false
+      description: |
+        URL da mídia na CDN do WhatsApp. Ausente, `null` e `""` são o mesmo
+        estado.
+
+        Quando preenchida, é usada em vez de `DirectPath` — **excepto** se
+        começar por `https://web.whatsapp.net/`, caso em que é descartada e
+        a descarga cai para `DirectPath`. Com os dois vazios é
+        `400 missing_url_or_direct_path`.
       example: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
     DirectPath:
       type: string
-      description: Caminho directo na CDN. Alternativa a `Url`.
+      nullable: false
+      description: |
+        Caminho directo na CDN, resolvido contra os hosts de mídia da
+        sessão. Ausente, `null` e `""` são o mesmo estado.
+
+        **Tem de começar por `/`.** Um valor sem barra inicial não é
+        recusado na fronteira: devolve `500 media_download_failed` (medido
+        com `"sem-barra"`). É a forma em que os metadados chegam em vários
+        eventos, e é a única alternativa a `Url`.
       example: /o1/v/t24/f2/m234/exemplo
     MediaKey:
       type: string
       format: byte
-      description: Chave de decifragem, em base64.
+      nullable: true
+      description: |
+        Chave de decifragem, em **base64** — o campo é `[]byte` em Go, logo
+        o JSON tem de trazer uma string base64 válida.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim na fronteira | ver o aviso abaixo |
+        | `null` | sim na fronteira | igual a ausente (`nil`) |
+        | `""` | sim na fronteira | base64 vazio, também `nil` |
+        | base64 inválido | não | `400 could_not_decode_payload` (medido) |
+        | número | não | `400 could_not_decode_payload` (medido) |
+        | base64 válido | sim | — |
+
+        **Perigo medido no código**: se `MediaKey` E `FileEncSHA256` vierem
+        ambos ausentes, a biblioteca toma a mídia por NÃO CIFRADA e devolve
+        `200` com os bytes tal e qual vieram da CDN — que, para mídia real
+        do WhatsApp, é conteúdo cifrado inútil disfarçado de sucesso
+        (`internal/wa-noise/capabilities/media/download_transport.go:37`).
+        Com apenas um dos dois em falta, o HMAC falha e a resposta é
+        `500 media_download_failed`.
       example: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
     Mimetype:
       type: string
+      nullable: false
       description: |
         Tipo da mídia. É devolvido TAL E QUAL na resposta e é também o
         prefixo da Data URL de `Data` — os dois não podem divergir, por
         construção.
+
+        **Tem de ter a forma `tipo/subtipo`.** Não é validado em lado
+        nenhum, mas o construtor da Data URL entra em pânico com qualquer
+        outra forma (`dataurl.New` panica com *"dataurl: invalid
+        mediatype"*), e o pânico é apanhado pelo router: a resposta é `500`
+        com o corpo genérico do status, sem código de taxonomia. Ausente,
+        `null` e `""` levam todos a esse mesmo `500` — mas só DEPOIS de os
+        bytes terem sido descarregados.
       example: image/png
     FileEncSHA256:
       type: string
       format: byte
-      description: SHA-256 do ficheiro CIFRADO, em base64.
+      nullable: true
+      description: |
+        SHA-256 do ficheiro CIFRADO, em base64 (`[]byte` em Go). Ausente,
+        `null` e `""` são o mesmo estado (`nil`); base64 inválido é
+        `400 could_not_decode_payload`.
+
+        Não é opcional na prática: é o que faz a biblioteca separar o MAC do
+        fim do corpo descarregado. Sem ele, e com `MediaKey` presente, a
+        verificação de HMAC falha e a resposta é `500 media_download_failed`.
+        Sem ele E sem `MediaKey`, ver o aviso em `MediaKey`.
       example: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
     FileSHA256:
       type: string
       format: byte
-      description: SHA-256 do ficheiro decifrado, em base64.
+      nullable: true
+      description: |
+        SHA-256 do ficheiro decifrado, em base64 (`[]byte` em Go). Ausente,
+        `null` e `""` são o mesmo estado (`nil`); base64 inválido é
+        `400 could_not_decode_payload`.
+
+        **É o único campo verdadeiramente opcional do descritor.** Só é
+        conferido quando tem exactamente 32 bytes; com qualquer outro
+        tamanho a verificação é saltada sem aviso. Quando confere e não
+        bate, a resposta é `500 media_download_failed`.
       example: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
     FileLength:
       type: integer
       format: int64
-      description: Tamanho do ficheiro em bytes.
+      nullable: false
+      minimum: 0
+      description: |
+        Tamanho do ficheiro decifrado, em bytes.
+
+        | estado | aceite? | efeito |
+        |---|---|---|
+        | ausente | sim na fronteira | vale `0`, e `0` faz a verificação FALHAR |
+        | `null` | sim na fronteira | idêntico a ausente |
+        | `0` | sim na fronteira | idem — ver abaixo |
+        | negativo | não | `400 could_not_decode_payload` (medido) — é `uint64` |
+        | `"74"` (texto) | não | `400 could_not_decode_payload` (medido) |
+        | valor exacto | sim | — |
+
+        **É obrigatório de facto, e tem de ser EXACTO.** A biblioteca compara
+        o tamanho do conteúdo decifrado com este número e devolve erro se
+        divergirem (`ReturnDownloadWarnings` está ligado). Como o campo é
+        `uint64` não-ponteiro, ausente vale `0`, e `0` nunca bate com um
+        ficheiro real: o resultado é `500 media_download_failed`. Copie o
+        `fileLength` do `data_json` sem o alterar.
       example: 74
 
 ResultadoDescargaDeMidia:
   type: object
   description: |
-    O conteúdo binário, já decifrado e codificado como Data URL.
+    O conteúdo binário, já decifrado e codificado como Data URL. Os dois
+    campos não têm `omitempty` (`pkg/domain/download.go:76-79`), logo
+    aparecem **sempre**, e nenhum vem `null`.
   required: [Mimetype, Data]
   properties:
     Mimetype:
       type: string
-      description: O mesmo `Mimetype` que veio no pedido.
+      nullable: false
+      description: |
+        O mesmo `Mimetype` que veio no pedido, ecoado sem alteração — não é
+        o tipo que a CDN declarou. Sempre presente, nunca `null`; não pode
+        vir `""` porque um `Mimetype` vazio derruba a resposta antes de
+        chegar aqui (ver o pedido).
       example: image/png
     Data:
       type: string
+      nullable: false
       description: |
-        Data URL completa — `data:<mimetype>;base64,<conteúdo>`. Não é
-        base64 nu: o prefixo faz parte do valor.
+        Data URL completa — `data:<mimetype>;base64,<conteúdo>`. **Não é
+        base64 nu**: o prefixo faz parte do valor e tem de ser removido
+        antes de descodificar.
 
-        Um download que devolva ZERO bytes é `500 empty_media`, e não um
-        `200` com Data URL vazia — decisão consciente registada como F126.
+        **Nunca vem vazia e nunca vem `null`.** Um download que devolva ZERO
+        bytes é `500 empty_media`, e não um `200` com Data URL vazia —
+        decisão consciente registada como F126.
       example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
 
 # ---------------------------------------------------------------------------
@@ -460,23 +962,48 @@ PaginaDeConversas:
     Uma página da lista de conversas, ordenada da interação mais recente para
     a mais antiga. NÃO traz mensagens — a lista existe para ordenar
     conversas.
+
+    Os quatro campos não têm `omitempty` (`pkg/domain/user.go:290`), logo
+    aparecem **sempre** e nenhum vem `null`.
   required: [chats, total, limit, offset]
   properties:
     chats:
       type: array
+      nullable: false
+      description: |
+        As conversas desta página, já ordenadas. **Sempre presente e nunca
+        `null`**: uma página vazia é `[]`, medido com `offset` além do fim.
+        Pode ter menos elementos que `limit` na última página.
       items:
         $ref: '#/components/schemas/ResumoDeConversa'
     total:
       type: integer
-      description: Total de conversas conhecidas, independente da página pedida.
+      nullable: false
+      minimum: 0
+      description: |
+        Total de conversas conhecidas, independente da página pedida. Sempre
+        presente, nunca `null`. `0` significa mesmo "nenhuma conversa".
       example: 384
     limit:
       type: integer
-      description: Tamanho da página realmente aplicado, depois da correcção de faixa.
+      nullable: false
+      minimum: 1
+      maximum: 500
+      description: |
+        Tamanho da página realmente aplicado, DEPOIS da correcção de faixa —
+        não é o que foi pedido. Medido: `limit=0`, `limit=-5`, `limit=abc` e
+        `limit` ausente devolvem todos `50`; `limit=9999` devolve `500`.
+        Sempre presente, nunca `null`.
       example: 50
     offset:
       type: integer
-      description: Deslocamento realmente aplicado.
+      nullable: false
+      minimum: 0
+      description: |
+        Deslocamento realmente aplicado. Um `offset` negativo é corrigido
+        para `0` e é o `0` que volta aqui; um `offset` além do fim NÃO é
+        corrigido — volta tal e qual, com `chats: []` (medido com
+        `offset=999999`). Sempre presente, nunca `null`.
       example: 0
 
 ResumoDeConversa:
@@ -486,48 +1013,100 @@ ResumoDeConversa:
     ausentes ao mesmo tempo: medido nas contas reais, a maioria das pessoas
     sem nome simplesmente não está no roster, e para elas não há nome a
     obter. `phone` é o que sobra de legível nesses casos.
+
+    Quatro campos vêm sempre (`jid`, `name`, `is_group`, `last_activity`) e
+    quatro têm `omitempty` e podem faltar (`push_name`, `full_name`,
+    `business_name`, `phone`) — `pkg/domain/user.go:246`.
   required: [jid, name, is_group, last_activity]
   properties:
     jid:
       type: string
+      nullable: false
       description: |
         Identidade da conversa como ela vive no histórico local. Para
         contactos pode ser `@lid` ou `@s.whatsapp.net`; para grupos é sempre
         `@g.us`. O valor reservado `status@broadcast` aparece aqui e
         representa os status vistos, não uma conversa.
+
+        **Sempre presente e nunca `null`** — não tem `omitempty`. É o valor
+        a usar como `chat_jid` em `GET /chat/history` e como destino nas
+        rotas de escrita.
       example: 90937376170214@lid
     name:
       type: string
-      description: Melhor nome disponível. String vazia quando não há nenhum.
+      nullable: false
+      description: |
+        Melhor nome disponível: roster primeiro, `pushName` do histórico
+        depois, nome do grupo para `@g.us`.
+
+        **Sempre presente e nunca `null`**, mas **frequentemente `""`** —
+        não tem `omitempty`, e uma cadeia vazia é a resposta normal para
+        quem não está no roster nem tem `pushName` gravado. `""` significa
+        "não há nome a obter", não "erro".
       example: Lucas Albuqueque
     is_group:
       type: boolean
+      nullable: false
+      description: |
+        `true` quando o `jid` termina em `@g.us`. **Sempre presente e nunca
+        `null`** — não tem `omitempty`, logo `false` aparece explicitamente
+        e é o valor normal para contactos. É derivado do sufixo do `jid`, e
+        não de uma consulta: um `status@broadcast` sai com `false`.
       example: false
     last_activity:
       type: string
       format: date-time
+      nullable: false
       description: |
         Instante da mensagem mais recente já persistida nesta conversa. É a
-        chave de ordenação da lista.
+        chave de ordenação da lista. **Sempre presente e nunca `null`.**
+
+        Vem no fuso local do servidor, e não em UTC — medido:
+        `2026-08-26T09:08:10.351982-04:00`. Divergente do `timestamp` de
+        `GET /health`, que é UTC.
       example: '2026-08-26T09:08:10.351982-04:00'
     push_name:
       type: string
-      description: Nome que a pessoa escolheu no telemóvel, cru.
+      nullable: false
+      description: |
+        Nome que a pessoa escolheu no telemóvel, cru.
+
+        **Pode não aparecer**: tem `omitempty`, logo é OMITIDO quando vale
+        `""`. Nunca vem `null`; ou vem preenchido, ou não vem. Ausente para
+        grupos, sempre.
       example: Lucas Albuqueque
     full_name:
       type: string
-      description: Nome do roster, cru.
+      nullable: false
+      description: |
+        Nome do roster, cru — o que quem consulta gravou na agenda.
+
+        **Pode não aparecer** (`omitempty`): é omitido quando vale `""`, que
+        é o caso da maioria dos `@lid`. Nunca vem `null`. Ausente para
+        grupos, sempre.
       example: Lucas Albuquerque
     business_name:
       type: string
-      description: Nome comercial verificado, cru.
+      nullable: false
+      description: |
+        Nome comercial verificado, cru.
+
+        **Pode não aparecer** (`omitempty`): omitido quando vale `""`, que é
+        o caso de qualquer conta não comercial. Nunca vem `null`.
       example: Loja Exemplo
     phone:
       type: string
+      nullable: false
       description: |
-        Número resolvido a partir do `@lid`, quando o mapeamento local o
-        conhece. Só é preenchido para as conversas DA PÁGINA devolvida, e
-        degrada em silêncio se a sessão estiver offline.
+        Número resolvido a partir do `@lid`, sem sufixo e sem dispositivo
+        (`554192421234`, não `554192421234:37@s.whatsapp.net`).
+
+        **Pode não aparecer** (`omitempty`), e falta em quatro casos:
+        conversa de grupo, conversa que já vem em `@s.whatsapp.net`,
+        mapeamento local desconhecido, e sessão offline — a resolução
+        degrada em silêncio e a lista sai sem telefone em vez de falhar.
+        Nunca vem `null`. Só é tentado para as conversas DA PÁGINA
+        devolvida.
       example: '554192421234'
 
 MensagemDoHistorico:
@@ -535,65 +1114,131 @@ MensagemDoHistorico:
   description: |
     Uma mensagem do histórico LOCAL. É leitura do nosso banco, não do
     WhatsApp — por isso responde com o telemóvel offline.
+
+    Um único campo tem `omitempty` (`quoted_message_id`); todos os outros
+    aparecem sempre, mesmo vazios
+    (`pkg/application/contracts/chat_history_port.go:24`). Nenhum vem `null`:
+    as colunas anuláveis do banco são lidas como `sql.NullString` e viram
+    `""`.
   required: [id, user_id, chat_jid, sender_jid, message_id, timestamp, message_type]
   properties:
     id:
       type: integer
-      description: Chave da linha no banco local. Serve para ordenar e desduplicar, não é o id da mensagem no WhatsApp.
+      nullable: false
+      description: |
+        Chave da linha no banco local. Serve para ordenar e desduplicar, não
+        é o id da mensagem no WhatsApp. **Sempre presente, nunca `null`.**
+        Não é estável entre sessões diferentes.
       example: 22780
     user_id:
       type: string
-      description: Sessão a que a linha pertence.
+      nullable: false
+      description: |
+        Sessão a que a linha pertence — 32 caracteres hexadecimais. Sempre
+        presente, nunca `null`. É sempre a sessão do token que chamou: a
+        consulta filtra por ela.
       example: 918e37366f27e1125ee0482a793267e1
     chat_jid:
       type: string
+      nullable: false
       description: |
-        Conversa sob a qual a linha está arquivada. Pode DIFERIR do
-        `chat_jid` que foi pedido: um pedido em `@lid` funde as linhas
-        guardadas sob o telefone da mesma pessoa.
+        Conversa sob a qual a linha está arquivada. **Sempre presente, nunca
+        `null`.**
+
+        Pode DIFERIR do `chat_jid` que foi pedido: um pedido em `@lid` funde
+        as linhas guardadas sob o telefone da mesma pessoa, e essas linhas
+        saem com o `chat_jid` que têm gravado. Não use este campo para
+        confirmar o que pediu.
       example: 554192421234@s.whatsapp.net
     sender_jid:
       type: string
-      description: Quem escreveu, na forma em que foi gravado (pode trazer sufixo de dispositivo).
+      nullable: false
+      description: |
+        Quem escreveu, na forma em que foi gravado. **Sempre presente, nunca
+        `null`.** Pode trazer sufixo de dispositivo
+        (`29343770251463:25@lid`, medido), que muda entre aparelhos da mesma
+        pessoa — não o use como chave de identidade.
       example: 5516981818244@s.whatsapp.net
     message_id:
       type: string
-      description: '`message_id` no WhatsApp — o valor a usar em reagir, apagar, favoritar e encaminhar.'
+      nullable: false
+      description: |
+        `message_id` no WhatsApp — o valor a usar em reagir, apagar,
+        favoritar e encaminhar. **Sempre presente, nunca `null`.** É a chave
+        de desduplicação da fusão `@lid`/telefone, logo não se repete dentro
+        de uma resposta.
       example: 2A196F2C7F3F02A666F6
     timestamp:
       type: string
       format: date-time
+      nullable: false
+      description: |
+        Instante da mensagem. **Sempre presente, nunca `null`.** É a chave
+        de ordenação (mais recente primeiro). Vem no fuso local do servidor,
+        e não em UTC — medido: `2026-08-26T09:08:10.351982-04:00`.
       example: '2026-08-26T09:08:10.351982-04:00'
     message_type:
       type: string
+      nullable: false
       description: |
         Tipo da mensagem como foi classificado na gravação — `text`,
         `image`, `video`, `audio`, `document`, `sticker`. `unknown` aparece
         quando o tipo não foi reconhecido, e é um valor real e frequente.
+
+        **Sempre presente, nunca `null`.** Não há enum fechado aqui de
+        propósito: a classificação é nossa e um tipo novo do WhatsApp
+        aparece como `unknown` em vez de quebrar a leitura. Trate um valor
+        desconhecido como `unknown`.
       example: video
     text_content:
       type: string
-      description: Texto ou legenda, quando existe.
+      nullable: false
+      description: |
+        Texto ou legenda, quando existe. **Sempre presente e nunca `null`**
+        — não tem `omitempty`, e a coluna anulável do banco é lida como
+        `""`. Vem `""` para mídia sem legenda.
+
+        Não há `trim`: uma mensagem de três espaços chega aqui como
+        `"   "` (medido).
       example: bateria video real
     media_link:
       type: string
-      description: Ligação para a mídia arquivada, quando o armazenamento externo está configurado.
+      nullable: false
+      description: |
+        Ligação para a mídia arquivada, quando o armazenamento externo (S3)
+        está configurado. **Sempre presente e nunca `null`**; vem `""`
+        sempre que o S3 não está ligado ou a mensagem não é de mídia — que é
+        o caso normal.
       example: ''
     quoted_message_id:
       type: string
-      description: '`message_id` da mensagem citada, quando esta é resposta a outra.'
+      nullable: false
+      description: |
+        `message_id` da mensagem citada, quando esta é resposta a outra.
+
+        **Pode não aparecer.** É o único campo desta resposta com
+        `omitempty`, logo é OMITIDO quando vale `""` — o que acontece em
+        toda mensagem que não cita nenhuma. Nunca vem `null`; ou vem
+        preenchido, ou não vem.
       example: 3EB0A4B2AFD45E625C0917
     data_json:
       type: string
+      nullable: false
       description: |
         O evento COMPLETO do WhatsApp, serializado como uma string de JSON —
         e não como objecto. Para o usar é preciso desserializar o valor uma
         segunda vez.
 
+        **Sempre presente e nunca `null`**; vem `""` para linhas gravadas
+        antes da migração que criou a coluna.
+
         É daqui que saem os sete campos do descritor de mídia que as rotas
         `/chat/download*` exigem, sob
         `Message.imageMessage` / `videoMessage` / `audioMessage` /
-        `documentMessage` / `stickerMessage`.
+        `documentMessage` / `stickerMessage`. **Aviso medido**: nas 25
+        mensagens de mídia de uma sessão real, `fileEncSha256` e
+        `fileSha256` vinham `null` em todas — o descritor copiado daqui não
+        basta para completar a descarga nesses casos.
       example: '{"Info":{"Chat":"554192421234@s.whatsapp.net","ID":"2A196F2C7F3F02A666F6"},"Message":{"imageMessage":{"URL":"https://mmg.whatsapp.net/o1/v/t24/exemplo","directPath":"/o1/v/t24/exemplo","mediaKey":"SlpkRE1hd3FWcDFa","mimetype":"image/png","fileEncSha256":"ZXhlbXBsbw==","fileSha256":"ZXhlbXBsbw==","fileLength":"74"}}}'
 
 IndiceDeConversas:
@@ -603,8 +1248,14 @@ IndiceDeConversas:
     última mensagem gravada em cada uma. É um MAPA cuja chave é o id da
     sessão — forma histórica preservada; hoje traz no máximo a chave do
     próprio chamador.
+
+    **Nunca é `null`**: uma sessão sem histórico devolve `{}`. O parâmetro
+    `limit` é IGNORADO neste ramo — o índice vem inteiro (medido: 386
+    entradas com `limit=1`). O valor `index` é sensível a maiúsculas:
+    `chat_jid=INDEX` é tratado como um JID normal e devolve `[]`.
   additionalProperties:
     type: array
+    description: As conversas dessa sessão, da mais recente para a mais antiga. Nunca `null`.
     items:
       $ref: '#/components/schemas/EntradaDoIndiceDeConversas'
   example:
@@ -616,14 +1267,27 @@ IndiceDeConversas:
 
 EntradaDoIndiceDeConversas:
   type: object
-  description: Uma conversa do índice, e quando teve a última mensagem gravada.
+  description: |
+    Uma conversa do índice, e quando teve a última mensagem gravada. Os dois
+    campos não têm `omitempty` (`pkg/application/contracts/chat_history_port.go:45`), logo aparecem sempre e nenhum vem `null`.
   required: [chat_jid, last_updated]
   properties:
     chat_jid:
       type: string
+      nullable: false
+      description: |
+        JID da conversa como está gravado no histórico — pode ser `@lid`,
+        `@s.whatsapp.net`, `@g.us` ou `status@broadcast`. **Sempre presente,
+        nunca `null`.** É o valor a passar de volta em
+        `GET /chat/history?chat_jid=`.
       example: 554192421234@s.whatsapp.net
     last_updated:
       type: string
       format: date-time
-      description: Instante já formatado em RFC 3339, com nanossegundos.
+      nullable: false
+      description: |
+        Instante já formatado em RFC 3339, com nanossegundos, no fuso local
+        do servidor. **Sempre presente, nunca `null`** — uma conversa cujo
+        instante não se consegue interpretar é SALTADA do índice inteira,
+        em vez de aparecer com o campo vazio.
       example: '2026-08-26T09:08:10.351982-04:00'

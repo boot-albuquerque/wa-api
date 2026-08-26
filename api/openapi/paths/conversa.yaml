@@ -118,14 +118,25 @@
 
       - `chat_jid=index` troca a resposta por um ÍNDICE: um mapa de id de
         sessão para a lista de conversas com a data da última mensagem. As
-        duas formas de resposta são diferentes e sempre foram.
+        duas formas de resposta são diferentes e sempre foram. O valor é
+        SENSÍVEL A MAIÚSCULAS — `chat_jid=INDEX` é tratado como um JID
+        normal e devolve `[]` (medido) — e `limit` é ignorado neste ramo:
+        o índice volta inteiro (medido, 386 entradas com `limit=1`).
+      - Uma conversa inexistente NÃO é erro: devolve `200` com `[]`.
       - Pedir com um `@lid` também traz as linhas guardadas sob o telefone da
         mesma pessoa, fundidas e desduplicadas por `message_id`. Medido em 30
         conversas reais: 27 vinham vazias sem essa fusão, porque estavam
         arquivadas sob o outro nome.
-      - `limit` ausente é 50. Um `limit` que não seja número é
-        `400 invalid_limit`, ao contrário de `/chat/list` — aqui a recusa é
-        no limite do fio, como o manipulador histórico fazia.
+      - `limit` ausente, ou presente e vazio (`limit=`), é 50. Um `limit`
+        que não seja INTEIRO — `abc`, `3.5` — é `400 invalid_limit`, ao
+        contrário de `/chat/list` — aqui a recusa é no limite do fio, como o
+        manipulador histórico fazia.
+      - **Não há mínimo nem máximo.** O número vai directo para o `LIMIT` do
+        SQL. Medido: `limit=0` devolve `[]` com `200`; `limit=-1` devolve
+        TUDO (é o `LIMIT -1` do SQLite, "sem limite"), e `limit=99999`
+        devolve o mesmo. Não existe tecto do lado do servidor.
+      - O `limit` é aplicado DEPOIS da fusão `@lid`/telefone, logo corta o
+        conjunto já fundido e não cada chave por si.
       - Não existe `offset`, `before`, `after` nem filtro por tipo: nenhum
         deles alguma vez existiu nesta rota.
       - Com a gravação de histórico desligada para a sessão, a resposta é
@@ -148,7 +159,13 @@
       - name: limit
         in: query
         required: false
-        description: Quantas mensagens devolver. Padrão 50.
+        description: |
+          Quantas mensagens devolver. Padrão 50 quando ausente ou vazio.
+
+          Sem mínimo e sem máximo: o valor vai directo para o `LIMIT` do
+          SQL. `0` devolve `[]`; um valor negativo devolve TUDO (medido —
+          `LIMIT -1` no SQLite é "sem limite"). Não inteiro é
+          `400 invalid_limit`.
         schema:
           type: integer
           default: 50
@@ -506,6 +523,19 @@
       mensagem própria, `sender` é o JID da própria conta e `from_me` é
       `true`.
 
+      - **`from_me` é `bool` NÃO-PONTEIRO** (`pkg/domain/star.go:9`), logo
+        ausente, `null` e `false` são o mesmo pedido: a mensagem é tratada
+        como de outra pessoa. Esquecer o campo numa mensagem própria endereça
+        a chave errada sem qualquer aviso, e a resposta continua a ser `200`.
+      - `star` também é `bool` não-ponteiro: omiti-lo é pedir
+        **DESfavoritar**, com `200 "Message unstarred"`.
+      - **Esta rota não tem alias de destino.** `chat` é o campo real, e não
+        o nome universal: um pedido com `jid` devolve `400 missing_chat`,
+        medido.
+      - Ordem das recusas, medida: `missing_chat` → `missing_message_id` →
+        `missing_sender` → `invalid_chat_jid` → `invalid_sender_jid`. Um
+        pedido com três campos em falta revela um de cada vez.
+
       **Histórico**: até à correcção da F223/CAP-54 esta rota devolvia
       `409 app_state_conflict`; hoje devolve `200`. O `409` continua
       possível, porque continua a ser uma escrita de app-state.
@@ -798,17 +828,27 @@
     tags: [Conversas]
     summary: Anunciar "a escrever" ou "a gravar" numa conversa
     description: |
-      Mostra ao outro lado que se está a escrever ou a gravar áudio.
+      Mostra ao outro lado que se está a escrever ou a gravar áudio
+      (`State: composing` com `Media: audio`).
 
       **Quando usar**: antes de enviar uma mensagem que demore a ser
       composta, para que a conversa não pareça parada.
 
       **Regras**:
 
-      - `State` é obrigatório; ausente é `400 missing_state`, medido. Os
-        valores da implementação são `composing`, `recording` e `paused`.
-      - `Media` é um qualificador opcional passado tal e qual ao WhatsApp;
-        envie string vazia quando não se aplicar.
+      - `State` é obrigatório; ausente, `null` e `""` dão todos
+        `400 missing_state`, medido.
+      - **Não há enum no servidor.** `State` vai como está para o protocolo,
+        logo um valor desconhecido não é recusado com `400` — o que o
+        WhatsApp faz com ele não foi medido aqui. As duas constantes que a
+        biblioteca define são `composing` e `paused`
+        (`internal/wa-noise/protocol/types/presence.go:17-18`).
+      - **Não existe um estado `recording`.** "A gravar" exprime-se como
+        `State: composing` com `Media: audio`.
+      - `Media` só tem efeito quando `State` é `composing`; em qualquer
+        outro estado é descartado sem aviso
+        (`internal/wa-noise/core/presence.go:142`). Os dois valores
+        conhecidos são `""` (texto) e `audio`.
       - Não há rota para "parar de escrever" a não ser enviar `paused`. O
         sinal também expira sozinho do lado do WhatsApp.
       - Isto é presença NA CONVERSA. A presença global da conta (online /
