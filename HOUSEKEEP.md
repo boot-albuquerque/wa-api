@@ -27380,7 +27380,54 @@ porque "duas marcas são duas fontes de verdade", e funcionou.
 **Regra**: nota consolidada também precisa de número e de uma marca própria,
 ou cola-se ao achado anterior.
 
-### 11. As afirmações dos workers sobre gates
+### 11. `EXIT != 0` sem nenhuma linha `FAIL` — o gate falhou ANTES dos testes
+
+Medido duas vezes nesta sessão, e a segunda contra mim próprio:
+
+```
+make check -> EXIT=2
+grep -E "^(FAIL|--- FAIL)" -> nada
+```
+
+O `make check` corre `build → vet → fmt-gate → test → gates`. Se abortar no
+`fmt-gate`, a saída diz `FALHA: arquivos fora do formato gofmt` e
+`make: *** [fmt-gate] Error 1` — nenhuma das duas contém `FAIL`.
+
+**Regra**: filtrar por `FAIL|FALHA|make: \*\*\*` e, sobretudo, **medir o código
+de saída**. Um filtro incompleto sobre um gate que abortou cedo produz
+exatamente a leitura "está verde" que o comentário do `Makefile` regista ter
+custado duas investigações cegas.
+
+**Causa da ocorrência de 2026-08-25**: resolvi um conflito de merge com
+`git checkout --theirs` e o ficheiro ficou fora do `gofmt`. Resolver conflitos
+por checkout de um dos lados **não passa pelo formatador** — correr `gofmt -l`
+nos ficheiros resolvidos faz parte de resolver o conflito.
+
+### 12. Repartir por FICHEIRO deixa achados sem dono
+
+A onda de três lotes paralelos foi repartida por ficheiro, para evitar
+colisões. Funcionou para isso — e criou um vão.
+
+**F241** abrange quatro rotas; duas vivem em `handler_group.go`. Proibi o lote
+de erros de lhe tocar (era de outro lote) e **não a mencionei no packet do lote
+de grupos**. O achado caiu entre os dois e só apareceu porque fui verificar
+cada achado individualmente em campo, em vez de aceitar o relatório do lote.
+
+**F242** falhou por outro motivo meu: escrevi `handler_contacts*.go` no plural
+e o ficheiro é `handler_contact.go`. O worker leu a lista, não encontrou, e
+corrigiu o handler vizinho — que não serve aquela rota.
+
+**Regras**:
+
+1. Repartir por ficheiro **e** listar, no packet de cada lote, TODOS os
+   achados que tocam os seus ficheiros — mesmo os que "pertencem" a outro.
+2. **Verificar os nomes de ficheiro do packet** antes de despachar. Um nome
+   errado não produz erro: produz trabalho no sítio errado, com relatório de
+   sucesso.
+3. Verificar cada achado em campo **individualmente**. O relatório do lote diz
+   o que o worker julga ter feito; a medição diz o que está feito.
+
+### 13. As afirmações dos workers sobre gates
 
 Três workers declararam `make check` com `exit 0`. O valor real foi `exit 2`
 nas três — a falha aparece no MEIO da saída, e qualquer leitura por `tail` a
