@@ -706,3 +706,82 @@ func TestConnectHandler_WithoutCheckOwnership_200(t *testing.T) {
 		t.Fatalf("StartSession received userID %q, want user-1", uid)
 	}
 }
+
+// TestSyncContactRoster_AusenteVsInvalido_PelaRota exercita os TRÊS corpos
+// JSON que em Go colapsam no mesmo valor — campo omitido, null e "" — pela
+// rota registrada, e confirma que os três dão o código de campo em falta,
+// distinto do código de valor inválido.
+//
+// É pela rota e não pelo use case porque só o decode distingue os três
+// corpos; um teste no use case só consegue exercitar Mode: "".
+func TestSyncContactRoster_AusenteVsInvalido_PelaRota(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantCode string
+		// wantMsgPart, quando não vazio, é o eco do valor recebido no corpo
+		// da resposta: é o que permite ao consumidor ver o próprio erro de
+		// digitação.
+		wantMsgPart string
+	}{
+		{"campo omitido", `{}`, "missing_sync_mode", ""},
+		{"campo null", `{"mode":null}`, "missing_sync_mode", ""},
+		{"campo vazio", `{"mode":""}`, "missing_sync_mode", ""},
+		{"valor desconhecido", `{"mode":"xpto"}`, "invalid_sync_mode", `xpto`},
+		// Maiúsculas continuam INVÁLIDAS — a comparação é sensível a caixa.
+		{"valor em maiusculas", `{"mode":"FULL"}`, "invalid_sync_mode", `FULL`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			as := &contractsfake.AppStateSyncer{}
+			log := &contractsfake.Logger{}
+			h := NewSyncContactRosterHandler(session.NewSyncContactRosterUseCase(as, log))
+
+			rec, _ := serveSession(t, h, http.MethodPost, "/user/contacts/sync", tt.body, "user-1", true)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())
+			}
+			errObj, ok := sessionEnvelope(t, rec)["error"].(map[string]any)
+			if !ok {
+				t.Fatalf("envelope.error nao e' o objeto tipado do ADR-002: %s", rec.Body.String())
+			}
+			if errObj["code"] != tt.wantCode {
+				t.Fatalf("error.code = %v, quero %v (corpo %s)", errObj["code"], tt.wantCode, rec.Body.String())
+			}
+			if tt.wantMsgPart != "" {
+				msg, _ := errObj["message"].(string)
+				if !strings.Contains(msg, tt.wantMsgPart) {
+					t.Errorf("error.message = %q nao ecoa o valor recebido %q", msg, tt.wantMsgPart)
+				}
+			}
+			if len(as.SyncContactRosterCalls) != 0 {
+				t.Errorf("corpo recusado alcancou a porta: %+v", as.SyncContactRosterCalls)
+			}
+		})
+	}
+}
+
+// TestSyncContactRoster_ValoresValidos_200_PelaRota é o caminho de SUCESSO:
+// sem ele, uma regra estrita demais (por exemplo, recusar tudo) passaria
+// despercebida por TestSyncContactRoster_AusenteVsInvalido_PelaRota.
+func TestSyncContactRoster_ValoresValidos_200_PelaRota(t *testing.T) {
+	for _, mode := range []string{"if_unsynced", "incremental", "full"} {
+		t.Run(mode, func(t *testing.T) {
+			as := &contractsfake.AppStateSyncer{}
+			log := &contractsfake.Logger{}
+			h := NewSyncContactRosterHandler(session.NewSyncContactRosterUseCase(as, log))
+
+			rec, _ := serveSession(t, h, http.MethodPost, "/user/contacts/sync",
+				`{"mode":"`+mode+`"}`, "user-1", true)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
+			}
+			if len(as.SyncContactRosterCalls) != 1 || as.SyncContactRosterCalls[0].Mode != mode {
+				t.Fatalf("porta recebeu %+v, quero uma chamada com mode=%q", as.SyncContactRosterCalls, mode)
+			}
+		})
+	}
+}

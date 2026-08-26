@@ -10,6 +10,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -119,5 +120,63 @@ func TestSyncContactRoster_ErroDoSDKPropaga(t *testing.T) {
 	}
 	if _, found := log.FindLevel(contractsfake.LevelError, "contact roster sync failed"); !found {
 		t.Errorf("falha do SDK nao foi logada em nivel error: %v", log.Messages())
+	}
+}
+
+// TestSyncContactRoster_AusenteVsInvalido trava a distinção que faltava:
+// "não mandaste o campo" e "mandaste um valor errado" são erros com
+// CORREÇÕES diferentes, e um cliente que ramifique sobre error.code precisa
+// separá-los. Antes desta correção os cinco casos abaixo devolviam
+// invalid_sync_mode indistintamente.
+//
+// Em Go, ausente / null / "" colapsam no mesmo valor depois do decode, por
+// isso o caso do use case é um só (Mode: ""); os três corpos JSON distintos
+// são exercitados pela rota, em
+// TestSyncContactRoster_AusenteVsInvalido_PelaRota.
+func TestSyncContactRoster_AusenteVsInvalido(t *testing.T) {
+	tests := []struct {
+		name     string
+		mode     string
+		wantCode string
+		// wantMsgPart, quando não vazio, é o eco do valor recebido: é o que
+		// permite ao consumidor ver o próprio erro de digitação.
+		wantMsgPart string
+	}{
+		{"modo vazio e' AUSENTE", "", "missing_sync_mode", ""},
+		{"modo desconhecido", "xpto", "invalid_sync_mode", `"xpto"`},
+		// Maiúsculas continuam INVÁLIDAS: a comparação é sensível a caixa,
+		// como nos outros enums da API. Aceitá-las seria widening de contrato.
+		{"modo em maiusculas", "FULL", "invalid_sync_mode", `"FULL"`},
+		{"modo com espaco", " full", "invalid_sync_mode", `" full"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			as := &contractsfake.AppStateSyncer{}
+			log := &contractsfake.Logger{}
+
+			_, err := session.NewSyncContactRosterUseCase(as, log).
+				Execute(context.Background(), txtID, domain.SyncContactRosterRequest{Mode: tt.mode})
+
+			if err == nil {
+				t.Fatalf("modo %q foi aceito", tt.mode)
+			}
+			var appErr *apperr.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("erro nao e' um *apperr.AppError: %v", err)
+			}
+			if appErr.Code != tt.wantCode {
+				t.Fatalf("Code = %q, quero %q (mensagem: %s)", appErr.Code, tt.wantCode, appErr.Error())
+			}
+			if appErr.Category != apperr.CategoryValidation {
+				t.Errorf("Category = %q, quero %q", appErr.Category, apperr.CategoryValidation)
+			}
+			if tt.wantMsgPart != "" && !strings.Contains(appErr.Error(), tt.wantMsgPart) {
+				t.Errorf("mensagem %q nao ecoa o valor recebido %s", appErr.Error(), tt.wantMsgPart)
+			}
+			if len(as.SyncContactRosterCalls) != 0 {
+				t.Errorf("modo recusado alcancou a porta: %+v", as.SyncContactRosterCalls)
+			}
+		})
 	}
 }

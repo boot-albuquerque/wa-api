@@ -61,15 +61,54 @@ var privacySettingValues = map[string][]string{
 	"calladd":      {"all", "known"},
 }
 
+// Error codes and messages of the privacy validator, as named constants: the
+// tests that lock the contract assert the SAME strings production returns
+// (ADR-0004).
+//
+// The missing_* codes are distinct from the invalid_* ones on purpose: an
+// absent field and a misspelled value are errors with DIFFERENT corrections,
+// and a client branching on error.code could not tell them apart while both
+// answered invalid_privacy_setting / invalid_privacy_value.
+const (
+	MissingPrivacySettingCode = "missing_privacy_setting"
+	missingPrivacySettingMsg  = "missing privacy setting name in payload"
+
+	MissingPrivacyValueCode = "missing_privacy_value"
+	missingPrivacyValueMsg  = "missing privacy setting value in payload"
+
+	InvalidPrivacySettingCode   = "invalid_privacy_setting"
+	invalidPrivacySettingMsgFmt = "invalid privacy setting name %q"
+
+	InvalidPrivacyValueCode   = "invalid_privacy_value"
+	invalidPrivacyValueMsgFmt = "invalid value %q for privacy setting %q"
+)
+
 // ValidatePrivacySetting reports whether name is a supported privacy setting
 // and value is one of the values WhatsApp accepts for it.
+//
+// An empty name or value is reported as MISSING, not invalid. Absent, null
+// and "" are indistinguishable once the payload is decoded into a Go string,
+// so the three collapse into the same answer; only a NON-EMPTY string outside
+// the accepted set is "invalid".
 func ValidatePrivacySetting(name, value string) error {
+	if name == "" {
+		log.Warn().Str("reason", "missing_setting").Msg("privacy setting rejected")
+		return apperr.New(MissingPrivacySettingCode, apperr.CategoryValidation,
+			missingPrivacySettingMsg, false, nil)
+	}
+	if value == "" {
+		log.Warn().Str("setting", name).Str("reason", "missing_value").
+			Msg("privacy setting rejected")
+		return apperr.New(MissingPrivacyValueCode, apperr.CategoryValidation,
+			missingPrivacyValueMsg, false, nil)
+	}
+
 	allowed, ok := privacySettingValues[name]
 	if !ok {
 		log.Warn().Str("setting", name).Str("reason", "unknown_setting").
 			Msg("privacy setting rejected")
-		return apperr.New("invalid_privacy_setting", apperr.CategoryValidation,
-			fmt.Sprintf("invalid privacy setting name %q", name), false, nil)
+		return apperr.New(InvalidPrivacySettingCode, apperr.CategoryValidation,
+			fmt.Sprintf(invalidPrivacySettingMsgFmt, name), false, nil)
 	}
 	for _, v := range allowed {
 		if value == v {
@@ -79,6 +118,6 @@ func ValidatePrivacySetting(name, value string) error {
 	log.Warn().Str("setting", name).Str("value", value).
 		Str("reason", "value_not_allowed").Strs("allowed", allowed).
 		Msg("privacy setting rejected")
-	return apperr.New("invalid_privacy_value", apperr.CategoryValidation,
-		fmt.Sprintf("invalid value %q for privacy setting %q", value, name), false, nil)
+	return apperr.New(InvalidPrivacyValueCode, apperr.CategoryValidation,
+		fmt.Sprintf(invalidPrivacyValueMsgFmt, value, name), false, nil)
 }
