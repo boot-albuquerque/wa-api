@@ -26640,7 +26640,52 @@ a conta.
 — era o único dos três que viera do Baileys e estava certo, e agora não é
 suposição.
 
-<!-- f-status: aberto -->
+## Fecho da F233(b): a cadeia inteira de administração de canal, medida (2026-08-26)
+
+Lote `boot-albuquerque/wa-admininvite`, commit `11a0e15`. Três rotas novas:
+
+```
+POST /newsletter/admin-invite          {jid, userJID}
+POST /newsletter/admin-invite/accept   {jid}
+POST /newsletter/admin-invite/revoke   {jid, userJID}
+```
+
+Query IDs medidos no bundle da SPA (não copiados do Baileys):
+`create=9387141988078609`, `accept=9580828702035549`, `revoke=9656078347839416`.
+
+**Verificação em campo, com o papel medido a cada passo** — canal
+`120363411706831441@newsletter`, criado pela `filarapida` e convidando a
+sessão `lucas`:
+
+| passo | chamada | `viewer_metadata.role` medido depois |
+|---|---|---|
+| 1 | `POST /newsletter/create` (fila) | fila=`owner` |
+| 2 | `POST /newsletter/admin-invite` (fila -> lucas LID) | lucas: ainda nada |
+| 3 | `POST /newsletter/admin-invite/accept` (lucas) | **lucas=`admin`** |
+| 4 | `POST /newsletter/change-owner` (fila -> lucas) | **lucas=`owner`, fila=`admin`** |
+| 5 | `POST /newsletter/demote` (lucas demove fila) | **fila=`subscriber`** |
+| 6 | `DELETE /newsletter/delete` (lucas, com `confirmJID`) | `state.type=`**`non_existing`** |
+
+**É a primeira vez nesta série que as quatro operações de administração de canal
+produzem efeito medido**, e não apenas `200`. O que faltava era o passo 2-3: sem
+um segundo administrador, `change-owner` e `demote` não tinham a quem apontar —
+por isso "não funcionavam".
+
+**Dois erros meus, corrigidos pela medição:**
+
+1. **Reportei `200` numa forma de pedido errada.** O binário do executor aceitava
+   `newsletter_id`/`user_id`; o que foi integrado usa `jid`/`userJID`. Contra o
+   binário integrado, o meu payload de ontem devolve `400 missing_jid` — ou seja,
+   o `200` que registei não provava a rota que ficou no repositório. Testar
+   sempre contra o binário construído do HEAD, não do ramo do executor.
+2. **Procurei a prova no sítio errado.** Fui ao WhatsApp Web da conta que
+   convida à espera de ver uma mensagem de convite. Não há nenhuma — é mutação
+   `mex` pura (ver F261). A prova estava do lado do convidado, no campo `role`.
+
+**Status**: corrigido — admin invite, accept, revoke, change-owner, demote e
+delete verificados de ponta a ponta com transição de estado medida.
+
+<!-- f-status: corrigido -->
 
 ## F234 — `TestStartSession_SessionOutlivesItsBootContext` falha sob carga: 1,87 s isolado, 30 s no `make check`
 
@@ -28741,5 +28786,84 @@ duas.
 
 **Status**: não corrigido — o campo `account_type` continua por expor. O
 bloqueio das comunidades foi retirado por medição.
+
+<!-- f-status: aberto -->
+
+## F261 — o `admin-invite` devolve `data:null` e deita fora o prazo de validade que o servidor manda
+
+**Data/contexto**: 2026-08-26, verificação em campo da F233(b).
+
+**Onde**: `internal/wa-noise/capabilities/newsletter/actions.go:219`
+
+```go
+func CreateAdminInvite(ctx context.Context, t Transport, channelJID, userJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationCreateAdminInvite, map[string]any{...})
+	return err            // <- o payload da resposta é descartado
+}
+```
+
+**Problema**: `POST /newsletter/admin-invite` devolve `{"code":200,"data":null}`.
+Do lado de quem chama, isso é indistinguível de "não aconteceu nada" — e foi
+exatamente o que me aconteceu: procurei uma mensagem de convite no WhatsApp Web
+da conta que convida, não a encontrei, e quase reportei a rota como quebrada.
+
+**Medido**. Instrumentei `CreateAdminInvite` para escrever a resposta crua num
+ficheiro (build temporário, revertido depois) e chamei a rota:
+
+```
+err=<nil> raw={"xwa2_newsletter_admin_invite_create":
+                {"id":"120363411706831441@newsletter",
+                 "invite_expiration_time":"1788351063"}}
+```
+
+O servidor **diz** que o convite existe e **até quando** vale (sete dias). Nós
+temos essa informação em mãos e devolvemos `null`.
+
+Um efeito lateral do mesmo achado: **não há mensagem nenhuma**. A hipótese do
+executor de que "criar convite é, no fundo, um envio de mensagem" é falsa — é
+uma mutação `mex` pura, e o convidado só sabe pelo seu próprio cliente. Procurar
+a prova no chat do convidador era procurar no sítio errado.
+
+**Correção sugerida**: `CreateAdminInvite` devolve `(json.RawMessage, error)`;
+a porta `NewsletterAdminInviter` devolve um tipo com `expiration_time`; a rota
+responde com ele. Custo: assinatura da porta, fake e use case — a mesma cadeia
+que o lote das comunidades já percorreu.
+
+**Status**: não corrigido — muda a forma da resposta de uma rota já entregue, e
+essa decisão é do utilizador.
+
+<!-- f-status: aberto -->
+
+## F262 — cinco mensagens de erro da validação de newsletter estão em português
+
+**Data/contexto**: 2026-08-26, ao ver `{"message":"jid do canal é obrigatório"}`
+numa resposta de campo.
+
+**Onde**: `pkg/application/usecase/notification/newsletter_ops.go`
+
+| linha | mensagem |
+|---|---|
+| 213 | `jid do canal é obrigatório` (`requireJID`, partilhada por **catorze** operações) |
+| 227 | `nome do canal é obrigatório` |
+| 232 | `código de convite é obrigatório` |
+| 237 | `pelo menos um server_id é obrigatório` |
+| 244 | `server_id é obrigatório` |
+
+**Problema**: o `CLAUDE.md` manda mensagens de erro em EN-US, e as onze regras
+acrescentadas depois (`demote`, `change_owner`, `delete`, os três de
+`admin_invite`) já estão em inglês. O ficheiro **mistura os dois idiomas na
+mesma tabela** — quem lê a tabela vê a regra a ser quebrada e cumprida lado a
+lado.
+
+O peso real está na primeira: `requireJID` é partilhada por catorze operações,
+logo é a mensagem de erro mais visível de toda a superfície de newsletter.
+
+**Correção sugerida**: traduzir as cinco (`channel jid is required`,
+`channel name is required`, `invite code is required`,
+`at least one server_id is required`, `server_id is required`). É mudança de
+texto de resposta, portanto contrato observável — merece ir num commit só seu.
+
+**Status**: não corrigido. É anterior a esta sessão (lote de 2026-08-20) e cai
+fora do âmbito da tarefa, logo fica registado em vez de corrigido de graça.
 
 <!-- f-status: aberto -->
