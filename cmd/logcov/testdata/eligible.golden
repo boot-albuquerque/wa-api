@@ -2790,7 +2790,7 @@ pkg/bootstrap.NewSessionEventDispatcher	EXCLUDED	X1
 pkg/bootstrap.NewStdioServer	EXCLUDED	X1
 pkg/bootstrap.ProcessOutgoingMedia	ELIGIBLE	covered
 pkg/bootstrap.ReadinessReport.Ready	EXCLUDED	X1
-pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:110)
+pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:111)
 pkg/bootstrap.Routes.func1	EXCLUDED	X6
 pkg/bootstrap.Routes.func2	EXCLUDED	X6
 pkg/bootstrap.UserEventHandler.GetUserID	EXCLUDED	X1
@@ -2871,7 +2871,7 @@ pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
 pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
 pkg/bootstrap.buildRouter	ELIGIBLE	covered
-pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:270)
+pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:271)
 pkg/bootstrap.buildRouter.func2	EXCLUDED	X6
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
@@ -2989,7 +2989,7 @@ pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
 pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
-pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:217)
+pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:218)
 pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
 pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	uncovered:L2(S-ret,global_hmac_key.go:131)
@@ -3893,6 +3893,9 @@ pkg/presentation/http.ProfileFullHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consu
 pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:74)
 pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:49)
 pkg/presentation/http.genericErrorMessage	EXCLUDED	X1
+pkg/presentation/http/apidocs.Handler	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,apidocs.go:61)
+pkg/presentation/http/apidocs.Handler.func1	EXCLUDED	X1
+pkg/presentation/http/apidocs.Specification	EXCLUDED	X1
 pkg/presentation/http/devui.Enabled	EXCLUDED	X1
 pkg/presentation/http/devui.Handler	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,devui.go:109)
 pkg/presentation/http/devui.Handler.func1	ELIGIBLE	covered

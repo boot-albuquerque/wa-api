@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"wa-api/pkg/infra/db"
+	"wa-api/pkg/presentation/http/apidocs"
 
 	"github.com/jmoiron/sqlx"
 	_ "modernc.org/sqlite"
@@ -118,6 +119,15 @@ func TestGolden(t *testing.T) {
 	seen := make(map[string]bool)
 
 	for _, route := range routes {
+		// A página de documentação não é uma rota da API: serve HTML e activos
+		// estáticos, e este harness grava e compara JSON. Forçá-la aqui não
+		// mediria nada de útil — o que importa dela está afirmado em
+		// pkg/presentation/http/apidocs (a página, os activos, a
+		// especificação embutida e a recusa de travessia de caminho) e nos
+		// quatro gates de openapi_coverage_test.go.
+		if strings.HasPrefix(route.Path, apidocs.BasePath) {
+			continue
+		}
 		for _, method := range route.Methods {
 			method, route := method, route
 			name := goldenFileName(method, route.Path)
