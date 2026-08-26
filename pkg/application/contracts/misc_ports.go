@@ -180,6 +180,11 @@ type NewsletterReader interface {
 	DemoteNewsletterAdmin(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
 	ChangeNewsletterOwner(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error
 	DeleteNewsletter(ctx context.Context, txtID string, channelJID domain.JID) error
+
+	// F233(b) — admin invite management.
+	CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	AcceptNewsletterAdminInvite(ctx context.Context, txtID string, channelJID domain.JID) error
+	RevokeNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
 }
 
 // AppStateSyncer força o pull de um patch de app-state do servidor WhatsApp.

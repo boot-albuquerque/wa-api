@@ -34,6 +34,20 @@ const (
 	mutationDemoteAdmin      = "9880997548630971"
 	mutationChangeOwner      = "9546742745432473"
 	mutationDeleteNewsletter = "30062808666639665"
+
+	// F233(b) — admin invite management.
+	//
+	// Extracted from the WhatsApp Web JS bundle on 2026-08-25 alongside the
+	// admin management IDs above (same session, same method).
+	//
+	//   WAWebMexCreateNewsletterAdminInviteJobMutation  -> 9387141988078609
+	//   WAWebMexAcceptNewsletterAdminInviteJobMutation  -> 9580828702035549
+	//   WAWebMexRevokeNewsletterAdminInviteJobMutation  -> 9656078347839416
+	//
+	// MAINTENANCE: same as the block above — re-extract with scripts/mex-query-ids/.
+	mutationCreateAdminInvite = "9387141988078609"
+	mutationAcceptAdminInvite = "9580828702035549"
+	mutationRevokeAdminInvite = "9656078347839416"
 )
 
 // ---------------------------------------------------------------------------

@@ -210,3 +210,42 @@ func Delete(ctx context.Context, t Transport, channelJID types.JID) error {
 	})
 	return err
 }
+
+// CreateAdminInvite creates an admin invite for a channel.
+//
+// Variables: {newsletter_id, user_id}. Measured from the SPA module
+// WAWebMexCreateNewsletterAdminInviteJobMutation (probe_chanadmin_test.go).
+// user_id MUST be LID — the caller resolves PN before calling.
+func CreateAdminInvite(ctx context.Context, t Transport, channelJID, userJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationCreateAdminInvite, map[string]any{
+		"newsletter_id": channelJID.String(),
+		"user_id":       userJID.String(),
+	})
+	return err
+}
+
+// AcceptAdminInvite accepts an admin invite for a channel.
+//
+// Variables: {newsletter_id}. Measured from the SPA module
+// WAWebMexAcceptNewsletterAdminInviteJob.acceptNewsletterAdminInvite(channelJID)
+// (probe_chanadmin_test.go:152).
+func AcceptAdminInvite(ctx context.Context, t Transport, channelJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationAcceptAdminInvite, map[string]any{
+		"newsletter_id": channelJID.String(),
+	})
+	return err
+}
+
+// RevokeAdminInvite revokes an admin invite for a channel.
+//
+// Variables: {newsletter_id, user_id}. Measured from the SPA module
+// WAWebMexRevokeNewsletterAdminInviteJob.revokeNewsletterAdminInvite(channelWid, userWid)
+// (probe_chanadmin_test.go:170-171).
+// user_id MUST be LID — the caller resolves PN before calling.
+func RevokeAdminInvite(ctx context.Context, t Transport, channelJID, userJID types.JID) error {
+	_, err := SendMexIQ(ctx, t, mutationRevokeAdminInvite, map[string]any{
+		"newsletter_id": channelJID.String(),
+		"user_id":       userJID.String(),
+	})
+	return err
+}

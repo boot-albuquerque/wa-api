@@ -193,3 +193,81 @@ func TestNewsletterOps_Delete_RequiresJIDAndConfirmJID(t *testing.T) {
 		t.Fatalf("delete with matching confirmJID failed: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// F233(b) — admin invite validation
+// ---------------------------------------------------------------------------
+
+func TestNewsletterOps_AdminInvite_RequiresJIDAndUserJID(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	nr.SessionGuard = contractsfake.FailSession(nil)
+	uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:  NewsletterOpAdminInvite,
+		JID: "120363000000000000@newsletter",
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing userJID")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op: NewsletterOpAdminInvite,
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing jid")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:      NewsletterOpAdminInvite,
+		JID:     "120363000000000000@newsletter",
+		UserJID: "5516900000000@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("admin_invite with valid fields failed: %v", err)
+	}
+}
+
+func TestNewsletterOps_AdminInviteAccept_RequiresJID(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	nr.SessionGuard = contractsfake.FailSession(nil)
+	uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op: NewsletterOpAdminInviteAccept,
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing jid")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:  NewsletterOpAdminInviteAccept,
+		JID: "120363000000000000@newsletter",
+	})
+	if err != nil {
+		t.Fatalf("admin_invite_accept with valid jid failed: %v", err)
+	}
+}
+
+func TestNewsletterOps_AdminInviteRevoke_RequiresJIDAndUserJID(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{}
+	nr.SessionGuard = contractsfake.FailSession(nil)
+	uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+	_, err := uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:  NewsletterOpAdminInviteRevoke,
+		JID: "120363000000000000@newsletter",
+	})
+	if err == nil {
+		t.Fatal("expected validation error for missing userJID")
+	}
+
+	_, err = uc.Execute(context.Background(), "u1", NewsletterRequest{
+		Op:      NewsletterOpAdminInviteRevoke,
+		JID:     "120363000000000000@newsletter",
+		UserJID: "5516900000000@s.whatsapp.net",
+	})
+	if err != nil {
+		t.Fatalf("admin_invite_revoke with valid fields failed: %v", err)
+	}
+}

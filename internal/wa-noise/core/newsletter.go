@@ -140,6 +140,30 @@ func (cli *Client) NewsletterDelete(ctx context.Context, channelJID types.JID) e
 	return newsletter.Delete(ctx, cli.newsletterT(), channelJID)
 }
 
+// NewsletterCreateAdminInvite creates an admin invite for a channel.
+func (cli *Client) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.CreateAdminInvite(ctx, cli.newsletterT(), channelJID, userJID)
+}
+
+// NewsletterAcceptAdminInvite accepts an admin invite for a channel.
+func (cli *Client) NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.AcceptAdminInvite(ctx, cli.newsletterT(), channelJID)
+}
+
+// NewsletterRevokeAdminInvite revokes an admin invite for a channel.
+func (cli *Client) NewsletterRevokeAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+	if cli == nil {
+		return ErrClientIsNil
+	}
+	return newsletter.RevokeAdminInvite(ctx, cli.newsletterT(), channelJID, userJID)
+}
+
 // GetNewsletterInfo gets the info of a newsletter that you're joined to.
 func (cli *Client) GetNewsletterInfo(ctx context.Context, jid types.JID) (*types.NewsletterMetadata, error) {
 	return cli.getNewsletterInfo(ctx, newsletter.JIDInput(jid), true)

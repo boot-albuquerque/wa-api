@@ -109,3 +109,24 @@ func (f *Fake) NewsletterDelete(ctx context.Context, channelJID types.JID) error
 	}
 	return nil
 }
+
+func (f *Fake) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+	if f.NewsletterCreateAdminInviteFn != nil {
+		return f.NewsletterCreateAdminInviteFn(ctx, channelJID, userJID)
+	}
+	return nil
+}
+
+func (f *Fake) NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error {
+	if f.NewsletterAcceptAdminInviteFn != nil {
+		return f.NewsletterAcceptAdminInviteFn(ctx, channelJID)
+	}
+	return nil
+}
+
+func (f *Fake) NewsletterRevokeAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+	if f.NewsletterRevokeAdminInviteFn != nil {
+		return f.NewsletterRevokeAdminInviteFn(ctx, channelJID, userJID)
+	}
+	return nil
+}

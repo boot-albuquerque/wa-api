@@ -522,6 +522,10 @@ type NewsletterReader struct {
 	ChangeOwnerFunc func(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error
 	DeleteFunc      func(ctx context.Context, txtID string, channelJID domain.JID) error
 
+	CreateAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	AcceptAdminInviteFunc func(ctx context.Context, txtID string, channelJID domain.JID) error
+	RevokeAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+
 	// NewsletterCalls regista TODA chamada da família, com o método e o
 	// identificador. Uma lista só serve para asserir que a rota certa chamou o
 	// método certo com o argumento certo — que é o que os testes precisam.
@@ -707,6 +711,33 @@ func (f *NewsletterReader) DeleteNewsletter(ctx context.Context, txtID string, c
 	f.record("DeleteNewsletter", txtID, channelJID, "")
 	if f.DeleteFunc != nil {
 		return f.DeleteFunc(ctx, txtID, channelJID)
+	}
+	return nil
+}
+
+// CreateNewsletterAdminInvite implementa port.NewsletterReader.
+func (f *NewsletterReader) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+	f.record("CreateNewsletterAdminInvite", txtID, channelJID, string(userJID))
+	if f.CreateAdminInviteFunc != nil {
+		return f.CreateAdminInviteFunc(ctx, txtID, channelJID, userJID)
+	}
+	return nil
+}
+
+// AcceptNewsletterAdminInvite implementa port.NewsletterReader.
+func (f *NewsletterReader) AcceptNewsletterAdminInvite(ctx context.Context, txtID string, channelJID domain.JID) error {
+	f.record("AcceptNewsletterAdminInvite", txtID, channelJID, "")
+	if f.AcceptAdminInviteFunc != nil {
+		return f.AcceptAdminInviteFunc(ctx, txtID, channelJID)
+	}
+	return nil
+}
+
+// RevokeNewsletterAdminInvite implementa port.NewsletterReader.
+func (f *NewsletterReader) RevokeNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+	f.record("RevokeNewsletterAdminInvite", txtID, channelJID, string(userJID))
+	if f.RevokeAdminInviteFunc != nil {
+		return f.RevokeAdminInviteFunc(ctx, txtID, channelJID, userJID)
 	}
 	return nil
 }
