@@ -1,7 +1,13 @@
 # Production Readiness Scorecard — wa-api
 
-**Data**: 2026-08-26, revisto depois da padronização de caminhos. **Medido**, não estimado: cada número desta página vem de
-um comando cuja saída está registada nos commits desta série.
+**Data**: 2026-08-26, revisto depois da padronização de caminhos e da **medição
+das quatro lacunas de produção** (`MEDICAO-PRODUCAO.md`). **Medido**, não
+estimado: cada número desta página vem de um comando cuja saída está registada
+nos commits desta série.
+
+A revisão de 26/08 mexeu na secção 6 porque **três das quatro linhas ❌ diziam
+coisas que a medição contradisse**. Uma linha de scorecard que descreve o
+mecanismo errado é pior que uma linha em branco: manda corrigir no sítio errado.
 
 ## Como ler este documento
 
@@ -29,8 +35,8 @@ Um scorecard que se auto-atribui verdes é um instrumento de conforto. Este tem
 | 3. Testes | 5 | 1 | 1 |
 | 4. Evidência | 4 | 1 | 0 |
 | 5. Auditoria | 5 | 0 | 0 |
-| 6. Produção | 2 | 4 | 4 |
-| **Total** | **29** | **11** | **8** |
+| 6. Produção | 2 | 5 | 3 |
+| **Total** | **29** | **12** | **7** |
 
 **A leitura honesta**: o contrato e a evidência estão fortes; a **prontidão
 operacional não está**. Uma API pode ser perfeitamente documentada e continuar
@@ -64,9 +70,9 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | Envelope de erro único | 🟡 | **duas** formas em produção: `error` objecto e `error` string (F266, 14 pontos). Ambas documentadas, o que impede o cliente de partir — mas é um contrato com duas caras |
 | Nomes consistentes | 🟡 | glossário escrito e vinculante para o novo; o existente mistura `snake_case`, `camelCase` e `PascalCase`, e `group_jid` tem **quatro** grafias (F269) |
 | Prosa da documentação verificada | 🟡 | os gates leem estrutura, não texto. Oito menções de um código inexistente sobreviveram em descrições até serem apanhadas à mão (ARMADILHAS #29) |
-| Singular/plural coerente | ✅ | **91 formas canónicas** registadas a 26/08, com gate que recusa família de colecção sem canónica. As antigas continuam a funcionar, marcadas `deprecated` |
+| Singular/plural coerente | ✅ | **91 formas canónicas** registadas a 26/08, com gate que recusa família de colecção sem canónica. As antigas continuam a **responder**, e **saíram do contrato**: medido a 26/08 contra o binário em execução, **0 de 141** operações servidas estão marcadas `deprecated` — não há o que marcar, porque nenhuma forma antiga está no documento |
 | Relação no caminho, não no nome | ✅ | 9 rotas reestruturadas com o identificador no caminho e o método a dizer a operação; `TestCaminhosCanonicosCumpremARegra` recusa a relação colada |
-| Códigos de estado semânticos | ❌ | `201`, `202`, `204`, `410`, `412`, `415`, `429`, `502`, `503`, `504` **nunca** são usados. `POST /group/create` cria recurso e devolve `200` sem `Location` |
+| Códigos de estado semânticos | ❌ | `201`, `202`, `204`, `410`, `412`, `415`, `502`, `503`, `504` **nunca** são usados. `POST /group/create` cria recurso e devolve `200` sem `Location`. **`429` saiu desta lista**: é alcançável em 64 sítios (`errmap.ClassifyIQ` → `CategoryRateLimited` → `429`) como relais do estrangulamento do WhatsApp, e **0 de 141** operações o documentam (F293) |
 | `additionalProperties: false` | ❌ | não declarado, e **corretamente**: seria falso enquanto o padrão for aceitar. Ligar o modo estrito é decisão de versão |
 
 ## 3. Testes
@@ -88,8 +94,10 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | Classificação por rota, visível no título | ✅ | ✅🟡❌⬜ no `summary` de cada operação, aplicada de `evidencias.tsv` pelo gerador |
 | Nenhuma rota sem classificação | ✅ | `TestOpenAPISummariesTrazemMarcaDeEvidencia`; **141 de 141** |
 | Tabela não pode desactualizar-se | ✅ | rota nova sem linha **falha o gerador**; linha órfã **também** — a falha por excesso é a silenciosa |
-| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **98 ✅, 8 🟡, 3 ❌, 32 ⬜** |
-| Cobertura de efeito confirmado | 🟡 | **98 de 141**. As 32 ⬜ não são esquecimento: escreveriam configuração em uso, derrubariam sessões, ou alterariam a conta — cada uma com o motivo escrito |
+| Os números batem entre as quatro fontes | ✅ | `TestEvidenceTableMatchesSpec`, `TestEvidenceLegendMatchesTable`, `TestEvidenceReportMatchesSpec` e `TestEvidenceReportSummaryMatchesTable` reconciliam tabela, spec embutida, legenda de `/docs` e relatório — **rota a rota**, não só no total (F281) |
+| Observador concreto registado por rota | 🟡 | **43 de 141**: as 24 promovidas, as 4 ❌, as 8 🟡 e as 7 ⬜ (24+4+8+7 = 43; o número anterior dizia 25 e não fechava). As restantes 98 ✅ trazem a frase-modelo e são inauditáveis a partir do registo (F282) |
+| Distinção ✅ / 🟡 respeitada | ✅ | 🟡 é a recusa deliberada de chamar confirmado o que só devolveu `2xx`. **122 ✅, 8 🟡, 4 ❌, 7 ⬜** |
+| Cobertura de efeito confirmado | 🟡 | **122 de 141**, contra 98 antes desta ronda. As 24 promoções são **medição nova** — chamada real contra o servidor local, com observador independente por rota — e **não** espelhamento de nome canónico sobre nome antigo: o eixo de canonicalização não moveu marca nenhuma. As 7 ⬜ que restam exigem um bucket S3 descartável, uma chamada a entrar, ou uma conta emparelhada cujo perfil seria alterado — cada uma com o motivo escrito. O motivo "mexeria na sessão em uso" caiu com as sessões descartáveis |
 
 ## 5. Auditoria
 
@@ -114,11 +122,11 @@ resolve.
 | `request_id` no corpo do erro | 🟡 | só no cabeçalho. Correlacionável, mas o cliente tem de o ler de outro sítio |
 | Prazos em dependência externa | 🟡 | 30 s por operação contra o WhatsApp, uniforme. **Não é configurável por rota**, e é o que produz o `500` de `/newsletter/updates` |
 | Sondas separadas | 🟡 | `/livez` e `/health/ready` distinguem vivacidade de prontidão. Mas `/health` — a funcional — está **atrás de token**, o que a torna inútil para um balanceador |
-| **Paginação** | ❌ | **nenhuma colecção é paginada**. `GET /user/contacts` devolveu **61 459 bytes** com 1266 contactos, sem limite nem cursor. Cresce com a agenda do utilizador |
+| **Paginação** | 🟡 | **duas colecções paginam, uma delas sem tecto, e o resto não pagina**. `GET /chats/list` tem `limit` (padrão 50, **máx. 500**), `offset` e `total` — medido com 2 000 conversas, e está assim desde `9d9dd7ec`, 2026-08-08. `GET /chats/history` tem `limit` **sem tecto**: `limit=999999` e `limit=-1` devolveram as 5 001 mensagens (1,5 MB), e 100 pedidos concorrentes levaram o processo de 16 MB a 264 MB de RSS (F291). `GET /users/contacts` continua sem limite nenhum — **61 459 bytes** com 1266 contactos. A afirmação anterior, "nenhuma colecção é paginada", **nunca foi verdade** (F294) |
 | **Versionamento** | 🟡 | continua sem `/v1`. Mas a padronização de 26/08 mostrou que **alias lado a lado** resolve tudo o que é ADITIVO — um caminho novo coexiste com o antigo, sem versão. `/v1` continua pré-requisito para o que **não pode coexistir**: mudar o status code de uma rota, ou unificar o envelope de erro |
-| **Idempotência** | ❌ | não há `Idempotency-Key`. `POST /chat/send/text` chamado duas vezes envia **duas** mensagens; um `500` pode ter enviado |
-| **Limitação de ritmo** | ❌ | nenhuma rota devolve `429`. O `x/time/rate` que existe protege a CONTA no envio, não o servidor |
-| **Concorrência** | ❌ | sem `ETag`, `If-Match` ou versão. Duas escritas simultâneas ao mesmo recurso perdem uma, em silêncio |
+| **Idempotência** | ❌ | não há `Idempotency-Key` em rota nenhuma. **A lacuna é só no envio**: as rotas de configuração são naturalmente idempotentes (medido: `POST /webhook`, `PUT /webhook`, `POST /session/proxy` repetidos deixam o mesmo estado), e `POST /admin/users` deduplica pelo índice único de `token_hash` — a repetição devolve `409`, não um segundo inquilino. No envio existe já `Id`, escolhido pelo cliente, que vira o stanza ID do WhatsApp, e a nossa escrita local deduplica por ele (`UNIQUE(user_id, message_id)` com `ON CONFLICT`). **Não medido**: se o WhatsApp deduplica na recepção, e se um `500` chegou a enviar — as duas exigem conta emparelhada (`HUMAN-LAST.md`) |
+| **Limitação de ritmo** | ❌ | **nenhuma rota recusa por ritmo**, e nenhum `429` vem de protecção nossa. O `x/time/rate` que existe protege o **SERVIDOR, por IP**, e não a conta no envio: 10 req/s, rajada 20, ligado em `router.go:257` em modo **observe-only** — mede e regista, nunca recusa. Medido com 4 rajadas de 60 pedidos concorrentes: **60× `200`, 0× `429`, ~40 avisos** "would have been rejected" por rajada. Um `429` é alcançável, mas só como **relais** do estrangulamento do WhatsApp (F293) |
+| **Concorrência** | ❌ | sem `ETag`, `If-Match` ou versão, e há perda silenciosa de escrita — **mas não pelo mecanismo que esta linha dizia**. Não há read-modify-write da linha: `UpdateUser` escreve só os campos informados e `SaveProxyConfig` escreve as duas colunas num único `UPDATE`. A janela é o par leitura→escrita de `resolveWebhookUseProxy`: um `POST /session/proxy` que OMITE `webhook_use_proxy` lê a coluna e reescreve-a, apagando o valor que um pedido concorrente acabou de declarar e foi respondido `200` a confirmar. Travado em `session_config_concurrency_test.go` sob `-race`, com dois controlos negativos executados (F292). **0 perdas em 200 rodadas** sem controlo de escalonamento — o defeito é real e raro |
 
 ---
 
@@ -133,11 +141,25 @@ duplica trabalho:
    caminho novo pode coexistir com o antigo. O que `/v1` ainda é
    pré-requisito é para o que **não pode coexistir**: mudar o status code de
    uma rota, ou unificar o envelope de erro.
-2. **Paginação em `/user/contacts`**, `/chat/list` e `/group/list`. É o único
-   ❌ que degrada **sozinho**, com o crescimento dos dados do utilizador.
+2. **Tecto em `/chats/history`** e **paginação em `/users/contacts`** e
+   `/groups/list`. `/chats/list` já pagina, com tecto de 500, desde 2026-08-08 —
+   o que fazia deste ponto um ❌ maior do que era. O tecto vem primeiro: sem ele
+   qualquer cliente transforma a rota que mais cresce em "traga tudo", e foi o
+   que levou o processo a 264 MB com 100 pedidos concorrentes.
 3. **`429` e limitação de ritmo** — o número certo depende do perfil de uso e é
-   decisão de produto, não de engenharia.
-4. **Idempotência nas rotas de envio**, com `Idempotency-Key`.
+   decisão de produto, não de engenharia; o observador por IP já instalado
+   existe para o produzir. Ao ligá-lo, o balde vira **recurso limitado**, e a
+   invariante do projecto passa a aplicar-se: *nada que espere por relógio ou
+   por par morto pode ocupar slot limitado*. Os detentores longos que passariam
+   a disputá-lo estão enumerados em `MEDICAO-PRODUCAO.md` §4 — rotas com timeout
+   de 30 s contra o WhatsApp, pareamento, e sobretudo o WebSocket, que detém
+   pela ligação inteira. As sondas têm de ficar de fora, e o `429` tem de trazer
+   `Retry-After`.
+4. **Idempotência nas rotas de envio**, com `Idempotency-Key`. As de
+   configuração já são idempotentes e não precisam. O `Id` do cliente é o
+   candidato natural a chave: já é o stanza ID do WhatsApp e a escrita local já
+   deduplica por ele — falta deduplicar ANTES do wire e devolver a resposta
+   original em vez de repetir a operação.
 5. **`/v2`** com naming canónico, códigos de estado semânticos, envelope de
    erro único, `error.details[]` e `additionalProperties: false`. Tudo o que
    parte contrato, de uma vez, num sítio onde partir é legítimo.
@@ -179,9 +201,20 @@ uma integração coexistiria com elas em vez de as substituir.
 
 ## Duas coisas que este scorecard NÃO afirma
 
-- **Que a API funciona.** Afirma que 98 operações tiveram efeito confirmado,
-  8 responderam sem observador, 3 falham e 32 não foram exercitadas. A
+- **Que a API funciona.** Afirma que 122 operações tiveram efeito confirmado,
+  8 responderam sem observador, 4 falham e 7 não foram exercitadas. A
   diferença entre isto e "funciona" é o assunto inteiro da coluna de evidência.
+
+  As 24 promoções desta ronda vieram de **sessões descartáveis** — criadas por
+  `POST /admin/users`, nunca emparelhadas, medidas num servidor isolado e
+  apagadas no fim —, cada uma confirmada por observador independente (SQLite,
+  rota irmã de leitura, ou quadro de WebSocket). O registo rota a rota está em
+  `CAMPANHA-DESCARTAVEL.md`. A quarta ❌ é `POST /session/logout` (F275).
+
+  **Três das quatro ❌ têm hoje causa determinada**, e é `PROTOCOL_CHANGED` nas
+  três: `INVESTIGATION-block-unblock.md` e
+  `INVESTIGATION-newsletter-updates.md`. Continuam ❌ — a marca só se move
+  quando a rota responder.
 
   Estes números subiram para 178/13/6/35 durante algumas horas, quando as
   formas antigas e canónicas estavam ambas documentadas. Voltaram ao que eram
@@ -191,3 +224,9 @@ uma integração coexistiria com elas em vez de as substituir.
 - **Que os gates cobrem tudo.** Eles leem estrutura, não prosa
   (ARMADILHAS #29), e verificam o repositório, não o binário em execução
   (ARMADILHAS #27). As duas limitações estão escritas nos próprios gates.
+
+  A segunda foi **verificada à mão** a 2026-08-26, e é a primeira vez nesta
+  campanha: com o binário deste worktree a correr na porta 8093,
+  `curl -s localhost:8093/docs/openapi.yaml | cmp - pkg/presentation/http/apidocs/openapi.yaml`
+  saiu com `exit 0` — **idênticos byte a byte**, 963 862 bytes. O binário serve
+  **122 caminhos**, **141 operações**, **0 `deprecated`**.

@@ -29002,18 +29002,29 @@ failed to unblock user: … info query returned status 400: bad-request
 `GET /user/blocklist` responde `200 {"Blocklist":[],"DHash":"…"}` — logo o
 caminho de leitura da lista funciona e é só a escrita que o servidor recusa.
 
-**O que isto elimina**: não é o número (testado inexistente e real), não é a
-forma do JID (testado PN e LID), e não é o tipo de conta (testado Business e
-pessoal). Sobra a forma do próprio IQ que enviamos.
+**O que isto elimina**: não é o número (testado inexistente e real) e não é o
+tipo de conta (testado Business e pessoal). Sobra a forma do próprio IQ que
+enviamos.
 
-**O que NÃO foi feito**: comparar o nosso IQ com o que o Baileys e o
-whatsapp-web.js enviam. É o passo seguinte e é o que a regra do projeto manda
-fazer antes de projetar — as três referências já estiveram aqui.
+**CORREÇÃO desta entrada (2026-08-26, investigação)**: a linha *"não é a forma
+do JID (testado PN e LID)"* estava ERRADA. As duas entradas atravessam
+`resolveBlocklistPNJID` (`pkg/infra/wa-noise/adapters/user/blocklist.go:103`),
+que converte LID → PN, e produzem o MESMO stanza no fio. **A linha "testado em
+LID" não testou LID.** Ver F278.
 
-**Correção sugerida**: ler `blocklist`/`block` nas referências, comparar o
-atributo `action` e a forma do `<item>`, e só então mexer.
+**O que NÃO foi feito → FOI FEITO**: as três referências foram consultadas e
+concordam. Causa determinada: `PROTOCOL_CHANGED` — o WhatsApp migrou a ESCRITA
+da blocklist para endereçamento por LID (`jid` em `@lid`, mais `pn_jid` no
+`block`). Baileys migrou em 2026-04-24 (`8ca9316a10`), whatsmeow em 2026-08-13
+(`8d023aa973`), 13 dias antes desta medição; o whatsapp-web.js converte PN→LID
+com `getAlternateUserWid` antes de bloquear.
 
-**Status**: não corrigido — causa por apurar.
+**Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-02 (biblioteca)
+e F278 (adaptador). O relato completo está em
+`INVESTIGATION-block-unblock.md`; os experimentos que exigem conta real, em
+`HUMAN-LAST.md` (E.1, E.2).
+
+**Status**: não corrigido — **causa determinada** (`PROTOCOL_CHANGED`).
 
 <!-- f-status: aberto -->
 
@@ -29034,16 +29045,38 @@ Os 30 s são exactamente `waclient.RequestTimeout`: o servidor **não responde**
 não é ele a recusar. `POST /newsletter/messages` sobre o MESMO canal e no mesmo
 segundo devolve `200 []` — logo a sessão, o canal e o transporte estão bons.
 
-**Hipótese, NÃO medida**: o query ID do `updates` está desactualizado. O
-WhatsApp roda-os, e um ID que não existe não produz erro — produz silêncio, que
-é exactamente o sintoma. O extractor está versionado em
-`scripts/mex-query-ids/` justamente para isto.
+**~~Hipótese, NÃO medida~~: o query ID do `updates` está desactualizado.**
 
-**Correção sugerida**: correr o extractor contra o bundle actual, comparar o ID
-do `updates` com o que está em `queryids.go`, e trocar se divergir. Se o ID
-bater, a hipótese cai e a causa é outra — registar isso em vez de insistir.
+**A HIPÓTESE CAIU (2026-08-26, investigação), por leitura de código.**
+`GetMessageUpdates` **não é uma query MEX** — é um IQ binário simples com
+namespace `newsletter` (`internal/wa-noise/capabilities/newsletter/messages.go:89-97`).
+Não passa por `queryids.go` e **não tem query ID nenhum**. Correr o extractor de
+`scripts/mex-query-ids/` não teria produzido informação sobre esta rota. Um
+achado com diagnóstico errado é pior que nenhum, e por isso esta correcção fica
+aqui em vez de a hipótese ser silenciosamente removida.
 
-**Status**: não corrigido.
+**Causa determinada**: `PROTOCOL_CHANGED`. O servidor deixou de atender
+`<message_updates>` endereçado ao JID do canal — ignora-o, e por isso o sintoma
+é silêncio até ao timeout e não um `400`. A forma que o WA Web usa hoje é
+`<messages type='jid' jid=… count=… [before]>` para `s.whatsapp.net`, que é
+exactamente o que `/newsletter/messages` já envia com sucesso; os contadores
+vêm dentro dos filhos `<message>`.
+
+Controlo que fecha a hipótese "resposta assíncrona / servidor não roteia para
+canal": `POST /newsletter/subscribe` faz um IQ `set` para o MESMO `@newsletter`
+JID (`actions.go:14`) e responde `200`.
+
+Referências: Baileys issue #2555 (**aberta** desde 2026-05-13, mesmo sintoma
+com repro), PR #2620 (stanza capturado do WA Web; fechado por stale-bot, nunca
+revisto), port mergeado em rsalcara/InfiniteAPI #503 (2026-06-06). whatsmeow
+respondeu *"eu também não resolvo"* — código idêntico, intocado desde 2023.
+
+**Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-03. Relato
+completo em `INVESTIGATION-newsletter-updates.md`; o experimento que falta, em
+`HUMAN-LAST.md` (B.4) — exige um canal COM mensagens, e o de teste estava
+vazio.
+
+**Status**: não corrigido — **causa determinada** (`PROTOCOL_CHANGED`).
 
 <!-- f-status: aberto -->
 
@@ -29888,3 +29921,1223 @@ fazer.
 
 <!-- f-status: aberto -->
 
+
+
+## F273 — o token de uma sessão APAGADA continua a autenticar
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis), a validar o observador do `DELETE /admin/users/{id}`.
+
+**Onde**: caminho de autenticação por token de sessão
+(`pkg/presentation/http/middleware`, cache de token→utilizador alimentada por
+`pkg/bootstrap/user_info_cache.go`) contra
+`pkg/application/usecase/user/delete_user.go` e
+`delete_user_complete.go`, que apagam a linha em `users` e **não** invalidam a
+entrada de cache do token.
+
+**Problema**: depois de a sessão ser apagada, o seu token continua a passar o
+middleware. Medido contra o binário do `HEAD` desta branch, servidor isolado na
+porta 8091, base SQLite própria:
+
+```
+# sessão descartavel-2, id 80eeb48bdff35433626c7268551288d1, token tok-desc-2
+$ curl -s -X DELETE -H 'Authorization: evadmin123' localhost:8091/admin/users/80eeb48bdff35433626c7268551288d1
+{"code":200,"data":{"status":"deleted"},"success":true}
+
+$ sqlite3 evdata/dbdata/users.db "select count(*) from users where id='80eeb48bdff35433626c7268551288d1';"
+0
+
+# token que NUNCA existiu — comportamento correcto
+$ curl -s -H 'token: token-que-nunca-existiu' localhost:8091/session/status
+{"code":401,"error":{"code":"unauthorized","message":"unauthorized"},"success":false}
+
+# token da sessão APAGADA — passa a autenticação
+$ curl -s -H 'token: tok-desc-2' localhost:8091/webhook
+{"code":200,"data":{"subscribe":[""],"webhook":""},"success":true}
+
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+```
+
+Esperado: `401 unauthorized`, igual ao token inexistente. Obtido: `200` em
+`GET /webhook` e em `GET /session/connect`, este último a lançar um arranque
+que só falha, de forma assíncrona, no log:
+
+```
+{"level":"error","error":"failed to resolve device jid: sql: no rows in result set",
+ "userid":"80eeb48bdff35433626c7268551288d1","message":"failed to start session"}
+```
+
+O mesmo acontece com `DELETE /admin/users/{id}/full` (medido com a sessão
+`descartavel-4`, token `tok-desc-4`: `GET /webhook` respondeu `200` depois do
+`/full`). Ou seja, **nenhum** dos dois caminhos de remoção fecha o token.
+
+A janela dura enquanto a entrada viver na cache. Não houve escrita de dados
+novos nas medições — os handlers que tocam no banco morrem em `no_session` —
+mas a fronteira de autenticação está a aceitar uma credencial revogada, e
+rotas de leitura que não consultam `users` (como `GET /webhook`, que respondeu
+`200`) devolvem corpo a quem já não é utilizador.
+
+**Correcção sugerida**: os dois use cases de remoção passam a invalidar a
+entrada de cache do token (a mesma porta que o `publish_userinfo` usa para
+escrever), na ORDEM: apagar a linha primeiro, invalidar depois — invalidar
+antes deixaria uma janela em que uma leitura concorrente repovoa a cache a
+partir da linha que ainda existe. Alternativa mais forte: a resolução do token
+deixar de ser servida por cache sem revalidação, e passar a confirmar a
+existência da linha.
+
+**Status**: não corrigido. Fora do escopo da tarefa (medição de evidências),
+e o conserto toca na fronteira de autenticação — exige teste do defeito, teste
+da ORDEM (apagar antes de invalidar) e controlo negativo executado, nos termos
+do `CLAUDE.md`. Registado para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F274 — `GET /session/connect` depois de `/session/disconnect` devolve `200` e não religa
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis), ao medir `/session/connect` e `/session/disconnect`.
+
+**Onde**: `pkg/bootstrap` — a guarda de "start em voo" do arranque de sessão
+(mensagem `start already in flight for this user; not starting a second
+pairing flow`) contra o `DisconnectUseCase`, que derruba o transporte sem
+limpar essa marca.
+
+**Problema**: numa sessão **nunca emparelhada**, a sequência
+`connect → disconnect → connect` devolve `200 {"status":"connecting"}` na
+segunda chamada e **nada volta a ligar**. Reproduzido duas vezes, com sessões
+descartáveis diferentes:
+
+```
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+# 4 s depois
+connected= True   (GET /session/status)
+
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/disconnect
+{"code":200,"data":{"details":""},"success":true}
+connected= False
+
+$ curl -s -H 'token: tok-desc-2' localhost:8091/session/connect
+{"code":200,"data":{"status":"connecting"},"success":true}
+# 6 s depois
+connected= False
+```
+
+O log diz o que a resposta não diz:
+
+```
+{"level":"warn","message":"start already in flight for this user; not starting a second pairing flow"}
+{"level":"error","error":"a session start is already in flight for this user; read the current QR from GET /session/qr","message":"failed to start session"}
+```
+
+São dois problemas, e o segundo é o grave:
+
+1. o `disconnect` derruba o socket mas deixa em voo o fluxo de emparelhamento
+   iniciado pelo `connect` anterior, pelo que a religação fica bloqueada até o
+   QR expirar;
+2. **o `200` é para um arranque que nunca acontece** — exactamente a classe da
+   F108, que a documentação de `/session/connect` declara fechada ("antes disso
+   o cliente recebia `200` para um arranque que nunca ia acontecer"). A F108
+   fechou a verificação de POSSE; este ramo, o de start duplicado, continua a
+   responder sucesso a uma falha.
+
+Contradiz também a descrição de `/session/disconnect`
+(`api/openapi/paths/sessao.yaml:98`): *"volta a ligar-se com
+`GET /session/connect`, sem QR novo"*.
+
+**Limite da medição, dito de propósito**: só foi medido em sessões **nunca
+emparelhadas**, onde o `connect` abre um fluxo de QR. Numa sessão já
+emparelhada o arranque pode não passar pela mesma guarda — não foi medido, e
+não se afirma nada sobre isso.
+
+**Correcção sugerida**: o `DisconnectUseCase` limpa a marca de start em voo ao
+derrubar o transporte; e, independentemente disso, o handler de `connect`
+deixa de responder `200` quando `startSession` devolve erro — devolve `409`
+com o código que o próprio erro já traz (`read the current QR from
+GET /session/qr`).
+
+**Status**: não corrigido. Fora do escopo (medição de evidências) e o conserto
+mexe no ciclo de vida da sessão. Registado para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F275 — `POST /session/logout` numa sessão ligada mas nunca emparelhada responde `500` com envelope de texto simples
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis).
+
+**Onde**: `pkg/application/usecase/session/logout.go:43` — o ramo de falha de
+`uc.sessions.Logout` só reconhece `apperr.CodeSessionNotConnected`; qualquer
+outro erro sobe cru e é mapeado para `500`.
+
+**Problema**: com o transporte VIVO mas sem aparelho emparelhado, o logout
+morre em `the store doesn't contain a device JID` e a rota responde:
+
+```
+$ curl -s -w ' [HTTP %{http_code}]' -X POST -H 'token: tok-desc-3' localhost:8091/session/logout
+{"code":500,"error":"internal server error","success":false} [HTTP 500]
+```
+
+Log correspondente:
+
+```
+{"level":"warn","txtID":"0970ba6c8bee9efe377178dd2c58a0ee",
+ "error":"the store doesn't contain a device JID","message":"logout failed"}
+```
+
+Duas coisas erradas na mesma resposta:
+
+1. é um **erro de cliente** — a sessão não tem o que desemparelhar — servido
+   como `500`. O par natural seria `409`, ao lado do `session_not_connected`
+   que a rota já sabe devolver;
+2. o corpo traz `error` como **string**, e não o objecto `{code, message}` da
+   taxonomia. É mais um ponto da F266, que essa entrada não enumera.
+
+**Correcção sugerida**: acrescentar ao `switch` do ramo de falha o caso "sem
+device JID no store", mapeado para um `apperr` tipado (`session_not_paired`,
+`409`), à semelhança do que a F93 fez para `session_not_connected`. Cuidado com
+a ordem: o `Detach` do ramo `session_not_connected` é deliberado (F93) e não
+deve ser estendido cegamente ao caso novo — uma sessão viva sem par não está a
+mentir sobre `users.connected`.
+
+**Status**: não corrigido. Fora do escopo. Consequência directa: a rota fica
+classificada **❌** em `api/openapi/evidencias.tsv`, com este erro como
+evidência — o caminho de `200` exige conta emparelhada e é doutro lote.
+
+<!-- f-status: aberto -->
+
+
+## F276 — `POST /s3/test` transforma recusa do upstream em `500` com envelope de texto simples
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências
+(sessões descartáveis), ao tentar promover `/s3/test`.
+
+**Onde**: o use case de teste de ligação S3 (`pkg/application/usecase/storage`,
+caminho que loga `S3 connection test failed`) — o erro do SDK da AWS sobe cru
+e é mapeado para `500`.
+
+**Problema**: com credenciais inválidas — a resposta mais provável de um
+operador que se engana a configurar — a rota devolve `500`:
+
+```
+$ curl -s -w ' [HTTP %{http_code}]' -X POST -H 'token: tok-desc-3' localhost:8091/s3/test
+{"code":500,"error":"internal server error","success":false} [HTTP 500]
+```
+
+O log tem o diagnóstico completo, que a resposta não dá:
+
+```
+"error":"operation error S3: ListObjectsV2, https response error StatusCode: 403,
+ api error InvalidAccessKeyId: The AWS Access Key Id you provided does not exist in our records."
+```
+
+Mesma classe da F275 e da F271: erro do lado do pedido servido como erro do
+servidor, e `error` em string em vez do objecto da taxonomia (F266). Quem chama
+`/s3/test` chama-o precisamente para saber SE a configuração está boa; um `500`
+opaco é a resposta menos útil possível para essa pergunta. O comportamento é o
+mesmo em `POST /session/s3/test`, que é o mesmo manipulador.
+
+**Correcção sugerida**: mapear a falha do teste de ligação para `422
+upstream_rejected` (o código que `/users/block` já usa) e levar a mensagem do
+upstream — sem credenciais — para o corpo.
+
+**Status**: não corrigido. Fora do escopo. Nota de classificação: a rota
+mantém-se **⬜**, e não passa a ❌, porque a falha medida foi provocada por
+credenciais deliberadamente falsas — é o meu input, não um defeito do
+percurso. O percurso em si foi exercitado até ao servidor da AWS e voltou.
+
+<!-- f-status: aberto -->
+
+
+## F277 — a documentação de `endpoint` do S3 diz "URL analisável" e a validação real recusa loopback e faixas reservadas
+
+**Data**: 2026-08-26. **Contexto**: campanha de redução de evidências — a
+tentar levantar um MinIO local descartável para testar `/s3/test`.
+
+**Onde**: `api/openapi/paths/infra.yaml:965` (bloco de regras do
+`POST /s3/config`) contra
+`pkg/application/usecase/storage/configure_s3.go:87-91`, que chama
+`egress.ValidateOutboundURL`.
+
+**Problema**: a documentação diz apenas
+
+> `endpoint`, quando presente, tem de ser um URL analisável
+> (`400 invalid_s3_endpoint`).
+
+`http://127.0.0.1:9000` **é** um URL analisável, e é recusado:
+
+```
+$ curl -s -X POST -H 'token: tok-desc-1' -H 'Content-Type: application/json' \
+    -d '{"enabled":true,"endpoint":"http://127.0.0.1:9000", ...}' localhost:8091/s3/config
+{"code":400,"error":{"code":"invalid_s3_endpoint","message":"invalid S3 endpoint"},"success":false}
+```
+
+A regra verdadeira é a do validador de saída (sec/F24): esquema `http`/`https`,
+host presente, e **nenhum** dos endereços resolvidos em faixa reservada ou
+loopback (`pkg/infra/egress`). A mensagem de erro é a mesma nos dois casos e
+não distingue "não analisei" de "recusei o destino", o que deixa quem configura
+sem saber o que corrigir.
+
+Consequência prática, e a razão de isto ter aparecido: **não é possível apontar
+a configuração para um MinIO local**, o que fecha a porta ao único fixture
+descartável barato para `/s3/test` e `/session/s3/test`. Essas duas rotas ficam
+⬜ por causa desta regra, e não por falta de vontade de as medir.
+
+Achado menor no mesmo terreno: `DELETE /s3/config` não zera a configuração —
+deixa `path_style: true`, `media_delivery: "base64"` e `retention_days: 30`
+(valores por omissão), enquanto o estado de uma sessão que nunca configurou S3
+é `path_style: false`, `media_delivery: ""` e `retention_days: 0`. Medido nos
+dois estados. A documentação só promete `enabled: false` e a volta ao `base64`,
+portanto não há contradição — mas "apagar" e "nunca ter tido" não são o mesmo
+corpo, e quem compara os dois não é avisado.
+
+**Correcção sugerida**: (a) a descrição de `endpoint` passa a dizer a regra
+real, citando o validador de saída e nomeando loopback e faixas reservadas;
+(b) opcionalmente, separar o código de erro em `invalid_s3_endpoint` (não
+analisável) e `reserved_s3_endpoint` (destino recusado), como
+`POST /session/proxy` já faz com `reserved_proxy_address`; (c) documentar o
+corpo que `DELETE /s3/config` deixa.
+
+**Status**: não corrigido — é alteração de documentação gerada e de taxonomia,
+fora do escopo desta tarefa. Registado para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F278 — o adaptador da blocklist resolve identidade no sentido INVERSO ao que o protocolo passou a exigir, e apaga a variável que a F264 julgava estar a medir
+
+**Data/contexto**: 2026-08-26, investigação da F264. Causa raiz na biblioteca
+vendorizada — ver `internal/wa-noise/HOUSEKEEP.md`, LIB-02. Esta entrada é a
+parte que é NOSSA.
+
+**Onde**: `pkg/infra/wa-noise/adapters/user/blocklist.go:103-116`
+
+```go
+func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
+	switch jid.Server {
+	case types.DefaultUserServer:  return jid, nil          // PN passa
+	case types.HiddenUserServer:   … GetPNForLID …          // LID VIRA PN
+	}
+}
+```
+
+**Problema, em duas camadas.**
+
+**(1) O sentido está invertido.** O upstream (whatsmeow `8d023aa973`,
+2026-08-13) e o Baileys (`8ca9316a10`, 2026-04-24) resolvem **PN → LID** para
+este stanza. Nós resolvemos **LID → PN**. O comentário da função ainda diz
+*"traduz um LID para o número de telefone, que é a forma que a lista de bloqueio
+aceita"* — era verdade quando foi escrito, e deixou de ser.
+
+**(2) E isto invalida uma linha da tabela da F264.** A F264 registou quatro
+combinações medidas e concluiu *"não é a forma do JID (testado PN e LID)"*. Mas
+as duas entradas atravessam esta função e produzem o **MESMO** stanza no fio,
+com `jid` em `@s.whatsapp.net`. A linha "testado em LID" **não testou LID**.
+
+É a ARMADILHA #1 na sua forma mais cara: a medição não estava a medir a variável
+que julgava medir, e a conclusão negativa que ela produziu — *"sobra a forma do
+próprio IQ"* — foi por acaso na direcção certa pela razão errada.
+
+**Correção sugerida**, e há uma barata e uma completa:
+
+- **Barata, e só nossa**: para `unblock`, a forma nova é
+  `<item jid='…@lid' action='unblock'/>` — sem `pn_jid`. Se esta função parar de
+  degradar o LID que o cliente já nos deu, a biblioteca vendorizada emite o
+  stanza CORRECTO sem ser tocada. São três linhas.
+- **Completa**: inverter a resolução para PN → LID e guardar o PN para o
+  `pn_jid`, em conjunto com o port do LIB-02. A função deixa de ter o nome certo.
+
+**Anti-regressão exigida**: a asserção que trava a CAUSA é *"`resolveBlocklist…`
+recebendo `@lid` devolve `@lid`"* — não o sintoma. E o dublê do `Transport` tem
+de atravessar `types.JID.String()` como o codificador real, senão abençoa o
+formato errado (ARMADILHA #1, variante "mais SIMPLES que a produção").
+
+**Status**: não corrigido, e não corrigido POR DECISÃO. A classificação da F264
+é `PROTOCOL_CHANGED`, não `BUG_LOCAL`; o CLAUDE.md proíbe corrigir de graça fora
+do escopo sem perguntar; e a confirmação em campo exige conta emparelhada, que
+este ambiente não tem. Ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md`
+(E.1, E.2).
+
+<!-- f-status: aberto -->
+
+## F279 — autocolante em WebP NÃO é convertido, e a documentação afirma que é
+
+**Data**: 2026-08-26. **Contexto**: campanha de observadores para as oito rotas
+🟡 (`OBSERVADORES-AMBAR.md`), rota `POST /chats/send/sticker`.
+
+**Onde**: `pkg/infra/media/sticker/exif.go:40-65`, `ConvertToWebPSticker`:
+
+```go
+mimeType := http.DetectContentType(data)
+...
+case mimeType == "image/jpeg", mimeType == "image/png", mimeType == "image/jpg":
+    converted, err := ConvertImageToWebP(data)   // ffmpeg, scale=512:512
+default:
+    return data, mimeType, nil                   // ← passa incólume
+```
+
+**Problema**: `api/openapi/paths/envio.yaml:458-460` afirma como facto:
+
+> A imagem recebida é **sempre convertida para WebP** pelo servidor; o que sobe
+> ao WhatsApp é o resultado da conversão, nunca os bytes de entrada.
+
+Não é verdade. `http.DetectContentType` reconhece a assinatura WebP e devolve
+`image/webp`, que não é nenhum dos ramos de conversão — cai no `default` e sobe
+tal e qual, recebendo apenas o EXIF (`exif.go:33-35`).
+
+**Evidência**, medida com o próprio exemplo publicado na documentação
+(`envio.yaml:489`, `data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==`):
+
+```
+$ go run /tmp/wsniff.go
+webp sniff: image/webp
+```
+
+**Isto explica o 🟡 da rota.** A bateria de 2026-08-26 enviou esse WebP
+sintético de 26 bytes, recebeu `200`, a mensagem chegou, e o cliente desenhou
+bolha vazia. O autocolante nunca passou pelo `scale=512:512`
+(`pkg/infra/media/sticker/sticker.go:92-96`) porque o caminho de conversão nunca
+correu para ele. O defeito não estava no envio nem no protocolo — estava em
+enviar uma imagem que o WhatsApp não desenha, achando que o servidor a
+normalizaria.
+
+**Consulta às referências (regra da `CLAUDE.md`)**: o whatsapp-web.js tem a
+MESMA política — a conversão por ffmpeg só corre para o que ainda não é WebP.
+Logo a divergência **não** está na política de conversão, e copiar a referência
+não corrigiria nada. É informação útil e negativa: o que está errado é a nossa
+documentação, não o desenho.
+
+**Correcção sugerida**, duas partes independentes:
+
+1. **Documentação** (barata, sem risco): trocar "sempre convertida" pela regra
+   real — converte-se `image/jpeg`, `image/png`, `image/jpg`, `image/gif` e
+   `video/*`; qualquer outro tipo, **WebP incluído**, sobe como veio, e cabe ao
+   chamador garantir 512×512.
+2. **Código** (a decidir): validar as dimensões de um WebP recebido e recusar
+   com `400` o que o WhatsApp não desenha, em vez de aceitar e produzir bolha
+   vazia. É mais um caso de `200` que diz menos do que aparenta.
+
+**Estado**: não corrigido. Achado incidental, fora do escopo da tarefa
+(inventário de observadores), e a parte 2 muda comportamento de rota. Registado
+para decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` B.1.
+
+<!-- f-status: aberto -->
+
+
+## F280 — `UpdateRequestParticipants` deita fora o resultado por participante que o WhatsApp devolve
+
+**Data**: 2026-08-26. **Contexto**: idem, rota
+`POST /groups/{group_jid}/join-requests`.
+
+**Onde**: `pkg/infra/wa-noise/adapters/group/participants.go:81`:
+
+```go
+_, err = client.UpdateGroupRequestParticipants(ctx, jid, jids, change)
+return err
+```
+
+**Problema**: `client.UpdateGroupRequestParticipants` devolve
+`([]types.GroupParticipant, error)` — a lista traz, **por solicitante**, o `JID`
+resolvido e um campo `Error` diferente de zero quando aquele solicitante
+falhou. O adaptador descarta o primeiro valor de retorno, e a rota devolve uma
+frase fixa: `{Details: "Group request participants updated successfully"}`.
+
+Consequência concreta, já reconhecida na documentação da própria rota
+(`api/openapi/paths/grupo.yaml:1411-1413`): *"o adaptador faz uma chamada por
+solicitante. Se algum falhar, a rota devolve erro — não há corpo que relate
+quais passaram."* Um sucesso parcial é indistinguível de sucesso total.
+
+**Evidência da inconsistência interna**: a rota IRMÃ,
+`POST /groups/{group_jid}/participants`, **devolve** exactamente essa lista, com
+`Error: 0` por participante (`api/openapi/paths/grupo.yaml:1324-1337`). Duas
+rotas do mesmo grupo, o mesmo tipo de retorno do upstream, e só uma o expõe.
+
+**Por que isto importa para a campanha de evidências**: a resposta do próprio
+WhatsApp seria o observador mais directo desta rota — não independente, mas
+suficiente para distinguir "aceitou os três" de "aceitou um". Descartá-la é
+parte da razão de o `200` não dizer nada.
+
+**Correcção sugerida**: propagar `[]types.GroupParticipant` até
+`domain.UpdateGroupRequestParticipantsResult`, no mesmo formato que
+`ResultadoAtualizarParticipantes` já usa, e documentar o sucesso parcial. É
+mudança de contrato de resposta (acrescento, não remoção), logo compatível.
+
+**Estado**: não corrigido. Fora do escopo, e altera o corpo de uma rota
+documentada — exige decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §3.
+
+<!-- f-status: aberto -->
+
+
+
+## F281 — a legenda servida em `/docs` ficou com os números de antes da padronização, com todos os gates verdes
+
+**Data**: 2026-08-26. **Contexto**: auditoria independente da classificação de
+evidência (`AUDITORIA-EVIDENCIAS.md`), sobre `2d965350`.
+
+**Onde**: `api/openapi/base.yaml:104`, `:114` e `:116` — o bloco
+`info.description`, que o gerador embute e `/docs` serve.
+
+**Problema**: `9a6b3ff` levou o `evidencias.tsv` de 141 para 232 operações
+(178 ✅ / 13 🟡 / 6 ❌ / 35 ⬜) e `2d96535` sincronizou o
+`docs/OPENAPI-EVIDENCIAS.md`. **A legenda ficou para trás em três sítios**, e é
+ela que o consumidor da API lê:
+
+```
+$ grep -n '98 ✅' api/openapi/base.yaml
+114:    Medição de 2026-08-26, com duas sessões reais: **98 ✅, 8 🟡, 3 ❌, 32 ⬜**.
+```
+
+- "As **141** estão documentadas" → são 232
+- "**98 ✅, 8 🟡, 3 ❌, 32 ⬜**" → 178 / 13 / 6 / 35
+- "As **32** por testar" → são 35
+
+E a suíte inteira passava com os três errados:
+
+```
+$ go test ./pkg/bootstrap/ -count=1
+ok  	wa-api/pkg/bootstrap	6.734s     (exit 0)
+```
+
+**Causa estrutural**, e não distracção: a marca de cada rota é GERADA da tabela,
+mas os totais da legenda são ESCRITOS À MÃO dentro do mesmo documento gerado.
+Um número à mão ao lado de um número gerado diverge no primeiro dia em que
+alguém acrescenta uma rota.
+
+**Correcção aplicada**: os três números corrigidos, e acrescentada a frase que
+explica por que 232 entradas são 141 operações distintas (91 canónicas
+partilham manipulador com a forma antiga).
+
+**Anti-regressão**: `pkg/bootstrap/openapi_reconciliation_test.go`, cinco
+testes, com `TestEvidenceLegendMatchesTable` a travar exactamente este caso.
+**Controlo negativo EXECUTADO** (178 → 179 em `base.yaml`, regenerado):
+
+```
+EXIT_APOS_MUTACAO=1
+--- FAIL: TestEvidenceLegendMatchesTable
+    legenda diz 179 ✅, mas evidencias.tsv tem 178
+```
+
+E o controlo mais forte não foi encenado: **na primeira execução o gate falhou
+contra o repositório tal como estava**, com seis erros, apanhando o defeito
+real. Os três controlos negativos estão em `AUDITORIA-EVIDENCIAS.md` §6.1.
+
+**Status**: **corrigido** — travado por `TestEvidenceLegendMatchesTable`,
+`TestEvidenceTableMatchesSpec`, `TestEvidenceReportMatchesSpec` e
+`TestEvidenceReportSummaryMatchesTable`.
+
+**Nota da integração (2026-08-26)**: o gate foi portado para a base canónica de
+`3a0b48b4`, onde o contrato voltou a 141 operações com um nome só por
+capacidade. Ele não conhece nenhum número: lê a fonte única e exige que as
+outras três a espelhem, pelo que atravessou a integração das 25 promoções sem
+ser tocado. A legenda foi ajustada ao estado final — `122 ✅, 8 🟡, 4 ❌, 7 ⬜`
+— e os três controlos negativos foram REEXECUTADOS sobre esse estado, incluindo
+um novo: a troca COMPENSADA (uma rota sobe, outra desce) mantém os quatro
+totais e mesmo assim `TestEvidenceTableMatchesSpec` acusa as duas rotas pelo
+nome. É a razão de o gate comparar rota a rota e não só o total.
+
+<!-- f-status: corrigido -->
+
+
+## F282 — as 98 ✅ têm todas a MESMA frase de evidência; nenhuma diz o que foi medido
+
+**Data**: 2026-08-26. **Contexto**: idem F281.
+
+**Onde**: `docs/OPENAPI-EVIDENCIAS.md`, coluna "Evidência" da tabela completa,
+no último commit em que ela existiu (`fea7e6e`).
+
+**Problema**: agrupando o texto de evidência das 98 ✅:
+
+```
+$ awk -F'|' 'NF>=8 {m=$7; gsub(/ /,"",m); if(m=="✅"){e=$8; gsub(/^ +| +$/,"",e); print e}}' \
+    docs/OPENAPI-EVIDENCIAS.md | sort | uniq -c
+  98  chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente.
+```
+
+**98 de 98 genéricas, 0 específicas.** Uma frase-modelo repetida, que não diz
+qual segunda leitura, nem o que foi lido, nem que valor mudou. Uma ✅ cuja prova
+é uma frase-modelo é **indistinguível de uma ✅ por decreto**, por construção.
+
+A gravidade está na assimetria — as outras marcas documentam-se:
+
+| marca | total | específicas | % |
+|---|---:|---:|---:|
+| ❌ | 3 | 3 | 100% |
+| 🟡 | 8 | 6 | 75% |
+| ⬜ | 32 | 21 | 66% |
+| ✅ | 98 | **0** | **0%** |
+
+**A marca com a afirmação mais forte é a única sem prova nenhuma.**
+
+Agrava: `git log --oneline -- api/openapi/evidencias.tsv` mostra que a tabela
+**nasceu** em `b0b8323` já com 98 ✅ (`1 file changed, 153 insertions(+)`), e que
+as 141 marcas antigas **nunca mudaram** desde então (medido: `rotas antigas
+ainda presentes: 141`, zero transições). Nenhuma ✅ deste repositório foi alguma
+vez promovida pela regra de transição — todas nasceram classificadas.
+
+**Correcção sugerida**: fazer da evidência um CAMPO da tabela versionada, com o
+que foi lido de volta e o valor observado, em vez de prosa num documento
+gerado. Enquanto isso não existir, as dez rotas listadas em
+`AUDITORIA-EVIDENCIAS.md` §3 são 🟡 por definição.
+
+**Status**: **parcialmente corrigido**. A campanha da sessão descartável
+registou o observador CONCRETO de cada uma das 25 rotas que promoveu, e a
+integração de 2026-08-26 repôs a coluna **Evidência** em
+`docs/OPENAPI-EVIDENCIAS.md` com esse texto. São hoje **43 de 141** operações
+com evidência registada — as 25 promovidas, as 4 ❌, as 8 🟡 e as 7 ⬜.
+
+As restantes 98 ✅ continuam com a frase-modelo, e o texto que abre a tabela
+completa diz agora que são elas as **inauditáveis** — a distinção que esta
+entrada pede que não se apague está escrita no próprio relatório, em vez de só
+aqui. Reclassificá-las exige as sessões de WhatsApp reais.
+
+<!-- f-status: aberto -->
+
+
+## F283 — `2d96535` apagou a coluna de evidência, e duas promessas ficaram a apontar para o vazio
+
+**Data**: 2026-08-26. **Contexto**: idem F281.
+
+**Onde**: `docs/OPENAPI-EVIDENCIAS.md:97` (cabeçalho da tabela completa);
+`api/openapi/evidencias.tsv:7` e `api/openapi/base.yaml:122` (as promessas).
+
+**Problema**: ao regenerar o relatório, `2d96535` trocou a última coluna:
+
+```
+@fea7e6e : | Grupo | Método | Endpoint | Documentado | Swagger | Teste | Evidência |
+@2d96535 : | Grupo | Método | Caminho  | Forma       | Teste   | Título |
+```
+
+Com a coluna **Evidência** desapareceram os 21 motivos específicos das ⬜ e os 6
+das 🟡 — a única parte do registo com conteúdo medido rota a rota:
+
+```
+$ grep -c 'apagaria uma sessao\|derrubaria\|alteraria o avatar' docs/OPENAPI-EVIDENCIAS.md
+0
+```
+
+E duas afirmações passaram a mentir:
+
+- `evidencias.tsv:7` — `⬜ não executada, com o motivo dito em docs/OPENAPI-EVIDENCIAS.md`
+- `base.yaml:122` — "O detalhe rota a rota está em `docs/OPENAPI-EVIDENCIAS.md`."
+
+Confirmado que o texto não migrou para as descrições das rotas: a única
+ocorrência das frases no `openapi.yaml` é a própria legenda, não uma descrição
+de rota.
+
+Um commit de documentação que **melhorou os números e destruiu a prova**. Hoje a
+contagem honesta é **0 de 232 operações com evidência registada**.
+
+**Correcção sugerida**: repor a coluna no gerador do relatório — o texto está em
+`git show fea7e6e:docs/OPENAPI-EVIDENCIAS.md` e é recuperável integralmente.
+
+**Status**: **corrigido na integração de 2026-08-26**. A coluna **Evidência**
+voltou à tabela completa de `docs/OPENAPI-EVIDENCIAS.md`, e o texto que a
+antecede diz explicitamente quais linhas ainda trazem a frase-modelo — as duas
+promessas deixam de apontar para o vazio. A contagem honesta passa de 0 de 232
+para **43 de 141** com observador concreto registado. Ver F282 para o que
+falta.
+
+<!-- f-status: corrigido -->
+
+
+## F284 — `fea7e6e` parte quatro gates e só é reparado dois commits depois (perigo de bisect)
+
+**Data**: 2026-08-26. **Contexto**: idem F281.
+
+**Onde**: commit `fea7e6eb`, `pkg/bootstrap/wiring_routes.go` e
+`api/openapi/paths/`.
+
+**Problema**: `fea7e6e` regista 91 rotas canónicas no router **sem** as
+acrescentar a `paths/`, a `evidencias.tsv`, à tabela de stdio ou aos golden.
+Medido directamente nesse commit, antes do *fast-forward*:
+
+```
+$ go test ./pkg/bootstrap/ -run 'TestOpenAPI|TestRegisteredHTTPRoutesHaveStdioEntry' -count=1
+EXIT=1
+--- FAIL: TestOpenAPICobreTodasAsRotasRegistadas
+    openapi_coverage_test.go:114: 91 rotas registadas SEM entrada na especificação OpenAPI.
+--- FAIL: TestRegisteredHTTPRoutesHaveStdioEntry
+    stdio_route_consistency_test.go:222: registered HTTP route POST /chats/archive has no stdio entry...
+```
+
+`9a6b3ff` e `2d96535` reparam tudo; em `2d96535` a suíte passa (exit 0). **Não
+há trabalho perdido** — o enunciado da auditoria supunha que o remate estivesse
+por commitar no worktree `wa-api-wa-noise`, e esse worktree está limpo, dois
+commits à frente.
+
+O que fica é o risco: qualquer `git bisect` que aterre em `fea7e6e` vê quatro
+gates vermelhos que nada têm a ver com o defeito procurado.
+
+**Nota de honestidade**: medi directamente dois dos quatro gates
+(`TestOpenAPICobreTodasAsRotasRegistadas`, `TestRegisteredHTTPRoutesHaveStdioEntry`).
+`TestGolden` e `cmd/logcov` vêm da medição de outro worker e **não os
+reexecutei** em `fea7e6e`.
+
+**Correcção sugerida**: nenhuma no código. Se a série ainda não foi publicada,
+`rebase -i` para juntar `fea7e6e`+`9a6b3ff` deixaria a história bissectável.
+
+**Status**: **fechado — não corrigir** o código; é achado de história, e
+reescrevê-la agora custaria mais do que vale. Registado para que quem bisectar
+saiba.
+
+<!-- f-status: nao-se-faz -->
+
+
+## F285 — `injectPathParams` corre em duas rotas que não precisam, e reescreve o corpo como `{}`
+
+**Data**: 2026-08-26. **Contexto**: idem F281, ao verificar se a herança de
+marca das canónicas atravessa código novo.
+
+**Onde**: `pkg/presentation/http/canonico.go:57` (a condição) e `:70` (o mapa).
+
+```go
+if strings.Contains(linha.CanonicalPath, "{") {
+    manipulador = injectPathParams(manipulador)
+}
+```
+
+```go
+var bodyFieldForPathParam = map[string]string{
+    "group_jid":     "groupJID",
+    "community_jid": "communityJID",
+}
+```
+
+**Problema**: a condição é "o caminho contém `{`", mas o mapa só conhece
+`group_jid` e `community_jid`. Medido:
+
+```
+$ awk -F'\t' '!/^#/ && NF==4 && $4 ~ /\{/ {n++} END{print n}' api/openapi/caminhos.tsv
+12                      <- embrulhadas pelo adaptador
+$ awk -F'\t' '!/^#/ && NF==4 && ($4 ~ /\{group_jid\}/ || $4 ~ /\{community_jid\}/) {n++} END{print n}' api/openapi/caminhos.tsv
+10                      <- as que precisam mesmo
+```
+
+As duas a mais são `GET /users/lid/{jid}` e `GET /users/profile/{jid}`, que já
+tinham o parâmetro no caminho na forma ANTIGA — nada sai do corpo. Nelas o
+adaptador lê o corpo, não encontra `jid` no mapa, não injecta nada, e ainda
+assim **reescreve o corpo como `{}`** e ajusta `ContentLength`. Funciona por
+acidente, porque o manipulador lê o `{jid}` de `mux.Vars` e não do corpo.
+
+É código a correr onde não devia, num caminho que ninguém mediu — e o acidente
+que o salva é exactamente o tipo de coisa que deixa de valer quando o
+manipulador mudar.
+
+**Correcção sugerida**: condicionar pelo mapa e não pela chaveta —
+`if pathParamsNeedInjection(linha.CanonicalPath)`, verificando se algum
+parâmetro do caminho está em `bodyFieldForPathParam`. E não reescrever o corpo
+quando nada foi injectado.
+
+**Status**: **não corrigido** — fora do âmbito da auditoria, e a política do
+projecto proíbe corrigir de graça defeito pré-existente sem perguntar.
+
+<!-- f-status: aberto -->
+
+
+## F286 — "as nove reestruturadas": três números para o mesmo conjunto, e pelo menos uma sem re-medição
+
+**Data**: 2026-08-26. **Contexto**: idem F285.
+
+**Onde**: mensagem de `9a6b3ff5`; `pkg/presentation/http/canonico.go:57`;
+`docs/ENDPOINTS.md:566`.
+
+**Problema**: `9a6b3ff` justifica a herança de marca dizendo que "as **nove**
+reestruturadas foram RE-MEDIDAS, porque nelas há código novo (o adaptador de
+injecção)". Três fontes dão três números para esse conjunto:
+
+| fonte | diz |
+|---|---:|
+| mensagem de `9a6b3ff` ("oito responderam; a nona deu 400") | **9** |
+| `canonico.go:57` — rotas embrulhadas pelo adaptador | **12** |
+| canónicas que precisam mesmo da injecção | **10** |
+| `docs/ENDPOINTS.md:566` — título "As **nove** que mudaram de forma" | **9**, mas a tabela lista **12** |
+
+Consequências:
+
+1. **10 rotas atravessam código novo e há 9 medições registadas.** Pelo menos
+   uma marca herdada nunca foi confirmada através do adaptador — herança
+   disfarçada de medição.
+2. **Não é possível dizer qual**, porque nenhuma fonte enumera as nove. É a
+   falha de "afirmação agregada": um número sem o conjunto não é auditável.
+3. A tabela do `ENDPOINTS.md` está sob a frase "Nestas o identificador **sai do
+   corpo** e vai para o caminho", que é **falsa** para `GET /users/lid/{jid}` e
+   `GET /users/profile/{jid}` (ver F285).
+
+Verificado que a herança em si é literal e sem excepções: cruzando as 91 linhas
+de `caminhos.tsv` com `evidencias.tsv`, as 91 canónicas têm exactamente a marca
+da forma antiga (zero divergências).
+
+**Correcção sugerida**: enumerar as dez no `ENDPOINTS.md` com o resultado da
+medição ao lado de cada nome, e corrigir o título "nove". Re-medir a que faltar.
+
+**Status**: **não corrigido** — exige as sessões reais para re-medir.
+
+<!-- f-status: aberto -->
+
+
+## F287 — `canonico.go` tem identificadores e comentários em português, contra a regra do `CLAUDE.md`
+
+**Data**: 2026-08-26. **Contexto**: idem F285.
+
+**Onde**: `pkg/presentation/http/canonico.go` — ficheiro NOVO, criado em
+`fea7e6e`.
+
+**Problema**: o `CLAUDE.md` fixa inglês para identificadores e comentários em
+todo o código novo. O ficheiro mistura: a API exportada está em inglês
+(`CanonicalRoute`, `RegisterCanonicalAliases`, `injectPathParams`,
+`bodyFieldForPathParam`), mas **todos os locais e todos os comentários estão em
+português** — `porChave`, `orfas`, `linha`, `chave`, `entrada`, `manipulador`,
+`bruto`, `corpo`, `novo`, `parametro`, `valor`, `campo`, `conhecido`, `jaVeio`,
+`tabela`.
+
+Por ser ficheiro novo, não se aplica a atenuante do "converta só o que tocou".
+
+**Correcção sugerida**: renomear os locais e traduzir os comentários, num commit
+que só faça isso — misturar renomeação com mudança de comportamento é
+exactamente o que o `CLAUDE.md` proíbe.
+
+**Status**: **não corrigido** — renomeação em massa fora do âmbito da auditoria;
+seria ruído no diff que a revisão desta auditoria tem de ler.
+
+<!-- f-status: aberto -->
+
+
+## F288 — `make check` ja' falha no HEAD por causa do HOUSEKEEP do wa-headless, ha' 466 commits
+
+**Data**: 2026-08-26. **Contexto**: auditoria de evidência (F281); apareceu ao
+correr `make check` para validar o gate novo.
+
+**Onde**: `internal/wa-headless/gate_test.go:635` e `:645`, que lêem
+`internal/wa-headless/HOUSEKEEP.md` (o `housekeepPath` do teste é relativo ao
+pacote — **não** é o `HOUSEKEEP.md` da raiz).
+
+**Problema**: `make check` termina em erro no HEAD `2d965350`, e a falha **não
+tem nada a ver com o trabalho desta auditoria**:
+
+```
+--- FAIL: TestHousekeepEntriesAreMachineReadable (0.19s)
+    gate_test.go:635: these statuses start with a word outside the vocabulary the file
+        already uses, so a scan cannot classify them:
+          H144: "H75 corrigida quanto ao diagnóstico; envio de tipos ricos co"
+    gate_test.go:645: entries with several authoritative statuses — read these by hand:
+          H5 (2 statuses), H14 (2 statuses), H90 (2 statuses)
+FAIL	wa-api/internal/wa-headless	103.387s
+make: *** [test] Error 1
+```
+
+São dois defeitos distintos no mesmo ficheiro:
+
+1. **H144** abre o `Status` com uma palavra fora do vocabulário
+   (`openStatusTokens`/`closedStatusTokens`), logo uma varredura não o consegue
+   classificar.
+2. **H5, H14 e H90** têm **dois** estados autoritativos cada um — o mesmo
+   defeito de "duas fontes de verdade" que o gate existe para impedir.
+
+**Confirmado pré-existente**, e não introduzido por mim:
+
+```
+$ git log --oneline -1 -- internal/wa-headless/HOUSEKEEP.md
+1117852d 2026-08-23 wa-headless: H75 corrigida — o primitivo genérico de envio existe e carrega
+$ git rev-list --count 1117852d..HEAD
+466
+$ git diff 2d965350..HEAD --stat -- internal/wa-headless/HOUSEKEEP.md
+(vazio — os meus commits não tocaram no ficheiro)
+```
+
+O texto de H144 (`"H75 corrigida quanto ao diagnóstico…"`) aponta directamente
+para `1117852d`, que é o commit que o introduziu.
+
+**Verificado que o resto está verde**: no `make check` final, a única falha é
+esta. `cmd/logcov` (339,99 s), `pkg/bootstrap` (70,54 s) e todos os outros
+pacotes passam.
+
+**Correcção sugerida**: reescrever o `Status` de H144 com uma palavra do
+vocabulário existente, e resolver em H5, H14 e H90 qual dos dois estados é o
+autoritativo — apagando o outro, não acrescentando um terceiro.
+
+**Referência cruzada**: o dado vive em `internal/wa-headless/HOUSEKEEP.md`, mas
+a entrada fica aqui porque quem sofre é um **gate** do build, que é âmbito da
+raiz. Quem for corrigir mexe no ficheiro do wa-headless.
+
+**Status**: **não corrigido** — pré-existente e fora do âmbito da auditoria de
+evidência. Registado porque um `make check` vermelho no HEAD faz a próxima
+sessão gastar tempo a perceber se foi ela que partiu alguma coisa.
+
+<!-- f-status: aberto -->
+
+
+
+## F289 — `orphan-browser-check` acusa como órfão um browser cujo DONO está vivo, e por isso bloqueia qualquer `make check` concorrente noutro worktree
+
+**Data/contexto**: 2026-08-26, achado de lado ao correr o gate no fim da
+investigação da F264/F265. **Fora do escopo dessa tarefa** — registado, não
+corrigido.
+
+**Onde**: `scripts/orphan-browser-check.sh:17-21`
+
+```bash
+principais=$(ps -Ao pid,ppid,etime,command 2>/dev/null \
+  | grep -i "Google Chrome" \
+  | grep -E "$padrao" \        # user-data-dir sob .../T/Test
+  | grep -v -- "--type=" \
+  | grep -v grep || true)
+```
+
+**Problema**: o recorte é feito SÓ pelo `--user-data-dir`. O script nunca olha
+para o `ppid`, e portanto não distingue *"browser que sobreviveu a uma execução
+anterior"* de *"browser que uma execução EM CURSO acabou de abrir"*. Os dois
+casam o padrão.
+
+O próprio texto de erro do script enuncia o critério que ele não aplica:
+
+> `ppid=1` significa que o processo DONO morreu antes de o parar
+
+**Evidência medida**, duas execuções seguidas de `make check` neste worktree:
+
+```
+orphan-browser-check: 1 browser(s) de teste SOBREVIVERAM a execucoes anteriores.
+  pid=32481 ppid=32190 idade=00:16     # 1.ª corrida
+  pid=34339 ppid=32190 idade=00:41     # 2.ª corrida, PID novo, MESMO ppid
+make: *** [orphan-browser-check] Error 1
+```
+
+O `ppid` **não é 1**, e o dono estava vivo:
+
+```
+32190 32145  …/wa-headless.test -test.paniconexit0 -test.count=1 …
+32145 23386  go test -race -count=1 -timeout=20m -p 1 wa-api/internal/wa-headless …
+```
+
+Ou seja: um `go test` de OUTRO worktree estava a correr, o seu binário de teste
+detinha o browser legitimamente, e o gate deste worktree declarou-o órfão. O PID
+mudou entre as duas corridas com o mesmo pai — a assinatura de uma suíte a
+progredir, não de um vazamento parado.
+
+**Consequência, e é a que dói**: o remédio que o próprio gate sugere
+(`make orphan-browser-clean`) **mataria a suíte do outro worktree**. Quem seguir
+a instrução sabota trabalho alheio e não fica a saber. E enquanto qualquer
+sessão correr testes headless, **nenhum outro worktree consegue fechar o
+`make check`** — que é exactamente o caso de "escopo disjunto de ficheiro não é
+escopo disjunto de gate".
+
+**Correção sugerida**: acrescentar ao recorte a verificação de que o `ppid` já
+não existe (ou é 1). Um browser cujo pai está vivo e é um binário `*.test` não é
+um órfão por definição — é a execução a decorrer. O `etime` sozinho **não**
+serve como discriminante: uma suíte headless legítima demora minutos, e um
+limiar de idade voltaria a apanhar o caso vivo.
+
+**Anti-regressão exigida**: o teste tem de exercitar os DOIS lados — pai morto
+(acusa) e pai vivo (não acusa). É a variante do "teste o caminho de SUCESSO, não
+só a recusa": hoje o gate só foi validado no caso em que deve falhar, e é por
+isso que o falso positivo sobreviveu.
+
+**Status**: não corrigido, e **não corrigido por decisão**. É achado incidental
+fora do escopo da tarefa (investigação da F264/F265), e o CLAUDE.md proíbe
+corrigir de graça sem perguntar. O browser acusado NÃO foi morto, pelo mesmo
+motivo: pertence a outra sessão.
+
+**Impacto no gate desta sessão**: `make check` parou aqui com `EXIT=2` nas duas
+corridas. Os alvos anteriores — `build`, `vet`, `fmt-gate` — passaram nas duas.
+Os commits desta sessão tocam **zero ficheiros `.go`** (7 ficheiros, todos
+Markdown), pelo que não há alteração de código por validar.
+
+<!-- f-status: aberto -->
+
+
+## F290 — o mapa por IP do observador de ritmo nunca é purgado: cresce com entrada não confiável
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Limitação de ritmo" do
+scorecard de produção. Achado incidental, fora do âmbito da medição.
+
+**Onde**: `pkg/bootstrap/limits.go:50-76`.
+
+```go
+type rateLimitObserver struct {
+	mu       sync.Mutex
+	limiters map[string]*rate.Limiter
+	...
+}
+
+func (o *rateLimitObserver) limiterFor(ip string) *rate.Limiter {
+	...
+	l, ok := o.limiters[ip]
+	if !ok {
+		l = rate.NewLimiter(o.perIPRate, o.perIPBurst)
+		o.limiters[ip] = l
+	}
+	return l
+}
+```
+
+**Problema**: uma entrada é criada por IP de origem e **nunca é removida**. Não
+há expiração, teto de cardinalidade nem varredura. O observador é instanciado
+uma vez na construção do router (`pkg/bootstrap/router.go:257`), portanto o mapa
+vive tanto quanto o processo.
+
+A chave vem do `RemoteAddr`, que é entrada não confiável mesmo com o cuidado —
+correcto — de **não** confiar no `X-Forwarded-For`. Um servidor exposto vê IPs
+de origem distintos a cada varredura; num ambiente IPv6 o espaço de chaves é
+praticamente ilimitado.
+
+Não foi medido o crescimento em campo: o servidor da medição foi exercitado a
+partir de um único IP (`127.0.0.1`), portanto o mapa teve **uma** entrada. O
+defeito é de leitura de código, e é por isso que está aqui e não no
+`MEDICAO-PRODUCAO.md`.
+
+**Onde dói mais do que parece**: é a Regra 1 do `CLAUDE.md` (inventário de
+detentores) aplicada ao contrário. Hoje o mecanismo é observe-only e o custo é
+só memória. No dia em que o limitador for ligado a sério, este mapa passa a ser
+o recurso limitado partilhado por todos os clientes, e a política de despejo
+deixa de ser detalhe: uma tabela sem despejo com política LRU errada expulsa o
+cliente legítimo e mantém o do atacante.
+
+**Correção sugerida**: substituir por um cache com expiração por inactividade
+(um `*rate.Limiter` cujo bucket está cheio é indistinguível de um recém-criado,
+portanto despejar um inactivo é gratuito), com teto explícito de cardinalidade.
+Registar o teto no log quando for atingido — sem isso a saturação é invisível.
+
+**Anti-regressão exigida quando for corrigido**: teste que crie N+1 chaves
+distintas e verifique que a cardinalidade não passa do teto, mais um controlo
+negativo que remova o despejo e mostre o teste a falhar. E o caminho de
+SUCESSO: um cliente activo não pode ser despejado enquanto está a ser limitado —
+é a variante do defeito que um teste só de teto não apanha.
+
+**Status**: não corrigido. Achado incidental fora do âmbito da tarefa, e o
+`CLAUDE.md` proíbe corrigir de graça sem perguntar.
+
+<!-- f-status: aberto -->
+
+
+## F291 — `GET /chats/history` aceita `limit` sem tecto, e `limit=-1` devolve a conversa inteira
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Paginação" do scorecard de
+produção.
+
+**Onde**: `pkg/presentation/http/handlers/handler_chat_history.go:65-77`
+(analisa e recusa não-numérico), `pkg/application/usecase/chat/get_chat_history.go:124-128`
+(aplica o padrão de 50) e `pkg/infra/db/chat_history_repository.go:62-70`
+(`... ORDER BY timestamp DESC LIMIT ?`).
+
+**Problema**: o valor do cliente chega ao `LIMIT` do SQL **sem tecto**. Medido a
+2026-08-26 contra `localhost:8093`, uma conversa semeada com 5 001 mensagens:
+
+```
+query                              bytes    msgs
+(sem limit)                        15760      50
+&limit=100                         31510     100
+&limit=5000                      1575010    5000
+&limit=999999                    1575325    5001
+&limit=-1                        1575325    5001
+&limit=0                              38       0
+```
+
+Duas coisas distintas:
+
+1. **Sem tecto.** `limit=999999` devolve tudo. A rota irmã `GET /chats/list`
+   TEM tecto — `LimitMaximo = 500`, `pkg/application/usecase/user/list_chats.go:30`,
+   com o comentário a dizer exactamente porquê: "existe para que um cliente não
+   transforme a paginação em 'traga tudo'". As duas rotas divergem, e a que
+   guarda o objecto que mais cresce é a que não tem tecto.
+2. **`limit=-1` é `LIMIT -1`.** Em SQLite isso significa **sem limite** e
+   devolve a conversa inteira. Em PostgreSQL `LIMIT -1` é erro de faixa, logo a
+   MESMA chamada devolveria `500`. Não foi medido contra Postgres — a medição
+   correu só sobre SQLite, e dizê-lo é parte do achado.
+
+**Consequência medida**, com o `json.Marshal` de `RespondJSON`
+(`pkg/presentation/http/response.go:83`) a materializar o corpo inteiro em
+memória antes de escrever:
+
+```
+conc=50  limit=999999  wall=0.34s  RSS 16 832KB -> 183 504KB
+conc=100 limit=999999  wall=0.53s  RSS 183 504KB -> 264 496KB
+conc=100 limit=50      wall=0.29s  RSS sem crescimento
+```
+
+100 pedidos concorrentes de uma conversa de 5 000 mensagens levaram o processo
+de 16MB a 264MB. Não é preciso um utilizador com muitos dados: basta um cliente
+que peça `limit=-1` em laço.
+
+**Correção sugerida**: tecto em `get_chat_history.go`, no mesmo sítio onde o
+padrão é aplicado, e com o mesmo desenho do `ListChatsUseCase` — corrigir a
+entrada fora de faixa em vez de a recusar, para não partir quem já manda
+números grandes. `limit` negativo passa a valer o padrão, como `limit=abc` já
+vale.
+
+**Anti-regressão exigida**: teste do tecto (`limit` acima do máximo devolve o
+máximo), teste do negativo (`-1` devolve o padrão, **não** tudo) e controlo
+negativo que remova o tecto e mostre os dois a falhar. O teste do negativo é o
+que trava a causa: um tecto que só compare `>` deixa o `-1` passar.
+
+**Status**: não corrigido. É lacuna de desenho e a decisão do tecto é de
+produto; registada para decisão.
+
+<!-- f-status: aberto -->
+
+
+## F292 — `POST /session/proxy` perde silenciosamente o `webhook_use_proxy` declarado por um pedido concorrente
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Concorrência" do scorecard
+de produção. É a única das quatro linhas directamente exercitável sem conta
+emparelhada.
+
+**Onde**: `pkg/application/usecase/storage/set_proxy.go`, função
+`resolveWebhookUseProxy` (passo 2: "otherwise the value STORED for this user"),
+com a escrita em `pkg/infra/db/session_config_repository.go:23`:
+
+```
+proxyConfigUpdateQuery = "UPDATE users SET proxy_url = ?, webhook_use_proxy = ? WHERE id = ?"
+webhookUseProxySelect  = "SELECT COALESCE(webhook_use_proxy, true) FROM users WHERE id = ?"
+```
+
+**Problema**: um pedido que **omite** `webhook_use_proxy` LÊ a coluna e
+reescreve-a junto com o `proxy_url` novo. Um pedido concorrente que a
+**declarou** é respondido `200` com o seu valor, e o banco fica com o outro.
+Nem uma resposta nem a outra diz que houve sobreposição.
+
+O diagnóstico da linha do scorecard estava errado no mecanismo: **não** há
+read-modify-write da linha inteira. O `UPDATE` é de duas colunas num único
+comando, portanto atómico, e escritas concorrentes de campos diferentes de
+`users` não se perdem. A janela é o par leitura→escrita, e um `ETag`/`If-Match`
+só a fecharia se a comparação de versão acontecesse DENTRO do mesmo `UPDATE`.
+
+**Medição** (`pkg/application/usecase/storage/session_config_concurrency_test.go`,
+repositório REAL sobre SQLite real, sob `-race`):
+
+```
+    session_config_concurrency_test.go:248: perda silenciosa confirmada:
+        A respondeu webhook_use_proxy=false, o banco tem true
+        (proxy_url="http://203.0.113.11:3128")
+```
+
+**E o número que ninguém teria adivinhado**: sem encontro marcado, a janela
+fechou **0 vezes em 200 rodadas** concorrentes. O defeito é real e raro, e um
+teste ingénuo de concorrência teria declarado o sistema seguro.
+
+**Correção sugerida**: nenhuma aplicada — é lacuna de desenho. O caminho mais
+barato não é `ETag`: é mudar o port para que "não informado" chegue ao SQL como
+tal (`webhook_use_proxy = COALESCE(?, webhook_use_proxy)`), eliminando a leitura
+separada. `ETag`/`If-Match` continua a ser a resposta certa para o caso geral de
+substituição de recurso, e é decisão de produto.
+
+**Anti-regressão**: já feita, e é o que trava o estado MEDIDO —
+`TestSetProxy_ConcorrenciaPerdeOFlagDeclarado` falha se a perda desaparecer, com
+a mensagem a mandar inverter a asserção e actualizar os documentos.
+Discriminantes: `TestSetProxy_Sequencial_NaoPerdeNada` e
+`TestSetProxy_BDeclaraOFlag_NaoEPerdaEUltimaEscrita`.
+
+**Controlos negativos EXECUTADOS**:
+
+```
+# 1) serializar A e B (tira o entrelaçamento):
+--- FAIL: TestSetProxy_ConcorrenciaPerdeOFlagDeclarado (0.06s)
+    session_config_concurrency_test.go:230: MUDANÇA DE COMPORTAMENTO:
+        webhook_use_proxy=false sobreviveu à escrita concorrente de B.
+
+# 2) fazer B DECLARAR o flag (tira a leitura, logo a janela):
+--- FAIL: TestSetProxy_ConcorrenciaPerdeOFlagDeclarado (0.06s)
+    session_config_concurrency_test.go:240: o UPDATE de B devia ter ficado
+        como o último; proxy_url="http://203.0.113.10:3128"
+```
+
+O segundo controlo falha noutra asserção — a de ordem — e não na da perda. Vale
+como prova de que o teste é sensível ao corpo de B, **não** como prova de que a
+asserção da perda morde; essa é a do primeiro controlo.
+
+**Status**: não corrigido; medido e travado.
+
+<!-- f-status: aberto -->
+
+
+## F293 — a API responde `429`, o contrato não o documenta em nenhuma das 141 operações, e os dois documentos afirmam o contrário
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Limitação de ritmo".
+
+**Onde**: `pkg/domain/apperr/codes.go:140` (`CategoryRateLimited` →
+`http.StatusTooManyRequests`), alimentada por
+`pkg/infra/wa-noise/errmap/iqerror.go:81` (`429` e `419` do servidor do
+WhatsApp), que chega ao cliente por `RespondJSON`
+(`pkg/presentation/http/response.go:52`, que usa o status da categoria e ignora
+o que o call site passou). São **64** sítios a chamar `errmap.ClassifyIQ`.
+
+**Problema**: um `429` é alcançável — é o relais do estrangulamento do
+WhatsApp — e **zero** das 141 operações o documentam:
+
+```
+$ curl -s localhost:8093/docs/openapi.yaml | python3 (contagem por código)
+[('101',1),('200',140),('400',131),('401',138),('403',4),('404',11),
+ ('409',8),('422',31),('500',136),('501',1)]
+ops com 429 documentado: 0
+```
+
+E os dois documentos afirmam o contrário do código:
+
+- `docs/PRODUCTION-READINESS.md`, linha 69: "`429` … **nunca** são usados";
+- a mesma página, linha 122: "nenhuma rota devolve `429`".
+
+**Correção sugerida**: documentar `429` nas operações que atravessam
+`errmap.ClassifyIQ`, com o `code` `upstream_rate_limited` e a semântica que a
+taxonomia já escreve — é a **única** categoria que o cliente deve repetir
+inalterada. Corrigir as duas linhas para dizerem o que é verdade: o servidor não
+gera `429` de protecção própria; relaia o do montante.
+
+**Anti-regressão exigida**: o gate que já existe para códigos de erro
+(`TestContratoCodigosDeErroExistemNoCodigo`) verifica a direcção
+documento→código. Falta a inversa: um código de estado que o mapa de categorias
+sabe produzir e que nenhuma operação declara.
+
+**Status**: não corrigido no contrato (é geração de OpenAPI, fora do âmbito
+desta tarefa). As duas linhas do scorecard **foram** corrigidas nesta sessão.
+
+<!-- f-status: aberto -->
+
+
+## F294 — "nenhuma colecção é paginada" nunca foi verdade: `/chats/list` pagina desde 2026-08-08, e a evidência gravada era uma PÁGINA lida como total
+
+**Data**: 2026-08-26. **Contexto**: medição da linha "Paginação".
+
+**Onde**: `api/openapi/CONTRATO-ARQUITETURAL.md` §19 e
+`docs/PRODUCTION-READINESS.md` linha 119. Contra
+`pkg/application/usecase/user/list_chats.go:22-31` e
+`pkg/presentation/http/handlers/handler_user.go:373-376`.
+
+**Problema**: os dois documentos dizem "**Medido**, sem paginação nenhuma" e
+"`GET /chat/history` é a **única** com limite". Medido a 2026-08-26 contra
+`localhost:8093` com 2 000 conversas semeadas:
+
+```
+query                      bytes  chats  total  limit_eco offset_eco
+(sem parametro)             5332     50   2000         50          0
+?limit=500                 52583    500   2000        500          0
+?limit=999999              52583    500   2000        500          0
+?limit=50&offset=1990       1135     10   2000         50       1990
+?offset=99999                 87      0   2000         50      99999
+```
+
+`limit`, `offset`, `total`, padrão de 50 e tecto de 500 — paginação completa, com
+o total para o cliente saber quantas páginas faltam. O código está lá **desde o
+commit que criou a rota**, `9d9dd7ec` de 2026-08-08 (`git log -S LimitMaximo`),
+dezoito dias antes de a secção §19 ter sido escrita.
+
+**A causa, e é o que interessa**: a linha da tabela §19 regista
+"`GET /chat/list` | 7 144 bytes". Esse número é compatível com a **primeira
+página de 50**, não com o total. A evidência foi recolhida correctamente e
+**interpretada** como se fosse a colecção inteira. Uma resposta que não diz
+"isto é uma página" só é distinguível de "isto é tudo" se quem mede olhar para
+os campos `total`/`limit` — que existem, e estavam na resposta.
+
+**Correção sugerida**: além de corrigir as duas afirmações, acrescentar à regra
+de medição do `CLAUDE.md` o teste que faltou: **uma colecção mede-se com dados
+que excedam qualquer página plausível**. 1 266 contactos provaram que
+`/user/contacts` não pagina porque 1 266 é maior que qualquer padrão; 7 144
+bytes de conversas não provaram nada sobre `/chat/list` porque ninguém verificou
+quantas conversas havia.
+
+**Status**: `docs/PRODUCTION-READINESS.md` corrigido nesta sessão.
+`api/openapi/CONTRATO-ARQUITETURAL.md` §19 **não** corrigido — o contrato é
+gerado/escrito noutro eixo e mexer nele estava fora do âmbito. Fica registado
+para a sessão que o tocar.
+
+<!-- f-status: aberto -->

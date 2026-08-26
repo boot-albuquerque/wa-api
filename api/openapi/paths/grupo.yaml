@@ -1410,7 +1410,18 @@
 
       **Desfecho parcial**: o adaptador faz uma chamada por solicitante. Se
       algum falhar, a rota devolve erro — não há corpo que relate quais
-      passaram.
+      passaram. **E não é por o WhatsApp não dizer**: ele devolve
+      `[]types.GroupParticipant` com um `Error` por solicitante, e o adaptador
+      descarta esse valor (`adapters/group/participants.go:81`). A rota irmã
+      `POST /groups/{group_jid}/participants` expõe a mesma lista. É a F280.
+
+      **Como se observa o efeito**: por `GET /groups/{group_jid}/join-requests`, lido
+      **antes e depois** — a decisão retira o solicitante da fila —, e por
+      `POST /groups/info`, onde um aprovado passa a constar de `Participants`.
+      Um `200` contra fila VAZIA não prova nada, e foi essa a medição de
+      2026-08-26. A fila enche-se só por API: entrar por link num grupo com
+      aprovação exigida cria um pendente
+      (`capabilities/group/invite.go:117`). Procedimento em `HUMAN-LAST.md` C.1.
 
       **Autenticação**: token de sessão.
     security:

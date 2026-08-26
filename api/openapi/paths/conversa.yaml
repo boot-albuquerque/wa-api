@@ -1067,6 +1067,20 @@
       - `request_id` na resposta identifica a mensagem de pedido criada, não
         a mensagem pedida — essa continua em `message_id`.
 
+      **Como se observa o reenvio, quando ele chega** (apurado a 2026-08-26):
+      o `request_id` **R** devolvido aqui reaparece na mensagem reenviada, no
+      campo `UnavailableRequestID`
+      (`internal/wa-noise/capabilities/message/history_sync.go:250`). Há três
+      leituras que o expõem:
+
+      1. `GET /chats/history` sobre o mesmo `chat_jid` — o `data_json` do
+         elemento contém `"UnavailableRequestID":"R"`. **Exige** que a
+         gravação de histórico esteja ligada: com `History` a `0` em
+         `GET /webhook/history`, nada é gravado.
+      2. o webhook da sessão, no evento `type: "Message"` — o corpo leva o
+         evento inteiro em `event`.
+      3. `GET /session/ws`, com o mesmo payload.
+
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []

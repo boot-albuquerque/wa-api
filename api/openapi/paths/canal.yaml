@@ -699,9 +699,23 @@
       `server_id` obtidos em `POST /newsletter/messages`.
 
       **Regras**: `jid` e `serverIDs` são obrigatórios; lista vazia é recusada
-      com `400 missing_server_ids`. `data` vem `null` em sucesso, e **não há
-      forma de confirmar o efeito por esta API** — foi por isso que a bateria
-      de campo a classificou como `200` sem observador independente.
+      com `400 missing_server_ids`. `data` vem `null` em sucesso.
+
+      **CORRECÇÃO a 2026-08-26**: esta descrição dizia que "não há forma de
+      confirmar o efeito por esta API". O observador **existe por desenho** —
+      a operação incrementa o contador de visualizações
+      (`internal/wa-noise/core/newsletter.go:52`), e esse contador é servido
+      por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`), que é
+      `POST /newsletters/updates`. O que acontece é que essa rota está
+      **inoperante** (F265: `500` ao fim de 30 s). Há uma segunda via, nunca
+      exercitada: `POST /newsletters/subscribe` entrega os mesmos dados como
+      evento `NewsletterLiveUpdate`, que chega ao webhook e a `/session/ws`
+      com `ViewsCount` por mensagem.
+
+      **O que NÃO serve como observador**: o `ViewsCount` de
+      `POST /newsletters/messages`. O campo existe e chega ao JSON, mas veio
+      `0` nas sessenta publicações medidas — um valor que nunca muda não
+      distingue caso nenhum. Ver `OBSERVADORES-AMBAR.md` §4.
 
       **Autenticação**: token de sessão.
     security:
@@ -755,9 +769,20 @@
       (`newsletter_ops.go:234`).
 
       **Regras**: `jid` e `serverID` são obrigatórios. `serverID` a zero é
-      recusado com `400 missing_server_id`. `data` vem `null` em sucesso, e o
-      efeito não é confirmável por esta API — classificada como `200` sem
-      observador independente na bateria de campo.
+      recusado com `400 missing_server_id`. `data` vem `null` em sucesso.
+
+      **CORRECÇÃO a 2026-08-26**: esta descrição dizia que "o efeito não é
+      confirmável por esta API". **É.** `POST /newsletters/messages` devolve
+      `ReactionCounts` por publicação, e ele traz valores reais — o exemplo
+      publicado nesta mesma documentação é `{'👍': 3, '😂': 58}`. O efeito
+      confirma-se lendo o mesmo `MessageServerID` **antes e depois**, e
+      fechando com a REMOÇÃO (`reaction` vazio) para ver o contador voltar ao
+      valor inicial: sem esse terceiro passo, um incremento pode ser de outra
+      pessoa.
+
+      Duas armadilhas ao comparar: `count` é obrigatório de facto nas
+      leituras, e **as chaves de emoji não são normalizadas** (`"❤"` e `"❤️"`
+      são entradas separadas). Ver `OBSERVADORES-AMBAR.md` §5.
 
       **Autenticação**: token de sessão.
     security:
