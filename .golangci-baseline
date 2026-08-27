@@ -109,7 +109,10 @@ max_complexity=51
 # (+4, INFORMATIVO). max_complexity inalterado (51). Issues novas vem dos
 # arquivos novos (quadrant_test.go, capabilities.yaml-derived code) —
 # nao investigado issue a issue por serem informativas, nao trava.
-count=607
+# feature/engine-capability-integration (2026-08-27): merge da auditoria
+# adversarial + correção F279/F280. count 607 -> 612 (+5, INFORMATIVO).
+# max_complexity inalterado (51). Testes novos de auditoria/newest-wins.
+count=612
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
