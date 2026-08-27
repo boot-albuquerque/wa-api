@@ -282,12 +282,28 @@ func buildRouter(d Deps) *mux.Router {
 	// cannot parse the same way as every other: no `success`, no `code`, and
 	// an `error` that is not an object. A client that mistypes a path would
 	// get a JSON decode failure instead of `error.code == "not_found"`.
+	// Each logs its own CAUSE, at warn, in addition to the boundary record the
+	// middleware stack emits. The two records answer different questions and
+	// the metric counts them separately: the boundary record says a request
+	// happened and how it ended; the cause record says WHY this exit was
+	// taken, and it is the one `cmd/logcov` requires of every >=400 exit path
+	// (METRIC.md §4). Warn and not error: both are client-side mistakes, and
+	// the 404/405 tests in boundary_log_test.go assert that neither emits an
+	// error-level record.
 	router.NotFoundHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(
-		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hlog.FromRequest(r).Warn().Err(errRouteNotFound).
+				Str("method", r.Method).
+				Str("url", redactURL(r.URL)).
+				Msg("request rejected: no route matches")
 			customhttp.RespondJSON(w, http.StatusNotFound, nil, errRouteNotFound)
 		}))
 	router.MethodNotAllowedHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(
-		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hlog.FromRequest(r).Warn().Err(errMethodNotAllowed).
+				Str("method", r.Method).
+				Str("url", redactURL(r.URL)).
+				Msg("request rejected: method not allowed on the matched route")
 			customhttp.RespondJSON(w, http.StatusMethodNotAllowed, nil, errMethodNotAllowed)
 		}))
 

@@ -1542,7 +1542,35 @@ min_errpath_coverage=777
 # handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
 # SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
 # como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
-min_eligible=993
+
+# ENVELOPE DE ERRO (2026-08-27): min_eligible SOBE 993->994 (+1, ratchet-UP).
+#
+# Numeros MEDIDOS: `go run ./cmd/logcov`
+#   ANTES  (1e7db641): eligible=993, covered=585, func_coverage=58.9% (589)
+#   DEPOIS:            eligible=994, covered=587, func_coverage=59.1% (591)
+#
+# ENTRA (1):
+#   pkg/bootstrap.buildRouter.func1 e func2 sao AGORA duas entradas ELIGIBLE
+#   onde antes havia uma so'. O 404 respondia por `http.NotFoundHandler()` — sem
+#   closure nenhuma, logo sem entrada — e o 405 por uma closure de UM statement
+#   com `http.Error`, que a X1 isentava porque `http.Error` nao e' caminho de
+#   saida no sentido da seccao 4. Trocar os dois por `RespondJSON` cria a
+#   segunda closure E torna a primeira elegivel: +1 no liquido.
+#
+# func_coverage SOBE 589->591 (+2 decimos), e o numerador sobe 585->587: as
+# duas closures nascem COBERTAS, porque cada uma loga a sua causa em warn antes
+# de responder. Isso nao foi acidente do gate — e' a regra que todo caminho
+# >=400 deste repositorio ja' seguia, e as duas eram a excepcao.
+#
+# O piso min_func_coverage NAO se mexe (589): subir um piso por causa de uma
+# melhoria de duas casas decimais tranca a proxima sessao sem necessidade.
+#
+# max_exempt_annotations NAO muda (2). A alternativa considerada e RECUSADA foi
+# marcar um construtor de erro com //log:exempt: o helper `webhookStoreError`
+# existia e foi REMOVIDO, com o `apperr.New` embutido nos oito sitios de
+# chamada. Um construtor puro que nao loga seria elegivel e descoberto, e gastar
+# a valvula orcada X8 num helper de tres linhas seria pagar caro por conveniencia.
+min_eligible=994
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
