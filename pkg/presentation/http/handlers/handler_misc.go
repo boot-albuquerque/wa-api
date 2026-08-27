@@ -8,6 +8,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtohealth "wa-api/pkg/presentation/http/dto/health"
 
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
@@ -46,7 +47,7 @@ func (h *GetHealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtohealth.PresentHealth(rsp), nil)
 }
 
 // ListNewsletterHandler handles GET /newsletter/list

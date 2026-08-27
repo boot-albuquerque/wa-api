@@ -1,150 +1,181 @@
 // Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
+// As structs deste ficheiro JÁ NÃO SÃO o formato de fio. Elas são
+// Go-idiomáticas por dentro — PascalCase, sem etiquetas `json` — e quem serve
+// HTTP passa por pkg/presentation/http/dto/session.
+// Ver docs/HTTP-DTO-CONVENTIONS.md.
+
 // ConnectRequest representa o payload de conexão.
 type ConnectRequest struct {
-	Subscribe []string `json:"subscribe,omitempty"`
-	Immediate bool     `json:"immediate,omitempty"`
+	Subscribe []string
+	Immediate bool
 }
 
 // ConnectResult representa o resultado da conexão.
 type ConnectResult struct {
-	Webhook string `json:"webhook"`
-	Jid     string `json:"jid"`
-	Events  string `json:"events"`
-	Details string `json:"details"`
+	Webhook string
+	Jid     string
+	Events  string
+	Details string
 }
 
 // DisconnectRequest representa o payload de desconexão.
 type DisconnectRequest struct {
-	Phone string `json:"phone,omitempty"`
+	Phone string
 }
 
 // DisconnectResult representa o resultado da desconexão.
 type DisconnectResult struct {
-	Details string `json:"details"`
+	Details string
 }
 
 // GetQRResult representa o resultado de obtenção do QR code.
 type GetQRResult struct {
-	QRCode string `json:"QRCode"`
+	QRCode string
 }
 
 // LogoutRequest representa o payload de logout.
 type LogoutRequest struct {
-	Phone string `json:"phone,omitempty"`
+	Phone string
 }
 
 // LogoutResult representa o resultado do logout.
 type LogoutResult struct {
-	Details string `json:"details"`
+	Details string
 }
 
 // PairPhoneRequest representa o payload de pareamento por telefone.
 type PairPhoneRequest struct {
-	Phone string `json:"Phone"`
+	Phone string
 }
 
 // PairPhoneResult representa o resultado do pareamento por telefone.
 type PairPhoneResult struct {
-	LinkingCode string `json:"LinkingCode"`
+	LinkingCode string
+}
+
+// ProxySummary é o resumo de proxy que GET /session/status reporta.
+//
+// Era um map[string]interface{} montado no use case, e por isso as suas chaves
+// não apareciam em auditoria de etiqueta nenhuma — foi assim que `proxyUrl`
+// sobreviveu em camelCase. Struct para que o apresentador quebre a compilação
+// quando um campo mudar de nome.
+type ProxySummary struct {
+	Enabled  bool
+	ProxyURL string
+}
+
+// S3Summary é o resumo de S3 que GET /session/status reporta.
+//
+// NÃO carrega credencial nenhuma, e a ausência é deliberada: o status é
+// consultado em laço por qualquer cliente autenticado.
+type S3Summary struct {
+	Enabled       bool
+	Endpoint      string
+	Region        string
+	Bucket        string
+	PathStyle     bool
+	PublicURL     string
+	MediaDelivery string
+	RetentionDays int
 }
 
 // GetStatusResult representa o resultado de obtenção do status.
 type GetStatusResult struct {
-	ID             string                 `json:"id"`
-	Name           string                 `json:"name"`
-	Connected      bool                   `json:"connected"`
-	LoggedIn       bool                   `json:"loggedIn"`
-	Token          string                 `json:"token"`
-	Jid            string                 `json:"jid"`
-	Webhook        string                 `json:"webhook"`
-	Events         string                 `json:"events"`
-	ProxyURL       string                 `json:"proxy_url"`
-	Qrcode         string                 `json:"qrcode"`
-	History        string                 `json:"history"`
-	ProxyConfig    map[string]interface{} `json:"proxy_config"`
-	S3Config       map[string]interface{} `json:"s3_config"`
-	HMACConfigured bool                   `json:"hmac_configured"`
+	ID             string
+	Name           string
+	Connected      bool
+	LoggedIn       bool
+	Token          string
+	Jid            string
+	Webhook        string
+	Events         string
+	ProxyURL       string
+	Qrcode         string
+	History        string
+	ProxyConfig    ProxySummary
+	S3Config       S3Summary
+	HMACConfigured bool
 }
 
 // SetStatusMessageRequest representa o payload de definição de status.
 type SetStatusMessageRequest struct {
-	Body string `json:"Body"`
+	Body string
 }
 
 // SetStatusMessageResult representa o resultado da definição de status.
 type SetStatusMessageResult struct {
-	Details string `json:"details"`
+	Details string
 }
 
 // PublishStatusImageRequest is the payload for POST /status/set/image.
 // Image is the same union as SendImageRequest.Image: data URI or http(s) URL.
 type PublishStatusImageRequest struct {
-	Image         string `json:"Image"`
-	Caption       string `json:"Caption,omitempty"`
-	ID            string `json:"Id,omitempty"`
-	MimeType      string `json:"MimeType,omitempty"`
-	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
+	Image         string
+	Caption       string
+	ID            string
+	MimeType      string
+	JPEGThumbnail []byte
 }
 
 // PublishStatusImageResult is the result of POST /status/set/image.
 type PublishStatusImageResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // PublishStatusVideoRequest is the payload for POST /status/set/video.
 // Video is the same union as SendVideoRequest.Video: data URI or http(s) URL.
 type PublishStatusVideoRequest struct {
-	Video         string `json:"Video"`
-	Caption       string `json:"Caption,omitempty"`
-	ID            string `json:"Id,omitempty"`
-	MimeType      string `json:"MimeType,omitempty"`
-	JPEGThumbnail []byte `json:"JPEGThumbnail,omitempty"`
+	Video         string
+	Caption       string
+	ID            string
+	MimeType      string
+	JPEGThumbnail []byte
 }
 
 // PublishStatusVideoResult is the result of POST /status/set/video.
 type PublishStatusVideoResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // PublishStatusAudioRequest is the payload for POST /status/set/audio.
 // Audio is the same union as SendAudioRequest.Audio: data URI or http(s) URL.
 type PublishStatusAudioRequest struct {
-	Audio    string `json:"Audio"`
-	ID       string `json:"Id,omitempty"`
-	MimeType string `json:"mimetype,omitempty"`
+	Audio    string
+	ID       string
+	MimeType string
 }
 
 // PublishStatusAudioResult is the result of POST /status/set/audio.
 type PublishStatusAudioResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // RequestHistorySyncRequest representa o payload de requisição de sincronização de histórico.
 type RequestHistorySyncRequest struct {
-	Count              int    `json:"count,omitempty"`
-	ChatJid            string `json:"chat_jid,omitempty"`
-	OldestMsgID        string `json:"oldest_msg_id,omitempty"`
-	OldestMsgFromMe    bool   `json:"oldest_msg_from_me,omitempty"`
-	OldestMsgTimestamp int64  `json:"oldest_msg_timestamp,omitempty"`
+	Count              int
+	ChatJid            string
+	OldestMsgID        string
+	OldestMsgFromMe    bool
+	OldestMsgTimestamp int64
 }
 
 // RequestHistorySyncResult representa o resultado da sincronização de histórico.
 type RequestHistorySyncResult struct {
-	Details            string `json:"details"`
-	Timestamp          int64  `json:"timestamp"`
-	Count              int    `json:"count"`
-	ChatJid            string `json:"chat_jid"`
-	OldestMsgID        string `json:"oldest_msg_id"`
-	OldestMsgFromMe    bool   `json:"oldest_msg_from_me"`
-	OldestMsgTimestamp int64  `json:"oldest_msg_timestamp"`
+	Details            string
+	Timestamp          int64
+	Count              int
+	ChatJid            string
+	OldestMsgID        string
+	OldestMsgFromMe    bool
+	OldestMsgTimestamp int64
 }
 
 // SyncContactRosterRequest representa o payload de sincronização forçada da
@@ -154,12 +185,12 @@ type SyncContactRosterRequest struct {
 	// Mode escolhe o custo do pull: "if_unsynced" (no-op se já sincronizado),
 	// "incremental" (fetch barato, não apaga versão) ou "full" (re-snapshot
 	// completo, caro).
-	Mode string `json:"mode"`
+	Mode string
 }
 
 // SyncContactRosterResult representa o resultado da sincronização forçada da
 // agenda de contatos.
 type SyncContactRosterResult struct {
-	Details string `json:"details"`
-	Mode    string `json:"mode"`
+	Details string
+	Mode    string
 }

@@ -11,6 +11,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	dtosession "wa-api/pkg/presentation/http/dto/session"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -93,7 +94,7 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// branch abaixo e' so' defesa contra uma mudanca futura que passe a
 	// devolver um, e por isso fica com um unico nivel (Error), nao o mesmo
 	// split Warn/Error dos outros handlers desta rota.
-	_, err := h.usecase.Execute(r.Context(), id, domain.ConnectRequest{})
+	rsp, err := h.usecase.Execute(r.Context(), id, domain.ConnectRequest{})
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("handler", "Connect").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
@@ -127,7 +128,7 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 		go h.StartSession(id, info.Get("Token"))
 	}
-	customhttp.RespondJSON(w, 200, map[string]interface{}{"status": "connecting"}, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentConnect(rsp), nil)
 }
 
 // DisconnectHandler handles POST /session/disconnect/{id}
@@ -152,7 +153,7 @@ func (h *DisconnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentDisconnect(rsp), nil)
 }
 
 // GetQRHandler handles GET /session/qr/{id}
@@ -175,7 +176,7 @@ func (h *GetQRHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentGetQR(rsp), nil)
 }
 
 // LogoutHandler handles POST /session/logout/{id}
@@ -198,7 +199,7 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentLogout(rsp), nil)
 }
 
 // PairPhoneHandler handles POST /session/pairphone/{id}
@@ -212,13 +213,13 @@ func (h *PairPhoneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.PairPhoneRequest
+	var req dtosession.PairPhoneRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PairPhone").Str("user_id", id).Msg("session use case failed")
@@ -229,7 +230,7 @@ func (h *PairPhoneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentPairPhone(rsp), nil)
 }
 
 // GetStatusHandler handles GET /session/status/{id}
@@ -254,7 +255,7 @@ func (h *GetStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentGetStatus(rsp), nil)
 }
 
 // SetStatusMessageHandler handles POST /session/statusmessage/{id}
@@ -270,13 +271,13 @@ func (h *SetStatusMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	var req domain.SetStatusMessageRequest
+	var req dtosession.SetStatusMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "SetStatusMessage").Str("user_id", id).Msg("session use case failed")
@@ -287,7 +288,7 @@ func (h *SetStatusMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentSetStatusMessage(rsp), nil)
 }
 
 // RequestHistorySyncHandler handles POST /session/historysync/{id}
@@ -307,14 +308,14 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	// documentava count, chat_jid, oldest_msg_id, oldest_msg_from_me e
 	// oldest_msg_timestamp, e nenhum deles era lido — o corpo do cliente ia
 	// para o lixo e a rota respondia 200.
-	var req domain.RequestHistorySyncRequest
+	var req dtosession.RequestHistorySyncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Msg("could not decode payload")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
 		return
 	}
 
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Str("user_id", id).Msg("session use case failed")
@@ -325,7 +326,7 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentRequestHistorySync(rsp), nil)
 }
 
 // SyncContactRosterHandler handles POST /user/contacts/sync.
@@ -345,13 +346,13 @@ func (h *SyncContactRosterHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	var req domain.SyncContactRosterRequest
+	var req dtosession.SyncContactRosterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "SyncContactRoster").Str("user_id", id).Msg("session use case failed")
@@ -362,5 +363,5 @@ func (h *SyncContactRosterHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentSyncContactRoster(rsp), nil)
 }

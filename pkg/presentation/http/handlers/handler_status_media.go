@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtosession "wa-api/pkg/presentation/http/dto/session"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -26,13 +26,13 @@ func (h *PublishStatusImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	var req domain.PublishStatusImageRequest
+	var req dtosession.PublishStatusImageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("status media request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PublishStatusImage").Str("user_id", id).Msg("status media use case failed")
@@ -43,7 +43,7 @@ func (h *PublishStatusImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentPublishStatusImage(rsp), nil)
 }
 
 // PublishStatusVideoHandler handles POST /status/set/video.
@@ -60,13 +60,13 @@ func (h *PublishStatusVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	var req domain.PublishStatusVideoRequest
+	var req dtosession.PublishStatusVideoRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("status media request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PublishStatusVideo").Str("user_id", id).Msg("status media use case failed")
@@ -77,7 +77,7 @@ func (h *PublishStatusVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentPublishStatusVideo(rsp), nil)
 }
 
 // PublishStatusAudioHandler handles POST /status/set/audio.
@@ -94,13 +94,13 @@ func (h *PublishStatusAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	var req domain.PublishStatusAudioRequest
+	var req dtosession.PublishStatusAudioRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("status media request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PublishStatusAudio").Str("user_id", id).Msg("status media use case failed")
@@ -111,5 +111,5 @@ func (h *PublishStatusAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentPublishStatusAudio(rsp), nil)
 }

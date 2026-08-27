@@ -160,10 +160,12 @@ func TestGetHealthExecute(t *testing.T) {
 				if got.GoRoutines <= 0 {
 					t.Errorf("goroutines = %d, queria > 0", got.GoRoutines)
 				}
-				for _, key := range []string{"alloc_mb", "total_alloc_mb", "sys_mb", "num_gc"} {
-					if _, ok := got.MemoryStats[key]; !ok {
-						t.Errorf("memory_stats sem a chave %q: %v", key, got.MemoryStats)
-					}
+				// MemoryStats deixou de ser map[string]any: hoje é
+				// domain.MemoryStats, e o nome de fio de cada contador vive em
+				// pkg/presentation/http/dto/health. Sys é o único que o
+				// runtime garante não-zero em qualquer processo vivo.
+				if got.MemoryStats.SysMB == 0 {
+					t.Errorf("memory_stats = %+v, quero sys_mb > 0", got.MemoryStats)
 				}
 			}
 
