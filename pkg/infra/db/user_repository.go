@@ -131,6 +131,18 @@ func (r *UserRepository) UserExists(ctx context.Context, id string) (bool, error
 // so a concurrent writer cannot race between the read and the UPDATE.
 func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.UserUpdate) error {
 	if upd.Engine != nil {
+		// Validity is checked BEFORE immutability, same priority order the
+		// pre-F279 code had inside the query builder: an engine that is not
+		// a real engine at all is always wrong, whether or not it happens
+		// to equal the row's current value, and callers (see
+		// TestUpdateUserRejectsInvalidEngine) depend on getting
+		// ErrInvalidEngine back for a garbage value, not ErrEngineImmutable.
+		if !upd.Engine.IsValidForCreate() {
+			log.Warn().Str("table", "users").Str("user_id", id).
+				Str("column", usersEngineColumn).Str("engine", upd.Engine.String()).
+				Msg("update user rejected: invalid engine")
+			return fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, upd.Engine.String())
+		}
 		return r.updateUserWithEngineGuard(ctx, id, upd)
 	}
 	return r.updateUser(ctx, id, upd)

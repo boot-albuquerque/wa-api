@@ -309,8 +309,45 @@ func TestCreateUserRejectsInvalidEngine(t *testing.T) {
 	}
 }
 
-// TestUpdateUserEngine cobre o caminho de SUCESSO da edição, e não só a recusa.
-func TestUpdateUserEngine(t *testing.T) {
+// TestUpdateUserEngine_IdempotentResendSucceeds cobre o caminho de SUCESSO
+// da edição de engine que sobrevive à F279: reenviar o MESMO valor já
+// gravado é um no-op tolerado (o mesmo comportamento que
+// EditUserUseCase.Execute já documentava na fronteira HTTP - ver
+// edit_user.go:66-73 - agora garantido pelo próprio repositório).
+func TestUpdateUserEngine_IdempotentResendSucceeds(t *testing.T) {
+	db := newUserTestDB(t)
+	repo := dbpkg.NewUserRepository(db)
+	ctx := context.Background()
+
+	if _, err := repo.CreateUser(ctx, domain.UserRecord{ID: "u1", Name: "u1", Token: "tok-u1"}); err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	noise := domain.EngineWaNoise
+	if err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &noise}); err != nil {
+		t.Fatalf("UpdateUser with the SAME engine as already persisted: %v", err)
+	}
+	if got := engineOf(t, db, "u1"); got != string(domain.EngineWaNoise) {
+		t.Fatalf("engine after idempotent update = %q, want %q", got, domain.EngineWaNoise)
+	}
+
+	entries, err := repo.ListUsers(ctx, "u1")
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("ListUsers: %v (%d entries)", err, len(entries))
+	}
+	if entries[0].Engine != domain.EngineWaNoise {
+		t.Errorf("ListUsers engine = %q, want %q", entries[0].Engine, domain.EngineWaNoise)
+	}
+}
+
+// TestUpdateUserEngine_DivergentValueRejected is the F279 regression test at
+// this layer: changing a session's engine to a DIFFERENT (but otherwise
+// valid) value must now fail with domain.ErrEngineImmutable, and must not
+// touch the row. This use to be the success path this same test file
+// documented (TestUpdateUserEngine, before F279) - that was exactly the bug:
+// the repository accepted a divergent engine with no error, and only
+// EditUserUseCase.Execute, one layer above, ever refused it.
+func TestUpdateUserEngine_DivergentValueRejected(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
@@ -320,23 +357,19 @@ func TestUpdateUserEngine(t *testing.T) {
 	}
 
 	headless := domain.EngineWaHeadless
-	if err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &headless}); err != nil {
-		t.Fatalf("UpdateUser: %v", err)
+	err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &headless})
+	if !errors.Is(err, domain.ErrEngineImmutable) {
+		t.Fatalf("UpdateUser(engine=%q) err = %v, want errors.Is(err, domain.ErrEngineImmutable)", headless, err)
 	}
-	if got := engineOf(t, db, "u1"); got != string(domain.EngineWaHeadless) {
-		t.Fatalf("engine after update = %q, want %q", got, domain.EngineWaHeadless)
-	}
-
-	entries, err := repo.ListUsers(ctx, "u1")
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("ListUsers: %v (%d entries)", err, len(entries))
-	}
-	if entries[0].Engine != domain.EngineWaHeadless {
-		t.Errorf("ListUsers engine = %q, want %q", entries[0].Engine, domain.EngineWaHeadless)
+	if got := engineOf(t, db, "u1"); got != string(domain.EngineWaNoise) {
+		t.Fatalf("engine changed despite the rejected update: got %q, want %q", got, domain.EngineWaNoise)
 	}
 }
 
 // TestUpdateUserRejectsInvalidEngine: recusa E preserva o valor anterior.
+// Um valor que não é um engine válido de jeito nenhum é recusado com
+// ErrInvalidEngine, não ErrEngineImmutable - validade é checada ANTES de
+// imutabilidade (ver o comentário em UpdateUser).
 func TestUpdateUserRejectsInvalidEngine(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
