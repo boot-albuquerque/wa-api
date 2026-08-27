@@ -73,10 +73,10 @@ CodigoQR:
   type: object
   description: |
     Resposta de `GET /session/qr`. Medida no servidor vivo em 2026-08-26,
-    numa sessão já autenticada: `{"QRCode": ""}`.
-  required: [QRCode]
+    numa sessão já autenticada: `{"qr_code": ""}`.
+  required: [qr_code]
   properties:
-    QRCode:
+    qr_code:
       type: string
       nullable: false
       description: |
@@ -96,7 +96,7 @@ CodigoQR:
         | `""` | a sessão já está emparelhada, ou nunca chamou `GET /session/connect`, ou o código expirou |
         | `data:image/png;base64,…` | há um código válido agora; desenhe-o |
 
-        Medido em 2026-08-26 nas duas sessões autenticadas: `{"QRCode": ""}`
+        Medido em 2026-08-26 nas duas sessões autenticadas: `{"qr_code": ""}`
         com `200` nas duas.
       example: ''
 
@@ -105,9 +105,9 @@ PedidoPareamentoTelefone:
   description: |
     Corpo de `POST /session/pairphone`. Campos desconhecidos são IGNORADOS em
     silêncio — o decodificador não usa `DisallowUnknownFields`.
-  required: [Phone]
+  required: [phone]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       minLength: 1
@@ -120,12 +120,12 @@ PedidoPareamentoTelefone:
         | estado | aceite? | efeito |
         |---|---|---|
         | corpo ausente | não | `400 could_not_decode_payload` — o decodificador não tolera `EOF` nesta rota |
-        | `{}` (campo omitido) | não | `400 missing_phone`, mensagem `missing Phone in payload` |
+        | `{}` (campo omitido) | não | `400 missing_phone`, mensagem `missing Phone in payload` (a mensagem cita o nome de domínio, não a chave do fio) |
         | `null` | não | `400 missing_phone` — **indistinguível de ausente** |
         | `""` | não | `400 missing_phone` — **indistinguível de ausente** |
         | `5541` (número JSON) | não | `400 could_not_decode_payload` — o tipo tem de ser texto |
         | `"   "` | passa a validação do wa-api | não é vazio, logo segue para o SDK; **a recusa do SDK não foi medida** (exigiria um pedido de pareamento real) |
-        | preenchido | sim | devolve `LinkingCode` |
+        | preenchido | sim | devolve `linking_code` |
 
         Não há `trim`, `pattern` nem verificação de comprimento no wa-api: a
         única regra local é *não ser vazio*. A validação de forma do número
@@ -137,9 +137,9 @@ PedidoPareamentoTelefone:
 ResultadoPareamentoTelefone:
   type: object
   description: Resposta de `POST /session/pairphone`.
-  required: [LinkingCode]
+  required: [linking_code]
   properties:
-    LinkingCode:
+    linking_code:
       type: string
       nullable: false
       description: |
@@ -160,12 +160,17 @@ EstadoSessao:
     vivo em 2026-08-26 nas duas sessões reais — a forma abaixo é a resposta
     real, não a struct.
 
-    Junta o estado AO VIVO (`connected`, `loggedIn`, lidos do registo de
+    Junta o estado AO VIVO (`connected`, `logged_in`, lidos do registo de
     clientes) com o registo PERSISTIDO da sessão (o resto).
 
-    **Nenhum campo tem `omitempty`** (`domain/session.go:53-67`): os catorze
+    **Nenhum campo tem `omitempty`** (`domain/session.go:53-67`): os treze
     aparecem SEMPRE, em toda resposta `200`, e nenhum vem `null`. O que varia
     é o valor, nunca a presença.
+
+    `token` (`domain.GetStatusResult.Token`) NÃO aparece: o apresentador
+    (`dto/session/presenter.go: PresentGetStatus`) omite-o de propósito — a
+    intenção é não ecoar o token de sessão numa sondagem de estado, e o campo
+    nem chega a existir em `GetStatusResponse`. Ver F298.
   properties:
     id:
       type: string
@@ -187,7 +192,7 @@ EstadoSessao:
       type: boolean
       nullable: false
       description: |
-        Há transporte vivo para o WhatsApp. Distinto de `loggedIn`: uma
+        Há transporte vivo para o WhatsApp. Distinto de `logged_in`: uma
         sessão pode estar autenticada com o transporte caído
         (`GET /session/disconnect` produz exactamente isso).
 
@@ -198,7 +203,7 @@ EstadoSessao:
         de propósito (F196), justamente para conseguir responder o estado de
         uma sessão caída.
       example: true
-    loggedIn:
+    logged_in:
       type: boolean
       nullable: false
       description: |
@@ -206,19 +211,6 @@ EstadoSessao:
         Sempre presente e nunca `null`; `false` é resposta legítima, não
         ausência.
       example: true
-    token:
-      type: string
-      nullable: false
-      description: |
-        **Sempre presente e sempre vazio.** O caso de uso constrói o resultado
-        sem preencher este campo (`session/get_status.go:78-97`), logo ele sai
-        com o valor zero em toda resposta. Medido `""` nas duas sessões em
-        2026-08-26.
-
-        Não use isto para recuperar o token da sessão — ele não é recuperável
-        depois de criado. O campo nunca é `null` e nunca é omitido: é vazio, o
-        que é diferente e mais enganador, porque parece dado.
-      example: ''
     jid:
       type: string
       nullable: false
@@ -263,7 +255,7 @@ EstadoSessao:
         Proxy de saída desta sessão. Sempre presente e nunca `null`; `""`
         quando não há proxy.
       example: ''
-    qrcode:
+    qr_code:
       type: string
       nullable: false
       description: |
@@ -302,12 +294,13 @@ EstadoSessao:
             É `entry.HasProxyURL`, ou seja, deriva de `proxy_url` não ser
             vazio — não é um interruptor independente.
           example: false
-        proxyUrl:
+        proxy_url:
           type: string
           nullable: false
           description: |
-            O mesmo valor de `proxy_url` do nível de cima, em `camelCase`.
-            Sempre presente e nunca `null`; `""` quando não há proxy.
+            O mesmo valor de `proxy_url` do nível de cima, repetido dentro do
+            resumo estruturado. Sempre presente e nunca `null`; `""` quando
+            não há proxy.
           example: ''
     s3_config:
       type: object
@@ -384,10 +377,10 @@ EstadoSessao:
       type: boolean
       nullable: false
       description: |
-        **Sempre presente e sempre `false`.** Como `token`, este campo não é
-        preenchido pelo caso de uso (`session/get_status.go:78-97`) e sai com o
-        valor zero mesmo quando existe chave HMAC gravada. Medido `false` nas
-        duas sessões em 2026-08-26.
+        **Sempre presente e sempre `false`.** O caso de uso não o preenche
+        (`session/get_status.go:78-97`) e ele sai com o valor zero mesmo
+        quando existe chave HMAC gravada. Medido `false` nas duas sessões em
+        2026-08-26.
 
         Nunca vem `null` nem é omitido — o que o torna pior que ausente: um
         `false` que parece resposta. Para saber se há chave, use
@@ -551,12 +544,9 @@ PerfilSessao:
       type: boolean
       nullable: false
       description: |
-        A sessão está autenticada. Sempre presente e nunca `null`.
-
-        Repare no nome — aqui é `logged_in`, e em `GET /session/status` é
-        `loggedIn`. As duas rotas divergem na grafia, ambas estão em uso, e
-        `encoding/json` casa nomes ignorando maiúsculas mas **não** ignora o
-        sublinhado: são nomes diferentes no fio.
+        A sessão está autenticada. Sempre presente e nunca `null`. Mesmo nome
+        do campo homónimo de `GET /session/status` — as duas rotas usam
+        `logged_in`.
       example: true
 
 PerfilSessaoCompleto:
@@ -663,26 +653,27 @@ PerfilSessaoCompleto:
 ResultadoLimiteHistorico:
   type: object
   description: |
-    Resposta de `POST /session/history`. As chaves são `Details` e `History`,
-    com maiúscula inicial — é o corpo histórico da rota.
-  required: [History]
+    Resposta de `POST /session/history` (e de `POST /webhook/history`, mesmo
+    manipulador). As chaves são `details` e `history`, minúsculas — DTO
+    `dtowebhook.HistoryResponse`.
+  required: [history]
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       description: |
         Confirmação em texto. Tem `omitempty` na struct
-        (`domain/webhook.go:49-52`), logo **poderia** ser omitido — mas o caso
-        de uso preenche-o sempre com a constante
+        (`dto/webhook/webhook.go: HistoryResponse`), logo **poderia** ser
+        omitido — mas o caso de uso preenche-o sempre com a constante
         `History configured successfully` (`storage/set_history.go:83`), então
         na prática aparece em toda resposta `200`. Nunca vem `null`.
       example: History configured successfully
-    History:
+    history:
       type: integer
       nullable: false
       minimum: 0
       description: |
-        Limite gravado, ecoado. **Sempre presente e nunca `null`**: `History`
+        Limite gravado, ecoado. **Sempre presente e nunca `null`**: `history`
         NÃO tem `omitempty` de propósito — `0` é resposta legítima e omitir o
         campo esconderia "gravação desligada" (F165).
 
