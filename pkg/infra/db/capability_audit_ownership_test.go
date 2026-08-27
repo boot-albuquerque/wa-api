@@ -83,11 +83,11 @@ func TestAudit_Invariant3_SplitBrainManyRounds(t *testing.T) {
 	ctx := context.Background()
 
 	type roundResult struct {
-		round               int
-		activeCount         int
-		supersededCount     int
-		activeSessionWins   string
-		err                 error
+		round             int
+		activeCount       int
+		supersededCount   int
+		activeSessionWins string
+		err               error
 	}
 
 	failures := 0
