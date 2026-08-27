@@ -1006,8 +1006,12 @@ ResultadoBloqueio:
         `POST /user/block`, `User unblocked` em `POST /user/unblock`. Sempre
         presente.
 
-        É texto para leitura humana: não o compare por igualdade. O enum é o
-        conjunto que o código escreve hoje, literal e sem variação.
+        O enum é o conjunto que o código escreve hoje, literal e sem variação
+        (`block_user.go`, `unblock_user.go`). **Como é campo de RESPOSTA, a
+        pergunta "e um valor desconhecido?" não se aplica à entrada**: um valor
+        fora desta lista não é recusado por validador nenhum — apenas
+        significaria que o texto mudou no nosso código. É texto para leitura
+        humana: não o compare por igualdade.
       enum: [User blocked, User unblocked]
       example: User blocked
     jid:

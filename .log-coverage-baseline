@@ -1264,7 +1264,31 @@ rules_frozen=true
 # servida seria ruido puro, e //log:exempt esta' orcado por
 # max_exempt_annotations (ratchet-DOWN), logo nao e' saida.
 # covered NAO muda; eligible +2 faz a razao cair.
-min_func_coverage=589
+# FAMILIA DE UTILIZADORES (2026-08-27): func_coverage DESCE 589->582 (-7).
+# justificativa: entram 13 elegiveis no denominador sem log proprio, todos em
+# pkg/presentation/http/dto/user. Sao de duas naturezas, e nenhuma tem o que
+# logar:
+#
+#   APRESENTADORES (8) — PresentCheckUser, PresentUserInfo, presentUserInfoList,
+#   PresentContactsLastActivity, PresentGetBlocklist, PresentGetContacts,
+#   presentBlocklistUpdate, presentTime, PresentUserProfile. Mapeiam um valor de
+#   dominio para o tipo de fio, campo a campo, sem E/S, sem erro e sem decisao
+#   que um operador possa querer observar. E' a mesma razao que a fundacao
+#   registou para dto/group.PresentGroupInfo e presentTime.
+#
+#   VALIDADORES (4) — BlockUserRequest.Validate, CheckUserRequest.Validate,
+#   GetAvatarRequest.Validate, SetPrivacySettingRequest.Validate. Devolvem
+#   *apperr.AppError para que a fronteira responda 400 com codigo estavel, e o
+#   registo do erro e' do MANIPULADOR, que ja' o faz com hlog em todos os cinco
+#   sitios que os chamam (handler_user.go, handler_contact.go,
+#   handler_misc.go). Logar tambem aqui duplicaria cada recusa no log.
+#
+# covered NAO muda (585 antes e depois desta mudanca, contando as 3 funcoes que
+# sairam de pkg/domain); eligible +13 faz a razao cair.
+#
+# //log:exempt nao e' saida: esta' orcado por max_exempt_annotations
+# (ratchet-DOWN), como a fundacao ja' tinha registado.
+min_func_coverage=582
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1542,7 +1566,26 @@ min_errpath_coverage=777
 # handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
 # SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
 # como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
-min_eligible=993
+# FAMILIA DE UTILIZADORES (2026-08-27): min_eligible SOBE 993->1006 (+13,
+# ratchet-UP honesto).
+#
+# ENTRAM (13), todos ELIGIBLE, todos em pkg/presentation/http/dto/user:
+#   PresentCheckUser, PresentUserInfo, presentUserInfoList, PresentUserProfile,
+#   PresentContactsLastActivity, PresentGetBlocklist, PresentGetContacts,
+#   presentBlocklistUpdate, presentTime, e os quatro Validate
+#   (BlockUserRequest, CheckUserRequest, GetAvatarRequest,
+#   SetPrivacySettingRequest).
+#
+# Entraram tambem 17 funcoes EXCLUDED, que nao contam para o denominador: os
+# ToDomain/ToBlockDomain/ToUnblockDomain e ResolveChat (X1, mapeamento trivial),
+# os apresentadores de uma linha, e mapPrivacySettings do adaptador wa-noise.
+#
+# SAEM (3), todas EXCLUDED e portanto sem efeito no numero:
+# pkg/domain.BlockUserRequest.ResolveChat, .UnblockUserRequest.ResolveChat e
+# .GetAvatarRequest.ResolveChat — os tipos de dominio deixaram de embutir
+# ChatTarget porque deixaram de ser o corpo HTTP; o alias `chat` passou a ser
+# resolvido pelos DTO de pedido.
+min_eligible=1006
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
