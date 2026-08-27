@@ -812,7 +812,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Webhook and events deleted successfully}
+              data: {details: Webhook and events deleted successfully}
               success: true
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -830,7 +830,7 @@
       conversa no banco local.
 
       `0` significa gravação **desactivada**, e é resposta legítima — o campo
-      `History` vem sempre presente, sem `omitempty`, exactamente para que o
+      `history` vem sempre presente, sem `omitempty`, exactamente para que o
       zero seja distinguível de "campo ausente".
 
       **Para LER o histórico de mensagens de uma conversa** use
@@ -856,7 +856,7 @@
                       $ref: '#/components/schemas/LimiteHistorico'
             example:
               code: 200
-              data: {History: 100}
+              data: {history: 100}
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -908,7 +908,7 @@
                       $ref: '#/components/schemas/LimiteHistorico'
             example:
               code: 200
-              data: {Details: History configured successfully, History: 100}
+              data: {details: History configured successfully, history: 100}
               success: true
       '400':
         description: |
@@ -1033,7 +1033,7 @@
             retention_days: 30
     responses:
       '200':
-        description: Configuração gravada. `Enabled` ecoa o estado pedido.
+        description: Configuração gravada. `enabled` ecoa o estado pedido.
         content:
           application/json:
             schema:
@@ -1045,7 +1045,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoS3'
             example:
               code: 200
-              data: {Details: S3 configuration saved successfully, Enabled: true}
+              data: {details: S3 configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1084,7 +1084,7 @@
       - TokenSessao: []
     responses:
       '200':
-        description: Configuração removida. `Enabled` vem `false`, logo omitido do corpo.
+        description: Configuração removida. `enabled` vem `false`.
         content:
           application/json:
             schema:
@@ -1096,7 +1096,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoS3'
             example:
               code: 200
-              data: {Details: S3 configuration deleted successfully}
+              data: {details: S3 configuration deleted successfully, enabled: false}
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1157,7 +1157,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoS3'
             example:
               code: 200
-              data: {Details: S3 configuration saved successfully, Enabled: true}
+              data: {details: S3 configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1209,7 +1209,7 @@
     responses:
       '200':
         description: |
-          O bucket respondeu. `Bucket` e `Region` ecoam a configuração
+          O bucket respondeu. `bucket` e `region` ecoam a configuração
           **testada** — é o que distingue "testei o que gravaste" de "respondi
           200". Nenhuma credencial aparece.
         content:
@@ -1225,9 +1225,9 @@
               code: 200
               data:
                 connected: true
-                Details: S3 connection test successful
-                Bucket: wa-api-midia
-                Region: sa-east-1
+                details: S3 connection test successful
+                bucket: wa-api-midia
+                region: sa-east-1
               success: true
       '400':
         description: |
@@ -1337,7 +1337,7 @@
             hmac_key: chave-de-assinatura-com-32-carac
     responses:
       '200':
-        description: 'Chave gravada. `Enabled: true` reporta o estado DEPOIS da operação.'
+        description: 'Chave gravada. `enabled: true` reporta o estado DEPOIS da operação.'
         content:
           application/json:
             schema:
@@ -1349,7 +1349,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
             example:
               code: 200
-              data: {Details: HMAC configuration saved successfully, Enabled: true}
+              data: {details: HMAC configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1389,9 +1389,7 @@
       - TokenSessao: []
     responses:
       '200':
-        description: |
-          Chave revogada. `Enabled` vem `false` — logo, omitido do corpo, e a
-          sua ausência é a confirmação.
+        description: Chave revogada. `enabled` vem `false`.
         content:
           application/json:
             schema:
@@ -1403,7 +1401,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
             example:
               code: 200
-              data: {Details: HMAC configuration deleted successfully}
+              data: {details: HMAC configuration deleted successfully, enabled: false}
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1454,7 +1452,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
             example:
               code: 200
-              data: {Details: HMAC configuration saved successfully, Enabled: true}
+              data: {details: HMAC configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1533,8 +1531,8 @@
       '200':
         description: |
           Configuração gravada. O corpo **difere entre os dois ramos**: ligar
-          ecoa `Set`, `ProxyURL` e `webhook_use_proxy`; desligar responde só
-          `Details`.
+          ecoa `set`, `proxy_url` e `webhook_use_proxy`; desligar responde só
+          `details`.
         content:
           application/json:
             schema:
@@ -1547,9 +1545,9 @@
             example:
               code: 200
               data:
-                Details: Proxy configured successfully
-                Set: true
-                ProxyURL: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+                details: Proxy configured successfully
+                set: true
+                proxy_url: socks5://utilizador:senha@proxy.exemplo.com.br:1080
                 webhook_use_proxy: false
               success: true
       '400':
@@ -1747,7 +1745,7 @@
     responses:
       '200':
         description: |
-          A recusa foi aceite pelo WhatsApp. O `CallID` ecoa o identificador
+          A recusa foi aceite pelo WhatsApp. O `call_id` ecoa o identificador
           recusado, para casar com o evento de origem.
         content:
           application/json:
@@ -1761,8 +1759,8 @@
             example:
               code: 200
               data:
-                Details: Call rejected
-                CallID: 3EB0A4B2AFD45E625C0917
+                details: Call rejected
+                call_id: 3EB0A4B2AFD45E625C0917
               success: true
       '400':
         description: |

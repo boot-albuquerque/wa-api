@@ -295,12 +295,12 @@
       **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`
       quando a sessão existe mas não está emparelhada.
 
-      **FORMA DA RESPOSTA — esta rota é a primeira migrada.** As chaves de
+      **FORMA DA RESPOSTA — esta rota foi a primeira migrada.** As chaves de
       `group_info` são `snake_case` minúsculo (`jid`, `owner_jid`, `is_admin`),
       produzidas por um apresentador escrito à mão, e já não são os nomes de
       campo do Go que a serialização directa da struct de protocolo emitia
-      (`JID`, `OwnerJID`, `IsAdmin`). As restantes rotas desta família ainda
-      devolvem a forma antiga — ver `InfoGrupo` contra `InfoGrupoCanonico`, e
+      (`JID`, `OwnerJID`, `IsAdmin`). Toda a família de grupo e comunidade
+      migrou desde então para a mesma forma — ver `InfoGrupoCanonico` e
       `docs/HTTP-DTO-CONVENTIONS.md`.
 
       Campos de protocolo que a forma canónica NÃO traz: `OwnerPN`, `TopicID`,

@@ -337,7 +337,7 @@ components:
       type: object
       description: Confirmação textual de uma operação sem carga útil própria.
       properties:
-        Details:
+        details:
           nullable: true
           type: string
           description: |
