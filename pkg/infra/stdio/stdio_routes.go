@@ -43,6 +43,7 @@ var dynamicRouteGroups = []map[string]dynamicRoute{
 	adminDynamicRoutes,
 	chatDynamicRoutes,
 	userDynamicRoutes,
+	groupDynamicRoutes,
 }
 
 var staticRoutes = mergeStaticRoutes(staticRouteGroups)

@@ -58,10 +58,14 @@ func goldenTestDeps(t *testing.T) Deps {
 }
 
 // pathParamValues supplies a stand-in for every {param} this router
-// registers (verified against wiring_routes.go: only {id} and {jid}).
+// registers (verified against wiring_routes.go).
 var pathParamValues = map[string]string{
-	"id":  "golden-test-id",
-	"jid": "5511999999999_s.whatsapp.net",
+	"id":              "golden-test-id",
+	"jid":             "5511999999999_s.whatsapp.net",
+	"group_jid":       "120363411669320145_g.us",
+	"chat_jid":        "5511999999999_s.whatsapp.net",
+	"poll_message_id": "golden-test-poll-message-id",
+	"invite_code":     "golden-test-invite-code",
 }
 
 var pathParamPattern = regexp.MustCompile(`\{([a-zA-Z]+)\}`)

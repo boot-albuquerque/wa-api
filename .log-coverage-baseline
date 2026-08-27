@@ -1294,7 +1294,8 @@ rules_frozen=true
 # (as familias fecharam sitios que nao logavam). Ratchet-UP, coerente com o
 # resto do ficheiro.
 # INTEGRACAO com errors-envelope (2026-08-27): func_coverage SOBE 590->592. Ratchet-UP.
-min_func_coverage=592
+# INTEGRACAO com http-dto-paths (2026-08-27): func_coverage SOBE 592->596 (novos handlers de rota). Ratchet-UP.
+min_func_coverage=596
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1605,7 +1606,8 @@ min_errpath_coverage=779
 # dto/user, dto/webhook, dto/storage que estavam no denominador saem dele.
 # covered nao muda: nenhuma funcao que registava deixou de o fazer.
 # INTEGRACAO com errors-envelope (2026-08-27): min_eligible SOBE 991->992 (+1, ratchet-UP honesto).
-min_eligible=992
+# INTEGRACAO com http-dto-paths (2026-08-27): min_eligible SOBE 992->1002 (+10, ratchet-UP honesto: 10 rotas cortadas ganharam handler/DTO proprio).
+min_eligible=1002
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

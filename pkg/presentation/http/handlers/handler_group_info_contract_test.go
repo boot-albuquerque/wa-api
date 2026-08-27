@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -58,13 +57,16 @@ func withContractUser(next http.Handler) http.Handler {
 }
 
 // groupInfoRouter monta a rota EXACTAMENTE como wiring_routes.go a monta:
-// registry.Register("/group/info", ..., "POST") aplicado a um mux.Router.
+// registry.Register("/groups/{group_jid}", customhttp.InjectPathParams(...),
+// "GET") aplicado a um mux.Router. group_jid vai no CAMINHO desde o corte
+// para a forma canónica (worktree http-dto-paths) — ver
+// pkg/bootstrap/wiring_routes.go.
 func groupInfoRouter(t *testing.T, f *grpFakes) *mux.Router {
 	t.Helper()
 	registry := customhttp.NewHandlerRegistry()
-	registry.Register("/group/info",
-		withContractUser(NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger))),
-		http.MethodPost)
+	registry.Register("/groups/{group_jid}",
+		customhttp.InjectPathParams(withContractUser(NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger)))),
+		http.MethodGet)
 	router := mux.NewRouter()
 	registry.Apply(router)
 	return router
@@ -125,8 +127,7 @@ func TestGetGroupInfo_ContratoPublico_NomesCanonicos(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -148,8 +149,7 @@ func TestGetGroupInfo_ContratoPublico_ChavesAntigasSumiram(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	contracttest.AssertNoKeys(t, rec.Body.Bytes(),
@@ -169,8 +169,7 @@ func TestGetGroupInfo_ContratoPublico_ValoresMapeados(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	var envelope struct {
@@ -229,44 +228,13 @@ func TestGetGroupInfo_ContratoPublico_ValoresMapeados(t *testing.T) {
 	}
 }
 
-// TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase é a afirmação de que o
-// PEDIDO de /group/info também usa snake_case — H-DTO-GROUP-INFO: esta era a
-// única rota da família que ainda aceitava `groupJID` no corpo, decodificando
-// direto em domain.GetGroupInfoRequest em vez de passar por um DTO de pedido.
-func TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase(t *testing.T) {
-	f := newGrpFakes()
-	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
-		return grupoDeReferencia(), nil
-	}
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
-	groupInfoRouter(t, f).ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, quero 200 com group_jid; corpo: %s", rec.Code, rec.Body.String())
-	}
-}
-
-// TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu prova que `groupJID`, sozinha,
-// já não resolve o pedido: cai na validação de campo obrigatório do use case,
-// e não é mais aceita como sinônimo silencioso de group_jid.
-func TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu(t *testing.T) {
-	f := newGrpFakes()
-	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
-		return grupoDeReferencia(), nil
-	}
-
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
-	groupInfoRouter(t, f).ServeHTTP(rec, req)
-
-	if rec.Code == http.StatusOK {
-		t.Fatalf("groupJID sozinho ainda resolveu o grupo: status 200, corpo: %s", rec.Body.String())
-	}
-}
+// TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase e
+// TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu mediam o PEDIDO de
+// `POST /group/info` (o corpo aceitava `group_jid`, e `groupJID` sozinha
+// deixava de resolver). O corte a hard das rotas concatenadas/sem group_jid
+// no caminho (worktree http-dto-paths, F297) substituiu essa rota por
+// `GET /groups/{group_jid}`, sem corpo — não há mais PEDIDO para medir, e os
+// dois testes foram removidos com a rota que protegiam.
 
 // TestGetGroupInfo_ContratoPublico_ZeroNaoViraDataFalsa trava a decisão do
 // apresentador sobre tempo ausente: null, e não "0001-01-01T00:00:00Z".
@@ -284,8 +252,7 @@ func TestGetGroupInfo_ContratoPublico_ZeroNaoViraDataFalsa(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	var envelope struct {

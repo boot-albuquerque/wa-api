@@ -3334,6 +3334,16 @@ pkg/infra/stdio.adminUserFullPath	ELIGIBLE	covered
 pkg/infra/stdio.adminUserPath	ELIGIBLE	covered
 pkg/infra/stdio.chatDownloadMediaPath	ELIGIBLE	covered
 pkg/infra/stdio.chatHistoryPath	ELIGIBLE	covered
+pkg/infra/stdio.chatMarkReadPath	ELIGIBLE	covered
+pkg/infra/stdio.chatSendPollVotePath	ELIGIBLE	covered
+pkg/infra/stdio.groupAnnouncePath	ELIGIBLE	covered
+pkg/infra/stdio.groupEphemeralPath	ELIGIBLE	covered
+pkg/infra/stdio.groupInfoPath	ELIGIBLE	covered
+pkg/infra/stdio.groupInviteInfoPath	ELIGIBLE	covered
+pkg/infra/stdio.groupInviteLinkPath	ELIGIBLE	covered
+pkg/infra/stdio.groupLockedPath	ELIGIBLE	covered
+pkg/infra/stdio.groupNamePath	ELIGIBLE	covered
+pkg/infra/stdio.groupTopicPath	ELIGIBLE	covered
 pkg/infra/stdio.mergeDynamicRoutes	ELIGIBLE	covered
 pkg/infra/stdio.mergeStaticRoutes	ELIGIBLE	covered
 pkg/infra/stdio.userLidPath	ELIGIBLE	covered
@@ -3893,6 +3903,8 @@ pkg/presentation/http.Find	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.RegisterCanonicalAliases	ELIGIBLE	uncovered:L1
+pkg/presentation/http.InjectPathParams	EXCLUDED	X1
+pkg/presentation/http.InjectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:110);uncovered:L2(S-consume,canonico.go:121);uncovered:L2(S-consume,canonico.go:142)
 pkg/presentation/http.NewHandlerRegistry	EXCLUDED	X1
 pkg/presentation/http.NewProfileFullHandler	EXCLUDED	X1
 pkg/presentation/http.NewProfileHandler	EXCLUDED	X1
@@ -3900,8 +3912,6 @@ pkg/presentation/http.ProfileFullHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consu
 pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:74)
 pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:110)
 pkg/presentation/http.genericError	EXCLUDED	X1
-pkg/presentation/http.injectPathParams	EXCLUDED	X1
-pkg/presentation/http.injectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:94);uncovered:L2(S-consume,canonico.go:105);uncovered:L2(S-consume,canonico.go:126)
 pkg/presentation/http/apidocs.Handler	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,apidocs.go:61)
 pkg/presentation/http/apidocs.Handler.func1	EXCLUDED	X1
 pkg/presentation/http/apidocs.Specification	EXCLUDED	X1

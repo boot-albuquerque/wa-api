@@ -19,7 +19,6 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.send.location": {httpMethod: "POST", httpPath: "/chat/send/location"},
 	"chat.send.contact":  {httpMethod: "POST", httpPath: "/chat/send/contact"},
 	"chat.send.poll":     {httpMethod: "POST", httpPath: "/chat/send/poll"},
-	"chat.send.pollvote": {httpMethod: "POST", httpPath: "/chat/send/pollvote"},
 	"chat.send.forward":  {httpMethod: "POST", httpPath: "/chat/send/forward"},
 	"chat.send.buttons":  {httpMethod: "POST", httpPath: "/chat/send/buttons"},
 	"chat.send.carousel": {httpMethod: "POST", httpPath: "/chat/send/carousel"},
@@ -32,7 +31,6 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.pin":                         {httpMethod: "POST", httpPath: "/chat/pin"},
 	"chat.mute":                        {httpMethod: "POST", httpPath: "/chat/mute"},
 	"chat.presence":                    {httpMethod: "POST", httpPath: "/chat/presence"},
-	"chat.markread":                    {httpMethod: "POST", httpPath: "/chat/markread"},
 	"chat.request-unavailable-message": {httpMethod: "POST", httpPath: "/chat/request-unavailable-message"},
 	"chat.ephemeral":                   {httpMethod: "POST", httpPath: "/chat/ephemeral"},
 	"chat.ephemeral.default":           {httpMethod: "POST", httpPath: "/chat/ephemeral/default"},
@@ -50,6 +48,31 @@ var chatDynamicRoutes = map[string]dynamicRoute{
 	// CAP-10: a forma consolidada, com o kind na RELAÇÃO do caminho — ver
 	// api/openapi/paths/conversa.yaml, "/chats/download/{kind}".
 	"chat.download.media": {httpMethod: "POST", buildPath: chatDownloadMediaPath},
+
+	// chat_jid e poll_message_id passam a viver no caminho — ver
+	// pkg/bootstrap/wiring_routes.go e a nota em groupDynamicRoutes.
+	"chat.markread":      {httpMethod: "POST", buildPath: chatMarkReadPath},
+	"chat.send.pollvote": {httpMethod: "POST", buildPath: chatSendPollVotePath},
+}
+
+func chatMarkReadPath(ss *Server, req *JSONRpcRequest) (string, bool) {
+	chatJID, ok := ss.stringParam(req, "ChatPhone")
+	if !ok {
+		return "", false
+	}
+	httpPath := "/chats/" + chatJID + "/read"
+	log.Debug().Str("method", req.Method).Str("path", httpPath).Msg("Rota dinamica de chat resolvida")
+	return httpPath, true
+}
+
+func chatSendPollVotePath(ss *Server, req *JSONRpcRequest) (string, bool) {
+	pollMessageID, ok := ss.stringParam(req, "PollMessageId")
+	if !ok {
+		return "", false
+	}
+	httpPath := "/polls/" + pollMessageID + "/votes"
+	log.Debug().Str("method", req.Method).Str("path", httpPath).Msg("Rota dinamica de chat resolvida")
+	return httpPath, true
 }
 
 func chatDownloadMediaPath(ss *Server, req *JSONRpcRequest) (string, bool) {

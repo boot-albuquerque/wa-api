@@ -56,7 +56,7 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 		// vir no corpo. O manipulador continua a lê-lo do corpo — logo o
 		// adaptador injecta-o antes de lhe passar o pedido.
 		if strings.Contains(linha.CanonicalPath, "{") {
-			manipulador = injectPathParams(manipulador)
+			manipulador = InjectPathParams(manipulador)
 		}
 		r.Register(linha.CanonicalPath, manipulador, linha.CanonicalMethod)
 	}
@@ -70,19 +70,35 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 // normalização nova. Mudar o nome do campo aqui mudaria o contrato do corpo, e
 // o objectivo desta camada é exactamente o contrário: caminho novo, corpo
 // igual.
+//
+// INTEGRAÇÃO (2026-08-27): esta tabela apontava para os nomes ANTIGOS
+// (`groupJID`, `ChatPhone`, `PollMessageId`, `Code`) porque foi escrita antes
+// das migrações DTO das famílias grupo e mensagens serem integradas nesta
+// árvore. Depois delas, os manipuladores passaram a ler exclusivamente os
+// nomes canónicos — a tabela ficou a apontar para campos que já não existem,
+// e as rotas cortadas (worktree http-dto-paths) que dependem desta injecção
+// para preencher group_jid/chat_phone/poll_message_id a partir do caminho
+// paravam de resolver (404→400 missing_*). Corrigido para os nomes actuais.
 var bodyFieldForPathParam = map[string]string{
-	"group_jid":     "groupJID",
-	"community_jid": "communityJID",
+	"group_jid":       "group_jid",
+	"community_jid":   "community_jid",
+	"chat_jid":        "chat_phone",
+	"poll_message_id": "poll_message_id",
+	"invite_code":     "code",
 }
 
-// injectPathParams copia os parâmetros do caminho para o corpo JSON, e só
+// InjectPathParams copia os parâmetros do caminho para o corpo JSON, e só
 // então chama o manipulador original.
 //
 // NÃO SOBRESCREVE. Se o corpo já trouxer o campo, o corpo ganha — o caminho é
 // a forma nova de dizer a mesma coisa, e não uma autoridade sobre quem já a
 // dizia. Isso mantém a rota canónica utilizável por um cliente que ainda
 // envie o identificador no corpo, durante a migração.
-func injectPathParams(next http.Handler) http.Handler {
+//
+// Exportada porque também é usada por rotas cortadas directamente para a
+// forma canónica (sem passar por RegisterCanonicalAliases) — ver
+// pkg/bootstrap/wiring_routes.go.
+func InjectPathParams(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		if len(vars) == 0 {
