@@ -71,9 +71,6 @@ func (uc *SendListUseCase) Execute(ctx context.Context, txtID string, req domain
 		body = strings.TrimSpace(req.Body)
 	}
 	if body == "" {
-		body = strings.TrimSpace(req.Body2)
-	}
-	if body == "" {
 		body = strings.TrimSpace(req.Text)
 	}
 
@@ -148,11 +145,10 @@ func (uc *SendListUseCase) Execute(ctx context.Context, txtID string, req domain
 	return result, nil
 }
 
-// resolveRowID escolhe o primeiro valor não-vazio da cadeia de fallback do
-// identificador de linha — RowId <- RowID <- Rowid <- Rowid2 — e usa o
+// resolveRowID escolhe o identificador da linha: row_id quando vem, e o
 // título JÁ TRIMADO como último recurso quando os quatro vêm vazios.
 func resolveRowID(row domain.ListRow, trimmedTitle string) string {
-	for _, candidate := range []string{row.RowId, row.RowID, row.Rowid, row.Rowid2} {
+	for _, candidate := range []string{row.RowID} {
 		if v := strings.TrimSpace(candidate); v != "" {
 			return v
 		}
@@ -185,7 +181,7 @@ func normalizeRows(in []domain.ListRow, sectionIndex int) ([]domain.ListRow, []d
 		out = append(out, domain.ListRow{
 			Title:       title,
 			Description: strings.TrimSpace(row.Description),
-			RowId:       resolveRowID(row, title),
+			RowID:       resolveRowID(row, title),
 		})
 	}
 	return out, dropped

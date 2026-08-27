@@ -91,7 +91,7 @@ func TestSendContact_Success_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Name":"Alice","Vcard":"` + vcard + `"}`
+	body := `{"phone":"5511999999999","name":"Alice","vcard":"` + vcard + `"}`
 	rec := sendContactServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -124,7 +124,7 @@ func TestSendContact_RejectUnauthenticated(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	body := `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD"}`
 	rec := sendContactServe(t, sm, jr, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -138,9 +138,9 @@ func TestSendContact_RejectMissingRequiredField(t *testing.T) {
 	// "faltou Phone" de "faltou Vcard", e era exatamente isso que a
 	// tabela original de handler_interactive_test.go exigia (co-gate D).
 	cases := map[string]struct{ body, cause string }{
-		"Phone": {`{"Name":"Alice","Vcard":"BEGIN:VCARD"}`, "missing Phone in payload"},
-		"Name":  {`{"Phone":"5511999999999","Vcard":"BEGIN:VCARD"}`, "missing Name in payload"},
-		"Vcard": {`{"Phone":"5511999999999","Name":"Alice"}`, "missing Vcard in payload"},
+		"phone": {`{"name":"Alice","vcard":"BEGIN:VCARD"}`, "missing Phone in payload"},
+		"name":  {`{"phone":"5511999999999","vcard":"BEGIN:VCARD"}`, "missing Name in payload"},
+		"vcard": {`{"phone":"5511999999999","name":"Alice"}`, "missing Vcard in payload"},
 	}
 	for field, tc := range cases {
 		t.Run(field, func(t *testing.T) {
@@ -164,7 +164,7 @@ func TestSendContact_SessionFailure(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{SessionGuard: contractsfake.FailSession(errSendContactSentinel)}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	body := `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD"}`
 	rec, recs := sendContactServeCapturingLog(t, sm, jr, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -184,7 +184,7 @@ func TestSendContact_InvalidPhoneNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	body := `{"Phone":"lixo","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	body := `{"phone":"lixo","name":"Alice","vcard":"BEGIN:VCARD"}`
 	rec := sendContactServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -203,7 +203,7 @@ func TestSendContact_DownstreamFailureNeverReturns200(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	body := `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD"}`
 	rec := sendContactServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -226,7 +226,7 @@ func TestSendContact_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD","id":"id-do-cliente"}`
 	rec := sendContactServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -252,7 +252,7 @@ func TestSendContact_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendContactRouter(sm, jr))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Name":"Alice","Vcard":"` + logassertGlobalEncryptionKey + `"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","name":"Alice","vcard":"` + logassertGlobalEncryptionKey + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/contact", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -278,7 +278,7 @@ func TestSendContact_NoSecretLeak(t *testing.T) {
 // registro de saída distingue os dois — o campo error carrega a causa CRU
 // do decoder (F141).
 func TestSendContact_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Phone":"5511`
+	const malformed = `{"phone":"5511`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -312,7 +312,7 @@ func TestSendContact_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 // ponto do teste. O corpo é VÁLIDO de propósito: se a guarda não disparar,
 // nada mais impede o envio, e a porta é alcançada.
 func TestSendContact_MissingSessionID_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	const body = `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD"}`
 	noSessionID := func(r *http.Request) *http.Request { return withUser(r, "") }
 
 	sm := &contractsfake.SimpleMessenger{}
@@ -350,7 +350,7 @@ func TestSendContact_MissingSessionID_ViaRegisteredRoute(t *testing.T) {
 // assertion do handler é a de duas variáveis (`info, ok := ...`), e é isso
 // que este teste trava.
 func TestSendContact_WrongTypeInContext_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	const body = `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD"}`
 	wrongType := func(r *http.Request) *http.Request {
 		return r.WithContext(context.WithValue(r.Context(), appport.UserInfoKey, 42))
 	}
@@ -393,7 +393,7 @@ func TestSendContact_SuccessEmitsNoOutcomeLog(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendContactRouter(sm, jr))
 	rec := httptest.NewRecorder()
-	body := `{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD"}`
+	body := `{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD"}`
 	wrapped.ServeHTTP(rec, msgAuthed(httptest.NewRequest(http.MethodPost, "/chat/send/contact", strings.NewReader(body))))
 
 	if rec.Code != http.StatusOK {

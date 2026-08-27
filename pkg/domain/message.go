@@ -23,21 +23,21 @@ package domain
 // was not tested, and QuotedMessage may well matter there. Send it when you
 // have it; do not require it.
 type ReplyContext struct {
-	StanzaID    string `json:"StanzaId"`
-	Participant string `json:"Participant"`
-	QuotedText  string `json:"QuotedText,omitempty"`
+	StanzaID    string
+	Participant string
+	QuotedText  string
 }
 
 // SendMessageRequest representa o payload de envio de mensagem de texto.
 // Corresponde ao struct textStruct em handlers.go:SendMessage().
 type SendMessageRequest struct {
 	ChatTarget
-	Phone        string        `json:"Phone"`
-	Body         string        `json:"Body"`
-	LinkPreview  bool          `json:"LinkPreview,omitempty"`
-	ID           string        `json:"Id,omitempty"`
-	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
-	MentionedJID []string      `json:"MentionedJid,omitempty"`
+	Phone        string
+	Body         string
+	LinkPreview  bool
+	ID           string
+	ReplyTo      *ReplyContext
+	MentionedJID []string
 }
 
 func (r *SendMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -96,14 +96,14 @@ const StatusDeleted = "deleted"
 // `git show 41bc8e2^:handlers.go`).
 type SendImageRequest struct {
 	ChatTarget
-	Phone         string        `json:"Phone"`
-	Image         string        `json:"Image"`
-	Caption       string        `json:"Caption,omitempty"`
-	ID            string        `json:"Id,omitempty"`
-	MimeType      string        `json:"MimeType,omitempty"`
-	JPEGThumbnail []byte        `json:"JPEGThumbnail,omitempty"`
-	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
-	MentionedJID  []string      `json:"MentionedJid,omitempty"`
+	Phone         string
+	Image         string
+	Caption       string
+	ID            string
+	MimeType      string
+	JPEGThumbnail []byte
+	ReplyTo       *ReplyContext
+	MentionedJID  []string
 }
 
 func (r *SendImageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -140,14 +140,14 @@ type MediaPayload struct {
 // `git show 41bc8e2^:handlers.go`, em torno da linha 900.
 type SendDocumentRequest struct {
 	ChatTarget
-	Phone        string        `json:"Phone"`
-	Document     string        `json:"Document"`
-	FileName     string        `json:"FileName"`
-	Caption      string        `json:"Caption,omitempty"`
-	ID           string        `json:"Id,omitempty"`
-	MimeType     string        `json:"MimeType,omitempty"`
-	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
-	MentionedJID []string      `json:"MentionedJid,omitempty"`
+	Phone        string
+	Document     string
+	FileName     string
+	Caption      string
+	ID           string
+	MimeType     string
+	ReplyTo      *ReplyContext
+	MentionedJID []string
 }
 
 func (r *SendDocumentRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -180,15 +180,15 @@ type SendDocumentResult struct {
 // contrato não é do executor).
 type SendAudioRequest struct {
 	ChatTarget
-	Phone    string        `json:"Phone"`
-	Audio    string        `json:"Audio"`
-	Caption  string        `json:"Caption,omitempty"`
-	ID       string        `json:"Id,omitempty"`
-	PTT      *bool         `json:"ptt,omitempty"`
-	MimeType string        `json:"mimetype,omitempty"`
-	Seconds  uint32        `json:"Seconds,omitempty"`
-	Waveform []byte        `json:"Waveform,omitempty"`
-	ReplyTo  *ReplyContext `json:"ReplyTo,omitempty"`
+	Phone    string
+	Audio    string
+	Caption  string
+	ID       string
+	PTT      *bool
+	MimeType string
+	Seconds  uint32
+	Waveform []byte
+	ReplyTo  *ReplyContext
 }
 
 func (r *SendAudioRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -236,16 +236,16 @@ type AudioPayload struct {
 // SendStickerRequest representa o payload de envio de sticker.
 type SendStickerRequest struct {
 	ChatTarget
-	Phone         string        `json:"Phone"`
-	Sticker       string        `json:"Sticker"`
-	ID            string        `json:"Id,omitempty"`
-	MimeType      string        `json:"MimeType,omitempty"`
-	PngThumbnail  []byte        `json:"PngThumbnail,omitempty"`
-	PackID        string        `json:"PackId,omitempty"`
-	PackName      string        `json:"PackName,omitempty"`
-	PackPublisher string        `json:"PackPublisher,omitempty"`
-	Emojis        []string      `json:"Emojis,omitempty"`
-	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
+	Phone         string
+	Sticker       string
+	ID            string
+	MimeType      string
+	PngThumbnail  []byte
+	PackID        string
+	PackName      string
+	PackPublisher string
+	Emojis        []string
+	ReplyTo       *ReplyContext
 }
 
 func (r *SendStickerRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -266,14 +266,14 @@ type SendStickerResult struct {
 // torno da linha 1583, e isDataVideo em send_video.go.
 type SendVideoRequest struct {
 	ChatTarget
-	Phone         string        `json:"Phone"`
-	Video         string        `json:"Video"`
-	Caption       string        `json:"Caption,omitempty"`
-	ID            string        `json:"Id,omitempty"`
-	MimeType      string        `json:"MimeType,omitempty"`
-	JPEGThumbnail []byte        `json:"JPEGThumbnail,omitempty"`
-	ReplyTo       *ReplyContext `json:"ReplyTo,omitempty"`
-	MentionedJID  []string      `json:"MentionedJid,omitempty"`
+	Phone         string
+	Video         string
+	Caption       string
+	ID            string
+	MimeType      string
+	JPEGThumbnail []byte
+	ReplyTo       *ReplyContext
+	MentionedJID  []string
 }
 
 func (r *SendVideoRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -288,11 +288,11 @@ type SendVideoResult struct {
 // SendContactRequest representa o payload de envio de contato.
 type SendContactRequest struct {
 	ChatTarget
-	Phone   string        `json:"Phone"`
-	Name    string        `json:"Name"`
-	Vcard   string        `json:"Vcard"`
-	ID      string        `json:"Id,omitempty"`
-	ReplyTo *ReplyContext `json:"ReplyTo,omitempty"`
+	Phone   string
+	Name    string
+	Vcard   string
+	ID      string
+	ReplyTo *ReplyContext
 }
 
 func (r *SendContactRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -307,8 +307,8 @@ type SendContactResult struct {
 // SendLocationRequest representa o payload de envio de localização.
 type SendLocationRequest struct {
 	ChatTarget
-	Phone string `json:"Phone"`
-	Name  string `json:"Name,omitempty"`
+	Phone string
+	Name  string
 	// PONTEIRO, e não float64, para separar "não informado" de "zero" (F121).
 	//
 	// Zero é coordenada VÁLIDA — o ponto onde o equador cruza o meridiano de
@@ -318,10 +318,10 @@ type SendLocationRequest struct {
 	// A mudança só AMPLIA o que é aceite: quem omite o campo continua a receber
 	// 400, e quem manda 0 passa a ser aceite em vez de recusado. Nenhum cliente
 	// existente perde comportamento.
-	Latitude  *float64      `json:"Latitude"`
-	Longitude *float64      `json:"Longitude"`
-	ID        string        `json:"Id,omitempty"`
-	ReplyTo   *ReplyContext `json:"ReplyTo,omitempty"`
+	Latitude  *float64
+	Longitude *float64
+	ID        string
+	ReplyTo   *ReplyContext
 }
 
 func (r *SendLocationRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -387,15 +387,15 @@ const (
 //
 // Estreitar isso agora recusaria payloads que a rota sempre aceitou.
 type InteractiveButton struct {
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	Text        string `json:"text"`
-	ButtonText  string `json:"buttonText"`
-	ID          string `json:"id"`
-	ButtonID    string `json:"buttonId"`
-	URL         string `json:"url"`
-	PhoneNumber string `json:"phone_number"`
-	CopyCode    string `json:"copy_code"`
+	Type        string
+	Title       string
+	Text        string
+	ButtonText  string
+	ID          string
+	ButtonID    string
+	URL         string
+	PhoneNumber string
+	CopyCode    string
 }
 
 // SendButtonsRequest representa o payload de envio de botões.
@@ -416,16 +416,16 @@ type InteractiveButton struct {
 // e não um campo com significado próprio.
 type SendButtonsRequest struct {
 	ChatTarget
-	Phone        string              `json:"Phone"`
-	Body         string              `json:"Body"`
-	Text         string              `json:"text"`
-	Title        string              `json:"Title"`
-	Footer       string              `json:"Footer"`
-	Image        string              `json:"Image"`
-	Buttons      []InteractiveButton `json:"Buttons"`
-	ID           string              `json:"Id,omitempty"`
-	ReplyTo      *ReplyContext       `json:"ReplyTo,omitempty"`
-	MentionedJID []string            `json:"MentionedJid,omitempty"`
+	Phone        string
+	Body         string
+	Text         string
+	Title        string
+	Footer       string
+	Image        string
+	Buttons      []InteractiveButton
+	ID           string
+	ReplyTo      *ReplyContext
+	MentionedJID []string
 }
 
 func (r *SendButtonsRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -471,30 +471,31 @@ type ButtonsPayload struct {
 // ListRow é UMA linha de uma seção de lista, com os SEIS campos do
 // listItem histórico (`git show 41bc8e2^:handlers.go`, função SendList).
 //
-// É um DTO de DOMÍNIO, não de protobuf. RowId/RowID/Rowid/Rowid2 existem
-// porque o histórico os aceitava como fallback encadeado nesta ordem exata:
+// É um DTO de DOMÍNIO, não de protobuf.
 //
-//	RowId <- RowID <- Rowid <- Rowid2 <- (o Title já resolvido e já trimado)
+// O identificador é UM campo, e não os quatro que este tipo carregava
+// (RowId/RowID/Rowid/Rowid2). O histórico aceitava as quatro grafias como
+// fallback encadeado, mas as quatro são a MESMA chave sob a regra de nome
+// canónico do contrato público (docs/HTTP-DTO-CONVENTIONS.md §8), e das quatro
+// só RowId era alguma vez ESCRITO pelo use case depois de normalizar e só
+// RowId é LIDO pelo adaptador (adapters/chat/messenger_list.go). As outras três
+// nunca levavam valor para lá da fronteira.
 //
-// O último nível NÃO é um campo do payload — é o próprio título, usado como
-// identificador quando os quatro campos de ID vêm vazios. Depois de
-// normalizado pelo use case, só Title/Description/RowId carregam valor: os
-// outros três ficam vazios, mesma disciplina de InteractiveButton.ID/ButtonID.
+// A cadeia de fallback que resta é `row_id <- (o Title já resolvido e já
+// trimado)`: o último nível NÃO é um campo do payload, é o próprio título,
+// usado como identificador quando row_id vem vazio.
 type ListRow struct {
-	Title       string `json:"title"`
-	Description string `json:"desc"`
-	RowId       string `json:"RowId"`
-	RowID       string `json:"RowID"`
-	Rowid       string `json:"rowId"`
-	Rowid2      string `json:"rowID"`
+	Title       string
+	Description string
+	RowID       string
 }
 
 // ListSection é UMA seção de `Sections`, com Rows já filtradas de linhas
 // sem título quando normalizada pelo use case (ver
 // SendListUseCase.normalizeSections).
 type ListSection struct {
-	Title string    `json:"title"`
-	Rows  []ListRow `json:"rows"`
+	Title string
+	Rows  []ListRow
 }
 
 // SendListRequest representa o payload de envio de lista, com o contrato
@@ -513,19 +514,18 @@ type ListSection struct {
 // (HOUSEKEEP F149).
 type SendListRequest struct {
 	ChatTarget
-	Phone        string        `json:"Phone"`
-	ButtonText   string        `json:"ButtonText"` // rótulo do botão que abre a lista; default "Select"
-	Desc         string        `json:"Desc"`       // corpo principal. Fallback: Body, body, text
-	Body         string        `json:"Body"`
-	Body2        string        `json:"body"`
-	Text         string        `json:"text"`
-	TopText      string        `json:"TopText"`    // cabeçalho opcional; também default do título da seção legada
-	FooterText   string        `json:"FooterText"` // rodapé opcional
-	Sections     []ListSection `json:"Sections"`   // preferida: multi-seção
-	List         []ListRow     `json:"List"`       // legado: lista plana
-	ID           string        `json:"Id,omitempty"`
-	ReplyTo      *ReplyContext `json:"ReplyTo,omitempty"`
-	MentionedJID []string      `json:"MentionedJid,omitempty"`
+	Phone        string
+	ButtonText   string // rótulo do botão que abre a lista; default "Select"
+	Desc         string // corpo principal. Fallback: body, text
+	Body         string
+	Text         string
+	TopText      string        // cabeçalho opcional; também default do título da seção legada
+	FooterText   string        // rodapé opcional
+	Sections     []ListSection // preferida: multi-seção
+	List         []ListRow     // legado: lista plana
+	ID           string
+	ReplyTo      *ReplyContext
+	MentionedJID []string
 }
 
 func (r *SendListRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -562,11 +562,11 @@ type ListPayload struct {
 // SendPollRequest representa o payload de envio de enquete.
 type SendPollRequest struct {
 	ChatTarget
-	Group   string        `json:"Group"`
-	Header  string        `json:"Header"`
-	Options []string      `json:"Options"`
-	ID      string        `json:"Id,omitempty"`
-	ReplyTo *ReplyContext `json:"ReplyTo,omitempty"`
+	Group   string
+	Header  string
+	Options []string
+	ID      string
+	ReplyTo *ReplyContext
 }
 
 func (r *SendPollRequest) ResolveChat() { ResolveChatField(&r.Group, r.ChatAlias) }
@@ -613,12 +613,12 @@ type PollPayload struct {
 // exactly what it passed, and the error is always about what it passed.
 type SendPollVoteRequest struct {
 	ChatTarget
-	Phone                string   `json:"Phone"`
-	Sender               string   `json:"Sender"`
-	PollMessageID        string   `json:"PollMessageId"`
-	PollMessageTimestamp int64    `json:"PollMessageTimestamp"`
-	Options              []string `json:"Options"`
-	ID                   string   `json:"Id,omitempty"`
+	Phone                string
+	Sender               string
+	PollMessageID        string
+	PollMessageTimestamp int64
+	Options              []string
+	ID                   string
 }
 
 func (r *SendPollVoteRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -672,14 +672,14 @@ type ForwardContext struct {
 // When MessageID is absent, Body is required (backward compat with CAP-49).
 type SendForwardRequest struct {
 	ChatTarget
-	Phone           string        `json:"Phone"`
-	Body            string        `json:"Body"`
-	ForwardingScore *uint32       `json:"ForwardingScore,omitempty"`
-	ID              string        `json:"Id,omitempty"`
-	ReplyTo         *ReplyContext `json:"ReplyTo,omitempty"`
-	MentionedJID    []string      `json:"MentionedJid,omitempty"`
-	MessageID       string        `json:"MessageID,omitempty"`
-	Chat            string        `json:"Chat,omitempty"`
+	Phone           string
+	Body            string
+	ForwardingScore *uint32
+	ID              string
+	ReplyTo         *ReplyContext
+	MentionedJID    []string
+	MessageID       string
+	Chat            string
 }
 
 func (r *SendForwardRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -706,8 +706,8 @@ type SendForwardResult struct {
 // DeleteMessageRequest representa o payload de exclusão de mensagem.
 type DeleteMessageRequest struct {
 	ChatTarget
-	Phone string `json:"Phone"`
-	ID    string `json:"Id"`
+	Phone string
+	ID    string
 }
 
 func (r *DeleteMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -729,12 +729,12 @@ type DeleteMessageResult struct {
 // SendEditMessageRequest representa o payload de edição de mensagem.
 type SendEditMessageRequest struct {
 	ChatTarget
-	Phone        string   `json:"Phone"`
-	Body         string   `json:"Body"`
-	ID           string   `json:"Id"`
-	StanzaID     *string  `json:"StanzaId,omitempty"`
-	Participant  *string  `json:"Participant,omitempty"`
-	MentionedJID []string `json:"MentionedJid,omitempty"`
+	Phone        string
+	Body         string
+	ID           string
+	StanzaID     *string
+	Participant  *string
+	MentionedJID []string
 }
 
 func (r *SendEditMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -801,11 +801,11 @@ const (
 // "numere automaticamente", e a numeração é do adapter, junto da montagem do
 // protobuf: é o wire que exige um id decimal por botão.
 type TemplateButton struct {
-	DisplayText string `json:"DisplayText"`
-	ID          string `json:"Id,omitempty"`
-	URL         string `json:"Url,omitempty"`
-	PhoneNumber string `json:"PhoneNumber,omitempty"`
-	Type        string `json:"Type"`
+	DisplayText string
+	ID          string
+	URL         string
+	PhoneNumber string
+	Type        string
 }
 
 // SendTemplateRequest representa o payload de envio de template.
@@ -816,13 +816,13 @@ type TemplateButton struct {
 // contrato, e não só reconexão de fiação como nos blocos anteriores.
 type SendTemplateRequest struct {
 	ChatTarget
-	Phone        string           `json:"Phone"`
-	Content      string           `json:"Content"`
-	Footer       string           `json:"Footer"`
-	ID           string           `json:"Id,omitempty"`
-	Buttons      []TemplateButton `json:"Buttons"`
-	ReplyTo      *ReplyContext    `json:"ReplyTo,omitempty"`
-	MentionedJID []string         `json:"MentionedJid,omitempty"`
+	Phone        string
+	Content      string
+	Footer       string
+	ID           string
+	Buttons      []TemplateButton
+	ReplyTo      *ReplyContext
+	MentionedJID []string
 }
 
 func (r *SendTemplateRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -912,14 +912,14 @@ type CarouselPayload struct {
 // (HOUSEKEEP F211).
 type SendCarouselRequest struct {
 	ChatTarget
-	Phone string `json:"Phone"`
-	Body  string `json:"Body"`
+	Phone string
+	Body  string
 	// Footer is the carousel-level footer, below all cards.
-	Footer       string                    `json:"Footer,omitempty"`
-	Cards        []SendCarouselCardRequest `json:"Cards"`
-	ID           string                    `json:"Id,omitempty"`
-	ReplyTo      *ReplyContext             `json:"ReplyTo,omitempty"`
-	MentionedJID []string                  `json:"MentionedJid,omitempty"`
+	Footer       string
+	Cards        []SendCarouselCardRequest
+	ID           string
+	ReplyTo      *ReplyContext
+	MentionedJID []string
 }
 
 func (r *SendCarouselRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -928,11 +928,11 @@ func (r *SendCarouselRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatA
 type SendCarouselCardRequest struct {
 	// Title is decorative: iOS does not render it; only Android shows it (F217).
 	// Put required information in Body, not here.
-	Title   string              `json:"Title,omitempty"`
-	Body    string              `json:"Body"`
-	Footer  string              `json:"Footer,omitempty"`
-	Image   string              `json:"Image,omitempty"`
-	Buttons []InteractiveButton `json:"Buttons"`
+	Title   string
+	Body    string
+	Footer  string
+	Image   string
+	Buttons []InteractiveButton
 }
 
 // SendCarouselResult is the response for POST /chat/send/carousel.

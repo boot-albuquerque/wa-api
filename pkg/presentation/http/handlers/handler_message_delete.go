@@ -7,7 +7,6 @@ import (
 	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 
 	"wa-api/pkg/application/usecase/message"
 
@@ -44,7 +43,7 @@ func (h *DeleteMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var req domain.DeleteMessageRequest
+	var req dtomessage.DeleteMessageRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -57,7 +56,7 @@ func (h *DeleteMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).
 			Str("path", r.URL.Path).

@@ -94,7 +94,7 @@ func TestSendLocation_Success_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Name":"Praça da Sé","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"5511999999999","name":"Praça da Sé","latitude":-23.5505,"longitude":-46.6333}`
 	rec := sendLocationServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -127,7 +127,7 @@ func TestSendLocation_RejectUnauthenticated(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333}`
 	rec := sendLocationServe(t, sm, jr, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -141,9 +141,9 @@ func TestSendLocation_RejectMissingRequiredField(t *testing.T) {
 	// "faltou Phone" de "faltou Longitude", e era exatamente isso que a
 	// tabela original de handler_interactive_test.go exigia (co-gate D).
 	cases := map[string]struct{ body, cause string }{
-		"Phone":     {`{"Latitude":-23.5505,"Longitude":-46.6333}`, "missing Phone in payload"},
-		"Latitude":  {`{"Phone":"5511999999999","Longitude":-46.6333}`, "missing Latitude in payload"},
-		"Longitude": {`{"Phone":"5511999999999","Latitude":-23.5505}`, "missing Longitude in payload"},
+		"phone":     {`{"latitude":-23.5505,"longitude":-46.6333}`, "missing Phone in payload"},
+		"latitude":  {`{"phone":"5511999999999","longitude":-46.6333}`, "missing Latitude in payload"},
+		"longitude": {`{"phone":"5511999999999","latitude":-23.5505}`, "missing Longitude in payload"},
 	}
 	for field, tc := range cases {
 		t.Run(field, func(t *testing.T) {
@@ -177,9 +177,9 @@ func TestSendLocation_RejectMissingRequiredField(t *testing.T) {
 // (0, 0), no golfo da Guiné, devolveu 200 e a mensagem saiu.
 func TestSendLocation_ZeroEhAceite_ViaRegisteredRoute(t *testing.T) {
 	bodies := map[string]string{
-		"zero_latitude":  `{"Phone":"5511999999999","Latitude":0,"Longitude":-46.6333}`,
-		"zero_longitude": `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":0}`,
-		"ambos_zero":     `{"Phone":"5511999999999","Latitude":0,"Longitude":0}`,
+		"zero_latitude":  `{"phone":"5511999999999","latitude":0,"longitude":-46.6333}`,
+		"zero_longitude": `{"phone":"5511999999999","latitude":-23.5505,"longitude":0}`,
+		"ambos_zero":     `{"phone":"5511999999999","latitude":0,"longitude":0}`,
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
@@ -203,8 +203,8 @@ func TestSendLocation_ZeroEhAceite_ViaRegisteredRoute(t *testing.T) {
 // trocado uma recusa errada por uma aceitação errada.
 func TestSendLocation_CampoAusenteContinua400_ViaRegisteredRoute(t *testing.T) {
 	bodies := map[string]string{
-		"sem_latitude":  `{"Phone":"5511999999999","Longitude":-46.6333}`,
-		"sem_longitude": `{"Phone":"5511999999999","Latitude":-23.5505}`,
+		"sem_latitude":  `{"phone":"5511999999999","longitude":-46.6333}`,
+		"sem_longitude": `{"phone":"5511999999999","latitude":-23.5505}`,
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestSendLocation_SessionFailure(t *testing.T) {
 	sm := &contractsfake.SimpleMessenger{SessionGuard: contractsfake.FailSession(errSendLocationSentinel)}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333}`
 	rec, recs := sendLocationServeCapturingLog(t, sm, jr, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -244,7 +244,7 @@ func TestSendLocation_InvalidPhoneNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	body := `{"Phone":"lixo","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"lixo","latitude":-23.5505,"longitude":-46.6333}`
 	rec := sendLocationServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -263,7 +263,7 @@ func TestSendLocation_DownstreamFailureNeverReturns200(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333}`
 	rec := sendLocationServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -286,7 +286,7 @@ func TestSendLocation_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333,"Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333,"id":"id-do-cliente"}`
 	rec := sendLocationServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -311,7 +311,7 @@ func TestSendLocation_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendLocationRouter(sm, jr))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","latitude":-23.5505,"longitude":-46.6333}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/location", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -337,7 +337,7 @@ func TestSendLocation_NoSecretLeak(t *testing.T) {
 // registro de saída distingue os dois — o campo error carrega a causa CRU
 // do decoder (F141).
 func TestSendLocation_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Phone":"5511`
+	const malformed = `{"phone":"5511`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -371,7 +371,7 @@ func TestSendLocation_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 // ponto do teste. O corpo é VÁLIDO de propósito: se a guarda não disparar,
 // nada mais impede o envio, e a porta é alcançada.
 func TestSendLocation_MissingSessionID_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333}`
+	const body = `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333}`
 	noSessionID := func(r *http.Request) *http.Request { return withUser(r, "") }
 
 	sm := &contractsfake.SimpleMessenger{}
@@ -409,7 +409,7 @@ func TestSendLocation_MissingSessionID_ViaRegisteredRoute(t *testing.T) {
 // assertion do handler é a de duas variáveis (`info, ok := ...`), e é isso
 // que este teste trava.
 func TestSendLocation_WrongTypeInContext_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333}`
+	const body = `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333}`
 	wrongType := func(r *http.Request) *http.Request {
 		return r.WithContext(context.WithValue(r.Context(), appport.UserInfoKey, 42))
 	}
@@ -452,7 +452,7 @@ func TestSendLocation_SuccessEmitsNoOutcomeLog(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendLocationRouter(sm, jr))
 	rec := httptest.NewRecorder()
-	body := `{"Phone":"5511999999999","Latitude":-23.5505,"Longitude":-46.6333}`
+	body := `{"phone":"5511999999999","latitude":-23.5505,"longitude":-46.6333}`
 	wrapped.ServeHTTP(rec, msgAuthed(httptest.NewRequest(http.MethodPost, "/chat/send/location", strings.NewReader(body))))
 
 	if rec.Code != http.StatusOK {

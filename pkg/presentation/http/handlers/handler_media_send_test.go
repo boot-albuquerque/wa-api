@@ -95,7 +95,7 @@ func TestSendImage_Success_ViaRegisteredRoute(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `","Caption":"legenda"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `","caption":"legenda"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -141,7 +141,7 @@ func TestSendImage_RejectUnauthenticated(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `"}`
 	rec := sendImageServe(t, mm, jr, mf, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -157,8 +157,8 @@ func TestSendImage_RejectUnauthenticated(t *testing.T) {
 // nem fetch nem SendImage são tocados.
 func TestSendImage_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"Phone": `{"Image":"` + sendImageTestURL + `"}`,
-		"Image": `{"Phone":"5511999999999"}`,
+		"phone": `{"image":"` + sendImageTestURL + `"}`,
+		"image": `{"phone":"5511999999999"}`,
 	}
 	for field, body := range bodies {
 		t.Run(field, func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestSendImage_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	mf := defaultSendImageFetcher()
 
 	encoded := base64.StdEncoding.EncodeToString(sendImagePNGBytes)
-	body := `{"Phone":"5511999999999","Image":"data:image/png;base64,` + encoded + `","Caption":"legenda"}`
+	body := `{"phone":"5511999999999","image":"data:image/png;base64,` + encoded + `","caption":"legenda"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -255,7 +255,7 @@ func TestSendImage_UnsupportedSource_Rejected(t *testing.T) {
 			jr := &contractsfake.JIDResolver{}
 			mf := defaultSendImageFetcher()
 
-			body := `{"Phone":"5511999999999","Image":"` + img + `"}`
+			body := `{"phone":"5511999999999","image":"` + img + `"}`
 			rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 			if rec.Code == http.StatusOK {
@@ -282,7 +282,7 @@ func TestSendImage_SessionFailure(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -305,7 +305,7 @@ func TestSendImage_InvalidPhoneNeverFetchesOrSends(t *testing.T) {
 	}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"lixo","Image":"` + sendImageTestURL + `"}`
+	body := `{"phone":"lixo","image":"` + sendImageTestURL + `"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -331,7 +331,7 @@ func TestSendImage_FetchFailure_NeverReturns200(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -354,7 +354,7 @@ func TestSendImage_DownstreamFailureNeverReturns200(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -381,7 +381,7 @@ func TestSendImage_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendImageFetcher()
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `","id":"id-do-cliente"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -410,7 +410,7 @@ func TestSendImage_InvalidMimeType_Rejected(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `"}`
+	body := `{"phone":"5511999999999","image":"` + sendImageTestURL + `"}`
 	rec := sendImageServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -435,7 +435,7 @@ func TestSendImage_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendImageRouter(mm, jr, mf))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Image":"` + logassertGlobalEncryptionKey + `"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","image":"` + logassertGlobalEncryptionKey + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/image", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)

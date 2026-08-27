@@ -29,7 +29,7 @@ const sendPollSentinelToken = "send-poll-sentinel-cause-4a91e2"
 const sendPollGroup = "120363313346913103@g.us"
 
 // sendPollBody é o menor corpo VÁLIDO da rota.
-const sendPollBody = `{"Group":"` + sendPollGroup + `","Header":"Que horas almocamos?","Options":["12h","13h"]}`
+const sendPollBody = `{"group":"` + sendPollGroup + `","header":"Que horas almocamos?","options":["12h","13h"]}`
 
 var errSendPollSentinel = errors.New(sendPollSentinelToken)
 
@@ -141,10 +141,10 @@ func TestSendPoll_RejectUnauthenticated(t *testing.T) {
 // sozinho não distingue "faltou Group" de "faltou Header" de "só uma opção".
 func TestSendPoll_RejectMissingRequiredField(t *testing.T) {
 	cases := map[string]struct{ body, cause string }{
-		"Group":              {`{"Header":"Qual?","Options":["a","b"]}`, "missing Group in payload"},
-		"Header":             {`{"Group":"` + sendPollGroup + `","Options":["a","b"]}`, "missing Header in payload"},
-		"Options_nenhuma":    {`{"Group":"` + sendPollGroup + `","Header":"Qual?"}`, "at least 2 options are required"},
-		"Options_apenas_uma": {`{"Group":"` + sendPollGroup + `","Header":"Qual?","Options":["a"]}`, "at least 2 options are required"},
+		"group":              {`{"header":"Qual?","options":["a","b"]}`, "missing Group in payload"},
+		"header":             {`{"group":"` + sendPollGroup + `","options":["a","b"]}`, "missing Header in payload"},
+		"Options_nenhuma":    {`{"group":"` + sendPollGroup + `","header":"Qual?"}`, "at least 2 options are required"},
+		"Options_apenas_uma": {`{"group":"` + sendPollGroup + `","header":"Qual?","options":["a"]}`, "at least 2 options are required"},
 	}
 	for field, tc := range cases {
 		t.Run(field, func(t *testing.T) {
@@ -187,7 +187,7 @@ func TestSendPoll_InvalidGroupNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	rec := sendPollServe(t, sm, jr, `{"Group":"lixo","Header":"Qual?","Options":["a","b"]}`, msgAuthed)
+	rec := sendPollServe(t, sm, jr, `{"group":"lixo","header":"Qual?","options":["a","b"]}`, msgAuthed)
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("JID invalido produziu 200: %s", rec.Body.String())
@@ -230,7 +230,7 @@ func TestSendPoll_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Group":"` + sendPollGroup + `","Header":"Qual?","Options":["a","b"],"Id":"id-do-cliente"}`
+	body := `{"group":"` + sendPollGroup + `","header":"Qual?","options":["a","b"],"id":"id-do-cliente"}`
 	rec := sendPollServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -256,7 +256,7 @@ func TestSendPoll_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendPollRouter(sm, jr))
 
-	body := `{"Group":"` + sendPollGroup + `","Header":"` + logassertGlobalHMACKey + `","Options":["` + logassertGlobalHMACKey + `","nao"]}`
+	body := `{"group":"` + sendPollGroup + `","header":"` + logassertGlobalHMACKey + `","options":["` + logassertGlobalHMACKey + `","nao"]}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/poll", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -280,7 +280,7 @@ func TestSendPoll_NoSecretLeak(t *testing.T) {
 // decode fosse ignorado (o use case rejeitaria por missing_group). Só o
 // registro de saída distingue os dois.
 func TestSendPoll_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Group":"12036`
+	const malformed = `{"group":"12036`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}

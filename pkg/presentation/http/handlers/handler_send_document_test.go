@@ -97,7 +97,7 @@ func TestSendDocument_Success_ViaRegisteredRoute(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendDocumentFetcher()
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"relatorio.pdf","Caption":"legenda"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"relatorio.pdf","caption":"legenda"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -139,7 +139,7 @@ func TestSendDocument_RejectUnauthenticated(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendDocumentFetcher()
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -156,9 +156,9 @@ func TestSendDocument_RejectUnauthenticated(t *testing.T) {
 // campo que Document tem e Image não — o 400 específico do CAP-04.
 func TestSendDocument_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"Phone":    `{"Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`,
-		"Document": `{"Phone":"5511999999999","FileName":"a.pdf"}`,
-		"FileName": `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `"}`,
+		"phone":    `{"document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`,
+		"document": `{"phone":"5511999999999","file_name":"a.pdf"}`,
+		"file_name": `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `"}`,
 	}
 	for field, body := range bodies {
 		t.Run(field, func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestSendDocument_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	mf := defaultSendDocumentFetcher()
 
 	encoded := base64.StdEncoding.EncodeToString(sendDocumentPDFBytes)
-	body := `{"Phone":"5511999999999","Document":"data:application/pdf;base64,` + encoded + `","FileName":"a.pdf","MimeType":"application/pdf"}`
+	body := `{"phone":"5511999999999","document":"data:application/pdf;base64,` + encoded + `","file_name":"a.pdf","mime_type":"application/pdf"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -254,7 +254,7 @@ func TestSendDocument_UnsupportedSource_Rejected(t *testing.T) {
 			jr := &contractsfake.JIDResolver{}
 			mf := defaultSendDocumentFetcher()
 
-			body := `{"Phone":"5511999999999","Document":"` + doc + `","FileName":"a.pdf"}`
+			body := `{"phone":"5511999999999","document":"` + doc + `","file_name":"a.pdf"}`
 			rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 			if rec.Code == http.StatusOK {
@@ -281,7 +281,7 @@ func TestSendDocument_SessionFailure(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendDocumentFetcher()
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -304,7 +304,7 @@ func TestSendDocument_InvalidPhoneNeverFetchesOrSends(t *testing.T) {
 	}
 	mf := defaultSendDocumentFetcher()
 
-	body := `{"Phone":"lixo","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`
+	body := `{"phone":"lixo","document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -330,7 +330,7 @@ func TestSendDocument_FetchFailure_NeverReturns200(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -353,7 +353,7 @@ func TestSendDocument_DownstreamFailureNeverReturns200(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendDocumentFetcher()
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -380,7 +380,7 @@ func TestSendDocument_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendDocumentFetcher()
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf","id":"id-do-cliente"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -415,7 +415,7 @@ func TestSendDocument_MimeType_RemoteContentTypeUsedWhenReqEmpty(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.zip"}`
+	body := `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.zip"}`
 	rec := sendDocumentServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -440,7 +440,7 @@ func TestSendDocument_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendDocumentRouter(mm, jr, mf))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Document":"` + logassertGlobalEncryptionKey + `","FileName":"leak-test.pdf"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","document":"` + logassertGlobalEncryptionKey + `","file_name":"leak-test.pdf"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/document", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)

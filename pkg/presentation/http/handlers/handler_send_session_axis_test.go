@@ -76,7 +76,7 @@ func sessionAxisCases() []sessionAxisCase {
 			serve: func(t *testing.T, sessionID string) (*httptest.ResponseRecorder, []string, []string) {
 				tm := &contractsfake.TextMessenger{}
 				rec := sessionAxisPost(t, sendTextRouter(tm, &contractsfake.JIDResolver{}),
-					"/chat/send/text", `{"Phone":"5511999999999","Body":"ola"}`, sessionID)
+					"/chat/send/text", `{"phone":"5511999999999","body":"ola"}`, sessionID)
 				send := make([]string, 0, len(tm.SendTextCalls))
 				for _, c := range tm.SendTextCalls {
 					send = append(send, c.TxtID)
@@ -91,7 +91,7 @@ func sessionAxisCases() []sessionAxisCase {
 			serve: func(t *testing.T, sessionID string) (*httptest.ResponseRecorder, []string, []string) {
 				mm := &contractsfake.MediaMessenger{}
 				rec := sessionAxisPost(t, sendImageRouter(mm, &contractsfake.JIDResolver{}, defaultSendImageFetcher()),
-					"/chat/send/image", `{"Phone":"5511999999999","Image":"`+sendImageTestURL+`","Caption":"legenda"}`, sessionID)
+					"/chat/send/image", `{"phone":"5511999999999","image":"`+sendImageTestURL+`","caption":"legenda"}`, sessionID)
 				send := make([]string, 0, len(mm.SendImageCalls))
 				for _, c := range mm.SendImageCalls {
 					send = append(send, c.TxtID)
@@ -106,7 +106,7 @@ func sessionAxisCases() []sessionAxisCase {
 			serve: func(t *testing.T, sessionID string) (*httptest.ResponseRecorder, []string, []string) {
 				mm := &contractsfake.MediaMessenger{}
 				rec := sessionAxisPost(t, sendAudioRouter(mm, &contractsfake.JIDResolver{}, defaultSendAudioFetcher()),
-					"/chat/send/audio", `{"Phone":"5511999999999","Audio":"`+sendAudioTestURL+`"}`, sessionID)
+					"/chat/send/audio", `{"phone":"5511999999999","audio":"`+sendAudioTestURL+`"}`, sessionID)
 				send := make([]string, 0, len(mm.SendAudioCalls))
 				for _, c := range mm.SendAudioCalls {
 					send = append(send, c.TxtID)
@@ -121,7 +121,7 @@ func sessionAxisCases() []sessionAxisCase {
 			serve: func(t *testing.T, sessionID string) (*httptest.ResponseRecorder, []string, []string) {
 				mm := &contractsfake.MediaMessenger{}
 				rec := sessionAxisPost(t, sendVideoRouter(mm, &contractsfake.JIDResolver{}, defaultSendVideoFetcher()),
-					"/chat/send/video", `{"Phone":"5511999999999","Video":"`+sendVideoTestURL+`"}`, sessionID)
+					"/chat/send/video", `{"phone":"5511999999999","video":"`+sendVideoTestURL+`"}`, sessionID)
 				send := make([]string, 0, len(mm.SendVideoCalls))
 				for _, c := range mm.SendVideoCalls {
 					send = append(send, c.TxtID)
@@ -137,7 +137,7 @@ func sessionAxisCases() []sessionAxisCase {
 				mm := &contractsfake.MediaMessenger{}
 				rec := sessionAxisPost(t, sendDocumentRouter(mm, &contractsfake.JIDResolver{}, defaultSendDocumentFetcher()),
 					"/chat/send/document",
-					`{"Phone":"5511999999999","Document":"`+sendDocumentTestURL+`","FileName":"relatorio.pdf"}`, sessionID)
+					`{"phone":"5511999999999","document":"`+sendDocumentTestURL+`","file_name":"relatorio.pdf"}`, sessionID)
 				send := make([]string, 0, len(mm.SendDocumentCalls))
 				for _, c := range mm.SendDocumentCalls {
 					send = append(send, c.TxtID)
@@ -153,7 +153,7 @@ func sessionAxisCases() []sessionAxisCase {
 				mm := &contractsfake.MediaMessenger{}
 				rec := sessionAxisPost(t, sendStickerRouter(mm, &contractsfake.JIDResolver{},
 					defaultSendStickerFetcher(), defaultSendStickerProcessor()),
-					"/chat/send/sticker", `{"Phone":"5511999999999","Sticker":"`+sendStickerTestURL+`"}`, sessionID)
+					"/chat/send/sticker", `{"phone":"5511999999999","sticker":"`+sendStickerTestURL+`"}`, sessionID)
 				send := make([]string, 0, len(mm.SendStickerCalls))
 				for _, c := range mm.SendStickerCalls {
 					send = append(send, c.TxtID)
@@ -169,7 +169,7 @@ func sessionAxisCases() []sessionAxisCase {
 				sm := &contractsfake.SimpleMessenger{}
 				rec := sessionAxisPost(t, sendLocationRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/location",
-					`{"Phone":"5511999999999","Name":"Praca da Se","Latitude":-23.5505,"Longitude":-46.6333}`, sessionID)
+					`{"phone":"5511999999999","name":"Praca da Se","latitude":-23.5505,"longitude":-46.6333}`, sessionID)
 				send := make([]string, 0, len(sm.SendLocationCalls))
 				for _, c := range sm.SendLocationCalls {
 					send = append(send, c.TxtID)
@@ -185,7 +185,7 @@ func sessionAxisCases() []sessionAxisCase {
 				sm := &contractsfake.SimpleMessenger{}
 				rec := sessionAxisPost(t, sendContactRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/contact",
-					`{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nEND:VCARD"}`, sessionID)
+					`{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nEND:VCARD"}`, sessionID)
 				send := make([]string, 0, len(sm.SendContactCalls))
 				for _, c := range sm.SendContactCalls {
 					send = append(send, c.TxtID)
@@ -201,7 +201,7 @@ func sessionAxisCases() []sessionAxisCase {
 				sm := &contractsfake.SimpleMessenger{}
 				rec := sessionAxisPost(t, sendPollRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/poll",
-					`{"Group":"120363313346913103@g.us","Header":"Que horas almocamos?","Options":["12h","13h"]}`, sessionID)
+					`{"group":"120363313346913103@g.us","header":"Que horas almocamos?","options":["12h","13h"]}`, sessionID)
 				send := make([]string, 0, len(sm.SendPollCalls))
 				for _, c := range sm.SendPollCalls {
 					send = append(send, c.TxtID)
@@ -217,7 +217,7 @@ func sessionAxisCases() []sessionAxisCase {
 				cm := &contractsfake.ChatMessenger{}
 				rec := sessionAxisPost(t, sendPollVoteRouter(cm, &contractsfake.JIDResolver{}),
 					"/chat/send/pollvote",
-					`{"Phone":"120363313346913103@g.us","Sender":"5511999999999@s.whatsapp.net","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`, sessionID)
+					`{"phone":"120363313346913103@g.us","sender":"5511999999999@s.whatsapp.net","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, sessionID)
 				send := make([]string, 0, len(cm.SendPollVoteCalls))
 				for _, c := range cm.SendPollVoteCalls {
 					send = append(send, c.TxtID)
@@ -233,7 +233,7 @@ func sessionAxisCases() []sessionAxisCase {
 				tm := &contractsfake.TextMessenger{}
 				rec := sessionAxisPost(t, sendForwardRouter(tm, &contractsfake.JIDResolver{}),
 					"/chat/send/forward",
-					`{"Phone":"5511999999999","Body":"forwarded text"}`, sessionID)
+					`{"phone":"5511999999999","body":"forwarded text"}`, sessionID)
 				send := make([]string, 0, len(tm.SendTextCalls))
 				for _, c := range tm.SendTextCalls {
 					send = append(send, c.TxtID)

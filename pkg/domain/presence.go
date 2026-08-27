@@ -28,10 +28,10 @@ func (r *ChatPresenceRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatA
 // ReactRequest para POST /chat/react
 type ReactRequest struct {
 	ChatTarget
-	Phone       string `json:"Phone"`
-	Body        string `json:"Body"`        // emoji or "remove"
-	Id          string `json:"Id"`          // message ID
-	Participant string `json:"Participant"` // optional participant JID
+	Phone       string
+	Body        string // emoji or "remove"
+	Id          string // message ID
+	Participant string // optional participant JID
 }
 
 func (r *ReactRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }

@@ -90,7 +90,7 @@ func sendAxisServe(t *testing.T, h http.Handler, target, body string, mut func(*
 	return rec, capture.Records(t)
 }
 
-const sendAxisMalformedBody = `{"Phone":"5511`
+const sendAxisMalformedBody = `{"phone":"5511`
 
 // sendAxisDecodeCauseRaw e' a causa das capabilities que logam o erro cru do
 // json.Decoder para o corpo truncado acima.
@@ -101,7 +101,7 @@ func sendAxisCases() []sendAxisCase {
 		{
 			nome:        "text",
 			rota:        "POST /chat/send/text",
-			validBody:   `{"Phone":"5511999999999","Body":"ola"}`,
+			validBody:   `{"phone":"5511999999999","body":"ola"}`,
 			decodeCause: sendAxisDecodeCauseRaw,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) sendAxisOutcome {
 				tm := &contractsfake.TextMessenger{}
@@ -113,7 +113,7 @@ func sendAxisCases() []sendAxisCase {
 		{
 			nome:         "image",
 			rota:         "POST /chat/send/image",
-			validBody:    `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `","Caption":"legenda"}`,
+			validBody:    `{"phone":"5511999999999","image":"` + sendImageTestURL + `","caption":"legenda"}`,
 			decodeCause:  sendAxisDecodeCauseRaw,
 			fetchesMedia: true,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) sendAxisOutcome {
@@ -128,7 +128,7 @@ func sendAxisCases() []sendAxisCase {
 		{
 			nome:         "audio",
 			rota:         "POST /chat/send/audio",
-			validBody:    `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `"}`,
+			validBody:    `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `"}`,
 			decodeCause:  sendAxisDecodeCauseRaw,
 			fetchesMedia: true,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) sendAxisOutcome {
@@ -143,7 +143,7 @@ func sendAxisCases() []sendAxisCase {
 		{
 			nome:         "video",
 			rota:         "POST /chat/send/video",
-			validBody:    `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`,
+			validBody:    `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`,
 			decodeCause:  sendAxisDecodeCauseRaw,
 			fetchesMedia: true,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) sendAxisOutcome {
@@ -158,7 +158,7 @@ func sendAxisCases() []sendAxisCase {
 		{
 			nome:         "document",
 			rota:         "POST /chat/send/document",
-			validBody:    `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"relatorio.pdf"}`,
+			validBody:    `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"relatorio.pdf"}`,
 			decodeCause:  sendAxisDecodeCauseRaw,
 			fetchesMedia: true,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) sendAxisOutcome {
@@ -173,7 +173,7 @@ func sendAxisCases() []sendAxisCase {
 		{
 			nome:         "sticker",
 			rota:         "POST /chat/send/sticker",
-			validBody:    `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`,
+			validBody:    `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`,
 			decodeCause:  sendAxisDecodeCauseRaw,
 			fetchesMedia: true,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) sendAxisOutcome {

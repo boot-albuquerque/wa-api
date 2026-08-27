@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 
-	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
@@ -24,7 +23,7 @@ func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.ReactRequest
+	var req dtomessage.ReactRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -33,7 +32,7 @@ func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.uc.Execute(r.Context(), id, req)
+	rsp, err := h.uc.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)

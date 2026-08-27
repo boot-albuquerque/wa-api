@@ -95,7 +95,7 @@ func TestSendVideo_Success_ViaRegisteredRoute(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -135,7 +135,7 @@ func TestSendVideo_RejectUnauthenticated(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -149,8 +149,8 @@ func TestSendVideo_RejectUnauthenticated(t *testing.T) {
 
 func TestSendVideo_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"Phone": `{"Video":"` + sendVideoTestURL + `"}`,
-		"Video": `{"Phone":"5511999999999"}`,
+		"phone": `{"video":"` + sendVideoTestURL + `"}`,
+		"video": `{"phone":"5511999999999"}`,
 	}
 	for field, body := range bodies {
 		t.Run(field, func(t *testing.T) {
@@ -191,7 +191,7 @@ func TestSendVideo_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	mf := defaultSendVideoFetcher()
 
 	encoded := base64.StdEncoding.EncodeToString(sendVideoMP4Bytes)
-	body := `{"Phone":"5511999999999","Video":"data:video/mp4;base64,` + encoded + `"}`
+	body := `{"phone":"5511999999999","video":"data:video/mp4;base64,` + encoded + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -231,7 +231,7 @@ func TestSendVideo_ShortDat_Rejected_NoPanic(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"dat"}`
+	body := `{"phone":"5511999999999","video":"dat"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -260,7 +260,7 @@ func TestSendVideo_UnsupportedSource_Rejected(t *testing.T) {
 			jr := &contractsfake.JIDResolver{}
 			mf := defaultSendVideoFetcher()
 
-			body := `{"Phone":"5511999999999","Video":"` + doc + `"}`
+			body := `{"phone":"5511999999999","video":"` + doc + `"}`
 			rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 			if rec.Code == http.StatusOK {
@@ -285,7 +285,7 @@ func TestSendVideo_SessionFailure(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -306,7 +306,7 @@ func TestSendVideo_InvalidPhoneNeverFetchesOrSends(t *testing.T) {
 	}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"lixo","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"lixo","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -329,7 +329,7 @@ func TestSendVideo_FetchFailure_NeverReturns200(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -352,7 +352,7 @@ func TestSendVideo_DownstreamFailureNeverReturns200(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -376,7 +376,7 @@ func TestSendVideo_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `","id":"id-do-cliente"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -405,7 +405,7 @@ func TestSendVideo_Caption_ForwardedFromRequest(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendVideoFetcher()
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `","Caption":"legenda do clipe"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `","caption":"legenda do clipe"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -435,7 +435,7 @@ func TestSendVideo_MimeType_SniffedFromBytes_ViaRegisteredRoute(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `"}`
+	body := `{"phone":"5511999999999","video":"` + sendVideoTestURL + `"}`
 	rec := sendVideoServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -460,7 +460,7 @@ func TestSendVideo_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendVideoRouter(mm, jr, mf))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Video":"` + logassertGlobalEncryptionKey + `"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","video":"` + logassertGlobalEncryptionKey + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/video", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)

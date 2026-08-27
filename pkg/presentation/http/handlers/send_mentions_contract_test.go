@@ -29,14 +29,14 @@ type mentionsCapture struct {
 }
 
 func mentionsCases() []mentionsCase {
-	mentionsJSON := `,"MentionedJid":["5511888888888@s.whatsapp.net","5511777777777@s.whatsapp.net"]`
+	mentionsJSON := `,"mentioned_jid":["5511888888888@s.whatsapp.net","5511777777777@s.whatsapp.net"]`
 	result := domain.MessageSendResult{ID: "wire-mention", Timestamp: time.Unix(1755500200, 0)}
 
 	return []mentionsCase{
 		{
 			nome:     "text",
-			bodyWith: `{"Phone":"5511999999999","Body":"@Alice @Bob"` + mentionsJSON + `}`,
-			bodyNo:   `{"Phone":"5511999999999","Body":"plain text"}`,
+			bodyWith: `{"phone":"5511999999999","body":"@Alice @Bob"` + mentionsJSON + `}`,
+			bodyNo:   `{"phone":"5511999999999","body":"plain text"}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				tm := &contractsfake.TextMessenger{
 					SendTextFunc: func(_ context.Context, _ string, _ domain.JID, _ string, _ *domain.LinkPreviewData, _ *domain.ReplyContext, mentionedJID []string, _ *domain.ForwardContext, _ string) (domain.MessageSendResult, error) {
@@ -54,8 +54,8 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome:     "image",
-			bodyWith: `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `","Caption":"@Alice"` + mentionsJSON + `}`,
-			bodyNo:   `{"Phone":"5511999999999","Image":"` + sendImageTestURL + `","Caption":"leg"}`,
+			bodyWith: `{"phone":"5511999999999","image":"` + sendImageTestURL + `","caption":"@Alice"` + mentionsJSON + `}`,
+			bodyNo:   `{"phone":"5511999999999","image":"` + sendImageTestURL + `","caption":"leg"}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				mm := &contractsfake.MediaMessenger{
 					SendImageFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
@@ -73,8 +73,8 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome:     "video",
-			bodyWith: `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `","Caption":"@Alice"` + mentionsJSON + `}`,
-			bodyNo:   `{"Phone":"5511999999999","Video":"` + sendVideoTestURL + `","Caption":"leg"}`,
+			bodyWith: `{"phone":"5511999999999","video":"` + sendVideoTestURL + `","caption":"@Alice"` + mentionsJSON + `}`,
+			bodyNo:   `{"phone":"5511999999999","video":"` + sendVideoTestURL + `","caption":"leg"}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				mm := &contractsfake.MediaMessenger{
 					SendVideoFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
@@ -92,8 +92,8 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome:     "document",
-			bodyWith: `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf","Caption":"@Alice"` + mentionsJSON + `}`,
-			bodyNo:   `{"Phone":"5511999999999","Document":"` + sendDocumentTestURL + `","FileName":"a.pdf","Caption":"leg"}`,
+			bodyWith: `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf","caption":"@Alice"` + mentionsJSON + `}`,
+			bodyNo:   `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `","file_name":"a.pdf","caption":"leg"}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				mm := &contractsfake.MediaMessenger{
 					SendDocumentFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.MediaPayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
@@ -111,8 +111,8 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome:     "template",
-			bodyWith: `{"Phone":"5511999999999","Content":"@Alice","Footer":"f"` + mentionsJSON + `,"Buttons":[{"DisplayText":"Ok","Type":"reply"}]}`,
-			bodyNo:   `{"Phone":"5511999999999","Content":"text","Footer":"f","Buttons":[{"DisplayText":"Ok","Type":"reply"}]}`,
+			bodyWith: `{"phone":"5511999999999","content":"@Alice","footer":"f"` + mentionsJSON + `,"buttons":[{"display_text":"Ok","type":"reply"}]}`,
+			bodyNo:   `{"phone":"5511999999999","content":"text","footer":"f","buttons":[{"display_text":"Ok","type":"reply"}]}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				sm := &contractsfake.SimpleMessenger{
 					SendTemplateFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.TemplatePayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
@@ -130,8 +130,8 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome:     "buttons",
-			bodyWith: `{"Phone":"5511999999999","Body":"@Alice","Title":"T"` + mentionsJSON + `,"Buttons":[{"type":"reply","title":"Ok"}]}`,
-			bodyNo:   `{"Phone":"5511999999999","Body":"text","Title":"T","Buttons":[{"type":"reply","title":"Ok"}]}`,
+			bodyWith: `{"phone":"5511999999999","body":"@Alice","title":"T"` + mentionsJSON + `,"buttons":[{"type":"reply","title":"Ok"}]}`,
+			bodyNo:   `{"phone":"5511999999999","body":"text","title":"T","buttons":[{"type":"reply","title":"Ok"}]}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				im := &contractsfake.InteractiveMessenger{
 					SendButtonsFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ButtonsPayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
@@ -149,8 +149,8 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome:     "carousel",
-			bodyWith: `{"Phone":"5511999999999","Body":"@Alice"` + mentionsJSON + `,"Cards":[{"Body":"C","Buttons":[{"type":"reply","title":"Y"}]}]}`,
-			bodyNo:   `{"Phone":"5511999999999","Body":"text","Cards":[{"Body":"C","Buttons":[{"type":"reply","title":"Y"}]}]}`,
+			bodyWith: `{"phone":"5511999999999","body":"@Alice"` + mentionsJSON + `,"cards":[{"body":"C","buttons":[{"type":"reply","title":"Y"}]}]}`,
+			bodyNo:   `{"phone":"5511999999999","body":"text","cards":[{"body":"C","buttons":[{"type":"reply","title":"Y"}]}]}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				im := &contractsfake.InteractiveMessenger{
 					SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.CarouselPayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
@@ -168,10 +168,10 @@ func mentionsCases() []mentionsCase {
 		},
 		{
 			nome: "list",
-			bodyWith: `{"Phone":"5511999999999","Body":"@Alice","ButtonText":"Ver"` + mentionsJSON +
-				`,"Sections":[{"title":"S","rows":[{"title":"R","RowId":"r1"}]}]}`,
-			bodyNo: `{"Phone":"5511999999999","Body":"text","ButtonText":"Ver"` +
-				`,"Sections":[{"title":"S","rows":[{"title":"R","RowId":"r1"}]}]}`,
+			bodyWith: `{"phone":"5511999999999","body":"@Alice","button_text":"Ver"` + mentionsJSON +
+				`,"sections":[{"title":"S","rows":[{"title":"R","row_id":"r1"}]}]}`,
+			bodyNo: `{"phone":"5511999999999","body":"text","button_text":"Ver"` +
+				`,"sections":[{"title":"S","rows":[{"title":"R","row_id":"r1"}]}]}`,
 			serve: func(t *testing.T, cap *mentionsCapture) serveFunc {
 				sm := &contractsfake.SimpleMessenger{
 					SendListFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.ListPayload, _ *domain.ReplyContext, mentionedJID []string, _ string) (domain.MessageSendResult, error) {
