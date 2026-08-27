@@ -31393,7 +31393,7 @@ protegia.
 **Status**: **corrigido** — mudança deliberada, aplicada, documentada e travada
 pelos testes acima.
 
-<!-- f-status: fechado -->
+<!-- f-status: corrigido -->
 
 ## F298 — `s3_config.access_key: "***"` não dizia nada, e passaria a corromper a credencial depois do alinhamento de nomes
 
@@ -31440,7 +31440,7 @@ FAIL
 
 **Status**: **corrigido**.
 
-<!-- f-status: fechado -->
+<!-- f-status: corrigido -->
 
 ## F299 — `GET /admin/users` não consegue dizer se uma sessão tem chave de acesso S3 configurada
 
