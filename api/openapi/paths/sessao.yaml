@@ -12,6 +12,12 @@
 #  3. Toda recusa deste grupo passa pela taxonomia `apperr`, logo o corpo de
 #     erro é o objecto `{code,message}` e não a forma antiga em texto simples.
 #     A ÚNICA excepção medida está em `POST /user/history/sync`, e está dita lá.
+#  4. As três rotas de EMPAREL­HAMENTO — `/session/connect`, `/session/qr` e
+#     `/session/pairphone` — exigem `engine` desde 2026-08-27. **O engine é
+#     escolhido pelo pedido de emparelhamento e determina qual transporte
+#     executa a ligação; não é inferido da sessão do chamador.** Nos dois GET
+#     vai como parâmetro de query, no POST vai no corpo. Ver a nota de cada
+#     uma e HOUSEKEEP F273/F281.
 
 /session/connect:
   get:
@@ -50,6 +56,8 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - $ref: '#/components/parameters/EngineDePareamento'
     responses:
       '200':
         description: Pedido aceite e posse da sessão confirmada. A ligação arranca em segundo plano.
@@ -73,8 +81,18 @@
         $ref: '#/components/responses/NaoAutorizado'
       '409':
         description: |
-          Outra réplica é dona desta sessão. Encaminhe o pedido para o
-          processo que a detém — insistir aqui não resolve.
+          Três causas partilham este status, e o `code` separa-as:
+
+          - `session_owned_by_another_replica` — outra réplica é dona desta
+            sessão. Encaminhe o pedido para o processo que a detém, porque
+            insistir aqui não resolve;
+          - `engine_mismatch` — o `engine` do pedido não é o da sessão alvo.
+            O engine é imutável depois da criação, logo o que muda é o pedido;
+          - `engine_unavailable` — o engine seria suportado mas não está
+            disponível NESTE processo (por exemplo headless sem Chrome
+            configurado). É facto de instalação, não de pedido.
+
+          Em nenhuma das três se chegou a tocar no transporte.
         content:
           application/json:
             schema:
@@ -85,6 +103,8 @@
                 code: session_owned_by_another_replica
                 message: this session is owned by another replica; route the request to its owner
               success: false
+      '422':
+        $ref: '#/components/responses/EngineNaoSuporta'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -226,6 +246,8 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - $ref: '#/components/parameters/EngineDePareamento'
     responses:
       '200':
         description: |
@@ -249,6 +271,10 @@
         $ref: '#/components/responses/SemSessao'
       '401':
         $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        $ref: '#/components/responses/EngineDivergente'
+      '422':
+        $ref: '#/components/responses/EngineNaoSuporta'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -273,6 +299,17 @@
 
       **Regras**:
 
+      - `engine` é obrigatório, não-nulo, não-vazio, e só aceita `wa_noise` ou
+        `wa_headless`. **O engine é escolhido pelo pedido de emparelhamento e
+        determina qual transporte executa a ligação; não é inferido da sessão
+        do chamador.** Ausente, vazio, `legacy_unknown` ou qualquer outro
+        valor dá `400 invalid_engine`, e nenhum transporte é tocado;
+      - `engine` tem de coincidir com o da sessão ALVO. Divergir dá
+        `409 engine_mismatch`. **Não há recurso a outro engine**: um pedido
+        que nomeie um transporte que não serve esta operação é recusado, nunca
+        servido em silêncio pelo outro;
+      - a resolução do engine corre ANTES da validação do número. Um corpo com
+        `engine` errado e sem `Phone` dá o erro do engine, não `missing_phone`;
       - `Phone` é obrigatório: só dígitos, com código de país, sem `+` e sem
         `@s.whatsapp.net`. Vazio dá `400 missing_phone`;
       - a sessão **não pode já estar autenticada** — a guarda corre ANTES de
@@ -294,6 +331,7 @@
           schema:
             $ref: '#/components/schemas/PedidoPareamentoTelefone'
           example:
+            engine: wa_noise
             Phone: '554192421234'
     responses:
       '200':
@@ -314,9 +352,11 @@
               success: true
       '400':
         description: |
-          Recusa de validação. Os códigos possíveis: `missing_phone` (sem o
-          campo `Phone`), `already_paired` (a sessão já está autenticada),
-          `no_session` (nenhum cliente vivo — ligue primeiro),
+          Recusa de validação. Os códigos possíveis: `invalid_engine` (campo
+          `engine` ausente, vazio ou não reconhecido — é o primeiro a ser
+          avaliado), `missing_phone` (sem o campo `Phone` nem `phone_number`),
+          `already_paired` (a sessão já está autenticada), `no_session`
+          (nenhum cliente vivo — ligue primeiro, ou a sessão alvo não existe),
           `pair_phone_failed` (o número foi recusado; a mensagem traz o motivo
           do SDK) e `could_not_decode_payload` (corpo não é JSON válido).
         content:
@@ -331,6 +371,10 @@
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
+      '409':
+        $ref: '#/components/responses/EngineDivergente'
+      '422':
+        $ref: '#/components/responses/EngineNaoSuporta'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
