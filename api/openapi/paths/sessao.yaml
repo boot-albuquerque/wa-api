@@ -1118,10 +1118,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 500
-              error: internal server error
+              error:
+                code: internal_error
+                message: Ocorreu um erro interno.
               success: false
 
 /session/hmac/config:

@@ -20,9 +20,12 @@ type GetGroupInfoRequest struct {
 
 func (r *GetGroupInfoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
-// GetGroupInfoResult representa o resultado da obtenção de informações de grupo
+// GetGroupInfoResult representa o resultado da obtenção de informações de grupo.
+//
+// Sem tag `json`: este tipo já NÃO é o formato de fio. Quem o serializa é
+// pkg/presentation/http/dto/group.PresentGetGroupInfo.
 type GetGroupInfoResult struct {
-	GroupInfo interface{} `json:"group_info"`
+	GroupInfo *GroupInfo
 }
 
 // GetGroupInviteLinkRequest representa a requisição para obter link de convite do grupo

@@ -668,7 +668,9 @@
                 summary: '`since` fora do RFC 3339 — envelope ANTIGO, `error` em texto'
                 value:
                   code: 400
-                  error: bad request
+                  error:
+                    code: invalid_request
+                    message: Requisição inválida.
                   success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'

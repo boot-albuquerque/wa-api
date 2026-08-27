@@ -18,7 +18,13 @@ type GroupDirectory interface {
 	SessionGuard
 
 	// GetGroupInfo devolve os metadados de um grupo.
-	GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (any, error)
+	//
+	// TIPADO, e não `any`: com `any` era o motor da sessão que decidia a
+	// forma do JSON servido ao cliente — o struct de protocolo do wa-noise
+	// numa sessão, o struct de conversa do headless na outra — e nenhuma das
+	// duas estava declarada em lado nenhum. Cada adaptador normaliza para
+	// domain.GroupInfo, e a fronteira HTTP apresenta a partir daí.
+	GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (*domain.GroupInfo, error)
 
 	// GetGroupInfoFromLink devolve os metadados a partir de um código de
 	// convite.

@@ -140,7 +140,9 @@ func grpReadCases() []grpReadCase {
 				return NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger))
 			},
 			failOp: func(f *grpFakes, err error) {
-				f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return nil, err }
+				f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+					return nil, err
+				}
 			},
 		},
 		{
@@ -392,7 +394,7 @@ func TestGetGroupInfo_UpstreamForbiddenReturns403(t *testing.T) {
 	f := newGrpFakes()
 	portErr := apperr.New("upstream_forbidden", apperr.CategoryForbidden,
 		"WhatsApp does not permit this operation on that target", false, nil)
-	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) {
+	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
 		return nil, portErr
 	}
 

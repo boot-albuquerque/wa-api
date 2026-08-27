@@ -9,7 +9,7 @@ import (
 )
 
 // GetGroupInfo devolve os metadados de um grupo.
-func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (any, error) {
+func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (*domain.GroupInfo, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -19,7 +19,10 @@ func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group dom
 		return nil, err
 	}
 	res, err := client.GetGroupInfo(ctx, jid)
-	return res, errmap.ClassifyIQ(err)
+	if err := errmap.ClassifyIQ(err); err != nil {
+		return nil, err
+	}
+	return toDomainGroupInfo(res), nil
 }
 
 // GetGroupInfoFromLink devolve os metadados a partir de um código de convite.

@@ -89,8 +89,8 @@ func TestProfileHandler_UseCaseError_500_GenericMessage(t *testing.T) {
 	if strings.Contains(body, "JID") {
 		t.Errorf("response body contains internal detail: %s", body)
 	}
-	if !strings.Contains(body, "internal server error") {
-		t.Errorf("expected generic error message, got %q", body)
+	if !strings.Contains(body, `"code":"internal_error"`) {
+		t.Errorf("expected the generic internal_error object, got %q", body)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestProfileHandler_RequestCancelled_503(t *testing.T) {
 		t.Errorf("expected 500, got %d", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "internal server error") {
-		t.Errorf("expected generic error message, got %q", body)
+	if !strings.Contains(body, `"code":"internal_error"`) {
+		t.Errorf("expected the generic internal_error object, got %q", body)
 	}
 }

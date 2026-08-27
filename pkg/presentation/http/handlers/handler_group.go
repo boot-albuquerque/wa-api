@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtogroup "wa-api/pkg/presentation/http/dto/group"
 
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
@@ -186,7 +187,7 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetGroupInfo(rsp), nil)
 }
 
 // GetGroupInviteLinkHandler gets invite link

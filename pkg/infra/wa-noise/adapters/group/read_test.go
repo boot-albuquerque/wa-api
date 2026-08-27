@@ -30,8 +30,11 @@ func TestGroupAdapter_GetGroupInfo_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetGroupInfo = %v", err)
 	}
-	if got != info {
-		t.Errorf("GetGroupInfo returned different pointer")
+	// O adaptador NORMALIZA: devolve domain.GroupInfo, nao o struct de
+	// protocolo. Comparar ponteiros aqui deixaria de medir o que interessa —
+	// o que interessa e' que o mapeamento aconteceu e preservou o jid.
+	if got == nil || got.JID != "g@g.us" {
+		t.Errorf("GetGroupInfo = %+v, quero JID g@g.us", got)
 	}
 }
 

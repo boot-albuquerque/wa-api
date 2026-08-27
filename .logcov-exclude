@@ -82,3 +82,14 @@ pkg/infra/wa-noise/adapters/
 # exclusão por pacote não distingue ficheiros, então a separação teve de ser
 # feita no layout. Se um dia entrar lógica em `client/`, esta linha sai.
 pkg/infra/wa-noise/client/
+
+# pkg/presentation/http/contracttest/ — mesmo caso de contractsfake e de
+# testkit: e' o pacote de ASSERCOES de contrato partilhado pelos testes das
+# seis familias de rota que migram para DTO. Nasceu como pacote nao-_test
+# porque um pacote _test nao pode ser importado por testes de outro pacote, e
+# e' exatamente isso que estes ajudantes existem para permitir.
+# justificativa: codigo de APOIO A TESTE, nao codigo de producao a
+# instrumentar; um ajudante de assercao que logasse seria ruido no teste, e
+# contar os seus 4 pontos no denominador diluiria o percentual sem dizer nada
+# sobre o repositorio real.
+pkg/presentation/http/contracttest/

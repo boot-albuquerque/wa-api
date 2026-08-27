@@ -52,11 +52,14 @@ func TestRespondJSONMarshalFailureLogsAndFallsBack(t *testing.T) {
 	RespondJSON(rec, http.StatusOK, make(chan int), nil)
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `"error":"internal server error"`) {
-		t.Errorf("body = %q, want the generic fallback envelope", body)
+	if !strings.Contains(body, `"error":{"code":"internal_error"`) {
+		t.Errorf("body = %q, want the generic fallback envelope with an error OBJECT", body)
 	}
-	if strings.Contains(body, `"success"`) {
-		t.Errorf("fallback body should be the minimal envelope, got %q", body)
+	// `success` está no corpo de recurso, e deliberadamente: o cliente
+	// distingue os dois ramos por ele, e um corpo de erro que o omitisse
+	// seria lido como `undefined`, que é falsy — erro tratado como sucesso.
+	if !strings.Contains(body, `"success":false`) {
+		t.Errorf("fallback body must still carry success=false, got %q", body)
 	}
 
 	out := logs.String()

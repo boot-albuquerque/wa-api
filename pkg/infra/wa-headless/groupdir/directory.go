@@ -60,7 +60,7 @@ func (d *Directory) EnsureSession(ctx context.Context, txtID string) error {
 }
 
 // GetGroupInfo reads one group by JID.
-func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID domain.JID) (any, error) {
+func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID domain.JID) (*domain.GroupInfo, error) {
 	pageJID, err := adapter.ToPageJID(groupJID)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,28 @@ func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID dom
 	if !chat.IsGroup {
 		return nil, fmt.Errorf("waheadless: %q is not a group conversation", pageJID)
 	}
-	return chat, nil
+	return toDomainGroupInfo(chat), nil
+}
+
+// toDomainGroupInfo maps what a CONVERSA gives us onto the group metadata the
+// port promises.
+//
+// A conversa é tudo o que este motor tem: a página não expõe uma colecção de
+// grupos, então três campos é o que existe, e o resto do domain.GroupInfo fica
+// no zero. Preencher o zero com um palpite seria pior que devolvê-lo — o
+// chamador não teria como distinguir "este motor não vê" de "o grupo é assim".
+func toDomainGroupInfo(chat waheadless.Chat) *domain.GroupInfo {
+	return &domain.GroupInfo{
+		JID:  domain.JID(chat.JID),
+		Name: chat.Title,
+		// ReadOnly é, na documentação da própria capability, o grupo de
+		// anúncio — a conversa em que só administradores escrevem. É a mesma
+		// propriedade que o wa-noise chama IsAnnounce.
+		IsAnnounce: chat.ReadOnly,
+		// Não-nulo mesmo vazio, pela mesma razão do adaptador wa-noise: o
+		// cliente lê `participants` como lista, e este motor nunca a tem.
+		Participants: []domain.GroupParticipant{},
+	}
 }
 
 // ListJoinedGroups returns the groups this account is in, and how many.

@@ -278,12 +278,16 @@ components:
           type: object
           nullable: false
           description: |
-            **Sempre presente** num corpo de erro produzido pela taxonomia
-            `apperr`. Nunca `null`, nunca `{}`.
+            **Sempre presente, e sempre um objecto** — em TODO corpo de erro,
+            em TODO estado HTTP, tenha o erro passado ou não pela taxonomia
+            `apperr`. Nunca `null`, nunca `{}`, nunca uma string.
 
-            Repare que existe uma segunda forma em que este campo é uma
-            **string** e não um objecto — ver `ErroTextoSimples`. Um cliente
-            que leia `error.code` sem verificar o tipo parte nessas rotas.
+            Houve uma segunda forma, com `error` em texto simples, para os
+            erros que não passavam pela taxonomia (F266). Ela FOI REMOVIDA: o
+            que não tem código próprio recebe agora o código genérico do
+            estado (`invalid_request`, `unauthorized`, `not_found`,
+            `internal_error`, ...). Ramificar sobre `error.code` é seguro em
+            qualquer resposta.
           required: [code, message]
           properties:
             code:
@@ -296,50 +300,13 @@ components:
             message:
               nullable: false
               type: string
-              description: Descrição legível, segura para mostrar ao utilizador.
+              description: |
+                Descrição legível em pt-BR, segura para mostrar ao utilizador.
+                Nunca traz detalhe interno — caminho de ficheiro, consulta SQL
+                ou valor de `panic` são descartados por `RespondJSON` e ficam
+                só no log. Travado por
+                `TestRespondJSONNaoVazaDetalheDeErroInterno`.
               example: missing chat in payload
-
-    ErroTextoSimples:
-      type: object
-      description: |
-        Forma ANTIGA de erro, com `error` em texto simples em vez do objecto.
-        Sobrevive em catorze pontos do código — sobretudo nas recusas de campo
-        obrigatório das rotas de grupo (`rejectMissingField`). Registado como
-        F266 no `HOUSEKEEP.md`. Um cliente que leia `error.code` parte aqui.
-      required: [code, error, success]
-      properties:
-        code:
-          nullable: false
-          type: integer
-          description: Estado HTTP, repetido no corpo. **Sempre presente.**
-          example: 400
-        error:
-          type: string
-          nullable: false
-          description: |
-            **Texto genérico do estado HTTP**, em minúsculas — `bad request`,
-            `unauthorized`, `internal server error`. **Sempre presente.**
-
-            Ao contrário da forma canónica, aqui `error` é uma **string** e não
-            um objecto: não há `error.code` nem `error.message`. É o resultado
-            de o erro não ter passado pela taxonomia `apperr` (F266).
-
-            O texto **nunca** traz detalhe interno: `RespondJSON` descarta a
-            mensagem do erro original e devolve só o texto do estado, o que
-            impede fuga de caminho de ficheiro, consulta SQL ou valor de
-            `panic`. Travado por `TestRespondJSONNaoVazaDetalheDeErroInterno`.
-          example: bad request
-        success:
-          nullable: false
-          type: boolean
-          enum: [false]
-          description: |
-            **Sempre presente e sempre `false`.** Campo legado — a forma
-            correcta de detectar erro é o estado HTTP.
-
-            Valor fora do enum não ocorre: é escrito pelo servidor, não lido
-            do pedido.
-          example: false
 
     ResultadoEnvio:
       type: object
@@ -529,8 +496,10 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErroTextoSimples'
+            $ref: '#/components/schemas/Erro'
           example:
             code: 500
-            error: internal server error
+            error:
+              code: internal_error
+              message: Ocorreu um erro interno.
             success: false
