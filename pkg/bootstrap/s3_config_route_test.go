@@ -24,6 +24,7 @@ import (
 	intstorage "wa-api/pkg/infra/storage"
 	"wa-api/pkg/infra/wa-noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
+	dtostorage "wa-api/pkg/presentation/http/dto/storage"
 	"wa-api/pkg/presentation/http/handlers"
 )
 
@@ -742,9 +743,9 @@ func assertNoSecretIn(t *testing.T, where, texto, envelope string) {
 }
 
 // s3ViewFromEnvelope extrai `data` do envelope do ADR-002 como S3ConfigView.
-func s3ViewFromEnvelope(t *testing.T, rec *httptest.ResponseRecorder) domain.S3ConfigView {
+func s3ViewFromEnvelope(t *testing.T, rec *httptest.ResponseRecorder) dtostorage.S3ConfigViewResponse {
 	t.Helper()
-	var view domain.S3ConfigView
+	var view dtostorage.S3ConfigViewResponse
 	decodeS3Data(t, rec, &view)
 	return view
 }

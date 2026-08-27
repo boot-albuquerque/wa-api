@@ -445,7 +445,11 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
 	data := sessionEnvelope(t, rec)["data"].(map[string]any)
-	if data["QRCode"] != "2@codigo-de-pareamento" && data["qrcode"] != "2@codigo-de-pareamento" {
+	// A chave e' `qr_code` desde a migracao para DTO
+	// (docs/HTTP-DTO-CONVENTIONS.md). Era `QRCode` — o nome do campo Go — e o
+	// teste tolerava as duas grafias; hoje afirma UMA, que e' o que faz a
+	// grafia antiga voltar a falhar aqui.
+	if data["qr_code"] != "2@codigo-de-pareamento" {
 		t.Fatalf("o QR persistido nao chegou ao cliente: %s", rec.Body.String())
 	}
 	logassert.NoSecrets(t, recs)

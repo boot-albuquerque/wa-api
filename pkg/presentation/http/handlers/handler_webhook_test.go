@@ -676,8 +676,10 @@ func TestDeleteWebhook_Success_200(t *testing.T) {
 	if db.execCalls != 1 {
 		t.Fatalf("execCalls = %d, quero 1", db.execCalls)
 	}
-	if _, ok := webhookEnvelope(t, rec)["data"].(map[string]any)["Details"]; !ok {
-		t.Fatalf("resposta sem Details: %s", rec.Body.String())
+	// `details`, minusculo: era `Details` (PascalCase, de um literal de mapa
+	// no handler) ate' a migracao para DTO.
+	if _, ok := webhookEnvelope(t, rec)["data"].(map[string]any)["details"]; !ok {
+		t.Fatalf("resposta sem details: %s", rec.Body.String())
 	}
 	logassert.NoSecrets(t, recs)
 }

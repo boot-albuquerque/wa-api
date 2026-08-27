@@ -8,12 +8,17 @@ import (
 	"strings"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtowebhook "wa-api/pkg/presentation/http/dto/webhook"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/hlog"
 )
+
+// webhookDeletedDetails is the message DELETE /webhook answers with. A named
+// constant and not a literal, so the handler and the contract test assert the
+// same string (ADR-0004).
+const webhookDeletedDetails = "Webhook and events deleted successfully"
 
 // WebhookHandlerDB is the minimal DB interface webhook handlers need.
 type WebhookHandlerDB interface {
@@ -109,8 +114,7 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	eventarray := strings.Split(events, ",")
-	response := map[string]interface{}{"webhook": webhook, "subscribe": eventarray}
-	customhttp.RespondJSON(w, http.StatusOK, response, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtowebhook.PresentGetWebhook(webhook, eventarray), nil)
 }
 
 // SetWebhookHandler handles POST /webhook
@@ -133,7 +137,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	txtid := info.Get("Id")
 	token := info.Get("Token")
 
-	var t domain.WebhookConfigRequest
+	var t dtowebhook.ConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("handler", "SetWebhook").
@@ -187,8 +191,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	v = h.ctx.UpdateUserInfo(v, "Events", eventstring)
 	h.ctx.publishValues(txtid, token, v)
 
-	response := map[string]interface{}{"webhook": webhook}
-	customhttp.RespondJSON(w, http.StatusOK, response, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtowebhook.PresentSetWebhook(webhook), nil)
 }
 
 // UpdateWebhookHandler handles PUT /webhook
@@ -211,7 +214,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	txtid := info.Get("Id")
 	token := info.Get("Token")
 
-	var t domain.WebhookConfigRequest
+	var t dtowebhook.ConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("handler", "UpdateWebhook").
@@ -271,8 +274,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	v = h.ctx.UpdateUserInfo(v, "Events", eventstring)
 	h.ctx.publishValues(txtid, token, v)
 
-	response := map[string]interface{}{"webhook": webhook, "events": validEvents, "active": t.Active}
-	customhttp.RespondJSON(w, http.StatusOK, response, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtowebhook.PresentUpdateWebhook(webhook, validEvents, t.Active), nil)
 }
 
 // DeleteWebhookHandler handles DELETE /webhook
@@ -320,6 +322,5 @@ func (h *DeleteWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	v = h.ctx.UpdateUserInfo(v, "Events", "")
 	h.ctx.publishValues(txtid, token, v)
 
-	response := map[string]interface{}{"Details": "Webhook and events deleted successfully"}
-	customhttp.RespondJSON(w, http.StatusOK, response, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtowebhook.PresentDeleteWebhook(webhookDeletedDetails), nil)
 }

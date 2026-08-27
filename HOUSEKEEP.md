@@ -31335,3 +31335,178 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — a família sessão migrou para DTO; três achados incidentais ficaram fora do âmbito
+
+**Data/contexto**: 2026-08-27, migração para DTO da família **sessão +
+configuração de webhook + configuração de armazenamento**
+(`/session/*`, `/status/set/*`, `/health`, `/webhook`, `/webhook/history`,
+`/s3/*`, `/hmac/*`, `/proxy/set`), sobre a fundação de `83a6d3ac`.
+
+Os três achados abaixo apareceram DE LADO enquanto se media o que cada rota
+serve. Nenhum é do âmbito da migração, e nenhum foi corrigido.
+
+### (a) `bootstrap.ProxyConfig` é código morto com etiquetas camelCase
+
+**Onde**: `pkg/bootstrap/dispatch_webhook.go:13-18`.
+
+```go
+type ProxyConfig struct {
+	Enabled         bool   `json:"enabled"`
+	ProxyURL        string `json:"proxyURL"`
+	WebhookUseProxy *bool  `json:"webhookUseProxy,omitempty"`
+}
+```
+
+**Problema**: a tarefa pedia para decidir se este struct é o payload PÚBLICO
+entregue ao webhook do utilizador ou plumbing interno de fila. **Não é nem
+um nem outro**: `grep -rn '\bProxyConfig\b' pkg/bootstrap` devolve só a
+declaração, e `grep -rn 'bootstrap.ProxyConfig' .` devolve zero. Nada no
+módulo o constrói, serializa ou lê — apagar as etiquetas não partiu a
+compilação nem um único teste, o que é a prova.
+
+As etiquetas `proxyURL`/`webhookUseProxy` liam-se como contrato público e não
+descreviam nada. As formas vivas do mesmo conceito são outras duas:
+`domain.ProxySummary`, servida por `GET /session/status` através de
+`pkg/presentation/http/dto/session`, e
+`messaging.ProxyConfigResponse` (`pkg/infra/messaging/webhook_utils.go:13`),
+que já emitia `proxy_url`/`webhook_use_proxy`.
+
+**Correção aplicada nesta sessão**: as etiquetas foram REMOVIDAS e o comentário
+do tipo diz porquê. **Correção sugerida em aberto**: apagar o tipo. Não foi
+apagado aqui porque remover código é decisão de quem manda no módulo, não
+efeito colateral de uma migração de nomes.
+
+**Status**: **parcialmente corrigido** — etiquetas removidas; a deleção do tipo
+morto fica pendente.
+
+### (b) o payload de webhook e de WebSocket que SAI daqui continua camelCase
+
+**Onde**: `pkg/bootstrap/eventhandler.go:29` e os `eventhandler_*.go` que o
+alimentam; `pkg/bootstrap/dispatch_callhook.go:56-58`.
+
+**Problema**: o `postmap` é o corpo que `sendEventWithWebHook` entrega ao
+webhook configurado pelo utilizador E que `BroadcastToUser` empurra pelo
+`GET /session/ws`. Ele é um `map[string]interface{}` montado a chave por
+chave em ~20 ficheiros, e pelo menos duas dessas chaves são camelCase:
+
+```go
+postmap["instanceName"] = instanceName   // dispatch_callhook.go:56
+postmap["userID"] = userID               // dispatch_callhook.go:58
+```
+
+Isto é contrato PÚBLICO pelos itens #52 (WebSocket) e #53 (webhooks que
+produzimos) da especificação de nomes, e **não** foi corrigido aqui: o
+`WSHandler` (`pkg/presentation/http/handlers/handler_session_ws.go`) não
+serializa nada por si — ele aceita o upgrade, regista a ligação e lê até
+fechar —, portanto o defeito não vive em nenhum ficheiro desta família. Ele
+vive na fan-out de eventos, que é uma superfície inteira à parte, com o seu
+próprio inventário de tipos de evento.
+
+**Correção sugerida**: uma família `pkg/presentation/http/dto/event` com um
+apresentador por tipo de evento, alimentada pelos `eventhandler_*`, em vez de
+um mapa partilhado — é a única forma de o gate de nomes chegar lá, porque um
+mapa não tem etiqueta que se audite.
+
+**Status**: **não corrigido** — fora do âmbito desta família; carece de tarefa
+própria.
+
+### (c) três tipos de domínio desta família nunca são construídos
+
+**Onde**: `pkg/domain/webhook.go` — `WebhookConfigResult`, `ChatMapping`,
+`ChatInfo`.
+
+**Problema**: `grep -rn 'domain.WebhookConfigResult\|domain.ChatMapping\|domain.ChatInfo' pkg cmd`
+devolve zero fora da própria declaração. Os quatro handlers de `/webhook`
+montavam `map[string]interface{}` à mão e nunca tocaram no
+`WebhookConfigResult`, que por isso carregava etiquetas (`Details`,
+`events,omitempty`) que ninguém alguma vez serviu.
+
+**Correção aplicada nesta sessão**: as etiquetas `json` saíram, como em todo o
+resto do ficheiro (`ChatMapping` mantém as suas `db:`, que são reais).
+**Correção sugerida em aberto**: apagar os três tipos.
+
+**Status**: **parcialmente corrigido** — etiquetas removidas; a deleção fica
+pendente, pelo mesmo motivo de (a).
+
+<!-- f-status: aberto -->
+
+## F298 — a especificação OpenAPI ficou a descrever a forma ANTIGA da família sessão
+
+**Data/contexto**: 2026-08-27, migração para DTO da família sessão.
+
+**Onde**: `api/openapi/paths/sessao.yaml` e `api/openapi/schemas/infra.yaml`,
+nos exemplos e esquemas de `/session/qr`, `/session/pairphone`,
+`/session/status`, `/webhook/history`, `/session/proxy`, `/s3/config`,
+`/hmac/config`.
+
+**Problema**: a especificação continua a documentar `QRCode`, `LinkingCode`,
+`loggedIn`, `qrcode`, `proxyUrl`, `Details`, `Enabled`, `Set`, `ProxyURL` e
+`History` — que são exactamente as grafias que esta migração fez DESAPARECER
+do fio. Medido: `GET /session/qr` serve hoje `{"qr_code": "..."}` e o exemplo
+em `paths/sessao.yaml:246` diz `QRCode: ''`.
+
+O documento é gerado (`go run ./cmd/openapidoc`) e EMBUTIDO no binário, então
+uma especificação errada não é só prosa: é o que `/docs` serve.
+
+**Correção sugerida**: reescrever os esquemas e os exemplos das rotas acima com
+as chaves canónicas, correr `go run ./cmd/openapidoc`, e confirmar com o `cmp`
+de `CLAUDE.md`.
+
+**Status**: **não corrigido** nesta entrega — é um corpo de trabalho próprio,
+em prosa portuguesa que descreve o comportamento a par das chaves, e misturá-lo
+com o diff de código tornaria a revisão de ambos pior.
+
+<!-- f-status: aberto -->
+
+## F299 — uma migração que só ACRESCENTA funções de mapeamento baixou um gate de rácio, sem defeito nenhum
+
+**Data/contexto**: 2026-08-27, migração para DTO da família sessão.
+
+**Onde**: `cmd/logcov/rules.go:173` (`ruleX1Trivial`), contra os apresentadores
+novos de `pkg/presentation/http/dto/{storage,webhook}`.
+
+**Problema**, medido dos dois lados:
+
+| | `func_coverage` | `eligible` | veredicto |
+|---|---|---|---|
+| `1e7db641` (antes) | 589 (piso 589) | 993 | verde |
+| depois da migração | **587** | **996** | **vermelho** |
+
+Nenhuma linha de log foi removida. O que aconteceu é que a regra **X1** deixa
+fora do DENOMINADOR toda função com **até dois** statements e sem caminho de
+saída, e três dos trinta e dois apresentadores novos tinham mais:
+
+```
+dto/storage.PresentProxyConfig    4 statements
+dto/webhook.PresentGetWebhook     3
+dto/webhook.PresentUpdateWebhook  3
+```
+
+Os três são mapeamento campo a campo, sem E/S e sem erro: **não há nada que
+registar neles**. Acrescentar um log satisfaria a métrica sem satisfazer o que
+ela mede — que é exactamente o modo de falha que um gate de rácio convida.
+
+**Correção aplicada**: o corpo dos três encolheu para dois statements, com a
+regra partilhada extraída (`webhook.nonNilStrings`, `storage.copyBool` +
+`storage.boolPtr`). O conjunto de `ELIGIBLE` do golden voltou a ser IDÊNTICO
+ao de `1e7db641` — `diff` das duas listas devolve vazio — e o gate voltou a
+589/993.
+
+**O que isto ensina, e que vale para as outras cinco famílias que vão migrar**:
+um gate de RÁCIO pode ficar vermelho por crescimento do denominador, sem que
+nada tenha piorado. Quem migrar uma família a seguir vai acrescentar dezenas de
+apresentadores; se algum passar de dois statements, o gate cai pelo mesmo
+motivo. **Escreva o apresentador como uma expressão só**, e ponha a regra
+partilhada numa função à parte.
+
+E o método que separou "eu parti isto" de "já estava partido" foi **medir o
+gate no commit ANTERIOR**, com a árvore limpa. Sem essa medição, este achado
+teria ido para o relatório como "gate pré-existente vermelho", que é o que a
+F296 legitimamente diz de outros dois — e teria ficado escondido debaixo dela.
+
+**Status**: **corrigido** em `abe3e88d`, com a medição dos dois lados colada
+acima. O teste que o trava é o próprio `make log-coverage-gate`, que falha
+fechado no estágio *ratchet*.
+
+<!-- f-status: fechado -->

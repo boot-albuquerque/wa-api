@@ -1,23 +1,28 @@
 package domain
 
+// As structs deste ficheiro JÁ NÃO SÃO o formato de fio. Elas são
+// Go-idiomáticas por dentro — PascalCase, sem etiquetas `json` — e quem serve
+// HTTP passa por pkg/presentation/http/dto/storage.
+// Ver docs/HTTP-DTO-CONVENTIONS.md.
+
 // S3ConfigRequest representa a requisição para configuração de S3.
 type S3ConfigRequest struct {
-	Enabled       bool   `json:"enabled"`
-	Endpoint      string `json:"endpoint"`
-	Region        string `json:"region"`
-	Bucket        string `json:"bucket"`
-	AccessKey     string `json:"access_key"`
-	SecretKey     string `json:"secret_key"`
-	PathStyle     bool   `json:"path_style"`
-	PublicURL     string `json:"public_url"`
-	MediaDelivery string `json:"media_delivery"`
-	RetentionDays int    `json:"retention_days"`
+	Enabled       bool
+	Endpoint      string
+	Region        string
+	Bucket        string
+	AccessKey     string
+	SecretKey     string
+	PathStyle     bool
+	PublicURL     string
+	MediaDelivery string
+	RetentionDays int
 }
 
 // S3ConfigResult representa o resultado de operação de S3.
 type S3ConfigResult struct {
-	Details string `json:"Details,omitempty"`
-	Enabled bool   `json:"Enabled,omitempty"`
+	Details string
+	Enabled bool
 }
 
 // S3ConfigView é a resposta de leitura de `GET /s3/config`.
@@ -27,15 +32,15 @@ type S3ConfigResult struct {
 // aquele SELECT nunca leu `s3_secret_key`, então o segredo não tem por onde
 // sair. AccessKey vem mascarada com MaskedS3AccessKey.
 type S3ConfigView struct {
-	Enabled       bool   `json:"enabled"`
-	Endpoint      string `json:"endpoint"`
-	Region        string `json:"region"`
-	Bucket        string `json:"bucket"`
-	AccessKey     string `json:"access_key"`
-	PathStyle     bool   `json:"path_style"`
-	PublicURL     string `json:"public_url"`
-	MediaDelivery string `json:"media_delivery"`
-	RetentionDays int    `json:"retention_days"`
+	Enabled       bool
+	Endpoint      string
+	Region        string
+	Bucket        string
+	AccessKey     string
+	PathStyle     bool
+	PublicURL     string
+	MediaDelivery string
+	RetentionDays int
 }
 
 // MaskedS3AccessKey é o que `GET /s3/config` devolve no lugar da access key.
@@ -70,10 +75,10 @@ func IsValidMediaDelivery(v string) bool {
 // (`41bc8e2^:handlers.go:6455`), e é o que distingue "testei o que você
 // configurou" de "respondi 200". Nenhuma credencial aparece aqui.
 type S3TestResult struct {
-	Connected bool   `json:"connected"`
-	Details   string `json:"Details,omitempty"`
-	Bucket    string `json:"Bucket,omitempty"`
-	Region    string `json:"Region,omitempty"`
+	Connected bool
+	Details   string
+	Bucket    string
+	Region    string
 }
 
 // HmacConfigRequest representa a requisição para configuração de HMAC.
@@ -83,7 +88,7 @@ type S3TestResult struct {
 // `enabled`/`key`/`secret` que estavam aqui nasceram com o stub da F151,
 // nunca foram lidos por nada em produção e nunca existiram no fio.
 type HmacConfigRequest struct {
-	HmacKey string `json:"hmac_key"`
+	HmacKey string
 }
 
 // HmacConfigResult representa o resultado de operação de HMAC.
@@ -91,8 +96,8 @@ type HmacConfigRequest struct {
 // Enabled reporta o estado DEPOIS da operação — true quando a chave ficou
 // gravada, false quando foi revogada —, não um eco do pedido.
 type HmacConfigResult struct {
-	Details string `json:"Details,omitempty"`
-	Enabled bool   `json:"Enabled,omitempty"`
+	Details string
+	Enabled bool
 }
 
 // HmacConfigView é a resposta de leitura de `GET /hmac/config`.
@@ -102,7 +107,7 @@ type HmacConfigResult struct {
 // devolvê-lo transformaria uma leitura de configuração num vazamento do
 // segredo que assina os webhooks (`41bc8e2^:handlers.go:6825`).
 type HmacConfigView struct {
-	HmacKey string `json:"hmac_key"`
+	HmacKey string
 }
 
 // MaskedHmacKey é o que `GET /hmac/config` devolve no lugar da chave quando
@@ -144,9 +149,9 @@ func IsSupportedProxyScheme(scheme string) bool {
 // dois num bool faria toda escrita de proxy zerar a flag de quem não a
 // mandou.
 type ProxyConfigRequest struct {
-	ProxyURL        string `json:"proxy_url"`
-	Enable          bool   `json:"enable"`
-	WebhookUseProxy *bool  `json:"webhook_use_proxy,omitempty"`
+	ProxyURL        string
+	Enable          bool
+	WebhookUseProxy *bool
 }
 
 // ProxyConfigResult representa o resultado de operação de Proxy.
@@ -157,8 +162,8 @@ type ProxyConfigRequest struct {
 // desabilitação histórico responde só `Details`, e é por isso que os dois
 // campos são omitempty/ponteiro em vez de sempre presentes.
 type ProxyConfigResult struct {
-	Details         string `json:"Details,omitempty"`
-	Set             bool   `json:"Set,omitempty"`
-	ProxyURL        string `json:"ProxyURL,omitempty"`
-	WebhookUseProxy *bool  `json:"webhook_use_proxy,omitempty"`
+	Details         string
+	Set             bool
+	ProxyURL        string
+	WebhookUseProxy *bool
 }

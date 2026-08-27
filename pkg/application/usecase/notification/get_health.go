@@ -11,6 +11,11 @@ import (
 	"wa-api/pkg/domain"
 )
 
+// bytesPerMB converts the runtime.MemStats byte counters to the megabytes the
+// health check reports. A named constant and not `/ 1024 / 1024` repeated
+// three times (ADR-0004).
+const bytesPerMB = 1024 * 1024
+
 // GetHealthUseCase retrieves health information about the server
 type GetHealthUseCase struct {
 	db             *sql.DB
@@ -53,11 +58,11 @@ func (uc *GetHealthUseCase) Execute(ctx context.Context) (*domain.HealthResponse
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	memoryStats := map[string]interface{}{
-		"alloc_mb":       memStats.Alloc / 1024 / 1024,
-		"total_alloc_mb": memStats.TotalAlloc / 1024 / 1024,
-		"sys_mb":         memStats.Sys / 1024 / 1024,
-		"num_gc":         memStats.NumGC,
+	memoryStats := domain.MemoryStats{
+		AllocMB:      memStats.Alloc / bytesPerMB,
+		TotalAllocMB: memStats.TotalAlloc / bytesPerMB,
+		SysMB:        memStats.Sys / bytesPerMB,
+		NumGC:        memStats.NumGC,
 	}
 
 	response := &domain.HealthResponse{
