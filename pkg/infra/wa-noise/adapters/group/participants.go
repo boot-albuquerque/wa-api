@@ -37,11 +37,15 @@ func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string
 	}
 	// Confirmado: o protocolo devolve a lista resultante na mesma resposta, e é
 	// ela que volta aqui. Este transporte lê a pós-condição na própria chamada.
-	return domain.ParticipantsUpdate{Result: res, Confirmed: true}, nil
+	out := make([]domain.GroupParticipant, 0, len(res))
+	for _, p := range res {
+		out = append(out, toDomainGroupParticipant(p))
+	}
+	return domain.ParticipantsUpdate{Participants: out, Confirmed: true}, nil
 }
 
 // GetRequestParticipants lista quem solicitou entrar no grupo.
-func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) (any, error) {
+func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -50,7 +54,20 @@ func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string,
 	if err != nil {
 		return nil, err
 	}
-	return client.GetGroupRequestParticipants(ctx, jid)
+	res, err := client.GetGroupRequestParticipants(ctx, jid)
+	if err != nil {
+		return nil, err
+	}
+	// This transport reports the requester and the moment; who tried to add
+	// them, and by which method, is not in the protocol answer and stays zero.
+	out := make([]domain.GroupJoinRequest, 0, len(res))
+	for _, r := range res {
+		out = append(out, domain.GroupJoinRequest{
+			JID:         jidOrEmpty(r.JID),
+			RequestedAt: r.RequestedAt,
+		})
+	}
+	return out, nil
 }
 
 // UpdateRequestParticipants aprova ou rejeita solicitações de entrada.

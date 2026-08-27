@@ -133,39 +133,38 @@ components:
         O grupo sobre o qual a operação age. Usado por `POST /group/info`,
         `POST /group/invitelink` e `POST /group/leave`. O nome específico da rota
         tem precedência sobre `chat` quando os dois vierem
-        (`pkg/domain/chat_target.go:14-17`) — medido: `{"groupJID":"<grupo>",
+        (`pkg/domain/chat_target.go:14-17`) — medido: `{"group_jid":"<grupo>",
         "chat":"nonsense"}` devolve `200`, porque `chat` nem é olhado.
 
         **Nenhum dos dois campos é ponteiro**, logo ausente, `null` e `""` são o
         mesmo pedido. O que muda entre eles é apenas o NOME.
 
-        **O nome do campo varia entre rotas desta família**, e não por acidente:
-        `/group/photo/remove`, `/group/ephemeral` e `/group/joinapprovalmode`
-        leem `groupjid` todo em minúsculas, e as restantes leem `groupJID`. Na
-        prática o descodificador do Go casa nomes ignorando maiúsculas, logo as
-        duas grafias funcionam em todas — mas o exemplo de cada rota traz a que
-        foi medida.
+        **O nome do campo é `group_jid` em toda a família**, uniformemente: a
+        migração para DTO (`docs/HTTP-DTO-CONVENTIONS.md`) fechou a variação de
+        grafia (`groupJID` vs `groupjid`) que esta secção documentava antes —
+        cada rota lê agora o mesmo DTO de pedido tipado, com a mesma etiqueta
+        `json:"group_jid"`.
 
         Campos desconhecidos são IGNORADOS em silêncio.
       properties:
         chat:
           description: |
             Nome universal do destino, aceite em toda a API. **Só é lido quando
-            `groupJID` estiver vazio** (`ResolveChatField`); os dois juntos e
-            diferentes fazem ganhar `groupJID` — medido.
+            `group_jid` estiver vazio** (`ResolveChatField`); os dois juntos e
+            diferentes fazem ganhar `group_jid` — medido.
 
             Ausente, `null` e `""` são indistinguíveis, e valem "não usar o
-            alias". As mesmas regras de forma de `groupJID` valem para o valor.
+            alias". As mesmas regras de forma de `group_jid` valem para o valor.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo, na forma `<número>@g.us`.
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não — salvo se `chat` vier | `/group/info` e `/group/invitelink`: `400 missing_group_jid`; `/group/leave`: `400` com `error` em TEXTO (F266) |
+            | ausente | não — salvo se `chat` vier | `/group/info` e `/group/invitelink`: `400 missing_group_jid` (recusa tipada, do use case); `/group/leave`: `400 invalid_request` (objecto canónico, do manipulador — `rejectMissingField`) |
             | `null` | não | idêntico a ausente — **indistinguível** |
             | `""` | não | idêntico a ausente — **indistinguível** |
             | `"   "` | **passa a guarda** | `400 invalid_group_jid` — erro DIFERENTE, porque não há `trim` |
@@ -3545,10 +3544,11 @@ components:
             quando a mesma pessoa está em dois sub-grupos: a comunidade medida
             tinha um só sub-grupo. Trate a lista como podendo repetir.
 
-            **Se o valor `null` é possível não foi determinado com segurança**,
-            pela mesma razão de `sub_groups`: o campo é `any` na struct de
-            resultado (`pkg/domain/community.go:28`). Verifique `null` antes de
-            iterar.
+            **Sempre `[]`, nunca `null`**: `PresentGetCommunityParticipants`
+            (`pkg/presentation/http/dto/group/presenter_group.go`) aloca a lista
+            antes do laço, mesmo vazia — fecha a incerteza sobre `null` que este
+            ficheiro registava antes da migração para DTO, quando o campo ainda
+            era `any` na struct de resultado.
 
             Sem paginação e sem tecto.
           example:
@@ -3624,11 +3624,10 @@ components:
       type: object
     PedidoAnuncioGrupo:
       description: |
-        Alterna o modo em que só administradores enviam mensagens. Os campos vêm
-        da struct anónima do manipulador (`handler_group_mgmt.go:275-279`), que
-        declara `GroupJID` e `Announce` SEM etiqueta `json` — o Go casa por nome
-        ignorando maiúsculas, logo `groupJID`, `groupjid` e `GroupJID` são o
-        mesmo campo, e `announce` e `Announce` também.
+        Alterna o modo em que só administradores enviam mensagens. O corpo é
+        `dtogroup.SetGroupAnnounceRequest`
+        (`pkg/presentation/http/dto/group/request.go`), com `group_jid` e
+        `announce`.
 
         **O manipulador não valida campo nenhum.**
       properties:
@@ -3654,12 +3653,12 @@ components:
           type: boolean
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo. Ausente, `null` e `""` são indistinguíveis e chegam ao
             parser: **medido `400 invalid_jid`, `could not parse JID ""`** —
@@ -3880,30 +3879,31 @@ components:
       type: object
     PedidoAtualizarParticipantes:
       description: |
-        Adiciona ou remove membros. Campos da struct anónima do manipulador
-        (`handler_group_mgmt.go:330-335`), que declara `GroupJID`, `Phone` e
-        `Action` SEM etiqueta `json` — as grafias `groupjid`/`phone`/`action`
-        funcionam igualmente, medido.
+        Adiciona ou remove membros. O corpo é
+        `dtogroup.UpdateGroupParticipantsRequest`
+        (`pkg/presentation/http/dto/group/request.go`), com `group_jid`, `phone` e
+        `action`.
 
         **A ORDEM da validação importa e é surpreendente**
-        (`handler_group_mgmt.go:341-355`): `Phone` → entrada vazia de `Phone` →
-        `Action` → `GroupJID`. Um pedido a que falte TUDO queixa-se primeiro dos
+        (`handler_group_mgmt.go:289-304`): `phone` → entrada vazia de `phone` →
+        `action` → `group_jid`. Um pedido a que falte TUDO queixa-se primeiro dos
         telefones, e o grupo é o ÚLTIMO a ser exigido.
 
-        **As quatro recusas do manipulador saem no envelope ANTIGO**, todas com o
-        mesmo corpo `{"code":400,"error":"bad request","success":false}` (F266).
-        Só as recusas do use case — `invalid_jid`, `invalid_action` — trazem
-        `error.code`.
+        **As quatro recusas do manipulador saem no mesmo corpo**
+        `{"code":400,"error":{"code":"invalid_request","message":"Requisição inválida."},"success":false}`
+        — nenhuma delas tem código próprio. Só as recusas que atravessam o use
+        case — `invalid_jid`, `invalid_action` — trazem um `error.code`
+        específico.
 
         Veja a limitação de `Action`: promover e despromover NÃO estão nesta rota.
       properties:
-        Action:
+        action:
           description: |
             O que fazer com os participantes indicados.
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400 "bad request"` (envelope ANTIGO), e só depois de `Phone` passar |
+            | ausente | não | `400 invalid_request`, e só depois de `phone` passar |
             | `null` | não | **indistinguível de ausente** |
             | `""` | não | **indistinguível de ausente** |
             | `add` / `remove` | sim | — |
@@ -3925,16 +3925,39 @@ components:
           example: add
           nullable: false
           type: string
-        Phone:
+        chat:
+          description: |
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio —
+            medido a funcionar nesta rota. Ausente, `null` e `""` são
+            indistinguíveis.
+          example: 120363411669320145@g.us
+          nullable: false
+          type: string
+        group_jid:
+          description: |
+            JID do grupo. Obrigatório, mas validado **DEPOIS** de `Phone` e de
+            `Action`.
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não — salvo se `chat` vier | `400 invalid_request`, e só depois de `phone` e `action` passarem |
+            | `null` | não | **indistinguível de ausente** |
+            | `""` | não | **indistinguível de ausente** |
+            | `"   "` | passa a guarda | `400 invalid_jid` (envelope NOVO) — medido |
+            | `120363411669320145@g.us` | sim | — |
+          example: 120363411669320145@g.us
+          nullable: false
+          type: string
+        phone:
           description: |
             Quem entra ou sai. **É o PRIMEIRO campo validado.**
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400 "bad request"` (envelope ANTIGO) |
+            | ausente | não | `400 invalid_request` |
             | `null` | não | **indistinguível de ausente** — medido |
             | `[]` | não | **indistinguível de ausente** — a guarda é `len(...) < 1` |
-            | `[""]` | não | `400 "bad request"`; o log diz o ÍNDICE, a resposta não |
+            | `[""]` | não | `400 invalid_request`; o log diz o ÍNDICE, a resposta não |
             | `["554192421234", ""]` | não | recusa a lista INTEIRA — **não há descarte silencioso de item** |
             | `["   "]` | passa a guarda | `400 invalid_jid`, `could not parse JID "   "` — medido |
             | `["554192421234"]` | **sim** | número nu é aceite — medido a passar da resolução |
@@ -3958,32 +3981,10 @@ components:
           minItems: 1
           nullable: false
           type: array
-        chat:
-          description: |
-            Nome universal do destino. Só lido quando `groupJID` estiver vazio —
-            medido a funcionar nesta rota. Ausente, `null` e `""` são
-            indistinguíveis.
-          example: 120363411669320145@g.us
-          nullable: false
-          type: string
-        groupJID:
-          description: |
-            JID do grupo. Obrigatório, mas validado **DEPOIS** de `Phone` e de
-            `Action`.
-
-            | estado | aceite? | efeito |
-            |---|---|---|
-            | ausente | não — salvo se `chat` vier | `400 "bad request"` (envelope ANTIGO), e só depois de `Phone` e `Action` passarem |
-            | `null` | não | **indistinguível de ausente** |
-            | `""` | não | **indistinguível de ausente** |
-            | `"   "` | passa a guarda | `400 invalid_jid` (envelope NOVO) — medido |
-            | `120363411669320145@g.us` | sim | — |
-          example: 120363411669320145@g.us
-          nullable: false
-          type: string
       required:
-        - Phone
-        - Action
+        - group_jid
+        - phone
+        - action
       type: object
     PedidoAvatar:
       description: |
@@ -4203,23 +4204,23 @@ components:
           description: |
             Alias universal de destino (`ChatTarget`, `pkg/domain/chat_target.go`).
 
-            **Só é usado quando `communityJID` estiver vazio** — ausente, `null` ou
-            `""`, que são indistinguíveis entre si. Quando ambos vêm preenchidos,
-            **`communityJID` ganha e `chat` é ignorado em silêncio**: medido a
-            2026-08-26 mandando `communityJID` real e `chat: "outro@g.us"`, e a
-            resposta foi a da comunidade de `communityJID`. Não há erro de
-            conflito.
+            **Só é usado quando `community_jid` estiver vazio** — ausente, `null`
+            ou `""`, que são indistinguíveis entre si. Quando ambos vêm
+            preenchidos, **`community_jid` ganha e `chat` é ignorado em
+            silêncio**: medido a 2026-08-26 mandando `community_jid` real e
+            `chat: "outro@g.us"`, e a resposta foi a da comunidade de
+            `community_jid`. Não há erro de conflito.
 
-            Ausente, `null` e `""` são indistinguíveis; se `communityJID` também
+            Ausente, `null` e `""` são indistinguíveis; se `community_jid` também
             faltar, a resposta é `400 missing_community_jid`.
 
             **Este alias NÃO existe em `/community/link` nem em
-            `/community/unlink`** — medido: `{"chat":"…","groupJID":"…"}` devolve
+            `/community/unlink`** — medido: `{"chat":"…","group_jid":"…"}` devolve
             `400 missing_community_jid`.
           example: 120363430034334401@g.us
           nullable: false
           type: string
-        communityJID:
+        community_jid:
           description: |
             JID da comunidade — que é um JID de **GRUPO** (`@g.us`), porque uma
             comunidade é um grupo-pai. Não existe servidor `@community`.
@@ -4685,12 +4686,13 @@ components:
         três saem desta mesma rota, e o que as distingue são `is_parent` e
         `linked_parent_jid`.
 
-        **Todas as recusas desta rota saem no envelope ANTIGO**, com `error` em
-        texto simples e sempre a mesma frase `"bad request"` (F266). Medido: as
-        SEIS causas distintas — `name` em falta, `participants` em falta,
-        `participants` vazio, entrada vazia em `participants`, `is_parent` com
-        `linked_parent_jid` — produzem corpos IDÊNTICOS. O cliente não consegue
-        saber qual campo falhou; a causa fica só no log do servidor.
+        **Todas as recusas desta rota saem no objecto canónico**
+        `{"code":"invalid_request","message":"Requisição inválida."}`
+        (`docs/HTTP-DTO-CONVENTIONS.md` §7) — o manipulador não usa códigos de erro
+        próprios aqui. As SEIS causas distintas — `name` em falta, `participants`
+        em falta, `participants` vazio, entrada vazia em `participants`,
+        `is_parent` com `linked_parent_jid` — produzem corpos IDÊNTICOS. O cliente
+        não consegue saber qual campo falhou; a causa fica só no log do servidor.
 
         Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
@@ -4729,7 +4731,7 @@ components:
             | ausente | grupo solto |
             | `null` | idêntico a ausente — **indistinguível** |
             | `""` | idêntico a ausente — **indistinguível**, e é o que faz a exclusão mútua com `is_parent` não disparar |
-            | preenchido, com `is_parent: true` | `400 "bad request"` |
+            | preenchido, com `is_parent: true` | `400 invalid_request` |
             | preenchido, sem `is_parent` | sub-grupo da comunidade indicada |
 
             Um valor mal formado não é validado por esta API: segue para
@@ -4743,7 +4745,7 @@ components:
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400`, `error: "bad request"` (envelope antigo) |
+            | ausente | não | `400 invalid_request` |
             | `null` | não | idêntico a ausente — **indistinguível** |
             | `""` | não | idêntico a ausente — **indistinguível** |
             | `"   "` | **sim** | aceite tal e qual; **não há `trim`**, e o grupo fica com um nome de três espaços |
@@ -4763,10 +4765,10 @@ components:
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | **depende** | com `is_parent: true`, sim; senão `400 "bad request"` |
+            | ausente | **depende** | com `is_parent: true`, sim; senão `400 invalid_request` |
             | `null` | igual a ausente | **indistinguível** — medido |
             | `[]` | igual a ausente | **indistinguível** — a guarda é `len(...) < 1` |
-            | `[""]` | não | `400 "bad request"`; o log diz o ÍNDICE, a resposta não |
+            | `[""]` | não | `400 invalid_request`; o log diz o ÍNDICE, a resposta não |
             | `["554192421234", ""]` | não | recusa a lista INTEIRA — não há descarte silencioso de item |
             | `["   "]` | passa a guarda | `400 invalid_jid` — `"   "` não é `""` |
             | `["nao-e-jid"]` | não | `400 invalid_jid`, com o valor citado na mensagem |
@@ -4936,12 +4938,12 @@ components:
         (`pkg/domain/group_request.go:23-27`).
 
         **Todas as recusas saem no envelope NOVO**, com `error.code` — esta rota
-        não passa por `rejectMissingField`. A ordem medida é `groupJID` → `Phone`
+        não passa por `rejectMissingField`. A ordem medida é `group_jid` → `Phone`
         → `Action` → resolução do grupo → resolução dos telefones → validação de
         `Action` contra a lista; ou seja, o inverso da ordem de
         `POST /group/updateparticipants`.
       properties:
-        Action:
+        action:
           description: |
             O veredito.
 
@@ -4962,7 +4964,29 @@ components:
           example: approve
           nullable: false
           type: string
-        Phone:
+        chat:
+          description: |
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio —
+            medido a funcionar nesta rota. Ausente, `null` e `""` são
+            indistinguíveis.
+          example: 120363411669320145@g.us
+          nullable: false
+          type: string
+        group_jid:
+          description: |
+            JID do grupo. **É o PRIMEIRO campo validado.**
+
+            | estado | aceite? | efeito |
+            |---|---|---|
+            | ausente | não — salvo se `chat` vier | `400 missing_group_jid` — medido |
+            | `null` | não | **indistinguível de ausente** |
+            | `""` | não | **indistinguível de ausente** |
+            | `"   "` | passa a guarda | `400 invalid_group_jid` |
+            | `120363411669320145@g.us` | sim | — |
+          example: 120363411669320145@g.us
+          nullable: false
+          type: string
+        phone:
           description: |
             Os solicitantes a decidir.
 
@@ -4994,32 +5018,10 @@ components:
           minItems: 1
           nullable: false
           type: array
-        chat:
-          description: |
-            Nome universal do destino. Só lido quando `groupJID` estiver vazio —
-            medido a funcionar nesta rota. Ausente, `null` e `""` são
-            indistinguíveis.
-          example: 120363411669320145@g.us
-          nullable: false
-          type: string
-        groupJID:
-          description: |
-            JID do grupo. **É o PRIMEIRO campo validado.**
-
-            | estado | aceite? | efeito |
-            |---|---|---|
-            | ausente | não — salvo se `chat` vier | `400 missing_group_jid` — medido |
-            | `null` | não | **indistinguível de ausente** |
-            | `""` | não | **indistinguível de ausente** |
-            | `"   "` | passa a guarda | `400 invalid_group_jid` |
-            | `120363411669320145@g.us` | sim | — |
-          example: 120363411669320145@g.us
-          nullable: false
-          type: string
       required:
-        - groupJID
-        - Phone
-        - Action
+        - group_jid
+        - phone
+        - action
       type: object
     PedidoDefinicaoPrivacidade:
       description: |
@@ -5547,12 +5549,11 @@ components:
       description: |
         **A struct de domínio mente aqui.** `GroupJoinRequest`
         (`pkg/domain/group.go:52-54`) declara `inviteLink`, e não é o que a rota
-        lê: o manipulador declara a sua própria struct anónima com `code`
-        (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do domínio
-        recebe `400` — medido: `{"inviteLink":"IVccRoDVSbpHKNkgNxyZx4"}` devolve
-        `400 "bad request"`, porque `inviteLink` é um campo DESCONHECIDO, é
-        ignorado (e registado no log como `unknown field "inviteLink"`), e `code`
-        fica `""`.
+        lê: o corpo é `dtogroup.JoinGroupRequest`
+        (`pkg/presentation/http/dto/group/request.go`), com `code`. Um cliente
+        escrito a partir do domínio recebe `400`, porque `inviteLink` é um campo
+        DESCONHECIDO nesta rota, é ignorado (e registado no log como
+        `unknown field "inviteLink"`), e `code` fica `""`.
 
         Este é o custo concreto de campo desconhecido não dar erro: o nome errado
         não se queixa de si próprio — queixa-se do campo certo estar em falta.
@@ -5564,11 +5565,11 @@ components:
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400`, `error: "bad request"` (envelope antigo, F266) |
+            | ausente | não | `400 invalid_request` — objecto canónico `error.code`/`error.message` |
             | `null` | não | **indistinguível de ausente** |
             | `""` | não | **indistinguível de ausente** |
             | `"   "` | **passa a guarda** | não há `trim`; segue para o WhatsApp. Por analogia com `/group/inviteinfo`, onde foi MEDIDO, o desfecho é `500`, não `400` |
-            | `inviteLink` em vez de `code` | não | `400 "bad request"` — campo desconhecido; ignorado, mas o log nomeia-o |
+            | `inviteLink` em vez de `code` | não | `400 invalid_request` — campo desconhecido; ignorado, mas o log nomeia-o |
             | código válido | sim | — |
 
             O URL completo também passa, porque a biblioteca corta o prefixo
@@ -6790,17 +6791,17 @@ components:
     PedidoFotoGrupo:
       description: |
         Foto de grupo. **Duas armadilhas medidas, e as duas com uma variável de
-        cada vez.** Campos da struct anónima do manipulador
-        (`handler_group_mgmt.go:234-238`); só `Photo` é validado.
+        cada vez.** O corpo é `dtogroup.SetGroupPhotoRequest`
+        (`pkg/presentation/http/dto/group/request.go`); só `photo` é validado.
       properties:
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo. Não é validado pelo manipulador: ausente, `null` e `""`
             são indistinguíveis e chegam ao parser de JID, que devolve
@@ -6814,17 +6815,17 @@ components:
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400`, `error: "bad request"` (envelope ANTIGO, F266) |
+            | ausente | não | `400 invalid_request` |
             | `null` | não | **indistinguível de ausente** |
             | `""` | não | **indistinguível de ausente**. Para REMOVER a foto a rota é `POST /group/photo/remove`, não o envio de vazio |
-            | `"   "` | não | passa a guarda `== ""` e morre no descodificador base64: `400` — **mas com o MESMO corpo `"bad request"`** |
+            | `"   "` | não | passa a guarda `== ""` e morre no descodificador base64: `400` — **mas com o MESMO corpo `invalid_request`** |
             | `data:image/jpeg;base64,…` | **não** | `400` — medido; o descodificador recusa os `:` e `;` do URI de dados |
             | base64 inválido | não | `400`, **corpo idêntico ao de campo em falta** |
             | JPEG em base64 cru | sim | — |
             | PNG em base64 cru | não | bem descodificado aqui e recusado pelo WhatsApp: `422 upstream_rejected` |
 
             **As quatro causas de `400` desta rota produzem o mesmo corpo**
-            — `{"code":400,"error":"bad request","success":false}` — porque a
+            — `{"code":400,"error":{"code":"invalid_request","message":"Requisição inválida."},"success":false}` — porque a
             falha de base64 também sai por `RespondJSON` com erro não-tipado
             (`handler_group_mgmt.go:249`). Nem sequer se distingue "não mandei
             foto" de "mandei com prefixo `data:`".
@@ -6841,14 +6842,14 @@ components:
       type: object
     PedidoInfoConvite:
       description: |
-        Inspecção de um convite. O campo chama-se `Code` com maiúscula
-        (`pkg/domain/group.go:42-44`) — a bateria de campo mediu `400 missing_code`
-        com `inviteLink`, porque `inviteLink` é campo desconhecido e é ignorado.
-
-        Na prática o descodificador do Go casa nomes ignorando maiúsculas, logo
-        `code` minúsculo também funciona — medido `200`.
+        Inspecção de um convite. O corpo é `dtogroup.GetGroupInviteInfoRequest`
+        (`pkg/presentation/http/dto/group/request.go`), com `json:"code"`
+        minúsculo — não mais a struct de domínio com `Code` maiúsculo que este
+        ficheiro descrevia antes da migração para DTO
+        (`docs/HTTP-DTO-CONVENTIONS.md`). `inviteLink` continua a ser campo
+        desconhecido e é ignorado.
       properties:
-        Code:
+        code:
           description: |
             Código do convite.
 
@@ -6866,7 +6867,7 @@ components:
           nullable: false
           type: string
       required:
-        - Code
+        - code
       type: object
     PedidoInfoUtilizadores:
       description: |
@@ -6949,7 +6950,7 @@ components:
         qualquer campo desconhecido, e o pedido falha com
         `400 missing_community_jid`. Medido.
       properties:
-        communityJID:
+        community_jid:
           description: |
             JID da comunidade (grupo-pai), no servidor `@g.us`.
 
@@ -6961,7 +6962,7 @@ components:
             | não interpretável | não | `400 invalid_jid`, `could not parse community JID "…"` |
             | `@g.us` real | sim | — |
 
-            **É verificado antes de `groupJID`**: um pedido sem os dois revela
+            **É verificado antes de `group_jid`**: um pedido sem os dois revela
             primeiro este. Medido.
 
             **O código do JID malformado é `invalid_jid` aqui**, e não
@@ -6971,7 +6972,7 @@ components:
           minLength: 1
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo a ligar ou desligar, no servidor `@g.us`.
 
@@ -6984,14 +6985,14 @@ components:
             | `@g.us` real | sim | — |
 
             **O grupo de avisos da comunidade não pode ser desligado**: nasce com
-            ela e vem marcado `IsDefaultSubGroup: true` (F237).
+            ela e vem marcado `is_default_sub_group: true` (F237).
           example: 120363411669320145@g.us
           minLength: 1
           nullable: false
           type: string
       required:
-        - communityJID
-        - groupJID
+        - community_jid
+        - group_jid
       type: object
     PedidoLimiteHistorico:
       description: |
@@ -7264,18 +7265,18 @@ components:
       description: |
         Exigir, ou deixar de exigir, aprovação para entrar. Usa a struct de
         DOMÍNIO (`pkg/domain/group_request.go:38-42`) — não há struct anónima
-        aqui. O campo do grupo é `groupjid`, todo em minúsculas.
+        aqui. O campo do grupo é `group_jid`, todo em minúsculas.
 
         As recusas saem no envelope NOVO, com `error.code`.
       properties:
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupjid` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupjid:
+        group_jid:
           description: |
             JID do grupo.
 
@@ -7297,7 +7298,7 @@ components:
 
             | estado | efeito |
             |---|---|
-            | ausente | **DESLIGA** a exigência — um pedido só com `groupjid` ABRE o grupo |
+            | ausente | **DESLIGA** a exigência — um pedido só com `group_jid` ABRE o grupo |
             | `null` | idêntico a ausente: `false`, em silêncio. **Indistinguível** |
             | `false` | desliga a exigência |
             | `true` | passa a exigir |
@@ -7310,26 +7311,26 @@ components:
           nullable: false
           type: boolean
       required:
-        - groupjid
+        - group_jid
       type: object
     PedidoNomeGrupo:
       description: |
-        Novo nome de um grupo. Os campos são lidos da struct anónima do
-        manipulador (`handler_group_mgmt.go:192-196`), não da de domínio.
+        Novo nome de um grupo. O corpo é `dtogroup.SetGroupNameRequest`
+        (`pkg/presentation/http/dto/group/request.go`).
 
-        **Só `Name` é validado.** Um pedido sem grupo passa a validação e falha
-        mais à frente, na resolução do JID — e os dois erros saem em ENVELOPES
-        DIFERENTES: `Name` em falta dá `error` em texto simples, grupo em falta dá
-        `error.code = invalid_jid`.
+        **Só `name` é validado no manipulador.** Um pedido sem grupo passa a
+        validação e falha mais à frente, na resolução do JID: `name` em falta dá
+        `error.code = invalid_request` (objecto canónico, sem taxonomia própria),
+        grupo em falta ou inválido dá `error.code = invalid_jid`.
       properties:
         chat:
           description: |
-            Nome universal do destino. Só é lido quando `groupJID` estiver vazio.
+            Nome universal do destino. Só é lido quando `group_jid` estiver vazio.
             Ausente, `null` e `""` são indistinguíveis e valem "não usar o alias".
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo.
 
@@ -7350,7 +7351,7 @@ components:
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400`, `error: "bad request"` (envelope ANTIGO, F266) |
+            | ausente | não | `400 invalid_request` |
             | `null` | não | **indistinguível de ausente** |
             | `""` | não | **indistinguível de ausente**. Não há forma de LIMPAR o nome por esta rota |
             | `"   "` | **sim** | aceite tal e qual; **não há `trim`** |
@@ -7852,9 +7853,9 @@ components:
       type: object
     PedidoRemoverFotoGrupo:
       description: |
-        Remoção da foto. Campos da struct anónima do manipulador
-        (`handler_group_mgmt.go:262-265`); o campo do grupo é `groupjid`, todo em
-        minúsculas, ao contrário do `groupJID` das rotas vizinhas.
+        Remoção da foto. O corpo é `dtogroup.GroupTargetRequest`
+        (`pkg/presentation/http/dto/group/request.go`) — o mesmo tipo partilhado
+        por `/group/invitelink`, `/group/leave` e `/group/requestparticipants`.
 
         **O manipulador não valida campo nenhum**, e o corpo INTEIRO é opcional no
         sentido em que `{}` é aceite pelo descodificador — a falha vem depois, na
@@ -7862,12 +7863,12 @@ components:
       properties:
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupjid` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupjid:
+        group_jid:
           description: |
             JID do grupo. Ausente, `null` e `""` são indistinguíveis e chegam ao
             parser: **medido `400 invalid_jid`, `could not parse JID ""`** —
@@ -8171,20 +8172,20 @@ components:
         | pedido | resposta medida |
         |---|---|
         | sem corpo e sem query | `400 could_not_decode_payload` — a causa REAL é o grupo em falta, não o corpo |
-        | `{"groupJID":null}` | `400 missing_group_jid` — a mensagem certa |
+        | `{"group_jid":null}` | `400 missing_group_jid` — a mensagem certa |
         | `{}` sem query | `400 missing_group_jid` |
         | `?group_jid=<grupo>` sem corpo | `200` |
         | corpo que NÃO é JSON, com `?group_jid=` | `200` — o erro de descodificação é PERDOADO quando a query traz o grupo (`handler_group.go:47-63`) |
       properties:
         chat:
           description: |
-            Nome universal do destino, no corpo. Só lido quando `groupJID`
+            Nome universal do destino, no corpo. Só lido quando `group_jid`
             estiver vazio; ausente, `null` e `""` são indistinguíveis. Medido a
             funcionar sozinho: `{"chat":"<grupo>"}` devolve `200`.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo, no CORPO. Ausente, `null` e `""` são indistinguíveis e
             fazem o manipulador cair para `?group_jid=` e depois para `?chat=`.
@@ -8557,15 +8558,16 @@ components:
       type: object
     PedidoTemporizadorGrupo:
       description: |
-        Mensagens temporárias do grupo. Campos da struct anónima do manipulador
-        (`handler_group_mgmt.go:309-313`); o campo do grupo é `groupjid`, todo em
-        minúsculas.
+        Mensagens temporárias do grupo. O corpo é
+        `dtogroup.SetDisappearingTimerRequest`
+        (`pkg/presentation/http/dto/group/request.go`), com `group_jid` e
+        `duration`.
 
         **O manipulador não valida campo nenhum.**
       properties:
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupjid` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
@@ -8597,7 +8599,7 @@ components:
           example: 24h
           nullable: false
           type: string
-        groupjid:
+        group_jid:
           description: |
             JID do grupo. Ausente, `null` e `""` são indistinguíveis e chegam ao
             parser: **medido `400 invalid_jid`, `could not parse JID ""`**. `chat`
@@ -8644,18 +8646,18 @@ components:
       type: object
     PedidoTopicoGrupo:
       description: |
-        Nova descrição de um grupo. Campos da struct anónima do manipulador
-        (`handler_group_mgmt.go:213-217`). Tal como em `/group/name`, só o campo
-        de conteúdo é validado.
+        Nova descrição de um grupo. O corpo é `dtogroup.SetGroupTopicRequest`
+        (`pkg/presentation/http/dto/group/request.go`). Tal como em
+        `/group/name`, só o campo de conteúdo é validado.
       properties:
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo. Ausente, `null` e `""` são indistinguíveis e levam a
             `400 invalid_jid` (`could not parse JID ""`) — envelope NOVO — e não a
@@ -8669,7 +8671,7 @@ components:
 
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | não | `400`, `error: "bad request"` (envelope ANTIGO, F266) |
+            | ausente | não | `400 invalid_request` |
             | `null` | não | **indistinguível de ausente** |
             | `""` | não | **indistinguível de ausente** — **não há forma de APAGAR a descrição por esta rota**: o vazio é recusado, não interpretado como limpeza |
             | `"   "` | **sim** | aceite tal e qual; **não há `trim`**. É o mais perto de "apagar" que a rota permite |
@@ -8683,20 +8685,21 @@ components:
       type: object
     PedidoTrancarGrupo:
       description: |
-        Alterna o modo em que só administradores editam os metadados. Campos da
-        struct anónima do manipulador (`handler_group_mgmt.go:292-296`), também
-        sem etiqueta `json` em `GroupJID` e `Locked`.
+        Alterna o modo em que só administradores editam os metadados. O corpo é
+        `dtogroup.SetGroupLockedRequest`
+        (`pkg/presentation/http/dto/group/request.go`), com `group_jid` e
+        `locked`.
 
         **O manipulador não valida campo nenhum.**
       properties:
         chat:
           description: |
-            Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+            Nome universal do destino. Só lido quando `group_jid` estiver vazio;
             ausente, `null` e `""` são indistinguíveis.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        groupJID:
+        group_jid:
           description: |
             JID do grupo. Ausente, `null` e `""` são indistinguíveis e chegam ao
             parser: **medido `400 invalid_jid`** — envelope NOVO. `chat` cobre a
@@ -9566,20 +9569,13 @@ components:
     ResultadoAtualizarParticipantes:
       description: |
         Resposta de `POST /group/updateparticipants`. É a única rota de escrita
-        desta família que devolve mais do que `Details`.
+        desta família que devolve mais do que `details`.
 
-        O corpo é montado à mão como mapa no manipulador
-        (`handler_group_mgmt.go:367-371`), e não a partir de uma struct — logo as
-        três chaves aparecem SEMPRE, sem `omitempty` a intervir.
+        O corpo é `dtogroup.UpdateGroupParticipantsResponse`
+        (`pkg/presentation/http/dto/group/group.go`), produzido por
+        `PresentParticipantsUpdate` — não mais um mapa montado à mão no
+        manipulador. As quatro chaves aparecem SEMPRE, sem `omitempty`.
       properties:
-        Details:
-          description: |
-            Confirmação textual, constante: `Participants updated`. **Sempre
-            presente**, nunca `null`. Não distingue adição de remoção nem diz
-            quantos passaram — para isso é `result`.
-          example: Participants updated
-          nullable: false
-          type: string
         confirmed:
           description: |
             A sessão que agiu LEU a mudança de volta.
@@ -9595,19 +9591,33 @@ components:
           example: true
           nullable: false
           type: boolean
-        result:
+        details:
           description: |
-            A lista de participantes que o WhatsApp devolveu na MESMA resposta.
-            `Error` diferente de zero numa entrada diz que aquele participante
-            falhou enquanto os outros passaram.
+            Confirmação textual, constante: `Participants updated`. **Sempre
+            presente**, nunca `null`. Não distingue adição de remoção nem diz
+            quantos passaram — para isso é `participants`.
+          example: Participants updated
+          nullable: false
+          type: string
+        participants:
+          description: |
+            A lista de participantes que o WhatsApp devolveu na MESMA resposta, na
+            forma canónica. Um `is_admin`/`is_super_admin` inesperado numa entrada
+            diz que aquele participante falhou enquanto os outros passaram — o
+            `Error` numérico do protocolo não é mais exposto (ver
+            `InfoGrupoCanonico`).
 
-            **A chave aparece sempre**, mas o valor é `any`
-            (`pkg/domain/group.go:229`) e vem do transporte: pode ser `null` se o
-            WhatsApp não devolver lista. Quem itera sem verificar `null` parte.
+            **Sempre um array, nunca `null`**: `make([]GroupParticipantResponse,
+            0, ...)` antes do laço (`presenter_group.go`).
           items:
-            $ref: '#/components/schemas/ParticipanteGrupo'
-          nullable: true
+            $ref: '#/components/schemas/ParticipanteGrupoCanonico'
+          nullable: false
           type: array
+      required:
+        - details
+        - participants
+        - confirmed
+        - reason
       type: object
     ResultadoBloqueio:
       description: |
@@ -9799,6 +9809,27 @@ components:
           readOnly: true
           type: boolean
       type: object
+    ResultadoCriarGrupo:
+      description: |
+        Resposta de `POST /group/create`, produzida por `PresentCreatedGroup`
+        (`pkg/presentation/http/dto/group/presenter_group.go`) a partir de
+        `dtogroup.CreateGroupResponse`.
+      properties:
+        created:
+          description: |
+            `false` quando o grupo já existia e foi ENCONTRADO em vez de CRIADO —
+            só o motor headless consegue responder `false`, porque a sua
+            capacidade é "garantir que este grupo existe". Um cliente que não
+            distinga os dois não sabe se acabou de alterar a conta de alguém.
+          example: true
+          nullable: false
+          type: boolean
+        group_info:
+          $ref: '#/components/schemas/InfoGrupoCanonico'
+      required:
+        - group_info
+        - created
+      type: object
     ResultadoDescargaDeMidia:
       description: |
         O conteúdo binário, já decifrado e codificado como Data URL. Os dois
@@ -9958,13 +9989,16 @@ components:
         presente** e nunca vem `null` (`pkg/domain/group.go:47`); um convite
         inválido não chega aqui — devolve `500`.
 
-        **Medido**: os metadados vêm com `AnnounceVersionID`,
-        `ParticipantVersionID` e `MemberAddMode` a `""`, ao contrário de
-        `POST /group/info` sobre o mesmo grupo no mesmo minuto. `ParticipantCount`
-        vem CORRECTO aqui — é `POST /group/list` que o traz a zero.
+        **Medido, antes da migração para DTO**: os metadados vinham com
+        `member_add_mode` a `""`, ao contrário de `POST /group/info` sobre o mesmo
+        grupo no mesmo minuto. `participant_count` vinha CORRECTO aqui — é
+        `POST /group/list` que o traz a zero. O corpo é hoje a mesma forma
+        canónica de `POST /group/info`, via `GetGroupInviteInfoResponse`
+        (`pkg/presentation/http/dto/group/group.go`); a divergência de campos
+        observada acima não foi re-verificada contra o novo apresentador.
       properties:
         invite_info:
-          $ref: '#/components/schemas/InfoGrupo'
+          $ref: '#/components/schemas/InfoGrupoCanonico'
       type: object
     ResultadoInfoGrupo:
       description: |
@@ -9972,9 +10006,10 @@ components:
         nunca vem `null`: o apresentador emite a chave sempre, e o manipulador só
         chega a responder `200` depois de o WhatsApp ter devolvido os metadados.
 
-        É a PRIMEIRA rota migrada para a forma canónica em `snake_case` — ver
-        `InfoGrupoCanonico` e `docs/HTTP-DTO-CONVENTIONS.md`. As restantes rotas
-        desta família ainda devolvem `InfoGrupo`, com os nomes de campo do Go.
+        Foi a PRIMEIRA rota migrada para a forma canónica em `snake_case` — ver
+        `InfoGrupoCanonico` e `docs/HTTP-DTO-CONVENTIONS.md`. Toda a família de
+        grupo e comunidade migrou desde então; `InfoGrupo` (sem sufixo) fica
+        documentado só como registo do formato ANTERIOR.
       properties:
         group_info:
           $ref: '#/components/schemas/InfoGrupoCanonico'
@@ -10038,21 +10073,20 @@ components:
         groups:
           description: |
             Todos os grupos de que a sessão participa, incluindo comunidades
-            (`IsParent: true`) e os sub-grupos de avisos que elas criam sozinhas
-            (`IsDefaultSubGroup: true`). Não há filtro nem paginação: **a rota
-            ignora o corpo por completo** — medido `200` com `{"groupJID":"lixo"}`
+            (`is_parent: true`) e os sub-grupos de avisos que elas criam sozinhas
+            (`is_default_sub_group: true`). Não há filtro nem paginação: **a rota
+            ignora o corpo por completo** — medido `200` com `{"group_jid":"lixo"}`
             e mesmo com um corpo que não é JSON.
 
-            **Sempre presente** — o campo não tem `omitempty`
-            (`pkg/domain/group.go:12`). Mas o seu tipo é `interface{}`, logo uma
-            resposta sem grupos pode vir `null` em vez de `[]`; não foi observada
-            com dados, e quem itera sem verificar `null` parte. Nas leituras
-            medidas veio sempre uma lista não vazia.
+            **Sempre `[]`, nunca `null`**: `PresentListGroups`
+            (`pkg/presentation/http/dto/group/presenter_group.go`) aloca a lista
+            antes do laço, mesmo vazia — o gap de `interface{}` que este ficheiro
+            documentava antes da migração para DTO fechou com o apresentador.
 
             A ordem não é significativa e não é estável entre chamadas.
           items:
-            $ref: '#/components/schemas/InfoGrupo'
-          nullable: true
+            $ref: '#/components/schemas/InfoGrupoCanonico'
+          nullable: false
           type: array
       type: object
     ResultadoMensagemIndisponivel:
@@ -10740,42 +10774,68 @@ components:
     SolicitacaoEntrada:
       description: |
         Um pedido de entrada pendente, devolvido por
-        `GET /group/requestparticipants`.
+        `GET /group/requestparticipants`. O corpo é
+        `dtogroup.GroupJoinRequestResponse`
+        (`pkg/presentation/http/dto/group/group.go`), produzido por
+        `PresentGroupJoinRequest` — não mais a struct de protocolo serializada
+        directamente.
 
         **A forma não foi observada com dados**: os dois grupos disponíveis não
-        tinham pedidos pendentes, e todas as chamadas medidas devolveram `[]`. Os
-        campos abaixo vêm do tipo do protocolo
-        (`internal/wa-noise/protocol/types/group.go:172-175`), que é serializado
-        sem etiquetas `json` e sem `omitempty` — logo os dois aparecem sempre.
+        tinham pedidos pendentes, e todas as chamadas medidas devolveram `[]`. As
+        descrições de campo abaixo ainda reflectem o que era conhecido do tipo de
+        protocolo antes da migração, não uma nova medição.
       properties:
-        JID:
+        added_by_jid:
+          description: |
+            Quem adicionou o solicitante. `""` quando ninguém o fez — um pedido
+            feito ao seguir um link de convite não tem quem o adicionou. **Não
+            observado com dados.**
+          example: ""
+          nullable: false
+          type: string
+        jid:
           description: |
             Quem pediu para entrar. **Sempre presente** quando houver uma entrada,
-            nunca `null` nem omitido — não há `omitempty` no tipo. **Não observado
+            nunca `null` nem omitido — o DTO não usa `omitempty`. **Não observado
             com dados.**
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        RequestedAt:
+        method:
           description: |
-            Quando o pedido foi feito. **Sempre presente**, nunca `null`: é
-            `time.Time` não-ponteiro, logo um valor por definir sairia como
-            `0001-01-01T00:00:00Z`. **Não observado com dados.**
-          example: "2026-08-26T08:42:47-04:00"
-          format: date-time
+            Como o pedido chegou (`InviteLink` para um convite). `""` quando o
+            motor não o relata. **Não observado com dados.**
+          example: InviteLink
           nullable: false
           type: string
+        requested_at:
+          description: |
+            Quando o pedido foi feito. `null`, e nunca
+            `"0001-01-01T00:00:00Z"`, quando o motor não relata o momento — ver
+            `presentTime` em `docs/HTTP-DTO-CONVENTIONS.md` §5. **Não observado
+            com dados.**
+          example: "2026-08-26T08:42:47-04:00"
+          format: date-time
+          nullable: true
+          type: string
+      required:
+        - jid
+        - requested_at
+        - added_by_jid
+        - method
       type: object
     SubGrupoComunidade:
       description: |
-        Um grupo ligado à comunidade. Os nomes de campo vêm em maiúscula inicial
-        porque a estrutura é serializada tal como o vendor a define — não há
-        etiquetas JSON a renomeá-la. Medido a 2026-08-26.
-
-        **As seis propriedades apareceram sempre**, nenhuma omitida, nenhuma
-        `null`.
+        Um grupo ligado à comunidade. O corpo é
+        `dtogroup.CommunitySubGroupResponse`
+        (`pkg/presentation/http/dto/group/group.go`), produzido por
+        `PresentCommunitySubGroup` — três campos, `snake_case`, e não mais os seis
+        da struct de protocolo serializada directamente que este ficheiro
+        documentava antes da migração para DTO. `name_set_at`/`name_set_by`/
+        `name_set_by_pn` desapareceram: eram detalhe do protocolo, não do recurso
+        — a mesma decisão de `InfoGrupoCanonico` (`docs/HTTP-DTO-CONVENTIONS.md`).
       properties:
-        IsDefaultSubGroup:
+        is_default_sub_group:
           description: |
             `true` no **grupo de avisos**, que a comunidade cria sozinha e que não
             pode ser desligado. `false` nos grupos ligados por
@@ -10787,12 +10847,12 @@ components:
           example: true
           nullable: false
           type: boolean
-        JID:
+        jid:
           description: JID do sub-grupo, no servidor `@g.us`. Sempre presente; nunca `null`, nunca ausente.
           example: 120363411669320145@g.us
           nullable: false
           type: string
-        Name:
+        name:
           description: |
             Nome do sub-grupo. Sempre presente; nunca `null`. **`""` é possível**
             — um grupo pode não ter nome definido —, e nesse caso é
@@ -10800,40 +10860,10 @@ components:
           example: Avisos
           nullable: false
           type: string
-        NameSetAt:
-          description: |
-            Quando o nome foi definido, em RFC 3339 **com o deslocamento do fuso do
-            SERVIDOR, não em UTC** — medido `2026-08-26T08:08:21-04:00`. Sempre
-            presente; nunca `null`.
-
-            Num grupo sem nome definido a forma não foi determinada com segurança:
-            seria `0001-01-01T00:00:00Z` se o vendor deixar o `time.Time` a zero,
-            mas isso não foi observado.
-          example: "2026-08-26T08:08:21-04:00"
-          format: date-time
-          nullable: false
-          type: string
-        NameSetBy:
-          description: |
-            Quem definiu o nome, em **LID**. Sempre presente; nunca `null`.
-
-            **Veio `""` na medição**, no grupo de avisos criado automaticamente com
-            a comunidade — o que é coerente com "ninguém o definiu". `""` é
-            indistinguível de "o servidor não informou".
-          example: ""
-          nullable: false
-          type: string
-        NameSetByPN:
-          description: |
-            O mesmo que `NameSetBy`, em **PN** (`…@s.whatsapp.net`). Sempre
-            presente; nunca `null`. Igualmente `""` na medição.
-
-            Os dois campos coexistem porque PN e LID não são intermutáveis; quando
-            ambos vierem vazios, **não há como identificar quem definiu o nome por
-            esta rota**.
-          example: ""
-          nullable: false
-          type: string
+      required:
+        - jid
+        - name
+        - is_default_sub_group
       type: object
     SubGruposComunidade:
       description: |
@@ -10845,15 +10875,15 @@ components:
             Os grupos ligados à comunidade.
 
             **Nunca vem vazia numa comunidade real**: o grupo de avisos é criado
-            com a comunidade e aparece sempre, marcado com `IsDefaultSubGroup:
+            com a comunidade e aparece sempre, marcado com `is_default_sub_group:
             true` (F237, medido com a transição 1 → 2 → 1 provocada por
             `POST /community/link` e `POST /community/unlink`).
 
-            **Se o valor `null` é possível não foi determinado com segurança**: o
-            campo é `any` na struct de resultado (`pkg/domain/community.go:13`),
-            logo uma fatia `nil` vinda do adaptador seria serializada como `null` e
-            não como `[]`. Não foi observado, porque não há comunidade sem
-            sub-grupos. **Verifique `null` antes de iterar.**
+            **Sempre `[]`, nunca `null`**: `PresentGetCommunitySubGroups`
+            (`pkg/presentation/http/dto/group/presenter_group.go`) aloca a lista
+            antes do laço, mesmo vazia — fecha a incerteza sobre `null` que este
+            ficheiro registava antes da migração para DTO, quando o campo ainda
+            era `any` na struct de resultado.
 
             Sem paginação e sem tecto.
           items:
@@ -15247,7 +15277,7 @@ paths:
         Quem precisar do telefone tem de resolver o LID por outra rota; esta não
         devolve PN.
 
-        **Regras**: `communityJID` é obrigatório, é um JID `@g.us`, e o alias
+        **Regras**: `community_jid` é obrigatório, é um JID `@g.us`, e o alias
         universal `chat` também é aceite.
 
         **Autenticação**: token de sessão.
@@ -15263,7 +15293,7 @@ paths:
         content:
           application/json:
             example:
-              communityJID: 120363430034334401@g.us
+              community_jid: 120363430034334401@g.us
             schema:
               $ref: '#/components/schemas/PedidoComunidade'
         required: true
@@ -15298,7 +15328,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Falta o `communityJID`, ou ele não é um JID que se consiga
+            Falta o `community_jid`, ou ele não é um JID que se consiga
             interpretar — neste caso o código é `invalid_community_jid`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
@@ -15323,13 +15353,13 @@ paths:
 
         **A lista nunca vem vazia numa comunidade real**: o grupo de avisos é
         criado automaticamente com a comunidade e aparece sempre, marcado com
-        `IsDefaultSubGroup: true`. Medido a 2026-08-26, com a transição
+        `is_default_sub_group: true`. Medido a 2026-08-26, com a transição
         1 → 2 → 1 provocada por `POST /community/link` e
         `POST /community/unlink` (F237).
 
-        **Regras**: `communityJID` é obrigatório e é um JID de GRUPO (`@g.us`),
+        **Regras**: `community_jid` é obrigatório e é um JID de GRUPO (`@g.us`),
         porque a comunidade é um grupo-pai. O alias universal `chat` também é
-        aceite, e só é usado quando `communityJID` vem vazio.
+        aceite, e só é usado quando `community_jid` vem vazio.
 
         **Autenticação**: token de sessão.
       parameters:
@@ -15344,7 +15374,7 @@ paths:
         content:
           application/json:
             example:
-              communityJID: 120363430034334401@g.us
+              community_jid: 120363430034334401@g.us
             schema:
               $ref: '#/components/schemas/PedidoComunidade'
         required: true
@@ -15356,12 +15386,9 @@ paths:
                 code: 200
                 data:
                   sub_groups:
-                    - IsDefaultSubGroup: true
-                      JID: 120363411669320145@g.us
-                      Name: Avisos
-                      NameSetAt: "2026-08-26T08:08:21-04:00"
-                      NameSetBy: ""
-                      NameSetByPN: ""
+                    - is_default_sub_group: true
+                      jid: 120363411669320145@g.us
+                      name: Avisos
                 success: true
               schema:
                 allOf:
@@ -15383,7 +15410,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Falta o `communityJID`, ou ele não é um JID que se consiga
+            Falta o `community_jid`, ou ele não é um JID que se consiga
             interpretar.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
@@ -15408,7 +15435,7 @@ paths:
         (`IsDefaultSubGroup: true`) nasce com a comunidade e permanece — foi ele
         que sobrou quando a contagem voltou a 1.
 
-        **Regras**: `communityJID` e `groupJID` são obrigatórios; o alias `chat`
+        **Regras**: `community_jid` e `group_jid` são obrigatórios; o alias `chat`
         não é aceite aqui.
 
         **Resposta**: `data` traz a confirmação textual
@@ -15435,8 +15462,8 @@ paths:
         content:
           application/json:
             example:
-              communityJID: 120363430034334401@g.us
-              groupJID: 120363411669320145@g.us
+              community_jid: 120363430034334401@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoLigacaoComunidade'
         required: true
@@ -15468,7 +15495,7 @@ paths:
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
-          description: Falta o `communityJID` ou o `groupJID`, ou um deles não é um JID válido.
+          description: Falta o `community_jid` ou o `group_jid`, ou um deles não é um JID válido.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -15487,7 +15514,7 @@ paths:
         `POST /community/subgroups`, e o cliente do WhatsApp mostra a mensagem de
         sistema *"O grupo X foi adicionado"* (F237).
 
-        **Regras**: `communityJID` e `groupJID` são ambos obrigatórios — a
+        **Regras**: `community_jid` e `group_jid` são ambos obrigatórios — a
         ausência de cada um tem o seu próprio código
         (`missing_community_jid`, `missing_group_jid`). Esta rota **não** aceita
         o alias universal `chat`: a struct do pedido não o inclui.
@@ -15517,8 +15544,8 @@ paths:
         content:
           application/json:
             example:
-              communityJID: 120363430034334401@g.us
-              groupJID: 120363411669320145@g.us
+              community_jid: 120363430034334401@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoLigacaoComunidade'
         required: true
@@ -15551,7 +15578,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Falta o `communityJID` ou o `groupJID`, ou um deles não é
+            Falta o `community_jid` ou o `group_jid`, ou um deles não é
             interpretável como JID (`invalid_jid`).
         "401":
           $ref: '#/components/responses/NaoAutorizado'
@@ -15587,7 +15614,7 @@ paths:
         |---|---|
         | sem corpo e sem query | `400 could_not_decode_payload` — a causa real é o grupo em falta, não o corpo |
         | corpo `{}` | `400 missing_group_jid` — a mensagem certa |
-        | corpo `{"groupJID":null}` | `400 missing_group_jid` |
+        | corpo `{"group_jid":null}` | `400 missing_group_jid` |
         | corpo que não é JSON, com `?group_jid=` | `200` — o erro de descodificação é PERDOADO quando a query traz o grupo (`handler_group.go:47-63`) |
 
         Ou seja: o `curl` sem `-d` — que é o `GET` normal de qualquer cliente —
@@ -15604,7 +15631,7 @@ paths:
             type: string
         - description: |
             JID do grupo. É a forma recomendada. Usada só quando o corpo não
-            trouxe `groupJID`.
+            trouxe `group_jid`.
           in: query
           name: group_jid
           required: false
@@ -15624,7 +15651,7 @@ paths:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoSolicitacoesEntrada'
         required: false
@@ -15691,9 +15718,9 @@ paths:
         resolve com `ResolveQualifiedJID` e não com `ResolveJID`
         (`group_request.go:100`). **É uma divergência face a
         `POST /group/updateparticipants`**, que aceita o número nu — as duas
-        rotas recebem uma lista chamada `Phone` e só uma tolera a forma curta.
+        rotas recebem uma lista chamada `phone` e só uma tolera a forma curta.
 
-        **Vocabulário próprio**: `Action` é `approve` ou `reject` — e não
+        **Vocabulário próprio**: `action` é `approve` ou `reject` — e não
         `add`/`remove`, que é o da outra rota. Qualquer outro valor devolve
         `400 invalid_action` (medido).
 
@@ -15729,10 +15756,10 @@ paths:
         content:
           application/json:
             example:
-              Action: approve
-              Phone:
+              action: approve
+              group_jid: 120363411669320145@g.us
+              phone:
                 - 554192421234@s.whatsapp.net
-              groupJID: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoDecidirSolicitacoes'
         required: true
@@ -15743,7 +15770,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group request participants updated successfully
+                  details: Group request participants updated successfully
                 success: true
               schema:
                 allOf:
@@ -15801,19 +15828,20 @@ paths:
         (`approve`/`reject`).
 
         **Regras e a ORDEM em que são aplicadas**, que muda a mensagem de erro:
-        primeiro `Phone` não vazio, depois cada entrada de `Phone` não vazia,
-        depois `Action`, e **só então** `groupJID`
-        (`handler_group_mgmt.go:341-356`). Um pedido a que falte tudo queixa-se
+        primeiro `phone` não vazio, depois cada entrada de `phone` não vazia,
+        depois `action`, e **só então** `group_jid`
+        (`handler_group_mgmt.go:289-304`). Um pedido a que falte tudo queixa-se
         dos telefones.
 
-        `Phone` aceita o **número nu** (`554192421234`) — medido a passar da
+        `phone` aceita o **número nu** (`554192421234`) — medido a passar da
         validação. É uma diferença face a
         `POST /group/updaterequestparticipants`, que exige o JID completo.
 
-        **Dois formatos de erro na mesma rota**: as recusas de campo em falta
-        usam `rejectMissingField` e saem no envelope ANTIGO, com `error` em
-        texto simples (F266); `invalid_action` e `invalid_jid` saem no envelope
-        NOVO, com `error` em objecto. Um cliente tem de aguentar os dois.
+        **Dois formatos de erro na mesma rota, e os dois são o objecto
+        canónico**: as recusas de campo em falta usam `rejectMissingField` e
+        saem com `error.code = invalid_request` (nenhuma delas tem código
+        próprio); `invalid_action` e `invalid_jid`, que atravessam o use case,
+        saem com o seu próprio `error.code`.
 
         **Autenticação**: token de sessão.
       parameters:
@@ -15828,10 +15856,10 @@ paths:
         content:
           application/json:
             example:
-              Action: add
-              Phone:
+              action: add
+              group_jid: 120363411669320145@g.us
+              phone:
                 - 554192421234@s.whatsapp.net
-              groupJID: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoAtualizarParticipantes'
         required: true
@@ -15842,16 +15870,16 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Participants updated
                   confirmed: true
-                  result:
-                    - AddRequest: null
-                      Error: 0
-                      IsAdmin: false
-                      IsSuperAdmin: false
-                      JID: 90937376170214@lid
-                      LID: 90937376170214@lid
-                      PhoneNumber: 554192421234@s.whatsapp.net
+                  details: Participants updated
+                  participants:
+                    - display_name: ""
+                      is_admin: false
+                      is_super_admin: false
+                      jid: 90937376170214@lid
+                      lid: 90937376170214@lid
+                      phone_number: 554192421234@s.whatsapp.net
+                  reason: ""
                 success: true
               schema:
                 allOf:
@@ -15862,8 +15890,10 @@ paths:
                     type: object
           description: |
             A mudança foi enviada e o WhatsApp devolveu a lista resultante.
-            Participante que tenha falhado individualmente volta em `result`
-            com `Error` diferente de zero — o `200` cobre o sucesso parcial.
+            Participante que tenha falhado individualmente volta em
+            `participants` — ver `ParticipanteGrupoCanonico` sobre o que
+            representa uma falha parcial na forma canónica — e o `200` cobre o
+            sucesso parcial.
         "400":
           content:
             application/json:
@@ -15871,8 +15901,9 @@ paths:
                 acaoDesconhecida:
                   description: |
                     `promote` e `demote` caem aqui: a biblioteca sabe fazê-los,
-                    a rota não os expõe (F263).
-                  summary: Formato NOVO — Action inválido
+                    a rota não os expõe (F263). Recusa do use case, com
+                    `error.code` específico.
+                  summary: action inválido, com código próprio
                   value:
                     code: 400
                     error:
@@ -15881,10 +15912,10 @@ paths:
                     success: false
                 campoObrigatorioEmFalta:
                   description: |
-                    `Phone` vazio, `Action` ausente ou `groupJID` ausente passam
-                    por `rejectMissingField`, que não usa a taxonomia de erro —
-                    `error` vem em texto simples (F266). Medido.
-                  summary: Formato ANTIGO — campo obrigatório ausente
+                    `phone` vazio, `action` ausente ou `group_jid` ausente
+                    passam por `rejectMissingField`, que não usa a taxonomia de
+                    erro — `error.code` fica no genérico `invalid_request`.
+                  summary: campo obrigatório ausente, sem código próprio
                   value:
                     code: 400
                     error:
@@ -15892,18 +15923,17 @@ paths:
                       message: Requisição inválida.
                     success: false
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/Erro'
-                  - $ref: '#/components/schemas/Erro'
+                $ref: '#/components/schemas/Erro'
           description: |
-            **Dois formatos possíveis.**
+            **Dois formatos possíveis, os dois com o objecto canónico.**
 
-            `Phone` vazio, entrada vazia na lista, `Action` ausente ou
-            `groupJID` ausente saem no formato ANTIGO (F266):
-            `{"code":400,"error":"bad request","success":false}`.
+            `phone` vazio, entrada vazia na lista, `action` ausente ou
+            `group_jid` ausente saem de `rejectMissingField`, sem código
+            próprio: `error.code = invalid_request`.
 
-            `Action` desconhecido — incluindo `promote` e `demote` — e JID
-            irresolúvel saem no formato NOVO, como o exemplo abaixo.
+            `action` desconhecido — incluindo `promote` e `demote` — e JID
+            irresolúvel atravessam o use case e saem com o `error.code`
+            específico, como o exemplo abaixo.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":
@@ -15927,9 +15957,9 @@ paths:
         **Quando usar**: para limpar a identidade visual sem escolher outra
         imagem.
 
-        **Regra que morde**: o campo do grupo é `groupjid`, **todo em
+        **Regra que morde**: o campo do grupo é `group_jid`, **todo em
         minúsculas** (`handler_group_mgmt.go:262`), ao contrário do
-        `groupJID` das rotas vizinhas. Na prática o descodificador do Go casa
+        `group_jid` das rotas vizinhas. Na prática o descodificador do Go casa
         nomes ignorando maiúsculas e as duas grafias funcionam; o exemplo traz
         a que foi medida.
 
@@ -15949,7 +15979,7 @@ paths:
         content:
           application/json:
             example:
-              groupjid: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoRemoverFotoGrupo'
         required: true
@@ -15960,7 +15990,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group photo removed successfully
+                  details: Group photo removed successfully
                 success: true
               schema:
                 allOf:
@@ -16008,8 +16038,9 @@ paths:
         (`handler_group_mgmt.go:242`). Num grupo com `IsLocked` verdadeiro, só
         administradores conseguem.
 
-        **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples,
-        tanto para `photo` em falta como para base64 inválido (F266).
+        **Formato do erro `400`**: objecto canónico, `error.code = invalid_request`
+        tanto para `photo` em falta como para base64 inválido — o cliente não
+        distingue as duas causas pelo corpo, só pelo log do servidor.
 
         **Autenticação**: token de sessão.
       parameters:
@@ -16024,7 +16055,7 @@ paths:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
               photo: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA==
             schema:
               $ref: '#/components/schemas/PedidoFotoGrupo'
@@ -16036,7 +16067,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group photo set successfully
+                  details: Group photo set successfully
                 success: true
               schema:
                 allOf:
@@ -16059,9 +16090,8 @@ paths:
                 $ref: '#/components/schemas/Erro'
           description: |
             `photo` ausente, ou não é base64 válido — é aqui que cai o prefixo
-            `data:image/jpeg;base64,`. **Formato antigo (F266)**: `error` em
-            texto simples, logo o cliente não distingue as duas causas pelo
-            corpo.
+            `data:image/jpeg;base64,`. `error.code = invalid_request` nas duas
+            causas; o cliente não as distingue pelo corpo.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":
@@ -16097,7 +16127,7 @@ paths:
         **Quando usar**: em grupos cujo link circula, para filtrar quem entra
         sem revogar o link.
 
-        **Regras**: o campo do grupo é `groupjid`, todo em minúsculas
+        **Regras**: o campo do grupo é `group_jid`, todo em minúsculas
         (`pkg/domain/group_request.go:40`). `mode` ausente vale `false`, logo
         um pedido só com o grupo **DESLIGA** a exigência — não a consulta.
         Para ler o estado actual use `IsJoinApprovalRequired` de
@@ -16119,7 +16149,7 @@ paths:
         content:
           application/json:
             example:
-              groupjid: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
               mode: true
             schema:
               $ref: '#/components/schemas/PedidoModoAprovacao'
@@ -16131,7 +16161,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group join approval mode updated successfully
+                  details: Group join approval mode updated successfully
                 success: true
               schema:
                 allOf:
@@ -16148,12 +16178,12 @@ paths:
                 code: 400
                 error:
                   code: missing_group_jid
-                  message: missing groupJID parameter
+                  message: missing group_jid parameter
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `groupjid` ausente (`missing_group_jid`), impossível de resolver
+            `group_jid` ausente (`missing_group_jid`), impossível de resolver
             (`invalid_group_jid`), corpo inválido
             (`could_not_decode_payload`), ou sessão por emparelhar
             (`no_session`).
@@ -16189,7 +16219,7 @@ paths:
           application/json:
             example:
               announce: true
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoAnuncioGrupo'
         required: true
@@ -16200,7 +16230,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group announce set successfully
+                  details: Group announce set successfully
                 success: true
               schema:
                 allOf:
@@ -16248,9 +16278,10 @@ paths:
         pedido falhar: volta na lista com `Error` diferente de zero.
 
         **Formato do erro `400`**: esta rota usa `rejectMissingField`
-        (`handler_group_mgmt.go:99`) e responde no envelope ANTIGO,
-        `{"code":400,"error":"bad request","success":false}`, com `error` em
-        STRING. Um cliente que leia `error.code` parte aqui. É o achado F266.
+        (`handler_group_mgmt.go:114`) e responde no objecto canónico,
+        `{"code":400,"error":{"code":"invalid_request","message":"Requisição
+        inválida."},"success":false}` — um cliente que leia `error.code` já
+        consegue ramificar.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -16270,32 +16301,48 @@ paths:
               example:
                 code: 200
                 data:
-                  AddressingMode: lid
-                  IsParent: false
-                  JID: 120363411669320145@g.us
-                  LinkedParentJID: ""
-                  Name: Equipa de entregas
-                  OwnerJID: 90937376170214@lid
-                  OwnerPN: 554192421234@s.whatsapp.net
-                  Participants:
-                    - AddRequest: null
-                      Error: 0
-                      IsAdmin: true
-                      IsSuperAdmin: true
-                      JID: 90937376170214@lid
-                      LID: 90937376170214@lid
-                      PhoneNumber: 554192421234@s.whatsapp.net
+                  created: true
+                  group_info:
+                    created_at: "2026-08-26T08:42:47-04:00"
+                    disappearing_timer: 0
+                    is_announce: false
+                    is_default_sub_group: false
+                    is_ephemeral: false
+                    is_incognito: false
+                    is_join_approval_required: false
+                    is_locked: false
+                    is_parent: false
+                    is_suspended: false
+                    jid: 120363411669320145@g.us
+                    linked_parent_jid: ""
+                    member_add_mode: ""
+                    name: Equipa de entregas
+                    name_set_at: null
+                    name_set_by: ""
+                    owner_jid: 90937376170214@lid
+                    participant_count: 1
+                    participants:
+                      - display_name: ""
+                        is_admin: true
+                        is_super_admin: true
+                        jid: 90937376170214@lid
+                        lid: 90937376170214@lid
+                        phone_number: 554192421234@s.whatsapp.net
+                    topic: ""
+                    topic_set_at: null
+                    topic_set_by: ""
                 success: true
               schema:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - properties:
                       data:
-                        $ref: '#/components/schemas/InfoGrupo'
+                        $ref: '#/components/schemas/ResultadoCriarGrupo'
                     type: object
           description: |
-            Grupo criado. O corpo traz os metadados completos do grupo novo,
-            na mesma forma que `POST /group/info` devolve.
+            Grupo criado. `group_info` traz os metadados completos do grupo
+            novo, na mesma forma canónica que `POST /group/info` devolve;
+            `created` diz se foi mesmo criado ou apenas encontrado.
         "400":
           content:
             application/json:
@@ -16311,7 +16358,8 @@ paths:
             `name` ausente, `participants` ausente ou vazio num grupo normal,
             ou `is_parent` e `linked_parent_jid` no mesmo pedido.
 
-            **Formato antigo (F266)**: `error` vem em texto simples.
+            **Objecto canónico**: `error.code = invalid_request` em todas as
+            seis causas — o manipulador não distingue qual campo falhou.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":
@@ -16340,7 +16388,7 @@ paths:
         um erro de escrita como `"24H"` ou `"1d"`. Do lado do cliente não há
         nada que distinga "desligou de propósito" de "escreveu mal".
 
-        **O campo do grupo é `groupjid`**, todo em minúsculas
+        **O campo do grupo é `group_jid`**, todo em minúsculas
         (`pkg/domain/group.go:186`).
 
         **Leitura de volta**: `POST /group/info` devolve `DisappearingTimer` em
@@ -16352,7 +16400,7 @@ paths:
           application/json:
             example:
               duration: 24h
-              groupjid: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/PedidoTemporizadorGrupo'
         required: true
@@ -16363,7 +16411,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Disappearing timer set
+                  details: Disappearing timer set
                 success: true
               schema:
                 allOf:
@@ -16402,7 +16450,7 @@ paths:
         **devolve `ParticipantCount` a zero** — medido no mesmo minuto, para o
         mesmo grupo, contra o `2` correcto desta rota.
 
-        **Regras**: `groupJID` é obrigatório; a recusa é `400 missing_group_jid`.
+        **Regras**: `group_jid` é obrigatório; a recusa é `400 missing_group_jid`.
         Um JID MAL FORMADO — número nu, só espaços — devolve
         `400 invalid_group_jid`.
 
@@ -16433,7 +16481,7 @@ paths:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/AlvoGrupo'
         required: true
@@ -16489,12 +16537,12 @@ paths:
                 code: 400
                 error:
                   code: missing_group_jid
-                  message: missing groupJID parameter
+                  message: missing group_jid parameter
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `groupJID` ausente (`missing_group_jid`), impossível de resolver
+            `group_jid` ausente (`missing_group_jid`), impossível de resolver
             (`invalid_group_jid`), corpo que não é JSON
             (`could_not_decode_payload`), ou sessão por emparelhar
             (`no_session`).
@@ -16537,7 +16585,7 @@ paths:
         content:
           application/json:
             example:
-              Code: IVccRoDVSbpHKNkgNxyZx4
+              code: IVccRoDVSbpHKNkgNxyZx4
             schema:
               $ref: '#/components/schemas/PedidoInfoConvite'
         required: true
@@ -16549,24 +16597,34 @@ paths:
                 code: 200
                 data:
                   invite_info:
-                    AnnounceVersionID: ""
-                    IsJoinApprovalRequired: false
-                    JID: 120363411669320145@g.us
-                    MemberAddMode: ""
-                    Name: Equipa de entregas
-                    OwnerJID: 90937376170214@lid
-                    OwnerPN: 554192421234@s.whatsapp.net
-                    ParticipantCount: 2
-                    ParticipantVersionID: ""
-                    Participants:
-                      - AddRequest: null
-                        Error: 0
-                        IsAdmin: false
-                        IsSuperAdmin: false
-                        JID: 90937376170214@lid
-                        LID: 90937376170214@lid
-                        PhoneNumber: 554192421234@s.whatsapp.net
-                    Topic: Combinações de rota do turno da manhã
+                    created_at: null
+                    disappearing_timer: 0
+                    is_announce: false
+                    is_default_sub_group: false
+                    is_ephemeral: false
+                    is_incognito: false
+                    is_join_approval_required: false
+                    is_locked: false
+                    is_parent: false
+                    is_suspended: false
+                    jid: 120363411669320145@g.us
+                    linked_parent_jid: ""
+                    member_add_mode: ""
+                    name: Equipa de entregas
+                    name_set_at: null
+                    name_set_by: ""
+                    owner_jid: 90937376170214@lid
+                    participant_count: 2
+                    participants:
+                      - display_name: ""
+                        is_admin: false
+                        is_super_admin: false
+                        jid: 90937376170214@lid
+                        lid: 90937376170214@lid
+                        phone_number: 554192421234@s.whatsapp.net
+                    topic: Combinações de rota do turno da manhã
+                    topic_set_at: null
+                    topic_set_by: ""
                 success: true
               schema:
                 allOf:
@@ -16588,7 +16646,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `Code` ausente (`missing_code`), corpo inválido
+            `code` ausente (`missing_code`), corpo inválido
             (`could_not_decode_payload`), ou sessão por emparelhar
             (`no_session`).
         "401":
@@ -16634,7 +16692,7 @@ paths:
         **código nu**. Alimentar um no outro só funciona porque a biblioteca
         corta o prefixo, e não porque o contrato o promete.
 
-        **Regras**: `groupJID` é obrigatório (`missing_group_jid`); só um
+        **Regras**: `group_jid` é obrigatório (`missing_group_jid`); só um
         administrador obtém o link — o WhatsApp recusa aos outros, e a recusa
         chega traduzida como `422`.
 
@@ -16643,7 +16701,7 @@ paths:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/AlvoGrupo'
         required: true
@@ -16671,12 +16729,12 @@ paths:
                 code: 400
                 error:
                   code: missing_group_jid
-                  message: missing groupJID parameter
+                  message: missing group_jid parameter
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `groupJID` ausente (`missing_group_jid`), impossível de resolver
+            `group_jid` ausente (`missing_group_jid`), impossível de resolver
             (`invalid_group_jid`), corpo inválido
             (`could_not_decode_payload`), ou sessão por emparelhar
             (`no_session`).
@@ -16700,10 +16758,10 @@ paths:
 
         **A struct de domínio MENTE aqui, e é a armadilha mais cara desta
         família.** `GroupJoinRequest` (`pkg/domain/group.go:52-54`) declara
-        `inviteLink`, e **não é o que a rota lê**: o manipulador declara a sua
-        própria struct anónima, com o campo `code`
-        (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do
-        domínio recebe `400`. É o achado F267.
+        `inviteLink`, e **não é o que a rota lê**: o corpo é
+        `dtogroup.JoinGroupRequest` (`pkg/presentation/http/dto/group/request.go`),
+        com o campo `code`. Um cliente escrito a partir do domínio recebe
+        `400`. É o achado F267.
 
         O valor é o **código nu** — `IVccRoDVSbpHKNkgNxyZx4` — e não o URL,
         que é o que `POST /group/invitelink` devolve.
@@ -16718,8 +16776,7 @@ paths:
         `POST /group/list`. O comportamento exacto do código de estado nesse
         caso não foi determinado com segurança pela implementação actual.
 
-        **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples
-        (F266).
+        **Formato do erro `400`**: objecto canónico, `error.code = invalid_request`.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -16737,7 +16794,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group joined successfully
+                  details: Group joined successfully
                 success: true
               schema:
                 allOf:
@@ -16762,9 +16819,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `code` ausente ou vazio. **Formato antigo (F266)**: `error` vem em
-            texto simples, e não diz qual campo faltou — a causa fica só no
-            log.
+            `code` ausente ou vazio. `error.code = invalid_request` — não diz
+            qual campo faltou; a causa fica só no log.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":
@@ -16788,19 +16844,18 @@ paths:
         **Quando usar**: no encerramento de uma operação. Para deixar de ver o
         grupo sem sair dele, arquive a conversa em vez disto.
 
-        **Regras**: `groupJID` é obrigatório — a recusa vem do manipulador
-        (`handler_group_mgmt.go:176`), no envelope antigo. `chat` é aceite como
-        alternativa; o nome específico ganha quando os dois vierem.
+        **Regras**: `group_jid` é obrigatório — a recusa vem do manipulador
+        (`handler_group_mgmt.go:163`), via `rejectMissingField`. `chat` é
+        aceite como alternativa; o nome específico ganha quando os dois vierem.
 
-        **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples
-        (F266).
+        **Formato do erro `400`**: objecto canónico, `error.code = invalid_request`.
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
             schema:
               $ref: '#/components/schemas/AlvoGrupo'
         required: true
@@ -16811,7 +16866,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group left successfully
+                  details: Group left successfully
                 success: true
               schema:
                 allOf:
@@ -16833,8 +16888,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `groupJID` e `chat` ambos ausentes. **Formato antigo (F266)**:
-            `error` em texto simples.
+            `group_jid` e `chat` ambos ausentes. `error.code = invalid_request`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":
@@ -16863,10 +16917,10 @@ paths:
         Para contar membros a partir desta listagem, conte `Participants`, que
         vem correcta.
 
-        **O que a lista inclui**: comunidades (`IsParent: true`) e os
+        **O que a lista inclui**: comunidades (`is_parent: true`) e os
         sub-grupos de avisos que elas criam sozinhas
-        (`IsDefaultSubGroup: true`) aparecem como entradas normais, ao lado dos
-        grupos comuns.
+        (`is_default_sub_group: true`) aparecem como entradas normais, ao lado
+        dos grupos comuns.
 
         **Regras**: o corpo é ignorado — a rota não tem filtro nem paginação
         (`handler_group.go`, `ListGroupsUseCase`). Envie `{}`.
@@ -16888,30 +16942,34 @@ paths:
                 code: 200
                 data:
                   groups:
-                    - AddressingMode: lid
-                      DisappearingTimer: 86400
-                      IsAnnounce: false
-                      IsDefaultSubGroup: false
-                      IsEphemeral: true
-                      IsLocked: false
-                      IsParent: false
-                      JID: 120363411669320145@g.us
-                      LinkedParentJID: ""
-                      MemberAddMode: admin_add
-                      Name: Equipa de entregas
-                      OwnerJID: 90937376170214@lid
-                      OwnerPN: 554192421234@s.whatsapp.net
-                      ParticipantCount: 0
-                      Participants:
-                        - AddRequest: null
-                          Error: 0
-                          IsAdmin: false
-                          IsSuperAdmin: false
-                          JID: 90937376170214@lid
-                          LID: 90937376170214@lid
-                          PhoneNumber: 554192421234@s.whatsapp.net
-                      Suspended: false
-                      Topic: Combinações de rota do turno da manhã
+                    - created_at: null
+                      disappearing_timer: 86400
+                      is_announce: false
+                      is_default_sub_group: false
+                      is_ephemeral: true
+                      is_incognito: false
+                      is_join_approval_required: false
+                      is_locked: false
+                      is_parent: false
+                      is_suspended: false
+                      jid: 120363411669320145@g.us
+                      linked_parent_jid: ""
+                      member_add_mode: admin_add
+                      name: Equipa de entregas
+                      name_set_at: null
+                      name_set_by: ""
+                      owner_jid: 90937376170214@lid
+                      participant_count: 0
+                      participants:
+                        - display_name: ""
+                          is_admin: false
+                          is_super_admin: false
+                          jid: 90937376170214@lid
+                          lid: 90937376170214@lid
+                          phone_number: 554192421234@s.whatsapp.net
+                      topic: Combinações de rota do turno da manhã
+                      topic_set_at: null
+                      topic_set_by: ""
                 success: true
               schema:
                 allOf:
@@ -16955,7 +17013,7 @@ paths:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
               locked: true
             schema:
               $ref: '#/components/schemas/PedidoTrancarGrupo'
@@ -16967,7 +17025,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group lock updated
+                  details: Group lock updated
                 success: true
               schema:
                 allOf:
@@ -17003,22 +17061,22 @@ paths:
 
         **Regras**: `name` é obrigatório e vazio é recusado. **É o único campo
         validado pelo manipulador** (`handler_group_mgmt.go:198`): um pedido
-        sem `groupJID` passa esta validação e só falha adiante, na resolução do
+        sem `group_jid` passa esta validação e só falha adiante, na resolução do
         JID, com `invalid_jid` no envelope NOVO. As duas recusas desta rota
         têm portanto formatos diferentes.
 
         Num grupo com `IsLocked` verdadeiro, só administradores conseguem — a
         recusa vem do WhatsApp, como `422`.
 
-        **Formato do erro `400` de campo em falta**: envelope ANTIGO, `error`
-        em texto simples (F266).
+        **Formato do erro `400` de campo em falta**: objecto canónico,
+        `error.code = invalid_request`.
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
               name: Equipa de entregas — turno da manhã
             schema:
               $ref: '#/components/schemas/PedidoNomeGrupo'
@@ -17030,7 +17088,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group name set successfully
+                  details: Group name set successfully
                 success: true
               schema:
                 allOf:
@@ -17052,11 +17110,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `name` ausente ou vazio. **Formato antigo (F266)**: `error` em
-            texto simples.
+            `name` ausente ou vazio. `error.code = invalid_request`.
 
-            Um `groupJID` ausente ou inválido produz `400` também, mas no
-            envelope NOVO, com `error.code: invalid_jid`.
+            Um `group_jid` ausente ou inválido produz `400` também, mas com
+            `error.code = invalid_jid`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":
@@ -17085,19 +17142,19 @@ paths:
 
         **Regras**: `topic` é obrigatório e vazio é recusado — **não há forma
         de APAGAR a descrição por esta rota**. É o único campo validado
-        (`handler_group_mgmt.go:220`): sem `groupJID` a falha vem adiante, como
+        (`handler_group_mgmt.go:220`): sem `group_jid` a falha vem adiante, como
         `invalid_jid`. Num grupo com `IsLocked` verdadeiro, só administradores
         conseguem.
 
-        **Formato do erro `400` de campo em falta**: envelope ANTIGO, `error`
-        em texto simples (F266).
+        **Formato do erro `400` de campo em falta**: objecto canónico,
+        `error.code = invalid_request`.
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              groupJID: 120363411669320145@g.us
+              group_jid: 120363411669320145@g.us
               topic: Combinações de rota do turno da manhã
             schema:
               $ref: '#/components/schemas/PedidoTopicoGrupo'
@@ -17109,7 +17166,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group topic set successfully
+                  details: Group topic set successfully
                 success: true
               schema:
                 allOf:
@@ -17131,8 +17188,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `topic` ausente ou vazio. **Formato antigo (F266)**: `error` em
-            texto simples.
+            `topic` ausente ou vazio. `error.code = invalid_request`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "422":

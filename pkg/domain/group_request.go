@@ -1,52 +1,45 @@
 // Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
-// GetGroupRequestParticipantsRequest representa a requisição para listar participantes que solicitaram entrar
+// The types in this file are use-case inputs and results, not the wire format.
+// See pkg/presentation/http/dto/group and docs/HTTP-DTO-CONVENTIONS.md.
+
+// GetGroupRequestParticipantsRequest is the input of the read-join-requests use case.
+//
+// No ChatTarget: the `chat` alias is resolved by the request DTO before this
+// type is built.
 type GetGroupRequestParticipantsRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
+	GroupJID string
 }
 
-func (r *GetGroupRequestParticipantsRequest) ResolveChat() {
-	ResolveChatField(&r.GroupJID, r.ChatAlias)
-}
-
-// GetGroupRequestParticipantsResult representa o resultado da listagem de participantes que solicitaram entrar
+// GetGroupRequestParticipantsResult is the pending join requests of one group.
+//
+// TYPED, and no longer a json.RawMessage produced by re-marshalling whatever
+// the engine returned: that made the ENGINE the author of the public payload,
+// with the protocol struct's Go field names as keys.
 type GetGroupRequestParticipantsResult struct {
-	// Response will be marshaled directly from wa-noise client response
-	Details string      `json:"Details,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+	Requests []GroupJoinRequest
 }
 
-// UpdateGroupRequestParticipantsRequest representa a requisição para aprovar ou rejeitar participantes
+// UpdateGroupRequestParticipantsRequest is the input of the decide-join-requests use case.
 type UpdateGroupRequestParticipantsRequest struct {
-	ChatTarget
-	GroupJID string   `json:"groupJID"`
-	Phone    []string `json:"Phone"`
-	Action   string   `json:"Action"` // approve, reject
+	GroupJID string
+	Phone    []string
+	Action   string // approve, reject
 }
 
-func (r *UpdateGroupRequestParticipantsRequest) ResolveChat() {
-	ResolveChatField(&r.GroupJID, r.ChatAlias)
-}
-
-// UpdateGroupRequestParticipantsResult representa o resultado da atualização de participantes
+// UpdateGroupRequestParticipantsResult is the outcome of deciding join requests.
 type UpdateGroupRequestParticipantsResult struct {
-	Details string `json:"Details"`
+	Details string
 }
 
-// SetGroupJoinApprovalModeRequest representa a requisição para definir modo de aprovação
+// SetGroupJoinApprovalModeRequest is the input of the join-approval-mode use case.
 type SetGroupJoinApprovalModeRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupjid"`
-	Mode     bool   `json:"mode"`
+	GroupJID string
+	Mode     bool
 }
 
-func (r *SetGroupJoinApprovalModeRequest) ResolveChat() {
-	ResolveChatField(&r.GroupJID, r.ChatAlias)
-}
-
-// SetGroupJoinApprovalModeResult representa o resultado da definição do modo de aprovação
+// SetGroupJoinApprovalModeResult is the outcome of toggling join approval.
 type SetGroupJoinApprovalModeResult struct {
-	Details string `json:"Details"`
+	Details string
 }

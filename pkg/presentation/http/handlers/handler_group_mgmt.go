@@ -7,11 +7,11 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtogroup "wa-api/pkg/presentation/http/dto/group"
 
 	"github.com/rs/zerolog/hlog"
 
 	"wa-api/pkg/application/usecase/group"
-	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 )
 
@@ -120,12 +120,7 @@ func rejectMissingField(w http.ResponseWriter, r *http.Request, code, field, log
 }
 
 func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		Name            string   `json:"name"`
-		Participants    []string `json:"participants"`
-		IsParent        bool     `json:"is_parent"`
-		LinkedParentJID string   `json:"linked_parent_jid"`
-	}
+	var req dtogroup.CreateGroupRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
@@ -149,23 +144,17 @@ func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, 
 		rejectEmptyElement(w, r, CodeEmptyParticipant, "participants", i, "create group request rejected")
 		return
 	}
-	opts := domain.CreateGroupOpts{
-		IsParent:        req.IsParent,
-		LinkedParentJID: domain.JID(req.LinkedParentJID),
-	}
-	rsp, err := uc.CreateGroup(r.Context(), id, req.Name, req.Participants, opts)
+	rsp, err := uc.CreateGroup(r.Context(), id, req.Name, req.Participants, req.ToDomainOpts())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("create group failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentCreatedGroup(rsp), nil)
 }
 
 func handleGroupJoin(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		Code string `json:"code"`
-	}
+	var req dtogroup.JoinGroupRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
@@ -179,20 +168,16 @@ func handleGroupJoin(uc *group.GroupManagementUseCase, w http.ResponseWriter, r 
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group joined successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group joined successfully"), nil)
 }
 
 func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string `json:"groupJID"`
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.GroupTargetRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.GroupJID == "" {
-		rejectMissingField(w, r, CodeMissingGroupJID, "groupJID", "leave group request rejected")
+		rejectMissingField(w, r, CodeMissingGroupJID, "group_jid", "leave group request rejected")
 		return
 	}
 	if err := uc.LeaveGroup(r.Context(), id, req.GroupJID); err != nil {
@@ -200,19 +185,14 @@ func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group left successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group left successfully"), nil)
 }
 
 func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string `json:"GroupJID"`
-		Name      string `json:"Name"`
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.SetGroupNameRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Name == "" {
 		rejectMissingField(w, r, CodeMissingName, "name", "set group name request rejected")
 		return
@@ -222,19 +202,14 @@ func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter,
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group name set successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group name set successfully"), nil)
 }
 
 func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string `json:"GroupJID"`
-		Topic     string `json:"Topic"`
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.SetGroupTopicRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Topic == "" {
 		rejectMissingField(w, r, CodeMissingTopic, "topic", "set group topic request rejected")
 		return
@@ -244,19 +219,14 @@ func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group topic set successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group topic set successfully"), nil)
 }
 
 func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string `json:"GroupJID"`
-		Photo     string `json:"Photo"`
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.SetGroupPhotoRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Photo == "" {
 		rejectMissingField(w, r, CodeMissingPhoto, "photo", "set group photo request rejected")
 		return
@@ -277,91 +247,66 @@ func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group photo set successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group photo set successfully"), nil)
 }
 
 func handleRemoveGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string `json:"groupjid"`
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.GroupTargetRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.RemoveGroupPhoto(r.Context(), id, req.GroupJID); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("remove group photo failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group photo removed successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group photo removed successfully"), nil)
 }
 
 func handleSetGroupAnnounce(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string
-		Announce  bool
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.SetGroupAnnounceRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetGroupAnnounce(r.Context(), id, req.GroupJID, req.Announce); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group announce failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Group announce set successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group announce set successfully"), nil)
 }
 
 func handleSetGroupLocked(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string
-		Locked    bool
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.SetGroupLockedRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetGroupLocked(r.Context(), id, req.GroupJID, req.Locked); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group locked failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Group lock updated"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group lock updated"), nil)
 }
 
 func handleSetDisappearingTimer(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string `json:"groupjid"`
-		Duration  string `json:"duration"`
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.SetDisappearingTimerRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if err := uc.SetDisappearingTimer(r.Context(), id, req.GroupJID, req.Duration); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set disappearing timer failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Disappearing timer set"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Disappearing timer set"), nil)
 }
 
 func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.ResponseWriter, r *http.Request, id string) {
-	var req struct {
-		GroupJID  string
-		Phone     []string
-		Action    string
-		ChatAlias string `json:"chat"`
-	}
+	var req dtogroup.UpdateGroupParticipantsRequest
 	if !decodeAndRespond(w, r, &req) {
 		return
 	}
-	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if len(req.Phone) < 1 {
 		rejectMissingField(w, r, CodeMissingPhones, "phones", "update group participants request rejected")
 		return
@@ -375,7 +320,7 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 		return
 	}
 	if req.GroupJID == "" {
-		rejectMissingField(w, r, CodeMissingGroupJID, "groupjid", "update group participants request rejected")
+		rejectMissingField(w, r, CodeMissingGroupJID, "group_jid", "update group participants request rejected")
 		return
 	}
 	update, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)
@@ -390,9 +335,5 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 		}
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]interface{}{
-		"Details":   "Participants updated",
-		"result":    update.Result,
-		"confirmed": update.Confirmed,
-	}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentParticipantsUpdate(update, "Participants updated"), nil)
 }

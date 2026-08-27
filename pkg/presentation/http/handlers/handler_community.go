@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
+	dtogroup "wa-api/pkg/presentation/http/dto/group"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -32,7 +32,7 @@ func (h *GetCommunitySubGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	var req domain.GetCommunitySubGroupsRequest
+	var req dtogroup.CommunityTargetRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -41,7 +41,7 @@ func (h *GetCommunitySubGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.GetSubGroups(r.Context(), id, req)
+	rsp, err := h.usecase.GetSubGroups(r.Context(), id, req.ToSubGroupsDomain())
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
@@ -53,7 +53,7 @@ func (h *GetCommunitySubGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.
 		}
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetCommunitySubGroups(rsp), nil)
 }
 
 // GetCommunityParticipantsHandler lists participants of linked groups.
@@ -67,7 +67,7 @@ func (h *GetCommunityParticipantsHandler) ServeHTTP(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	var req domain.GetCommunityParticipantsRequest
+	var req dtogroup.CommunityTargetRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -76,7 +76,7 @@ func (h *GetCommunityParticipantsHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.GetParticipants(r.Context(), id, req)
+	rsp, err := h.usecase.GetParticipants(r.Context(), id, req.ToParticipantsDomain())
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
@@ -88,7 +88,7 @@ func (h *GetCommunityParticipantsHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		}
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetCommunityParticipants(rsp), nil)
 }
 
 // CommunityLinkGroupHandler links a group to a community.
@@ -102,7 +102,7 @@ func (h *CommunityLinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	var req domain.CommunityLinkRequest
+	var req dtogroup.CommunityLinkRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -111,7 +111,7 @@ func (h *CommunityLinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	if err := h.usecase.LinkGroup(r.Context(), id, req); err != nil {
+	if err := h.usecase.LinkGroup(r.Context(), id, req.ToLinkDomain()); err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
 			hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("community link rejected")
@@ -122,7 +122,7 @@ func (h *CommunityLinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		}
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group linked to community successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group linked to community successfully"), nil)
 }
 
 // CommunityUnlinkGroupHandler unlinks a group from a community.
@@ -136,7 +136,7 @@ func (h *CommunityUnlinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	var req domain.CommunityUnlinkRequest
+	var req dtogroup.CommunityLinkRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -145,7 +145,7 @@ func (h *CommunityUnlinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	if err := h.usecase.UnlinkGroup(r.Context(), id, req); err != nil {
+	if err := h.usecase.UnlinkGroup(r.Context(), id, req.ToUnlinkDomain()); err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
 			hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("community unlink rejected")
@@ -156,5 +156,5 @@ func (h *CommunityUnlinkGroupHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		}
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Group unlinked from community successfully"}, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement("Group unlinked from community successfully"), nil)
 }

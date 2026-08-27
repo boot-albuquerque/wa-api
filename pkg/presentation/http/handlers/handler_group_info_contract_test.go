@@ -126,7 +126,7 @@ func TestGetGroupInfo_ContratoPublico_NomesCanonicos(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -149,7 +149,7 @@ func TestGetGroupInfo_ContratoPublico_ChavesAntigasSumiram(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	contracttest.AssertNoKeys(t, rec.Body.Bytes(),
@@ -170,7 +170,7 @@ func TestGetGroupInfo_ContratoPublico_ValoresMapeados(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	var envelope struct {
@@ -229,6 +229,45 @@ func TestGetGroupInfo_ContratoPublico_ValoresMapeados(t *testing.T) {
 	}
 }
 
+// TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase é a afirmação de que o
+// PEDIDO de /group/info também usa snake_case — H-DTO-GROUP-INFO: esta era a
+// única rota da família que ainda aceitava `groupJID` no corpo, decodificando
+// direto em domain.GetGroupInfoRequest em vez de passar por um DTO de pedido.
+func TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase(t *testing.T) {
+	f := newGrpFakes()
+	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+		return grupoDeReferencia(), nil
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/group/info",
+		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
+	groupInfoRouter(t, f).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200 com group_jid; corpo: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu prova que `groupJID`, sozinha,
+// já não resolve o pedido: cai na validação de campo obrigatório do use case,
+// e não é mais aceita como sinônimo silencioso de group_jid.
+func TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu(t *testing.T) {
+	f := newGrpFakes()
+	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+		return grupoDeReferencia(), nil
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/group/info",
+		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+	groupInfoRouter(t, f).ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusOK {
+		t.Fatalf("groupJID sozinho ainda resolveu o grupo: status 200, corpo: %s", rec.Body.String())
+	}
+}
+
 // TestGetGroupInfo_ContratoPublico_ZeroNaoViraDataFalsa trava a decisão do
 // apresentador sobre tempo ausente: null, e não "0001-01-01T00:00:00Z".
 //
@@ -246,7 +285,7 @@ func TestGetGroupInfo_ContratoPublico_ZeroNaoViraDataFalsa(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363000000000000@g.us"}`))
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	var envelope struct {

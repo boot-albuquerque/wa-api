@@ -48,13 +48,13 @@ type GroupDirectory struct {
 	GetGroupInfoFunc  func(ctx context.Context, txtID string, group domain.JID) (*domain.GroupInfo, error)
 	GetGroupInfoCalls []GroupDirectoryGetGroupInfoCall
 
-	GetGroupInfoFromLinkFunc  func(ctx context.Context, txtID, code string) (any, error)
+	GetGroupInfoFromLinkFunc  func(ctx context.Context, txtID, code string) (*domain.GroupInfo, error)
 	GetGroupInfoFromLinkCalls []GroupDirectoryGetGroupInfoFromLinkCall
 
 	GetGroupInviteLinkFunc  func(ctx context.Context, txtID string, group domain.JID) (string, error)
 	GetGroupInviteLinkCalls []GroupDirectoryGetGroupInviteLinkCall
 
-	ListJoinedGroupsFunc  func(ctx context.Context, txtID string) (any, int, error)
+	ListJoinedGroupsFunc  func(ctx context.Context, txtID string) ([]*domain.GroupInfo, int, error)
 	ListJoinedGroupsCalls []GroupDirectoryListJoinedGroupsCall
 }
 
@@ -85,12 +85,14 @@ func (f *GroupDirectory) GetGroupInfo(ctx context.Context, txtID string, group d
 }
 
 // GetGroupInfoFromLink implementa port.GroupDirectory.
-func (f *GroupDirectory) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (any, error) {
+func (f *GroupDirectory) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (*domain.GroupInfo, error) {
 	f.GetGroupInfoFromLinkCalls = append(f.GetGroupInfoFromLinkCalls, GroupDirectoryGetGroupInfoFromLinkCall{Ctx: ctx, TxtID: txtID, Code: code})
 	if f.GetGroupInfoFromLinkFunc != nil {
 		return f.GetGroupInfoFromLinkFunc(ctx, txtID, code)
 	}
-	return nil, nil
+	// Um grupo, e nao (nil, nil), pela mesma razao de GetGroupInfo: os dois
+	// adaptadores reais mapeiam sempre uma resposta (ARMADILHAS #1).
+	return &domain.GroupInfo{Participants: []domain.GroupParticipant{}}, nil
 }
 
 // GetGroupInviteLink implementa port.GroupDirectory.
@@ -103,12 +105,14 @@ func (f *GroupDirectory) GetGroupInviteLink(ctx context.Context, txtID string, g
 }
 
 // ListJoinedGroups implementa port.GroupDirectory.
-func (f *GroupDirectory) ListJoinedGroups(ctx context.Context, txtID string) (any, int, error) {
+func (f *GroupDirectory) ListJoinedGroups(ctx context.Context, txtID string) ([]*domain.GroupInfo, int, error) {
 	f.ListJoinedGroupsCalls = append(f.ListJoinedGroupsCalls, GroupDirectoryListJoinedGroupsCall{Ctx: ctx, TxtID: txtID})
 	if f.ListJoinedGroupsFunc != nil {
 		return f.ListJoinedGroupsFunc(ctx, txtID)
 	}
-	return nil, 0, nil
+	// Lista vazia e NAO-nula: e' o que os dois adaptadores reais devolvem para
+	// uma sessao sem grupos, e um duble mais permissivo esconderia o defeito.
+	return []*domain.GroupInfo{}, 0, nil
 }
 
 // --- GroupLifecycle ----------------------------------------------------
@@ -140,7 +144,7 @@ type GroupLifecycleLeaveGroupCall struct {
 type GroupLifecycle struct {
 	SessionGuard
 
-	CreateGroupFunc  func(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error)
+	CreateGroupFunc  func(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error)
 	CreateGroupCalls []GroupLifecycleCreateGroupCall
 
 	JoinGroupFunc  func(ctx context.Context, txtID, code string) (any, error)
@@ -153,12 +157,18 @@ type GroupLifecycle struct {
 var _ port.GroupLifecycle = (*GroupLifecycle)(nil)
 
 // CreateGroup implements port.GroupLifecycle.
-func (f *GroupLifecycle) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+func (f *GroupLifecycle) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 	f.CreateGroupCalls = append(f.CreateGroupCalls, GroupLifecycleCreateGroupCall{Ctx: ctx, TxtID: txtID, Name: name, Participants: participants, Opts: opts})
 	if f.CreateGroupFunc != nil {
 		return f.CreateGroupFunc(ctx, txtID, name, participants, opts)
 	}
-	return nil, nil
+	// Zero-value devolve o grupo com o NOME pedido e Created verdadeiro: e' o
+	// que o transporte wa-noise faz sempre, e o headless quando o grupo nao
+	// existia. Nenhum dos dois devolve nil sem erro.
+	return &domain.CreatedGroup{
+		Group:   &domain.GroupInfo{Name: name, Participants: []domain.GroupParticipant{}},
+		Created: true,
+	}, nil
 }
 
 // JoinGroup implementa port.GroupLifecycle.
@@ -369,7 +379,7 @@ type GroupRequestsSetJoinApprovalModeCall struct {
 type GroupRequests struct {
 	SessionGuard
 
-	GetRequestParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID) (any, error)
+	GetRequestParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error)
 	GetRequestParticipantsCalls []GroupRequestsGetRequestParticipantsCall
 
 	UpdateRequestParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error
@@ -382,12 +392,14 @@ type GroupRequests struct {
 var _ port.GroupRequests = (*GroupRequests)(nil)
 
 // GetRequestParticipants implementa port.GroupRequests.
-func (f *GroupRequests) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) (any, error) {
+func (f *GroupRequests) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error) {
 	f.GetRequestParticipantsCalls = append(f.GetRequestParticipantsCalls, GroupRequestsGetRequestParticipantsCall{Ctx: ctx, TxtID: txtID, Group: group})
 	if f.GetRequestParticipantsFunc != nil {
 		return f.GetRequestParticipantsFunc(ctx, txtID, group)
 	}
-	return nil, nil
+	// Fila vazia e NAO-nula: um grupo sem solicitacoes pendentes e' o caso
+	// comum, e e' assim que os dois adaptadores reais o devolvem.
+	return []domain.GroupJoinRequest{}, nil
 }
 
 // UpdateRequestParticipants implementa port.GroupRequests.

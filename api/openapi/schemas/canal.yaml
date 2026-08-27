@@ -1176,7 +1176,7 @@ PedidoComunidade:
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
   properties:
-    communityJID:
+    community_jid:
       type: string
       nullable: false
       description: |
@@ -1207,18 +1207,18 @@ PedidoComunidade:
       description: |
         Alias universal de destino (`ChatTarget`, `pkg/domain/chat_target.go`).
 
-        **Só é usado quando `communityJID` estiver vazio** — ausente, `null` ou
-        `""`, que são indistinguíveis entre si. Quando ambos vêm preenchidos,
-        **`communityJID` ganha e `chat` é ignorado em silêncio**: medido a
-        2026-08-26 mandando `communityJID` real e `chat: "outro@g.us"`, e a
-        resposta foi a da comunidade de `communityJID`. Não há erro de
-        conflito.
+        **Só é usado quando `community_jid` estiver vazio** — ausente, `null`
+        ou `""`, que são indistinguíveis entre si. Quando ambos vêm
+        preenchidos, **`community_jid` ganha e `chat` é ignorado em
+        silêncio**: medido a 2026-08-26 mandando `community_jid` real e
+        `chat: "outro@g.us"`, e a resposta foi a da comunidade de
+        `community_jid`. Não há erro de conflito.
 
-        Ausente, `null` e `""` são indistinguíveis; se `communityJID` também
+        Ausente, `null` e `""` são indistinguíveis; se `community_jid` também
         faltar, a resposta é `400 missing_community_jid`.
 
         **Este alias NÃO existe em `/community/link` nem em
-        `/community/unlink`** — medido: `{"chat":"…","groupJID":"…"}` devolve
+        `/community/unlink`** — medido: `{"chat":"…","group_jid":"…"}` devolve
         `400 missing_community_jid`.
       example: 120363430034334401@g.us
 
@@ -1232,9 +1232,9 @@ PedidoLigacaoComunidade:
     (`pkg/domain/community.go:31-40`). Mandá-lo não dá erro — é ignorado como
     qualquer campo desconhecido, e o pedido falha com
     `400 missing_community_jid`. Medido.
-  required: [communityJID, groupJID]
+  required: [community_jid, group_jid]
   properties:
-    communityJID:
+    community_jid:
       type: string
       nullable: false
       minLength: 1
@@ -1249,14 +1249,14 @@ PedidoLigacaoComunidade:
         | não interpretável | não | `400 invalid_jid`, `could not parse community JID "…"` |
         | `@g.us` real | sim | — |
 
-        **É verificado antes de `groupJID`**: um pedido sem os dois revela
+        **É verificado antes de `group_jid`**: um pedido sem os dois revela
         primeiro este. Medido.
 
         **O código do JID malformado é `invalid_jid` aqui**, e não
         `invalid_community_jid` como nas duas rotas de leitura — são funções
         de parse diferentes (`community.go:106` contra `community.go:37`).
       example: 120363430034334401@g.us
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       minLength: 1
@@ -1272,7 +1272,7 @@ PedidoLigacaoComunidade:
         | `@g.us` real | sim | — |
 
         **O grupo de avisos da comunidade não pode ser desligado**: nasce com
-        ela e vem marcado `IsDefaultSubGroup: true` (F237).
+        ela e vem marcado `is_default_sub_group: true` (F237).
       example: 120363411669320145@g.us
 
 SubGruposComunidade:
@@ -1289,15 +1289,15 @@ SubGruposComunidade:
         Os grupos ligados à comunidade.
 
         **Nunca vem vazia numa comunidade real**: o grupo de avisos é criado
-        com a comunidade e aparece sempre, marcado com `IsDefaultSubGroup:
+        com a comunidade e aparece sempre, marcado com `is_default_sub_group:
         true` (F237, medido com a transição 1 → 2 → 1 provocada por
         `POST /community/link` e `POST /community/unlink`).
 
-        **Se o valor `null` é possível não foi determinado com segurança**: o
-        campo é `any` na struct de resultado (`pkg/domain/community.go:13`),
-        logo uma fatia `nil` vinda do adaptador seria serializada como `null` e
-        não como `[]`. Não foi observado, porque não há comunidade sem
-        sub-grupos. **Verifique `null` antes de iterar.**
+        **Sempre `[]`, nunca `null`**: `PresentGetCommunitySubGroups`
+        (`pkg/presentation/http/dto/group/presenter_group.go`) aloca a lista
+        antes do laço, mesmo vazia — fecha a incerteza sobre `null` que este
+        ficheiro registava antes da migração para DTO, quando o campo ainda
+        era `any` na struct de resultado.
 
         Sem paginação e sem tecto.
       items:
@@ -1306,19 +1306,22 @@ SubGruposComunidade:
 SubGrupoComunidade:
   type: object
   description: |
-    Um grupo ligado à comunidade. Os nomes de campo vêm em maiúscula inicial
-    porque a estrutura é serializada tal como o vendor a define — não há
-    etiquetas JSON a renomeá-la. Medido a 2026-08-26.
-
-    **As seis propriedades apareceram sempre**, nenhuma omitida, nenhuma
-    `null`.
+    Um grupo ligado à comunidade. O corpo é
+    `dtogroup.CommunitySubGroupResponse`
+    (`pkg/presentation/http/dto/group/group.go`), produzido por
+    `PresentCommunitySubGroup` — três campos, `snake_case`, e não mais os seis
+    da struct de protocolo serializada directamente que este ficheiro
+    documentava antes da migração para DTO. `name_set_at`/`name_set_by`/
+    `name_set_by_pn` desapareceram: eram detalhe do protocolo, não do recurso
+    — a mesma decisão de `InfoGrupoCanonico` (`docs/HTTP-DTO-CONVENTIONS.md`).
+  required: [jid, name, is_default_sub_group]
   properties:
-    JID:
+    jid:
       type: string
       nullable: false
       description: JID do sub-grupo, no servidor `@g.us`. Sempre presente; nunca `null`, nunca ausente.
       example: 120363411669320145@g.us
-    Name:
+    name:
       type: string
       nullable: false
       description: |
@@ -1326,41 +1329,7 @@ SubGrupoComunidade:
         — um grupo pode não ter nome definido —, e nesse caso é
         indistinguível de "o servidor não informou".
       example: Avisos
-    NameSetAt:
-      type: string
-      format: date-time
-      nullable: false
-      description: |
-        Quando o nome foi definido, em RFC 3339 **com o deslocamento do fuso do
-        SERVIDOR, não em UTC** — medido `2026-08-26T08:08:21-04:00`. Sempre
-        presente; nunca `null`.
-
-        Num grupo sem nome definido a forma não foi determinada com segurança:
-        seria `0001-01-01T00:00:00Z` se o vendor deixar o `time.Time` a zero,
-        mas isso não foi observado.
-      example: '2026-08-26T08:08:21-04:00'
-    NameSetBy:
-      type: string
-      nullable: false
-      description: |
-        Quem definiu o nome, em **LID**. Sempre presente; nunca `null`.
-
-        **Veio `""` na medição**, no grupo de avisos criado automaticamente com
-        a comunidade — o que é coerente com "ninguém o definiu". `""` é
-        indistinguível de "o servidor não informou".
-      example: ''
-    NameSetByPN:
-      type: string
-      nullable: false
-      description: |
-        O mesmo que `NameSetBy`, em **PN** (`…@s.whatsapp.net`). Sempre
-        presente; nunca `null`. Igualmente `""` na medição.
-
-        Os dois campos coexistem porque PN e LID não são intermutáveis; quando
-        ambos vierem vazios, **não há como identificar quem definiu o nome por
-        esta rota**.
-      example: ''
-    IsDefaultSubGroup:
+    is_default_sub_group:
       type: boolean
       nullable: false
       description: |
@@ -1392,10 +1361,11 @@ ParticipantesComunidade:
         quando a mesma pessoa está em dois sub-grupos: a comunidade medida
         tinha um só sub-grupo. Trate a lista como podendo repetir.
 
-        **Se o valor `null` é possível não foi determinado com segurança**,
-        pela mesma razão de `sub_groups`: o campo é `any` na struct de
-        resultado (`pkg/domain/community.go:28`). Verifique `null` antes de
-        iterar.
+        **Sempre `[]`, nunca `null`**: `PresentGetCommunityParticipants`
+        (`pkg/presentation/http/dto/group/presenter_group.go`) aloca a lista
+        antes do laço, mesmo vazia — fecha a incerteza sobre `null` que este
+        ficheiro registava antes da migração para DTO, quando o campo ainda
+        era `any` na struct de resultado.
 
         Sem paginação e sem tecto.
       items:

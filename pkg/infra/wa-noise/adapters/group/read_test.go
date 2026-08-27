@@ -100,7 +100,10 @@ func TestGroupAdapter_GetGroupInviteLink_NoSession(t *testing.T) {
 
 // TestGroupAdapter_ListJoinedGroups_OK.
 func TestGroupAdapter_ListJoinedGroups_OK(t *testing.T) {
-	groups := []*types.GroupInfo{{}, {}}
+	groups := []*types.GroupInfo{
+		{JID: types.JID{User: "111", Server: "g.us"}, GroupName: types.GroupName{Name: "Um"}},
+		{JID: types.JID{User: "222", Server: "g.us"}},
+	}
 	fake := &testkit.Fake{GetJoinedGroupsFn: func(ctx context.Context) ([]*types.GroupInfo, error) { return groups, nil }}
 	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
 	got, count, err := a.ListJoinedGroups(context.Background(), "u1")
@@ -110,8 +113,10 @@ func TestGroupAdapter_ListJoinedGroups_OK(t *testing.T) {
 	if count != 2 {
 		t.Errorf("ListJoinedGroups count = %d, want 2", count)
 	}
-	if len(got.([]*types.GroupInfo)) != 2 {
-		t.Errorf("ListJoinedGroups returned %d items", len(got.([]*types.GroupInfo)))
+	// O adaptador normaliza para o tipo de dominio, e o teste afirma um campo
+	// MAPEADO: len() sozinho passaria com o mapeamento inteiro trocado.
+	if len(got) != 2 || got[0].JID != "111@g.us" || got[0].Name != "Um" {
+		t.Errorf("ListJoinedGroups = %#v", got)
 	}
 }
 
