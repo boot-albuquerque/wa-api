@@ -2,14 +2,16 @@ package domain
 
 import "errors"
 
-// GetAvatarRequest para POST /user/avatar
+// GetAvatarRequest é a entrada do caso de uso do avatar.
+//
+// Sem etiquetas `json` e sem ChatTarget: deixou de ser o corpo de
+// POST /user/avatar na migração da família de utilizadores. Quem descodifica
+// o corpo, resolve o alias `chat` e valida é
+// pkg/presentation/http/dto/user.GetAvatarRequest.
 type GetAvatarRequest struct {
-	ChatTarget
-	Phone   string `json:"Phone"`
-	Preview bool   `json:"Preview"`
+	Phone   string
+	Preview bool
 }
-
-func (r *GetAvatarRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // ErrAvatarNotFound é devolvido quando o contato simplesmente não tem foto de
 // perfil pública — o caso comum (maioria dos contatos não tem foto pública),
@@ -33,18 +35,11 @@ type GetContactsRequest struct{}
 // GetBlocklistRequest para GET /user/blocklist (no fields needed)
 type GetBlocklistRequest struct{}
 
-// UpdateBlocklistRequest para POST /user/blocklist/update
-type UpdateBlocklistRequest struct {
-	Phone string `json:"Phone"`
-	JID   string `json:"JID"`
-	// Action is inferred from the endpoint (block/unblock)
-}
-
 // GetPrivacySettingsRequest para GET /user/privacy (no fields needed)
 type GetPrivacySettingsRequest struct{}
 
-// SetPrivacySettingRequest para POST /user/privacy
+// SetPrivacySettingRequest é a entrada do caso de uso de privacidade.
 type SetPrivacySettingRequest struct {
-	PrivacySetting string `json:"privacy_setting"`
-	Value          string `json:"value"`
+	PrivacySetting string
+	Value          string
 }

@@ -121,12 +121,11 @@ func TestGetUserInfoFiltraPelosJIDsPedidos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetUserInfo: %v", err)
 	}
-	m, ok := got.(map[domain.JID]domain.ContactName)
-	if !ok {
-		t.Fatalf("tipo inesperado: %T", got)
+	if len(got) != 1 {
+		t.Fatalf("devolveu %d entradas para 1 JID pedido", len(got))
 	}
-	if len(m) != 1 {
-		t.Fatalf("devolveu %d entradas para 1 JID pedido", len(m))
+	if got[0].JID != "111@lid" {
+		t.Fatalf("devolveu %q, quero o JID pedido", got[0].JID)
 	}
 }
 

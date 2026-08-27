@@ -793,10 +793,13 @@ func TestContactDirectory(t *testing.T) {
 	if v, err := f.IsOnWhatsApp(ctx, "u1", []string{"5511"}); v != nil || err != nil {
 		t.Errorf("IsOnWhatsApp zero-value = %v, %v", v, err)
 	}
-	if v, err := f.GetUserInfo(ctx, "u1", []domain.JID{"a@s"}); v != nil || err != nil {
+	// Slice VAZIA e não nil: os dois adaptadores reais alocam antes do laço,
+	// e um dublê que devolvesse nil seria mais simples que a produção — que é
+	// como se abençoa código morto (ARMADILHAS #1).
+	if v, err := f.GetUserInfo(ctx, "u1", []domain.JID{"a@s"}); v == nil || len(v) != 0 || err != nil {
 		t.Errorf("GetUserInfo zero-value = %v, %v", v, err)
 	}
-	if v, n, err := f.GetAllContacts(ctx, "u1"); v != nil || n != 0 || err != nil {
+	if v, n, err := f.GetAllContacts(ctx, "u1"); v == nil || len(v) != 0 || n != 0 || err != nil {
 		t.Errorf("GetAllContacts zero-value = %v, %d, %v", v, n, err)
 	}
 	if v, err := f.GetProfilePicture(ctx, "u1", "a@s", true); v != nil || err != nil {
@@ -825,8 +828,8 @@ func TestContactDirectory(t *testing.T) {
 	f.IsOnWhatsAppFunc = func(context.Context, string, []string) ([]domain.WhatsAppCheck, error) {
 		return []domain.WhatsAppCheck{{}}, nil
 	}
-	f.GetUserInfoFunc = func(context.Context, string, []domain.JID) (any, error) { return nil, errBoom }
-	f.GetAllContactsFunc = func(context.Context, string) (any, int, error) { return nil, 7, nil }
+	f.GetUserInfoFunc = func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) { return nil, errBoom }
+	f.GetAllContactsFunc = func(context.Context, string) ([]domain.Contact, int, error) { return nil, 7, nil }
 	f.GetProfilePictureFunc = func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 		return &domain.AvatarInfo{}, nil
 	}
@@ -884,10 +887,10 @@ func TestPrivacyManager(t *testing.T) {
 	f := &contractsfake.PrivacyManager{}
 	ctx := context.Background()
 
-	if v, err := f.GetPrivacySettings(ctx, "u1"); v != nil || err != nil {
+	if v, err := f.GetPrivacySettings(ctx, "u1"); v != (domain.PrivacySettings{}) || err != nil {
 		t.Errorf("GetPrivacySettings zero-value = %v, %v", v, err)
 	}
-	if v, err := f.SetPrivacySetting(ctx, "u1", "last", "contacts"); v != nil || err != nil {
+	if v, err := f.SetPrivacySetting(ctx, "u1", "last", "contacts"); v != (domain.PrivacySettings{}) || err != nil {
 		t.Errorf("SetPrivacySetting zero-value = %v, %v", v, err)
 	}
 	if c := f.SetPrivacySettingCalls[0]; c.Name != "last" || c.Value != "contacts" {
@@ -897,9 +900,13 @@ func TestPrivacyManager(t *testing.T) {
 		t.Errorf("GetPrivacySettingsCalls = %+v", f.GetPrivacySettingsCalls)
 	}
 
-	f.GetPrivacySettingsFunc = func(context.Context, string) (any, error) { return "cfg", nil }
-	f.SetPrivacySettingFunc = func(context.Context, string, string, string) (any, error) { return nil, errBoom }
-	if v, _ := f.GetPrivacySettings(ctx, "u1"); v != "cfg" {
+	f.GetPrivacySettingsFunc = func(context.Context, string) (domain.PrivacySettings, error) {
+		return domain.PrivacySettings{LastSeen: "cfg"}, nil
+	}
+	f.SetPrivacySettingFunc = func(context.Context, string, string, string) (domain.PrivacySettings, error) {
+		return domain.PrivacySettings{}, errBoom
+	}
+	if v, _ := f.GetPrivacySettings(ctx, "u1"); v.LastSeen != "cfg" {
 		t.Errorf("GetPrivacySettingsFunc = %v", v)
 	}
 	if _, err := f.SetPrivacySetting(ctx, "u1", "", ""); !errors.Is(err, errBoom) {

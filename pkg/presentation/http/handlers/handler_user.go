@@ -13,6 +13,7 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
+	dtouser "wa-api/pkg/presentation/http/dto/user"
 
 	"wa-api/pkg/application/usecase/user"
 )
@@ -178,7 +179,7 @@ func (h *UserHandlers) CheckUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
-		var req domain.CheckUserRequest
+		var req dtouser.CheckUserRequest
 		if err := decodeRequest(w, r, &req); err != nil {
 			if requestAnswered(err) {
 				return
@@ -189,7 +190,14 @@ func (h *UserHandlers) CheckUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
-		result, err := h.checkUser.Execute(r.Context(), txtID, req)
+		if err := req.Validate(); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("payload rejected")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
+		result, err := h.checkUser.Execute(r.Context(), txtID, req.ToDomain())
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
 				Str("path", r.URL.Path).
@@ -197,7 +205,7 @@ func (h *UserHandlers) CheckUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentCheckUser(result), nil)
 	})
 }
 
@@ -220,7 +228,7 @@ func (h *UserHandlers) GetUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
-		var req domain.CheckUserRequest
+		var req dtouser.CheckUserRequest
 		if err := decodeRequest(w, r, &req); err != nil {
 			if requestAnswered(err) {
 				return
@@ -231,8 +239,16 @@ func (h *UserHandlers) GetUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
-		req.Phone = normalizePhones(req.Phone)
-		result, err := h.getUser.Execute(r.Context(), txtID, req)
+		if err := req.Validate(); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("payload rejected")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
+		input := req.ToDomain()
+		input.Phone = normalizePhones(input.Phone)
+		result, err := h.getUser.Execute(r.Context(), txtID, input)
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
 				Str("path", r.URL.Path).
@@ -240,7 +256,7 @@ func (h *UserHandlers) GetUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentGetUserInfo(result), nil)
 	})
 }
 
@@ -289,7 +305,7 @@ func (h *UserHandlers) GetUserLID() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentGetUserLID(result), nil)
 	})
 }
 
@@ -342,7 +358,7 @@ func (h *UserHandlers) GetUserProfile() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentUserProfile(result), nil)
 	})
 }
 
@@ -456,7 +472,7 @@ func (h *UserHandlers) BlockUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
-		var req domain.BlockUserRequest
+		var req dtouser.BlockUserRequest
 		if err := decodeRequest(w, r, &req); err != nil {
 			if requestAnswered(err) {
 				return
@@ -467,7 +483,14 @@ func (h *UserHandlers) BlockUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
-		result, err := h.blockUser.Execute(r.Context(), txtID, req)
+		if err := req.Validate(); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("payload rejected")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
+		result, err := h.blockUser.Execute(r.Context(), txtID, req.ToBlockDomain())
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
 				Str("path", r.URL.Path).
@@ -475,7 +498,7 @@ func (h *UserHandlers) BlockUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentBlockResult(result), nil)
 	})
 }
 
@@ -498,7 +521,7 @@ func (h *UserHandlers) UnblockUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errMissingSessionID)
 			return
 		}
-		var req domain.UnblockUserRequest
+		var req dtouser.BlockUserRequest
 		if err := decodeRequest(w, r, &req); err != nil {
 			if requestAnswered(err) {
 				return
@@ -509,7 +532,14 @@ func (h *UserHandlers) UnblockUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
-		result, err := h.unblockUser.Execute(r.Context(), txtID, req)
+		if err := req.Validate(); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("payload rejected")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
+		result, err := h.unblockUser.Execute(r.Context(), txtID, req.ToUnblockDomain())
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
 				Str("path", r.URL.Path).
@@ -517,6 +547,6 @@ func (h *UserHandlers) UnblockUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentUnblockResult(result), nil)
 	})
 }

@@ -46,12 +46,33 @@ func (r *Roster) EnsureSession(ctx context.Context, txtID string) error {
 // one row per identity, so the same person appears twice — 944 rows folded into
 // 390 people on the measured profile. Returning the row count would report
 // roughly twice the contacts anybody has.
-func (r *Roster) GetAllContacts(ctx context.Context, txtID string) (any, int, error) {
+// The page's collection is already ordered deterministically (contacts.Roster
+// documents it), so this adapter preserves that order instead of imposing a
+// second one.
+func (r *Roster) GetAllContacts(ctx context.Context, txtID string) ([]domain.Contact, int, error) {
 	roster, err := r.list(ctx, txtID)
 	if err != nil {
 		return nil, 0, err
 	}
-	return roster.Contacts, len(roster.Contacts), nil
+	out := make([]domain.Contact, 0, len(roster.Contacts))
+	for _, c := range roster.Contacts {
+		out = append(out, domain.Contact{
+			// Identity() prefers the lid, which is what the send path
+			// measured as working on this build.
+			JID:          domain.JID(c.Identity()),
+			PN:           domain.JID(c.PN),
+			LID:          domain.JID(c.LID),
+			Found:        true,
+			PushName:     c.Pushname,
+			BusinessName: c.VerifiedName,
+			IsBusiness:   c.IsBusiness,
+			// FullName and FirstName stay EMPTY, and that is measured rather
+			// than missing: this build's getName answers for 1 of 944 models
+			// on the lab profile because it reads the ADDRESS BOOK. See
+			// ContactNames below.
+		})
+	}
+	return out, len(out), nil
 }
 
 // ContactNames returns the roster keyed by JID, typed.
@@ -88,17 +109,33 @@ func (r *Roster) ContactNames(ctx context.Context, txtID string) (map[domain.JID
 	return out, nil
 }
 
-// GetUserInfo returns the raw entries for the given JIDs.
-func (r *Roster) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error) {
+// GetUserInfo returns what this engine knows about the given JIDs, in the
+// order they were asked for.
+//
+// Status, PictureID and Devices stay EMPTY here, and that is a property of the
+// engine rather than a gap: this adapter reads the page's contact collection,
+// which carries names and identities and nothing the server would have to be
+// asked for. The wa-noise adapter fills exactly the complementary half.
+func (r *Roster) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) ([]domain.UserInfo, error) {
 	names, err := r.ContactNames(ctx, txtID)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[domain.JID]domain.ContactName, len(jids))
+	out := make([]domain.UserInfo, 0, len(jids))
 	for _, j := range jids {
-		if n, ok := names[j]; ok {
-			out[j] = n
+		n, ok := names[j]
+		if !ok {
+			continue
 		}
+		out = append(out, domain.UserInfo{
+			JID:          j,
+			PushName:     n.PushName,
+			BusinessName: n.BusinessName,
+			// VerifiedName stays empty even though the page carries a
+			// verifiedName: that field is the LOCAL roster's copy, and it is
+			// already reported as BusinessName. Writing the same value into
+			// two keys would make a client believe two sources agreed.
+		})
 	}
 	return out, nil
 }

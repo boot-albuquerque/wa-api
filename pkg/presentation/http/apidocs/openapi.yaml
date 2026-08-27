@@ -182,9 +182,8 @@ components:
         Ponteiro para a foto de perfil. A imagem NÃO vem no corpo — vem o URL, e é
         dele que se baixa. O URL é temporário e assinado pelo WhatsApp.
 
-        **As duas chaves aparecem sempre**: o caso de uso monta um mapa literal com
-        as duas (`get_avatar.go:60-63`). Quando não há foto, não há corpo nenhum —
-        a resposta é `404`, não um `Avatar` com campos vazios.
+        **As duas chaves aparecem sempre.** Quando não há foto, não há corpo
+        nenhum — a resposta é `404`, não um `Avatar` com campos vazios.
 
         O tipo do módulo de protocolo tem mais campos (`Type`, `DirectPath`,
         `Hash`), e esta rota **não** os expõe.
@@ -192,7 +191,7 @@ components:
         id:
           description: |
             Identificador da foto. Muda quando a pessoa troca a imagem, e é o mesmo
-            valor que `InfoUtilizador.PictureID` — serve para detectar troca sem
+            valor que `InfoUtilizador.picture_id` — serve para detectar troca sem
             baixar. Sempre presente; nunca `null`.
           example: "1735689600"
           nullable: false
@@ -834,64 +833,68 @@ components:
       type: object
     ContactoDoRoster:
       description: |
-        Uma entrada do roster — o tipo `types.ContactInfo` do módulo de protocolo
-        (`internal/wa-noise/protocol/types/user.go:59-68`) serializado sem
-        tratamento.
+        Uma entrada da agenda. Era o tipo `types.ContactInfo` do módulo de
+        protocolo serializado sem tratamento; hoje é `domain.Contact`, normalizado
+        no adaptador de cada motor.
 
-        **Os seis campos aparecem SEMPRE**: nenhum tem `omitempty`, e a medição
-        confirmou-o (461 de 461 entradas com as seis chaves presentes). Nenhum vem
-        `null` — os cinco de texto vêm `""` quando não há valor, e `Found` vem
-        `false`.
+        **Todos os campos aparecem SEMPRE**: nenhum tem `omitempty`. Nenhum vem
+        `null` — os de texto vêm `""` quando não há valor, e os booleanos `false`.
 
-        Os nomes vêm de FONTES DIFERENTES, e é aí que está a armadilha: `FullName`
-        e `FirstName` vêm da sincronização da agenda de quem consulta, `PushName`
-        vem do nome que a própria pessoa publica, e `BusinessName` do registo
-        comercial. Medido:
+        Os nomes vêm de FONTES DIFERENTES, e é aí que está a armadilha:
+        `full_name` e `first_name` vêm da sincronização da agenda de quem consulta,
+        `push_name` do nome que a própria pessoa publica, e `business_name` do
+        registo comercial. Medido a 2026-08-26 (as contagens descrevem o DADO e
+        continuam válidas; só os nomes das chaves mudaram):
 
         | campo | Business (461) | pessoal (3456) |
         |---|---:|---:|
-        | `Found` verdadeiro | 461 | 3456 |
-        | `PushName` preenchido | 460 | 1152 |
-        | `FullName` preenchido | **1** | 164 |
-        | `FirstName` preenchido | 1 | 89 |
-        | `BusinessName` preenchido | 2 | 43 |
-        | `RedactedPhone` preenchido | 0 | 2199 |
+        | `found` verdadeiro | 461 | 3456 |
+        | `push_name` preenchido | 460 | 1152 |
+        | `full_name` preenchido | **1** | 164 |
+        | `first_name` preenchido | 1 | 89 |
+        | `business_name` preenchido | 2 | 43 |
         | **sem nome nenhum dos quatro** | 1 | **2175** |
 
-        Um cliente que leia apenas `FullName` vê uma agenda praticamente sem nomes.
-        A ordem de preferência que o próprio projecto usa está em
-        `domain.ContactName.Melhor` (`pkg/domain/user.go`): `FullName`, `PushName`,
-        `BusinessName`, `FirstName`, e cadeia vazia quando nenhum existe.
+        Um cliente que leia apenas `full_name` vê uma agenda praticamente sem
+        nomes. A ordem de preferência que o próprio projecto usa está em
+        `domain.ContactName.Melhor`: `full_name`, `push_name`, `business_name`,
+        `first_name`, e cadeia vazia quando nenhum existe.
 
-        A escassez de `FullName` tem consequência directa para a publicação de
+        A escassez de `full_name` tem consequência directa para a publicação de
         status — ver `POST /status/set/image` e a F256.
+
+        **O campo `RedactedPhone` SAIU.** Era o número parcialmente ocultado
+        (`+55∙∙∙∙∙∙∙∙45`), preenchido só para membros em espaço LID encontrados em
+        grupos — 0 de 461 na conta Business, 2199 de 3456 na conta com muitos
+        grupos. Não serve para enviar mensagem, e o `phone_number` que o substitui
+        responde à mesma necessidade sem ocultar dígitos quando o mapeamento é
+        conhecido. Quem dependia dele fica sem ele: é o corte a seco.
       properties:
-        BusinessName:
+        business_name:
           description: |
             Nome comercial, quando a conta é comercial. Sempre presente; `""`
-            (nunca `null`) para contas pessoais — que é o caso quase sempre (2 de
-            461, 43 de 3456).
+            (nunca `null`) para contas pessoais — que é o caso quase sempre.
           example: ""
           nullable: false
           type: string
-        FirstName:
+        first_name:
           description: |
             Primeiro nome, quando veio da sincronização da agenda. Sempre presente;
-            `""` (nunca `null`) quando não veio — que é o caso da esmagadora
-            maioria (1 de 461, 89 de 3456).
+            `""` (nunca `null`) quando não veio — o caso da esmagadora maioria.
+            Vazio SEMPRE no motor `wa-headless`, que não lê a agenda.
           example: ""
           nullable: false
           type: string
-        Found:
+        found:
           description: |
-            Se a entrada foi encontrada no armazenamento local de contactos.
-            Sempre presente; nunca `null`. Medido `true` em 461 de 461 e em 3456 de
-            3456 — na prática toda entrada devolvida vem com `true`, porque só é
-            devolvido o que foi encontrado.
+            Se o motor tem mesmo um registo deste contacto, em vez de ter
+            sintetizado a entrada a partir de uma identidade nua. Sempre presente;
+            nunca `null`. Medido `true` em 461 de 461 e em 3456 de 3456 no motor
+            `wa-noise` — só é devolvido o que foi encontrado.
           example: true
           nullable: false
           type: boolean
-        FullName:
+        full_name:
           description: |
             Nome completo, quando veio da sincronização da agenda. Sempre presente;
             `""` (nunca `null`) quando não veio.
@@ -902,7 +905,41 @@ components:
           example: ""
           nullable: false
           type: string
-        PushName:
+        is_business:
+          description: |
+            Se a página classifica a conta como comercial. **Só o motor
+            `wa-headless` o responde**; no `wa-noise` vem sempre `false`, porque o
+            armazenamento de contactos não carrega a bandeira. Sempre presente.
+          example: false
+          nullable: false
+          type: boolean
+        jid:
+          description: |
+            A identidade por onde endereçar este contacto. É o `lid` quando o motor
+            conhece um — o caminho de envio mediu que é essa a que funciona neste
+            build —, e a identidade de telefone caso contrário.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+        lid:
+          description: |
+            A identidade de privacidade do contacto. Sempre presente; `""` quando o
+            motor só conhece um telefone.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+        phone_number:
+          description: |
+            A identidade de TELEFONE do contacto. Sempre presente; `""` quando o
+            motor só conhece um `@lid`.
+
+            Existe ao lado de `lid` porque uma pessoa é UMA entrada com DUAS
+            identidades, e qual delas quem chama já tem depende de onde a leu: o
+            histórico de mensagens fala telefone, a colecção de mensagens fala lid.
+          example: ""
+          nullable: false
+          type: string
+        push_name:
           description: |
             Nome que a própria pessoa publica. É o que costuma estar preenchido
             (460 de 461 na conta Business). Sempre presente; `""` quando a pessoa
@@ -910,22 +947,16 @@ components:
           example: Janio Gonzalez
           nullable: false
           type: string
-        RedactedPhone:
-          description: |
-            Número parcialmente ocultado, na forma `+55∙∙∙∙∙∙∙∙45` — os pontos são
-            o operador de bala `∙` (U+2219), não pontos normais.
-
-            Sempre presente; `""` (nunca `null`) quando não se aplica. **Só é
-            preenchido para membros em espaço LID encontrados em GRUPOS** — está
-            escrito no próprio tipo do módulo de protocolo
-            (`internal/wa-noise/protocol/types/user.go:66`), e a medição
-            confirma-o: 0 de 461 na conta Business, contra 2199 de 3456 na conta
-            com muitos grupos, todos em chaves `@lid` e todos sem `PushName`.
-
-            Não serve para enviar mensagem — é só apresentável.
-          example: ""
-          nullable: false
-          type: string
+      required:
+        - jid
+        - phone_number
+        - lid
+        - found
+        - first_name
+        - full_name
+        - push_name
+        - business_name
+        - is_business
       type: object
     ContextoResposta:
       description: Citação — faz a mensagem enviada aparecer como resposta a outra.
@@ -992,117 +1023,145 @@ components:
       type: object
     DefinicoesPrivacidade:
       description: |
-        As definições de privacidade da conta, tal como o WhatsApp as devolve.
-        É a mesma forma na LEITURA (`GET /user/privacy`) e na resposta da ESCRITA
-        (`POST /user/privacy`).
+        As definições de privacidade da conta. É a mesma forma na LEITURA
+        (`GET /user/privacy`) e na resposta da ESCRITA (`POST /user/privacy`) — a
+        escrita devolve o estado RESULTANTE de todas, não só o da que mudou.
 
-        **Atenção à assimetria de nomes**: a LEITURA devolve as chaves em
-        `PascalCase` (`GroupAdd`, `LastSeen`…), mas a ESCRITA recebe o nome em
-        minúsculas (`groupadd`, `last`…). São vocabulários diferentes para a mesma
-        definição, e a tabela de validação da escrita
-        (`pkg/domain/privacy.go:54-62`) conhece só SETE das DEZ chaves devolvidas
-        aqui.
+        > **Nota da migração de DTO (2026-08-27).** A forma abaixo é DERIVADA DO
+        > CÓDIGO. Este objecto era repassado do módulo de protocolo SEM tratamento,
+        > pelo que as chaves vinham em `PascalCase` (`GroupAdd`, `LastSeen`…) e
+        > uma chave nova do WhatsApp apareceria na resposta pública sozinha, no
+        > próximo rebase do vendor. Hoje o adaptador mapeia campo a campo para
+        > `domain.PrivacySettings`: as chaves são as de baixo, **a lista é fechada**
+        > e acrescentar uma passou a ser uma decisão nossa. Os valores medidos a
+        > 2026-08-26 continuam válidos.
 
-        **Nenhuma chave é garantida.** O objecto é repassado do módulo de protocolo
-        sem tratamento (`get_privacy_settings.go:32`), pelo que a API não impõe
-        presença nem valores: o que está abaixo é o que a conta de teste devolveu
-        em 2026-08-26, e uma chave nova do WhatsApp apareceria aqui sem qualquer
-        alteração no nosso código. Não trate a lista como fechada.
+        **A assimetria de nomes entre leitura e escrita MANTÉM-SE**, e é do
+        WhatsApp, não nossa: lê-se `read_receipts` e escreve-se `readreceipts`,
+        lê-se `last_seen` e escreve-se `last`. A tabela de validação da escrita
+        (`pkg/domain/privacy.go`) conhece só SETE das DEZ definições devolvidas
+        aqui — cada campo abaixo diz qual é o seu nome de escrita, ou que não tem.
+
+        **As dez chaves aparecem SEMPRE**, e nenhuma vem `null`: a que o motor não
+        reportou vem `""`. Era o contrário — nenhuma chave era garantida.
 
         Os valores são cadeias e **não têm `enum` declarado nesta resposta de
         propósito**: só os sete campos escrevíveis têm conjunto conhecido, e mesmo
         esse é o conjunto que a NOSSA validação aceita na escrita, não uma garantia
         sobre o que a leitura pode devolver.
       properties:
-        CallAdd:
+        call_add:
           description: |
-            Quem pode ligar para a conta. Escreve-se como `calladd`; a escrita
-            aceita só `all` e `known`. Medido `all`. Pode não aparecer, e pode vir
-            `null`.
-          example: all
-          nullable: true
-          type: string
-        Defense:
-          description: |
-            Devolvido pela leitura e **sem contraparte na escrita**. O significado
-            exacto não foi determinado com segurança pela implementação actual — o
-            campo é repassado do WhatsApp e não é interpretado em lado nenhum do
-            nosso código. Medido `off`. Pode não aparecer, e pode vir `null`.
-          example: "off"
-          nullable: true
-          type: string
-        GroupAdd:
-          description: |
-            Quem pode adicionar a conta a grupos. Escreve-se como `groupadd`, e os
-            valores que a escrita aceita são `all`, `contacts`,
-            `contact_blacklist` e `none`. Medido `all`.
+            Quem pode ligar para a conta. Escreve-se como `calladd`, e os valores que a escrita aceita
+            são só `all` e `known`. Medido `all` (chave antiga `CallAdd`).
 
-            Pode não aparecer, e pode vir `null`: é repassado do módulo de
-            protocolo sem garantia de presença.
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
           example: all
-          nullable: true
+          nullable: false
           type: string
-        LastSeen:
+        defense:
           description: |
-            Quem vê a hora do último acesso. Escreve-se como `last`; a escrita
-            aceita `all`, `contacts`, `contact_blacklist`, `none`. Medido
-            `contacts`. Pode não aparecer, e pode vir `null`.
+            Devolvido pela leitura e **sem contraparte na escrita**. O significado exacto não foi determinado com segurança pela implementação actual — o campo é repassado do WhatsApp e não é interpretado em lado nenhum do nosso código. Medido `off` (chave antiga `Defense`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não a reportou.
+          example: "off"
+          nullable: false
+          type: string
+        group_add:
+          description: |
+            Quem pode adicionar a conta a grupos. Escreve-se como `groupadd`, e os valores que a escrita aceita
+            são `all`, `contacts`, `contact_blacklist` e `none`. Medido `all` (chave antiga `GroupAdd`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
+          example: all
+          nullable: false
+          type: string
+        last_seen:
+          description: |
+            Quem vê a hora do último acesso. Escreve-se como `last`, e os valores que a escrita aceita
+            são `all`, `contacts`, `contact_blacklist` e `none`. Medido `contacts` (chave antiga `LastSeen`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
           example: contacts
-          nullable: true
+          nullable: false
           type: string
-        Messages:
+        messages:
           description: |
-            Devolvido pela leitura e **sem contraparte na escrita** — não consta da
-            tabela de validação (`pkg/domain/privacy.go:54-62`), logo não é
-            definível por esta API: `{"privacy_setting":"messages"}` seria recusado
-            com `400 invalid_privacy_setting`. Medido `all`. Pode não aparecer, e
-            pode vir `null`.
+            Devolvido pela leitura e **sem contraparte na escrita** — não consta da tabela de validação (`pkg/domain/privacy.go`), logo não é definível por esta API: `{"privacy_setting":"messages"}` é recusado com `400 invalid_privacy_setting`. Medido `all` (chave antiga `Messages`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não a reportou.
           example: all
-          nullable: true
+          nullable: false
           type: string
-        Online:
+        online:
           description: |
-            Quem vê a conta como online. Escreve-se como `online`; a escrita aceita
-            só `all` e `match_last_seen`. Medido `all`. Pode não aparecer, e pode
-            vir `null`.
+            Quem vê a conta como online. Escreve-se como `online`, e os valores que a escrita aceita
+            são só `all` e `match_last_seen`. Medido `all` (chave antiga `Online`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
           example: all
-          nullable: true
+          nullable: false
           type: string
-        Profile:
+        profile:
           description: |
-            Quem vê a foto de perfil. Escreve-se como `profile`; a escrita aceita
-            `all`, `contacts`, `contact_blacklist`, `none`. Medido `all`. Pode não
-            aparecer, e pode vir `null`.
+            Quem vê a foto de perfil. Escreve-se como `profile`, e os valores que a escrita aceita
+            são `all`, `contacts`, `contact_blacklist` e `none`. Medido `all` (chave antiga `Profile`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
           example: all
-          nullable: true
+          nullable: false
           type: string
-        ReadReceipts:
+        read_receipts:
           description: |
-            Se os confirmativos de leitura são enviados. Escreve-se como
-            `readreceipts`, e é o caso em que a escrita aceita MENOS valores que as
-            outras: só `all` e `none` — `contacts` é recusado com
-            `400 invalid_privacy_value`. Medido `all`. Pode não aparecer, e pode
-            vir `null`.
+            Se os confirmativos de leitura são enviados. É o caso em que a escrita aceita MENOS valores que as outras: `contacts` é recusado com `400 invalid_privacy_value`. Escreve-se como `readreceipts`, e os valores que a escrita aceita
+            são só `all` e `none`. Medido `all` (chave antiga `ReadReceipts`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
           example: all
-          nullable: true
+          nullable: false
           type: string
-        Status:
+        status:
           description: |
-            Quem vê os status publicados — é esta definição que decide o alcance de
-            `POST /status/set/*`. Escreve-se como `status`; a escrita aceita `all`,
-            `contacts`, `contact_blacklist`, `none`. Medido `contacts`. Pode não
-            aparecer, e pode vir `null`.
+            Quem vê os status publicados — é esta definição que decide o alcance de `POST /status/set/*`. Escreve-se como `status`, e os valores que a escrita aceita
+            são `all`, `contacts`, `contact_blacklist` e `none`. Medido `contacts` (chave antiga `Status`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não reportou esta
+            definição. `""` é distinguível de todo valor aceite, o que `all` não
+            seria.
           example: contacts
-          nullable: true
+          nullable: false
           type: string
-        Stickers:
+        stickers:
           description: |
-            Devolvido pela leitura e **sem contraparte na escrita** — não consta da
-            tabela de validação. Medido `contacts`. Pode não aparecer, e pode vir
-            `null`.
+            Devolvido pela leitura e **sem contraparte na escrita** — não consta da tabela de validação. Medido `contacts` (chave antiga `Stickers`).
+
+            Sempre presente; `""` (nunca `null`) quando o motor não a reportou.
           example: contacts
-          nullable: true
+          nullable: false
           type: string
+      required:
+        - group_add
+        - last_seen
+        - status
+        - profile
+        - read_receipts
+        - call_add
+        - online
+        - messages
+        - defense
+        - stickers
       type: object
     Detalhes:
       description: Confirmação textual de uma operação sem carga útil própria.
@@ -2345,44 +2404,66 @@ components:
       type: object
     InfoUtilizador:
       description: |
-        O que o WhatsApp sabe sobre uma conta, do ponto de vista da sessão que
-        pergunta. É o tipo `types.UserInfo` do módulo de protocolo
-        (`internal/wa-noise/protocol/types/user.go:16-22`) serializado sem
-        tratamento, pelo que os nomes vêm em `PascalCase` e **nenhum campo tem
-        `omitempty`**: os cinco aparecem sempre que a entrada existir.
+        O que se sabe sobre uma conta, do ponto de vista da sessão que pergunta.
+
+        Era o tipo `types.UserInfo` do módulo de protocolo serializado SEM
+        tratamento — daí os nomes em `PascalCase` e o bloco `VerifiedName` com o
+        certificado protobuf cru lá dentro. Hoje é `domain.UserInfo`, normalizado
+        no adaptador de cada motor, apresentado por
+        `pkg/presentation/http/dto/user`.
+
+        **Nenhum campo tem `omitempty`**: os oito aparecem sempre que a entrada
+        existir. O que varia é o conteúdo, não a presença.
+
+        **Os dois motores preenchem metades complementares**, e isso é propriedade
+        do motor, não falta de dado. O `wa-noise` pergunta ao servidor e responde
+        `status`, `picture_id`, `devices` e `verified_name`; o `wa-headless` lê a
+        colecção de contactos da página e responde `push_name` e `business_name`.
+        O que o motor não sabe vem no valor zero.
       properties:
-        Devices:
+        business_name:
+          description: |
+            Nome comercial do roster local. Sempre presente; `""` (nunca `null`).
+            Como `push_name`, só o motor `wa-headless` o preenche nesta rota.
+          example: ""
+          nullable: false
+          type: string
+        devices:
           description: |
             Aparelhos ligados àquela conta, cada um com o seu sufixo de
             dispositivo. O primeiro, sem sufixo, é o aparelho principal.
 
-            Sempre presente. Medido `[]` (array vazio) para uma conta cujos
-            aparelhos a sessão não conhece. `null` é possível — o campo é uma fatia
-            Go sem `omitempty`, e uma fatia nil serializa como `null` —, mas não foi
-            observado em campo. Trate as duas formas.
+            **Sempre presente e sempre um array** — `[]` e nunca `null`, ao
+            contrário do campo antigo: o apresentador aloca antes do laço, e a
+            ressalva "trate as duas formas" que estava aqui deixou de se aplicar.
           example:
             - 554192421234@s.whatsapp.net
             - 554192421234:41@s.whatsapp.net
-            - 554192421234:76@s.whatsapp.net
           items:
             description: JID de um aparelho, com sufixo `:N` a partir do segundo.
             example: 554192421234:41@s.whatsapp.net
             nullable: false
             type: string
-          nullable: true
+          nullable: false
           type: array
-        LID:
+        jid:
           description: |
-            Identificador de privacidade da conta, quando o mapeamento é conhecido.
+            O identificador consultado, ecoado tal como foi enviado — é o que
+            permite casar a resposta com a pergunta sem depender da posição.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        lid:
+          description: |
+            Identificador de privacidade da conta, quando o servidor o reporta.
             Sempre presente; vem `""` (nunca `null`) quando não há mapeamento.
 
-            **Ressalva medida**: quando a consulta é feita POR um `@lid`, este campo
-            vem `""` e a chave do mapa é que traz o LID. Ele resolve o LID DE um
-            número, não ecoa o que se perguntou.
+            Substitui o campo `LID` do tipo de protocolo, com a mesma ressalva:
+            ele resolve o LID DE um número, e não ecoa o que se perguntou.
           example: 90937376170214@lid
           nullable: false
           type: string
-        PictureID:
+        picture_id:
           description: |
             Identificador da foto de perfil actual, para detectar troca sem baixar
             a imagem. Sempre presente; vem `""` (nunca `null`) quando não há foto
@@ -2390,73 +2471,89 @@ components:
           example: ""
           nullable: false
           type: string
-        Status:
+        push_name:
           description: |
-            O "recado" do perfil. Sempre presente; vem `""` (nunca `null`) quando a
-            privacidade o esconde, quando não há nenhum, ou quando o servidor não o
-            devolveu — os três casos são indistinguíveis.
+            Nome que a própria pessoa publica, quando o motor o conhece. Sempre
+            presente; `""` (nunca `null`). Só o motor `wa-headless` o preenche
+            nesta rota — o `wa-noise` pergunta ao servidor, que não o devolve aqui.
           example: ""
           nullable: false
           type: string
-        VerifiedName:
+        status:
           description: |
-            Bloco de verificação comercial. **`null` para contas pessoais** —
-            medido nas duas contas de teste, incluindo para um número cujo
-            `verified_name` de `/user/check` vinha PREENCHIDO. As duas fontes não
-            concordam, e esta é a que fica nula.
+            O "recado" do perfil. Sempre presente; vem `""` (nunca `null`) quando a
+            privacidade o esconde, quando não há nenhum, quando o servidor não o
+            devolveu, ou quando o motor é o `wa-headless` — os quatro casos são
+            indistinguíveis.
+          example: ""
+          nullable: false
+          type: string
+        verified_name:
+          description: |
+            Nome verificado da conta comercial, JÁ EXTRAÍDO do certificado.
 
-            Quando não é nulo, o tipo declara duas chaves — `Certificate` e
-            `Details`, ambas do certificado protobuf
-            `waVnameCert.VerifiedNameCertificate`
-            (`internal/wa-noise/protocol/types/user.go:9-13`). **A forma interna
-            delas não foi determinada com segurança**: nenhuma das contas de teste
-            devolveu um bloco não-nulo, e o que está aqui vem do tipo, não de
-            medição.
-          nullable: true
-          properties:
-            Certificate:
-              description: |
-                Certificado de nome verificado, tal como o WhatsApp o emite.
-                Estrutura interna não determinada com segurança pela implementação
-                actual — nunca observada em campo.
-              nullable: true
-              type: object
-            Details:
-              description: |
-                Detalhes decodificados do certificado. Estrutura interna não
-                determinada com segurança pela implementação actual — nunca
-                observada em campo.
-              nullable: true
-              type: object
-          type: object
+            **Isto é uma mudança de forma, não só de nome.** O campo antigo
+            (`VerifiedName`) era um OBJECTO com o certificado protobuf cru —
+            `Certificate` e `Details` — cuja estrutura interna nunca foi observada
+            em campo porque vinha `null` nas duas contas de teste. O adaptador
+            passou a chamar `Details.GetVerifiedName()` e a servir só a cadeia,
+            que é o único pedaço daquele bloco que alguém conseguia usar.
+
+            Sempre presente; `""` (nunca `null`) para contas pessoais.
+          example: ""
+          nullable: false
+          type: string
+      required:
+        - jid
+        - lid
+        - status
+        - picture_id
+        - verified_name
+        - devices
+        - push_name
+        - business_name
       type: object
     InfoUtilizadores:
       description: |
-        Bloco `users`, indexado pelo JID consultado. É o objecto cru do módulo de
-        protocolo — a camada de aplicação não o decompõe de propósito, para não
-        arrastar o tipo do SDK para dentro dela (`get_user.go:47`).
+        Bloco `users` de `POST /user/info`.
+
+        > **Nota da migração de DTO (2026-08-27).** A forma abaixo é DERIVADA DO
+        > CÓDIGO, não medida contra o servidor vivo: a rota passou a servir um DTO
+        > (`pkg/presentation/http/dto/user`) e o corpo mudou de nomes — e nalguns
+        > casos de FORMA — em relação ao que foi medido a 2026-08-26. As contagens
+        > de população que aparecem abaixo continuam válidas (descrevem o DADO,
+        > não as chaves); os nomes das chaves e a estrutura vêm do DTO.
+
+        **Era um OBJECTO indexado pelo JID consultado; passou a ser um ARRAY.** A
+        chave daquele objecto era um JID — que é DADO, não nome de campo — e a
+        regra de nomes do contrato (`docs/HTTP-DTO-CONVENTIONS.md` §8) vale para
+        toda chave de objecto JSON. Não havia renomear; o dado teve de sair da
+        chave e passar a valor, no campo `jid` de cada entrada.
+
+        A ordem do array é a ORDEM DO PEDIDO, não a de um mapa: o adaptador
+        percorre os JIDs pedidos, e não o mapa que o servidor devolveu
+        (`pkg/infra/wa-noise/adapters/user/adapter.go`). JIDs para os quais o
+        servidor não respondeu ficam simplesmente FORA do array.
       properties:
         users:
-          additionalProperties:
-            $ref: '#/components/schemas/InfoUtilizador'
           description: |
             Uma entrada por JID que o servidor conseguiu responder. **Sempre
-            presente**, e `{}` (objecto vazio, nunca `null`) quando nada foi
-            pedido ou nada foi resolvido — medido.
-
-            A chave é o JID JÁ QUALIFICADO, não o valor cru que se enviou: quem
-            pediu `554192421234` encontra a entrada sob
-            `554192421234@s.whatsapp.net`.
+            presente**, e `[]` (array vazio, nunca `null`) quando nada foi pedido
+            ou nada foi resolvido — o apresentador aloca antes do laço.
           example:
-            554192421234@s.whatsapp.net:
-              Devices:
+            - business_name: ""
+              devices:
                 - 554192421234@s.whatsapp.net
-              LID: 90937376170214@lid
-              PictureID: ""
-              Status: ""
-              VerifiedName: null
+              jid: 554192421234@s.whatsapp.net
+              lid: 90937376170214@lid
+              picture_id: ""
+              push_name: ""
+              status: ""
+              verified_name: ""
+          items:
+            $ref: '#/components/schemas/InfoUtilizador'
           nullable: false
-          type: object
+          type: array
       required:
         - users
       type: object
@@ -2559,20 +2656,24 @@ components:
       type: object
     ListaBloqueados:
       description: |
-        A lista de bloqueados da sessão. **Esta resposta NÃO usa o envelope
-        comum** — o manipulador serializa o resultado e escreve-o directamente
-        (`handler_blocklist.go:66-73`), pelo que não há `code`, `data` nem
-        `success`. Medido: `{"Blocklist":[],"DHash":"1787412261963655"}`.
+        A lista de bloqueados da sessão, em `GET /user/blocklist`.
 
-        As duas chaves aparecem sempre — o caso de uso monta um mapa literal com as
-        duas (`get_blocklist.go:38-41`).
+        > **Nota da migração de DTO (2026-08-27).** A forma abaixo é DERIVADA DO
+        > CÓDIGO. **Esta rota deixou de ser a excepção do envelope.** Escrevia o
+        > JSON directamente para preservar o formato antigo, e por isso não trazia
+        > `code`, `data` nem `success` — era a ÚNICA das 141 rotas assim, e um
+        > cliente não a conseguia ler como lê as outras. Hoje passa por
+        > `RespondJSON` como todas: o corpo abaixo é o conteúdo de `data`.
+        > As duas chaves mudaram de nome junto (`Blocklist` → `blocklist`,
+        > `DHash` → `dhash`).
+
+        As duas chaves aparecem sempre.
       properties:
-        Blocklist:
+        blocklist:
           description: |
             JIDs bloqueados, em forma canónica. **Sempre presente e nunca `null`**:
-            o conversor inicializa a fatia com `[]string{}` e só depois a preenche
-            (`pkg/infra/wa-noise/adapters/user/blocklist.go:77-84`), pelo que uma
-            conta sem bloqueios devolve `[]` — medido. A ordem é a que o WhatsApp
+            o apresentador aloca a fatia antes de a preencher, pelo que uma conta
+            sem bloqueios devolve `[]` — medido. A ordem é a que o WhatsApp
             devolveu; não há garantia de ser estável entre chamadas.
           example: []
           items:
@@ -2582,20 +2683,20 @@ components:
             type: string
           nullable: false
           type: array
-        DHash:
+        dhash:
           description: |
             Hash com que o WhatsApp versiona a lista. Serve para detectar que a
             lista mudou sem a comparar entrada a entrada.
 
             Sempre presente; nunca `null`. Vem `""` quando o WhatsApp devolveu uma
-            lista nula (`blocklist.go:77-80`) — não confunda `""` com "a lista não
-            mudou".
+            lista nula, e também no motor `wa-headless`, que não versiona a lista —
+            não confunda `""` com "a lista não mudou".
           example: "1787412261963655"
           nullable: false
           type: string
       required:
-        - Blocklist
-        - DHash
+        - blocklist
+        - dhash
       type: object
     ListaCanais:
       description: |
@@ -3931,7 +4032,20 @@ components:
         modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
         `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
-        Phone:
+        chat:
+          description: |
+            Nome universal do destino (F225), aceite em toda rota com destinatário.
+            É copiado para `phone` **apenas quando `phone` está vazio**
+            (`domain.ResolveChatField`, chamado pelo DTO de pedido em
+            `pkg/presentation/http/dto/user/request.go`), logo `phone` ganha
+            quando os dois vierem.
+
+            Ausente, `null` e `""` são indistinguíveis: os três deixam `phone` sem
+            substituto, e o pedido morre em `400 missing_phone`.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        phone:
           description: |
             Contacto de quem se quer a foto. Aceita número nu, JID de telefone ou
             LID — a resolução é leniente (`ResolveJID`) e aplica o servidor por
@@ -3942,7 +4056,7 @@ components:
             | ausente | não | `400 missing_phone` |
             | `null` | não | `400 missing_phone` — indistinguível de ausente |
             | `""` | não | `400 missing_phone` — indistinguível de ausente |
-            | `"   "` | **não, mas com outro código** | `400 invalid_phone`: a guarda é `len(Phone) < 1`, e três espaços têm comprimento 3 — **não há `trim` aqui** (`get_avatar.go:35`) |
+            | `"   "` | **não, mas com outro código** | `400 invalid_phone`: a guarda é `phone == ""`, e três espaços não são a cadeia vazia — **não há `trim` aqui** |
             | `"lixo"` | não | `400 invalid_phone` |
             | `123` (número) | não | `400 could_not_decode_payload` |
             | preenchido | sim | — |
@@ -3954,13 +4068,15 @@ components:
           minLength: 1
           nullable: false
           type: string
-        Preview:
+        preview:
           default: false
           description: |
             `true` devolve a miniatura; `false` devolve a imagem em tamanho cheio.
 
             **Ausente, `null` e `false` são o mesmo pedido** — o campo é `bool` sem
-            `*` (`pkg/domain/contacts.go:9`), logo `null` vira `false` em silêncio.
+            `*`, e isso é DELIBERADO: "não pedi" e "pedi false" significam a mesma
+            coisa aqui, que é "dá-me a imagem inteira". As rotas em que a diferença
+            importa usam ponteiro.
             Aqui isso é inofensivo, porque `false` é o padrão inerte e não uma
             acção; noutras rotas desta API o mesmo mecanismo é perigoso (ver a
             secção 4.2 do contrato arquitectural).
@@ -3970,40 +4086,45 @@ components:
           example: true
           nullable: false
           type: boolean
-        chat:
-          description: |
-            Nome universal do destino (F225), aceite em toda rota com destinatário.
-            É copiado para `Phone` **apenas quando `Phone` está vazio**
-            (`domain.ResolveChatField`), logo `Phone` ganha quando os dois vierem.
-
-            Ausente, `null` e `""` são indistinguíveis: os três deixam `Phone` sem
-            substituto, e o pedido morre em `400 missing_phone`.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
       required:
-        - Phone
+        - phone
       type: object
     PedidoBloqueio:
       description: |
-        Quem bloquear ou desbloquear. Basta UM dos dois campos: `JID` tem
-        precedência, e `Phone` é usado quando `JID` vem vazio
-        (`block_user.go:41-47`).
+        Quem bloquear ou desbloquear. Basta UM dos dois campos: `jid` tem
+        precedência, e `phone` é usado quando `jid` vem vazio.
+
+        > **Nota da migração de DTO (2026-08-27).** Os campos chamavam-se `Phone` e
+        > `JID`. A chave canónica é a minúscula, e é a única documentada. A
+        > maiúscula continua a funcionar por uma propriedade do `encoding/json` do
+        > Go — que casa nomes de campo sem distinguir a caixa —, não por decisão
+        > nossa; está medido em
+        > `pkg/presentation/http/dto/user/request_test.go`. Não conte com ela.
 
         **Ao contrário do resto da API, aqui HÁ `trim`**: os dois campos passam por
-        `strings.TrimSpace` antes da verificação de vazio, logo `"   "` conta como
-        ausente. Medido — e é divergência real face a `POST /user/avatar` e
-        `POST /user/presence/subscribe`, onde a mesma entrada dá `invalid_phone`.
+        `strings.TrimSpace` no caso de uso antes da verificação de vazio, logo
+        `"   "` conta como ausente para a RESOLUÇÃO. Repare que a validação de
+        fronteira, essa, não faz `trim` — `{"phone":"   "}` passa por ela e é o
+        caso de uso que o recusa, com o mesmo código.
 
         Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
         desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
         modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
         `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
-        JID:
+        chat:
           description: |
-            Contacto em forma de JID. **Tem precedência sobre `Phone`**: quando os
-            dois vierem preenchidos, `Phone` é ignorado sem aviso.
+            Nome universal do destino (F225). É copiado para `phone` **apenas
+            quando `phone` está vazio** (`domain.ResolveChatField`, chamado pelo
+            DTO de pedido), e nunca ganha de `jid`. Ausente, `null` e `""` são
+            indistinguíveis — medido: `{"chat":""}` dá `400 missing_phone_or_jid`.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        jid:
+          description: |
+            Contacto em forma de JID. **Tem precedência sobre `phone`**: quando os
+            dois vierem preenchidos, `phone` é ignorado sem aviso.
 
             Tabela dos estados, medida com pedidos que a validação recusa (nenhum
             chegou a bloquear ninguém):
@@ -4011,34 +4132,25 @@ components:
             | corpo | efeito |
             |---|---|
             | `{}` | `400 missing_phone_or_jid` |
-            | `{"Phone":null,"JID":null}` | `400 missing_phone_or_jid` — indistinguível de ausente |
-            | `{"Phone":"","JID":""}` | `400 missing_phone_or_jid` — idem |
-            | `{"Phone":"   "}` | `400 missing_phone_or_jid` — **há `trim` aqui** |
-            | `{"JID":"   "}` | `400 missing_phone_or_jid` — idem |
-            | `{"Phone":"lixo"}` | `400 invalid_phone_or_jid` |
-            | `{"Phone":123}` | `400 could_not_decode_payload` |
+            | `{"phone":null,"jid":null}` | `400 missing_phone_or_jid` — indistinguível de ausente |
+            | `{"phone":"","jid":""}` | `400 missing_phone_or_jid` — idem |
+            | `{"phone":"   "}` | `400 missing_phone_or_jid` — **há `trim` no caso de uso** |
+            | `{"jid":"   "}` | `400 missing_phone_or_jid` — idem |
+            | `{"phone":"lixo"}` | `400 invalid_phone_or_jid` |
+            | `{"phone":123}` | `400 could_not_decode_payload` |
 
             Repare que a recusa é a MESMA para os dois campos: o código de erro não
             diz qual dos dois estava mal.
           example: 90937376170214@lid
           nullable: false
           type: string
-        Phone:
+        phone:
           description: |
             Contacto. A resolução é LENIENTE por decisão registada na F203: um
-            número nu (`554192421234`) é aceite, porque um campo chamado `Phone`
+            número nu (`554192421234`) é aceite, porque um campo chamado `phone`
             que exigisse `@s.whatsapp.net` seria contrato surpreendente.
 
-            Usado só quando `JID` vem vazio.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
-        chat:
-          description: |
-            Nome universal do destino (F225). É copiado para `Phone` **apenas
-            quando `Phone` está vazio** (`domain.ResolveChatField`), e nunca ganha
-            de `JID`. Ausente, `null` e `""` são indistinguíveis — medido:
-            `{"chat":""}` dá `400 missing_phone_or_jid`.
+            Usado só quando `jid` vem vazio.
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
@@ -9144,10 +9256,14 @@ components:
         **degrada em vez de falhar**: o que não se conseguiu obter aparece em
         `unavailable`, com o motivo, em vez de sair como campo vazio mudo.
 
-        **Quais campos aparecem sempre**: `jid`, `lid`, `query`, `on_whatsapp`,
-        `verified_name`, `avatar_url` e `avatar_id` não têm `omitempty`
-        (`get_user_profile.go:41-73`) e vêm SEMPRE. `user_info` e `unavailable`
-        têm `omitempty` e **podem não aparecer**.
+        > **Nota da migração de DTO (2026-08-27).** `user_info` e `unavailable`
+        > mudaram de forma; os outros sete campos ficaram iguais. As medições de
+        > 2026-08-26 citadas abaixo continuam a descrever o comportamento.
+
+        **TODOS os campos aparecem sempre.** `user_info` e `unavailable` tinham
+        `omitempty` e podiam desaparecer; deixaram de ter. Emitir sempre é mais
+        barato do que documentar a ausência, e um cliente já não precisa de
+        distinguir "esta chave não vem nesta versão" de "não há nada a reportar".
       properties:
         avatar_id:
           description: |
@@ -9214,12 +9330,14 @@ components:
             description: Motivo, em texto livre, de a peça não ter sido obtida.
             nullable: false
             type: string
+          default: {}
           description: |
             O que NÃO pôde ser obtido, com o motivo, por chave.
 
-            **Ausente quando tudo correu bem** — tem `omitempty`, e o caso de uso
-            põe o mapa a `nil` quando está vazio (`get_user_profile.go:104-106`),
-            de propósito: um `{}` obrigaria o cliente a distinguir vazio de nada.
+            **Sempre presente, e `{}` quando tudo correu bem.** O caso de uso põe o
+            mapa a `nil` quando está vazio, mas o apresentador aloca-o: um cliente
+            que percorra os motivos não deve ter de verificar `null` num mapa cuja
+            ausência de entradas já diz "nada falhou".
 
             As cinco chaves possíveis são `jid`, `lid`, `on_whatsapp`, `user_info`
             e `avatar`. Os valores são texto livre destinado a leitura humana —
@@ -9231,32 +9349,33 @@ components:
             `servidor nao respondeu sobre este numero`.
           example:
             avatar: avatar hidden by privacy settings
-          nullable: true
+          nullable: false
           type: object
         user_info:
-          additionalProperties:
-            $ref: '#/components/schemas/InfoUtilizador'
           description: |
-            O bloco cru do módulo de protocolo, com a mesma forma de
-            `POST /user/info` — indexado pelo JID consultado.
+            Os metadados da conta, com a mesma forma de `POST /user/info`.
 
-            **Pode não aparecer**: tem `omitempty` (`get_user_profile.go:68`), logo
-            é omitido quando a consulta de informação de conta falhou. Nesse caso o
-            motivo está em `unavailable.user_info`. Ausência e `null` significam a
-            mesma coisa aqui: não foi possível obter.
-          nullable: true
-          type: object
+            **Era um objecto indexado pelo JID consultado; é um ARRAY**, pela mesma
+            razão que ali: a chave era dado, e chave que é dado não pode satisfazer
+            a regra de nomes do contrato.
+
+            **Sempre presente.** `[]` quando a consulta de informação de conta
+            falhou — e nesse caso o motivo está em `unavailable.user_info`. Nunca
+            `null`.
+          items:
+            $ref: '#/components/schemas/InfoUtilizador'
+          nullable: false
+          type: array
         verified_name:
           description: |
             Nome verificado, quando a conta é comercial verificada. Sempre
             presente; `""` (nunca `null`) quando não há ou quando a consulta de
             presença na rede falhou.
 
-            **Vem de fonte diferente de `user_info.VerifiedName`**, e as duas podem
-            discordar: este é copiado do resultado de `IsOnWhatsApp`
-            (`get_user_profile.go:181-183`), enquanto o outro vem da consulta de
-            informação de conta. Medido um caso com este preenchido e
-            `user_info.VerifiedName` a `null` no mesmo corpo.
+            **Vem de fonte diferente de `user_info[].verified_name`**, e as duas
+            podem discordar: este é copiado do resultado de `IsOnWhatsApp`,
+            enquanto o outro vem da consulta de informação de conta. Medido um caso
+            com este preenchido e o outro vazio no mesmo corpo.
           example: ""
           nullable: false
           type: string
@@ -9268,6 +9387,8 @@ components:
         - verified_name
         - avatar_url
         - avatar_id
+        - user_info
+        - unavailable
       type: object
     ResolucaoLID:
       description: |
@@ -9440,14 +9561,18 @@ components:
       description: |
         Resultado de bloquear ou desbloquear. **Nunca foi observado em campo**: as
         duas rotas que o produzem falham hoje com `422 upstream_rejected` (ver
-        F264), logo a forma abaixo vem do código (`block_user.go:25-31, 71-81`),
-        não de medição — incluindo as afirmações de presença de cada campo.
+        F264), logo a forma abaixo vem do código, não de medição — incluindo as
+        afirmações de presença de cada campo.
+
+        > **Nota da migração de DTO (2026-08-27).** As cinco chaves mudaram de
+        > nome, e `requested_jid` mudou de SEMÂNTICA — ver o campo.
       properties:
-        Blocklist:
+        blocklist:
           description: |
             A lista de bloqueados resultante da operação. Sempre presente e nunca
-            `null`, pelo mesmo motivo de `ListaBloqueados.Blocklist`: a fatia é
-            inicializada com `[]string{}`. Vem `[]` quando a lista fica vazia.
+            `null`, pelo mesmo motivo de `ListaBloqueados.blocklist`: o
+            apresentador aloca antes de preencher. Vem `[]` quando a lista fica
+            vazia.
           example:
             - 554192421234@s.whatsapp.net
           items:
@@ -9457,23 +9582,16 @@ components:
             type: string
           nullable: false
           type: array
-        DHash:
-          description: |
-            Hash da lista resultante. Sempre presente; `""` quando o WhatsApp
-            devolveu lista nula. Nunca `null`.
-          example: "1787412261963655"
-          nullable: false
-          type: string
-        Details:
+        details:
           description: |
             Confirmação textual, constante por rota — `User blocked` em
-            `POST /user/block`, `User unblocked` em `POST /user/unblock`. Sem
-            `omitempty`, logo sempre presente.
+            `POST /user/block`, `User unblocked` em `POST /user/unblock`. Sempre
+            presente.
 
             O enum é o conjunto que o código escreve hoje, literal e sem variação
-            (`block_user.go:73`, `unblock_user.go:72`). **Como é campo de RESPOSTA,
-            a pergunta "e um valor desconhecido?" não se aplica à entrada**: um
-            valor fora desta lista não é recusado por validador nenhum — apenas
+            (`block_user.go`, `unblock_user.go`). **Como é campo de RESPOSTA, a
+            pergunta "e um valor desconhecido?" não se aplica à entrada**: um valor
+            fora desta lista não é recusado por validador nenhum — apenas
             significaria que o texto mudou no nosso código. É texto para leitura
             humana: não o compare por igualdade.
           enum:
@@ -9482,31 +9600,43 @@ components:
           example: User blocked
           nullable: false
           type: string
-        JID:
+        dhash:
+          description: |
+            Hash da lista resultante. Sempre presente; `""` quando o WhatsApp
+            devolveu lista nula. Nunca `null`.
+          example: "1787412261963655"
+          nullable: false
+          type: string
+        jid:
           description: |
             O JID que a lista de bloqueio de facto usou, depois da normalização
             (descarte de agente/dispositivo e troca do servidor legado pelo
-            padrão). Sem `omitempty`, logo sempre presente.
+            padrão). Sempre presente.
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        RequestedJID:
+        requested_jid:
           description: |
             O JID pedido, já normalizado.
 
-            **Pode não aparecer**: tem `omitempty` na struct
-            (`block_user.go:30`) e só é preenchido quando DIFERE do usado
-            (`block_user.go:78-80`) — o que acontece quando o pedido veio em LID e
-            precisou de ser traduzido. A ausência significa "pedido e usado são o
-            mesmo", não "não sei".
+            **Mudou de semântica na migração.** O campo antigo (`RequestedJID`)
+            tinha `omitempty` e só era preenchido quando DIFERIA do usado — a sua
+            ausência significava "pedido e usado são o mesmo". Hoje está sempre
+            presente e, quando não houve tradução, ecoa o mesmo valor de `jid`.
+
+            A troca é deliberada: o campo passa a responder sempre à mesma
+            pergunta — *que identidade pedi?* — em vez de significar duas coisas
+            conforme estivesse vazio. Quem quer saber se houve tradução compara os
+            dois valores, que é a comparação que a pergunta pede.
           example: 90937376170214@lid
           nullable: false
           type: string
       required:
-        - Details
-        - JID
-        - Blocklist
-        - DHash
+        - details
+        - jid
+        - requested_jid
+        - blocklist
+        - dhash
       type: object
     ResultadoConfigHmac:
       description: |
@@ -10211,9 +10341,12 @@ components:
         Uma entrada por número que o servidor do WhatsApp reconheceu.
         `is_in_whatsapp: false` NÃO é erro — é a resposta à pergunta.
 
-        **Nenhum dos quatro campos tem `omitempty`** (`check_user.go:23-28`), logo
-        os quatro aparecem SEMPRE que a entrada exista. O que varia é o conteúdo,
-        não a presença.
+        **Nenhum dos quatro campos tem `omitempty`**, logo os quatro aparecem
+        SEMPRE que a entrada exista. O que varia é o conteúdo, não a presença.
+
+        Os nomes não mudaram na migração de DTO de 2026-08-27 — já eram
+        canónicos. O que mudou foi o embrulho: `data` deixou de ser o array e
+        passou a ser `{"users": [...]}`.
 
         Números que não produziram entrada não aparecem de forma nenhuma — ver
         o descarte silencioso descrito em `PedidoVerificacaoNumero.phone`.
@@ -10361,39 +10494,81 @@ components:
         - last_activity
       type: object
     Roster:
-      additionalProperties:
-        $ref: '#/components/schemas/ContactoDoRoster'
       description: |
-        O roster inteiro, indexado por JID. **Sempre um objecto**, e `{}` quando a
-        agenda está vazia — nunca `null`: o adaptador constrói o mapa com `make`
-        (`internal/wa-noise/persistence/store/sqlstore/store_contact.go:221`).
+        A agenda da sessão, em `GET /user/contacts`.
 
-        **As chaves misturam espaços de identidade, e a proporção varia por
-        conta.** Medido em 2026-08-26 (isto CORRIGE a medição anterior, que dizia
-        que a totalidade das chaves vinha em `@lid`):
+        > **Nota da migração de DTO (2026-08-27).** A forma abaixo é DERIVADA DO
+        > CÓDIGO, não medida contra o servidor vivo: a rota passou a servir um DTO
+        > (`pkg/presentation/http/dto/user`) e o corpo mudou de nomes — e nalguns
+        > casos de FORMA — em relação ao que foi medido a 2026-08-26. As contagens
+        > de população que aparecem abaixo continuam válidas (descrevem o DADO,
+        > não as chaves); os nomes das chaves e a estrutura vêm do DTO.
+
+        **Era um OBJECTO indexado por JID; passou a ser `{contacts, count}`.** A
+        chave daquele objecto era um JID — dado, não nome de campo —, e por isso
+        não podia satisfazer a regra de nomes do contrato. O JID passou a viver no
+        campo `jid` de cada entrada, e o `count` que o log já calculava passou a
+        ser servido em vez de o cliente ter de contar o mapa.
+
+        **A ORDEM é determinística.** O motor `wa-noise` lê de um mapa e ORDENA por
+        JID antes de devolver; o `wa-headless` preserva a ordem que a colecção da
+        página já tem. Sem isso, a mesma agenda saía numa ordem diferente a cada
+        chamada e nenhum cliente conseguia diffar duas respostas.
+
+        **Os JIDs misturam espaços de identidade, e a proporção varia por conta.**
+        Medido a 2026-08-26, e continua a descrever o dado:
 
         | conta | total | `@lid` | `@s.whatsapp.net` | `@bot` |
         |---|---:|---:|---:|---:|
         | Business (`filarapida`) | 461 | 232 | 229 | 0 |
         | pessoal (`lucas`) | 3456 | 2524 | 931 | 1 |
 
-        Ou seja: **não se pode assumir nem um espaço nem o outro**. Quem quiser
-        casar isto com uma agenda por telefone tem de resolver cada `@lid` —
-        `GET /user/profile/{jid}` faz a tradução nos dois sentidos.
+        Ou seja: **não se pode assumir nem um espaço nem o outro**. O DTO ajuda
+        aqui — cada entrada traz `phone_number` e `lid` além de `jid`, e o campo
+        vazio diz que aquele motor não conhece aquela identidade.
 
         O `@bot` é um terceiro espaço, com uma entrada medida
-        (`867051314767696@bot`, `PushName: "Meta AI"`). Não é contacto humano.
+        (`867051314767696@bot`, nome "Meta AI"). Não é contacto humano.
 
         **Não há paginação.** A resposta medida foi de 61 459 bytes para 461
         contactos e 498 688 bytes para 3456 — cresce com a agenda, sem tecto.
       example:
-        90937376170214@lid:
-          BusinessName: ""
-          FirstName: ""
-          Found: true
-          FullName: ""
-          PushName: Janio Gonzalez
-          RedactedPhone: ""
+        contacts:
+          - business_name: ""
+            first_name: ""
+            found: true
+            full_name: ""
+            is_business: false
+            jid: 90937376170214@lid
+            lid: 90937376170214@lid
+            phone_number: ""
+            push_name: Janio Gonzalez
+        count: 1
+      properties:
+        contacts:
+          description: |
+            As entradas da agenda. Sempre presente; `[]` (nunca `null`) quando a
+            agenda está vazia.
+          items:
+            $ref: '#/components/schemas/ContactoDoRoster'
+          nullable: false
+          type: array
+        count:
+          description: |
+            Quantas entradas vêm em `contacts`. É a mesma contagem que o servidor
+            já registava no log e que o cliente tinha de derivar contando o mapa.
+
+            **Para o motor `wa-headless` é a contagem de PESSOAS, não de linhas**:
+            a colecção da página traz uma linha por identidade, e a mesma pessoa
+            aparece duas vezes — 944 linhas dobradas em 390 pessoas no perfil
+            medido. Devolver o número de linhas reportaria o dobro dos contactos
+            que alguém tem.
+          example: 461
+          nullable: false
+          type: integer
+      required:
+        - contacts
+        - count
       type: object
     SaudeDetalhada:
       description: Contagens do processo, devolvidas por `GET /health`.
@@ -10662,46 +10837,82 @@ components:
           type: boolean
       type: object
     UltimaAtividadePorConversa:
-      additionalProperties:
-        description: |
-          Instante da mensagem mais recente daquela conversa, em RFC 3339.
-          **Repare que vem no fuso LOCAL do servidor, não em UTC** — medido:
-          `2026-08-24T18:56:53.836029-04:00`, com deslocamento `-04:00` e
-          resolução de microssegundos. Nunca `null`.
-        example: "2026-08-24T18:56:53.836029-04:00"
-        format: date-time
-        nullable: false
-        type: string
       description: |
-        Instante da mensagem mais recente de cada conversa, indexado por JID.
-        Derivado do histórico LOCAL (o `HistorySync` que chega depois do
-        pareamento, mais as mensagens correntes), **não** de uma consulta ao
-        WhatsApp.
+        Instante da mensagem mais recente de cada conversa, em
+        `GET /user/contacts/last-activity`. Derivado do histórico LOCAL (o
+        `HistorySync` que chega depois do pareamento, mais as mensagens correntes),
+        **não** de uma consulta ao WhatsApp.
 
-        **Sempre um objecto**, e `{}` quando não há histórico — nunca `null`: a
-        consulta constrói o mapa com `make`
-        (`pkg/infra/db/message_history.go:141`).
+        > **Nota da migração de DTO (2026-08-27).** A forma abaixo é DERIVADA DO
+        > CÓDIGO. **Era um OBJECTO indexado por JID; passou a ser `{chats: […]}`.**
+        > Aquelas chaves eram JIDs, e um JID nunca casa com a regra de nomes do
+        > contrato (`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`) — `@` e `.` não estão no
+        > alfabeto. Não havia renomear: o dado teve de sair da chave.
 
-        As chaves são normalizadas para o espaço LID quando o mapeamento é
-        conhecido, para casarem com as chaves de `GET /user/contacts`. Um número
-        sem LID conhecido mantém a chave em `@s.whatsapp.net`, e grupos aparecem em
-        `@g.us`. Quando a sessão está em espera, a normalização é saltada e o dado
-        sai cru — degrada, não falha (`get_contacts_last_activity.go`).
+        **A ordem é por JID**, imposta pelo apresentador. O mapa de origem tem
+        ordem de iteração aleatória por desenho do Go, e sem ordenar duas respostas
+        para o mesmo estado não se conseguiam diffar.
 
-        **O mapa não traz só contactos.** Medido, 384 chaves numa conta: 379
-        `@lid`, 3 `@g.us`, 1 `@s.whatsapp.net` e 1 `status@broadcast` — mais a
-        chave `0@s.whatsapp.net`, que é a conta oficial do WhatsApp. A filtragem é
-        de quem chama; a consulta inclui grupos e difusões de propósito
-        (`pkg/infra/db/message_history.go:124`).
+        Os JIDs são normalizados para o espaço LID quando o mapeamento é conhecido,
+        para casarem com os de `GET /user/contacts`. Um número sem LID conhecido
+        mantém o `@s.whatsapp.net`, e grupos aparecem em `@g.us`. Quando a sessão
+        está em espera, a normalização é saltada e o dado sai cru — degrada, não
+        falha.
+
+        **A lista não traz só contactos.** Medido, 384 entradas numa conta: 379
+        `@lid`, 3 `@g.us`, 1 `@s.whatsapp.net` e 1 `status@broadcast` — mais
+        `0@s.whatsapp.net`, que é a conta oficial do WhatsApp. A filtragem é de
+        quem chama; a consulta inclui grupos e difusões de propósito.
 
         **Descarte silencioso, do lado da resposta**: uma linha cujo carimbo de
         tempo não parseia é SALTADA, com aviso no log e sem sinal nenhum na
-        resposta (`pkg/infra/db/message_history.go:143-148`). Uma conversa pode
-        faltar aqui sem que isso signifique ausência de mensagens.
-      example:
-        554192421234@s.whatsapp.net: "2026-08-24T18:56:53.796034-04:00"
-        100429404864623@lid: "2026-08-24T18:56:53.836029-04:00"
-        status@broadcast: "2026-08-24T18:56:53.795000-04:00"
+        resposta. Uma conversa pode faltar aqui sem que isso signifique ausência
+        de mensagens.
+      properties:
+        chats:
+          description: |
+            Uma entrada por conversa, ordenada por `jid`. Sempre presente; `[]`
+            (nunca `null`) quando não há histórico.
+          example:
+            - jid: 100429404864623@lid
+              last_activity: "2026-08-24T22:56:53Z"
+            - jid: status@broadcast
+              last_activity: "2026-08-24T22:56:53Z"
+          items:
+            properties:
+              jid:
+                description: Identidade da conversa, como ela vive no histórico local.
+                example: 100429404864623@lid
+                nullable: false
+                type: string
+              last_activity:
+                description: |
+                  Instante da mensagem mais recente daquela conversa, em RFC 3339
+                  **UTC**.
+
+                  **Duas mudanças em relação ao que foi medido a 2026-08-26.** O
+                  valor vinha no fuso LOCAL do servidor com resolução de
+                  microssegundos (`2026-08-24T18:56:53.836029-04:00`); o
+                  apresentador passou a normalizar para UTC com resolução de
+                  segundos (`2026-08-24T22:56:53Z`), que é a mesma regra do resto
+                  do contrato.
+
+                  E é **`null`, e não `"0001-01-01T00:00:00Z"`, para tempo
+                  desconhecido**: essa cadeia é uma data real no fio, e um cliente
+                  que a parseasse recebia uma conversa activa antes do calendário
+                  gregoriano em vez de um campo sem valor. A chave existe sempre.
+                example: "2026-08-24T22:56:53Z"
+                format: date-time
+                nullable: true
+                type: string
+            required:
+              - jid
+              - last_activity
+            type: object
+          nullable: false
+          type: array
+      required:
+        - chats
       type: object
     UtilizadorAdmin:
       description: |
@@ -20703,8 +20914,8 @@ paths:
         content:
           application/json:
             example:
-              Phone: 554192421234@s.whatsapp.net
               Preview: true
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoAvatar'
         required: true
@@ -20796,8 +21007,8 @@ paths:
         enviamos. `GET /user/blocklist` continua a funcionar — é só a escrita
         que é recusada.
 
-        **Regras**, para quando voltar a funcionar: basta um de `JID` ou
-        `Phone`, com `JID` a ganhar quando os dois vierem. A resolução é
+        **Regras**, para quando voltar a funcionar: basta um de `jid` ou
+        `phone`, com `jid` a ganhar quando os dois vierem. A resolução é
         LENIENTE por decisão registada (F203): um número nu é aceite.
 
         **Autenticação**: token de sessão.
@@ -20805,7 +21016,7 @@ paths:
         content:
           application/json:
             example:
-              Phone: 554192421234@s.whatsapp.net
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoBloqueio'
         required: true
@@ -20816,11 +21027,12 @@ paths:
               example:
                 code: 200
                 data:
-                  Blocklist:
+                  blocklist:
                     - 554192421234@s.whatsapp.net
-                  DHash: "1787412261963655"
-                  Details: User blocked
-                  JID: 554192421234@s.whatsapp.net
+                  details: User blocked
+                  dhash: "1787412261963655"
+                  jid: 554192421234@s.whatsapp.net
+                  requested_jid: 554192421234@s.whatsapp.net
                 success: true
               schema:
                 allOf:
@@ -20839,12 +21051,12 @@ paths:
                 code: 400
                 error:
                   code: missing_phone_or_jid
-                  message: missing Phone or JID
+                  message: missing phone or jid in payload
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Nem `Phone` nem `JID` no corpo (`missing_phone_or_jid`),
+            Nem `phone` nem `jid` no corpo (`missing_phone_or_jid`),
             identificador que não parseia (`invalid_phone_or_jid`), corpo
             ilegível (`could_not_decode_payload`) ou sessão inexistente
             (`no_session`).
@@ -20881,14 +21093,18 @@ paths:
         versiona a lista.
 
         **Quando usar**: para saber, antes de enviar, se um destino está
-        bloqueado; e para detectar mudanças na lista comparando o `DHash` em
+        bloqueado; e para detectar mudanças na lista comparando o `dhash` em
         vez de percorrer as entradas.
 
-        **Ressalva de formato, medida**: esta é a única rota do grupo que **NÃO
-        usa o envelope comum**. O manipulador serializa o resultado e escreve-o
-        directamente (`handler_blocklist.go:66-73`), portanto a resposta é
-        `{"Blocklist":[…],"DHash":"…"}` — sem `code`, sem `data`, sem `success`.
-        Um cliente que leia `data` encontra `undefined` aqui.
+        **Ressalva de formato, resolvida**: esta ERA a única rota do grupo que
+        não usava o envelope comum. O manipulador serializava o resultado e
+        escrevia-o directamente, portanto a resposta medida a 2026-08-26 era
+        `{"Blocklist":[…],"DHash":"…"}` — sem `code`, sem `data`, sem `success`,
+        e um cliente que lesse `data` encontrava `undefined`.
+
+        **A excepção acabou na migração de DTO de 2026-08-27**: a rota passa por
+        `RespondJSON` como todas as outras, e o corpo abaixo é o de `data`. As
+        duas chaves mudaram de nome junto — `blocklist` e `dhash`.
 
         **Contraste com a escrita**: esta LEITURA funciona. As duas rotas que
         alteram a lista (`POST /user/block` e `POST /user/unblock`) estão hoje
@@ -20900,13 +21116,21 @@ paths:
           content:
             application/json:
               example:
-                Blocklist: []
-                DHash: "1787412261963655"
+                code: 200
+                data:
+                  blocklist: []
+                  dhash: "1787412261963655"
+                success: true
               schema:
-                $ref: '#/components/schemas/ListaBloqueados'
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ListaBloqueados'
+                    type: object
           description: |
-            A lista de bloqueados, **sem envelope**. Medido: numa conta sem
-            bloqueios, `Blocklist` vem como array vazio.
+            A lista de bloqueados. Medido: numa conta sem bloqueios, `blocklist`
+            vem como array vazio.
         "400":
           $ref: '#/components/responses/SemSessao'
         "401":
@@ -20978,21 +21202,37 @@ paths:
               example:
                 code: 200
                 data:
-                  - is_in_whatsapp: true
-                    jid: 554192421234@s.whatsapp.net
-                    query: "554192421234"
-                    verified_name: ""
+                  users:
+                    - is_in_whatsapp: true
+                      jid: 554192421234@s.whatsapp.net
+                      query: "554192421234"
+                      verified_name: ""
                 success: true
               schema:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - properties:
                       data:
-                        items:
-                          $ref: '#/components/schemas/ResultadoVerificacaoNumero'
-                        type: array
+                        properties:
+                          users:
+                            description: |
+                              Uma entrada por número que o servidor reconheceu.
+                              Sempre presente; `[]` (nunca `null`) quando nenhum
+                              produziu entrada.
+
+                              **`data` passou a ser um OBJECTO com `users`
+                              dentro, na migração de DTO de 2026-08-27** — era o
+                              array directamente. O embrulho é onde um `meta` de
+                              paginação caberia sem mexer nos campos existentes,
+                              e alinha esta rota com `POST /user/info`.
+                            items:
+                              $ref: '#/components/schemas/ResultadoVerificacaoNumero'
+                            type: array
+                        required:
+                          - users
+                        type: object
                     type: object
-          description: Uma entrada por número consultado.
+          description: Uma entrada por número consultado, em `data.users`.
         "400":
           $ref: '#/components/responses/CorpoInvalido'
         "401":
@@ -21028,17 +21268,18 @@ paths:
         Não se pode assumir nem um espaço nem o outro. Quem quiser casar isto com
         uma agenda por telefone tem de resolver cada `@lid` —
         `GET /user/profile/{jid}` faz a tradução nos dois sentidos. O `@bot` é um
-        terceiro espaço (medido: `867051314767696@bot`, `PushName: "Meta AI"`) e
+        terceiro espaço (medido: `867051314767696@bot`, `push_name: "Meta AI"`) e
         não é contacto humano.
 
-        **Segunda ressalva medida**: `FullName` costuma vir VAZIO e o nome real
-        está em `PushName`. Numa conta WhatsApp Business, apenas **1** dos 461
-        contactos tinha `FullName`, contra 460 com `PushName`. Um cliente que
-        leia apenas `FullName` vê uma agenda sem nomes.
+        **Segunda ressalva medida**: `full_name` costuma vir VAZIO e o nome real
+        está em `push_name`. Numa conta WhatsApp Business, apenas **1** dos 461
+        contactos tinha `full_name`, contra 460 com `push_name`. Um cliente que
+        leia apenas `full_name` vê uma agenda sem nomes.
 
         **Terceira ressalva medida**: numa conta com muitos grupos, **2175 dos
-        3456 contactos não têm nome nenhum** — nem `FullName`, nem `PushName`,
-        nem `BusinessName`, nem `FirstName`. Para 2199 deles há `RedactedPhone`
+        3456 contactos não têm nome nenhum** — nem `full_name`, nem `push_name`,
+        nem `business_name`, nem `first_name`. Para 2199 deles havia
+        `RedactedPhone`, que a migração de DTO removeu (ver `ContactoDoRoster`)
         (`+55∙∙∙∙∙∙∙∙45`), que é apresentável mas não serve para enviar mensagem.
 
         **Tamanho**: 61 459 bytes para 461 contactos, 498 688 para 3456. Não há
@@ -21053,12 +21294,17 @@ paths:
                 code: 200
                 data:
                   90937376170214@lid:
-                    BusinessName: ""
-                    FirstName: ""
-                    Found: true
-                    FullName: ""
-                    PushName: Janio Gonzalez
-                    RedactedPhone: ""
+                    contacts:
+                      - business_name: ""
+                        first_name: ""
+                        found: true
+                        full_name: ""
+                        is_business: false
+                        jid: 90937376170214@lid
+                        lid: 90937376170214@lid
+                        phone_number: ""
+                        push_name: Janio Gonzalez
+                    count: 1
                 success: true
               schema:
                 allOf:
@@ -21398,15 +21644,17 @@ paths:
                 code: 200
                 data:
                   users:
-                    554192421234@s.whatsapp.net:
-                      Devices:
+                    - business_name: ""
+                      devices:
                         - 554192421234@s.whatsapp.net
                         - 554192421234:41@s.whatsapp.net
                         - 554192421234:76@s.whatsapp.net
-                      LID: 90937376170214@lid
-                      PictureID: ""
-                      Status: ""
-                      VerifiedName: null
+                      jid: 554192421234@s.whatsapp.net
+                      lid: 90937376170214@lid
+                      picture_id: ""
+                      push_name: ""
+                      status: ""
+                      verified_name: ""
                 success: true
               schema:
                 allOf:
@@ -21415,7 +21663,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/InfoUtilizadores'
                     type: object
-          description: Bloco `users`, indexado pelo JID consultado.
+          description: Bloco `users`, um elemento por JID consultado.
         "400":
           $ref: '#/components/responses/CorpoInvalido'
         "401":
@@ -21669,12 +21917,17 @@ paths:
         `POST /status/set/*` pode ir.
 
         **A ressalva que apanha quem escreve um cliente**: leitura e escrita
-        usam **vocabulários diferentes**. Aqui as chaves vêm em `PascalCase`
-        (`GroupAdd`, `LastSeen`, `ReadReceipts`…); o `POST` neste mesmo caminho
-        recebe o nome em minúsculas (`groupadd`, `last`, `readreceipts`…). E a
-        leitura devolve TRÊS chaves que a escrita não conhece — `Messages`,
-        `Defense` e `Stickers` não constam da tabela de validação
-        (`pkg/domain/privacy.go:54-62`), logo não são definíveis por esta API.
+        usam **vocabulários diferentes, e continuam a usar**. Aqui as chaves são
+        `snake_case` (`group_add`, `last_seen`, `read_receipts`…); o `POST` neste
+        mesmo caminho recebe o nome em minúsculas SEM separador (`groupadd`,
+        `last`, `readreceipts`…). A assimetria é do WhatsApp — os nomes de
+        escrita são os do protocolo —, não uma escolha nossa, e a migração de DTO
+        de 2026-08-27 não a resolveu: só alinhou a LEITURA com o resto do
+        contrato, que até aí devolvia `PascalCase` (`GroupAdd`, `LastSeen`).
+
+        E a leitura devolve TRÊS chaves que a escrita não conhece — `messages`,
+        `defense` e `stickers` não constam da tabela de validação
+        (`pkg/domain/privacy.go`), logo não são definíveis por esta API.
 
         **Autenticação**: token de sessão.
       responses:
@@ -21684,16 +21937,16 @@ paths:
               example:
                 code: 200
                 data:
-                  CallAdd: all
-                  Defense: "off"
-                  GroupAdd: all
-                  LastSeen: contacts
-                  Messages: all
-                  Online: all
-                  Profile: all
-                  ReadReceipts: all
-                  Status: contacts
-                  Stickers: contacts
+                  call_add: all
+                  defense: "off"
+                  group_add: all
+                  last_seen: contacts
+                  messages: all
+                  online: all
+                  profile: all
+                  read_receipts: all
+                  status: contacts
+                  stickers: contacts
                 success: true
               schema:
                 allOf:
@@ -21773,13 +22026,16 @@ paths:
               example:
                 code: 200
                 data:
-                  CallAdd: all
-                  GroupAdd: all
-                  LastSeen: contacts
-                  Online: all
-                  Profile: all
-                  ReadReceipts: all
-                  Status: contacts
+                  call_add: all
+                  defense: "off"
+                  group_add: all
+                  last_seen: contacts
+                  messages: all
+                  online: all
+                  profile: all
+                  read_receipts: all
+                  status: contacts
+                  stickers: contacts
                 success: true
               schema:
                 allOf:
@@ -21866,14 +22122,16 @@ paths:
                   unavailable:
                     avatar: avatar hidden by privacy settings
                   user_info:
-                    554192421234@s.whatsapp.net:
-                      Devices:
+                    - business_name: ""
+                      devices:
                         - 554192421234@s.whatsapp.net
                         - 554192421234:41@s.whatsapp.net
-                      LID: 90937376170214@lid
-                      PictureID: ""
-                      Status: ""
-                      VerifiedName: null
+                      jid: 554192421234@s.whatsapp.net
+                      lid: 90937376170214@lid
+                      picture_id: ""
+                      push_name: ""
+                      status: ""
+                      verified_name: ""
                   verified_name: ""
                 success: true
               schema:
@@ -21993,8 +22251,8 @@ paths:
         lista, e por isso falham juntas. Causa por apurar — F264 no
         `HOUSEKEEP.md`.
 
-        **Regras**, para quando voltar a funcionar: basta um de `JID` ou
-        `Phone`, com `JID` a ganhar quando os dois vierem, e a resolução aceita
+        **Regras**, para quando voltar a funcionar: basta um de `jid` ou
+        `phone`, com `jid` a ganhar quando os dois vierem, e a resolução aceita
         número nu (F203).
 
         **Autenticação**: token de sessão.
@@ -22002,7 +22260,7 @@ paths:
         content:
           application/json:
             example:
-              Phone: 554192421234@s.whatsapp.net
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoBloqueio'
         required: true
@@ -22013,10 +22271,11 @@ paths:
               example:
                 code: 200
                 data:
-                  Blocklist: []
-                  DHash: "1787412261963655"
-                  Details: User unblocked
-                  JID: 554192421234@s.whatsapp.net
+                  blocklist: []
+                  details: User unblocked
+                  dhash: "1787412261963655"
+                  jid: 554192421234@s.whatsapp.net
+                  requested_jid: 554192421234@s.whatsapp.net
                 success: true
               schema:
                 allOf:
@@ -22035,12 +22294,12 @@ paths:
                 code: 400
                 error:
                   code: missing_phone_or_jid
-                  message: missing Phone or JID
+                  message: missing phone or jid in payload
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Nem `Phone` nem `JID` no corpo (`missing_phone_or_jid`),
+            Nem `phone` nem `jid` no corpo (`missing_phone_or_jid`),
             identificador que não parseia (`invalid_phone_or_jid`), corpo
             ilegível (`could_not_decode_payload`) ou sessão inexistente
             (`no_session`).

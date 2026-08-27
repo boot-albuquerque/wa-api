@@ -269,7 +269,9 @@ func miscBodyCases() []miscBodyCase {
 			// (missing_privacy_setting vs invalid_privacy_setting).
 			emptyBodyErr: "missing privacy setting name in payload",
 			failOp: func(_ *contractsfake.ChatOperations, pm *contractsfake.PrivacyManager, err error) {
-				pm.SetPrivacySettingFunc = func(context.Context, string, string, string) (any, error) { return nil, err }
+				pm.SetPrivacySettingFunc = func(context.Context, string, string, string) (domain.PrivacySettings, error) {
+					return domain.PrivacySettings{}, err
+				}
 			},
 			opErr: "failed to set privacy setting",
 		},
@@ -482,7 +484,9 @@ func TestGetPrivacySettingsHandler_SessionFailure(t *testing.T) {
 
 func TestGetPrivacySettingsHandler_ReadFailure(t *testing.T) {
 	pm := &contractsfake.PrivacyManager{
-		GetPrivacySettingsFunc: func(context.Context, string) (any, error) { return nil, ipmErrBoom },
+		GetPrivacySettingsFunc: func(context.Context, string) (domain.PrivacySettings, error) {
+			return domain.PrivacySettings{}, ipmErrBoom
+		},
 	}
 
 	rec, recs := ipmServe(t, getPrivacyHandler(pm), http.MethodGet, "/user/privacy", "",

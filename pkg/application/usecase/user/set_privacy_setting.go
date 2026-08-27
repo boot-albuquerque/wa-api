@@ -20,20 +20,20 @@ func NewSetPrivacySettingUseCase(pm appport.PrivacyManager, logger appport.Logge
 }
 
 // Execute sets a privacy setting with validation
-func (uc *SetPrivacySettingUseCase) Execute(ctx context.Context, userID string, req domain.SetPrivacySettingRequest) (interface{}, error) {
+func (uc *SetPrivacySettingUseCase) Execute(ctx context.Context, userID string, req domain.SetPrivacySettingRequest) (domain.PrivacySettings, error) {
 	if err := uc.privacy.EnsureSession(ctx, userID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
-		return nil, err
+		return domain.PrivacySettings{}, err
 	}
 
 	if err := domain.ValidatePrivacySetting(req.PrivacySetting, req.Value); err != nil {
-		return nil, err
+		return domain.PrivacySettings{}, err
 	}
 
 	settings, err := uc.privacy.SetPrivacySetting(ctx, userID, req.PrivacySetting, req.Value)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to set privacy setting", "error", err, "user_id", userID)
-		return nil, fmt.Errorf("failed to set privacy setting: %w", err)
+		return domain.PrivacySettings{}, fmt.Errorf("failed to set privacy setting: %w", err)
 	}
 
 	return settings, nil

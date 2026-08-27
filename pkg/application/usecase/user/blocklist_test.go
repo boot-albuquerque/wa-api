@@ -60,12 +60,11 @@ func TestGetBlocklistUseCase_Execute(t *testing.T) {
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
-		if got["DHash"] != "h1" {
-			t.Errorf("DHash = %v, queria h1", got["DHash"])
+		if got.DHash != "h1" {
+			t.Errorf("DHash = %v, queria h1", got.DHash)
 		}
-		jids, ok := got["Blocklist"].([]string)
-		if !ok || len(jids) != 2 {
-			t.Fatalf("Blocklist = %#v", got["Blocklist"])
+		if len(got.JIDs) != 2 {
+			t.Fatalf("JIDs = %#v", got.JIDs)
 		}
 		rec, ok := logger.Find("Retrieved blocklist")
 		if !ok {

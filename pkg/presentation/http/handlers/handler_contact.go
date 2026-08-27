@@ -8,6 +8,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtouser "wa-api/pkg/presentation/http/dto/user"
 
 	"wa-api/pkg/application/usecase/user"
 )
@@ -22,7 +23,7 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.GetAvatarRequest
+	var req dtouser.GetAvatarRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -33,7 +34,14 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.uc.Execute(r.Context(), id, req)
+	if err := req.Validate(); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).
+			Str("user_id", id).
+			Msg("get avatar payload rejected")
+		customhttp.RespondJSON(w, 400, nil, err)
+		return
+	}
+	rsp, err := h.uc.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		// ErrAvatarNotFound era sempre reportado como 500 — indistinguível de
 		// falha real (sessão caída, JID inválido). "Contato sem foto pública"
@@ -62,7 +70,7 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtouser.PresentAvatar(rsp), nil)
 }
 
 // GetContactsLastActivityHandler expõe GetContactsLastActivityUseCase —
@@ -89,7 +97,7 @@ func (h *GetContactsLastActivityHandler) ServeHTTP(w http.ResponseWriter, r *htt
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtouser.PresentContactsLastActivity(rsp), nil)
 }
 
 type GetContactsHandler struct{ uc *user.GetContactsUseCase }
@@ -110,7 +118,7 @@ func (h *GetContactsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtouser.PresentGetContacts(rsp), nil)
 }
 
 type GetUserInfoHandler struct{ uc *user.GetUserUseCase }
@@ -123,7 +131,7 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.CheckUserRequest
+	var req dtouser.CheckUserRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -134,8 +142,16 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	req.Phone = normalizePhones(req.Phone)
-	rsp, err := h.uc.Execute(r.Context(), id, req)
+	if err := req.Validate(); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).
+			Str("user_id", id).
+			Msg("get user info payload rejected")
+		customhttp.RespondJSON(w, 400, nil, err)
+		return
+	}
+	input := req.ToDomain()
+	input.Phone = normalizePhones(input.Phone)
+	rsp, err := h.uc.Execute(r.Context(), id, input)
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).
 			Str("user_id", id).
@@ -143,7 +159,7 @@ func (h *GetUserInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtouser.PresentGetUserInfo(rsp), nil)
 }
 
 // ContactHandlers agrupa os handlers de leitura de dados de contato
