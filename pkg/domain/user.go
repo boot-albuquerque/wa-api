@@ -8,10 +8,13 @@ import (
 // ListUsersInput is the use case input for listing users. Empty UserID means
 // "every user"; a non-empty one narrows the listing to a single user.
 //
-// Input and not Request: the wire type with that role is
-// dtoadmin.ListUsersRequest, and two types with the same name — one of them
-// carrying `json` tags — is the collision a review does not catch
+// Input and not Request throughout this family: `…Request` is the name the
+// convention reserves for the WIRE type, and two types with the same name —
+// one of them carrying `json` tags — is the collision a review does not catch
 // (docs/HTTP-DTO-CONVENTIONS.md §4).
+//
+// This one has no wire type at all: the id it carries comes from the PATH of
+// GET /admin/users/{id}, and there is no body to decode.
 type ListUsersInput struct {
 	UserID string
 }
