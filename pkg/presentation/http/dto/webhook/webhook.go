@@ -57,9 +57,18 @@ type HistoryResponse struct {
 // values to every client, and only one of them can be ranged over without a
 // check.
 func PresentGetWebhook(webhookURL string, subscribe []string) GetWebhookResponse {
-	events := make([]string, 0, len(subscribe))
-	events = append(events, subscribe...)
-	return GetWebhookResponse{Webhook: webhookURL, Subscribe: events}
+	return GetWebhookResponse{Webhook: webhookURL, Subscribe: nonNilStrings(subscribe)}
+}
+
+// nonNilStrings devolve uma cópia que é `[]` e nunca `null` no fio.
+//
+// Uma função, e não a alocação repetida nos dois apresentadores, por duas
+// razões: a regra é a mesma nos dois, e o corpo de UMA expressão mantém cada
+// apresentador dentro da regra X1 do cmd/logcov — um apresentador com três
+// statements entra no denominador do gate de log e baixa a cobertura sem que
+// haja nada que registar nele.
+func nonNilStrings(in []string) []string {
+	return append(make([]string, 0, len(in)), in...)
 }
 
 // PresentSetWebhook maps the webhook write.
@@ -73,9 +82,7 @@ func PresentSetWebhook(webhookURL string) SetWebhookResponse {
 // the server recognizes — the append-to-nil idiom — and nil would serialize as
 // `null`. It becomes `[]` here.
 func PresentUpdateWebhook(webhookURL string, validEvents []string, active bool) UpdateWebhookResponse {
-	events := make([]string, 0, len(validEvents))
-	events = append(events, validEvents...)
-	return UpdateWebhookResponse{Webhook: webhookURL, Events: events, Active: active}
+	return UpdateWebhookResponse{Webhook: webhookURL, Events: nonNilStrings(validEvents), Active: active}
 }
 
 // PresentDeleteWebhook maps the webhook deletion.

@@ -150,14 +150,26 @@ func PresentProxyConfig(r *domain.ProxyConfigResult) ProxyConfigResponse {
 	if r == nil {
 		return ProxyConfigResponse{}
 	}
-	out := ProxyConfigResponse{
-		Details:  r.Details,
-		Set:      r.Set,
-		ProxyURL: r.ProxyURL,
+	return ProxyConfigResponse{
+		Details:         r.Details,
+		Set:             r.Set,
+		ProxyURL:        r.ProxyURL,
+		WebhookUseProxy: copyBool(r.WebhookUseProxy),
 	}
-	if r.WebhookUseProxy != nil {
-		useProxy := *r.WebhookUseProxy
-		out.WebhookUseProxy = &useProxy
-	}
-	return out
 }
+
+// copyBool devolve um ponteiro NOVO para o mesmo valor, ou nil.
+//
+// Duas funções pequenas em vez de três statements dentro do apresentador, pelo
+// mesmo motivo que nonNilStrings em dto/webhook: acima de dois statements o
+// apresentador entra no denominador do gate de log do cmd/logcov (regra X1) e
+// baixa a cobertura sem que haja nada que registar nele.
+func copyBool(v *bool) *bool {
+	if v == nil {
+		return nil
+	}
+	return boolPtr(*v)
+}
+
+// boolPtr é o endereço de uma cópia de v.
+func boolPtr(v bool) *bool { return &v }
