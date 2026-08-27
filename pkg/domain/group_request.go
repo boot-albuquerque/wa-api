@@ -5,13 +5,11 @@ package domain
 // See pkg/presentation/http/dto/group and docs/HTTP-DTO-CONVENTIONS.md.
 
 // GetGroupRequestParticipantsRequest is the input of the read-join-requests use case.
+//
+// No ChatTarget: the `chat` alias is resolved by the request DTO before this
+// type is built.
 type GetGroupRequestParticipantsRequest struct {
-	ChatTarget
 	GroupJID string
-}
-
-func (r *GetGroupRequestParticipantsRequest) ResolveChat() {
-	ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
 // GetGroupRequestParticipantsResult is the pending join requests of one group.
@@ -25,14 +23,9 @@ type GetGroupRequestParticipantsResult struct {
 
 // UpdateGroupRequestParticipantsRequest is the input of the decide-join-requests use case.
 type UpdateGroupRequestParticipantsRequest struct {
-	ChatTarget
 	GroupJID string
 	Phone    []string
 	Action   string // approve, reject
-}
-
-func (r *UpdateGroupRequestParticipantsRequest) ResolveChat() {
-	ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
 // UpdateGroupRequestParticipantsResult is the outcome of deciding join requests.
@@ -42,13 +35,8 @@ type UpdateGroupRequestParticipantsResult struct {
 
 // SetGroupJoinApprovalModeRequest is the input of the join-approval-mode use case.
 type SetGroupJoinApprovalModeRequest struct {
-	ChatTarget
 	GroupJID string
 	Mode     bool
-}
-
-func (r *SetGroupJoinApprovalModeRequest) ResolveChat() {
-	ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
 // SetGroupJoinApprovalModeResult is the outcome of toggling join approval.

@@ -31423,3 +31423,40 @@ corpo de cada rota está declarado.
 exercitam as 20 rotas pelo router registado.
 
 <!-- f-status: corrigido -->
+
+## F300 — a migração da família de grupo BAIXOU `min_func_coverage` de 589 para 586, e isso é uma decisão de gate
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO.
+
+**Onde**: `.log-coverage-baseline:1279` (`min_func_coverage=586`, era 589) e
+`.log-coverage-baseline:1564` (`min_eligible=998`, era 993).
+
+**Problema**: `min_func_coverage` é uma trava **ratchet-UP** — falha se cair —, e
+esta sessão fê-la cair. A causa é o DENOMINADOR: entram 5 apresentadores novos
+em `pkg/presentation/http/dto/group/presenter_group.go` que são elegíveis por
+terem laço (>2 statements) e não por terem decisão. Nenhum faz E/S, nenhum
+devolve erro, e nenhum pode ter logger — a camada `dto` importa `pkg/domain` e
+mais nada, por regra de sentido único (`docs/HTTP-DTO-CONVENTIONS.md` §3).
+`covered` não muda; a razão cai porque o divisor cresce.
+
+**Medido**: `go test ./cmd/logcov/ -run TestBaselineBateComAMedicao` reportava
+`min_func_coverage = 589 no baseline, medido 586` e
+`min_eligible = 993 no baseline, medido 998`.
+
+**Por que não foi usado `//log:exempt`**: é a válvula desenhada para isto, e
+está SEM FOLGA — `max_exempt_annotations` é 2 e as duas estão gastas. Subir esse
+orçamento seria outro ratchet-DOWN, no mesmo ficheiro, com o mesmo dono.
+
+**Precedente**: a própria fundação DTO fez o mesmo movimento uma semana atrás,
+590→589, pelos mesmos dois apresentadores (`PresentGroupInfo`, `presentTime`),
+e a justificativa está escrita ao lado do valor. Esta sessão seguiu-a e
+escreveu a decomposição ao lado da linha, para a próxima não a redescobrir.
+
+**Status**: aplicado nesta sessão, e sinalizado. Se o dono do gate preferir
+manter 589, as saídas são: subir `max_exempt_annotations` e anotar os 5
+apresentadores, ou excluir `pkg/presentation/http/dto/` inteiro em
+`.logcov-exclude` — a segunda tem a vantagem de não voltar a acontecer nas
+quatro famílias que ainda vão migrar, e a desvantagem de tirar do denominador
+código que um dia pode ganhar decisão.
+
+<!-- f-status: corrigido -->

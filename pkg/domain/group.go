@@ -44,12 +44,12 @@ type GetGroupInfoResult struct {
 }
 
 // GetGroupInviteLinkRequest is the input of the invite-link use case.
+//
+// No ChatTarget: the `chat` alias is a WIRE concern, and it is resolved by the
+// request DTO before this type is built (dto/group.GroupTargetRequest).
 type GetGroupInviteLinkRequest struct {
-	ChatTarget
 	GroupJID string
 }
-
-func (r *GetGroupInviteLinkRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
 // GetGroupInviteLinkResult is the invite link of a group.
 type GetGroupInviteLinkResult struct {

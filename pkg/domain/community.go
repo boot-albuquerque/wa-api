@@ -5,11 +5,8 @@ package domain
 
 // GetCommunitySubGroupsRequest is the request to list subgroups of a community.
 type GetCommunitySubGroupsRequest struct {
-	ChatTarget
 	CommunityJID string
 }
-
-func (r *GetCommunitySubGroupsRequest) ResolveChat() { ResolveChatField(&r.CommunityJID, r.ChatAlias) }
 
 // CommunitySubGroup is one child group of a community, as the community
 // listing reports it — which is LESS than GroupInfo: the server answers this
@@ -30,12 +27,7 @@ type GetCommunitySubGroupsResult struct {
 
 // GetCommunityParticipantsRequest is the request to list participants of linked groups.
 type GetCommunityParticipantsRequest struct {
-	ChatTarget
 	CommunityJID string
-}
-
-func (r *GetCommunityParticipantsRequest) ResolveChat() {
-	ResolveChatField(&r.CommunityJID, r.ChatAlias)
 }
 
 // GetCommunityParticipantsResult is who is in the community's linked groups.
