@@ -472,24 +472,29 @@ significa coisas diferentes** — está documentado assim.
 {"code": 400, "error": {"code": "missing_chat", "message": "missing chat in payload"}, "success": false}
 ```
 
-**A forma antiga**, em 14 pontos do código (F266):
+**A forma antiga** — `error` em texto simples, em 14 pontos do código — era a
+**F266**, e foi **REMOVIDA**. `error` é hoje um objecto em toda resposta de
+erro, em todo estado HTTP:
 
 ```json
-{"code": 400, "error": "bad request", "success": false}
+{"code": 400, "error": {"code": "invalid_request", "message": "Requisição inválida."}, "success": false}
 ```
 
-`error` é uma **string**. Onze desses pontos vêm de `rejectMissingField`, logo
-**toda** recusa de campo obrigatório das rotas de grupo tem este formato.
+O que não passa pela taxonomia `apperr` recebe o código genérico do estado —
+`invalid_request` (400), `unauthorized` (401), `forbidden` (403), `not_found`
+(404), `conflict` (409), `unprocessable_entity` (422), `rate_limited` (429),
+`not_implemented` (501), `bad_gateway` (502), `service_unavailable` (503),
+`gateway_timeout` (504), `internal_error` (500 e qualquer outro).
 
-**Decisão**: a forma canónica é a única para código novo. A antiga está
-documentada rota a rota com `ErroTextoSimples`, para que ninguém escreva
-`error.code` e parta. Correcção registada em **F266**.
+**Consequência para o cliente**: `error.code` pode ser lido sem verificar o
+tipo, em qualquer resposta. Era isso que a F266 impedia.
 
 ### 14.1 O que nunca sai no corpo de erro
 
 **Medido e travado por teste** (`TestRespondJSONNaoVazaDetalheDeErroInterno`):
 um erro que não seja `*apperr.AppError` **nunca** tem o seu texto serializado.
-`RespondJSON` cai em `genericErrorMessage`, que devolve só o texto do status.
+`RespondJSON` cai em `genericError`, que devolve o par código+mensagem
+genérico do status — nunca `err.Error()`.
 
 Consequência: **não há stack trace, caminho de ficheiro, consulta SQL nem
 segredo em resposta nenhuma** — em ambiente nenhum. O `panic` completo vai para

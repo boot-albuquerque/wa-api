@@ -391,10 +391,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 403
-              error: forbidden
+              error:
+                code: forbidden
+                message: Operação não permitida.
               success: false
       '404':
         description: |
@@ -403,10 +405,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 404
-              error: not found
+              error:
+                code: not_found
+                message: Recurso não encontrado.
               success: false
       '500':
         $ref: '#/components/responses/ErroInterno'

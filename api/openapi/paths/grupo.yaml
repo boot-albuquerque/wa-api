@@ -148,10 +148,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -248,9 +250,19 @@
       rota tem de impor prazo próprio.
 
       **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`
-      quando a sessão existe mas não está emparelhada. Estes vêm no envelope
-      NOVO, com `error` em objecto — ao contrário das rotas de escrita desta
-      família.
+      quando a sessão existe mas não está emparelhada.
+
+      **FORMA DA RESPOSTA — esta rota é a primeira migrada.** As chaves de
+      `group_info` são `snake_case` minúsculo (`jid`, `owner_jid`, `is_admin`),
+      produzidas por um apresentador escrito à mão, e já não são os nomes de
+      campo do Go que a serialização directa da struct de protocolo emitia
+      (`JID`, `OwnerJID`, `IsAdmin`). As restantes rotas desta família ainda
+      devolvem a forma antiga — ver `InfoGrupo` contra `InfoGrupoCanonico`, e
+      `docs/HTTP-DTO-CONVENTIONS.md`.
+
+      Campos de protocolo que a forma canónica NÃO traz: `OwnerPN`, `TopicID`,
+      `AddressingMode`, `CreatorCountryCode`, `AnnounceVersionID`,
+      `ParticipantVersionID`, e `Error`/`AddRequest` dos participantes.
 
       **Autenticação**: token de sessão.
     security:
@@ -279,34 +291,34 @@
               code: 200
               data:
                 group_info:
-                  JID: 120363411669320145@g.us
-                  OwnerJID: 90937376170214@lid
-                  OwnerPN: 554192421234@s.whatsapp.net
-                  Name: Equipa de entregas
-                  NameSetAt: '2026-08-26T08:42:49-04:00'
-                  Topic: Combinações de rota do turno da manhã
-                  TopicID: 3EB0A4B2AFD45E625C0917
-                  IsLocked: false
-                  IsAnnounce: false
-                  IsEphemeral: true
-                  DisappearingTimer: 86400
-                  IsParent: false
-                  LinkedParentJID: ''
-                  IsJoinApprovalRequired: false
-                  AddressingMode: lid
-                  GroupCreated: '2026-08-26T08:42:47-04:00'
-                  CreatorCountryCode: BR
-                  ParticipantCount: 2
-                  MemberAddMode: admin_add
-                  Suspended: false
-                  Participants:
-                    - JID: 90937376170214@lid
-                      PhoneNumber: 554192421234@s.whatsapp.net
-                      LID: 90937376170214@lid
-                      IsAdmin: false
-                      IsSuperAdmin: false
-                      Error: 0
-                      AddRequest: null
+                  jid: 120363411669320145@g.us
+                  owner_jid: 90937376170214@lid
+                  name: Equipa de entregas
+                  name_set_at: '2026-08-26T12:42:49Z'
+                  name_set_by: 90937376170214@lid
+                  topic: Combinações de rota do turno da manhã
+                  topic_set_at: '2026-08-26T12:42:51Z'
+                  topic_set_by: 90937376170214@lid
+                  is_locked: false
+                  is_announce: false
+                  is_ephemeral: true
+                  disappearing_timer: 86400
+                  is_incognito: false
+                  is_suspended: false
+                  is_parent: false
+                  linked_parent_jid: ''
+                  is_default_sub_group: false
+                  is_join_approval_required: false
+                  member_add_mode: admin_add
+                  created_at: '2026-08-26T12:42:47Z'
+                  participant_count: 2
+                  participants:
+                    - jid: 90937376170214@lid
+                      phone_number: 554192421234@s.whatsapp.net
+                      lid: 90937376170214@lid
+                      display_name: ''
+                      is_admin: false
+                      is_super_admin: false
               success: true
       '400':
         description: |
@@ -427,10 +439,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 500
-              error: internal server error
+              error:
+                code: internal_error
+                message: Ocorreu um erro interno.
               success: false
 
 /group/invitelink:
@@ -574,10 +588,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -709,10 +725,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -921,10 +939,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -999,10 +1019,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1242,10 +1264,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1371,7 +1395,9 @@
                   `error` vem em texto simples (F266). Medido.
                 value:
                   code: 400
-                  error: bad request
+                  error:
+                    code: invalid_request
+                    message: Requisição inválida.
                   success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'

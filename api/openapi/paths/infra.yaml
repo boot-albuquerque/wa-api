@@ -177,10 +177,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 409
-              error: conflict
+              error:
+                code: conflict
+                message: A requisição não pode ser atendida no estado atual.
               success: false
       '500':
         $ref: '#/components/responses/ErroInterno'
@@ -349,10 +351,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 409
-              error: conflict
+              error:
+                code: conflict
+                message: A requisição não pode ser atendida no estado atual.
               success: false
       '500':
         $ref: '#/components/responses/ErroInterno'
@@ -647,10 +651,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -728,10 +734,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1210,10 +1218,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 500
-              error: internal server error
+              error:
+                code: internal_error
+                message: Ocorreu um erro interno.
               success: false
 
 /hmac/config:
@@ -1648,10 +1658,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'

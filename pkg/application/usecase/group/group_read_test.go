@@ -109,7 +109,7 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 			name: "falha da porta vira erro logado",
 			req:  domain.GetGroupInfoRequest{GroupJID: "123@g.us"},
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return nil, boom }
+				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) { return nil, boom }
 			},
 			wantErr: true,
 			wantLog: wantLog{contractsfake.LevelError, "failed to get group info", []string{"txtID", "groupJID", "error"}},
@@ -118,7 +118,9 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 			name: "sucesso devolve o info e loga em info",
 			req:  domain.GetGroupInfoRequest{GroupJID: "123@g.us"},
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return "info", nil }
+				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+					return &domain.GroupInfo{JID: "123@g.us"}, nil
+				}
 			},
 			wantLog:    wantLog{contractsfake.LevelInfo, "group info retrieved", []string{"txtID", "groupJID"}},
 			wantCalled: true,
@@ -150,7 +152,7 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 				assertCode(t, err, tt.wantCode)
 			}
 			if !tt.wantErr {
-				if res == nil || res.GroupInfo != "info" {
+				if res == nil || res.GroupInfo == nil || res.GroupInfo.JID != "123@g.us" {
 					t.Errorf("resultado = %+v", res)
 				}
 			}

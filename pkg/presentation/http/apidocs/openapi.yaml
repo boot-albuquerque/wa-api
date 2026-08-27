@@ -49,10 +49,12 @@ components:
         application/json:
           example:
             code: 500
-            error: internal server error
+            error:
+              code: internal_error
+              message: Ocorreu um erro interno.
             success: false
           schema:
-            $ref: '#/components/schemas/ErroTextoSimples'
+            $ref: '#/components/schemas/Erro'
       description: |
         Falha não classificada, ou tempo esgotado à espera do WhatsApp (o
         limite por pedido é de 30 segundos).
@@ -1177,12 +1179,16 @@ components:
           type: integer
         error:
           description: |
-            **Sempre presente** num corpo de erro produzido pela taxonomia
-            `apperr`. Nunca `null`, nunca `{}`.
+            **Sempre presente, e sempre um objecto** — em TODO corpo de erro,
+            em TODO estado HTTP, tenha o erro passado ou não pela taxonomia
+            `apperr`. Nunca `null`, nunca `{}`, nunca uma string.
 
-            Repare que existe uma segunda forma em que este campo é uma
-            **string** e não um objecto — ver `ErroTextoSimples`. Um cliente
-            que leia `error.code` sem verificar o tipo parte nessas rotas.
+            Houve uma segunda forma, com `error` em texto simples, para os
+            erros que não passavam pela taxonomia (F266). Ela FOI REMOVIDA: o
+            que não tem código próprio recebe agora o código genérico do
+            estado (`invalid_request`, `unauthorized`, `not_found`,
+            `internal_error`, ...). Ramificar sobre `error.code` é seguro em
+            qualquer resposta.
           nullable: false
           properties:
             code:
@@ -1193,7 +1199,12 @@ components:
               nullable: false
               type: string
             message:
-              description: Descrição legível, segura para mostrar ao utilizador.
+              description: |
+                Descrição legível em pt-BR, segura para mostrar ao utilizador.
+                Nunca traz detalhe interno — caminho de ficheiro, consulta SQL
+                ou valor de `panic` são descartados por `RespondJSON` e ficam
+                só no log. Travado por
+                `TestRespondJSONNaoVazaDetalheDeErroInterno`.
               example: missing chat in payload
               nullable: false
               type: string
@@ -1205,51 +1216,6 @@ components:
           description: |
             **Sempre presente e sempre `false`** num corpo de erro. Campo
             legado — a forma correcta de detectar erro é o estado HTTP.
-
-            Valor fora do enum não ocorre: é escrito pelo servidor, não lido
-            do pedido.
-          enum:
-            - false
-          example: false
-          nullable: false
-          type: boolean
-      required:
-        - code
-        - error
-        - success
-      type: object
-    ErroTextoSimples:
-      description: |
-        Forma ANTIGA de erro, com `error` em texto simples em vez do objecto.
-        Sobrevive em catorze pontos do código — sobretudo nas recusas de campo
-        obrigatório das rotas de grupo (`rejectMissingField`). Registado como
-        F266 no `HOUSEKEEP.md`. Um cliente que leia `error.code` parte aqui.
-      properties:
-        code:
-          description: Estado HTTP, repetido no corpo. **Sempre presente.**
-          example: 400
-          nullable: false
-          type: integer
-        error:
-          description: |
-            **Texto genérico do estado HTTP**, em minúsculas — `bad request`,
-            `unauthorized`, `internal server error`. **Sempre presente.**
-
-            Ao contrário da forma canónica, aqui `error` é uma **string** e não
-            um objecto: não há `error.code` nem `error.message`. É o resultado
-            de o erro não ter passado pela taxonomia `apperr` (F266).
-
-            O texto **nunca** traz detalhe interno: `RespondJSON` descarta a
-            mensagem do erro original e devolve só o texto do estado, o que
-            impede fuga de caminho de ficheiro, consulta SQL ou valor de
-            `panic`. Travado por `TestRespondJSONNaoVazaDetalheDeErroInterno`.
-          example: bad request
-          nullable: false
-          type: string
-        success:
-          description: |
-            **Sempre presente e sempre `false`.** Campo legado — a forma
-            correcta de detectar erro é o estado HTTP.
 
             Valor fora do enum não ocorre: é escrito pelo servidor, não lido
             do pedido.
@@ -2196,6 +2162,186 @@ components:
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
+      type: object
+    InfoGrupoCanonico:
+      description: |
+        Metadados de um grupo, na forma CANÓNICA — `snake_case` minúsculo,
+        produzida pelo apresentador `PresentGroupInfo`
+        (`pkg/presentation/http/dto/group/presenter.go`) a partir de
+        `domain.GroupInfo`.
+
+        **O que mudou face a `InfoGrupo`**, e porquê: `InfoGrupo` descrevia a
+        struct de protocolo do wa-noise serializada DIRECTAMENTE, sem etiquetas
+        `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `wa-headless`
+        servia OUTRA struct na mesma chave, então a forma do corpo dependia de que
+        motor tinha a sessão. Hoje os dois motores normalizam para
+        `domain.GroupInfo`, e esta é a única forma servida.
+
+        **Campos que desapareceram** e a razão: `OwnerPN`, `TopicID`,
+        `TopicDeleted`, `AddressingMode`, `CreatorCountryCode`,
+        `AnnounceVersionID`, `ParticipantVersionID` e `Error`/`AddRequest` dos
+        participantes eram detalhe do protocolo, não do recurso. `Suspended` passou
+        a `is_suspended`.
+
+        **Presença**: nenhuma propriedade tem `omitempty`. Todas aparecem sempre.
+        As três datas são `null` quando o motor não as conhece — e não
+        `"0001-01-01T00:00:00Z"`, que seria uma data real no fio.
+
+        **O que o motor headless não vê**: uma sessão servida por `wa-headless` só
+        consegue `jid`, `name` e `is_announce`; o resto vem no zero, e
+        `participants` vem `[]`. Isso é visível, e é de propósito — preencher com
+        palpite tornaria "não vejo" indistinguível de "o grupo é assim".
+      properties:
+        created_at:
+          description: Quando o grupo foi criado. `null` quando desconhecido.
+          example: "2026-08-26T12:42:47Z"
+          format: date-time
+          nullable: true
+          type: string
+        disappearing_timer:
+          description: |
+            Duração das mensagens temporárias, em SEGUNDOS. `0` quando desligadas.
+          example: 86400
+          minimum: 0
+          nullable: false
+          type: integer
+        is_announce:
+          description: Só administradores podem enviar mensagens.
+          example: false
+          nullable: false
+          type: boolean
+        is_default_sub_group:
+          description: É o grupo de avisos criado com a comunidade.
+          example: false
+          nullable: false
+          type: boolean
+        is_ephemeral:
+          description: Mensagens temporárias ligadas.
+          example: true
+          nullable: false
+          type: boolean
+        is_incognito:
+          description: Grupo em modo incógnito.
+          example: false
+          nullable: false
+          type: boolean
+        is_join_approval_required:
+          description: Entrar exige aprovação de um administrador.
+          example: false
+          nullable: false
+          type: boolean
+        is_locked:
+          description: Só administradores podem editar os dados do grupo.
+          example: false
+          nullable: false
+          type: boolean
+        is_parent:
+          description: O "grupo" é na verdade uma COMUNIDADE.
+          example: false
+          nullable: false
+          type: boolean
+        is_suspended:
+          description: Grupo suspenso pelo WhatsApp.
+          example: false
+          nullable: false
+          type: boolean
+        jid:
+          description: JID do grupo, sempre terminado em `@g.us`.
+          example: 120363411669320145@g.us
+          nullable: false
+          type: string
+        linked_parent_jid:
+          description: |
+            A comunidade a que este grupo pertence. `""` num grupo solto.
+          example: ""
+          nullable: false
+          type: string
+        member_add_mode:
+          description: |
+            Quem pode adicionar membros. Valores do WhatsApp: `admin_add`,
+            `all_member_add`. `""` quando o servidor não o disse.
+          example: admin_add
+          nullable: false
+          type: string
+        name:
+          description: O nome (assunto) do grupo.
+          example: Equipa de entregas
+          nullable: false
+          type: string
+        name_set_at:
+          description: |
+            Quando o nome foi definido, em RFC 3339 UTC. `null` quando desconhecido.
+          example: "2026-08-26T12:42:49Z"
+          format: date-time
+          nullable: true
+          type: string
+        name_set_by:
+          description: Quem definiu o nome. `""` quando desconhecido.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+        owner_jid:
+          description: Quem criou o grupo. `""` quando o WhatsApp não o deu.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+        participant_count:
+          description: |
+            O que o servidor reportou, que NÃO é sempre o tamanho de
+            `participants`: um não-administrador a ler um grupo em modo anúncio
+            recebe a contagem sem a lista.
+          example: 2
+          minimum: 0
+          nullable: false
+          type: integer
+        participants:
+          description: |
+            Os membros. **Sempre um array, nunca `null`** — só um dos dois se
+            percorre sem verificação. Vem `[]` quando a sessão é servida pelo motor
+            headless, que não vê a lista.
+          items:
+            $ref: '#/components/schemas/ParticipanteGrupoCanonico'
+          nullable: false
+          type: array
+        topic:
+          description: A descrição do grupo. `""` num grupo sem descrição.
+          example: Combinações de rota do turno da manhã
+          nullable: false
+          type: string
+        topic_set_at:
+          description: Quando a descrição foi definida. `null` quando desconhecido.
+          example: "2026-08-26T12:42:51Z"
+          format: date-time
+          nullable: true
+          type: string
+        topic_set_by:
+          description: Quem definiu a descrição. `""` quando desconhecido.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+      required:
+        - jid
+        - owner_jid
+        - name
+        - name_set_at
+        - name_set_by
+        - topic
+        - topic_set_at
+        - topic_set_by
+        - is_locked
+        - is_announce
+        - is_ephemeral
+        - disappearing_timer
+        - is_incognito
+        - is_suspended
+        - is_parent
+        - linked_parent_jid
+        - is_default_sub_group
+        - is_join_approval_required
+        - member_add_mode
+        - created_at
+        - participant_count
+        - participants
       type: object
     InfoUtilizador:
       description: |
@@ -3260,6 +3406,68 @@ components:
           nullable: false
           type: string
       type: object
+    ParticipanteGrupoCanonico:
+      description: |
+        Um membro do grupo, na forma CANÓNICA — chaves em `snake_case` minúsculo,
+        produzidas por um apresentador escrito à mão
+        (`pkg/presentation/http/dto/group/presenter.go`) e não pela serialização
+        directa da struct de protocolo.
+
+        É a forma que `POST /group/info` devolve. As outras rotas desta família
+        ainda devolvem `ParticipanteGrupo`, com os nomes do Go — a migração é
+        família a família, e esta é a primeira.
+
+        **Todas as propriedades aparecem SEMPRE**: o DTO não usa `omitempty` em
+        campo nenhum, de propósito. Ler este objecto nunca exige verificar
+        ausência — exige verificar VAZIO.
+      properties:
+        display_name:
+          description: |
+            Só vem preenchido para participantes anónimos de grupos em modo
+            anúncio; `""` é a forma normal de "não se aplica".
+          example: ""
+          nullable: false
+          type: string
+        is_admin:
+          description: |
+            Administrador do grupo. `false` significa "não é administrador", e não
+            "não se sabe".
+          example: false
+          nullable: false
+          type: boolean
+        is_super_admin:
+          description: Criador do grupo. Um super-administrador é também administrador.
+          example: false
+          nullable: false
+          type: boolean
+        jid:
+          description: |
+            Identificador a usar para falar com este participante. É sempre igual
+            a `lid` ou a `phone_number` — nunca uma terceira forma. `""` quando o
+            WhatsApp não o deu.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+        lid:
+          description: |
+            O identificador opaco do participante. `""` num grupo cujo modo de
+            endereçamento não seja `lid`.
+          example: 90937376170214@lid
+          nullable: false
+          type: string
+        phone_number:
+          description: O número, em forma PN. `""` num participante que só tenha LID.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+      required:
+        - jid
+        - phone_number
+        - lid
+        - display_name
+        - is_admin
+        - is_super_admin
+      type: object
     ParticipantesComunidade:
       description: |
         Resposta de `POST /community/participants`. A lista está dentro da chave
@@ -3583,7 +3791,7 @@ components:
             | ausente | sim | instante zero — sem limite inferior |
             | `null` | sim | idem — indistinguível de ausente |
             | `""` | sim | idem: o manipulador só tenta interpretar quando o valor é não-vazio (`handler_newsletter.go:145`) |
-            | mal formatado | **não** | `400`, **mas no envelope ANTIGO** — ver abaixo |
+            | mal formatado | **não** | `400 invalid_request` — ver abaixo |
             | tipo não-texto | não | `400 could_not_decode_payload` |
 
             **É o único campo das dezoito rotas validado no MANIPULADOR, antes do
@@ -3591,12 +3799,14 @@ components:
             `apperr`. Medido a 2026-08-26 com `{"since":"nao-e-data"}`:
 
             ```json
-            {"code": 400, "error": "bad request", "success": false}
+            {"code": 400, "error": {"code": "invalid_request", "message": "Requisição inválida."}, "success": false}
             ```
 
-            `error` é uma **string**, não o objecto `{code, message}` de todas as
-            outras recusas deste grupo. Um cliente que leia `error.code` parte
-            exactamente aqui, e só aqui. É a forma `ErroTextoSimples` (F266).
+            O `error.code` é o GENÉRICO do estado, e não um código próprio, porque
+            esta recusa não passa pela taxonomia `apperr` — é a única das dezoito
+            rotas assim. A FORMA, essa, é a mesma de todas as outras: objecto com
+            `code` e `message`. (A forma antiga, com `error` em texto, era a F266 e
+            já não existe.)
           example: "2026-08-26T00:00:00Z"
           format: date-time
           nullable: false
@@ -9577,12 +9787,17 @@ components:
     ResultadoInfoGrupo:
       description: |
         Resposta de `POST /group/info`. `group_info` está **sempre presente** e
-        nunca vem `null`: o campo não tem `omitempty` (`pkg/domain/group.go:25`) e
-        o manipulador só chega a responder `200` depois de o WhatsApp ter
-        devolvido os metadados.
+        nunca vem `null`: o apresentador emite a chave sempre, e o manipulador só
+        chega a responder `200` depois de o WhatsApp ter devolvido os metadados.
+
+        É a PRIMEIRA rota migrada para a forma canónica em `snake_case` — ver
+        `InfoGrupoCanonico` e `docs/HTTP-DTO-CONVENTIONS.md`. As restantes rotas
+        desta família ainda devolvem `InfoGrupo`, com os nomes de campo do Go.
       properties:
         group_info:
-          $ref: '#/components/schemas/InfoGrupo'
+          $ref: '#/components/schemas/InfoGrupoCanonico'
+      required:
+        - group_info
       type: object
     ResultadoLimiteHistorico:
       description: |
@@ -11092,10 +11307,12 @@ paths:
             application/json:
               example:
                 code: 409
-                error: conflict
+                error:
+                  code: conflict
+                  message: A requisição não pode ser atendida no estado atual.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             Já existe sessão com este `token`. **Devolve o envelope ANTIGO**, com
             `error` em texto simples e não o objecto `{code, message}` — este erro
@@ -11349,10 +11566,12 @@ paths:
             application/json:
               example:
                 code: 409
-                error: conflict
+                error:
+                  code: conflict
+                  message: A requisição não pode ser atendida no estado atual.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             O `token` pedido já pertence a outra sessão. Envelope ANTIGO, com
             `error` em texto simples (F266).
@@ -15314,7 +15533,9 @@ paths:
                   summary: Formato ANTIGO — campo obrigatório ausente
                   value:
                     code: 400
-                    error: bad request
+                    error:
+                      code: invalid_request
+                      message: Requisição inválida.
                     success: false
               schema:
                 oneOf:
@@ -15476,10 +15697,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             `photo` ausente, ou não é base64 válido — é aqui que cai o prefixo
             `data:image/jpeg;base64,`. **Formato antigo (F266)**: `error` em
@@ -15724,10 +15947,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             `name` ausente, `participants` ausente ou vazio num grupo normal,
             ou `is_parent` e `linked_parent_jid` no mesmo pedido.
@@ -15835,9 +16060,19 @@ paths:
         rota tem de impor prazo próprio.
 
         **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`
-        quando a sessão existe mas não está emparelhada. Estes vêm no envelope
-        NOVO, com `error` em objecto — ao contrário das rotas de escrita desta
-        família.
+        quando a sessão existe mas não está emparelhada.
+
+        **FORMA DA RESPOSTA — esta rota é a primeira migrada.** As chaves de
+        `group_info` são `snake_case` minúsculo (`jid`, `owner_jid`, `is_admin`),
+        produzidas por um apresentador escrito à mão, e já não são os nomes de
+        campo do Go que a serialização directa da struct de protocolo emitia
+        (`JID`, `OwnerJID`, `IsAdmin`). As restantes rotas desta família ainda
+        devolvem a forma antiga — ver `InfoGrupo` contra `InfoGrupoCanonico`, e
+        `docs/HTTP-DTO-CONVENTIONS.md`.
+
+        Campos de protocolo que a forma canónica NÃO traz: `OwnerPN`, `TopicID`,
+        `AddressingMode`, `CreatorCountryCode`, `AnnounceVersionID`,
+        `ParticipantVersionID`, e `Error`/`AddRequest` dos participantes.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -15856,34 +16091,34 @@ paths:
                 code: 200
                 data:
                   group_info:
-                    AddressingMode: lid
-                    CreatorCountryCode: BR
-                    DisappearingTimer: 86400
-                    GroupCreated: "2026-08-26T08:42:47-04:00"
-                    IsAnnounce: false
-                    IsEphemeral: true
-                    IsJoinApprovalRequired: false
-                    IsLocked: false
-                    IsParent: false
-                    JID: 120363411669320145@g.us
-                    LinkedParentJID: ""
-                    MemberAddMode: admin_add
-                    Name: Equipa de entregas
-                    NameSetAt: "2026-08-26T08:42:49-04:00"
-                    OwnerJID: 90937376170214@lid
-                    OwnerPN: 554192421234@s.whatsapp.net
-                    ParticipantCount: 2
-                    Participants:
-                      - AddRequest: null
-                        Error: 0
-                        IsAdmin: false
-                        IsSuperAdmin: false
-                        JID: 90937376170214@lid
-                        LID: 90937376170214@lid
-                        PhoneNumber: 554192421234@s.whatsapp.net
-                    Suspended: false
-                    Topic: Combinações de rota do turno da manhã
-                    TopicID: 3EB0A4B2AFD45E625C0917
+                    created_at: "2026-08-26T12:42:47Z"
+                    disappearing_timer: 86400
+                    is_announce: false
+                    is_default_sub_group: false
+                    is_ephemeral: true
+                    is_incognito: false
+                    is_join_approval_required: false
+                    is_locked: false
+                    is_parent: false
+                    is_suspended: false
+                    jid: 120363411669320145@g.us
+                    linked_parent_jid: ""
+                    member_add_mode: admin_add
+                    name: Equipa de entregas
+                    name_set_at: "2026-08-26T12:42:49Z"
+                    name_set_by: 90937376170214@lid
+                    owner_jid: 90937376170214@lid
+                    participant_count: 2
+                    participants:
+                      - display_name: ""
+                        is_admin: false
+                        is_super_admin: false
+                        jid: 90937376170214@lid
+                        lid: 90937376170214@lid
+                        phone_number: 554192421234@s.whatsapp.net
+                    topic: Combinações de rota do turno da manhã
+                    topic_set_at: "2026-08-26T12:42:51Z"
+                    topic_set_by: 90937376170214@lid
                 success: true
               schema:
                 allOf:
@@ -16009,10 +16244,12 @@ paths:
             application/json:
               example:
                 code: 500
-                error: internal server error
+                error:
+                  code: internal_error
+                  message: Ocorreu um erro interno.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             O convite foi revogado, é inválido, ou o WhatsApp não respondeu.
             Ao contrário de `/group/info`, esta rota NÃO traduz a recusa do
@@ -16164,10 +16401,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             `code` ausente ou vazio. **Formato antigo (F266)**: `error` vem em
             texto simples, e não diz qual campo faltou — a causa fica só no
@@ -16233,10 +16472,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             `groupJID` e `chat` ambos ausentes. **Formato antigo (F266)**:
             `error` em texto simples.
@@ -16450,10 +16691,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             `name` ausente ou vazio. **Formato antigo (F266)**: `error` em
             texto simples.
@@ -16527,10 +16770,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             `topic` ausente ou vazio. **Formato antigo (F266)**: `error` em
             texto simples.
@@ -16987,10 +17232,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             Sessão sem identificador (`missing_session_id`), ou `id` ausente no
             caminho. **A recusa por `id` ausente usa o envelope ANTIGO**, com
@@ -18418,7 +18665,9 @@ paths:
                   summary: '`since` fora do RFC 3339 — envelope ANTIGO, `error` em texto'
                   value:
                     code: 400
-                    error: bad request
+                    error:
+                      code: invalid_request
+                      message: Requisição inválida.
                     success: false
               schema:
                 oneOf:
@@ -18884,10 +19133,12 @@ paths:
             application/json:
               example:
                 code: 500
-                error: internal server error
+                error:
+                  code: internal_error
+                  message: Ocorreu um erro interno.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             O teste saiu e falhou: bucket inacessível, credencial recusada, tempo
             esgotado aos 10 segundos, ou segredo gravado que não decifra. O corpo
@@ -19977,10 +20228,12 @@ paths:
             application/json:
               example:
                 code: 500
-                error: internal server error
+                error:
+                  code: internal_error
+                  message: Ocorreu um erro interno.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             O teste falhou: credencial recusada, bucket inexistente, endpoint
             inalcançável, tempo esgotado, ou o segredo gravado não pôde ser
@@ -20495,10 +20748,12 @@ paths:
             application/json:
               example:
                 code: 403
-                error: forbidden
+                error:
+                  code: forbidden
+                  message: Operação não permitida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             O contacto TEM foto, mas escondeu-a por privacidade. Medido — e
             repare no `error` em string, não no objecto.
@@ -20507,10 +20762,12 @@ paths:
             application/json:
               example:
                 code: 404
-                error: not found
+                error:
+                  code: not_found
+                  message: Recurso não encontrado.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             O contacto não tem foto de perfil pública. É o caso comum, não uma
             falha do servidor. `error` em string, como no `403`.
@@ -21971,10 +22228,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             Corpo ilegível. **Envelope ANTIGO**: `error` é a string
             `"bad request"`, e não o objecto `{code, message}` — esta recusa usa
@@ -22057,10 +22316,12 @@ paths:
             application/json:
               example:
                 code: 400
-                error: bad request
+                error:
+                  code: invalid_request
+                  message: Requisição inválida.
                 success: false
               schema:
-                $ref: '#/components/schemas/ErroTextoSimples'
+                $ref: '#/components/schemas/Erro'
           description: |
             Corpo ilegível. **Envelope ANTIGO**, com `error` em texto simples
             (F266).

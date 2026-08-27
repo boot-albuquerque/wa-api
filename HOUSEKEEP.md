@@ -29121,9 +29121,65 @@ os três avulsos idem. E um teste que percorra as rotas registadas e afirme que
 todo corpo de erro tem `error.code` — sem ele, o próximo `fmt.Errorf` volta a
 entrar sem ninguém dar por isso.
 
-**Status**: não corrigido.
+**Correção APLICADA (2026-08-27, fundação DTO da fronteira HTTP)** — e por outro
+caminho, mais forte que o sugerido. Converter os catorze pontos deixaria a
+FORMA dependente de cada call site lembrar-se de usar a taxonomia; o próximo
+`fmt.Errorf` reabriria a entrada. Em vez disso, o ramo genérico do próprio
+`RespondJSON` (`pkg/presentation/http/response.go`) passou a emitir um OBJECTO:
 
-<!-- f-status: aberto -->
+```go
+func genericError(statusCode int) ErrorBody   // {code, message} por estado
+envelope["error"] = genericError(statusCode)  // era: o texto do estado
+```
+
+Com isto, `error` é objecto em TODO ramo — tipado, não tipado, e qualquer
+estado — e nenhum call site pode voltar a produzir a forma antiga sem editar
+`RespondJSON`. Os catorze pontos continuam a merecer código próprio em vez do
+genérico `invalid_request` (isso é melhoria de MENSAGEM, e fica para a migração
+da família de grupos), mas a FORMA já não depende deles.
+
+**Testes que travam** (`pkg/presentation/http/`):
+
+- `TestRespondJSON_ErrorIsNeverAString` — erro tipado, tipado embrulhado, nu e
+  nu embrulhado: nenhum produz `error` em texto;
+- `TestRespondJSON_UntypedError_UsesCanonicalErrorObject` — os doze estados da
+  tabela genérica, com `error.code` esperado por estado, e o corpo verificado
+  contra fuga do texto do erro;
+- `TestRespondJSONNaoVazaDetalheDeErroInterno` (já existia) — actualizado para
+  afirmar o objecto em vez do texto;
+- `pkg/bootstrap/openapi_contrato_test.go: envelopeDeErroValido` — a tolerância
+  à forma antiga (`case string: return ""`) SAIU. Um corpo com `error` em texto
+  passa a ser divergência, em vez de ser registado como estado normal.
+
+**CONTROLO NEGATIVO EXECUTADO.** Reintroduzido `envelope["error"] = err.Error()`
+no ramo não tipado; `go test ./pkg/presentation/http/` falhou com, entre outras:
+
+```
+--- FAIL: TestRespondJSONNaoVazaDetalheDeErroInterno/panic_de_runtime
+    response_leak_test.go:83: o corpo da resposta contém "panic", que é detalhe interno:
+        {"code":500,"error":"panic: runtime error: invalid memory address or nil pointer dereference","success":false}
+    response_leak_test.go:99: error = "panic: runtime error: …", esperado um objecto {code, message}
+--- FAIL: TestRespondJSON_UntypedError_UsesCanonicalErrorObject/Bad_Request
+    response_test.go:144: envelope["error"] = "connection string: postgres://user:hunter2@internal-host/db",
+        want an object {code, message} for EVERY status
+--- FAIL: TestProfileHandler_UseCaseError_500_GenericMessage
+    profile_handler_test.go:87: response body contains PII (JID):
+        {"code":500,"error":"failed: JID 5511987654321@s.whatsapp.net timeout","success":false}
+```
+
+Revertido a seguir.
+
+**Especificação actualizada na mesma sessão**: o esquema `ErroTextoSimples`
+saiu de `api/openapi/base.yaml`, os 17 `$ref` que apontavam para ele passaram a
+apontar para `Erro`, e os 19 exemplos com `error` em texto foram reescritos
+para a forma objecto. `api/openapi/CONTRATO.md`,
+`api/openapi/CONTRATO-ARQUITETURAL.md` §14 e `api/openapi/schemas/canal.yaml`
+deixaram de instruir a documentar a forma antiga.
+
+**Status**: corrigido — a FORMA está travada. Fica em aberto, e é outra
+entrada, dar código PRÓPRIO (em vez de `invalid_request`) aos catorze pontos.
+
+<!-- f-status: corrigido -->
 
 ## F267 — a struct de domínio não é o contrato da rota, e documentar a partir dela erra em dez sítios
 
@@ -31202,5 +31258,80 @@ quantas conversas havia.
 `api/openapi/CONTRATO-ARQUITETURAL.md` §19 **não** corrigido — o contrato é
 gerado/escrito noutro eixo e mexer nele estava fora do âmbito. Fica registado
 para a sessão que o tocar.
+
+<!-- f-status: aberto -->
+
+## F295 — o golden de elegibilidade do `cmd/logcov` ficou por regenerar no CAP-10, e o `make check` já entrava vermelho na fundação DTO
+
+**Data/contexto**: 2026-08-27, fundação da migração para DTO da fronteira HTTP
+(`worktree/http-dto-foundation`). Apanhado porque a mesma sessão acrescentou
+funções elegíveis e teve de tocar no mesmo golden — sem isso, o achado ficava
+invisível a quem não mexesse em `cmd/logcov`.
+
+**Onde**: `cmd/logcov/testdata/eligible.golden` e `.log-coverage-baseline`,
+face ao commit `1636d228` (CAP-10, "consolida descarga de mídia por kind").
+
+**Problema**: o commit acrescentou três funções elegíveis e não regenerou o
+golden nem o baseline. Medido em `HEAD` (`1636d228`), com a árvore limpa e SEM
+nenhuma alteração desta sessão:
+
+```
+$ git stash -u && go test ./cmd/logcov/ -run 'TestGoldenBate|TestBaselineBateComAMedicao'
+--- FAIL: TestGoldenBate (1.66s)
+    golden diverged: the eligible SET changed
+    ADDED:
+      + pkg/application/usecase/message.DownloadMediaUseCase.Execute (ELIGIBLE)
+      + pkg/application/usecase/message.NewDownloadMediaUseCase (EXCLUDED)
+      + pkg/infra/stdio.chatDownloadMediaPath (ELIGIBLE)
+      + pkg/presentation/http/handlers.DownloadMediaHandler.ServeHTTP (ELIGIBLE)
+      + pkg/presentation/http/handlers.NewDownloadMediaHandler (EXCLUDED)
+--- FAIL: TestBaselineBateComAMedicao (1.96s)
+    min_eligible = 988 no baseline, medido 991
+```
+
+**Correção aplicada nesta sessão**: golden regenerado com
+`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`, e
+`min_eligible` subido `988 -> 993`. O `+5` é `+3` desta dívida do CAP-10 mais
+`+2` desta sessão (`dto/group.PresentGroupInfo` e `dto/group.presentTime`); a
+decomposição está escrita ao lado do valor no próprio `.log-coverage-baseline`,
+para que a próxima sessão não tenha de a redescobrir.
+
+Não foi "correcção de graça": o golden é um ficheiro só, e esta sessão TINHA de
+o tocar. Deixá-lo com metade da verdade é que seria a escolha errada.
+
+**Correção sugerida (processo, não código)**: o `make check` já falharia no
+CAP-10 se tivesse sido corrido até ao fim — o alvo `test` corre `./cmd/logcov`.
+O que faltou foi correr o gate, não um gate novo.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F296 — `make check` já entrava vermelho neste ramo por dois gates alheios à fundação DTO
+
+**Data/contexto**: 2026-08-27, fundação da migração para DTO. Registado porque
+o relatório da sessão afirma "os gates estão como estavam", e essa afirmação só
+vale com os números medidos dos dois lados.
+
+**Onde e o quê**, ambos medidos em `HEAD` (`1636d228`) com a árvore limpa
+(`git stash -u`) e reproduzidos idênticos depois das alterações:
+
+1. `internal/wa-headless/gate_test.go:635`,
+   `TestHousekeepEntriesAreMachineReadable` — a entrada **H144** de
+   `internal/wa-headless/HOUSEKEEP.md:11038` começa o `**Status**` por `"H75"`,
+   palavra fora do vocabulário que o gate reconhece. **Já está registado** em
+   `HOUSEKEEP.md:30787`; esta linha é só o cruzamento.
+2. `make coverage-gate` — cobertura total **85,0 %** contra
+   `min_coverage=870` em `.coverage-baseline`. Medido `85.0%` ANTES e `85.0%`
+   DEPOIS das alterações desta sessão: o número não se mexeu, o que descarta
+   esta fundação como causa.
+
+**Correção sugerida**: (1) é uma palavra num `**Status**`; (2) exige ou subir a
+cobertura ou baixar o piso com justificativa — e baixar um piso é decisão de
+quem manda no gate, não de quem passa por ele.
+
+**Status**: NÃO corrigido, e de propósito. Nenhum dos dois é do âmbito desta
+tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
+sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->

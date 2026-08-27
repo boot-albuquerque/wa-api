@@ -128,12 +128,13 @@ func TestContratoRespostaDeRecusaBateComOEsquema(t *testing.T) {
 }
 
 // envelopeDeErroValido devolve o motivo da divergência, ou "" se o corpo
-// obedecer a uma das DUAS formas que a API produz hoje.
+// obedecer à ÚNICA forma que a API produz.
 //
-// São duas de propósito: a forma canónica, com `error` em objecto, e a antiga,
-// com `error` em texto — que sobrevive em catorze pontos (F266). Aceitar as
-// duas aqui é registar o estado real; estreitar para uma só quando a F266
-// estiver corrigida é que fará o teste travar a regressão.
+// Aceitava duas formas — a canónica, com `error` em objecto, e a antiga, com
+// `error` em texto, que sobrevivia em catorze pontos (F266). A F266 está
+// corrigida: `RespondJSON` devolve objecto em todo ramo, tipado ou não. A
+// tolerância saiu junto, porque uma tolerância que sobrevive à causa deixa de
+// registar o estado real e passa a esconder a regressão.
 func envelopeDeErroValido(corpo []byte) string {
 	var envelope map[string]any
 	if err := json.Unmarshal(corpo, &envelope); err != nil {
@@ -153,7 +154,8 @@ func envelopeDeErroValido(corpo []byte) string {
 	}
 	switch valor := erro.(type) {
 	case string:
-		return "" // forma antiga, F266
+		return "error é TEXTO: a forma antiga (F266) foi removida — " +
+			"todo corpo de erro tem `error` em objecto {code, message}"
 	case map[string]any:
 		if _, tem := valor["code"]; !tem {
 			return "error é objecto mas não tem code"
@@ -327,18 +329,19 @@ func TestContratoExemploDeErroBateComOEsquema(t *testing.T) {
 					continue
 				}
 				verificados++
-				esquema := renderYAML(json["schema"])
-				textoSimples := strings.Contains(esquema, "ErroTextoSimples")
 				chave := strings.ToUpper(metodo) + " " + caminho + " [" + codigo + "]"
-				switch erro.(type) {
-				case string:
-					if !textoSimples {
-						divergem = append(divergem, chave+": exemplo com `error` em TEXTO, esquema de objecto")
-					}
-				case map[string]any:
-					if textoSimples {
-						divergem = append(divergem, chave+": exemplo com `error` em OBJECTO, esquema ErroTextoSimples")
-					}
+				// Já não há duas formas para conciliar: o esquema de erro é um
+				// só, e o exemplo tem de ser objecto com code e message.
+				objecto, ok := erro.(map[string]any)
+				if !ok {
+					divergem = append(divergem, chave+": exemplo com `error` em TEXTO (forma F266, removida)")
+					continue
+				}
+				if _, tem := objecto["code"]; !tem {
+					divergem = append(divergem, chave+": exemplo com `error` em objecto sem `code`")
+				}
+				if _, tem := objecto["message"]; !tem {
+					divergem = append(divergem, chave+": exemplo com `error` em objecto sem `message`")
 				}
 			}
 		}

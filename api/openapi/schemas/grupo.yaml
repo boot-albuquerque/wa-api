@@ -1306,16 +1306,241 @@ ResultadoListaGrupos:
       items:
         $ref: '#/components/schemas/InfoGrupo'
 
+ParticipanteGrupoCanonico:
+  type: object
+  description: |
+    Um membro do grupo, na forma CANÓNICA — chaves em `snake_case` minúsculo,
+    produzidas por um apresentador escrito à mão
+    (`pkg/presentation/http/dto/group/presenter.go`) e não pela serialização
+    directa da struct de protocolo.
+
+    É a forma que `POST /group/info` devolve. As outras rotas desta família
+    ainda devolvem `ParticipanteGrupo`, com os nomes do Go — a migração é
+    família a família, e esta é a primeira.
+
+    **Todas as propriedades aparecem SEMPRE**: o DTO não usa `omitempty` em
+    campo nenhum, de propósito. Ler este objecto nunca exige verificar
+    ausência — exige verificar VAZIO.
+  required: [jid, phone_number, lid, display_name, is_admin, is_super_admin]
+  properties:
+    jid:
+      type: string
+      nullable: false
+      description: |
+        Identificador a usar para falar com este participante. É sempre igual
+        a `lid` ou a `phone_number` — nunca uma terceira forma. `""` quando o
+        WhatsApp não o deu.
+      example: 90937376170214@lid
+    phone_number:
+      type: string
+      nullable: false
+      description: O número, em forma PN. `""` num participante que só tenha LID.
+      example: 554192421234@s.whatsapp.net
+    lid:
+      type: string
+      nullable: false
+      description: |
+        O identificador opaco do participante. `""` num grupo cujo modo de
+        endereçamento não seja `lid`.
+      example: 90937376170214@lid
+    display_name:
+      type: string
+      nullable: false
+      description: |
+        Só vem preenchido para participantes anónimos de grupos em modo
+        anúncio; `""` é a forma normal de "não se aplica".
+      example: ''
+    is_admin:
+      type: boolean
+      nullable: false
+      description: |
+        Administrador do grupo. `false` significa "não é administrador", e não
+        "não se sabe".
+      example: false
+    is_super_admin:
+      type: boolean
+      nullable: false
+      description: Criador do grupo. Um super-administrador é também administrador.
+      example: false
+
+InfoGrupoCanonico:
+  type: object
+  description: |
+    Metadados de um grupo, na forma CANÓNICA — `snake_case` minúsculo,
+    produzida pelo apresentador `PresentGroupInfo`
+    (`pkg/presentation/http/dto/group/presenter.go`) a partir de
+    `domain.GroupInfo`.
+
+    **O que mudou face a `InfoGrupo`**, e porquê: `InfoGrupo` descrevia a
+    struct de protocolo do wa-noise serializada DIRECTAMENTE, sem etiquetas
+    `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `wa-headless`
+    servia OUTRA struct na mesma chave, então a forma do corpo dependia de que
+    motor tinha a sessão. Hoje os dois motores normalizam para
+    `domain.GroupInfo`, e esta é a única forma servida.
+
+    **Campos que desapareceram** e a razão: `OwnerPN`, `TopicID`,
+    `TopicDeleted`, `AddressingMode`, `CreatorCountryCode`,
+    `AnnounceVersionID`, `ParticipantVersionID` e `Error`/`AddRequest` dos
+    participantes eram detalhe do protocolo, não do recurso. `Suspended` passou
+    a `is_suspended`.
+
+    **Presença**: nenhuma propriedade tem `omitempty`. Todas aparecem sempre.
+    As três datas são `null` quando o motor não as conhece — e não
+    `"0001-01-01T00:00:00Z"`, que seria uma data real no fio.
+
+    **O que o motor headless não vê**: uma sessão servida por `wa-headless` só
+    consegue `jid`, `name` e `is_announce`; o resto vem no zero, e
+    `participants` vem `[]`. Isso é visível, e é de propósito — preencher com
+    palpite tornaria "não vejo" indistinguível de "o grupo é assim".
+  required:
+    [jid, owner_jid, name, name_set_at, name_set_by, topic, topic_set_at,
+     topic_set_by, is_locked, is_announce, is_ephemeral, disappearing_timer,
+     is_incognito, is_suspended, is_parent, linked_parent_jid,
+     is_default_sub_group, is_join_approval_required, member_add_mode,
+     created_at, participant_count, participants]
+  properties:
+    jid:
+      type: string
+      nullable: false
+      description: JID do grupo, sempre terminado em `@g.us`.
+      example: 120363411669320145@g.us
+    owner_jid:
+      type: string
+      nullable: false
+      description: Quem criou o grupo. `""` quando o WhatsApp não o deu.
+      example: 90937376170214@lid
+    name:
+      type: string
+      nullable: false
+      description: O nome (assunto) do grupo.
+      example: Equipa de entregas
+    name_set_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: |
+        Quando o nome foi definido, em RFC 3339 UTC. `null` quando desconhecido.
+      example: '2026-08-26T12:42:49Z'
+    name_set_by:
+      type: string
+      nullable: false
+      description: Quem definiu o nome. `""` quando desconhecido.
+      example: 90937376170214@lid
+    topic:
+      type: string
+      nullable: false
+      description: A descrição do grupo. `""` num grupo sem descrição.
+      example: Combinações de rota do turno da manhã
+    topic_set_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: Quando a descrição foi definida. `null` quando desconhecido.
+      example: '2026-08-26T12:42:51Z'
+    topic_set_by:
+      type: string
+      nullable: false
+      description: Quem definiu a descrição. `""` quando desconhecido.
+      example: 90937376170214@lid
+    is_locked:
+      type: boolean
+      nullable: false
+      description: Só administradores podem editar os dados do grupo.
+      example: false
+    is_announce:
+      type: boolean
+      nullable: false
+      description: Só administradores podem enviar mensagens.
+      example: false
+    is_ephemeral:
+      type: boolean
+      nullable: false
+      description: Mensagens temporárias ligadas.
+      example: true
+    disappearing_timer:
+      type: integer
+      nullable: false
+      minimum: 0
+      description: |
+        Duração das mensagens temporárias, em SEGUNDOS. `0` quando desligadas.
+      example: 86400
+    is_incognito:
+      type: boolean
+      nullable: false
+      description: Grupo em modo incógnito.
+      example: false
+    is_suspended:
+      type: boolean
+      nullable: false
+      description: Grupo suspenso pelo WhatsApp.
+      example: false
+    is_parent:
+      type: boolean
+      nullable: false
+      description: O "grupo" é na verdade uma COMUNIDADE.
+      example: false
+    linked_parent_jid:
+      type: string
+      nullable: false
+      description: |
+        A comunidade a que este grupo pertence. `""` num grupo solto.
+      example: ''
+    is_default_sub_group:
+      type: boolean
+      nullable: false
+      description: É o grupo de avisos criado com a comunidade.
+      example: false
+    is_join_approval_required:
+      type: boolean
+      nullable: false
+      description: Entrar exige aprovação de um administrador.
+      example: false
+    member_add_mode:
+      type: string
+      nullable: false
+      description: |
+        Quem pode adicionar membros. Valores do WhatsApp: `admin_add`,
+        `all_member_add`. `""` quando o servidor não o disse.
+      example: admin_add
+    created_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: Quando o grupo foi criado. `null` quando desconhecido.
+      example: '2026-08-26T12:42:47Z'
+    participant_count:
+      type: integer
+      nullable: false
+      minimum: 0
+      description: |
+        O que o servidor reportou, que NÃO é sempre o tamanho de
+        `participants`: um não-administrador a ler um grupo em modo anúncio
+        recebe a contagem sem a lista.
+      example: 2
+    participants:
+      type: array
+      nullable: false
+      description: |
+        Os membros. **Sempre um array, nunca `null`** — só um dos dois se
+        percorre sem verificação. Vem `[]` quando a sessão é servida pelo motor
+        headless, que não vê a lista.
+      items:
+        $ref: '#/components/schemas/ParticipanteGrupoCanonico'
+
 ResultadoInfoGrupo:
   type: object
   description: |
     Resposta de `POST /group/info`. `group_info` está **sempre presente** e
-    nunca vem `null`: o campo não tem `omitempty` (`pkg/domain/group.go:25`) e
-    o manipulador só chega a responder `200` depois de o WhatsApp ter
-    devolvido os metadados.
+    nunca vem `null`: o apresentador emite a chave sempre, e o manipulador só
+    chega a responder `200` depois de o WhatsApp ter devolvido os metadados.
+
+    É a PRIMEIRA rota migrada para a forma canónica em `snake_case` — ver
+    `InfoGrupoCanonico` e `docs/HTTP-DTO-CONVENTIONS.md`. As restantes rotas
+    desta família ainda devolvem `InfoGrupo`, com os nomes de campo do Go.
+  required: [group_info]
   properties:
     group_info:
-      $ref: '#/components/schemas/InfoGrupo'
+      $ref: '#/components/schemas/InfoGrupoCanonico'
 
 ResultadoInfoConvite:
   type: object

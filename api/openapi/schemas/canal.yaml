@@ -352,7 +352,7 @@ PedidoAtualizacoesCanal:
         | ausente | sim | instante zero — sem limite inferior |
         | `null` | sim | idem — indistinguível de ausente |
         | `""` | sim | idem: o manipulador só tenta interpretar quando o valor é não-vazio (`handler_newsletter.go:145`) |
-        | mal formatado | **não** | `400`, **mas no envelope ANTIGO** — ver abaixo |
+        | mal formatado | **não** | `400 invalid_request` — ver abaixo |
         | tipo não-texto | não | `400 could_not_decode_payload` |
 
         **É o único campo das dezoito rotas validado no MANIPULADOR, antes do
@@ -360,12 +360,14 @@ PedidoAtualizacoesCanal:
         `apperr`. Medido a 2026-08-26 com `{"since":"nao-e-data"}`:
 
         ```json
-        {"code": 400, "error": "bad request", "success": false}
+        {"code": 400, "error": {"code": "invalid_request", "message": "Requisição inválida."}, "success": false}
         ```
 
-        `error` é uma **string**, não o objecto `{code, message}` de todas as
-        outras recusas deste grupo. Um cliente que leia `error.code` parte
-        exactamente aqui, e só aqui. É a forma `ErroTextoSimples` (F266).
+        O `error.code` é o GENÉRICO do estado, e não um código próprio, porque
+        esta recusa não passa pela taxonomia `apperr` — é a única das dezoito
+        rotas assim. A FORMA, essa, é a mesma de todas as outras: objecto com
+        `code` e `message`. (A forma antiga, com `error` em texto, era a F266 e
+        já não existe.)
       example: '2026-08-26T00:00:00Z'
     after:
       type: string

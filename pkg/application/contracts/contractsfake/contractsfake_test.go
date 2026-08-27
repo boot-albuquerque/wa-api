@@ -575,7 +575,10 @@ func TestGroupDirectory(t *testing.T) {
 	f := &contractsfake.GroupDirectory{}
 	ctx := context.Background()
 
-	if v, err := f.GetGroupInfo(ctx, "u1", "g@g.us"); v != nil || err != nil {
+	// O zero-value devolve um grupo COM o jid pedido, e nao (nil, nil): os
+	// dois adaptadores reais nunca devolvem nil sem erro, e um duble que o
+	// fizesse abencoaria no chamador um caminho que a producao nao produz.
+	if v, err := f.GetGroupInfo(ctx, "u1", "g@g.us"); err != nil || v == nil || v.JID != "g@g.us" {
 		t.Errorf("GetGroupInfo zero-value = %v, %v", v, err)
 	}
 	if v, err := f.GetGroupInfoFromLink(ctx, "u1", "code"); v != nil || err != nil {
@@ -601,12 +604,14 @@ func TestGroupDirectory(t *testing.T) {
 		t.Errorf("ListJoinedGroupsCalls = %+v", f.ListJoinedGroupsCalls)
 	}
 
-	f.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return "info", nil }
+	f.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+		return &domain.GroupInfo{Name: "info"}, nil
+	}
 	f.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
 	f.GetGroupInviteLinkFunc = func(context.Context, string, domain.JID) (string, error) { return "https://l", nil }
 	f.ListJoinedGroupsFunc = func(context.Context, string) (any, int, error) { return []int{1, 2}, 2, nil }
 
-	if v, _ := f.GetGroupInfo(ctx, "u1", ""); v != "info" {
+	if v, _ := f.GetGroupInfo(ctx, "u1", ""); v == nil || v.Name != "info" {
 		t.Errorf("GetGroupInfoFunc = %v", v)
 	}
 	if _, err := f.GetGroupInfoFromLink(ctx, "u1", ""); !errors.Is(err, errBoom) {

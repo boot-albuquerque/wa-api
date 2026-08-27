@@ -45,7 +45,7 @@ type GroupDirectory struct {
 
 	SessionGuard
 
-	GetGroupInfoFunc  func(ctx context.Context, txtID string, group domain.JID) (any, error)
+	GetGroupInfoFunc  func(ctx context.Context, txtID string, group domain.JID) (*domain.GroupInfo, error)
 	GetGroupInfoCalls []GroupDirectoryGetGroupInfoCall
 
 	GetGroupInfoFromLinkFunc  func(ctx context.Context, txtID, code string) (any, error)
@@ -71,12 +71,17 @@ func (f *GroupDirectory) GroupNames(ctx context.Context, txtID string) (map[doma
 var _ port.GroupDirectory = (*GroupDirectory)(nil)
 
 // GetGroupInfo implementa port.GroupDirectory.
-func (f *GroupDirectory) GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (any, error) {
+func (f *GroupDirectory) GetGroupInfo(ctx context.Context, txtID string, group domain.JID) (*domain.GroupInfo, error) {
 	f.GetGroupInfoCalls = append(f.GetGroupInfoCalls, GroupDirectoryGetGroupInfoCall{Ctx: ctx, TxtID: txtID, Group: group})
 	if f.GetGroupInfoFunc != nil {
 		return f.GetGroupInfoFunc(ctx, txtID, group)
 	}
-	return nil, nil
+	// Zero-value devolve um grupo COM o jid pedido, e nao (nil, nil).
+	// Nenhum dos dois adaptadores reais devolve nil sem erro — o wa-noise
+	// mapeia a resposta do servidor, o headless mapeia a conversa — entao um
+	// duble que devolvesse nil abencoaria no handler um caminho que a
+	// producao nunca produz (ARMADILHAS #1).
+	return &domain.GroupInfo{JID: group, Participants: []domain.GroupParticipant{}}, nil
 }
 
 // GetGroupInfoFromLink implementa port.GroupDirectory.
