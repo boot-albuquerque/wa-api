@@ -31335,3 +31335,117 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — o gate permanente de nomenclatura (caminhos, esquema OpenAPI, JSON ao vivo), e cinco compostos concatenados que nenhuma das outras sessões tinha registado
+
+**Data/contexto**: 2026-08-27, construção do gate de regressão permanente para
+a nomenclatura da fronteira HTTP (`worktree/http-dto-openapi-gate`), a
+correr em paralelo às seis migrações por família (sessão, mensagens, grupos,
+utilizadores, canais, admin) documentadas em
+`docs/HTTP-DTO-CONVENTIONS.md`. Esta entrada não é sobre um defeito único: é
+sobre o mecanismo de deteção que fica no repositório depois de todas as
+migrações fundirem, e sobre um achado incidental feito ao construí-lo.
+
+**O que foi construído** — três ficheiros, três superfícies:
+
+| ficheiro | superfície | mecanismo |
+|---|---|---|
+| `pkg/bootstrap/naming_paths_gate_test.go` | caminhos de URL registados | `bootstrap.Routes(Deps{})` (a mesma enumeração de `cmd/listroutes`) + regex kebab-case + par de listas curadas (compostos concatenados conhecidos / palavras de uma só peça confirmadas) |
+| `pkg/bootstrap/naming_openapi_gate_test.go` | especificação OpenAPI GERADA e embutida | percorre `especificacao(t)` (o mesmo parser YAML de `openapi_contrato_test.go`) recursivamente por `properties`, `enum`, `example`/`examples` e `name` de parâmetro, contra `contracttest.IsCanonicalKey` |
+| `pkg/presentation/http/handlers/naming_gate_live_test.go` | corpo JSON servido de verdade | uma rota por família (sessão, grupos, mensagens, utilizadores, admin, canais), montada no `*mux.Router` real, autenticada, contra `contracttest.AssertPublicJSONUsesCanonicalNaming` — o helper partilhado que já existia em `pkg/presentation/http/contracttest/naming.go` desde a fundação DTO (não foi recriado) |
+
+Os três correm dentro de `go test ./...`, que é o que `make test`/`make
+check` já executam — nenhuma alteração ao `Makefile` foi necessária.
+
+**Onde**: os ficheiros acima. `go build ./...`, `go vet ./...` e `gofmt -l`
+saem limpos nos três. `golangci-lint` não acrescenta issue acima do teto real
+do repositório (`max_complexity` continua em 50; a função mais complexa dos
+três ficheiros é `walkOpenAPIDoc` com 15). A CONTAGEM informativa de
+`.golangci-baseline` não foi tocada: medida ANTES dos três ficheiros (sem
+eles, `git mv` temporário) em **608** issues, e DEPOIS em **610** — os dois
+que os ficheiros acrescentam são ambos `gocyclo` informativo, não a trava. O
+608 em si já diverge do `count=575` declarado no ficheiro, e essa divergência
+é anterior a esta sessão (drift de trabalho ainda não fundido nas outras
+worktrees) — não é desta entrada para corrigir.
+
+**Resultado medido ao correr contra o estado ATUAL desta worktree** (antes de
+as worktrees-irmãs fundirem as seis migrações):
+
+- `TestPathsAreLowercaseKebabCase` — passa.
+- `TestPathParamsAreSnakeCase` — passa.
+- `TestPathSegmentsAreNotConcatenatedCompounds` — **falha**, 18 ocorrências de
+  13 palavras: `inviteinfo`, `invitelink`, `joinapprovalmode`,
+  `requestparticipants`, `updaterequestparticipants`, `updateparticipants`,
+  `pollvote`, `markread`, `pairphone` (as legadas dos 4 caminhos concatenados
+  que `pkg/bootstrap/caminhos.tsv` ainda não resolve — `inviteinfo`,
+  `invitelink`, `markread`, `pollvote` continuam nas duas formas, antiga E
+  canónica) e **cinco achados NOVOS, não registados em nenhuma sessão
+  anterior**: `downloadimage`, `downloadvideo`, `downloadaudio`,
+  `downloaddocument`, `downloadsticker` — `/chat/download{kind}` e as
+  `/chats/...` irmãs colam "download" direto ao tipo de mídia, sem hífen nem
+  segmento próprio (ao contrário de `/chats/download/{kind}`, que já existe
+  registado e usa exatamente o padrão certo).
+- `TestOpenAPISchemaPropertyNamesAreCanonical` — **falha**: dezenas de
+  propriedades PascalCase em `components.schemas` das famílias ainda não
+  migradas (sessão, utilizadores, mensagens, canais, admin).
+- `TestOpenAPIEnumValuesAreCanonical` — passa, depois de excluir quatro
+  formas que NÃO são códigos (texto livre com espaço, `***` de mascaramento,
+  literais de duração `0`/`24h`/`7d`/`90d`, e a cadeia vazia `''` como membro
+  documentado de `media_delivery`/`MemberAddMode` — ver comentário
+  `nonCodeEnumValue` no ficheiro para a evidência de cada uma).
+- `TestOpenAPIExampleKeysAreCanonical` — **falha**: ~150 chaves PascalCase ou
+  camelCase nos `example`/`examples` das rotas ainda não migradas.
+- `TestOpenAPIParameterNamesAreCanonical` — passa.
+- `TestLiveNaming_Session` — **falha**: `loggedIn`, `proxy_config.proxyUrl`.
+- `TestLiveNaming_Groups` — passa (`/group/info`, a implementação de
+  referência).
+- `TestLiveNaming_Messages` — passa (`/chat/send/contact`, já migrada no
+  CAP-08B).
+- `TestLiveNaming_Users` — passa (`/users/lid/{jid}`).
+- `TestLiveNaming_Admin` — **falha**: `proxy_config.proxyUrl`,
+  `proxy_config.webhookUseProxy`.
+- `TestLiveNaming_Newsletters` — passa (`types.JID` do wa-noise vendorizado
+  tem `MarshalText`, e `types.NewsletterMetadata`/`NewsletterThreadMetadata`
+  já trazem etiquetas `json:"..."` em snake_case de fábrica).
+
+Nenhuma destas falhas foi corrigida nesta sessão — não é o âmbito desta
+tarefa (que é o mecanismo de deteção, não a correção por família), e o
+`CLAUDE.md` pede para perguntar antes de corrigir achado fora de âmbito.
+
+**Achado incidental que atravessa a fronteira para `internal/wa-headless`
+não se aplica aqui** — as três superfícies medidas (caminhos registados,
+OpenAPI embutido, corpo HTTP ao vivo) são todas código nosso
+(`pkg/bootstrap`, `pkg/presentation`), não a biblioteca vendorizada.
+
+**Achado incidental adicional, fora do âmbito do gate**: ao construir
+`TestOpenAPIExampleKeysAreCanonical`, o walker encontrou chaves de objeto que
+são dados dinâmicos, não nomes de propriedade — números de telefone/JID como
+chave de dicionário (`components.schemas.Roster.example` e
+`InfoUtilizadores.properties.users.example`, ambos com JID literal como
+chave) e emoji como chave de dicionário
+(`components.schemas.MensagemCanal.properties.ReactionCounts.example`, com
+`👍`/`😂`). A regra §8 de `docs/HTTP-DTO-CONVENTIONS.md` não abre exceção
+para dicionário de chave dinâmica — "toda chave de objeto JSON público,
+recursivamente... casa com [regex]" —, então o gate reporta-os como
+violação, tal como reportaria em produção se
+`AssertPublicJSONUsesCanonicalNaming` corresse sobre a mesma resposta. Não
+foi tratado como falso positivo porque a regra escrita não abre essa exceção;
+fica registado para quem decidir se esses dois esquemas devem migrar de
+dicionário-por-chave-dinâmica para array de objetos com o identificador como
+campo (`[{"jid": "...", "count": N}]` em vez de `{"<jid>": N}`).
+
+**Correção sugerida**: nenhuma nesta sessão — é trabalho das worktrees-irmãs
+(`worker-groups`, `worker-messages`, `worker-paths`, sessão/utilizadores/
+canais/admin) migrar cada família para o padrão de
+`docs/HTTP-DTO-CONVENTIONS.md`, e dos quatro caminhos concatenados legados
+(`inviteinfo`, `invitelink`, `markread`, `pollvote`) e dos cinco `download*`
+novos serem corrigidos em `pkg/bootstrap/wiring_routes.go` +
+`pkg/bootstrap/caminhos.tsv`, com uma entrada própria quando isso acontecer.
+O dicionário-por-JID/emoji fica como pergunta em aberto para quem for dono
+dos esquemas `Roster`, `InfoUtilizadores` e `MensagemCanal`.
+
+**Status**: o MECANISMO está corrigido/construído nesta sessão (compila,
+corre, não foi enfraquecido para passar). Os ACHADOS que ele reporta
+continuam abertos, de propósito — ver tabela acima.
+
+<!-- f-status: aberto -->
