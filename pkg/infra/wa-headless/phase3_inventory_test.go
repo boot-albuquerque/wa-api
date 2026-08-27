@@ -165,6 +165,26 @@ var inventarioFase3 = map[string]portStatus{
 		"reabriu — WAWebSendLocationChatAction é função carregável, não componente React. " +
 		"Quando esta porta for servida, é candidata a divisão pela decisão 92."},
 
+	// As duas entradas abaixo entraram com a F281, que criou os ports
+	// PairingQRReader e SessionStarter para tirar o pareamento de um adaptador
+	// wa-noise fixo (F273). Nenhuma das duas está satisfeita nesta build, e
+	// isso está MEDIDO — não é "não olhei".
+	"PairingQRReader": {motivo: "PENDENTE POR MEDIR, e por medir do lado CERTO. O QR existe " +
+		"neste transporte: o pool de sessões tem uma classe de quota só para ele " +
+		"(pkg/infra/wa-headless/registry/registry.go, KindPairing — 'a session showing a QR " +
+		"code, waiting for a human'). O que não existe é caminho de EXTRAÇÃO: nenhuma " +
+		"capability devolve o conteúdo do código, e nada sob pkg/infra/wa-headless o serve. " +
+		"Dizer 'recusado' seria repetir o erro da H75; a página mostra-o, e eu não medi se o " +
+		"expõe a quem a dirige."},
+
+	"SessionStarter": {motivo: "PENDENTE POR LIGAR, e não por escrever. Arrancar sessão é " +
+		"exatamente o que Sessions.Acquire faz (pkg/infra/wa-headless/sessions.go), com o " +
+		"runtime por trás (internal/wa-headless/runtime). O que falta é o ADAPTADOR para a " +
+		"porta e, antes disso, a construção: `grep -rn NewDisconnector pkg/bootstrap` devolve " +
+		"zero fora de testes — nada de wa-headless é sequer instanciado no arranque. " +
+		"Referência cruzada: pkg/capabilityregistry/matrix.go regista connect_session como " +
+		"not_implemented para wa_headless, com esta mesma evidência."},
+
 	"PhonePairer": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA: parear exige um humano com o " +
 		"telefone, e o caminho de boot da headless é de RESTAURAÇÃO — recusa página não " +
 		"pareada com `PAIRING_LOADING`, medido em 2026-08-23. Não é código por fazer."},

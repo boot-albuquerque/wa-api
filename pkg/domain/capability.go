@@ -148,6 +148,22 @@ const (
 	CapDisconnectSession  Capability = "disconnect_session"
 	CapLogoutSession      Capability = "logout_session"
 
+	// CapGetPairingQR is offering the QR code a human points a phone at.
+	//
+	// It is engine-conditioned and not a plain database read, even though the
+	// code itself is stored in users.qrcode: the column only ever has a value
+	// because ONE engine's lifecycle writes it there. An engine with no such
+	// writer serves an empty string forever, which is why the read lives
+	// behind PairingQRReader instead of behind the user repository.
+	CapGetPairingQR Capability = "get_pairing_qr"
+
+	// CapConnectSession is starting the transport a pairing flow needs.
+	//
+	// Unlike every other entry in this block it does NOT presuppose a live
+	// session — it is what produces one — so its port deliberately does not
+	// embed SessionGuard. See port.SessionStarter.
+	CapConnectSession Capability = "connect_session"
+
 	// CapDetectAccountType asks the transport whether the session's own
 	// account is personal or Business (worktree feature/account-type-
 	// detection, items 33-35). It is engine-conditioned like every other

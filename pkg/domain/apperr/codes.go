@@ -107,6 +107,34 @@ const (
 	// by the party upstream, and repeating it unchanged will not help.
 	CategoryUpstreamRejected Category = "upstream_rejected"
 
+	// CategoryCapabilityUnsupported covers a well formed, authorized request
+	// for an operation THIS SESSION'S ENGINE does not serve.
+	//
+	// The census at the top of this file says a new category needs a written
+	// justification. Here it is: engine-explicit pairing (worktree
+	// feature/pairing-explicit-engine) made "the request is fine, and the
+	// transport you named cannot do this" a reachable answer for the first
+	// time, and every existing category answers it wrongly.
+	//
+	//   - CategoryValidation (400) says "fix your payload". The payload names
+	//     a real engine and a real operation; there is nothing to fix short of
+	//     using a different session, which is not a payload edit.
+	//   - CategoryConflict (409) says "retry against the right target or after
+	//     the state changes". The state will never change: an engine's
+	//     capability set is static for the life of the build.
+	//   - CategoryNotImplemented (501) is already public contract for "the
+	//     USER turned this feature off" on GET /chat/history. Nobody turned
+	//     this off.
+	//   - CategoryUpstreamRejected (422) has the right STATUS and the wrong
+	//     story: it means the WhatsApp server understood and refused. Here
+	//     nothing ever left this process — no provider was called at all, and
+	//     saying otherwise would send whoever reads the log looking upstream.
+	//
+	// It shares 422 with CategoryUpstreamRejected on purpose: both are
+	// "understood, and will not be served, and repeating it unchanged will not
+	// help". The Code is what separates them for anyone who needs to.
+	CategoryCapabilityUnsupported Category = "capability_unsupported"
+
 	// CategoryInternal covers everything the caller cannot fix by changing
 	// their request: downstream failures, bugs, unexpected state.
 	CategoryInternal Category = "internal"
@@ -140,6 +168,8 @@ func (c Category) HTTPStatus() int {
 	case CategoryRateLimited:
 		return http.StatusTooManyRequests
 	case CategoryUpstreamRejected:
+		return http.StatusUnprocessableEntity
+	case CategoryCapabilityUnsupported:
 		return http.StatusUnprocessableEntity
 	case CategoryInternal:
 		return http.StatusInternalServerError

@@ -37,10 +37,10 @@ Esquemas:                       170
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 98
+  OK  chamada real com efeito confirmado: 97
   AMR sucesso sem observador independente: 8
   ERR falhou, com o erro medido:          3
-  NT  não testada, com o motivo dito:     34
+  NT  não testada, com o motivo dito:     35
 ```
 
 ## Por grupo
@@ -60,6 +60,24 @@ Validação:
 | Sessões | 22 | 8 | 0 | 0 | 14 |
 | Status | 3 | 0 | 3 | 0 | 0 |
 | **Total** | **143** | **98** | **8** | **3** | **34** |
+
+## A que foi REBAIXADA em 2026-08-27
+
+`GET /session/qr` estava ✅ — chamada real com efeito confirmado. A marca foi
+posta para ⬜, e não porque a rota tenha piorado: porque a MEDIÇÃO deixou de
+descrever a rota.
+
+`engine` passou a ser obrigatório nesta rota (HOUSEKEEP F273/F281). A chamada
+que produziu o ✅ não o levava, e hoje receberia `400 invalid_engine` — logo o
+que está provado é o comportamento de um contrato anterior. Pela mesma regra do
+cabeçalho de `evidencias.tsv` que obrigou a re-medir as nove rotas
+reestruturadas: quando aparece código novo entre o cliente e o manipulador, a
+prova antiga não transita.
+
+Volta a ✅ com uma chamada real a `GET /session/qr?engine=wa_noise` numa sessão
+em janela de emparelhamento, com o código confirmado por quem lê o telemóvel.
+
+`GET /session/connect` e `POST /session/pairphone` já eram ⬜ e continuam.
 
 ## As três que falham
 
@@ -203,7 +221,7 @@ Validação:
 | Sessões | `GET` | `/session/profile` | — | ✅ | Consultar o perfil da conta ligada |
 | Sessões | `GET` | `/session/profile/full` | — | ✅ | Consultar o perfil da conta com os dados que só a rede sabe |
 | Sessões | `POST` | `/session/proxy` | — | ⬜ | Configurar o proxy de saída desta sessão |
-| Sessões | `GET` | `/session/qr` | — | ✅ | Ler o QR code de emparelhamento |
+| Sessões | `GET` | `/session/qr` | — | ⬜ | Ler o QR code de emparelhamento |
 | Sessões | `DELETE` | `/session/s3/config` | — | ⬜ | Remover a configuração S3 desta sessão |
 | Sessões | `GET` | `/session/s3/config` | — | ✅ | Ler a configuração S3 desta sessão |
 | Sessões | `POST` | `/session/s3/config` | — | ⬜ | Gravar a configuração S3 desta sessão |

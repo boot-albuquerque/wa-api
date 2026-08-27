@@ -17,6 +17,7 @@ package session_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -58,6 +59,23 @@ func ctlDe(sg *contractsfake.SessionGuard) *contractsfake.SessionController {
 // pairerDe segue o mesmo idioma de ctlDe: delega EnsureSession ao guard
 // ORIGINAL, para que as chamadas continuem sendo registradas nele. Entrou com
 // o CAP-26, quando PairPhoneUseCase passou a consumir port.PhonePairer.
+func qrDe(sg *contractsfake.SessionGuard, users *contractsfake.UserRepository) *contractsfake.PairingQRReader {
+	return &contractsfake.PairingQRReader{
+		SessionGuard: contractsfake.SessionGuard{EnsureSessionFunc: sg.EnsureSession},
+		PairingQRFunc: func(ctx context.Context, txtID string) (string, error) {
+			entries, err := users.ListUsers(ctx, txtID)
+			if err != nil {
+				return "", fmt.Errorf("database error: %w", err)
+			}
+			if len(entries) == 0 {
+				return "", apperr.New("no_session", apperr.CategoryValidation, "no session", false, nil)
+			}
+			return entries[0].QRCode, nil
+		},
+	}
+}
+
+// pairerDe segue o mesmo idioma de ctlDe.
 func pairerDe(sg *contractsfake.SessionGuard) *contractsfake.PhonePairer {
 	return &contractsfake.PhonePairer{
 		SessionGuard: contractsfake.SessionGuard{EnsureSessionFunc: sg.EnsureSession},
@@ -98,7 +116,7 @@ func guardCases() []guardCase {
 			return session.NewSetStatusMessageUseCase(statusDe(sg), log).Execute(context.Background(), txtID, domain.SetStatusMessageRequest{Body: "ola"})
 		}},
 		{"GetQR", func(sg *contractsfake.SessionGuard, log *contractsfake.Logger) (any, error) {
-			return session.NewGetQRUseCase(sg, users, log).Execute(context.Background(), txtID)
+			return session.NewGetQRUseCase(qrDe(sg, users), log).Execute(context.Background(), txtID)
 		}},
 		// GetStatus NÃO entra: desde a F196 ele não consulta o SessionGuard, e
 		// é essa a correção. Ver TestGetStatus_DesconectadaDevolveEstado.
@@ -120,7 +138,16 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 				t.Errorf("EnsureSession: %+v", sg.EnsureSessionCalls)
 			}
 
-			rec, found := log.FindLevel(contractsfake.LevelWarn, "no wanoise session")
+			// GetQR deixou de nomear um engine nesta mensagem quando a
+			// leitura passou para trás de port.PairingQRReader: o use case já
+			// não sabe qual transporte serve a sessão, e continuar a escrever
+			// "wanoise" seria uma linha de log que mente para metade dos
+			// pedidos. Os outros seis ainda consomem portas só do wa-noise.
+			wantRefusalMsg := "no wanoise session"
+			if tc.name == "GetQR" {
+				wantRefusalMsg = "no session for QR read"
+			}
+			rec, found := log.FindLevel(contractsfake.LevelWarn, wantRefusalMsg)
 			if !found {
 				t.Fatalf("recusa de sessao nao foi logada em nivel warn (F72): %v", log.Messages())
 			}
@@ -151,7 +178,7 @@ func TestUseCases_ComSessao_LogamOSucesso(t *testing.T) {
 			var err error
 			switch tc.name {
 			case "GetQR":
-				_, err = session.NewGetQRUseCase(sg, users, log).Execute(context.Background(), txtID)
+				_, err = session.NewGetQRUseCase(qrDe(sg, users), log).Execute(context.Background(), txtID)
 			default:
 				_, err = tc.run(sg, log)
 			}
@@ -246,7 +273,7 @@ func TestGetQR(t *testing.T) {
 		}}
 		log := &contractsfake.Logger{}
 
-		r, err := session.NewGetQRUseCase(&contractsfake.SessionGuard{}, users, log).
+		r, err := session.NewGetQRUseCase(qrDe(&contractsfake.SessionGuard{}, users), log).
 			Execute(context.Background(), txtID)
 
 		if err != nil {
@@ -273,7 +300,7 @@ func TestGetQR(t *testing.T) {
 		}}
 		log := &contractsfake.Logger{}
 
-		r, err := session.NewGetQRUseCase(&contractsfake.SessionGuard{}, users, log).
+		r, err := session.NewGetQRUseCase(qrDe(&contractsfake.SessionGuard{}, users), log).
 			Execute(context.Background(), txtID)
 
 		if err != nil {
@@ -294,7 +321,7 @@ func TestGetQR(t *testing.T) {
 		}}
 		log := &contractsfake.Logger{}
 
-		r, err := session.NewGetQRUseCase(&contractsfake.SessionGuard{}, users, log).
+		r, err := session.NewGetQRUseCase(qrDe(&contractsfake.SessionGuard{}, users), log).
 			Execute(context.Background(), txtID)
 
 		if !errors.Is(err, errDB) {
@@ -314,14 +341,17 @@ func TestGetQR(t *testing.T) {
 		}}
 		log := &contractsfake.Logger{}
 
-		r, err := session.NewGetQRUseCase(&contractsfake.SessionGuard{}, users, log).
+		r, err := session.NewGetQRUseCase(qrDe(&contractsfake.SessionGuard{}, users), log).
 			Execute(context.Background(), txtID)
 
 		assertNoSessionAppErr(t, err)
 		if r != nil {
 			t.Error("resultado devia ser nil")
 		}
-		if !log.Logged("no user record for session") {
+		// A ausência de registro passou a ser detectada pelo adaptador de
+		// engine (pkg/infra/wa-noise/adapters/pairing/qr.go) e não pelo use
+		// case, então o registro que sobra aqui é o da falha da leitura.
+		if !log.Logged("failed to read QR code") {
 			t.Errorf("ausencia de registro nao foi logada: %v", log.Messages())
 		}
 	})

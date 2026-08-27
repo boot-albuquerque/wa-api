@@ -105,8 +105,43 @@ PedidoPareamentoTelefone:
   description: |
     Corpo de `POST /session/pairphone`. Campos desconhecidos são IGNORADOS em
     silêncio — o decodificador não usa `DisallowUnknownFields`.
-  required: [Phone]
+
+    **`engine` é obrigatório desde 2026-08-27.** O engine é ESCOLHIDO pelo
+    pedido de emparelhamento e determina qual transporte executa a ligação;
+    não é inferido da sessão do chamador. Ver a descrição da rota.
+  required: [engine, Phone]
   properties:
+    engine:
+      type: string
+      nullable: false
+      enum: [wa_noise, wa_headless]
+      description: |
+        Transporte que executa este emparelhamento. Obrigatório, não-nulo e
+        não-vazio.
+
+        Tem de ser IGUAL ao engine com que a sessão alvo foi criada
+        (`POST /admin/users`): divergir dá `409 engine_mismatch`, e o engine
+        é imutável depois da criação, portanto o que muda é o pedido. A
+        redundância é deliberada — é a confirmação explícita no ponto em que
+        uma operação sensível começa.
+
+        `legacy_unknown` é RECUSADO com `400 invalid_engine`: descreve
+        história de migração, nunca uma intenção. Qualquer outro valor fora
+        desta lista — incluindo os nomes de configuração antigos `wanoise` e
+        `headless`, e variações de caixa ou com espaços — é igualmente
+        inválido e dá `400 invalid_engine`. O valor não é aparado nem
+        normalizado antes de ser comparado.
+    phone_number:
+      type: string
+      nullable: false
+      description: |
+        Alias snake_case de `Phone`, aceite desde 2026-08-27. Só é usado
+        quando `Phone` vier ausente ou vazio, para que um corpo com os dois
+        campos não dependa da ordem em que o JSON os lista.
+
+        `Phone` mantém a maiúscula porque é o nome histórico da rota e
+        integradores escrevem contra ele; renomear seria mudança de contrato
+        disfarçada de arrumação.
     Phone:
       type: string
       nullable: false

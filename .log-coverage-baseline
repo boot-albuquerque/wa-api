@@ -1289,7 +1289,7 @@ rules_frozen=true
 # erro). UpdateUser e execUpdateUser continuam elegiveis e cobertas; nenhuma
 # funcao perdeu log. Medido com `go run ./cmd/logcov -json ./pkg` apos a
 # correcao completa, nao inferido.
-min_func_coverage=595
+min_func_coverage=601
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1563,7 +1563,7 @@ min_func_coverage=595
 # nem tupla multi-valor do callee). O denominador cresceu e o numerador
 # cresceu junto na mesma proporcao; o piso nao caiu. Medido apos a correcao
 # completa, nao inferido.
-min_errpath_coverage=782
+min_errpath_coverage=783
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1630,7 +1630,7 @@ min_errpath_coverage=782
 # interface, not a func decl) and the removal of the now-dead duplicate
 # engine-validity branch inside execUpdateUser. Medido apos a correcao
 # completa, nao inferido.
-min_eligible=1013
+min_eligible=1026
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
@@ -2033,5 +2033,59 @@ max_exempt_annotations=2
 #   NewMuteChatUseCase, NewMuteChatHandler — X1, construtores triviais.
 #   contractsfake.ChatMuter.MuteChat, contractsfake.ChatOperations.MuteChat — X5.
 #   MiscAdapter.MuteChat — X5.
+#
+# max_exempt_annotations NAO muda (2).
+# F273/F281 (2026-08-27, worktree feature/pairing-explicit-engine): engine
+# explicito no pareamento, resolvido por pkg/pairing em vez de um adaptador
+# wa-noise fixo.
+#
+# Numeros MEDIDOS: `go run ./cmd/logcov`
+#   ANTES:  eligible=1013, covered=610, func_coverage=59.5% (595), errpath=78.2% (782)
+#   DEPOIS: eligible=1026, covered=617, func_coverage=60.1% (601), errpath=78.3% (783)
+#
+# min_eligible 1013->1026 (+13, ratchet-UP honesto). E' o saldo de +18 novas
+# elegiveis contra -5 que sairam com a fiacao antiga.
+#
+# ENTRAM como ELIGIBLE (13 liquidas; as 18 brutas sao):
+#   pkg/pairing.NewRegistry                            (covered)
+#   pkg/pairing.Registry.Resolve                       (covered)
+#   pkg/pairing.Registry.TargetEngine                  (covered)
+#   pkg/pairing.Registry.ResolveQRReader               (covered)
+#   pkg/pairing.Registry.ResolvePhonePairer            (covered)
+#   pkg/pairing.Registry.ResolveStarter                (covered)
+#   pkg/pairing.errInvalidEngine                       (covered)
+#   pkg/pairing.errEngineMismatch                      (covered)
+#   pkg/pairing.errCapabilityNotSupported              (covered)
+#   pkg/pairing.errEngineUnavailable                   (covered)
+#   pkg/pairing.errNoSession                           (covered)
+#   pkg/bootstrap.buildPairingRegistry                 (covered)
+#   pkg/bootstrap.waNoiseSessionStarter.CheckOwnership (covered)
+#   pkg/presentation/http/handlers.respondPairingRefusal (covered)
+#
+# SAEM (5, porque a fiacao que as continha deixou de existir):
+#   pkg/bootstrap.connectOwnershipCheck                       (era ELIGIBLE)
+#   pkg/bootstrap.connectOwnershipCheck.func1                 (X, closure)
+#   pkg/bootstrap.initConnectHandler                          (X1)
+#   pkg/presentation/http/handlers.ConnectHandler.WithCheckOwnership (X1)
+#   pkg/presentation/http/handlers.ConnectHandler.WithStartSession   (X1)
+#
+# Os cinco eram o mecanismo de injecao por closure que o `.With...` usava. A
+# verificacao de posse nao desapareceu — mudou de casa para
+# waNoiseSessionStarter.CheckOwnership, que entra na lista acima E loga.
+#
+# func_coverage SOBE 595->601, e isso merece explicacao porque nao foi de
+# graca. As catorze funcoes novas nasceram TODAS cobertas, e cinco delas
+# (os construtores de erro de pkg/pairing) so' o sao porque cada uma ganhou
+# uma linha em Debug. Essa linha DUPLICA o que Resolve ja' regista em Warn, e a
+# duplicacao e' deliberada: o Warn e' o evento operacional (quem foi recusado,
+# em que sessao alvo, para que capacidade) e o Debug e' a taxonomia (que
+# codigo e que categoria produziram o status). Debug esta' desligado em
+# producao, logo o custo la' e' zero, e e' exatamente o que se quer ao ligar
+# Debug para perguntar por que um status saiu como saiu. Esta' dito no
+# comentario de pkg/pairing/errors.go, para que nao passe por descuido.
+#
+# errpath_coverage sobe 782->783 (+1 decimo): o unico caminho de saida novo
+# nao coberto e' o `return nil` de CheckOwnership, e os restantes caminhos
+# novos saem todos por baixo de um log >= Warn ou propagam a causa.
 #
 # max_exempt_annotations NAO muda (2).

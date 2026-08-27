@@ -29757,12 +29757,117 @@ ambientes que já existem. O trabalho pertence à worktree que fizer o roteament
 consumir `domain.Engine` (capability-registry / routing), porque só lá se vê o
 conjunto todo dos pontos de contacto.
 
-**Status**: **não corrigido** — é dualidade DELIBERADA e temporária, não
-descuido. O que esta worktree fez foi confiná-la a uma função e travá-la:
-`engineDomainFor` erra em vez de cair no padrão, e
-`pkg/bootstrap/engine_backfill_test.go` (`TestEngineDomainForCoversEveryConfiguredEngine`,
-`TestEngineDomainForRejectsUnknown`) prova as duas metades. Referência cruzada
-com F274, que descreve o backfill que depende desta travessia.
+**Status**: **parcialmente corrigido** — a metade que MAIS custava está
+fechada, e a dualidade de vocabulário continua aberta. Leia as duas partes
+separadas, porque confundi-las é o que faria esta entrada parecer resolvida
+quando não está.
+
+### O que FICOU CORRIGIDO (2026-08-27, worktree `feature/pairing-explicit-engine`)
+
+A frase medida acima — *"`pkg/bootstrap/wiring_handlers.go:425` nem sequer
+passa pelo router por capability — aponta directo ao adaptador wa-noise"* — era
+o dano real, e é o que foi consertado.
+
+O que estava errado, medido antes de mexer: `GetQRHandler`, `ConnectHandler` e
+`PairPhoneHandler` recebiam, em `pkg/bootstrap/wiring_handlers.go:165`, um
+`wasession.NewSessionGuardAdapter(waClientLookup)` FIXO, sem condicional
+nenhuma por engine. Uma sessão criada com `engine=wa_headless` persistia certo
+(coluna `users.engine`), reportava certo em `GET /session/capabilities`, e
+parava a parear pelo socket — porque nada entre o handler e o adaptador alguma
+vez leu a coluna. O mecanismo antigo (`EngineSelection.EngineFor`,
+`UsaHeadless`) estava MORTO em produção: `grep` devolve só os próprios testes.
+
+O que passou a existir:
+
+- **`pkg/pairing`** — um `Registry` que resolve o provider por engine, na ordem
+  `invalid_engine` (400) → `engine_mismatch` (409) → `capability_not_supported`
+  (422) → `engine_unavailable` (409), **sem tocar em provider nenhum** até
+  decidir. Consome a MESMA `capabilityregistry.CapabilityRegistry` que
+  `GET /session/capabilities` — não há segunda tabela de capacidades;
+- **`engine` explícito no pedido** de `/session/qr`, `/session/connect` (query)
+  e `/session/pairphone` (corpo). Confirmação redundante contra o engine da
+  sessão ALVO, que já está gravado e é imutável (F279);
+- **portas novas** `appport.PairingQRReader` e `appport.SessionStarter`, e as
+  capacidades `get_pairing_qr` / `connect_session` na matriz — com o
+  `wa_headless` medido como `not_implemented`, evidência confirmada;
+- **actor ≠ alvo**: a resolução lê o engine da sessão ALVO
+  (`pairing.Registry.TargetEngine`), nunca do actor. Não existe `ActorEngine`.
+
+**Testes que travam o defeito** (todos pela ROTA REGISTADA, `gorilla/mux`, e
+todos a medir QUAL PROVIDER FOI TOCADO — não o status, que o adaptador errado
+também devolve 200):
+
+`pkg/presentation/http/handlers/handler_pairing_engine_test.go`
+- `TestPairingQR_WaNoise_CallsOnlyNoiseProvider`
+- `TestPairingQR_WaHeadless_CapabilityNotSupported`
+- `TestPairingPhone_WaNoise_CallsOnlyNoiseProvider`
+- `TestPairingPhone_WaHeadless_CapabilityNotSupported`
+- `TestPairingQR_MissingEngine_400`, `TestPairingPhone_MissingEngine_400`
+- `TestPairing_UnknownEngineValues_400` (sete valores, `legacy_unknown` incluído)
+- `TestPairing_EngineMismatch_409`, `TestPairing_EngineMismatch_PairPhone_409`
+- **`TestPairing_UsesTargetEngineNotActorEngine`** e o seu par positivo
+- `TestPairingConnect_WaNoise_CallsOnlyNoiseProvider`,
+  `TestPairingConnect_WaHeadless_CapabilityNotSupported`
+- `TestPairing_UnknownTargetSession_400`
+
+`pkg/bootstrap/connect_ownership_wiring_test.go`
+- `TestConnectStarterIsWiredForWaNoise` (a fiação de PRODUÇÃO resolve um
+  `*waNoiseSessionStarter`, e não um passa-nada qualquer)
+- `TestConnectOwnershipCheckIsWired`, `TestConnectOwnershipCheckGranted_200`,
+  `TestConnectRouteRequiresEngine`
+
+**CONTROLE NEGATIVO EXECUTADO.** Reintroduzi o defeito exacto em
+`pkg/pairing/registry.go` — resolução fixa em `r.providers[domain.EngineWaNoise]`
+e as duas guardas curto-circuitadas com `if false &&`, que é o hardcode da F273
+na sua forma mínima — e corri a suite. Saída literal:
+
+```
+--- FAIL: TestPairingQR_WaHeadless_CapabilityNotSupported (0.00s)
+    handler_pairing_engine_test.go:125: status = 200, quero 422 (corpo {"code":200,"data":{"QRCode":"2@noise"},"success":true}
+--- FAIL: TestPairingPhone_WaHeadless_CapabilityNotSupported (0.00s)
+    handler_pairing_engine_test.go:159: status = 200, quero 422 (corpo {"code":200,"data":{"LinkingCode":"NOISE-CODE"},"success":true}
+--- FAIL: TestPairing_EngineMismatch_409 (0.00s)
+    handler_pairing_engine_test.go:233: status = 200, quero 409 (corpo {"code":200,"data":{"QRCode":"2@noise"},"success":true}
+--- FAIL: TestPairing_EngineMismatch_PairPhone_409 (0.00s)
+    handler_pairing_engine_test.go:251: status = 400, quero 409 — a recusa de engine tem de correr ANTES da validação do telefone (corpo {"code":400,"error":{"code":"missing_phone",...}}
+--- FAIL: TestPairing_UsesTargetEngineNotActorEngine (0.00s)
+    handler_pairing_engine_test.go:297: status = 200: o pedido foi servido, e o único provider capaz de servir QR nesta build é o do ACTOR (wa_noise). O alvo é wa_headless (corpo {"code":200,"data":{"QRCode":"2@noise"},"success":true}
+--- FAIL: TestPairingConnect_WaHeadless_CapabilityNotSupported (0.00s)
+    handler_pairing_engine_test.go:372: status = 200, quero 422 (corpo {"code":200,"data":{"status":"connecting"},"success":true}
+FAIL	wa-api/pkg/presentation/http/handlers	0.386s
+```
+
+Seis testes morderam, e os corpos são a prova de que morderam pela CAUSA e não
+pelo sintoma: `2@noise` e `NOISE-CODE` são a resposta do provider wa-noise a um
+pedido que nomeou `wa_headless`. Correcção restaurada; suite verde.
+
+Nota sobre o que o controle NÃO prova: `TestPairingQR_WaNoise_...` e
+`TestPairingPhone_WaNoise_...` continuaram a passar com o defeito no lugar, e
+tinham de continuar — com tudo hardcoded em wa-noise, um pedido wa-noise é
+servido correctamente por acidente. É exactamente por isso que o par positivo
+sozinho não bastava, e por que a asserção que interessa é a contagem de
+chamadas por provider.
+
+### O que CONTINUA ABERTO
+
+A dualidade de vocabulário em si. `EngineWaNoise = "wanoise"` /
+`EngineWaHeadless = "headless"` (`pkg/bootstrap/engine_selection.go:29-32`)
+continuam a existir ao lado de `wa_noise` / `wa_headless`
+(`pkg/domain/engine.go`), com `engineDomainFor` como única travessia. Isso não
+foi tocado, e não podia ser: mudar o valor aceite em `WA_API_ENGINE` sem
+janela de alias partiria ambientes que já existem, e a correcção de cima não
+precisou disso — `pkg/pairing` fala `domain.Engine` de ponta a ponta.
+
+O que MUDOU nesta metade é que ela encolheu: `rotaDeEngine` /
+`ErrEngineSemPort` (`pkg/bootstrap/engine_routing.go`) e
+`pkg/infra/enginerouter` continuam a falar só o vocabulário de configuração, e
+continuam sem UM chamador de produção — `EngineSelection.EngineFor` também.
+São código morto medido, e estão registados como tal na **F281**. O que resta
+vivo do vocabulário antigo é o backfill (`Default()`, `SessoesEmHeadless()`),
+descrito na F274.
+
+Referência cruzada: **F274** (o backfill que depende da travessia) e **F281**
+(o código morto e o resto do padrão).
 
 <!-- f-status: aberto -->
 
@@ -30330,3 +30435,220 @@ final da ADR-0010 sobre por quê.
 
 <!-- f-status: corrigido -->
 
+
+## F281 — o padrão "handler ligado a adaptador concreto" sobrevive em ~10 sítios fora do pareamento, e o roteamento por engine antigo é código morto
+
+**Data**: 2026-08-27. **Contexto**: worktree `feature/pairing-explicit-engine`,
+que corrigiu a metade de PAREAMENTO da F273. Estes são os achados de lado do
+mesmo levantamento — o que foi encontrado a olhar, e que não cabia no enunciado.
+
+### (a) Dez adaptadores wa-noise concretos, ligados sem condicional por engine
+
+**Onde**: `pkg/bootstrap/wiring_handlers.go`, linhas 130-208.
+
+```
+130  presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
+150  chatMessenger      := wachat.NewChatMessengerAdapter(waClientLookup)
+154  mediaDownloader    := wachat.NewMediaDownloaderAdapter(waClientLookup)
+156  groupAdapter       := wagroup.NewGroupAdapter(waClientLookup)
+160  miscAdapter        := wamisc.NewMiscAdapter(waClientLookup)
+161  userAdapter        := wauser.NewUserAdapter(waClientLookup)
+163  sessionGuard       := wasession.NewSessionGuardAdapter(waClientLookup)
+208  forwardedMsgSender := wachat.NewForwardedMessageAdapter(waClientLookup)
+```
+
+**Problema**: é o MESMO padrão da F273 — handler ligado a um adaptador de UM
+engine, sem que nada leia `users.engine`. Uma sessão em `wa_headless` que
+chamasse `/chat/send/text`, `/user/presence` ou `/group/info` seria servida pelo
+socket, com o registo dela a dizer outra coisa.
+
+**Por que NÃO é o mesmo dano, hoje**: nenhuma sessão corre em headless neste
+build. Nada de `pkg/infra/wa-headless` é construído em `pkg/bootstrap` — `grep
+-rn NewDisconnector pkg/bootstrap` devolve zero fora de testes. Enquanto isso
+for verdade, o roteamento errado é indistinguível do certo. Deixa de ser no dia
+em que o primeiro provider headless for ligado, e nesse dia são ~10 sítios, não
+um.
+
+**Correção sugerida**: generalizar `pkg/pairing.Registry` para as portas de
+capacidade — ele já é genérico em `Resolve(ctx, alvo, engine, capability)`, e o
+que falta é um `Provider` com mais campos e handlers que resolvam em vez de
+receberem a porta pronta. **Não deve ser feito adaptador a adaptador**: o valor
+está em ser um sítio só, e dez `if` espalhados seriam pior que o estado actual.
+
+**Status**: **não corrigido**, e deliberadamente. O enunciado desta worktree é a
+superfície de pareamento; alargar para as ~10 rotas de capacidade num diff só
+misturaria a correcção com uma refatoração de fiação inteira, e a revisão
+deixaria de conseguir separar as duas.
+
+<!-- f-status: aberto -->
+
+## F282 — o roteamento por engine anterior é código morto: zero chamadores de produção
+
+**Data**: 2026-08-27. **Contexto**: o mesmo da F281.
+
+**Onde**:
+
+- `pkg/bootstrap/engine_selection.go:53` — `EngineSelection.EngineFor(txtID)`;
+- `pkg/bootstrap/engine_routing.go` — `rotaDeEngine`, `ErrEngineSemPort`;
+- `pkg/infra/enginerouter/groupinfo.go` — o pacote inteiro.
+
+**Problema**: os três existem para escolher transporte por sessão, e nenhum é
+chamado de produção. Medido:
+
+```
+$ grep -rn "\.EngineFor(" --include="*.go" pkg/ | grep -v _test
+(vazio)
+$ grep -rn "rotaDeEngine(" --include="*.go" pkg/ | grep -v _test
+(vazio)
+$ grep -rn "enginerouter\." --include="*.go" pkg/ cmd/ | grep -v "^pkg/infra/enginerouter"
+(vazio)
+```
+
+Os únicos chamadores são os próprios testes (`engine_selection_test.go:23,42,46`,
+`engine_selection_test.go:87`, `enginerouter/groupinfo_test.go`). O que continua
+VIVO em `EngineSelection` é `Default()` e `SessoesEmHeadless()`, e só para o
+backfill do arranque (F274).
+
+O dano de manter isto não é peso: é que um mecanismo morto **parece** ser o
+lugar onde a decisão de engine se toma. Foi exactamente essa leitura que fez a
+F273 durar — havia um `EngineFor` com testes verdes, e a fiação real não passava
+por ele. Agora há DOIS mecanismos aparentes (`pkg/pairing`, vivo; estes, mortos)
+e o próximo a chegar tem de descobrir qual, por medição.
+
+**Correção sugerida**: apagar os três, e com eles os testes que só existem para
+os cobrir. `pkg/pairing` é o sítio onde a decisão passa a viver, e o vocabulário
+dele é `domain.Engine`, o que também encolhe a F273. Antes de apagar, confirmar
+que nenhum plano aprovado depende de `pkg/infra/enginerouter` — ele tem doc
+comment a descrever intenção de desenho, e apagar intenção registada sem
+perguntar é como se perde contexto.
+
+**Status**: **não corrigido**. Apagar código é decisão do dono do repositório e
+não do executor de uma tarefa de pareamento — registado para decisão explícita,
+como a CLAUDE.md manda.
+
+<!-- f-status: aberto -->
+
+## F283 — `GET /session/connect` e `GET /session/disconnect` continuam a ser GET que MUTAM estado, e agora carregam um parâmetro obrigatório
+
+**Data**: 2026-08-27. **Contexto**: o mesmo da F281. A decisão de contrato que
+esta worktree teve de tomar, registada aqui porque a alternativa também era
+defensável.
+
+**Onde**: `pkg/bootstrap/wiring_routes.go:49,50` e
+`api/openapi/paths/sessao.yaml` (a nota 1 do grupo já diz "é surpreendente...
+não é para ser imitado").
+
+**Problema**: `engine` passou a ser obrigatório nas três rotas de pareamento, e
+duas delas são GET. Um GET com corpo não é contrato que este projecto vá começar,
+então `engine` entra como query em `/session/qr` e `/session/connect`, e no
+corpo JSON de `POST /session/pairphone`.
+
+Para `/session/qr` isso é limpo: a rota é uma leitura, idempotente, sem efeito
+colateral, e um parâmetro de query é a forma certa.
+
+Para `/session/connect` não é: a rota **não é idempotente** — reclama a posse da
+sessão e relança o arranque a cada chamada. O correcto seria `POST`. Não foi
+mudado, e a razão é aritmética de rupturas: tornar `engine` obrigatório já é uma
+ruptura para quem chama hoje; trocar o método ao mesmo tempo seriam DUAS no
+mesmo diff, e a segunda quebra também quem já se tinha adaptado à primeira.
+
+**Correção sugerida**: quando houver janela de versionamento, `POST
+/session/connect` com `{"engine": ...}` no corpo, mantendo o GET a responder com
+um aviso de depreciação durante uma versão. A mesma janela serve para
+`/session/disconnect`.
+
+**Status**: **não corrigido** — decisão consciente de adiar, com o custo dito.
+
+<!-- f-status: aberto -->
+
+## F284 — `MiscAdapter.SyncContactRoster` e o use case validam o mesmo campo com códigos diferentes (ver F272), e o mesmo padrão nasceu de novo no pareamento
+
+**Data**: 2026-08-27. **Contexto**: o mesmo da F281. É um reforço da F272, e não
+uma entrada nova a concorrer com ela — fica aqui porque a F272 dizia que a
+divergência era "hoje inobservável", e a superfície de pareamento acabou de
+mostrar a forma em que ela deixa de ser.
+
+**Onde**: `pkg/pairing/errors.go` (`CodeNoSession`) e
+`pkg/infra/wa-noise/adapters/pairing/qr.go` (`codeNoSessionRow`).
+
+**Problema**: dois sítios constroem `apperr` com o código `"no_session"` para o
+mesmo facto — não há linha em `users` para este id. São deliberadamente iguais
+(o código é contrato público, e divergir aqui seria dar dois nomes a um facto),
+mas a igualdade é mantida por disciplina e por comentário, não pelo compilador.
+É a MESMA forma da F272: uma regra escrita duas vezes, correcta hoje, a divergir
+na primeira vez que alguém editar um lado.
+
+**Correção sugerida**: a mesma que a F272 propõe — a tabela de códigos partilhados
+sobe para o domínio (`pkg/domain/apperr/codes.go` já é o sítio óbvio, e já tem
+`CodeSessionNotConnected` a fazer exactamente isto, pelo mesmo motivo escrito no
+comentário dele). `no_session` é o segundo candidato, e há pelo menos um terceiro
+(`pkg/application/usecase/session/get_status.go`).
+
+**Status**: **não corrigido**. Mover o código para o domínio toca em três
+camadas e é escopo próprio; registado, com referência cruzada para F272.
+
+<!-- f-status: aberto -->
+
+## F285 — o `coverage-gate` está VERMELHO desde antes desta sessão, e por isso o piso `min_coverage=870` nunca chegou a ser aplicado; a cobertura real é 84,6%
+
+**Data**: 2026-08-27. **Contexto**: worktree `feature/pairing-explicit-engine`,
+ao correr `make check` no fim da tarefa. Achado de lado, e não da tarefa.
+
+**Onde**: `Makefile:251-281` (alvo `coverage-gate`), `.coverage-baseline`
+(`min_coverage=870`), e `internal/wa-headless/gate_test.go`
+(`TestHousekeepEntriesAreMachineReadable`).
+
+**Problema**: o `coverage-gate` corre os testes PRIMEIRO e só calcula a
+percentagem se eles passarem (`|| { ...; exit 1; }`, linha 262). Um teste está a
+falhar em `internal/wa-headless` — `TestHousekeepEntriesAreMachineReadable`, por
+causa da entrada H144, cujo status começa por uma palavra fora do vocabulário
+que o scan classifica. Logo o gate morre na linha 262 e **nunca chega à linha
+267**, onde a comparação com o piso acontece.
+
+Duas coisas decorrem, e a segunda é a que importa:
+
+1. o gate falha, e falha pelo motivo certo (testes vermelhos são testes
+   vermelhos) — não há bug no Makefile;
+2. o PISO nunca é avaliado. E quando se avalia à mão, ele não passa:
+
+```
+$ go tool cover -func=coverage.out | tail -1
+total:  (statements)  84.6%
+
+$ grep min_coverage .coverage-baseline
+min_coverage=870          # 87,0%
+```
+
+**Medido nas duas pontas, para não confundir causa com coincidência**: em
+worktree limpa de `f996279e` (o commit base desta) o mesmo comando dá **84,5%**,
+e o gate falha exactamente da mesma forma, pela mesma entrada H144. Portanto:
+
+- a cobertura NÃO foi derrubada por este trabalho — subiu 84,5% → 84,6%;
+- o piso declarado está 2,4 pontos acima do real, e está assim há tempo
+  suficiente para ninguém ter notado, precisamente porque o gate morre antes de
+  o ler.
+
+É a mesma família de armadilha da F99 que o próprio comentário do alvo descreve
+("o silêncio apagava a evidência necessária no caminho de falha"): aqui não há
+silêncio, há uma falha REAL a esconder uma segunda falha atrás dela.
+
+**Correção sugerida**, por ordem:
+
+1. consertar a H144 em `internal/wa-headless/HOUSEKEEP.md` — o status tem de
+   começar por uma palavra do vocabulário que `openStatusTokens` /
+   `closedStatusTokens` conhecem, ou a palavra nova entra na lista de propósito.
+   É uma linha de texto, e desbloqueia o gate;
+2. **só então** decidir o que fazer com `min_coverage`. Há duas respostas
+   defensáveis e uma indefensável: baixar para 845 e ratchet-UP daí (honesto,
+   admite o estado), ou subir a cobertura até 87,0% (mantém a promessa). A
+   indefensável é deixar o piso a 870 com o gate a nunca o ler — é a promessa
+   sem a verificação, que é pior que não ter promessa.
+
+**Status**: **não corrigido**. As duas metades são escopo alheio: a H144
+pertence ao HOUSEKEEP da biblioteca vendorizada e a decisão sobre o piso é do
+dono do repositório. Referência cruzada em `internal/wa-noise/HOUSEKEEP.md` não
+se aplica — o achado atravessa para `internal/wa-headless`, que tem o seu
+próprio ficheiro, e a entrada H144 já lá está; o que falta lá é a informação de
+que ela bloqueia um gate do repositório inteiro.
+
+<!-- f-status: aberto -->

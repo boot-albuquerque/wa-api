@@ -2378,6 +2378,7 @@ pkg/application/contracts/contractsfake.NewsletterReader.SubscribeNewsletterLive
 pkg/application/contracts/contractsfake.NewsletterReader.ToggleNewsletterMute	EXCLUDED	X5
 pkg/application/contracts/contractsfake.NewsletterReader.UnfollowNewsletter	EXCLUDED	X5
 pkg/application/contracts/contractsfake.NewsletterReader.record	EXCLUDED	X5
+pkg/application/contracts/contractsfake.PairingQRReader.PairingQR	EXCLUDED	X5
 pkg/application/contracts/contractsfake.PhonePairer.IsPaired	EXCLUDED	X5
 pkg/application/contracts/contractsfake.PhonePairer.RequestPairingCode	EXCLUDED	X5
 pkg/application/contracts/contractsfake.PresenceController.SendChatPresence	EXCLUDED	X5
@@ -2429,6 +2430,8 @@ pkg/application/contracts/contractsfake.SessionRegistry.Get	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionRegistry.ProvisionWebhookClient	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionRegistry.Register	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionRegistry.Unregister	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SessionStarter.CheckOwnership	EXCLUDED	X5
+pkg/application/contracts/contractsfake.SessionStarter.StartSession	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SessionStatusReader.SessionStatus	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SimpleMessenger.SendContact	EXCLUDED	X5
 pkg/application/contracts/contractsfake.SimpleMessenger.SendList	EXCLUDED	X5
@@ -2878,6 +2881,7 @@ pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
 pkg/bootstrap.buildLeaseManager	ELIGIBLE	covered
 pkg/bootstrap.buildOwnerAddr	ELIGIBLE	covered
 pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
+pkg/bootstrap.buildPairingRegistry	ELIGIBLE	covered
 pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
 pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
 pkg/bootstrap.buildRouter	ELIGIBLE	covered
@@ -2894,8 +2898,6 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:514)
-pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
 pkg/bootstrap.deleteKillChannel	EXCLUDED	X1
@@ -2932,7 +2934,6 @@ pkg/bootstrap.historyLimitForUser	ELIGIBLE	uncovered:L1
 pkg/bootstrap.hmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X7
 pkg/bootstrap.hmacKeySource.String	EXCLUDED	X4
 pkg/bootstrap.init	EXCLUDED	X3
-pkg/bootstrap.initConnectHandler	EXCLUDED	X1
 pkg/bootstrap.initCustomHandlers	ELIGIBLE	covered
 pkg/bootstrap.initCustomHandlers.func1	EXCLUDED	X6
 pkg/bootstrap.initCustomHandlers.func2	EXCLUDED	X6
@@ -3081,6 +3082,8 @@ pkg/bootstrap.userInfoSessionCache.SetHistory	EXCLUDED	X1
 pkg/bootstrap.userInfoSessionCache.SetProxy	EXCLUDED	X1
 pkg/bootstrap.userInfoSessionCache.publish	ELIGIBLE	covered
 pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:84)
+pkg/bootstrap.waNoiseSessionStarter.CheckOwnership	ELIGIBLE	covered
+pkg/bootstrap.waNoiseSessionStarter.StartSession	EXCLUDED	X1
 pkg/bootstrap.withField	ELIGIBLE	uncovered:L1
 pkg/bootstrap.writeAdminTokenFile	ELIGIBLE	covered
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
@@ -3138,6 +3141,7 @@ pkg/domain.JID.Server	ELIGIBLE	uncovered:L1
 pkg/domain.MuteChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.NewCanonicalAccountIdentity	EXCLUDED	X1
 pkg/domain.NormalizeIdentityInput	EXCLUDED	X1
+pkg/domain.PairPhoneRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.ParseEngine	ELIGIBLE	uncovered:L1
 pkg/domain.ParticipantsUpdate.Valida	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group.go:268)
 pkg/domain.PinChatRequest.ResolveChat	EXCLUDED	X1
@@ -3663,8 +3667,11 @@ pkg/infra/wa-noise/adapters/misc.NewMiscAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.resolveToLID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/misc.serverIDFromText	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/pairing.NewPhonePairerAdapter	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/pairing.NewQRReaderAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.IsPaired	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.RequestPairingCode	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/pairing.QRReaderAdapter.PairingQR	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/pairing.errNoSessionRow	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/presence.NewPresenceControllerAdapter	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/presence.PresenceControllerAdapter.SendChatPresence	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/presence.PresenceControllerAdapter.SendPresence	EXCLUDED	X5
@@ -3950,6 +3957,17 @@ pkg/infra/wa-noise/runtime/session.wanoiseSession.Subscribe.func2	EXCLUDED	X6
 pkg/infra/wa-noise/runtime/session.wanoiseSession.Subscribe.func3	EXCLUDED	X6
 pkg/infra/wa-noise/runtime/session.wanoiseSession.WaNoiseClient	EXCLUDED	X1
 pkg/infra/wa-noise/runtime/session.wanoiseSession.translatePairingItem	EXCLUDED	X1
+pkg/pairing.NewRegistry	ELIGIBLE	covered
+pkg/pairing.Registry.Resolve	ELIGIBLE	covered
+pkg/pairing.Registry.ResolvePhonePairer	ELIGIBLE	covered
+pkg/pairing.Registry.ResolveQRReader	ELIGIBLE	covered
+pkg/pairing.Registry.ResolveStarter	ELIGIBLE	covered
+pkg/pairing.Registry.TargetEngine	ELIGIBLE	covered
+pkg/pairing.errCapabilityNotSupported	ELIGIBLE	covered
+pkg/pairing.errEngineMismatch	ELIGIBLE	uncovered:L2(S-ret,errors.go:81)
+pkg/pairing.errEngineUnavailable	ELIGIBLE	uncovered:L2(S-ret,errors.go:105)
+pkg/pairing.errInvalidEngine	ELIGIBLE	covered
+pkg/pairing.errNoSession	ELIGIBLE	covered
 pkg/presentation/http.Find	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
@@ -3980,9 +3998,7 @@ pkg/presentation/http/handlers.CommunityLinkGroupHandler.ServeHTTP	ELIGIBLE	unco
 pkg/presentation/http/handlers.CommunityUnlinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:148)
 pkg/presentation/http/handlers.ConfigureHmacHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConfigureS3Handler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:110);uncovered:L2(S-http,handler_session.go:116)
-pkg/presentation/http/handlers.ConnectHandler.WithCheckOwnership	EXCLUDED	X1
-pkg/presentation/http/handlers.ConnectHandler.WithStartSession	EXCLUDED	X1
+pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:82);uncovered:L2(S-consume,handler_session.go:103);uncovered:L2(S-http,handler_session.go:109)
 pkg/presentation/http/handlers.DeleteHmacConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DeleteMessageHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DeleteS3ConfigHandler.ServeHTTP	ELIGIBLE	covered
@@ -4009,7 +4025,7 @@ pkg/presentation/http/handlers.GetHealthHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetHistoryHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetHmacConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetPrivacySettingsHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.GetQRHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.GetQRHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:179)
 pkg/presentation/http/handlers.GetS3ConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetStatusHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetUserInfoHandler.ServeHTTP	ELIGIBLE	covered
@@ -4110,7 +4126,7 @@ pkg/presentation/http/handlers.NewUpdateGroupRequestParticipantsHandler	EXCLUDED
 pkg/presentation/http/handlers.NewUpdateWebhookHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewUserHandlers	EXCLUDED	X1
 pkg/presentation/http/handlers.NewWSHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.PairPhoneHandler.ServeHTTP	ELIGIBLE	covered
+pkg/presentation/http/handlers.PairPhoneHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:257)
 pkg/presentation/http/handlers.PinChatHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.PublishStatusAudioHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.PublishStatusImageHandler.ServeHTTP	ELIGIBLE	covered
@@ -4199,10 +4215,13 @@ pkg/presentation/http/handlers.newNewsletterOpHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.newsletterBody.toRequest	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.newsletterOpHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.normalizePhones	ELIGIBLE	uncovered:L1
+pkg/presentation/http/handlers.pairingEngineFromQuery	EXCLUDED	X1
+pkg/presentation/http/handlers.pairingTarget	EXCLUDED	X1
 pkg/presentation/http/handlers.rejectEmptyElement	ELIGIBLE	covered
 pkg/presentation/http/handlers.rejectMissingField	ELIGIBLE	covered
 pkg/presentation/http/handlers.requestAnswered	EXCLUDED	X1
 pkg/presentation/http/handlers.requirePublishUserInfo	EXCLUDED	X1
+pkg/presentation/http/handlers.respondPairingRefusal	ELIGIBLE	covered
 pkg/presentation/http/handlers.sessionUser	ELIGIBLE	covered
 pkg/presentation/http/handlers.sortedCapabilities	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.sortedCapabilities.func1	EXCLUDED	X6

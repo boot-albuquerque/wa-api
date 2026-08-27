@@ -11,14 +11,23 @@ import (
 	"github.com/justinas/alice"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/application/contracts/contractsfake"
+	"wa-api/pkg/application/usecase/session"
+	"wa-api/pkg/presentation/http/handlers"
 )
 
-// FIX-42 — wiring lock for `.WithStartSession` (wiring_handlers.go:410).
+// FIX-42 (+ F281) — wiring lock for the session launcher on /session/connect.
 //
-// Without this test, removing `.WithStartSession(s.startSession)` from
-// initConnectHandler compiles, passes every other test, and only shows up when
-// a user tries to connect in production — GET /session/connect responds
-// 200 {"status":"connecting"} but nothing actually connects.
+// Without this test, dropping the launcher from the production wiring compiles,
+// passes every other test, and only shows up when a user tries to connect in
+// production — GET /session/connect responds 200 {"status":"connecting"} but
+// nothing actually connects.
+//
+// The SEAM moved with the F281: it used to be `.WithStartSession(...)` on the
+// ConnectHandler, and is now appport.SessionStarter, resolved per engine by
+// pkg/pairing (see pkg/bootstrap/pairing_providers.go). The protection is
+// unchanged — the route must CALL the launcher, not merely have one — and the
+// substitution below happens at the provider instead of at the handler field.
 //
 // The defect is the SIBLING of the poll-options wiring defect (F129/CAP-14):
 // same mechanism (optional decorator silently dropped), same consequence
@@ -52,25 +61,18 @@ func newConnectWiringRouter(t *testing.T) (*mux.Router, <-chan string) {
 	// CALLS it during init, so a nil SessionOrchestrator is safe here.
 	initCustomHandlers(&server{DB: newChatHistoryDB(t), ExPath: t.TempDir()})
 
-	// Assert the wiring is in place BEFORE replacing it. This is the primary
-	// assertion: if `.WithStartSession(s.startSession)` is removed from
-	// initConnectHandler (wiring_handlers.go:410), StartSession is nil and
-	// this line kills the test with a message that names the missing call.
-	if customHandlerSet.Session.Connect.StartSession == nil {
-		t.Fatal("StartSession is nil after initCustomHandlers — " +
-			"the wiring in initConnectHandler (wiring_handlers.go:410) no longer calls " +
-			".WithStartSession(s.startSession). Without it, GET /session/connect " +
-			"responds 200 {\"status\":\"connecting\"} but no WhatsApp session starts: " +
-			"the response lies.")
-	}
-
-	// Replace StartSession with a stub that signals invocation. This proves
-	// that the handler actually CALLS StartSession during a real HTTP request,
-	// not just that the field was set.
+	// The "is the wiring in place" half now lives in
+	// TestConnectStarterIsWiredForWaNoise (connect_ownership_wiring_test.go),
+	// which asserts the PRODUCTION registry resolves a *waNoiseSessionStarter.
+	// What this file measures is the other half, and the one a nil-check can
+	// never give: that a real HTTP request through the registered route
+	// actually CALLS the launcher.
 	invoked := make(chan string, 1)
-	customHandlerSet.Session.Connect.StartSession = func(userID, token string) {
-		invoked <- userID
-	}
+	customHandlerSet.Session.Connect = handlers.NewConnectHandler(
+		session.NewConnectUseCase(&contractsfake.Logger{}),
+		starterRegistry(&contractsfake.SessionStarter{
+			StartSessionFunc: func(_ context.Context, txtID, _ string) { invoked <- txtID },
+		}))
 
 	inject := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -95,14 +97,17 @@ func TestStartSessionIsWiredIntoConnectHandler(t *testing.T) {
 	router, invoked := newConnectWiringRouter(t)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect", nil))
+	// `engine` e' obrigatorio desde a F281: sem ele a rota responde 400
+	// invalid_engine antes de tocar em provider nenhum.
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect?engine=wa_noise", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
 	}
 
-	// The handler fires StartSession with `go` (handler_session.go:96), so
-	// we wait on the channel with a timeout instead of checking immediately.
+	// The wa-noise provider fires StartSession with `go`
+	// (pkg/bootstrap/pairing_providers.go), so the wait stays even though this
+	// double is synchronous: the production path is the one being described.
 	select {
 	case uid := <-invoked:
 		if uid != connectWiringUser {
@@ -111,8 +116,7 @@ func TestStartSessionIsWiredIntoConnectHandler(t *testing.T) {
 	case <-time.After(connectWiringInvocationTimeout):
 		t.Fatal("StartSession was not invoked within the timeout — " +
 			"the handler at GET /session/connect responded 200 but never called " +
-			"StartSession. If .WithStartSession(s.startSession) is still in " +
-			"wiring_handlers.go:410, then the handler itself stopped calling it " +
-			"(check handler_session.go:91-96).")
+			"the launcher resolved from the pairing registry (check " +
+			"handler_session.go ConnectHandler.ServeHTTP and pkg/pairing).")
 	}
 }

@@ -8,6 +8,36 @@
 # divergir das fontes.
 components:
   parameters:
+    EngineDePareamento:
+      description: |
+        Transporte que executa este emparelhamento.
+
+        **O engine é escolhido pelo pedido de emparelhamento e determina qual
+        transporte executa a ligação; não é inferido da sessão do chamador.**
+
+        Obrigatório, não-nulo e não-vazio, e tem de ser IGUAL ao engine com que
+        a sessão alvo foi criada em `POST /admin/users`. Divergir dá
+        `409 engine_mismatch`; o engine é imutável depois da criação, portanto
+        o que muda é o pedido. A redundância é deliberada: é a confirmação
+        explícita no ponto em que uma operação sensível começa.
+
+        `legacy_unknown` é RECUSADO com `400 invalid_engine` — descreve
+        história de migração, nunca uma intenção. O valor não é aparado nem
+        normalizado: `wa_noise ` com espaço, ou `WA_NOISE`, também dão
+        `400 invalid_engine`.
+
+        **Vai na query e não no corpo** porque as duas rotas que o pedem assim
+        são GET, e um GET com corpo não é contrato que este projecto vá
+        começar. `POST /session/pairphone` recebe-o no corpo JSON.
+      in: query
+      name: engine
+      required: true
+      schema:
+        enum:
+          - wa_noise
+          - wa_headless
+        example: wa_noise
+        type: string
     IdNoCaminho:
       description: Identificador do recurso, em hexadecimal de 32 caracteres.
       in: path
@@ -44,6 +74,51 @@ components:
 
         Note que um campo com o NOME errado não cai aqui: é ignorado (e
         registado). Ver "Campos que a API não conhece".
+    EngineDivergente:
+      content:
+        application/json:
+          example:
+            code: 409
+            error:
+              code: engine_mismatch
+              message: request names engine "wa_headless", but this session was created with engine "wa_noise"; engine is immutable after creation
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        O `engine` do pedido é um engine real, mas não é o da sessão ALVO.
+
+        Nenhum transporte foi tocado. O engine é imutável depois da criação
+        (F279), portanto o que muda é o pedido — não a sessão. Para saber com
+        que engine a sessão foi criada, veja `GET /session/capabilities`.
+
+        O mesmo status cobre `engine_unavailable`: o engine seria suportado,
+        e não está disponível neste processo (headless sem Chrome
+        configurado, por exemplo). Esse é facto de instalação, e o `code`
+        separa-os.
+    EngineNaoSuporta:
+      content:
+        application/json:
+          example:
+            code: 422
+            error:
+              code: capability_not_supported
+              message: capability "get_pairing_qr" is "not_implemented" on engine "wa_headless"
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        O pedido está correcto e o engine que ele nomeia **não serve esta
+        operação** nesta versão.
+
+        Nenhum transporte foi tocado, e não há recurso ao outro engine: servir
+        pelo transporte que ninguém pediu emparelharia a sessão contra o que o
+        próprio registo dela diz.
+
+        Medido em 2026-08-27: `wa_headless` não serve `get_pairing_qr` nem
+        `connect_session` (não existe adaptador, e nada de wa-headless é
+        construído no arranque), e `request_pairing_code` está por medir. A
+        matriz completa está em `GET /admin/capabilities`.
     ErroInterno:
       content:
         application/json:
@@ -7253,6 +7328,10 @@ components:
       description: |
         Corpo de `POST /session/pairphone`. Campos desconhecidos são IGNORADOS em
         silêncio — o decodificador não usa `DisallowUnknownFields`.
+
+        **`engine` é obrigatório desde 2026-08-27.** O engine é ESCOLHIDO pelo
+        pedido de emparelhamento e determina qual transporte executa a ligação;
+        não é inferido da sessão do chamador. Ver a descrição da rota.
       properties:
         Phone:
           description: |
@@ -7280,7 +7359,41 @@ components:
           minLength: 1
           nullable: false
           type: string
+        engine:
+          description: |
+            Transporte que executa este emparelhamento. Obrigatório, não-nulo e
+            não-vazio.
+
+            Tem de ser IGUAL ao engine com que a sessão alvo foi criada
+            (`POST /admin/users`): divergir dá `409 engine_mismatch`, e o engine
+            é imutável depois da criação, portanto o que muda é o pedido. A
+            redundância é deliberada — é a confirmação explícita no ponto em que
+            uma operação sensível começa.
+
+            `legacy_unknown` é RECUSADO com `400 invalid_engine`: descreve
+            história de migração, nunca uma intenção. Qualquer outro valor fora
+            desta lista — incluindo os nomes de configuração antigos `wanoise` e
+            `headless`, e variações de caixa ou com espaços — é igualmente
+            inválido e dá `400 invalid_engine`. O valor não é aparado nem
+            normalizado antes de ser comparado.
+          enum:
+            - wa_noise
+            - wa_headless
+          nullable: false
+          type: string
+        phone_number:
+          description: |
+            Alias snake_case de `Phone`, aceite desde 2026-08-27. Só é usado
+            quando `Phone` vier ausente ou vazio, para que um corpo com os dois
+            campos não dependa da ordem em que o JSON os lista.
+
+            `Phone` mantém a maiúscula porque é o nome histórico da rota e
+            integradores escrevem contra ele; renomear seria mudança de contrato
+            disfarçada de arrumação.
+          nullable: false
+          type: string
       required:
+        - engine
         - Phone
       type: object
     PedidoPresenca:
@@ -19722,6 +19835,8 @@ paths:
         5. `GET /session/status` confirma — `loggedIn: true`.
 
         **Autenticação**: token de sessão.
+      parameters:
+        - $ref: '#/components/parameters/EngineDePareamento'
       responses:
         "200":
           content:
@@ -19755,8 +19870,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Outra réplica é dona desta sessão. Encaminhe o pedido para o
-            processo que a detém — insistir aqui não resolve.
+            Três causas partilham este status, e o `code` separa-as:
+
+            - `session_owned_by_another_replica` — outra réplica é dona desta
+              sessão. Encaminhe o pedido para o processo que a detém, porque
+              insistir aqui não resolve;
+            - `engine_mismatch` — o `engine` do pedido não é o da sessão alvo.
+              O engine é imutável depois da criação, logo o que muda é o pedido;
+            - `engine_unavailable` — o engine seria suportado mas não está
+              disponível NESTE processo (por exemplo headless sem Chrome
+              configurado). É facto de instalação, não de pedido.
+
+            Em nenhuma das três se chegou a tocar no transporte.
+        "422":
+          $ref: '#/components/responses/EngineNaoSuporta'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -20127,6 +20254,17 @@ paths:
 
         **Regras**:
 
+        - `engine` é obrigatório, não-nulo, não-vazio, e só aceita `wa_noise` ou
+          `wa_headless`. **O engine é escolhido pelo pedido de emparelhamento e
+          determina qual transporte executa a ligação; não é inferido da sessão
+          do chamador.** Ausente, vazio, `legacy_unknown` ou qualquer outro
+          valor dá `400 invalid_engine`, e nenhum transporte é tocado;
+        - `engine` tem de coincidir com o da sessão ALVO. Divergir dá
+          `409 engine_mismatch`. **Não há recurso a outro engine**: um pedido
+          que nomeie um transporte que não serve esta operação é recusado, nunca
+          servido em silêncio pelo outro;
+        - a resolução do engine corre ANTES da validação do número. Um corpo com
+          `engine` errado e sem `Phone` dá o erro do engine, não `missing_phone`;
         - `Phone` é obrigatório: só dígitos, com código de país, sem `+` e sem
           `@s.whatsapp.net`. Vazio dá `400 missing_phone`;
         - a sessão **não pode já estar autenticada** — a guarda corre ANTES de
@@ -20144,6 +20282,7 @@ paths:
           application/json:
             example:
               Phone: "554192421234"
+              engine: wa_noise
             schema:
               $ref: '#/components/schemas/PedidoPareamentoTelefone'
         required: true
@@ -20176,13 +20315,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Recusa de validação. Os códigos possíveis: `missing_phone` (sem o
-            campo `Phone`), `already_paired` (a sessão já está autenticada),
-            `no_session` (nenhum cliente vivo — ligue primeiro),
+            Recusa de validação. Os códigos possíveis: `invalid_engine` (campo
+            `engine` ausente, vazio ou não reconhecido — é o primeiro a ser
+            avaliado), `missing_phone` (sem o campo `Phone` nem `phone_number`),
+            `already_paired` (a sessão já está autenticada), `no_session`
+            (nenhum cliente vivo — ligue primeiro, ou a sessão alvo não existe),
             `pair_phone_failed` (o número foi recusado; a mensagem traz o motivo
             do SDK) e `could_not_decode_payload` (corpo não é JSON válido).
         "401":
           $ref: '#/components/responses/NaoAutorizado'
+        "409":
+          $ref: '#/components/responses/EngineDivergente'
+        "422":
+          $ref: '#/components/responses/EngineNaoSuporta'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -20483,6 +20628,8 @@ paths:
         **Regras**: exige um cliente vivo — sem ele, `400 no_session`.
 
         **Autenticação**: token de sessão.
+      parameters:
+        - $ref: '#/components/parameters/EngineDePareamento'
       responses:
         "200":
           content:
@@ -20506,11 +20653,15 @@ paths:
           $ref: '#/components/responses/SemSessao'
         "401":
           $ref: '#/components/responses/NaoAutorizado'
+        "409":
+          $ref: '#/components/responses/EngineDivergente'
+        "422":
+          $ref: '#/components/responses/EngineNaoSuporta'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ✅ Ler o QR code de emparelhamento
+      summary: ⬜ Ler o QR code de emparelhamento
       tags:
         - Sessões
   /session/s3/config:
