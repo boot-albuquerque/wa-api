@@ -30195,18 +30195,37 @@ divergir do valor already-gravado, devolvendo o mesmo comportamento que
 camada que todo chamador atravessa, não pela disciplina de um caso de uso
 específico.
 
-**Status**: não corrigido nesta sessão — o papel desta worktree é auditar e
-reportar, não corrigir (instrução explícita do prompt de auditoria). Teste do
-defeito commitado em `pkg/infra/db/capability_audit_user_test.go`
-(`TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation`), controle
-de contraste em `TestAudit_Invariant2_UseCaseComparisonRejectsDivergence`
-(confirma que o caso de uso, sozinho, recusa a mesma mudança). Falta o
-controle negativo formal exigido pela política deste projeto para achados
-corrigidos (não se aplica ainda — achado não corrigido) e falta decidir se a
-correção entra nesta worktree de auditoria ou numa worktree de correção
-separada; perguntar ao usuário antes de agir.
+**Status**: **corrigido** em `feature/ownership-newest-wins-fix` (2026-08-26),
+por decisão explícita do usuário. `UserRepository.UpdateUser` agora roda a
+escrita de engine dentro de uma transação que lê a linha com `FOR UPDATE`
+(Postgres; SQLite usa seu próprio lock serializado de transação) e recusa com
+`domain.ErrEngineImmutable` qualquer divergência do valor já gravado — a
+validade do engine (`IsValidForCreate`) continua sendo checada primeiro, na
+mesma ordem de prioridade que o código anterior tinha, para que um valor
+inválido continue voltando `ErrInvalidEngine` e não `ErrEngineImmutable`.
 
-<!-- f-status: aberto -->
+Testes que travam o achado:
+
+- `TestAudit_Invariant2_RepositoryRejectsEngineChangeAfterCreation`
+  (`pkg/infra/db/capability_audit_user_test.go`) — antigo
+  `..._RepositoryAcceptsEngineChangeAfterCreation`, o teste de ATAQUE da
+  auditoria, invertido para afirmar a rejeição. Controle negativo executado
+  manualmente durante a correção: sem `updateUserWithEngineGuard`, este
+  teste falha com "UpdateUser with a divergent engine unexpectedly
+  succeeded" — confirmado antes de commitar.
+- `TestUpdateUserEngine_DivergentValueRejected` e
+  `TestUpdateUserEngine_IdempotentResendSucceeds`
+  (`pkg/infra/db/user_engine_test.go`) — o antigo `TestUpdateUserEngine`
+  testava exatamente o caminho que era o bug (mudar o engine com sucesso);
+  foi substituído pelos dois acima, um para a rejeição e um para o no-op
+  idempotente que `EditUserUseCase` já tolerava.
+- `TestUpdateUserRejectsInvalidEngine` — sem mudança de asserção, mas
+  depende da nova ordem de prioridade (validade antes de imutabilidade) para
+  continuar verde.
+
+`make check` verde após a correção (ver F280, mesma sessão).
+
+<!-- f-status: corrigido -->
 
 ## F280 — "claim mais recente vence" (invariante 4) é, na implementação, "quem chega por último ao banco vence" — não há comparação de recência de token/claim
 
@@ -30257,11 +30276,57 @@ necessária (ex.: para tolerar reconexão fora de ordem), introduzir um
 timestamp de emissão do lado do chamador e comparar em
 `ClaimAccountIdentity` antes de aceitar a supersessão.
 
-**Status**: não corrigido nesta sessão — é achado de auditoria, não de
-implementação; decisão (a) vs (b) é do usuário/arquiteto do projeto, não da
-worktree de auditoria. Teste do defeito commitado em
-`pkg/infra/db/account_ownership_audit_test.go`
-(`TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency`).
+**Status**: **corrigido** em `feature/ownership-newest-wins-fix` (2026-08-26)
+— decisão (a): "chegada ao banco" (mais precisamente, "claim mais
+recentemente aceito pelo coordenador autoritativo") é a semântica
+pretendida, formalizada em **ADR-0010**
+(`docs/adr/0010-newest-wins-e-a-ordem-que-o-claim-decide.md`). Nenhum
+algoritmo mudou em `ClaimAccountIdentity` — o mecanismo
+(`pg_advisory_xact_lock` + `FOR UPDATE` + `ownership_revision` monotônica,
+atribuída dentro da própria transação) já implementava exatamente esta
+semântica; o que faltava era o registro explícito da decisão e a cobertura
+de teste dos interleavings que a tornam verificável.
 
-<!-- f-status: aberto -->
+Metodologia seguida: (1) o teste de caracterização
+(`TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency`, já commitado pela
+auditoria) foi rodado de novo contra Postgres real para confirmar o
+comportamento atual antes de qualquer mudança — passou, documentando
+"ordem de chegada ao banco" como o comportamento medido; (2) sob a NOVA
+formalização (ADR-0010) esse mesmo resultado deixa de ser um defeito, então
+não havia teste "vermelho antes / verde depois" a escrever para a
+ordenação em si — o que HAVIA para corrigir era ausência de cobertura dos
+interleavings explicitamente pedidos, que sim eram novos.
+
+Testes que travam o achado (todos em `pkg/infra/db/`, Postgres real via
+`WA_API_TEST_POSTGRES`):
+
+- `TestNewestWins_TrivialSequential` — caso trivial (A claim → B claim).
+- `TestNewestWins_ClaimOrderDecidesNotAuthOrder` — o cerne da ambiguidade: A
+  autentica primeiro mas faz claim por último, B autentica depois mas faz
+  claim primeiro; A vence, confirmando que é o CLAIM, não a autenticação,
+  que define "mais recente" (decisão registrada na ADR-0010).
+- `TestNewestWins_ConcurrentClaimsSameReplica` — reconfirma a invariante 3
+  (exclusividade) sob a formalização nova; mesma propriedade de
+  `TestAccountOwnership_Race`.
+- `TestNewestWins_ConcurrentClaimsDifferentReplicas` — duas conexões
+  `*sqlx.DB` independentes (réplicas simuladas) disputando o mesmo
+  `(identity, engine)` concorrentemente; verificado por uma TERCEIRA conexão.
+- `TestNewestWins_CleanupFailureDoesNotReturnOwnership` — um
+  `domain.Fencer` que sempre falha não devolve ownership ao antigo dono
+  (invariante 6/8), lido de uma conexão nova (mesma disciplina de
+  `TestAccountOwnership_Restart`).
+- Reusados sem alteração: `TestAccountOwnership_Fencing` (callback
+  atrasado), `TestAccountOwnership_Restart` (restart pós-supersede),
+  `TestAccountOwnership_StructuralConstraint` /
+  `TestAudit_Invariant3_StructuralIndexRejectsBypassingTheGoLayer` (proteção
+  estrutural), `TestAccountOwnership_CrossEngine` /
+  `TestAudit_AccountOwnership_CrossEngine_Concurrent` (cross-engine).
+
+`TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency` permanece no
+repositório sem alteração, como registro histórico do achado — ver a nota
+final da ADR-0010 sobre por quê.
+
+`make check` verde após a correção (ver F279, mesma sessão).
+
+<!-- f-status: corrigido -->
 

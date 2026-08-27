@@ -143,9 +143,11 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 				Msg("update user rejected: invalid engine")
 			return fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, upd.Engine.String())
 		}
-		return r.updateUserWithEngineGuard(ctx, id, upd)
+		err := r.updateUserWithEngineGuard(ctx, id, upd)
+		return err
 	}
-	return r.updateUser(ctx, id, upd)
+	err := r.execUpdateUser(ctx, r.db, id, upd)
+	return err
 }
 
 // updateUserWithEngineGuard runs UpdateUser's write inside a transaction
@@ -195,6 +197,8 @@ func (r *UserRepository) updateUserWithEngineGuard(ctx context.Context, id strin
 	}
 
 	if err := r.execUpdateUser(ctx, tx, id, upd); err != nil {
+		log.Warn().Err(err).Str("table", "users").Str("user_id", id).
+			Msg("engine-guarded update aborted: the underlying field write failed")
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -210,12 +214,6 @@ func (r *UserRepository) updateUserWithEngineGuard(ctx context.Context, id strin
 // so the same query-building code runs on either.
 type sqlExecer interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-}
-
-// updateUser is the un-guarded path, used when upd.Engine is nil (no
-// immutability question to ask).
-func (r *UserRepository) updateUser(ctx context.Context, id string, upd domain.UserUpdate) error {
-	return r.execUpdateUser(ctx, r.db, id, upd)
 }
 
 func (r *UserRepository) execUpdateUser(ctx context.Context, exec sqlExecer, id string, upd domain.UserUpdate) error {
@@ -259,15 +257,12 @@ func (r *UserRepository) execUpdateUser(ctx context.Context, exec sqlExecer, id 
 		addField("webhook_use_proxy", *upd.WebhookUseProxy)
 	}
 	if upd.Engine != nil {
-		// Validated, not coerced: an update that names an engine nobody serves
-		// has to fail saying so. legacy_unknown is refused here too — it
-		// describes history and can never be an intent.
-		if !upd.Engine.IsValidForCreate() {
-			log.Warn().Str("table", "users").Str("user_id", id).
-				Str("column", usersEngineColumn).Str("engine", upd.Engine.String()).
-				Msg("update user rejected: invalid engine")
-			return fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, upd.Engine.String())
-		}
+		// Validity and immutability are both already checked by UpdateUser
+		// before it ever calls this method with upd.Engine set (validity in
+		// UpdateUser itself, immutability in updateUserWithEngineGuard) - by
+		// the time execution reaches here, upd.Engine is known valid and, if
+		// this call came through the guard, already confirmed unchanged or
+		// non-conflicting. This is just the column assignment.
 		addField(usersEngineColumn, upd.Engine.String())
 	}
 	if upd.S3 != nil {

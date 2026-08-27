@@ -3265,8 +3265,11 @@ pkg/infra/db.UserRepository.DeleteUser	ELIGIBLE	covered
 pkg/infra/db.UserRepository.ListUsers	ELIGIBLE	covered
 pkg/infra/db.UserRepository.ListUsers.func1	EXCLUDED	X1
 pkg/infra/db.UserRepository.UpdateUser	ELIGIBLE	covered
-pkg/infra/db.UserRepository.UpdateUser.func1	EXCLUDED	X6
 pkg/infra/db.UserRepository.UserExists	ELIGIBLE	covered
+pkg/infra/db.UserRepository.execUpdateUser	ELIGIBLE	covered
+pkg/infra/db.UserRepository.execUpdateUser.func1	EXCLUDED	X6
+pkg/infra/db.UserRepository.updateUserWithEngineGuard	ELIGIBLE	covered
+pkg/infra/db.UserRepository.updateUserWithEngineGuard.func1	EXCLUDED	X1
 pkg/infra/db.UserRepository.userS3Config	ELIGIBLE	covered
 pkg/infra/db.WebhookOutboxRepository.ClaimDue	ELIGIBLE	uncovered:L1
 pkg/infra/db.WebhookOutboxRepository.ClaimDue.func1	EXCLUDED	X1

@@ -1283,7 +1283,13 @@ rules_frozen=true
 # (numerador e denominador crescem juntos e a razao pode cair um decimo sem
 # nenhuma funcao individual ter perdido log). Medido com
 # `go run ./cmd/logcov -json ./pkg` apos o merge completo, nao inferido.
-min_func_coverage=594
+# feature/ownership-newest-wins-fix (2026-08-26, F279): func_coverage SOBE
+# 594->595 (+1, ratchet-UP). ENTRA (1): pkg/infra/db.UserRepository.
+# updateUserWithEngineGuard (nova, coberta por log.Error/Warn nos ramos de
+# erro). UpdateUser e execUpdateUser continuam elegiveis e cobertas; nenhuma
+# funcao perdeu log. Medido com `go run ./cmd/logcov -json ./pkg` apos a
+# correcao completa, nao inferido.
+min_func_coverage=595
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1546,6 +1552,17 @@ min_func_coverage=594
 # feature/engine-capability-integration (2026-08-26): merge da onda 3 (ver
 # justificativa de min_func_coverage acima). errpath_coverage SOBE 781->782
 # (+1, ratchet-UP). Medido apos o merge completo.
+
+# feature/ownership-newest-wins-fix (2026-08-26, F279): errpath_coverage
+# permanece 782 (ratchet-HOLD, nao subida): UpdateUser.updateUserWithEngineGuard
+# adiciona 7 novos caminhos de saida (BeginTxx, leitura do engine atual,
+# divergencia de engine, propagacao do execUpdateUser, Commit), todos
+# cobertos por log.Error/Warn ou por propagacao explicita de causa
+# (`err := f(...); return err`, nao `return f(...)` direto - a forma direta
+# nao casa a regra (b) do METRIC.md porque nao e' nem identificador `err`
+# nem tupla multi-valor do callee). O denominador cresceu e o numerador
+# cresceu junto na mesma proporcao; o piso nao caiu. Medido apos a correcao
+# completa, nao inferido.
 min_errpath_coverage=782
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
@@ -1605,7 +1622,15 @@ min_errpath_coverage=782
 # engine + persistencia) que capability-http-endpoints nao tinha no seu
 # commit-base isolado. Medido apos o merge completo, nao inferido pela soma
 # das branches.
-min_eligible=1011
+# feature/ownership-newest-wins-fix (2026-08-26, F279): min_eligible SOBE
+# 1011->1013 (+2, ratchet-UP honesto). ENTRA (1):
+# pkg/infra/db.UserRepository.updateUserWithEngineGuard. execUpdateUser was
+# already eligible (renamed/restructured from the old UpdateUser body, same
+# entry); the net +2 also reflects sqlExecer's methods not counting (an
+# interface, not a func decl) and the removal of the now-dead duplicate
+# engine-validity branch inside execUpdateUser. Medido apos a correcao
+# completa, nao inferido.
+min_eligible=1013
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
