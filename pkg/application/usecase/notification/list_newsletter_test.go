@@ -29,7 +29,7 @@ func TestListNewsletterExecute(t *testing.T) {
 		// wantNewsletters é o valor esperado em
 		// NewsletterCollection.Newsletters no caminho feliz.
 		wantNewsletters []domain.NewsletterMetadata
-		wantErrorLog   string
+		wantErrorLog    string
 		// wantListCalls é quantas vezes ListSubscribed deve ter sido chamado.
 		wantListCalls int
 	}{
