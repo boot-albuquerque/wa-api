@@ -33161,3 +33161,136 @@ existiam e já exercitavam a rota real — não precisaram de teste novo, só
 pararam de mentir "passa" por acidente de branch isolada.
 
 <!-- f-status: corrigido -->
+
+## F329 — reversão de F269/CAP-10: as 88 rotas legadas deixam de responder — corte limpo por directiva do utilizador
+
+**Data/contexto**: 2026-08-27, `worktree/http-dto-legacy-alias-removal`,
+ramificado de `worktree/http-dto-foundation`. Tarefa explícita: reverter a
+política do F269/CAP-10 ("cada caminho antigo continua registado e a
+responder [...] tempo de vida: permanente") para toda a iniciativa de
+padronização de nomes do contrato HTTP.
+
+**O que o F269/CAP-10 tinha decidido** (2026-08-26/27,
+`api/openapi/CAMINHOS-CANONICOS.md`, commit que introduziu
+`pkg/presentation/http/canonico.go`): a tabela `caminhos.tsv` (91 linhas)
+gerava, para cada rota antiga já registada em `wiring_routes.go`, uma SEGUNDA
+rota com a forma canónica, apontando para o MESMO manipulador — via
+`RegisterCanonicalAliases`. As duas ficavam registadas no `mux.Router` para
+sempre; só a antiga saía do OpenAPI.
+
+**Por que a reversão**: o utilizador deu directiva explícita e directa, para
+toda a iniciativa de normalização de nomes (não só uma família), dizendo,
+em síntese: *"como o sistema ainda não tem consumidores, a compatibilidade
+futura não deve ser sacrificada por compatibilidade com um passado que
+ninguém consumiu [...] deprecated existe para consumidores reais migrando,
+não para preservar histórico de desenvolvimento"*. Perguntado se isto
+deveria aplicar-se a todo o projecto e não só a uma família, confirmou que
+sim. Isto substitui, para este projecto e nesta fase (pré-lançamento), a
+premissa que sustentava o F269/CAP-10 — a promessa de vida permanente
+assumia clientes reais a proteger, e não há nenhum.
+
+**Mecanismo, tal como encontrado** (`pkg/presentation/http/canonico.go`,
+`pkg/bootstrap/wiring_routes.go:275` antes desta sessão): `registry.routes`
+é um slice interno de `HandlerRegistry` (`pkg/presentation/http/registry.go`);
+`wiring_routes.go` acumula ~130 chamadas a `registry.Register(caminhoAntigo,
+handler, metodo)`; SÓ DEPOIS `RegisterCanonicalAliases(CaminhosCanonicos())`
+percorria a tabela embutida (`pkg/bootstrap/caminhos.tsv`, cópia de
+`api/openapi/caminhos.tsv`, comparadas por `TestAsDuasTabelasDeCaminhosSaoIguais`)
+e ACRESCENTAVA, para cada linha, uma nova entrada com o caminho canónico e o
+MESMO handler (injectando `{group_jid}`/`{community_jid}` no corpo quando o
+canónico ganhava parâmetro de caminho). `registry.Apply(router)` registava as
+duas.
+
+**Correção**: `RegisterCanonicalAliases` virou `CanonicalizeRoutes` — em vez
+de ACRESCENTAR, agora SUBSTITUI: remove do `registry.routes` cada (método,
+caminho) que a tabela consumiu e regista só o canónico no lugar. Trata
+correctamente entradas de método múltiplo (`registry.Register("/user/privacy",
+handler, "GET", "POST")` — descoberto só ao correr o gate: minha primeira
+versão assumia, incorrectamente, que nenhum `Register` combinava métodos).
+`wiring_routes.go` continua a registar os caminhos ANTIGOS tal como sempre
+registou — a mudança vive inteiramente no mecanismo de canonicalização, não
+nas ~130 chamadas a `Register`.
+
+**Onde a mudança foi ALÉM de `pkg/bootstrap`**: o stdio JSON-RPC
+(`pkg/infra/stdio/stdio_routes_*.go`) monta pedidos HTTP internos via
+`httptest.NewRequest` contra o MESMO router — 69 dos seus métodos estáticos
+apontavam para caminhos antigos que iam deixar de responder, o que teria
+partido a interface stdio em produção, não só os testes. Actualizados os
+`httpPath` de `chat.*`, `group.*`, `newsletter.*`, `user.*`,
+`session.qr`/`session.pairphone`/`session.history` para a forma canónica.
+Três (`group.photo`, `group.photo.remove`, `group.updateparticipants`)
+mudaram de `staticRoute` para `dynamicRoute`, porque o canónico ganhou
+`{group_jid}` na RELAÇÃO do caminho — `groupJIDParam` tenta várias grafias
+(`GroupJID`, `groupJID`, `groupjid`, `group_jid`) nos parâmetros do pedido
+JSON-RPC, preservando o que um cliente já enviasse antes desta mudança
+(nenhuma grafia nova é exigida).
+
+**As cinco rotas de descarga (`/chat/download{tipo}`) foram DELIBERADAMENTE
+excluídas** desta reversão — não fazem parte de `caminhos.tsv` (são a
+consolidação CAP-10 separada, `/chats/download/{kind}`), e o worktree
+`http-dto-download-paths` já tinha registado (F297 nesse ramo) que mantê-las
+é decisão própria e explícita, anterior a esta directiva. Não as toquei.
+
+**Erro cometido e corrigido durante esta sessão** — registo porque a política
+anti-regressão deste projecto pede honestidade sobre o processo, não só o
+resultado: a primeira tentativa de propagar o rename usou um script Python
+com substituição literal de string em TODO o repositório (120 ficheiros),
+incluindo `wiring_routes.go` — que NÃO deveria ter sido tocado, porque o
+mecanismo de canonicalização já cuida da troca em tempo de execução. Editar
+o texto das chamadas a `Register` ali directamente duplicou registos
+conflitantes (`SetGroupPhoto` e `RemoveGroupPhoto` ficaram os DOIS registados
+como `POST /groups/{group_jid}/photo`, quando deviam ser `PUT` e `DELETE`
+respectivamente) e corrompeu comentários que citavam CAMINHOS DE FICHEIRO
+não relacionados com rotas HTTP (`internal/wa-noise/capabilities/user/info.go`
+virou `.../users/info.go`, um caminho que não existe, só porque a substring
+`/user/info` bateu). Revertido por completo (`git checkout --` nos 120
+ficheiros) e refeito por ficheiro, só onde uma string literal era de facto
+um alvo de `httptest.NewRequest`/`f.get`/`f.do` contra o router real.
+
+**Verificação de medição — contagem de rotas** (`go run ./cmd/listroutes`,
+antes via `git stash` para a árvore do commit anterior a esta sessão, depois
+com as alterações aplicadas de volta, mesma máquina, mesma árvore): **235 →
+147** rotas registadas (**-88**). Não é exactamente -91 porque quatro das 91
+linhas da tabela mapeiam PARES de linhas para o MESMO par (método, caminho)
+canónico final combinado com métodos múltiplos numa única entrada de
+registry (`/user/privacy` GET+POST era uma só chamada a `Register`).
+
+**Testes**: `TestTodaRotaCanonicaEstaRegistadaEALegadaNao` (antiga
+`TestTodaRotaLegadaTemCanonicaRegistada`, invertida) prova que a canónica
+está registada E que a antiga NÃO está — antes o teste dela provava o
+oposto, que as duas coexistiam, e passava porque coexistiam mesmo.
+`TestRotaLegadaResponde404` (nova) é table-driven sobre `CaminhosCanonicos()`
+— 88 subtestes (algumas das 91 linhas partilham a mesma dupla método+caminho
+antigo, ex.: `GET`/`POST /user/privacy` cada uma sua linha mas o mesmo
+`routeEntry`), um por linha, cada um afirmando `router.Match` falso para o
+caminho antigo. **Controlo negativo EXECUTADO**: troquei temporariamente o
+corpo de `CanonicalizeRoutes` por `r.routes = append(r.routes, canonicas...)`
+— o comportamento antigo de F269, que ACRESCENTA em vez de SUBSTITUIR — e
+corri `go test ./pkg/bootstrap/... -run TestRotaLegadaResponde404 -v`:
+falharam **88 de 88** subtestes, todos com a mensagem esperada ("ainda casa
+com uma rota registada — devia ter sido removida no corte limpo"). Restaurada
+a implementação correcta a seguir (ficheiro guardado antes da mutação) e
+reconfirmado `go test ./pkg/bootstrap/... ./pkg/infra/stdio/...` verde.
+`go test ./pkg/bootstrap/... ./pkg/infra/stdio/...`: PASS
+completo depois da correcção. `go test ./...`: as únicas falhas restantes
+são as duas já registadas como pré-existentes e alheias a esta fundação
+(`cmd/logcov` — F295/F296 — e `TestTodoMetodoComErroTemWrapper` em
+`pkg/infra/wa-noise/client`, ficheiro que esta sessão não tocou, confirmado
+por `git diff --stat` vazio nesse caminho).
+
+**Documentação actualizada**: `api/openapi/CAMINHOS-CANONICOS.md` e
+`docs/ENDPOINTS.md` — a secção de política deixa de afirmar "as antigas
+continuam a responder" e passa a registar a reversão (data, motivo,
+directiva do utilizador), mantendo a tabela de equivalência nome-antigo →
+nome-canónico como registo histórico para quem chegar com o nome antigo (em
+logs, exemplos velhos). `pkg/bootstrap/stdio_route_consistency_test.go`:
+`knownPending` e `structuralExceptions` actualizados para os nomes
+canónicos; três novas excepções estruturais para os `dynamicRoute` de
+`group.photo`/`group.photo.remove`/`group.updateparticipants`.
+
+**Status**: corrigido nesta sessão. Testado por
+`TestTodaRotaCanonicaEstaRegistadaEALegadaNao` e `TestRotaLegadaResponde404`
+(`pkg/bootstrap/caminhos_canonicos_test.go`), com controlo negativo
+executado e descrito acima.
+
+<!-- f-status: corrigido -->

@@ -562,25 +562,24 @@ Catálogo, produtos e Flows são superfície exclusiva da Cloud API com WABA.
 
 ## Caminhos canónicos — a padronização
 
-**2026-08-26.** As rotas passaram a ter forma canónica, e **as antigas
-continuam a funcionar**. A regra está em `api/openapi/CAMINHOS-CANONICOS.md`; a
-tabela é `api/openapi/caminhos.tsv`, e é dela que saem tanto as rotas
-registadas como a documentação — não há terceira cópia a desactualizar-se.
+**2026-08-26.** As rotas passaram a ter forma canónica. A regra está em
+`api/openapi/CAMINHOS-CANONICOS.md`; a tabela é `api/openapi/caminhos.tsv`, e
+é dela que saem tanto as rotas registadas como a documentação — não há
+terceira cópia a desactualizar-se.
 
 **91 rotas** ganharam forma canónica. O que fica singular — `/session/*`,
 `/health`, `/webhook`, `/s3/*`, `/hmac/*`, `/proxy/set`, `/status/set/*`,
 `/labels`, `/admin/users`, `/call/reject` — é singleton ou já era plural, e o
 motivo de cada uma está no documento da regra.
 
-**As antigas continuam a ser servidas — e saíram do OpenAPI.** Não há data de
-remoção; o que há é a decisão de o contrato descrever **um nome por operação**.
-Documentar as duas formas punha 232 operações para 141 capacidades, e obrigava
-quem lê a escolher entre `/chat/list` e `/chats/list` sem elemento para decidir
-— que é a ambiguidade que esta padronização existe para eliminar.
-
-**Esta tabela é, a partir de agora, a única referência do nome antigo.** Se tem
-um cliente a chamar `/chat/list`, ele continua a funcionar; procure aqui a
-forma nova quando quiser migrar.
+**Reversão de 2026-08-27**: a política original mantinha a rota antiga
+registada e a responder para sempre. Foi **revertida por directiva explícita
+do utilizador** — o projecto ainda não tem consumidores reais, então não há
+cliente a proteger de um corte, e a promessa de compatibilidade permanente
+só tinha custo, sem benefício. **As formas antigas listadas abaixo já não
+respondem** (404) — a tabela abaixo é agora um **registo histórico**, para
+quem chegar com o nome antigo (visto em logs, exemplos velhos) encontrar a
+forma actual.
 
 ### As nove que mudaram de forma, não só de número
 

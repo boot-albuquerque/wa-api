@@ -3341,8 +3341,11 @@ pkg/infra/stdio.groupEphemeralPath	ELIGIBLE	covered
 pkg/infra/stdio.groupInfoPath	ELIGIBLE	covered
 pkg/infra/stdio.groupInviteInfoPath	ELIGIBLE	covered
 pkg/infra/stdio.groupInviteLinkPath	ELIGIBLE	covered
+pkg/infra/stdio.groupJIDParam	ELIGIBLE	uncovered:L1
 pkg/infra/stdio.groupLockedPath	ELIGIBLE	covered
 pkg/infra/stdio.groupNamePath	ELIGIBLE	covered
+pkg/infra/stdio.groupParticipantsPath	ELIGIBLE	covered
+pkg/infra/stdio.groupPhotoPath	ELIGIBLE	covered
 pkg/infra/stdio.groupTopicPath	ELIGIBLE	covered
 pkg/infra/stdio.mergeDynamicRoutes	ELIGIBLE	covered
 pkg/infra/stdio.mergeStaticRoutes	ELIGIBLE	covered
@@ -3901,10 +3904,10 @@ pkg/infra/wa-noise/runtime/session.wanoiseSession.WaNoiseClient	EXCLUDED	X1
 pkg/infra/wa-noise/runtime/session.wanoiseSession.translatePairingItem	EXCLUDED	X1
 pkg/presentation/http.Find	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
+pkg/presentation/http.HandlerRegistry.CanonicalizeRoutes	ELIGIBLE	uncovered:L1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
-pkg/presentation/http.HandlerRegistry.RegisterCanonicalAliases	ELIGIBLE	uncovered:L1
 pkg/presentation/http.InjectPathParams	EXCLUDED	X1
-pkg/presentation/http.InjectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:110);uncovered:L2(S-consume,canonico.go:121);uncovered:L2(S-consume,canonico.go:142)
+pkg/presentation/http.InjectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:152);uncovered:L2(S-consume,canonico.go:163);uncovered:L2(S-consume,canonico.go:184)
 pkg/presentation/http.NewHandlerRegistry	EXCLUDED	X1
 pkg/presentation/http.NewProfileFullHandler	EXCLUDED	X1
 pkg/presentation/http.NewProfileHandler	EXCLUDED	X1

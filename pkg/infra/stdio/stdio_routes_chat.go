@@ -10,31 +10,42 @@ import (
 // mídia e leitura de histórico.
 
 var chatStaticRoutes = map[string]staticRoute{
-	"chat.send.text":     {httpMethod: "POST", httpPath: "/chat/send/text"},
-	"chat.send.image":    {httpMethod: "POST", httpPath: "/chat/send/image"},
-	"chat.send.video":    {httpMethod: "POST", httpPath: "/chat/send/video"},
-	"chat.send.document": {httpMethod: "POST", httpPath: "/chat/send/document"},
-	"chat.send.audio":    {httpMethod: "POST", httpPath: "/chat/send/audio"},
-	"chat.send.sticker":  {httpMethod: "POST", httpPath: "/chat/send/sticker"},
-	"chat.send.location": {httpMethod: "POST", httpPath: "/chat/send/location"},
-	"chat.send.contact":  {httpMethod: "POST", httpPath: "/chat/send/contact"},
-	"chat.send.poll":     {httpMethod: "POST", httpPath: "/chat/send/poll"},
-	"chat.send.forward":  {httpMethod: "POST", httpPath: "/chat/send/forward"},
-	"chat.send.buttons":  {httpMethod: "POST", httpPath: "/chat/send/buttons"},
-	"chat.send.carousel": {httpMethod: "POST", httpPath: "/chat/send/carousel"},
-	"chat.send.list":     {httpMethod: "POST", httpPath: "/chat/send/list"},
-	"chat.send.edit":     {httpMethod: "POST", httpPath: "/chat/send/edit"},
+	"chat.send.text":     {httpMethod: "POST", httpPath: "/chats/send/text"},
+	"chat.send.image":    {httpMethod: "POST", httpPath: "/chats/send/image"},
+	"chat.send.video":    {httpMethod: "POST", httpPath: "/chats/send/video"},
+	"chat.send.document": {httpMethod: "POST", httpPath: "/chats/send/document"},
+	"chat.send.audio":    {httpMethod: "POST", httpPath: "/chats/send/audio"},
+	"chat.send.sticker":  {httpMethod: "POST", httpPath: "/chats/send/sticker"},
+	"chat.send.location": {httpMethod: "POST", httpPath: "/chats/send/location"},
+	"chat.send.contact":  {httpMethod: "POST", httpPath: "/chats/send/contact"},
+	"chat.send.poll":     {httpMethod: "POST", httpPath: "/chats/send/poll"},
+	"chat.send.forward":  {httpMethod: "POST", httpPath: "/chats/send/forward"},
+	"chat.send.buttons":  {httpMethod: "POST", httpPath: "/chats/send/buttons"},
+	"chat.send.carousel": {httpMethod: "POST", httpPath: "/chats/send/carousel"},
+	"chat.send.list":     {httpMethod: "POST", httpPath: "/chats/send/list"},
+	"chat.send.edit":     {httpMethod: "POST", httpPath: "/chats/send/edit"},
 
-	"chat.delete":                      {httpMethod: "POST", httpPath: "/chat/delete/message"},
-	"chat.react":                       {httpMethod: "POST", httpPath: "/chat/react"},
-	"chat.archive":                     {httpMethod: "POST", httpPath: "/chat/archive"},
-	"chat.pin":                         {httpMethod: "POST", httpPath: "/chat/pin"},
-	"chat.mute":                        {httpMethod: "POST", httpPath: "/chat/mute"},
-	"chat.presence":                    {httpMethod: "POST", httpPath: "/chat/presence"},
-	"chat.request-unavailable-message": {httpMethod: "POST", httpPath: "/chat/request-unavailable-message"},
-	"chat.ephemeral":                   {httpMethod: "POST", httpPath: "/chat/ephemeral"},
-	"chat.ephemeral.default":           {httpMethod: "POST", httpPath: "/chat/ephemeral/default"},
-	"message.star":                     {httpMethod: "POST", httpPath: "/message/star"},
+	"chat.delete":                      {httpMethod: "POST", httpPath: "/chats/delete/message"},
+	"chat.react":                       {httpMethod: "POST", httpPath: "/chats/react"},
+	"chat.archive":                     {httpMethod: "POST", httpPath: "/chats/archive"},
+	"chat.pin":                         {httpMethod: "POST", httpPath: "/chats/pin"},
+	"chat.mute":                        {httpMethod: "POST", httpPath: "/chats/mute"},
+	"chat.presence":                    {httpMethod: "POST", httpPath: "/chats/presence"},
+	"chat.request-unavailable-message": {httpMethod: "POST", httpPath: "/chats/request-unavailable-message"},
+	"chat.ephemeral":                   {httpMethod: "POST", httpPath: "/chats/ephemeral"},
+	"chat.ephemeral.default":           {httpMethod: "POST", httpPath: "/chats/ephemeral/default"},
+	"message.star":                     {httpMethod: "POST", httpPath: "/messages/star"},
+
+	// chat.markread e chat.send.pollvote NÃO estão aqui: o corte a hard das
+	// rotas concatenadas (worktree http-dto-paths, F297) já as tornou
+	// DINÂMICAS — ver chatDynamicRoutes abaixo (chat_jid/poll_message_id
+	// vivem no caminho, não são mais um segmento estático).
+	//
+	// chat.download.image/video/audio/document NÃO estão aqui: as cinco
+	// rotas legadas /chat/download{tipo} foram apagadas (reversão de
+	// F269/CAP-10 para download, worktree http-dto-download-paths, F328) —
+	// só a forma consolidada /chats/download/{kind} responde, em
+	// chatDynamicRoutes (chat.download.media).
 }
 
 var chatDynamicRoutes = map[string]dynamicRoute{
@@ -85,7 +96,7 @@ func chatHistoryPath(ss *Server, req *JSONRpcRequest) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	httpPath := "/chat/history?chat_jid=" + chatJID
+	httpPath := "/chats/history?chat_jid=" + chatJID
 	// Add optional limit parameter
 	if limit, ok := req.Params["limit"].(float64); ok {
 		httpPath += fmt.Sprintf("&limit=%d", int(limit))

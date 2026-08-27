@@ -31,7 +31,13 @@ var familiasPluralizadas = map[string]string{
 	"message":    "messages",
 }
 
-func TestTodaRotaLegadaTemCanonicaRegistada(t *testing.T) {
+// TestTodaRotaCanonicaEstaRegistadaEALegadaNao é o gate do corte limpo
+// (reversão de F269/CAP-10, 2026-08-27): para cada linha da tabela, SÓ a
+// forma canónica pode responder — a antiga tem de desaparecer do router, não
+// só do contrato documentado. Ver HOUSEKEEP.md para a decisão e a
+// justificação (directiva do utilizador, zero consumidores reais antes do
+// lançamento).
+func TestTodaRotaCanonicaEstaRegistadaEALegadaNao(t *testing.T) {
 	servidas := map[string]bool{}
 	for _, rota := range Routes(Deps{}) {
 		for _, metodo := range rota.Methods {
@@ -43,8 +49,8 @@ func TestTodaRotaLegadaTemCanonicaRegistada(t *testing.T) {
 	for _, linha := range CaminhosCanonicos() {
 		antiga := linha.LegacyMethod + " " + linha.LegacyPath
 		canonica := linha.CanonicalMethod + " " + linha.CanonicalPath
-		if !servidas[antiga] {
-			faltam = append(faltam, "a tabela cita "+antiga+", que o router NÃO serve")
+		if servidas[antiga] {
+			faltam = append(faltam, "a rota legada "+antiga+" AINDA responde — devia ter sido substituída pela canónica")
 		}
 		if !servidas[canonica] {
 			faltam = append(faltam, canonica+" está na tabela mas NÃO foi registada")
@@ -57,6 +63,32 @@ func TestTodaRotaLegadaTemCanonicaRegistada(t *testing.T) {
 	}
 }
 
+// TestRotaLegadaResponde404 é o teste de regressão exigido pela política
+// anti-regressão do projeto para achados corrigidos (CLAUDE.md): reproduz,
+// para as noventa e uma rotas da tabela, exactamente a condição que a
+// reversão de F269/CAP-10 muda — o caminho antigo deixa de casar com
+// qualquer rota registada. Table-driven sobre caminhos.tsv, e não uma lista à
+// mão, porque são noventa e uma entradas e a tabela já é a fonte única.
+//
+// As cinco rotas de download (/chat/download{tipo}) não estão em
+// CaminhosCanonicos() — sofreram a mesma reversão por um caminho separado
+// (worktree http-dto-download-paths, F328), sem passar por caminhos.tsv, e
+// já têm o seu próprio teste de regressão (TestF297_LegacyDownloadRoutesAreGone).
+func TestRotaLegadaResponde404(t *testing.T) {
+	router := newRouterForRouteCheck()
+
+	for _, linha := range CaminhosCanonicos() {
+		linha := linha
+		t.Run(linha.LegacyMethod+"_"+linha.LegacyPath, func(t *testing.T) {
+			req := httptest.NewRequest(linha.LegacyMethod, linha.LegacyPath, nil)
+			var match mux.RouteMatch
+			if router.Match(req, &match) {
+				t.Fatalf("%s %s ainda casa com uma rota registada — devia ter sido removida no corte limpo (F269/CAP-10 revertido)",
+					linha.LegacyMethod, linha.LegacyPath)
+			}
+		})
+	}
+}
 // TestNenhumaFamiliaDeColeccaoFicouNoSingular é o teste que impede a
 // padronização de ficar a meio: se alguém acrescentar `/group/coisa-nova` sem
 // linha na tabela, isto acusa.

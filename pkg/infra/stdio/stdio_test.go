@@ -226,7 +226,7 @@ func TestRouteRequest_RotaEstaticaComTokens(t *testing.T) {
 
 	ss.handleRequest([]byte(`{"id":1,"method":"chat.send.text","params":{"token":"T","adminToken":"A","Phone":"55"}}`))
 
-	if router.method != http.MethodPost || router.path != "/chat/send/text" {
+	if router.method != http.MethodPost || router.path != "/chats/send/text" {
 		t.Fatalf("rota = %s %s", router.method, router.path)
 	}
 	if router.token != "T" || router.auth != "A" {
@@ -278,17 +278,17 @@ func TestRouteRequest_RotasDinamicas(t *testing.T) {
 		{
 			name:     "user lid",
 			line:     `{"id":1,"method":"user.lid","params":{"jid":"55@s.whatsapp.net"}}`,
-			wantPath: "/user/lid/55@s.whatsapp.net", wantVerb: http.MethodGet,
+			wantPath: "/users/lid/55@s.whatsapp.net", wantVerb: http.MethodGet,
 		},
 		{
 			name:     "chat history sem limit",
 			line:     `{"id":1,"method":"chat.history","params":{"chat_jid":"c@s.whatsapp.net"}}`,
-			wantPath: "/chat/history", wantQuery: "chat_jid=c@s.whatsapp.net", wantVerb: http.MethodGet,
+			wantPath: "/chats/history", wantQuery: "chat_jid=c@s.whatsapp.net", wantVerb: http.MethodGet,
 		},
 		{
 			name:     "chat history com limit",
 			line:     `{"id":1,"method":"chat.history","params":{"chat_jid":"c@s.whatsapp.net","limit":25}}`,
-			wantPath: "/chat/history", wantQuery: "chat_jid=c@s.whatsapp.net&limit=25", wantVerb: http.MethodGet,
+			wantPath: "/chats/history", wantQuery: "chat_jid=c@s.whatsapp.net&limit=25", wantVerb: http.MethodGet,
 		},
 		// Rotas cortadas para a forma canónica com group_jid/chat_jid/
 		// poll_message_id/invite_code no caminho (worktree http-dto-paths).
