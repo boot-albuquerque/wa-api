@@ -112,7 +112,31 @@ max_complexity=51
 # feature/engine-capability-integration (2026-08-27): merge da auditoria
 # adversarial + correção F279/F280. count 607 -> 612 (+5, INFORMATIVO).
 # max_complexity inalterado (51). Testes novos de auditoria/newest-wins.
-count=612
+# feature/pairing-explicit-engine (2026-08-27): engine explícito no
+# pareamento (F273/F281). count 612 -> 613 (+1, INFORMATIVO).
+# max_complexity inalterado (51).
+#
+# A issue nova foi IDENTIFICADA, e não estimada — as duas listas foram
+# comparadas linha a linha (`make lint` em worktree de f996279e contra HEAD):
+#
+#   + pkg/domain/apperr/codes.go: cyclomatic complexity 11 of func
+#     `(Category).HTTPStatus` is high (> 10) (gocyclo)
+#
+# É o `switch` que mapeia Category para status HTTP, que ganhou o décimo `case`
+# com CategoryCapabilityUnsupported (422). A complexidade de um switch plano
+# cresce com o número de casos e não com o entrelaçamento — dividi-lo em duas
+# funções baixaria o número e pioraria a leitura, porque a tabela inteira
+# deixaria de caber num olhar. Fica como está, e é o motivo de a trava ser
+# max_complexity e não count.
+#
+# Os arquivos NOVOS (pkg/pairing, pairing_providers.go,
+# handler_pairing_common.go, handler_pairing_engine_test.go,
+# pairing_testkit_test.go) não produziram uma única issue.
+#
+# Duas funções de teste subiram de complexidade sem mudar a contagem, porque já
+# estavam na lista: TestUseCases_SemSessao_PropagamACausa 11 -> 12 (o ramo que
+# escolhe a mensagem de recusa esperada do GetQR).
+count=613
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

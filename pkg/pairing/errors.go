@@ -3,6 +3,8 @@ package pairing
 import (
 	"fmt"
 
+	"github.com/rs/zerolog/log"
+
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 )
@@ -48,8 +50,19 @@ const (
 	CodeNoSession = "no_session"
 )
 
+// The five constructors below each log at Debug, and Resolve logs the SAME
+// refusal at Warn with the target session and the capability attached. The
+// duplication is deliberate and the two lines answer different questions: the
+// Warn is the operational event ("this caller was refused, here is who and
+// what"), and the Debug is the taxonomy ("this is the code and the category
+// that produced the status"). Debug is off in production, so the second costs
+// nothing there and is exactly what is wanted when somebody turns it on to ask
+// why a status came out the way it did.
+
 // errInvalidEngine builds the 400 for a missing or unparseable engine.
 func errInvalidEngine(raw string) error {
+	log.Debug().Str("code", CodeInvalidEngine).Int("raw_len", len(raw)).
+		Msg("pairing: building refusal")
 	return apperr.New(CodeInvalidEngine, apperr.CategoryValidation,
 		fmt.Sprintf("engine must be %q or %q", domain.EngineWaNoise, domain.EngineWaHeadless),
 		false, fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, raw))
@@ -62,6 +75,9 @@ func errInvalidEngine(raw string) error {
 // caller guessing which of the two values to change, and the answer is never
 // "change the session": engine is immutable after creation (F279).
 func errEngineMismatch(requested, target domain.Engine) error {
+	log.Debug().Str("code", CodeEngineMismatch).
+		Str("requested_engine", requested.String()).Str("target_engine", target.String()).
+		Msg("pairing: building refusal")
 	return apperr.New(CodeEngineMismatch, apperr.CategoryConflict,
 		fmt.Sprintf("request names engine %q, but this session was created with engine %q; engine is immutable after creation",
 			requested, target),
@@ -72,6 +88,9 @@ func errEngineMismatch(requested, target domain.Engine) error {
 // does not serve. reason carries the matrix's own note, which is where the
 // evidence for the refusal is written down.
 func errCapabilityNotSupported(capability domain.Capability, engine domain.Engine, status domain.CapabilityStatus, reason string) error {
+	log.Debug().Str("code", CodeCapabilityNotSupported).
+		Str("capability", capability.String()).Str("engine", engine.String()).
+		Str("status", status.String()).Msg("pairing: building refusal")
 	return apperr.New(CodeCapabilityNotSupported, apperr.CategoryCapabilityUnsupported,
 		fmt.Sprintf("capability %q is %q on engine %q", capability, status, engine),
 		false, fmt.Errorf("%s", reason))
@@ -80,6 +99,9 @@ func errCapabilityNotSupported(capability domain.Capability, engine domain.Engin
 // errEngineUnavailable builds the 409 for a provider the matrix promised and
 // this process does not have.
 func errEngineUnavailable(capability domain.Capability, engine domain.Engine) error {
+	log.Debug().Str("code", CodeEngineUnavailable).
+		Str("capability", capability.String()).Str("engine", engine.String()).
+		Msg("pairing: building refusal")
 	return apperr.New(CodeEngineUnavailable, apperr.CategoryConflict,
 		fmt.Sprintf("engine %q is not available in this process for capability %q", engine, capability),
 		false, nil)
@@ -87,6 +109,8 @@ func errEngineUnavailable(capability domain.Capability, engine domain.Engine) er
 
 // errNoSession builds the 400 for a target id with no row.
 func errNoSession(txtID string) error {
+	log.Debug().Str("code", CodeNoSession).Str("target_session_id", txtID).
+		Msg("pairing: building refusal")
 	return apperr.New(CodeNoSession, apperr.CategoryValidation, "no session", false,
 		fmt.Errorf("no user row for target session %q", txtID))
 }

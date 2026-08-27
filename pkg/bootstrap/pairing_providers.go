@@ -3,6 +3,8 @@ package bootstrap
 import (
 	"context"
 
+	"github.com/rs/zerolog/log"
+
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
@@ -43,6 +45,12 @@ type waNoiseSessionStarter struct {
 // s.Leases is nil, the claim always succeeds, and nothing is ever refused here.
 func (s *waNoiseSessionStarter) CheckOwnership(_ context.Context, txtID string) error {
 	if !claimSessionOwnership(s.server.Leases, txtID) {
+		// claimSessionOwnership already logs WHY it refused (lease held
+		// elsewhere, or the coordinator could not answer). This line says what
+		// the refusal became: the request is about to be answered 409, which is
+		// the fact the HTTP side is correlating against.
+		log.Warn().Str("txt_id", txtID).Str("code", codeSessionOwnedByAnotherReplica).
+			Msg("pairing: connect refused, session owned by another replica")
 		return apperr.New(codeSessionOwnedByAnotherReplica, apperr.CategoryConflict,
 			msgSessionOwnedByAnotherReplica, false, nil)
 	}
@@ -94,5 +102,13 @@ func buildPairingRegistry(s *server, users appport.UserRepository, getClient wac
 		Starter:     &waNoiseSessionStarter{server: s},
 	}
 	waHeadless := &pairing.Provider{Engine: domain.EngineWaHeadless}
+	// Logged with the per-engine port counts rather than a bare "built": the
+	// question an operator asks of this line is "does THIS process serve
+	// headless pairing", and a count of zero answers it where a provider list
+	// would not.
+	log.Info().
+		Int("wa_noise_ports", 3).
+		Int("wa_headless_ports", 0).
+		Msg("pairing: provider registry wired")
 	return pairing.NewRegistry(users, caps, waNoise, waHeadless)
 }
