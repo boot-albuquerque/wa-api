@@ -95,11 +95,28 @@ type NewsletterMessageResponse struct {
 	Type      string  `json:"type"`
 	Timestamp *string `json:"timestamp"`
 	ViewCount int     `json:"view_count"`
-	// ReactionCounts is emoji -> count, never null and `{}` for a post nobody
-	// reacted to. The keys are NOT Unicode-normalized: the protocol keeps "❤"
-	// and "❤️" apart, and merging them here would invent a total it never sent.
-	ReactionCounts map[string]int `json:"reaction_counts"`
-	Text           string         `json:"text"`
+	// Reactions is an ARRAY and not the protocol's emoji-keyed object, and this
+	// is the one place where the public naming rule forced a shape change
+	// rather than a rename: `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$` applies to EVERY
+	// object key recursively, and "❤️" is not a key that rule can ever admit.
+	// Exempting the map would have meant weakening the shared assertion for all
+	// six route families to accommodate one field.
+	//
+	// It is also the better shape on its own: a JSON object keyed by arbitrary
+	// Unicode is awkward for a typed client, and an array carries an order.
+	// Never null — `[]` for a post nobody reacted to.
+	Reactions []NewsletterReactionResponse `json:"reactions"`
+	Text      string                       `json:"text"`
+}
+
+// NewsletterReactionResponse is one emoji and how many people used it.
+//
+// The emojis are NOT Unicode-normalized: the protocol counts "❤" and "❤️"
+// separately — measured on the same post, 1 and 6 — and merging them here would
+// report a total it never sent.
+type NewsletterReactionResponse struct {
+	Emoji string `json:"emoji"`
+	Count int    `json:"count"`
 }
 
 // ListNewslettersResponse is the `data` of GET /newsletter/list.

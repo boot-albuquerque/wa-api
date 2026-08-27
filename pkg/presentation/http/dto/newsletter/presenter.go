@@ -1,6 +1,7 @@
 package newsletter
 
 import (
+	"sort"
 	"time"
 
 	"wa-api/pkg/domain"
@@ -77,13 +78,23 @@ func PresentNewsletterMessage(m domain.NewsletterMessage) NewsletterMessageRespo
 		ViewCount: m.ViewCount,
 		Text:      m.Text,
 	}
-	// Allocated even when the post has no reactions: `{}` and `null` are
-	// different values to every client, and only one of them can be indexed
+	// Allocated even when the post has no reactions: `[]` and `null` are
+	// different values to every client, and only one of them can be ranged over
 	// without a check.
-	out.ReactionCounts = make(map[string]int, len(m.ReactionCounts))
+	out.Reactions = make([]NewsletterReactionResponse, 0, len(m.ReactionCounts))
 	for emoji, count := range m.ReactionCounts {
-		out.ReactionCounts[emoji] = count
+		out.Reactions = append(out.Reactions, NewsletterReactionResponse{Emoji: emoji, Count: count})
 	}
+	// SORTED, and not left in map order: Go randomizes map iteration by design,
+	// so an unsorted slice would make the same post serialize differently on
+	// every request — which breaks caching, diffing and any test that compares
+	// the body.
+	sort.Slice(out.Reactions, func(i, j int) bool {
+		if out.Reactions[i].Count != out.Reactions[j].Count {
+			return out.Reactions[i].Count > out.Reactions[j].Count
+		}
+		return out.Reactions[i].Emoji < out.Reactions[j].Emoji
+	})
 	return out
 }
 
