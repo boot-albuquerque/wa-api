@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -221,11 +222,25 @@ func TestOpenAPIEnumValuesAreCanonical(t *testing.T) {
 // and checks every object key inside it, recursively — an example is meant
 // to show a client exactly what the wire looks like, so a stale key here is
 // either a lie about the contract or a preview of a regression.
+// dynamicExampleKey reconhece uma chave de MAPA DINÂMICO usada como
+// identificador — telefone/JID (contém "@") ou hash hexadecimal de 32
+// caracteres — dentro de um exemplo. Estas chaves são DADOS, não nomes
+// estruturais: "5516981818244@s.whatsapp.net" não é um campo que a nossa API
+// escolheu chamar assim, é o valor real que o WhatsApp devolve como chave de
+// um mapa (ex.: users/contacts, session/profile/full.user_info,
+// IndiceDeConversas). A regra de nomes canónicos (item #26 da especificação:
+// "Maps/dynamic objects... não altere valores dinâmicos arbitrariamente")
+// aplica-se aos campos ESTRUTURAIS ao lado dela, não à chave em si.
+var dynamicExampleKey = regexp.MustCompile(`^([0-9]+@[a-z.]+|[0-9a-f]{32})$`)
+
 func TestOpenAPIExampleKeysAreCanonical(t *testing.T) {
 	doc := especificacao(t)
 
 	var offenders []string
 	record := func(path, key string) {
+		if dynamicExampleKey.MatchString(key) {
+			return
+		}
 		if !contracttest.IsCanonicalKey(key) {
 			offenders = append(offenders, key+"  em  "+path)
 		}
