@@ -45,11 +45,11 @@ DELETE	/session/hmac/config	✅
 GET	/session/hmac/config	✅
 POST	/session/hmac/config	✅
 POST	/session/logout	❌
-POST	/session/pairphone	⬜
+POST	/session/pair/phone	⬜
 GET	/session/profile	✅
 GET	/session/profile/full	✅
 POST	/session/proxy	✅
-GET	/session/qr	✅
+GET	/session/pair/qr	✅
 DELETE	/session/s3/config	✅
 GET	/session/s3/config	✅
 POST	/session/s3/config	✅
@@ -82,11 +82,7 @@ GET	/users/privacy	✅
 GET	/users/profile/{jid}	✅
 POST	/chats/archive	✅
 POST	/chats/delete/message	✅
-POST	/chats/downloadaudio	✅
-POST	/chats/downloaddocument	✅
-POST	/chats/downloadimage	✅
-POST	/chats/downloadsticker	✅
-POST	/chats/downloadvideo	✅
+POST	/chats/download/{kind}	⬜
 POST	/chats/ephemeral	✅
 POST	/chats/ephemeral/default	✅
 POST	/chats/markread	✅

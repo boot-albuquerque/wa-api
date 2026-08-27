@@ -46,6 +46,20 @@ var chatStaticRoutes = map[string]staticRoute{
 
 var chatDynamicRoutes = map[string]dynamicRoute{
 	"chat.history": {httpMethod: "GET", buildPath: chatHistoryPath},
+
+	// CAP-10: a forma consolidada, com o kind na RELAÇÃO do caminho — ver
+	// api/openapi/paths/conversa.yaml, "/chats/download/{kind}".
+	"chat.download.media": {httpMethod: "POST", buildPath: chatDownloadMediaPath},
+}
+
+func chatDownloadMediaPath(ss *Server, req *JSONRpcRequest) (string, bool) {
+	kind, ok := ss.stringParam(req, "kind")
+	if !ok {
+		return "", false
+	}
+	httpPath := "/chats/download/" + kind
+	log.Debug().Str("method", req.Method).Str("path", httpPath).Msg("Rota dinamica de download consolidado resolvida")
+	return httpPath, true
 }
 
 func chatHistoryPath(ss *Server, req *JSONRpcRequest) (string, bool) {

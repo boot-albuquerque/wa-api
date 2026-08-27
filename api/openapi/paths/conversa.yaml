@@ -112,7 +112,7 @@
 
       **Quando usar**: para reconstruir uma conversa, e para obter o
       `data_json` de onde saem os sete campos do descritor que as rotas
-      `/chat/download*` exigem.
+      `POST /chats/download/{kind}` exige.
 
       **Regras**:
 
@@ -1138,31 +1138,51 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/chat/downloadimage:
+/chats/download/{kind}:
   post:
     tags: [Descarga de mídia]
-    summary: Descarregar a imagem de uma mensagem recebida
+    summary: Descarregar a mídia de uma mensagem recebida, pelo kind no caminho
     description: |
-      Baixa da CDN do WhatsApp o conteúdo de uma `imageMessage`, decifra-o e
-      devolve-o como Data URL.
+      A forma consolidada das cinco rotas de descarga (CAP-10): baixa da CDN
+      do WhatsApp o conteúdo indicado por `{kind}`, decifra-o e devolve-o
+      como Data URL — exactamente o que `POST /chats/downloadimage`,
+      `downloadvideo`, `downloadaudio`, `downloaddocument` e
+      `downloadsticker` já faziam, com o kind agora na RELAÇÃO do caminho em
+      vez de colado ao NOME da rota.
 
-      **O corpo é o DESCRITOR da mídia, não um identificador de mensagem.**
-      Os sete campos saem do `data_json` da mensagem devolvida por
-      `GET /chat/history`, sob `Message.imageMessage`. Sem esse passo
-      anterior não há como usar esta rota — ver a descrição da etiqueta
-      **Descarga de mídia**.
+      **Por que consolidar**: as cinco rotas eram idênticas em lógica,
+      diferindo só no kind — que o cliente já sabe antes de chamar, porque
+      veio de `Message.imageMessage` / `videoMessage` / `audioMessage` /
+      `documentMessage` / `stickerMessage` no `data_json` de
+      `GET /chats/history`. Cinco nomes de rota duplicavam no NOME uma
+      informação que agora vive na posição que a padronização de caminhos
+      (F269, regra 2) reserva para relação: `/chats/download/{kind}`, não
+      `/chats/download{kind}`.
 
-      **Quando usar**: para arquivar ou reprocessar a mídia que chegou numa
-      conversa.
+      **As cinco formas anteriores continuam a funcionar** — mesmo padrão de
+      coexistência da padronização de caminhos: nenhum cliente existente
+      quebra, e quem integrar de novo lê um nome só.
 
-      **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
-      é `400 missing_url_or_direct_path`, medido. O `Mimetype` devolvido é o
-      MESMO que entrou, e é também o prefixo da Data URL. Mídia expirada na
-      CDN é `404 media_unavailable`.
+      **Corpo**: os sete campos de `PedidoDescargaDeMidia`, sem `Kind` — o
+      kind vem do caminho. Um corpo que ainda traga `Kind` não é rejeitado,
+      mas o caminho tem prioridade (mesma convenção de
+      `pkg/presentation/http/canonico.go`: o novo lugar não sobrescreve
+      quem já dizia a mesma coisa).
 
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: kind
+        in: path
+        required: true
+        description: |
+          Qual das cinco capabilities de download executar. Fora do enum é
+          `400 unknown_media_kind`, e a porta de download não é alcançada.
+        schema:
+          type: string
+          enum: [image, video, audio, document, sticker]
+          example: image
     requestBody:
       required: true
       content:
@@ -1179,7 +1199,7 @@
             FileLength: 74
     responses:
       '200':
-        description: A imagem, decifrada e em Data URL.
+        description: A mídia, decifrada e em Data URL.
         content:
           application/json:
             schema:
@@ -1197,8 +1217,9 @@
               success: true
       '400':
         description: |
-          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+          Corpo ilegível (`could_not_decode_payload`), `{kind}` fora do enum
+          (`unknown_media_kind`), `Url` e `DirectPath` ambos ausentes
+          (`missing_url_or_direct_path`) ou sessão inexistente
           (`no_session`).
         content:
           application/json:
@@ -1207,8 +1228,8 @@
             example:
               code: 400
               error:
-                code: missing_url_or_direct_path
-                message: missing Url and DirectPath in payload
+                code: unknown_media_kind
+                message: Kind must be one of image, video, audio, document, sticker
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1231,399 +1252,6 @@
           Falha na descarga ou na decifragem (`media_download_failed`), ou
           conteúdo de zero bytes (`empty_media`) — que é tratado como erro de
           servidor, e não como um `200` com corpo vazio.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 500
-              error:
-                code: media_download_failed
-                message: failed to download media
-              success: false
-
-/chat/downloadvideo:
-  post:
-    tags: [Descarga de mídia]
-    summary: Descarregar o vídeo de uma mensagem recebida
-    description: |
-      Baixa da CDN do WhatsApp o conteúdo de uma `videoMessage`, decifra-o e
-      devolve-o como Data URL.
-
-      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-      `GET /chat/history` sob `Message.videoMessage` — os mesmos sete campos
-      de todas as rotas deste grupo.
-
-      **Quando usar**: para arquivar ou reprocessar um vídeo recebido.
-
-      **Cuidado com o tamanho**: a resposta é JSON com o ficheiro inteiro em
-      base64, logo cresce cerca de um terço acima do original. Um vídeo de
-      1,5 MB medido em campo devolveu 2 010 098 bytes de `Data`.
-
-      **Regras**: pelo menos um entre `Url` e `DirectPath`. Mídia expirada é
-      `404 media_unavailable`.
-
-      **Autenticação**: token de sessão.
-    security:
-      - TokenSessao: []
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/PedidoDescargaDeMidia'
-          example:
-            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            DirectPath: /o1/v/t24/f2/m234/exemplo
-            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-            Mimetype: video/mp4
-            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-            FileLength: 1503232
-    responses:
-      '200':
-        description: O vídeo, decifrado e em Data URL.
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/Envelope'
-                - type: object
-                  properties:
-                    data:
-                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-            example:
-              code: 200
-              data:
-                Mimetype: video/mp4
-                Data: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
-              success: true
-      '400':
-        description: |
-          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-          (`no_session`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 400
-              error:
-                code: missing_url_or_direct_path
-                message: missing Url and DirectPath in payload
-              success: false
-      '401':
-        $ref: '#/components/responses/NaoAutorizado'
-      '404':
-        description: A mídia já não está disponível na CDN do WhatsApp.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 404
-              error:
-                code: media_unavailable
-                message: media is no longer available; it may have expired on the WhatsApp CDN
-              success: false
-      '500':
-        description: |
-          Falha na descarga ou na decifragem (`media_download_failed`), ou
-          conteúdo de zero bytes (`empty_media`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 500
-              error:
-                code: media_download_failed
-                message: failed to download media
-              success: false
-
-/chat/downloadaudio:
-  post:
-    tags: [Descarga de mídia]
-    summary: Descarregar o áudio de uma mensagem recebida
-    description: |
-      Baixa da CDN do WhatsApp o conteúdo de uma `audioMessage`, decifra-o e
-      devolve-o como Data URL. Serve tanto para áudio anexado como para
-      mensagem de voz.
-
-      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-      `GET /chat/history` sob `Message.audioMessage`.
-
-      **Quando usar**: para transcrever, arquivar ou reproduzir fora do
-      WhatsApp um áudio recebido.
-
-      **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
-      é `400 missing_url_or_direct_path`. O `Mimetype` medido em campo para
-      mensagem de voz é `audio/mp4`, e é devolvido tal e qual.
-
-      **Autenticação**: token de sessão.
-    security:
-      - TokenSessao: []
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/PedidoDescargaDeMidia'
-          example:
-            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            DirectPath: /o1/v/t24/f2/m234/exemplo
-            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-            Mimetype: audio/mp4
-            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-            FileLength: 14130
-    responses:
-      '200':
-        description: O áudio, decifrado e em Data URL.
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/Envelope'
-                - type: object
-                  properties:
-                    data:
-                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-            example:
-              code: 200
-              data:
-                Mimetype: audio/mp4
-                Data: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yTTRBIG1wNDE=
-              success: true
-      '400':
-        description: |
-          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-          (`no_session`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 400
-              error:
-                code: missing_url_or_direct_path
-                message: missing Url and DirectPath in payload
-              success: false
-      '401':
-        $ref: '#/components/responses/NaoAutorizado'
-      '404':
-        description: A mídia já não está disponível na CDN do WhatsApp.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 404
-              error:
-                code: media_unavailable
-                message: media is no longer available; it may have expired on the WhatsApp CDN
-              success: false
-      '500':
-        description: |
-          Falha na descarga ou na decifragem (`media_download_failed`), ou
-          conteúdo de zero bytes (`empty_media`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 500
-              error:
-                code: media_download_failed
-                message: failed to download media
-              success: false
-
-/chat/downloaddocument:
-  post:
-    tags: [Descarga de mídia]
-    summary: Descarregar o documento de uma mensagem recebida
-    description: |
-      Baixa da CDN do WhatsApp o conteúdo de uma `documentMessage`,
-      decifra-o e devolve-o como Data URL.
-
-      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-      `GET /chat/history` sob `Message.documentMessage`.
-
-      **Quando usar**: para guardar em disco ou processar um ficheiro que
-      chegou por conversa.
-
-      **Regras**: pelo menos um entre `Url` e `DirectPath`. O nome original
-      do ficheiro NÃO vem nesta resposta — está no `data_json` da mensagem
-      (`fileName`), e tem de ser lido de lá. Mídia expirada é
-      `404 media_unavailable`.
-
-      **Autenticação**: token de sessão.
-    security:
-      - TokenSessao: []
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/PedidoDescargaDeMidia'
-          example:
-            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            DirectPath: /o1/v/t24/f2/m234/exemplo
-            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-            Mimetype: application/pdf
-            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-            FileLength: 48
-    responses:
-      '200':
-        description: O documento, decifrado e em Data URL.
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/Envelope'
-                - type: object
-                  properties:
-                    data:
-                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-            example:
-              code: 200
-              data:
-                Mimetype: application/pdf
-                Data: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDM+Pgo=
-              success: true
-      '400':
-        description: |
-          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-          (`no_session`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 400
-              error:
-                code: missing_url_or_direct_path
-                message: missing Url and DirectPath in payload
-              success: false
-      '401':
-        $ref: '#/components/responses/NaoAutorizado'
-      '404':
-        description: A mídia já não está disponível na CDN do WhatsApp.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 404
-              error:
-                code: media_unavailable
-                message: media is no longer available; it may have expired on the WhatsApp CDN
-              success: false
-      '500':
-        description: |
-          Falha na descarga ou na decifragem (`media_download_failed`), ou
-          conteúdo de zero bytes (`empty_media`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 500
-              error:
-                code: media_download_failed
-                message: failed to download media
-              success: false
-
-/chat/downloadsticker:
-  post:
-    tags: [Descarga de mídia]
-    summary: Descarregar o autocolante de uma mensagem recebida
-    description: |
-      Baixa da CDN do WhatsApp o conteúdo de uma `stickerMessage`, decifra-o
-      e devolve-o como Data URL. Autocolantes são normalmente WebP, animados
-      ou não.
-
-      O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-      `GET /chat/history` sob `Message.stickerMessage`.
-
-      **Quando usar**: para arquivar ou reutilizar um autocolante recebido.
-
-      **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
-      é `400 missing_url_or_direct_path`. Mídia expirada é
-      `404 media_unavailable`.
-
-      **Autenticação**: token de sessão.
-    security:
-      - TokenSessao: []
-    requestBody:
-      required: true
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/PedidoDescargaDeMidia'
-          example:
-            Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            DirectPath: /o1/v/t24/f2/m234/exemplo
-            MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-            Mimetype: image/webp
-            FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-            FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-            FileLength: 59
-    responses:
-      '200':
-        description: O autocolante, decifrado e em Data URL.
-        content:
-          application/json:
-            schema:
-              allOf:
-                - $ref: '#/components/schemas/Envelope'
-                - type: object
-                  properties:
-                    data:
-                      $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-            example:
-              code: 200
-              data:
-                Mimetype: image/webp
-                Data: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
-              success: true
-      '400':
-        description: |
-          Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-          ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-          (`no_session`).
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 400
-              error:
-                code: missing_url_or_direct_path
-                message: missing Url and DirectPath in payload
-              success: false
-      '401':
-        $ref: '#/components/responses/NaoAutorizado'
-      '404':
-        description: A mídia já não está disponível na CDN do WhatsApp.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 404
-              error:
-                code: media_unavailable
-                message: media is no longer available; it may have expired on the WhatsApp CDN
-              success: false
-      '500':
-        description: |
-          Falha na descarga ou na decifragem (`media_download_failed`), ou
-          conteúdo de zero bytes (`empty_media`).
         content:
           application/json:
             schema:

@@ -25,8 +25,14 @@ quatro dos oito estavam factualmente errados (`OBSERVADORES-AMBAR.md`).
 
 ## O contrato descreve um nome por operação
 
-O router serve **234 rotas**; o contrato documenta **141**. A diferença são as
-91 formas antigas, que **continuam a responder** e saíram da especificação.
+O router serve **235 rotas**; o contrato documenta **137**. A diferença são as
+91 formas antigas pluralizadas (F269) mais as cinco `/chat/download*`
+(CAP-10) — 96 no total —, que **continuam a responder** e saíram da
+especificação. `POST /chats/download/{kind}` é a rota nova que as
+consolida, com o kind na relação do caminho: as CINCO rotas
+`/chats/downloadimage` etc. (a forma intermédia que a F269 tinha
+pluralizado) foram RETIRADAS do contrato — e do serviço — a favor dela,
+porque continuavam a violar a regra 2 (verbo colado ao tipo no nome).
 
 Documentar as duas formas punha 232 operações para 141 capacidades, e obrigava
 o leitor a escolher entre `/chat/list` e `/chats/list` sem elemento para
@@ -45,22 +51,22 @@ antigo continua a funcionar.
 ## Resumo quantitativo
 
 ```
-Rotas servidas pelo router:     234
-  documentadas (canónicas):     141
-  antigas, fora do contrato:     91   (continuam a responder)
+Rotas servidas pelo router:     235
+  documentadas (canónicas):     137
+  antigas, fora do contrato:     96   (continuam a responder)
   /docs e /docs/:                 2
 
-Operações documentadas:         141
+Operações documentadas:         137
 Cobertura do contrato:          100%
-Caminhos distintos:             122
+Caminhos distintos:             118
 Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 122
+  OK  chamada real com efeito confirmado: 117
   AMR sucesso sem observador independente: 8
   ERR falhou, com o erro medido:          4
-  NT  não testada, com o motivo dito:     7
+  NT  não testada, com o motivo dito:     8
 ```
 
 ## Por grupo
@@ -72,14 +78,14 @@ Validação:
 | Comunidades | 4 | 4 | 0 | 0 | 0 |
 | Contactos e utilizadores | 14 | 10 | 0 | 2 | 2 |
 | Conversas | 13 | 12 | 1 | 0 | 0 |
-| Descarga de mídia | 5 | 5 | 0 | 0 | 0 |
+| Descarga de mídia | 1 | 0 | 0 | 0 | 1 |
 | Envio de mensagens | 16 | 15 | 1 | 0 | 0 |
 | Grupos | 18 | 17 | 1 | 0 | 0 |
 | Integrações e configuração | 19 | 17 | 0 | 0 | 2 |
 | Saúde | 4 | 4 | 0 | 0 | 0 |
 | Sessões | 21 | 17 | 0 | 1 | 3 |
 | Status | 3 | 0 | 3 | 0 | 0 |
-| **Total** | **141** | **122** | **8** | **4** | **7** |
+| **Total** | **137** | **117** | **8** | **4** | **8** |
 
 ## As quatro que falharam
 
@@ -136,17 +142,19 @@ falsos**, e estão substituídos abaixo.
 | `POST /status/set/video` | Mesmo caminho e mesma pre-condicao de `/status/set/image` (`SendVideo` para `status@broadcast`). **Precisa de medicao PROPRIA**: evidencia herdada nao e evidencia. Ver `HUMAN-LAST.md` C.2. |
 | `POST /status/set/audio` | Mesmo caminho e mesma pre-condicao de `/status/set/image` (`SendAudio` para `status@broadcast`). **Precisa de medicao PROPRIA**: evidencia herdada nao e evidencia. Ver `HUMAN-LAST.md` C.2. |
 
-## As sete que continuam por testar, e porquê
+## As oito que continuam por testar, e porquê
 
-Nenhuma delas com o motivo antigo *"mexeria na sessão em uso"* — esse foi
-derrubado pela campanha da sessão descartável, e valeu 25 rotas.
+Sete delas sem o motivo antigo *"mexeria na sessão em uso"* — esse foi
+derrubado pela campanha da sessão descartável, e valeu 25 rotas. A oitava é
+nova, e o motivo é outro: ainda não foi medida.
 
 | Endpoint | Motivo |
 |---|---|
+| `POST /chats/download/{kind}` | rota nova (CAP-10, 2026-08-27): consolida as cinco rotas de descarga com o `kind` na relação do caminho, não colado ao corpo. Reusa o mesmo caminho de código das cinco ✅ (`mediaDownloadFlow`), mas ainda não foi chamada contra um servidor real — herdar evidência de código não é medição, então fica ⬜ até ter a sua própria |
 | `POST /s3/test` | não há bucket descartável: o validador de saída recusa endpoint em loopback (medido `400 invalid_s3_endpoint` para `http://127.0.0.1:9000`, F277), o que impede um MinIO local, e não há credenciais AWS descartáveis |
 | `POST /session/s3/test` | idem — mesmo manipulador |
 | `POST /call/reject` | exige uma chamada a entrar; não há como provocar uma |
-| `POST /session/pairphone` | iniciaria emparelhamento de um número real |
+| `POST /session/pair/phone` | iniciaria emparelhamento de um número real |
 | `POST /users/avatar` | alteraria o avatar da conta |
 | `POST /users/privacy` | alteraria definições de privacidade da conta |
 | `POST /users/status` | alteraria o recado da conta |
@@ -222,11 +230,7 @@ verificáveis, e a diferença está agora visível em vez de escondida.
 | Conversas | `POST` | `/chats/react` | `POST /chat/react` | ✅ | Reagir a uma mensagem com um emoji | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Conversas | `POST` | `/chats/request-unavailable-message` | `POST /chat/request-unavailable-message` | 🟡 | Pedir ao par o reenvio de uma mensagem indecifrável | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1. |
 | Conversas | `POST` | `/messages/star` | `POST /message/star` | ✅ | Favoritar ou desfavoritar uma mensagem | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Descarga de mídia | `POST` | `/chats/downloadaudio` | `POST /chat/downloadaudio` | ✅ | Descarregar o áudio de uma mensagem recebida | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Descarga de mídia | `POST` | `/chats/downloaddocument` | `POST /chat/downloaddocument` | ✅ | Descarregar o documento de uma mensagem recebida | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Descarga de mídia | `POST` | `/chats/downloadimage` | `POST /chat/downloadimage` | ✅ | Descarregar a imagem de uma mensagem recebida | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Descarga de mídia | `POST` | `/chats/downloadsticker` | `POST /chat/downloadsticker` | ✅ | Descarregar o autocolante de uma mensagem recebida | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Descarga de mídia | `POST` | `/chats/downloadvideo` | `POST /chat/downloadvideo` | ✅ | Descarregar o vídeo de uma mensagem recebida | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
+| Descarga de mídia | `POST` | `/chats/download/{kind}` | `POST /chat/downloadimage`, `/chat/downloadvideo`, `/chat/downloadaudio`, `/chat/downloaddocument`, `/chat/downloadsticker` (CAP-10) | ⬜ | Descarregar a mídia de uma mensagem recebida, pelo kind no caminho | rota nova (CAP-10); ainda não medida contra um servidor real. |
 | Envio de mensagens | `POST` | `/chats/send/audio` | `POST /chat/send/audio` | ✅ | Enviar um áudio ou mensagem de voz | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/buttons` | `POST /chat/send/buttons` | ✅ | Enviar uma mensagem com botões | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/carousel` | `POST /chat/send/carousel` | ✅ | Enviar um carrossel de cartões | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
@@ -291,11 +295,11 @@ verificáveis, e a diferença está agora visível em vez de escondida.
 | Sessões | `POST` | `/session/hmac/config` | — | ✅ | Gravar a chave HMAC de assinatura dos webhooks | terceira chave distinta, sobre estado limpo: `200`, e `GET /session/hmac/config` passou de `""` para `"***"`. |
 | Sessões | `DELETE` | `/session/hmac/config` | — | ✅ | Revogar a chave HMAC desta sessão | `200`; `GET /session/hmac/config` voltou de `"***"` para `""`. |
 | Sessões | `POST` | `/session/logout` | — | ❌ | Desvincular o aparelho da conta de WhatsApp | `500 {"error":"internal server error"}` numa sessao LIGADA e nunca emparelhada; no log, `the store doesn't contain a device JID`. Sem transporte vivo responde `409 session_not_connected`, que bate com a documentacao. O caminho de `200` exige conta emparelhada. Achado F275. |
-| Sessões | `POST` | `/session/pairphone` | — | ⬜ | Emparelhar por código de telefone em vez de QR | iniciaria emparelhamento de um numero real. |
+| Sessões | `POST` | `/session/pair/phone` | — | ⬜ | Emparelhar por código de telefone em vez de QR | iniciaria emparelhamento de um numero real. |
 | Sessões | `GET` | `/session/profile` | — | ✅ | Consultar o perfil da conta ligada | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Sessões | `GET` | `/session/profile/full` | — | ✅ | Consultar o perfil da conta com os dados que só a rede sabe | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Sessões | `POST` | `/session/proxy` | — | ✅ | Configurar o proxy de saída desta sessão | `200 {"Details":"Proxy configured successfully","Set":true,"ProxyURL":"socks5://proxy.exemplo.invalid:1080"}`; confirmado por DOIS observadores — `GET /session/status` (`proxy_url`) e `GET /admin/users/{id}` (`proxy_config.enabled: true`). |
-| Sessões | `GET` | `/session/qr` | — | ✅ | Ler o QR code de emparelhamento | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
+| Sessões | `GET` | `/session/pair/qr` | — | ✅ | Ler o QR code de emparelhamento | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Sessões | `GET` | `/session/s3/config` | — | ✅ | Ler a configuração S3 desta sessão | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Sessões | `POST` | `/session/s3/config` | — | ✅ | Gravar a configuração S3 desta sessão | corpo distinto (`ap-south-1`, `descartavel-sessao`, `retention_days: 5`): `200`, e `GET /session/s3/config` devolveu-o. |
 | Sessões | `DELETE` | `/session/s3/config` | — | ✅ | Remover a configuração S3 desta sessão | `200`; `GET /session/s3/config` passou de `bucket: descartavel-sessao` para `enabled: false, bucket: ""`. |

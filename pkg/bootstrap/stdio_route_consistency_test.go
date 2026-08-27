@@ -113,6 +113,7 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		"POST /community/link":         {reason: "F237: new community route; stdio entry deferred"},
 		"POST /community/unlink":       {reason: "F237: new community route; stdio entry deferred"},
 
+		"POST /chats/download/{kind}":   {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "chat.download.media", httpMethod: "POST"},
 		"GET /user/lid/{jid}":           {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "user.lid", httpMethod: "GET"},
 		"GET /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.get", httpMethod: "GET"},
 		"PUT /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.edit", httpMethod: "PUT"},

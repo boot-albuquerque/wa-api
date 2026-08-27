@@ -437,13 +437,21 @@ func initCustomHandlers(s *server) {
 		UnlinkGroup:     handlers.NewCommunityUnlinkGroupHandler(communityWriteUC),
 	}
 
-	// Download Handlers (/chat/download*)
+	// Download Handlers (/chat/download*, e a forma consolidada /chats/download)
+	downloadImageUC := message.NewDownloadImageUseCase(mediaDownloader, logger)
+	downloadVideoUC := message.NewDownloadVideoUseCase(mediaDownloader, logger)
+	downloadAudioUC := message.NewDownloadAudioUseCase(mediaDownloader, logger)
+	downloadDocumentUC := message.NewDownloadDocumentUseCase(mediaDownloader, logger)
+	downloadStickerUC := message.NewDownloadStickerUseCase(mediaDownloader, logger)
 	downloadHandlers := &handlers.DownloadHandlers{
-		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(mediaDownloader, logger)),
-		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(mediaDownloader, logger)),
-		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(mediaDownloader, logger)),
-		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(mediaDownloader, logger)),
-		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(mediaDownloader, logger)),
+		Media: handlers.NewDownloadMediaHandler(message.NewDownloadMediaUseCase(
+			downloadImageUC, downloadVideoUC, downloadAudioUC, downloadDocumentUC, downloadStickerUC,
+		)),
+		Image:    handlers.NewDownloadImageHandler(downloadImageUC),
+		Video:    handlers.NewDownloadVideoHandler(downloadVideoUC),
+		Audio:    handlers.NewDownloadAudioHandler(downloadAudioUC),
+		Document: handlers.NewDownloadDocumentHandler(downloadDocumentUC),
+		Sticker:  handlers.NewDownloadStickerHandler(downloadStickerUC),
 	}
 
 	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)

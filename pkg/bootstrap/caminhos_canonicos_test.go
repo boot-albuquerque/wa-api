@@ -53,6 +53,19 @@ func TestTodaRotaLegadaTemCanonicaRegistada(t *testing.T) {
 	}
 }
 
+// consolidadasCAP10 são rotas legadas cuja forma canónica não é uma
+// renomeação 1-para-1 (o que CaminhosCanonicos() assume), mas uma
+// consolidação de VÁRIAS rotas legadas para UMA canónica nova com
+// manipulador diferente do delas — ver api/openapi/CAMINHOS-CANONICOS.md,
+// secção CAP-10, e a mesma exceção em openapi_coverage_test.go.
+var consolidadasCAP10 = map[string]bool{
+	"POST /chat/downloadimage":    true,
+	"POST /chat/downloadvideo":    true,
+	"POST /chat/downloadaudio":    true,
+	"POST /chat/downloaddocument": true,
+	"POST /chat/downloadsticker":  true,
+}
+
 // TestNenhumaFamiliaDeColeccaoFicouNoSingular é o teste que impede a
 // padronização de ficar a meio: se alguém acrescentar `/group/coisa-nova` sem
 // linha na tabela, isto acusa.
@@ -69,9 +82,9 @@ func TestNenhumaFamiliaDeColeccaoFicouNoSingular(t *testing.T) {
 			continue
 		}
 		for _, metodo := range rota.Methods {
-			if !comCanonica[strings.ToUpper(metodo)+" "+rota.Path] {
-				semPadronizar = append(semPadronizar,
-					strings.ToUpper(metodo)+" "+rota.Path)
+			chave := strings.ToUpper(metodo) + " " + rota.Path
+			if !comCanonica[chave] && !consolidadasCAP10[chave] {
+				semPadronizar = append(semPadronizar, chave)
 			}
 		}
 	}

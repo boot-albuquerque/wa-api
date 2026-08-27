@@ -66,3 +66,50 @@ sessão. `/labels` e `/admin/users` já eram plurais e ficam.
 Vive em `api/openapi/caminhos.tsv`, e é a **fonte única**: o registo de rotas
 lê-a, o gerador de OpenAPI lê-a, e há gate que recusa divergência entre ela e
 as rotas realmente servidas.
+
+## CAP-10 (2026-08-27) — a segunda ronda, dois casos que a tabela não cobre
+
+A tabela resolve renomeações 1-para-1 com o MESMO manipulador. Dois achados
+depois da F269 não são isso, e ficam registados aqui em vez de forçados na
+tabela:
+
+**`POST /session/pairphone` → `POST /session/pair/phone`, e
+`GET /session/qr` → `GET /session/pair/qr`.** Duas renomeações simples, cabem
+na tabela como qualquer outra linha — estão lá. Agrupadas sob `/session/pair/`
+porque são as duas formas de emparelhar (QR e código de telefone) — a relação
+que antes só a documentação afirmava passa a estar no caminho.
+
+**As cinco rotas de descarga (`/chat/download{tipo}`) → `POST
+/chats/download/{kind}`.** Isto NÃO é uma renomeação 1-para-1: são CINCO
+rotas legadas para UMA canónica nova, com um manipulador NOVO
+(`DownloadMediaHandler`) que despacha pelo `{kind}` do caminho para o mesmo
+`mediaDownloadFlow` que as cinco já usavam. A tabela assume o mesmo
+manipulador nos dois lados — por isso esta rota é registada directamente em
+`wiring_routes.go`, não via `RegisterCanonicalAliases`, e documentada à mão
+em `api/openapi/paths/conversa.yaml`. `TestOpenAPICobreTodasAsRotasRegistadas`
+e `TestNenhumaFamiliaDeColeccaoFicouNoSingular` reconhecem as cinco legadas
+como cobertas por esta consolidação através de uma excepção nomeada
+(`consolidadaEm` / `consolidadasCAP10`), não da tabela.
+
+**Por que consolidar em vez de só pluralizar** (como a F269 tinha feito com
+estas cinco, gerando `/chats/downloadimage` etc.): pluralizar corrigiu a
+regra 1 (`/chat` → `/chats`), mas a forma pluralizada continuava a violar a
+regra 2 — `downloadimage`, `downloadvideo` etc. são o verbo `download`
+colado ao TIPO no nome, exactamente o padrão que a regra 2 proíbe
+(`/group/requestparticipants` foi o exemplo original). O tipo já vem no
+corpo do cliente (`Message.imageMessage` / `videoMessage` / ... no
+`data_json` de `GET /chats/history`) — cinco nomes de rota duplicavam no
+CAMINHO uma informação que o cliente já tem para o CORPO. `{kind}` na
+RELAÇÃO do caminho, não colado ao nome, é a forma que a regra 2 pede.
+
+**A forma intermédia (`/chats/downloadimage` etc.) foi RETIRADA, do
+contrato e do serviço.** Ela só existia há um dia, dentro da mesma sessão de
+trabalho que a substituiu — nenhum cliente real chegou a depender dela.
+Mantê-la coexistindo com `/chats/download/{kind}` teria recriado exactamente
+o problema que a padronização existe para resolver: duas formas para a
+mesma operação, uma delas ainda a violar a regra 2. **As cinco formas
+ORIGINAIS (singulares, `/chat/downloadimage` etc.) continuam a responder** —
+essas sim têm histórico e coexistência garantida, mesmo padrão desta
+página. `POST /chats/download/{kind}` fica ⬜ até ter a sua própria medição:
+reusa o código das cinco ✅ que tinham, mas herdar evidência de código não é
+medição.

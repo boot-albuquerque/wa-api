@@ -10913,7 +10913,7 @@ components:
       name: token
       type: apiKey
 info:
-  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## Campos que a API não conhece\n\nUm campo que o servidor não reconhece é **ignorado**, e o pedido segue sem\nele. Isto é herança do decodificador de JSON do Go e vale para toda a API.\n\n**É mais perigoso do que parece**, e foi medido: um nome mal escrito não\nproduz erro — produz o valor zero. Quando o valor zero significa alguma\ncoisa, o erro de digitação vira uma escolha silenciosa. O caso real:\n`{\"mute\": true, \"duration\": \"8h\"}` em `/chat/mute` devolve `200` e cala a\nconversa **para sempre**, porque o campo é `mute_duration` e a ausência\ndele significa \"para sempre\".\n\nDesde 2026-08-26 o servidor **regista** cada campo desconhecido:\n\n```\nWRN unknown field \"duration\" route=/chat/mute unknown_fields=[\"duration\"] req_id=…\n```\n\nE há um modo **estrito**, desligado por omissão, que os recusa:\n\n```\nWA_API_STRICT_UNKNOWN_FIELDS=true\nPOST /chat/mute {\"jid\":\"…\",\"mute\":true,\"duration\":\"8h\"}\n  -> 400 {\"error\":{\"code\":\"unknown_field\",\"message\":\"unknown field \\\"duration\\\"\"}}\n```\n\nEstá desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se\nintegra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata\nde apanhar um nome errado antes de ele chegar a produção.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 141 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-26, com duas sessões reais mais um lote de sessões\ndescartáveis: **122 ✅, 8 \U0001F7E1, 4 ❌, 7 ⬜**.\n\nAs 7 por testar não são esquecimento, e nenhuma delas o é por \"mexeria na\nsessão em uso\" — esse motivo caiu com as sessões descartáveis, e valeu 25\nrotas. As que restam exigem um bucket S3 descartável, uma chamada a entrar,\nou uma conta emparelhada cujo perfil seria alterado. O detalhe rota a rota\nestá em `docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
+  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## Campos que a API não conhece\n\nUm campo que o servidor não reconhece é **ignorado**, e o pedido segue sem\nele. Isto é herança do decodificador de JSON do Go e vale para toda a API.\n\n**É mais perigoso do que parece**, e foi medido: um nome mal escrito não\nproduz erro — produz o valor zero. Quando o valor zero significa alguma\ncoisa, o erro de digitação vira uma escolha silenciosa. O caso real:\n`{\"mute\": true, \"duration\": \"8h\"}` em `/chat/mute` devolve `200` e cala a\nconversa **para sempre**, porque o campo é `mute_duration` e a ausência\ndele significa \"para sempre\".\n\nDesde 2026-08-26 o servidor **regista** cada campo desconhecido:\n\n```\nWRN unknown field \"duration\" route=/chat/mute unknown_fields=[\"duration\"] req_id=…\n```\n\nE há um modo **estrito**, desligado por omissão, que os recusa:\n\n```\nWA_API_STRICT_UNKNOWN_FIELDS=true\nPOST /chat/mute {\"jid\":\"…\",\"mute\":true,\"duration\":\"8h\"}\n  -> 400 {\"error\":{\"code\":\"unknown_field\",\"message\":\"unknown field \\\"duration\\\"\"}}\n```\n\nEstá desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se\nintegra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata\nde apanhar um nome errado antes de ele chegar a produção.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 137 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-26, com duas sessões reais mais um lote de sessões\ndescartáveis: **117 ✅, 8 \U0001F7E1, 4 ❌, 8 ⬜**.\n\nAs 8 por testar não são todas esquecimento. Sete não o são por \"mexeria na\nsessão em uso\" — esse motivo caiu com as sessões descartáveis, e valeu 25\nrotas — e exigem um bucket S3 descartável, uma chamada a entrar, ou uma\nconta emparelhada cujo perfil seria alterado. A oitava,\n`POST /chats/download/{kind}`, é nova (CAP-10, consolidação das cinco\nrotas de descarga com o kind na relação do caminho) e ainda não foi\nmedida contra um servidor real. O detalhe rota a rota está em\n`docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
   title: wa-api — API HTTP para WhatsApp
   version: 1.0.6
 openapi: 3.0.3
@@ -11696,229 +11696,52 @@ paths:
       summary: ✅ Apagar para todos uma mensagem enviada
       tags:
         - Conversas
-  /chats/downloadaudio:
+  /chats/download/{kind}:
     post:
       description: |
-        > **Substitui `POST /chat/downloadaudio`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        A forma consolidada das cinco rotas de descarga (CAP-10): baixa da CDN
+        do WhatsApp o conteúdo indicado por `{kind}`, decifra-o e devolve-o
+        como Data URL — exactamente o que `POST /chats/downloadimage`,
+        `downloadvideo`, `downloadaudio`, `downloaddocument` e
+        `downloadsticker` já faziam, com o kind agora na RELAÇÃO do caminho em
+        vez de colado ao NOME da rota.
 
-        Baixa da CDN do WhatsApp o conteúdo de uma `audioMessage`, decifra-o e
-        devolve-o como Data URL. Serve tanto para áudio anexado como para
-        mensagem de voz.
+        **Por que consolidar**: as cinco rotas eram idênticas em lógica,
+        diferindo só no kind — que o cliente já sabe antes de chamar, porque
+        veio de `Message.imageMessage` / `videoMessage` / `audioMessage` /
+        `documentMessage` / `stickerMessage` no `data_json` de
+        `GET /chats/history`. Cinco nomes de rota duplicavam no NOME uma
+        informação que agora vive na posição que a padronização de caminhos
+        (F269, regra 2) reserva para relação: `/chats/download/{kind}`, não
+        `/chats/download{kind}`.
 
-        O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-        `GET /chat/history` sob `Message.audioMessage`.
+        **As cinco formas anteriores continuam a funcionar** — mesmo padrão de
+        coexistência da padronização de caminhos: nenhum cliente existente
+        quebra, e quem integrar de novo lê um nome só.
 
-        **Quando usar**: para transcrever, arquivar ou reproduzir fora do
-        WhatsApp um áudio recebido.
-
-        **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
-        é `400 missing_url_or_direct_path`. O `Mimetype` medido em campo para
-        mensagem de voz é `audio/mp4`, e é devolvido tal e qual.
-
-        **Autenticação**: token de sessão.
-      requestBody:
-        content:
-          application/json:
-            example:
-              DirectPath: /o1/v/t24/f2/m234/exemplo
-              FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-              FileLength: 14130
-              FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-              MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-              Mimetype: audio/mp4
-              Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            schema:
-              $ref: '#/components/schemas/PedidoDescargaDeMidia'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                code: 200
-                data:
-                  Data: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yTTRBIG1wNDE=
-                  Mimetype: audio/mp4
-                success: true
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-                    type: object
-          description: O áudio, decifrado e em Data URL.
-        "400":
-          content:
-            application/json:
-              example:
-                code: 400
-                error:
-                  code: missing_url_or_direct_path
-                  message: missing Url and DirectPath in payload
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-            ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-            (`no_session`).
-        "401":
-          $ref: '#/components/responses/NaoAutorizado'
-        "404":
-          content:
-            application/json:
-              example:
-                code: 404
-                error:
-                  code: media_unavailable
-                  message: media is no longer available; it may have expired on the WhatsApp CDN
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: A mídia já não está disponível na CDN do WhatsApp.
-        "500":
-          content:
-            application/json:
-              example:
-                code: 500
-                error:
-                  code: media_download_failed
-                  message: failed to download media
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Falha na descarga ou na decifragem (`media_download_failed`), ou
-            conteúdo de zero bytes (`empty_media`).
-      security:
-        - TokenSessao: []
-      summary: ✅ Descarregar o áudio de uma mensagem recebida
-      tags:
-        - Descarga de mídia
-  /chats/downloaddocument:
-    post:
-      description: |
-        > **Substitui `POST /chat/downloaddocument`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
-
-        Baixa da CDN do WhatsApp o conteúdo de uma `documentMessage`,
-        decifra-o e devolve-o como Data URL.
-
-        O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-        `GET /chat/history` sob `Message.documentMessage`.
-
-        **Quando usar**: para guardar em disco ou processar um ficheiro que
-        chegou por conversa.
-
-        **Regras**: pelo menos um entre `Url` e `DirectPath`. O nome original
-        do ficheiro NÃO vem nesta resposta — está no `data_json` da mensagem
-        (`fileName`), e tem de ser lido de lá. Mídia expirada é
-        `404 media_unavailable`.
+        **Corpo**: os sete campos de `PedidoDescargaDeMidia`, sem `Kind` — o
+        kind vem do caminho. Um corpo que ainda traga `Kind` não é rejeitado,
+        mas o caminho tem prioridade (mesma convenção de
+        `pkg/presentation/http/canonico.go`: o novo lugar não sobrescreve
+        quem já dizia a mesma coisa).
 
         **Autenticação**: token de sessão.
-      requestBody:
-        content:
-          application/json:
-            example:
-              DirectPath: /o1/v/t24/f2/m234/exemplo
-              FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-              FileLength: 48
-              FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-              MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-              Mimetype: application/pdf
-              Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            schema:
-              $ref: '#/components/schemas/PedidoDescargaDeMidia'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                code: 200
-                data:
-                  Data: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDM+Pgo=
-                  Mimetype: application/pdf
-                success: true
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-                    type: object
-          description: O documento, decifrado e em Data URL.
-        "400":
-          content:
-            application/json:
-              example:
-                code: 400
-                error:
-                  code: missing_url_or_direct_path
-                  message: missing Url and DirectPath in payload
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-            ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-            (`no_session`).
-        "401":
-          $ref: '#/components/responses/NaoAutorizado'
-        "404":
-          content:
-            application/json:
-              example:
-                code: 404
-                error:
-                  code: media_unavailable
-                  message: media is no longer available; it may have expired on the WhatsApp CDN
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: A mídia já não está disponível na CDN do WhatsApp.
-        "500":
-          content:
-            application/json:
-              example:
-                code: 500
-                error:
-                  code: media_download_failed
-                  message: failed to download media
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Falha na descarga ou na decifragem (`media_download_failed`), ou
-            conteúdo de zero bytes (`empty_media`).
-      security:
-        - TokenSessao: []
-      summary: ✅ Descarregar o documento de uma mensagem recebida
-      tags:
-        - Descarga de mídia
-  /chats/downloadimage:
-    post:
-      description: |
-        > **Substitui `POST /chat/downloadimage`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
-
-        Baixa da CDN do WhatsApp o conteúdo de uma `imageMessage`, decifra-o e
-        devolve-o como Data URL.
-
-        **O corpo é o DESCRITOR da mídia, não um identificador de mensagem.**
-        Os sete campos saem do `data_json` da mensagem devolvida por
-        `GET /chat/history`, sob `Message.imageMessage`. Sem esse passo
-        anterior não há como usar esta rota — ver a descrição da etiqueta
-        **Descarga de mídia**.
-
-        **Quando usar**: para arquivar ou reprocessar a mídia que chegou numa
-        conversa.
-
-        **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
-        é `400 missing_url_or_direct_path`, medido. O `Mimetype` devolvido é o
-        MESMO que entrou, e é também o prefixo da Data URL. Mídia expirada na
-        CDN é `404 media_unavailable`.
-
-        **Autenticação**: token de sessão.
+      parameters:
+        - description: |
+            Qual das cinco capabilities de download executar. Fora do enum é
+            `400 unknown_media_kind`, e a porta de download não é alcançada.
+          in: path
+          name: kind
+          required: true
+          schema:
+            enum:
+              - image
+              - video
+              - audio
+              - document
+              - sticker
+            example: image
+            type: string
       requestBody:
         content:
           application/json:
@@ -11950,21 +11773,22 @@ paths:
                       data:
                         $ref: '#/components/schemas/ResultadoDescargaDeMidia'
                     type: object
-          description: A imagem, decifrada e em Data URL.
+          description: A mídia, decifrada e em Data URL.
         "400":
           content:
             application/json:
               example:
                 code: 400
                 error:
-                  code: missing_url_or_direct_path
-                  message: missing Url and DirectPath in payload
+                  code: unknown_media_kind
+                  message: Kind must be one of image, video, audio, document, sticker
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-            ausentes (`missing_url_or_direct_path`) ou sessão inexistente
+            Corpo ilegível (`could_not_decode_payload`), `{kind}` fora do enum
+            (`unknown_media_kind`), `Url` e `DirectPath` ambos ausentes
+            (`missing_url_or_direct_path`) ou sessão inexistente
             (`no_session`).
         "401":
           $ref: '#/components/responses/NaoAutorizado'
@@ -11999,208 +11823,7 @@ paths:
             servidor, e não como um `200` com corpo vazio.
       security:
         - TokenSessao: []
-      summary: ✅ Descarregar a imagem de uma mensagem recebida
-      tags:
-        - Descarga de mídia
-  /chats/downloadsticker:
-    post:
-      description: |
-        > **Substitui `POST /chat/downloadsticker`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
-
-        Baixa da CDN do WhatsApp o conteúdo de uma `stickerMessage`, decifra-o
-        e devolve-o como Data URL. Autocolantes são normalmente WebP, animados
-        ou não.
-
-        O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-        `GET /chat/history` sob `Message.stickerMessage`.
-
-        **Quando usar**: para arquivar ou reutilizar um autocolante recebido.
-
-        **Regras**: pelo menos um entre `Url` e `DirectPath`; faltarem os dois
-        é `400 missing_url_or_direct_path`. Mídia expirada é
-        `404 media_unavailable`.
-
-        **Autenticação**: token de sessão.
-      requestBody:
-        content:
-          application/json:
-            example:
-              DirectPath: /o1/v/t24/f2/m234/exemplo
-              FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-              FileLength: 59
-              FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-              MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-              Mimetype: image/webp
-              Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            schema:
-              $ref: '#/components/schemas/PedidoDescargaDeMidia'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                code: 200
-                data:
-                  Data: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
-                  Mimetype: image/webp
-                success: true
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-                    type: object
-          description: O autocolante, decifrado e em Data URL.
-        "400":
-          content:
-            application/json:
-              example:
-                code: 400
-                error:
-                  code: missing_url_or_direct_path
-                  message: missing Url and DirectPath in payload
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-            ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-            (`no_session`).
-        "401":
-          $ref: '#/components/responses/NaoAutorizado'
-        "404":
-          content:
-            application/json:
-              example:
-                code: 404
-                error:
-                  code: media_unavailable
-                  message: media is no longer available; it may have expired on the WhatsApp CDN
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: A mídia já não está disponível na CDN do WhatsApp.
-        "500":
-          content:
-            application/json:
-              example:
-                code: 500
-                error:
-                  code: media_download_failed
-                  message: failed to download media
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Falha na descarga ou na decifragem (`media_download_failed`), ou
-            conteúdo de zero bytes (`empty_media`).
-      security:
-        - TokenSessao: []
-      summary: ✅ Descarregar o autocolante de uma mensagem recebida
-      tags:
-        - Descarga de mídia
-  /chats/downloadvideo:
-    post:
-      description: |
-        > **Substitui `POST /chat/downloadvideo`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
-
-        Baixa da CDN do WhatsApp o conteúdo de uma `videoMessage`, decifra-o e
-        devolve-o como Data URL.
-
-        O corpo é o DESCRITOR da mídia, tirado do `data_json` de
-        `GET /chat/history` sob `Message.videoMessage` — os mesmos sete campos
-        de todas as rotas deste grupo.
-
-        **Quando usar**: para arquivar ou reprocessar um vídeo recebido.
-
-        **Cuidado com o tamanho**: a resposta é JSON com o ficheiro inteiro em
-        base64, logo cresce cerca de um terço acima do original. Um vídeo de
-        1,5 MB medido em campo devolveu 2 010 098 bytes de `Data`.
-
-        **Regras**: pelo menos um entre `Url` e `DirectPath`. Mídia expirada é
-        `404 media_unavailable`.
-
-        **Autenticação**: token de sessão.
-      requestBody:
-        content:
-          application/json:
-            example:
-              DirectPath: /o1/v/t24/f2/m234/exemplo
-              FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-              FileLength: 1503232
-              FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-              MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-              Mimetype: video/mp4
-              Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-            schema:
-              $ref: '#/components/schemas/PedidoDescargaDeMidia'
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                code: 200
-                data:
-                  Data: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
-                  Mimetype: video/mp4
-                success: true
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/ResultadoDescargaDeMidia'
-                    type: object
-          description: O vídeo, decifrado e em Data URL.
-        "400":
-          content:
-            application/json:
-              example:
-                code: 400
-                error:
-                  code: missing_url_or_direct_path
-                  message: missing Url and DirectPath in payload
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Corpo ilegível (`could_not_decode_payload`), `Url` e `DirectPath`
-            ausentes (`missing_url_or_direct_path`) ou sessão inexistente
-            (`no_session`).
-        "401":
-          $ref: '#/components/responses/NaoAutorizado'
-        "404":
-          content:
-            application/json:
-              example:
-                code: 404
-                error:
-                  code: media_unavailable
-                  message: media is no longer available; it may have expired on the WhatsApp CDN
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: A mídia já não está disponível na CDN do WhatsApp.
-        "500":
-          content:
-            application/json:
-              example:
-                code: 500
-                error:
-                  code: media_download_failed
-                  message: failed to download media
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            Falha na descarga ou na decifragem (`media_download_failed`), ou
-            conteúdo de zero bytes (`empty_media`).
-      security:
-        - TokenSessao: []
-      summary: ✅ Descarregar o vídeo de uma mensagem recebida
+      summary: ⬜ Descarregar a mídia de uma mensagem recebida, pelo kind no caminho
       tags:
         - Descarga de mídia
   /chats/ephemeral:
@@ -12363,7 +11986,7 @@ paths:
 
         **Quando usar**: para reconstruir uma conversa, e para obter o
         `data_json` de onde saem os sete campos do descritor que as rotas
-        `/chat/download*` exigem.
+        `POST /chats/download/{kind}` exige.
 
         **Regras**:
 
@@ -19693,9 +19316,11 @@ paths:
       summary: ❌ Desvincular o aparelho da conta de WhatsApp
       tags:
         - Sessões
-  /session/pairphone:
+  /session/pair/phone:
     post:
       description: |
+        > **Substitui `POST /session/pairphone`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+
         Pede ao WhatsApp um **código de emparelhamento** de oito caracteres,
         que a pessoa digita no telemóvel em *Aparelhos conectados → Conectar
         com número de telefone*. É a alternativa ao QR quando não há como
@@ -19773,6 +19398,58 @@ paths:
       security:
         - TokenSessao: []
       summary: ⬜ Emparelhar por código de telefone em vez de QR
+      tags:
+        - Sessões
+  /session/pair/qr:
+    get:
+      description: |
+        > **Substitui `GET /session/qr`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+
+        Devolve a imagem do QR code guardada para esta sessão, em data URI.
+
+        **Vazio é comportamento normal, não defeito.** O valor só existe
+        durante a janela de emparelhamento: é gravado a cada código novo que o
+        WhatsApp emite e limpo quando a janela expira. Numa sessão já
+        autenticada, ou numa que ainda não chamou `GET /session/connect`, a
+        resposta é `200` com `{"QRCode": ""}`.
+
+        **Como usar**: chame `GET /session/connect` primeiro e sondar esta rota
+        até o campo vir preenchido. O código gira sozinho — leia sempre o mais
+        recente. Quem quiser evitar a sondagem tem os eventos `QR` e `QRTimeout`
+        em `GET /session/ws`, que trazem também o texto cru do código e a
+        validade.
+
+        **Regras**: exige um cliente vivo — sem ele, `400 no_session`.
+
+        **Autenticação**: token de sessão.
+      responses:
+        "200":
+          content:
+            application/json:
+              example:
+                code: 200
+                data:
+                  QRCode: ""
+                success: true
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/CodigoQR'
+                    type: object
+          description: |
+            Valor actual da coluna de QR. Medido em 2026-08-26 numa sessão já
+            autenticada: `{"QRCode": ""}`.
+        "400":
+          $ref: '#/components/responses/SemSessao'
+        "401":
+          $ref: '#/components/responses/NaoAutorizado'
+        "500":
+          $ref: '#/components/responses/ErroInterno'
+      security:
+        - TokenSessao: []
+      summary: ✅ Ler o QR code de emparelhamento
       tags:
         - Sessões
   /session/profile:
@@ -20046,56 +19723,6 @@ paths:
       security:
         - TokenSessao: []
       summary: ✅ Configurar o proxy de saída desta sessão
-      tags:
-        - Sessões
-  /session/qr:
-    get:
-      description: |
-        Devolve a imagem do QR code guardada para esta sessão, em data URI.
-
-        **Vazio é comportamento normal, não defeito.** O valor só existe
-        durante a janela de emparelhamento: é gravado a cada código novo que o
-        WhatsApp emite e limpo quando a janela expira. Numa sessão já
-        autenticada, ou numa que ainda não chamou `GET /session/connect`, a
-        resposta é `200` com `{"QRCode": ""}`.
-
-        **Como usar**: chame `GET /session/connect` primeiro e sondar esta rota
-        até o campo vir preenchido. O código gira sozinho — leia sempre o mais
-        recente. Quem quiser evitar a sondagem tem os eventos `QR` e `QRTimeout`
-        em `GET /session/ws`, que trazem também o texto cru do código e a
-        validade.
-
-        **Regras**: exige um cliente vivo — sem ele, `400 no_session`.
-
-        **Autenticação**: token de sessão.
-      responses:
-        "200":
-          content:
-            application/json:
-              example:
-                code: 200
-                data:
-                  QRCode: ""
-                success: true
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data:
-                        $ref: '#/components/schemas/CodigoQR'
-                    type: object
-          description: |
-            Valor actual da coluna de QR. Medido em 2026-08-26 numa sessão já
-            autenticada: `{"QRCode": ""}`.
-        "400":
-          $ref: '#/components/responses/SemSessao'
-        "401":
-          $ref: '#/components/responses/NaoAutorizado'
-        "500":
-          $ref: '#/components/responses/ErroInterno'
-      security:
-        - TokenSessao: []
-      summary: ✅ Ler o QR code de emparelhamento
       tags:
         - Sessões
   /session/s3/config:

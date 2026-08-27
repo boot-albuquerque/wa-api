@@ -191,7 +191,11 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/chat/delete/message` | revogar mensagem enviada |
 | POST | `/message/star` | favoritar / desfavoritar mensagem (CAP-54) — **ver F223** |
 
-### Descarga de média (5)
+### Descarga de média (5, mais a forma canónica consolidada)
+
+Canónica (CAP-10): `POST /chats/download/{kind}`, `kind` ∈
+`image, video, audio, document, sticker`. As cinco abaixo continuam a
+responder, mas saíram do contrato.
 
 | método | rota | o que faz |
 |---|---|---|
@@ -275,8 +279,8 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | GET | `/session/connect` | ligar a sessão; verifica posse antes de responder (F108) |
 | GET | `/session/disconnect` | desligar |
 | POST | `/session/logout` | terminar sessão no telemóvel |
-| GET | `/session/qr` | código QR de pareamento |
-| POST | `/session/pairphone` | parear por código de telefone |
+| GET | `/session/pair/qr` | código QR de pareamento (canónico; substitui `GET /session/qr`) |
+| POST | `/session/pair/phone` | parear por código de telefone (canónico; substitui `POST /session/pairphone`) |
 | GET | `/session/status` | estado da sessão |
 | GET | `/session/profile` | perfil da própria sessão |
 | GET | `/session/profile/full` | perfil completo |
@@ -606,7 +610,7 @@ corpo ganha. É o que permite migrar um cliente de cada vez.
 
 ### As restantes, por família
 
-**`/chat` → `/chats`** (33 rotas)
+**`/chat` → `/chats`** (28 rotas)
 
 | antiga | canónica |
 |---|---|
@@ -614,11 +618,6 @@ corpo ganha. É o que permite migrar um cliente de cada vez.
 | `GET /chat/list` | `GET /chats/list` |
 | `POST /chat/archive` | `POST /chats/archive` |
 | `POST /chat/delete/message` | `POST /chats/delete/message` |
-| `POST /chat/downloadaudio` | `POST /chats/downloadaudio` |
-| `POST /chat/downloaddocument` | `POST /chats/downloaddocument` |
-| `POST /chat/downloadimage` | `POST /chats/downloadimage` |
-| `POST /chat/downloadsticker` | `POST /chats/downloadsticker` |
-| `POST /chat/downloadvideo` | `POST /chats/downloadvideo` |
 | `POST /chat/ephemeral` | `POST /chats/ephemeral` |
 | `POST /chat/ephemeral/default` | `POST /chats/ephemeral/default` |
 | `POST /chat/markread` | `POST /chats/markread` |
@@ -709,6 +708,32 @@ corpo ganha. É o que permite migrar um cliente de cada vez.
 | `POST /user/privacy` | `POST /users/privacy` |
 | `POST /user/status` | `POST /users/status` |
 | `POST /user/unblock` | `POST /users/unblock` |
+
+### Fora da tabela: duas renomeações simples e uma consolidação (CAP-10, 2026-08-27)
+
+| antiga | canónica |
+|---|---|
+| `GET /session/qr` | `GET /session/pair/qr` |
+| `POST /session/pairphone` | `POST /session/pair/phone` |
+
+As duas rotas de pareamento (QR e telefone) passam a viver sob `/session/pair/`
+— relação explícita em vez de dois nomes soltos que só a documentação
+associava.
+
+**Consolidação das cinco rotas de descarga.** As cinco `/chats/download{tipo}`
+que a F269 tinha pluralizado (`/chats/downloadimage` etc.) foram **retiradas
+do contrato e do serviço** — não são mais servidas — a favor de
+`POST /chats/download/{kind}`, com o `kind` (`image`, `video`, `audio`,
+`document`, `sticker`) na RELAÇÃO do caminho em vez de colado ao nome. A
+pluralização sozinha não bastava: `downloadimage` continuava a violar a
+regra 2 de `api/openapi/CAMINHOS-CANONICOS.md` (verbo colado ao tipo). As
+CINCO formas originais, singulares (`/chat/downloadimage` etc.), continuam a
+responder — coexistência normal — mas não têm mais uma forma canónica
+1-para-1: o gate de cobertura reconhece-as como cobertas pela consolidação,
+não por uma linha em `caminhos.tsv` (ver `openapi_coverage_test.go` e
+`caminhos_canonicos_test.go`, exceção CAP-10). Corpo igual
+(`PedidoDescargaDeMidia`, sem `Kind`); um `Kind` no corpo, se vier, não
+sobrescreve o `{kind}` do caminho.
 
 ---
 
@@ -994,13 +1019,13 @@ destinatários). Detalhe em HOUSEKEEP F256.
 | `GET /webhook`, `GET /webhook/history` | ✅ | leitura |
 | `GET /s3/config`, `GET /session/s3/config` | ✅ | leitura |
 | `GET /hmac/config`, `GET /session/hmac/config` | ✅ | leitura |
-| `GET /session/status`, `/session/profile`, `/session/profile/full`, `/session/qr` | ✅ | leitura |
+| `GET /session/status`, `/session/profile`, `/session/profile/full`, `/session/pair/qr` | ✅ | leitura |
 | `POST/PUT/DELETE /webhook`, `POST /webhook/history` | ⬜ | escreve configuração — não testado sem aval |
 | `POST/DELETE /s3/config`, `POST /s3/configure`, `POST /s3/test`, `POST/DELETE /session/s3/config`, `POST /session/s3/test` | ⬜ | idem |
 | `POST/DELETE /hmac/config`, `/hmac/configure` | ⬜ | idem |
 | `POST /session/history` | ⬜ | idem |
 | `POST /admin/users`, `PUT /admin/users/{id}`, `DELETE /admin/users/{id}`, `DELETE /admin/users/{id}/full` | ⬜ | cria/apaga utilizadores |
-| `GET /session/connect`, `/session/disconnect`, `POST /session/logout`, `/session/pairphone` | ⬜ | derrubaria as sessões vivas |
+| `GET /session/connect`, `/session/disconnect`, `POST /session/logout`, `/session/pair/phone` | ⬜ | derrubaria as sessões vivas |
 | `POST /proxy/set`, `POST /session/proxy` | ⬜ | mudaria a rede da sessão |
 | `GET /session/ws` | ⬜ | WebSocket, fora do alcance de `curl` |
 | `POST /call/reject` | ⬜ | exige chamada a entrar |

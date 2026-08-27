@@ -148,6 +148,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/user/blocklist", customChain.Then(ch.Blocklist.GetBlocklist), "GET")
 
 	// Download routes
+	registry.Register("/chats/download/{kind}", customChain.Then(ch.Download.Media), "POST")
 	registry.Register("/chat/downloadimage", customChain.Then(ch.Download.Image), "POST")
 	registry.Register("/chat/downloadvideo", customChain.Then(ch.Download.Video), "POST")
 	registry.Register("/chat/downloadaudio", customChain.Then(ch.Download.Audio), "POST")

@@ -9,6 +9,7 @@ import (
 	"wa-api/pkg/infra/wa-noise/errmap"
 	customhttp "wa-api/pkg/presentation/http"
 
+	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/hlog"
 )
 
@@ -146,8 +147,48 @@ func (h *DownloadStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-// DownloadHandlers agrupa os handlers de download de midia (/chat/download*).
+type DownloadMediaHandler struct{ uc *message.DownloadMediaUseCase }
+
+func NewDownloadMediaHandler(uc *message.DownloadMediaUseCase) *DownloadMediaHandler {
+	return &DownloadMediaHandler{uc: uc}
+}
+
+// ServeHTTP é o corpo dos outros cinco handlers, com um passo a mais: o
+// segmento {kind} do caminho preenche req.Kind ANTES da decodificação do
+// corpo, na mesma convenção de pkg/presentation/http/canonico.go — o
+// caminho é uma forma nova de dizer a mesma coisa, não uma autoridade sobre
+// quem já a dizia, então só preenche o campo se o corpo não o tiver feito.
+func (h *DownloadMediaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	id, ok := sessionUser(w, r)
+	if !ok {
+		return
+	}
+	var req domain.DownloadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Msg("download payload rejected")
+		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
+		return
+	}
+	if req.Kind == "" {
+		if kind, ok := mux.Vars(r)["kind"]; ok {
+			req.Kind = domain.MediaKind(kind)
+		}
+	}
+	rsp, err := h.uc.Execute(r.Context(), id, req)
+	if err != nil {
+		err = errmap.ClassifyDownload(err)
+		hlog.FromRequest(r).Error().Err(err).Msg("download failed")
+		customhttp.RespondJSON(w, 500, nil, err)
+		return
+	}
+	customhttp.RespondJSON(w, 200, rsp, nil)
+}
+
+// DownloadHandlers agrupa os handlers de download de midia. Media é a rota
+// consolidada (/chats/download); os cinco outros campos são as formas
+// anteriores, ainda servidas (CAP-10).
 type DownloadHandlers struct {
+	Media    *DownloadMediaHandler
 	Image    *DownloadImageHandler
 	Video    *DownloadVideoHandler
 	Audio    *DownloadAudioHandler

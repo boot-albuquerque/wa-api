@@ -101,7 +101,7 @@ info:
     ## O marcador no título de cada endpoint
 
     Cada título começa com um símbolo que diz **quanta prova existe de que
-    aquela rota funciona** — não o quão bem está documentada. As 141 estão
+    aquela rota funciona** — não o quão bem está documentada. As 137 estão
     documentadas; o que varia é o que foi medido.
 
     | | significa |
@@ -112,13 +112,16 @@ info:
     | ⬜ | **não executada**, e a descrição diz porquê |
 
     Medição de 2026-08-26, com duas sessões reais mais um lote de sessões
-    descartáveis: **122 ✅, 8 🟡, 4 ❌, 7 ⬜**.
+    descartáveis: **117 ✅, 8 🟡, 4 ❌, 8 ⬜**.
 
-    As 7 por testar não são esquecimento, e nenhuma delas o é por "mexeria na
+    As 8 por testar não são todas esquecimento. Sete não o são por "mexeria na
     sessão em uso" — esse motivo caiu com as sessões descartáveis, e valeu 25
-    rotas. As que restam exigem um bucket S3 descartável, uma chamada a entrar,
-    ou uma conta emparelhada cujo perfil seria alterado. O detalhe rota a rota
-    está em `docs/OPENAPI-EVIDENCIAS.md`.
+    rotas — e exigem um bucket S3 descartável, uma chamada a entrar, ou uma
+    conta emparelhada cujo perfil seria alterado. A oitava,
+    `POST /chats/download/{kind}`, é nova (CAP-10, consolidação das cinco
+    rotas de descarga com o kind na relação do caminho) e ainda não foi
+    medida contra um servidor real. O detalhe rota a rota está em
+    `docs/OPENAPI-EVIDENCIAS.md`.
 
     **Um 🟡 não é um ✅ mais fraco por descuido** — é a recusa deliberada de
     chamar confirmado aquilo que só devolveu `2xx`.

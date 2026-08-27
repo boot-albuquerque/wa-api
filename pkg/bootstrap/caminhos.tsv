@@ -14,11 +14,6 @@ GET	/user/privacy	GET	/users/privacy
 GET	/user/profile/{jid}	GET	/users/profile/{jid}
 POST	/chat/archive	POST	/chats/archive
 POST	/chat/delete/message	POST	/chats/delete/message
-POST	/chat/downloadaudio	POST	/chats/downloadaudio
-POST	/chat/downloaddocument	POST	/chats/downloaddocument
-POST	/chat/downloadimage	POST	/chats/downloadimage
-POST	/chat/downloadsticker	POST	/chats/downloadsticker
-POST	/chat/downloadvideo	POST	/chats/downloadvideo
 POST	/chat/ephemeral	POST	/chats/ephemeral
 POST	/chat/ephemeral/default	POST	/chats/ephemeral/default
 POST	/chat/markread	POST	/chats/markread
@@ -92,3 +87,5 @@ POST	/user/presence/subscribe	POST	/users/presence/subscribe
 POST	/user/privacy	POST	/users/privacy
 POST	/user/status	POST	/users/status
 POST	/user/unblock	POST	/users/unblock
+POST	/session/pairphone	POST	/session/pair/phone
+GET	/session/qr	GET	/session/pair/qr
