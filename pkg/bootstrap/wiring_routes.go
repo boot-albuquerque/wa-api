@@ -147,13 +147,11 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	// Blocklist route
 	registry.Register("/user/blocklist", customChain.Then(ch.Blocklist.GetBlocklist), "GET")
 
-	// Download routes
+	// Download routes. The five legacy per-kind routes (/chat/downloadimage
+	// etc.) were removed 2026-08-27 — see HOUSEKEEP.md F297: hard-cutover
+	// directive reverses the CAP-10/F269 "permanent coexistence" policy for
+	// this family, since no real consumers depend on them pre-launch.
 	registry.Register("/chats/download/{kind}", customChain.Then(ch.Download.Media), "POST")
-	registry.Register("/chat/downloadimage", customChain.Then(ch.Download.Image), "POST")
-	registry.Register("/chat/downloadvideo", customChain.Then(ch.Download.Video), "POST")
-	registry.Register("/chat/downloadaudio", customChain.Then(ch.Download.Audio), "POST")
-	registry.Register("/chat/downloaddocument", customChain.Then(ch.Download.Document), "POST")
-	registry.Register("/chat/downloadsticker", customChain.Then(ch.Download.Sticker), "POST")
 
 	// Presence & Chat routes
 	registry.Register("/user/presence", customChain.Then(ch.Presence.Send), "POST")

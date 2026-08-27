@@ -194,16 +194,13 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 ### Descarga de média (5, mais a forma canónica consolidada)
 
 Canónica (CAP-10): `POST /chats/download/{kind}`, `kind` ∈
-`image, video, audio, document, sticker`. As cinco abaixo continuam a
-responder, mas saíram do contrato.
+`image, video, audio, document, sticker`.
 
-| método | rota | o que faz |
-|---|---|---|
-| POST | `/chat/downloadimage` | baixa e decifra imagem recebida |
-| POST | `/chat/downloadvideo` | idem, vídeo |
-| POST | `/chat/downloadaudio` | idem, áudio |
-| POST | `/chat/downloaddocument` | idem, documento |
-| POST | `/chat/downloadsticker` | idem, autocolante |
+As cinco rotas por-kind que existiam antes (`/chat/downloadimage`,
+`downloadvideo`, `downloadaudio`, `downloaddocument`, `downloadsticker`)
+foram **removidas** em 2026-08-27 — não apenas do contrato, do serviço
+também (HOUSEKEEP.md F297): decisão explícita de corte-limpo, sem
+consumidores reais a proteger. Devolvem `404` agora.
 
 ### Gestão de conversa (12)
 
@@ -720,20 +717,25 @@ As duas rotas de pareamento (QR e telefone) passam a viver sob `/session/pair/`
 — relação explícita em vez de dois nomes soltos que só a documentação
 associava.
 
-**Consolidação das cinco rotas de descarga.** As cinco `/chats/download{tipo}`
-que a F269 tinha pluralizado (`/chats/downloadimage` etc.) foram **retiradas
-do contrato e do serviço** — não são mais servidas — a favor de
+**Consolidação das cinco rotas de descarga.** As cinco `/chat/download{tipo}`
+que a F269 tinha pluralizado (`/chats/downloadimage` etc., forma
+intermédia já retirada no mesmo dia) foram substituídas por
 `POST /chats/download/{kind}`, com o `kind` (`image`, `video`, `audio`,
 `document`, `sticker`) na RELAÇÃO do caminho em vez de colado ao nome. A
 pluralização sozinha não bastava: `downloadimage` continuava a violar a
-regra 2 de `api/openapi/CAMINHOS-CANONICOS.md` (verbo colado ao tipo). As
-CINCO formas originais, singulares (`/chat/downloadimage` etc.), continuam a
-responder — coexistência normal — mas não têm mais uma forma canónica
-1-para-1: o gate de cobertura reconhece-as como cobertas pela consolidação,
-não por uma linha em `caminhos.tsv` (ver `openapi_coverage_test.go` e
-`caminhos_canonicos_test.go`, exceção CAP-10). Corpo igual
-(`PedidoDescargaDeMidia`, sem `Kind`); um `Kind` no corpo, se vier, não
+regra 2 de `api/openapi/CAMINHOS-CANONICOS.md` (verbo colado ao tipo). Corpo
+igual (`PedidoDescargaDeMidia`, sem `Kind`); um `Kind` no corpo, se vier, não
 sobrescreve o `{kind}` do caminho.
+
+**As CINCO formas originais, singulares (`/chat/downloadimage` etc.), foram
+REMOVIDAS em 2026-08-27** (HOUSEKEEP.md F297) — não só do contrato, do
+serviço também. A decisão inicial do CAP-10 tinha sido mantê-las a
+responder, mesma política de coexistência permanente do resto desta tabela;
+essa política foi **revertida só para esta família**, por instrução
+explícita de corte-limpo ("hard cutover"): não havia consumidores reais a
+proteger antes do lançamento. As cinco devolvem `404`. O gate de cobertura
+(`openapi_coverage_test.go`, `caminhos_canonicos_test.go`) já não precisa de
+exceção para elas — deixaram de aparecer em `Routes(Deps{})`.
 
 ---
 
@@ -828,6 +830,12 @@ telemóvel (F240).
 com o CAP-54 responde `200`.
 
 ### chat — descarga de média (5)
+
+**Nota (2026-08-27, HOUSEKEEP.md F297)**: as cinco rotas medidas abaixo foram
+removidas do serviço — a medição fica como evidência histórica de que a
+lógica de descarga por-kind funcionava, herdada integralmente por
+`POST /chats/download/{kind}` (mesmos use cases, ver
+`download_media_unified.go`), não como prova de rota ainda viva.
 
 Todas ✅. O corpo é o descritor de média, tirado do `data_json` da mensagem em
 `GET /chat/history` (campos `URL`, `directPath`, `mediaKey`, `mimetype`,

@@ -31408,4 +31408,107 @@ não com um esquecimento.
 apropriado antes de tocar em código de produção. Nenhuma rota, handler,
 use case ou ficheiro OpenAPI foi alterado nesta sessão.
 
+---
+
+**Decisão (2026-08-27, mesma sessão, após consulta)**: opção **2** — reverter
+a política CAP-10/F269 para esta família de download, por instrução
+explícita do utilizador: o corte-limpo ("hard cutover", sem aliases, sem
+rotas antigas a responder) é o comportamento pedido para a iniciativa como
+um todo, e a garantia de "tempo de vida permanente" documentada em
+`CAMINHOS-CANONICOS.md` não protege ninguém, porque **não existe consumidor
+real antes do lançamento**. O risco de quebra é zero — é exactamente o caso
+em que a garantia de coexistência foi desenhada para NÃO se aplicar.
+
+Esta reversão é **específica da família download**, não da política geral:
+as ~90 renomeações de `caminhos.tsv` continuam sob a política de
+coexistência permanente descrita em `CAMINHOS-CANONICOS.md`, §"Como isto NÃO
+parte clientes". Um esforço irmão (`worktree/http-dto-legacy-alias-removal`)
+está a remover o mecanismo `RegisterCanonicalAliases`/`caminhos.tsv` em
+paralelo — as cinco rotas de download nunca estiveram nessa tabela (eram
+registadas directamente em `wiring_routes.go`, ver nota no topo desta
+entrada), então não há sobreposição de ficheiros, mas as duas sessões
+revertem a MESMA política, em famílias diferentes.
+
+**O que foi feito**:
+
+1. `pkg/bootstrap/wiring_routes.go`: removidas as cinco linhas
+   `registry.Register("/chat/download{tipo}", …)`. Só
+   `/chats/download/{kind}` fica registada.
+2. `pkg/bootstrap/wiring_handlers.go`: removida a construção dos cinco use
+   cases/handlers por-kind como campos separados — `DownloadHandlers` passa
+   a ter só o campo `Media`, construído directamente a partir dos cinco use
+   cases (que continuam a existir, porque `DownloadMediaUseCase` delega
+   para eles).
+3. `pkg/presentation/http/handlers/handler_download.go`: removidos
+   `DownloadImageHandler`, `DownloadVideoHandler`, `DownloadAudioHandler`,
+   `DownloadDocumentHandler`, `DownloadStickerHandler` e os cinco
+   construtores — código morto após (1). `DownloadMediaHandler` e o use
+   case `DownloadImageUseCase`/`DownloadVideoUseCase`/etc. NÃO foram
+   tocados: continuam vivos, agora com um único chamador
+   (`DownloadMediaUseCase`).
+4. `pkg/infra/stdio/stdio_routes_chat.go`: removidas as quatro entradas
+   estáticas `chat.download.image/video/audio/document` (não havia entrada
+   para `sticker` — já fora `knownPending` antes desta sessão).
+5. Gates que tinham excepção nomeada para as cinco rotas — já não precisam
+   dela, porque as rotas deixaram de existir em `Routes(Deps{})`:
+   - `pkg/bootstrap/openapi_coverage_test.go` (`TestOpenAPICobreTodasAsRotasRegistadas`):
+     removido o mapa `consolidadaEm`.
+   - `pkg/bootstrap/caminhos_canonicos_test.go` (`TestNenhumaFamiliaDeColeccaoFicouNoSingular`):
+     removido o mapa `consolidadasCAP10`.
+   - `pkg/bootstrap/stdio_route_consistency_test.go`: removida a entrada
+     `"POST /chat/downloadsticker": true` de `knownPending` (o teste já
+     falharia sozinho se ela ficasse — linhas 255-261 verificam que toda
+     entrada de `knownPending` ainda existe no router).
+6. Testes de handler reescritos para exercitar os mesmos oito eixos
+   (sucesso, 401, 400 sem `Id`, corpo malformado, campo obrigatório em
+   falta, `DirectPath` sozinho, falha de sessão, falha do downloader, bytes
+   vazios, ausência de segredo no log) pela rota consolidada
+   `/chats/download/{kind}` em vez das cinco antigas:
+   `pkg/presentation/http/handlers/handler_download_test.go` e
+   `pkg/presentation/http/handlers/handler_nonsend_axes_test.go`
+   (`nonSendAxisDownloadCase`, os cinco casos `DownloadImage/Video/Audio/
+   Document/Sticker`).
+7. **Teste novo, o controlo negativo exigido pela política anti-regressão
+   do `CLAUDE.md`**: `TestF297_LegacyDownloadRoutesAreGone`
+   (`pkg/bootstrap/caminhos_canonicos_test.go`) prova, pela ROTA REGISTADA
+   de produção (`Routes(Deps{})` + o roteador real via
+   `newRouterForRouteCheck()`), que as cinco rotas antigas devolvem `404` e
+   que `/chats/download/{kind}` continua casada para os cinco kinds.
+   **Controlo negativo EXECUTADO**: reintroduzi
+   `registry.Register("/chat/downloadimage", …)` em `wiring_routes.go` e o
+   subteste `//chat/downloadimage` falhou com
+   `got 200, want 404 (rota removida pela F297)` — o teste morde. Revertida
+   a reintrodução logo a seguir (`git diff` limpo confirmado antes de
+   prosseguir).
+8. Documentação actualizada para reflectir a reversão (não apagada — a
+   medição histórica de 2026-08-26 fica registada como evidência de que a
+   lógica funcionava, herdada por `/chats/download/{kind}`):
+   `api/openapi/CAMINHOS-CANONICOS.md`, `docs/ENDPOINTS.md`,
+   `docs/OPENAPI-EVIDENCIAS.md`, `api/openapi/MATRIZ.md`,
+   `api/openapi/paths/conversa.yaml`, `api/openapi/paths/envio.yaml`.
+   `pkg/presentation/http/apidocs/openapi.yaml` regenerado via
+   `go run ./cmd/openapidoc` (118 caminhos).
+9. Gates derivados que mudaram por consequência, não por escolha:
+   - `pkg/presentation/http/handlers/testdata/respondjson_ledger.tsv`:
+     regenerado (`-update-ledger`) — as 10 entradas das cinco
+     `DownloadXHandler.ServeHTTP` (nil + rsp) saem.
+   - `cmd/logcov/testdata/eligible.golden`: regenerado — as cinco
+     `DownloadXHandler.ServeHTTP` (ELIGIBLE) e os cinco construtores
+     (EXCLUDED) saem do conjunto elegível.
+   - `.log-coverage-baseline`: `min_func_coverage` 589→587,
+     `min_errpath_coverage` 777→776, `min_eligible` 993→988 — as três
+     quedas são ratchet-DOWN honesto (funções que deixaram de existir, não
+     logging retirado de código vivo), com justificativa escrita ao lado
+     de cada linha.
+
+**Verificação**: `go build ./...`, `go vet ./...` limpos.
+`go test ./pkg/presentation/http/handlers/... ./pkg/bootstrap/...
+./pkg/application/usecase/message/... ./pkg/infra/stdio/...
+./cmd/logcov/...` verde, incluindo `TestF297_LegacyDownloadRoutesAreGone`
+com o controlo negativo descrito no ponto 7.
+
+**Status**: CORRIGIDO nesta sessão — reversão deliberada e completa da
+F269/CAP-10 para a família de download, com controlo negativo travado em
+teste.
+
 <!-- f-status: aberto -->

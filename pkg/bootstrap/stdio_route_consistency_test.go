@@ -143,9 +143,8 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 	// Adding a route here means acknowledging a KNOWN omission, not
 	// granting a permanent exemption.
 	knownPending := map[string]bool{
-		"GET /chat/list":             true,
-		"POST /chat/downloadsticker": true,
-		"POST /chat/send/template":   true,
+		"GET /chat/list":           true,
+		"POST /chat/send/template": true,
 
 		"GET /group/requestparticipants":        true,
 		"POST /group/updaterequestparticipants": true,

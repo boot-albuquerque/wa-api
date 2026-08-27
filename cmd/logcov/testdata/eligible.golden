@@ -2889,7 +2889,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:519)
+pkg/bootstrap.connectOwnershipCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:514)
 pkg/bootstrap.connectOwnershipCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -3942,12 +3942,7 @@ pkg/presentation/http/handlers.DeleteS3ConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DeleteUserCompleteHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DeleteWebhookHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DisconnectHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.DownloadAudioHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.DownloadDocumentHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.DownloadImageHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DownloadMediaHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.DownloadStickerHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.DownloadVideoHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetAvatarHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetBlocklistHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP	ELIGIBLE	covered
@@ -3988,12 +3983,7 @@ pkg/presentation/http/handlers.NewDeleteS3ConfigHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewDeleteUserCompleteHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewDeleteWebhookHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewDisconnectHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.NewDownloadAudioHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.NewDownloadDocumentHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.NewDownloadImageHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewDownloadMediaHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.NewDownloadStickerHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.NewDownloadVideoHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetAvatarHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetBlocklistHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewGetChatHistoryHandler	EXCLUDED	X1

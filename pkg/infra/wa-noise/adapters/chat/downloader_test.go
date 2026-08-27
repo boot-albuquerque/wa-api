@@ -34,11 +34,11 @@ type downloadKindCase struct {
 
 func downloadKindCases() []downloadKindCase {
 	return []downloadKindCase{
-		{"Download Image", "/chat/downloadimage", domain.MediaKindImage, "*waE2E.ImageMessage", "image/jpeg"},
-		{"Download Video", "/chat/downloadvideo", domain.MediaKindVideo, "*waE2E.VideoMessage", "video/mp4"},
-		{"Download Audio", "/chat/downloadaudio", domain.MediaKindAudio, "*waE2E.AudioMessage", "audio/ogg; codecs=opus"},
-		{"Download Document", "/chat/downloaddocument", domain.MediaKindDocument, "*waE2E.DocumentMessage", "application/pdf"},
-		{"Download Sticker", "/chat/downloadsticker", domain.MediaKindSticker, "*waE2E.StickerMessage", "image/webp"},
+		{"Download Image", "/chats/download/image", domain.MediaKindImage, "*waE2E.ImageMessage", "image/jpeg"},
+		{"Download Video", "/chats/download/video", domain.MediaKindVideo, "*waE2E.VideoMessage", "video/mp4"},
+		{"Download Audio", "/chats/download/audio", domain.MediaKindAudio, "*waE2E.AudioMessage", "audio/ogg; codecs=opus"},
+		{"Download Document", "/chats/download/document", domain.MediaKindDocument, "*waE2E.DocumentMessage", "application/pdf"},
+		{"Download Sticker", "/chats/download/sticker", domain.MediaKindSticker, "*waE2E.StickerMessage", "image/webp"},
 	}
 }
 

@@ -80,16 +80,13 @@ porque são as duas formas de emparelhar (QR e código de telefone) — a relaç
 que antes só a documentação afirmava passa a estar no caminho.
 
 **As cinco rotas de descarga (`/chat/download{tipo}`) → `POST
-/chats/download/{kind}`.** Isto NÃO é uma renomeação 1-para-1: são CINCO
+/chats/download/{kind}`.** Isto NÃO é uma renomeação 1-para-1: eram CINCO
 rotas legadas para UMA canónica nova, com um manipulador NOVO
 (`DownloadMediaHandler`) que despacha pelo `{kind}` do caminho para o mesmo
 `mediaDownloadFlow` que as cinco já usavam. A tabela assume o mesmo
 manipulador nos dois lados — por isso esta rota é registada directamente em
 `wiring_routes.go`, não via `RegisterCanonicalAliases`, e documentada à mão
-em `api/openapi/paths/conversa.yaml`. `TestOpenAPICobreTodasAsRotasRegistadas`
-e `TestNenhumaFamiliaDeColeccaoFicouNoSingular` reconhecem as cinco legadas
-como cobertas por esta consolidação através de uma excepção nomeada
-(`consolidadaEm` / `consolidadasCAP10`), não da tabela.
+em `api/openapi/paths/conversa.yaml`.
 
 **Por que consolidar em vez de só pluralizar** (como a F269 tinha feito com
 estas cinco, gerando `/chats/downloadimage` etc.): pluralizar corrigiu a
@@ -103,13 +100,35 @@ CAMINHO uma informação que o cliente já tem para o CORPO. `{kind}` na
 RELAÇÃO do caminho, não colado ao nome, é a forma que a regra 2 pede.
 
 **A forma intermédia (`/chats/downloadimage` etc.) foi RETIRADA, do
-contrato e do serviço.** Ela só existia há um dia, dentro da mesma sessão de
-trabalho que a substituiu — nenhum cliente real chegou a depender dela.
-Mantê-la coexistindo com `/chats/download/{kind}` teria recriado exactamente
-o problema que a padronização existe para resolver: duas formas para a
-mesma operação, uma delas ainda a violar a regra 2. **As cinco formas
-ORIGINAIS (singulares, `/chat/downloadimage` etc.) continuam a responder** —
-essas sim têm histórico e coexistência garantida, mesmo padrão desta
-página. `POST /chats/download/{kind}` fica ⬜ até ter a sua própria medição:
-reusa o código das cinco ✅ que tinham, mas herdar evidência de código não é
-medição.
+contrato e do serviço**, no mesmo dia em que nasceu — nenhum cliente real
+chegou a depender dela.
+
+### Reversão (2026-08-27, HOUSEKEEP.md F297) — as cinco formas ORIGINAIS já não respondem
+
+Este parágrafo dizia, até esta reversão, que "as cinco formas ORIGINAIS
+(singulares, `/chat/downloadimage` etc.) continuam a responder — essas sim
+têm histórico e coexistência garantida, mesmo padrão desta página" — ou
+seja, aplicava a esta família a política de coexistência permanente descrita
+acima (§"Como isto NÃO parte clientes").
+
+**Essa decisão foi revertida por instrução explícita do utilizador**: corte
+limpo ("hard cutover"), sem aliases nem rotas antigas a responder, porque
+**nenhum consumidor real existe antes do lançamento** — a garantia de
+"tempo de vida permanente" não protege ninguém que ainda não integrou. As
+cinco rotas (`/chat/downloadimage`, `downloadvideo`, `downloadaudio`,
+`downloaddocument`, `downloadsticker`) foram removidas do `wiring_routes.go`
+e devolvem `404`; os handlers e a excepção `consolidadaEm` /
+`consolidadasCAP10` que as cobriam também foram removidos —
+`TestOpenAPICobreTodasAsRotasRegistadas` e
+`TestNenhumaFamiliaDeColeccaoFicouNoSingular` já não precisam de exceção
+para esta família, porque `registadas`/`Routes(Deps{})` nunca mais as inclui.
+O controlo negativo (`TestF297_LegacyDownloadRoutesAreGone`,
+`pkg/bootstrap/caminhos_canonicos_test.go`) trava as duas pontas: as cinco
+rotas devolvem 404 pelo roteador real, e `/chats/download/{kind}` continua
+casada para os cinco kinds.
+
+**Esta reversão é específica da família download, não da política geral**
+(§"Como isto NÃO parte clientes" continua a valer para as ~90 renomeações da
+tabela `caminhos.tsv`). `POST /chats/download/{kind}` fica ⬜ até ter a sua
+própria medição: reusa o código das cinco ✅ que tinham, mas herdar evidência
+de código não é medição.

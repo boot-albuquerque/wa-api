@@ -37,11 +37,6 @@ var chatStaticRoutes = map[string]staticRoute{
 	"chat.ephemeral":                   {httpMethod: "POST", httpPath: "/chat/ephemeral"},
 	"chat.ephemeral.default":           {httpMethod: "POST", httpPath: "/chat/ephemeral/default"},
 	"message.star":                     {httpMethod: "POST", httpPath: "/message/star"},
-
-	"chat.download.image":    {httpMethod: "POST", httpPath: "/chat/downloadimage"},
-	"chat.download.video":    {httpMethod: "POST", httpPath: "/chat/downloadvideo"},
-	"chat.download.audio":    {httpMethod: "POST", httpPath: "/chat/downloadaudio"},
-	"chat.download.document": {httpMethod: "POST", httpPath: "/chat/downloaddocument"},
 }
 
 var chatDynamicRoutes = map[string]dynamicRoute{
