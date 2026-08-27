@@ -68,14 +68,29 @@ func pairingTarget(r *http.Request, actorID string) string {
 // create a second place where 400/409/422 is decided, and the two would diverge
 // the first time somebody edited one.
 //
-// The level is Warn and never Error: all four refusals are the caller naming
-// something this process will not do, which is a client-caused outcome. Logging
-// them at Error would make a mistyped engine indistinguishable from the database
-// being down, which is the failure F90 was filed for.
+// The LEVEL is chosen by the same taxonomy the rest of this package uses
+// (isClientCausedSessionError), and not fixed at Warn — which is what a first
+// version of this function did, and it was wrong. Resolution reads the target
+// session's row, so a database outage arrives here as an ordinary error: at
+// Warn it would be indistinguishable from a caller mistyping an engine name,
+// which is precisely the confusion F90 was filed for, and at 400 it would tell
+// the caller to fix a payload that is fine.
+//
+// The four refusals pkg/pairing produces ARE client-caused and do come out at
+// Warn — they are apperr.AppErrors whose category maps to 4xx, so the same test
+// answers both cases without a second list to keep in sync.
 func respondPairingRefusal(w http.ResponseWriter, r *http.Request, handler, targetID string, err error) {
-	hlog.FromRequest(r).Warn().Err(err).
+	if isClientCausedSessionError(err) {
+		hlog.FromRequest(r).Warn().Err(err).
+			Str("handler", handler).
+			Str("target_session_id", targetID).
+			Msg("pairing request refused before any provider was called")
+		customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+		return
+	}
+	hlog.FromRequest(r).Error().Err(err).
 		Str("handler", handler).
 		Str("target_session_id", targetID).
-		Msg("pairing request refused before any provider was called")
-	customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+		Msg("pairing request could not be resolved")
+	customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 }

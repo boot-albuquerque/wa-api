@@ -21,10 +21,10 @@
 // part — the ORDER is. Every request has to answer four questions, and each one
 // has to be answered before any provider is touched:
 //
-//	1. is the named engine a real engine?          -> invalid_engine (400)
-//	2. is it the TARGET session's engine?          -> engine_mismatch (409)
-//	3. does that engine serve this capability?     -> capability_not_supported (422)
-//	4. is a provider actually wired for it here?   -> engine_unavailable (409)
+//  1. is the named engine a real engine?          -> invalid_engine (400)
+//  2. is it the TARGET session's engine?          -> engine_mismatch (409)
+//  3. does that engine serve this capability?     -> capability_not_supported (422)
+//  4. is a provider actually wired for it here?   -> engine_unavailable (409)
 //
 // A handler that got the order wrong would call a provider and only then
 // discover the request should have been refused — which for pairing means

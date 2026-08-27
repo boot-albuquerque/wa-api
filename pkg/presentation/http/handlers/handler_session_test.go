@@ -12,8 +12,10 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/session"
+	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/pairing"
 )
 
 // Este arquivo cobre handler_session.go inteiro: os 8 handlers das rotas
@@ -91,6 +93,23 @@ type sessionCase struct {
 	readsBody bool
 }
 
+// sessionCaseRegistry monta o registry de pareamento para esta tabela: a
+// sessao autenticada esta' gravada em wa_noise, o provider passado serve esse
+// engine, e o wa_headless fica registado e vazio. A matriz e' a de PRODUCAO —
+// um duble permissivo abencoaria caminhos que nao existem (ARMADILHAS.md #1).
+func sessionCaseRegistry(waNoise *pairing.Provider) *pairing.Registry {
+	users := &contractsfake.UserRepository{
+		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
+			if id == "" {
+				return nil, nil
+			}
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineWaNoise, QRCode: "qr-data"}}, nil
+		},
+	}
+	return pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
+		waNoise, &pairing.Provider{Engine: domain.EngineWaHeadless})
+}
+
 func sessionCases() []sessionCase {
 	log := &contractsfake.Logger{}
 	guard := func(err error) *contractsfake.SessionGuard {
@@ -127,12 +146,21 @@ func sessionCases() []sessionCase {
 			path:   "/session/logout",
 		},
 		{
+			// GetQR passou a resolver a porta por engine (F281). O provider
+			// wa_noise e' um PairingQRReader cuja guarda falha com `e`, que e'
+			// o eixo que esta tabela mede; a matriz consultada e' a REAL.
 			name: "GetQR",
 			build: func(e error) http.Handler {
-				return NewGetQRHandler(session.NewGetQRUseCase(guard(e), users(), log))
+				return NewGetQRHandler(log, sessionCaseRegistry(&pairing.Provider{
+					Engine: domain.EngineWaNoise,
+					QRReader: &contractsfake.PairingQRReader{
+						SessionGuard:  *guard(e),
+						PairingQRFunc: func(context.Context, string) (string, error) { return "qr-data", nil },
+					},
+				}))
 			},
 			method: http.MethodGet,
-			path:   "/session/qr",
+			path:   "/session/qr?engine=wa_noise",
 		},
 		{
 			name: "GetStatus",
@@ -182,12 +210,14 @@ func sessionCases() []sessionCase {
 				// o código, não só verificar a sessão. Aqui só importa a
 				// recusa da guarda propagar, então o pairer nasce com a mesma
 				// FailSession.
-				return NewPairPhoneHandler(session.NewPairPhoneUseCase(
-					&contractsfake.PhonePairer{SessionGuard: contractsfake.FailSession(e)}, log))
+				return NewPairPhoneHandler(log, sessionCaseRegistry(&pairing.Provider{
+					Engine:      domain.EngineWaNoise,
+					PhonePairer: &contractsfake.PhonePairer{SessionGuard: contractsfake.FailSession(e)},
+				}))
 			},
 			method:    http.MethodPost,
 			path:      "/session/pairphone",
-			body:      `{"Phone":"5511999999999"}`,
+			body:      `{"engine":"wa_noise","Phone":"5511999999999"}`,
 			readsBody: true,
 		},
 		{
@@ -201,10 +231,15 @@ func sessionCases() []sessionCase {
 			readsBody: true,
 		},
 		{
-			name:   "Connect",
-			build:  func(error) http.Handler { return NewConnectHandler(session.NewConnectUseCase(log)) },
+			name: "Connect",
+			build: func(error) http.Handler {
+				return NewConnectHandler(session.NewConnectUseCase(log), sessionCaseRegistry(&pairing.Provider{
+					Engine:  domain.EngineWaNoise,
+					Starter: &contractsfake.SessionStarter{},
+				}))
+			},
 			method: http.MethodPost,
-			path:   "/session/connect",
+			path:   "/session/connect?engine=wa_noise",
 		},
 	}
 }
@@ -350,12 +385,19 @@ func TestSessionHandlers_MissingRequiredField_400_LogsError(t *testing.T) {
 		handler http.Handler
 		path    string
 		want    string
+		// body substitui o `{}` partilhado quando o handler exige um campo
+		// ANTES do que este teste mede. PairPhone e' o caso: desde a F281 um
+		// `{}` seco morre em invalid_engine e nunca chega ao missing_phone.
+		body string
 	}{
 		{
-			name:    "PairPhone sem Phone",
-			handler: NewPairPhoneHandler(session.NewPairPhoneUseCase(&contractsfake.PhonePairer{}, &contractsfake.Logger{})),
-			path:    "/session/pairphone",
-			want:    "missing Phone",
+			name: "PairPhone sem Phone",
+			body: `{"engine":"wa_noise"}`,
+			handler: NewPairPhoneHandler(&contractsfake.Logger{}, sessionCaseRegistry(&pairing.Provider{
+				Engine: domain.EngineWaNoise, PhonePairer: &contractsfake.PhonePairer{},
+			})),
+			path: "/session/pairphone",
+			want: "missing Phone",
 		},
 		{
 			name:    "RequestHistorySync sem âncora",
@@ -373,7 +415,11 @@ func TestSessionHandlers_MissingRequiredField_400_LogsError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec, recs := serveSession(t, tt.handler, http.MethodPost, tt.path, `{}`, "user-1", true)
+			body := tt.body
+			if body == "" {
+				body = `{}`
+			}
+			rec, recs := serveSession(t, tt.handler, http.MethodPost, tt.path, body, "user-1", true)
 
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())
@@ -437,9 +483,26 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 			return []domain.UserListEntry{{ID: "user-1", QRCode: "2@codigo-de-pareamento"}}, nil
 		},
 	}
-	h := NewGetQRHandler(session.NewGetQRUseCase(&contractsfake.SessionGuard{}, users, &contractsfake.Logger{}))
+	h := NewGetQRHandler(&contractsfake.Logger{}, sessionCaseRegistry(&pairing.Provider{
+		Engine: domain.EngineWaNoise,
+		QRReader: &contractsfake.PairingQRReader{
+			PairingQRFunc: func(ctx context.Context, txtID string) (string, error) {
+				// Imita a REGRA do adaptador de producao
+				// (pkg/infra/wa-noise/adapters/pairing/qr.go): le' o registo
+				// persistido e devolve entries[0].QRCode.
+				entries, err := users.ListUsers(ctx, txtID)
+				if err != nil {
+					return "", err
+				}
+				if len(entries) == 0 {
+					return "", noSessionErr()
+				}
+				return entries[0].QRCode, nil
+			},
+		},
+	}))
 
-	rec, recs := serveSession(t, h, http.MethodGet, "/session/qr", "", "user-1", true)
+	rec, recs := serveSession(t, h, http.MethodGet, "/session/qr?engine=wa_noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
@@ -490,9 +553,13 @@ func TestGetQRAndStatus_NoUserRecord_400_NoSession(t *testing.T) {
 		path    string
 	}{
 		{
+			// O registo ausente e' agora detectado ANTES do use case: o
+			// registry le' a sessao alvo para resolver o engine e recusa com
+			// o MESMO codigo `no_session` (pkg/pairing/errors.go), por isso o
+			// contrato observado nao muda.
 			name:    "GetQR",
-			handler: NewGetQRHandler(session.NewGetQRUseCase(&contractsfake.SessionGuard{}, empty, log)),
-			path:    "/session/qr",
+			handler: NewGetQRHandler(log, pairing.NewRegistry(empty, capabilityregistry.NewCapabilityRegistry(), &pairing.Provider{Engine: domain.EngineWaNoise, QRReader: &contractsfake.PairingQRReader{}}, &pairing.Provider{Engine: domain.EngineWaHeadless})),
+			path:    "/session/qr?engine=wa_noise",
 		},
 		{
 			name:    "GetStatus",
@@ -537,9 +604,12 @@ func TestGetQRAndStatus_RepositoryFailure_500_LogsError(t *testing.T) {
 		path    string
 	}{
 		{
+			// A leitura do registo passou para o registry, que a faz para
+			// resolver o engine do ALVO. A falha do banco continua a sair 500
+			// em nivel error — respondPairingRefusal usa a mesma taxonomia.
 			name:    "GetQR",
-			handler: NewGetQRHandler(session.NewGetQRUseCase(&contractsfake.SessionGuard{}, broken, log)),
-			path:    "/session/qr",
+			handler: NewGetQRHandler(log, pairing.NewRegistry(broken, capabilityregistry.NewCapabilityRegistry(), &pairing.Provider{Engine: domain.EngineWaNoise, QRReader: &contractsfake.PairingQRReader{}}, &pairing.Provider{Engine: domain.EngineWaHeadless})),
+			path:    "/session/qr?engine=wa_noise",
 		},
 		{
 			name:    "GetStatus",
@@ -584,48 +654,77 @@ func TestSessionUser_WrongTypeInContext_401(t *testing.T) {
 	logassert.OutcomeLogged(t, capture.Records(t), "unauthorized")
 }
 
-// TestConnectHandler_StartsClientOnce: o unico handler com efeito colateral
-// proprio. WithStartSession injeta o lancador; ConnectHandler responde 200 e
-// dispara a sessao em background exatamente uma vez, propagando o token do
-// userinfo autenticado (HOUSEKEEP.md: antes ia sempre vazio).
-func TestConnectHandler_StartsClientOnce(t *testing.T) {
-	type call struct{ userID, token string }
-	started := make(chan call, 2)
-	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
-		WithStartSession(func(userID, token string) { started <- call{userID, token} })
+// connectStarterHandler monta o ConnectHandler sobre um SessionStarter fake
+// registado como provider do wa_noise. A sessao "user-1" esta' gravada nesse
+// engine, e a matriz consultada e' a de PRODUCAO.
+func connectStarterHandler(starter *contractsfake.SessionStarter) http.Handler {
+	return NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
+		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineWaNoise, Starter: starter}))
+}
 
-	rec, recs := serveSession(t, h, http.MethodPost, "/session/connect", "", "user-1", true)
+// TestConnectHandler_StartsClientOnce: o unico handler com efeito colateral
+// proprio. ConnectHandler responde 200 e dispara a sessao exatamente uma vez,
+// propagando o token do userinfo autenticado (HOUSEKEEP.md: antes ia sempre
+// vazio).
+func TestConnectHandler_StartsClientOnce(t *testing.T) {
+	starter := &contractsfake.SessionStarter{}
+	rec, recs := serveSession(t, connectStarterHandler(starter), http.MethodPost,
+		"/session/connect?engine=wa_noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	got := <-started
-	if got.userID != "user-1" {
-		t.Fatalf("StartSession recebeu userID %q, quero user-1", got.userID)
+	if len(starter.StartSessionCalls) != 1 {
+		t.Fatalf("StartSession chamado %d vez(es), quero 1: %+v", len(starter.StartSessionCalls), starter.StartSessionCalls)
 	}
-	if got.token != logassertAdminToken {
-		t.Fatalf("StartSession recebeu token %q, quero o token do userinfo autenticado", got.token)
+	got := starter.StartSessionCalls[0]
+	if got.TxtID != "user-1" {
+		t.Fatalf("StartSession recebeu txtID %q, quero user-1", got.TxtID)
 	}
-	select {
-	case extra := <-started:
-		t.Fatalf("StartSession chamado mais de uma vez (segunda: %+v)", extra)
-	default:
+	if got.Token != logassertAdminToken {
+		t.Fatalf("StartSession recebeu token %q, quero o token do userinfo autenticado", got.Token)
 	}
 	logassert.NoSecrets(t, recs)
 }
 
-// TestConnectHandler_WithoutStartSession_StillResponds: sem lancador injetado
-// (o zero-value do handler, que e' o que bootstrap monta antes do wiring) a
-// rota nao pode entrar em panico com um nil call.
-func TestConnectHandler_WithoutStartSession_StillResponds(t *testing.T) {
-	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}))
+// TestConnectHandler_MissingEngine_400: o sucessor de
+// TestConnectHandler_WithoutStartSession_StillResponds.
+//
+// Aquele teste protegia um zero-value do handler em que StartSession era nil e
+// a rota tinha de responder 200 mesmo assim. Esse estado deixou de existir: o
+// lancador vem do provider que o registry resolve, e nao ha resolucao sem
+// engine. O que sobra a proteger e' que a AUSENCIA do engine e' recusa
+// explicita e nao panico com um nil.
+func TestConnectHandler_MissingEngine_400(t *testing.T) {
+	starter := &contractsfake.SessionStarter{}
+	rec, _ := serveSession(t, connectStarterHandler(starter), http.MethodPost,
+		"/session/connect", "", "user-1", true)
 
-	rec, recs := serveSession(t, h, http.MethodPost, "/session/connect", "", "user-1", true)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	logassert.NoSecrets(t, recs)
+	if len(starter.StartSessionCalls) != 0 || len(starter.CheckOwnershipCalls) != 0 {
+		t.Fatalf("pedido sem engine alcancou o provider: %+v / %+v", starter.CheckOwnershipCalls, starter.StartSessionCalls)
+	}
+}
+
+// TestConnectHandler_NilStarter_EngineUnavailable: um provider registado cujo
+// Starter e' nil nao pode virar panico nem 200 silencioso. E' a metade
+// `engine_unavailable` de pkg/pairing, e e' o unico caminho que a distingue de
+// `capability_not_supported`.
+func TestConnectHandler_NilStarter_EngineUnavailable(t *testing.T) {
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
+		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineWaNoise}))
+
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d, quero 409 (corpo %s)", rec.Code, rec.Body.String())
+	}
+	errObj := sessionEnvelope(t, rec)["error"].(map[string]any)
+	if errObj["code"] != pairing.CodeEngineUnavailable {
+		t.Fatalf("error.code = %v, quero %q", errObj["code"], pairing.CodeEngineUnavailable)
+	}
 }
 
 // F108: ownership denied must reach the client as 409, not as 200.
@@ -635,7 +734,9 @@ func TestConnectHandler_WithoutStartSession_StillResponds(t *testing.T) {
 // The client received success for a request that would never connect.
 
 // TestConnectHandler_OwnershipDenied_409: when CheckOwnership rejects, the
-// handler responds 409 with the classified error — not 200.
+// handler responds 409 with the classified error — not 200 — and StartSession
+// is never reached. A ORDEM e' o que se trava: inverter as duas chamadas
+// devolve 409 na mesma, e so' a contagem de StartSession o revela.
 func TestConnectHandler_OwnershipDenied_409(t *testing.T) {
 	ownershipErr := apperr.New(
 		"session_owned_by_another_replica",
@@ -644,15 +745,19 @@ func TestConnectHandler_OwnershipDenied_409(t *testing.T) {
 		false,
 		nil,
 	)
-	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
-		WithStartSession(func(string, string) { t.Fatal("StartSession must not be called when ownership is denied") }).
-		WithCheckOwnership(func(string) error { return ownershipErr })
+	starter := &contractsfake.SessionStarter{
+		CheckOwnershipFunc: func(context.Context, string) error { return ownershipErr },
+	}
 
-	rec, recs := serveSession(t, h, http.MethodGet, "/session/connect", "", "user-1", true)
+	rec, recs := serveSession(t, connectStarterHandler(starter), http.MethodGet,
+		"/session/connect?engine=wa_noise", "", "user-1", true)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status %d, want 409 — CategoryConflict must reach the HTTP boundary (body: %s)",
 			rec.Code, rec.Body.String())
+	}
+	if len(starter.StartSessionCalls) != 0 {
+		t.Fatalf("StartSession chamado %d vez(es) com a posse negada", len(starter.StartSessionCalls))
 	}
 	errObj, ok := sessionEnvelope(t, rec)["error"].(map[string]any)
 	if !ok {
@@ -673,37 +778,19 @@ func TestConnectHandler_OwnershipDenied_409(t *testing.T) {
 // TestConnectHandler_OwnershipGranted_200: when CheckOwnership passes, the
 // handler proceeds normally — the check must not block the happy path.
 func TestConnectHandler_OwnershipGranted_200(t *testing.T) {
-	started := make(chan string, 1)
-	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
-		WithStartSession(func(userID, _ string) { started <- userID }).
-		WithCheckOwnership(func(string) error { return nil })
+	starter := &contractsfake.SessionStarter{}
 
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect", "", "user-1", true)
+	rec, _ := serveSession(t, connectStarterHandler(starter), http.MethodGet,
+		"/session/connect?engine=wa_noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
 	}
-	uid := <-started
-	if uid != "user-1" {
-		t.Fatalf("StartSession received userID %q, want user-1", uid)
+	if len(starter.CheckOwnershipCalls) != 1 {
+		t.Fatalf("CheckOwnership calls = %d, want 1", len(starter.CheckOwnershipCalls))
 	}
-}
-
-// TestConnectHandler_WithoutCheckOwnership_200: without the check installed
-// (single mode), the handler behaves exactly as before F108.
-func TestConnectHandler_WithoutCheckOwnership_200(t *testing.T) {
-	started := make(chan string, 1)
-	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{})).
-		WithStartSession(func(userID, _ string) { started <- userID })
-
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect", "", "user-1", true)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
-	}
-	uid := <-started
-	if uid != "user-1" {
-		t.Fatalf("StartSession received userID %q, want user-1", uid)
+	if len(starter.StartSessionCalls) != 1 || starter.StartSessionCalls[0].TxtID != "user-1" {
+		t.Fatalf("StartSession: %+v", starter.StartSessionCalls)
 	}
 }
 

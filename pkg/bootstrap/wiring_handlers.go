@@ -494,5 +494,3 @@ func initCustomHandlers(s *server) {
 		Capability:  handlers.NewCapabilityHandlers(userRepo, capabilities),
 	}
 }
-
-
