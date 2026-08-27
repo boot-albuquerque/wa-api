@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/usecase/chat"
@@ -87,8 +88,8 @@ func (h *GetChatHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	// `index` answers a map of user id to chats, a normal chat answers the
 	// array of messages.
 	if result.IsIndex {
-		customhttp.RespondJSON(w, http.StatusOK, result.Index, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentChatIndex(result.Index), nil)
 		return
 	}
-	customhttp.RespondJSON(w, http.StatusOK, result.Messages, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentChatHistoryMessages(result.Messages), nil)
 }

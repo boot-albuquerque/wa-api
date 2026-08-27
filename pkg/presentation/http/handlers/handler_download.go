@@ -8,6 +8,7 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/wa-noise/errmap"
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/hlog"
@@ -36,7 +37,7 @@ func (h *DownloadImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentDownload(rsp), nil)
 }
 
 type DownloadVideoHandler struct{ uc *message.DownloadVideoUseCase }
@@ -62,7 +63,7 @@ func (h *DownloadVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentDownload(rsp), nil)
 }
 
 type DownloadAudioHandler struct{ uc *message.DownloadAudioUseCase }
@@ -88,7 +89,7 @@ func (h *DownloadAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentDownload(rsp), nil)
 }
 
 type DownloadDocumentHandler struct {
@@ -116,7 +117,7 @@ func (h *DownloadDocumentHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentDownload(rsp), nil)
 }
 
 type DownloadStickerHandler struct {
@@ -144,7 +145,7 @@ func (h *DownloadStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentDownload(rsp), nil)
 }
 
 type DownloadMediaHandler struct{ uc *message.DownloadMediaUseCase }
@@ -181,7 +182,7 @@ func (h *DownloadMediaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentDownload(rsp), nil)
 }
 
 // DownloadHandlers agrupa os handlers de download de midia. Media é a rota

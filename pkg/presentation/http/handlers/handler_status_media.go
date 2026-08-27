@@ -6,6 +6,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -43,7 +44,7 @@ func (h *PublishStatusImageHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentPublishStatusImage(rsp), nil)
 }
 
 // PublishStatusVideoHandler handles POST /status/set/video.
@@ -77,7 +78,7 @@ func (h *PublishStatusVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentPublishStatusVideo(rsp), nil)
 }
 
 // PublishStatusAudioHandler handles POST /status/set/audio.
@@ -111,5 +112,5 @@ func (h *PublishStatusAudioHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentPublishStatusAudio(rsp), nil)
 }

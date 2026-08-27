@@ -52,8 +52,10 @@ import (
 // nunca o suba. Medido em 2026-08-27, na fundação da migração DTO: 108.
 // Baixado para 90 quando as dezoito respostas de ENVIO da família mensagens
 // passaram por dtomessage (quinze capabilities de envio + delete + edit +
-// react).
-const maxPendingRespondJSONSites = 90
+// react), e para 72 quando a superfície de GESTÃO da mesma família a seguiu
+// (presença ×3, markread, efémero ×2, estrela, descarga ×6, status ×3,
+// histórico ×2).
+const maxPendingRespondJSONSites = 72
 
 // updateLedger reescreve o livro-razão em vez de o comparar.
 var updateLedger = flag.Bool("update-ledger", false,

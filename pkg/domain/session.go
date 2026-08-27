@@ -90,9 +90,9 @@ type PublishStatusImageRequest struct {
 
 // PublishStatusImageResult is the result of POST /status/set/image.
 type PublishStatusImageResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // PublishStatusVideoRequest is the payload for POST /status/set/video.
@@ -107,9 +107,9 @@ type PublishStatusVideoRequest struct {
 
 // PublishStatusVideoResult is the result of POST /status/set/video.
 type PublishStatusVideoResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // PublishStatusAudioRequest is the payload for POST /status/set/audio.
@@ -122,9 +122,9 @@ type PublishStatusAudioRequest struct {
 
 // PublishStatusAudioResult is the result of POST /status/set/audio.
 type PublishStatusAudioResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // RequestHistorySyncRequest representa o payload de requisição de sincronização de histórico.

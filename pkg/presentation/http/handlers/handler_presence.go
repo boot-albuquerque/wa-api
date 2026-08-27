@@ -5,6 +5,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	"wa-api/pkg/application/usecase/message"
 
@@ -37,7 +38,7 @@ func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Presence sent"}, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentAction(dtomessage.DetailsPresenceSent), nil)
 }
 
 type SubscribePresenceHandler struct {
@@ -68,7 +69,7 @@ func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Presence subscription updated"}, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentAction(dtomessage.DetailsPresenceSubscribed), nil)
 }
 
 type ChatPresenceHandler struct{ uc *message.ChatPresenceUseCase }
@@ -97,7 +98,7 @@ func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Chat presence sent"}, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentAction(dtomessage.DetailsChatPresenceSent), nil)
 }
 
 type MarkReadHandler struct{ uc *message.MarkReadUseCase }
@@ -126,7 +127,7 @@ func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Message marked as read"}, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentAction(dtomessage.DetailsMessageMarkedRead), nil)
 }
 
 // PresenceHandlers agrupa os handlers de presenca (/user/presence,

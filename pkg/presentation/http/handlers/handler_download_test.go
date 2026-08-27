@@ -118,8 +118,8 @@ func (c downloadRouteCase) serveCapturingLog(t *testing.T, md appport.MediaDownl
 }
 
 type downloadResultBody struct {
-	Mimetype string `json:"Mimetype"`
-	Data     string `json:"Data"`
+	Mimetype string `json:"mimetype"`
+	Data     string `json:"data"`
 }
 
 // TestDownload_Success_ViaRegisteredRoute prova o caminho HTTP -> handler ->
