@@ -31509,7 +31509,7 @@ F296 legitimamente diz de outros dois — e teria ficado escondido debaixo dela.
 acima. O teste que o trava é o próprio `make log-coverage-gate`, que falha
 fechado no estágio *ratchet*.
 
-<!-- f-status: fechado -->
+<!-- f-status: corrigido -->
 
 ## F300 — `TestTodoMetodoComErroTemWrapper` já falhava neste ramo, e é de grupos/canais
 
