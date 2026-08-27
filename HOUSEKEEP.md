@@ -31632,11 +31632,14 @@ uma especificação errada não é só prosa: é o que `/docs` serve.
 as chaves canónicas, correr `go run ./cmd/openapidoc`, e confirmar com o `cmp`
 de `CLAUDE.md`.
 
-**Status**: **não corrigido** nesta entrega — é um corpo de trabalho próprio,
-em prosa portuguesa que descreve o comportamento a par das chaves, e misturá-lo
-com o diff de código tornaria a revisão de ambos pior.
+**Status**: corrigido — ver F335, que reescreveu `api/openapi/{paths,schemas}/sessao.yaml`
+com as chaves canónicas (excepto os dois pontos que F335 mantém deliberadamente
+divergentes por serem comportamento REAL do servidor, não documentação
+desactualizada: `user_info`/`privacy` de `PerfilSessaoCompleto`, adiado por
+F302, e `qrCodeBase64`/`expiresAt` de `EventoWebSocket`, decorrente do
+F297(b)).
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F299 — uma migração que só ACRESCENTA funções de mapeamento baixou um gate de rácio, sem defeito nenhum
 
@@ -33592,5 +33595,110 @@ já enumerava os sete em falta — não precisou de teste novo, só parou de
 falhar. `go test ./pkg/infra/wa-noise/client/... -race` verde.
 
 **Status**: corrigido.
+
+<!-- f-status: corrigido -->
+
+## F335 — F332/F298 fecham para a família sessão: `api/openapi/{paths,schemas}/sessao.yaml` sincronizados com o DTO
+
+**Data/contexto**: 2026-08-27, fechamento do gap de documentação deixado por
+F298 (aberto) e coberto pela medição agregada de F332, restrito à família
+SESSÃO (`/session/*`, `/status/set/*`, mais as rotas de `/webhook/history`,
+`/s3/*`, `/hmac/*`, `/proxy/set` documentadas no mesmo grupo). Âmbito
+estritamente dois ficheiros: `api/openapi/paths/sessao.yaml` e
+`api/openapi/schemas/sessao.yaml`.
+
+**Medição — antes**: `TestOpenAPISchemaPropertyNamesAreCanonical` +
+`TestOpenAPIExampleKeysAreCanonical`, filtrados às famílias/esquemas da
+sessão (`/session`, `sessao`, `EstadoSessao`, `ResultadoPareamentoTelefone`,
+`PedidoPareamentoTelefone`, `CodigoQR`, `ResultadoProxy`,
+`ResultadoLimiteHistorico`, `LimiteHistorico`, `PerfilSessaoCompleto`,
+`EventoWebSocket`): **67 violações**.
+
+**Correcção aplicada**: renomeadas para a grafia canónica — lida do `json:`
+real em `pkg/presentation/http/dto/{session,storage,webhook}/*.go`, não
+adivinhada — as chaves de `properties` e de `example`/`examples`, e a prosa
+que falava DO nome antigo:
+
+- `EstadoSessao`: `loggedIn`→`logged_in`; `proxy_config.proxyUrl`→`proxy_config.proxy_url`;
+  removida a divergência de grafia com `PerfilSessao.logged_in` (já não existe:
+  as duas rotas usam `logged_in`); removido o campo `token`, que
+  `dtosession.PresentGetStatus` omite de propósito e por isso **não existe**
+  na resposta real (não é caso de renomear — é caso de apagar da doc).
+- `CodigoQR`: `QRCode`→`qr_code` (propriedade, `required`, exemplo e prosa).
+- `PedidoPareamentoTelefone`: `Phone`→`phone`.
+- `ResultadoPareamentoTelefone`: `LinkingCode`→`linking_code`.
+- `ResultadoLimiteHistorico` (a que vive em `sessao.yaml`, distinta de
+  `LimiteHistorico` em `infra.yaml`): `Details`/`History`→`details`/`history`.
+- Exemplos de caminho em `paths/sessao.yaml`: `/session/qr`, `/session/pairphone`,
+  `/session/status`, `/session/history`, `/session/proxy`, `/session/s3/config`,
+  `/session/s3/test`, `/session/hmac/config` — todas as chaves `Details`,
+  `Enabled`, `Bucket`, `Region`, `Set`, `ProxyURL`, `LinkingCode`, `QRCode`,
+  `Phone`, `loggedIn`, `proxyUrl` corrigidas para a grafia minúscula real.
+
+**26 violações corrigidas** dentro do filtro da família (67→41 na mesma
+medição, ver excepções abaixo pelas 41 restantes).
+
+### Excepção deliberada 1 — `PerfilSessaoCompleto.user_info`/`.privacy` (F302)
+
+Por instrução explícita da tarefa e pelo item #70 da especificação de nomes
+("proibido corrigir só o Swagger"): `GET /session/profile/full` serve hoje,
+de verdade, `user_info` e `privacy` com chaves PascalCase (`Devices`, `LID`,
+`PictureID`, `Status`, `VerifiedName`, `CallAdd`, `Defense`, `GroupAdd`,
+`LastSeen`, `Messages`, `Online`, `Profile`, `ReadReceipts`, `Stickers`) —
+medido em `pkg/domain/user_info.go` (`UserInfo`, `PrivacySettings`, sem
+etiqueta `json`) e confirmado por
+`pkg/application/usecase/profile/get_profile_full.go:47-50`, que serializa
+os dois tipos de domínio DIRECTO, sem apresentador. F302 já regista isto
+como aberto e deliberadamente adiado — é trabalho de código da família
+UTILIZADORES, não de prosa da família sessão. Reescrever a doc para
+`snake_case` aqui faria a especificação MENTIR sobre o que o servidor
+devolve. **32 violações da medição ficam aqui, de propósito, sem correcção.**
+
+**Achado incidental, não corrigido**: medindo isto, notei que a forma
+documentada de `user_info` (mapa indexado pelo JID) também diverge da real:
+`ProfileFullResult.UserInfo` é `[]domain.UserInfo` (um ARRAY), não um mapa —
+`get_profile_full.go:47`. A doc já estava errada na FORMA antes de estar
+errada na grafia, e as duas coisas ficaram fora desta correcção pelo mesmo
+motivo do F302: é o mesmo achado de código, não de documentação, e misturar
+os dois teria escondido qual dos dois motivou a mudança. Registo aqui porque
+apareceu ao medir F302 de perto; correcção sugerida: quando F302 for
+corrigido (apresentador `dtouser.PresentUserInfo`/`PresentPrivacySettings`),
+a forma do `user_info` também deve ser corrigida para ARRAY na doc.
+
+### Excepção deliberada 2 — `EventoWebSocket.qrCodeBase64`/`.expiresAt` (nova, decorre do F297(b))
+
+Não estava nomeada na tarefa, mas segue a mesma regra: medido em
+`pkg/application/session/orchestrator.go:538,760,787` —
+`payload["qrCodeBase64"]` e `payload["expiresAt"]` são chaves REAIS,
+escritas em camelCase de propósito no `postmap` que `GET /session/ws`
+difunde tal e qual. F297(b) já documentava que o fan-out de eventos
+(`postmap`) inteiro ficou fora da migração DTO desta família — é superfície
+própria, sem apresentador, com pelo menos duas outras chaves camelCase
+conhecidas (`instanceName`, `userID` em `dispatch_callhook.go`). Reescrever
+`qrCodeBase64`/`expiresAt` para snake_case teria o mesmo defeito do caso
+acima: a doc mentiria sobre o que sai no fio. **4 violações da medição ficam
+aqui, de propósito.** A descrição do esquema já dizia isto correctamente
+antes desta sessão ("objecto PLANO", "chaves são as do SDK") — não precisou
+de escrita nova, só de não ser mexida.
+
+**Medição — depois**: 41 restantes no filtro da família, **100% explicadas**:
+5 fora do âmbito (`LimiteHistorico`/`ResultadoProxy` vivem em
+`api/openapi/schemas/infra.yaml`, não nos dois ficheiros desta tarefa), 4 da
+excepção 2, 32 da excepção 1. Zero violação sem dono.
+
+**Regeneração**: `go run ./cmd/openapidoc` — `pkg/presentation/http/apidocs/openapi.yaml`
+escrito de novo (118 caminhos), único ficheiro gerado tocado.
+
+**Gate/testes**: `go build ./...` limpo; `go vet ./...` limpo;
+`go test ./pkg/bootstrap/... ./pkg/presentation/...` — as duas suítes do gate
+(`TestOpenAPISchemaPropertyNamesAreCanonical`,
+`TestOpenAPIExampleKeysAreCanonical`) continuam a falhar, mas por violações
+de OUTRAS famílias (F300 mensagens, F313 grupo, e as demais que F332 mediu
+em conjunto) — nenhuma delas em `sessao.yaml`. Todo o resto de
+`pkg/bootstrap` e `pkg/presentation` verde.
+
+**Status**: corrigido, para a família sessão. F298 fecha. F332 continua
+aberto até as demais famílias (mensagens, grupo, utilizadores, canais,
+admin) passarem pela mesma correcção nos respectivos `paths`/`schemas`.
 
 <!-- f-status: corrigido -->
