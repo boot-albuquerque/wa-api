@@ -2,8 +2,10 @@
 
 **Levantamento**: 2026-08-24, contra `feature/wa-noise`.
 **Bateria em campo**: 2026-08-26 — ver "Verificação em campo".
-**Total**: **234 entradas de rota** servidas, das quais **141 documentadas**
-sobre **122 caminhos distintos**. As outras 91 são as formas antigas: continuam
+**Atualização**: 2026-08-27 — merge da arquitetura Engine + Capability
+Providers acrescentou `GET /session/capabilities` e `GET /admin/capabilities`.
+**Total**: **236 entradas de rota** servidas, das quais **143 documentadas**
+sobre **124 caminhos distintos**. As outras 91 são as formas antigas: continuam
 a responder e saíram do contrato.
 
 O número duplicou a 26/08 com a padronização: 143 rotas antigas, mais 91
@@ -11,7 +13,8 @@ formas canónicas registadas ao lado delas. As antigas continuam a funcionar e
 estão marcadas `deprecated` no OpenAPI — ver "Caminhos canónicos".
 
 Percurso: 121 no levantamento de 24/08 → 141 com comunidades e convites de
-admin → 143 → **234** com a padronização.
+admin → 143 → 234 com a padronização → **236** com `session/capabilities` e
+`admin/capabilities` (27/08).
 
 **Estado por caminho, contado da tabela de verificação** (não estimado):
 
@@ -20,8 +23,8 @@ admin → 143 → **234** com a padronização.
 | ✅ chamada real com efeito confirmado | **98** |
 | 🟡 sucesso sem observador independente | **8** |
 | ❌ falhou, com o erro medido | **3** — `/users/block`, `/users/unblock`, `/newsletters/updates` |
-| ⬜ não testada, com o motivo dito | **32** |
-| | **141** |
+| ⬜ não testada, com o motivo dito | **34** |
+| | **143** |
 
 Reproduzir a lista:
 
@@ -257,7 +260,7 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 
 ---
 
-## session — 14 rotas
+## session — 15 rotas
 
 | método | rota | o que faz |
 |---|---|---|
@@ -275,6 +278,7 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/session/s3/config` | configurar S3 por sessão |
 | POST | `/session/s3/test` | testar credenciais S3 |
 | POST | `/session/hmac/config` | configurar chave HMAC por sessão |
+| GET | `/session/capabilities` | status de cada capability para a engine/conta da sessão atual |
 
 ---
 
@@ -972,18 +976,20 @@ contactos por `push_name`: 461 contactos produzem **dois** destinatários.
 Medido, com o comparativo da conta pessoal (1266 contactos → 165
 destinatários). Detalhe em HOUSEKEEP F256.
 
-### infraestrutura — 19 rotas
+### infraestrutura — 21 rotas
 
 | rota | | nota |
 |---|---|---|
 | `GET /health` | ✅ | autenticada |
 | `GET /health/live`, `GET /health/ready`, `GET /livez` | ✅ | **sem** autenticação |
 | `GET /admin/users`, `GET /admin/users/{id}` | ✅ | `-H 'Authorization: <ADMIN_TOKEN>'`. O token é **regerado a cada arranque** e está em `<datadir>/admin_token` |
+| `GET /admin/capabilities` | ⬜ | matriz completa Engine×AccountType (88 capabilities); testado por rota registada com SQLite real, não contra servidor vivo |
 | `GET /labels`, `GET /labels/{id}/chats` | ✅ | — |
 | `GET /webhook`, `GET /webhook/history` | ✅ | leitura |
 | `GET /s3/config`, `GET /session/s3/config` | ✅ | leitura |
 | `GET /hmac/config`, `GET /session/hmac/config` | ✅ | leitura |
 | `GET /session/status`, `/session/profile`, `/session/profile/full`, `/session/qr` | ✅ | leitura |
+| `GET /session/capabilities` | ⬜ | status por capability para a engine/conta da sessão; testado por rota registada com SQLite real, não contra servidor vivo |
 | `POST/PUT/DELETE /webhook`, `POST /webhook/history` | ⬜ | escreve configuração — não testado sem aval |
 | `POST/DELETE /s3/config`, `POST /s3/configure`, `POST /s3/test`, `POST/DELETE /session/s3/config`, `POST /session/s3/test` | ⬜ | idem |
 | `POST/DELETE /hmac/config`, `/hmac/configure` | ⬜ | idem |
