@@ -33555,3 +33555,42 @@ percorreu a superfície INTEIRA sem estar preso ao âmbito de uma família.
 **Status**: corrigido.
 
 <!-- f-status: corrigido -->
+
+## F334 — F204/F300 fechado: os sete métodos sem wrapper de `errmap.ClassifyIQ` ganharam o wrapper
+
+**Data/contexto**: 2026-08-27, fechamento dos dois gaps deixados abertos
+pelo relatório final da normalização de contrato (F296-F333). Este era o
+segundo dos dois — o primeiro (F332, esquemas OpenAPI desactualizados) foi
+tratado em paralelo por outros workers.
+
+**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers.go`. Sete métodos
+da interface `Client` eram PROMOVIDOS de `*wanoise.Client` em vez de
+escritos — sem wrapper, uma recusa do servidor do WhatsApp chegava ao
+cliente HTTP como `500` em vez do código classificado por
+`errmap.ClassifyIQ` (o mecanismo da F204).
+
+**Correção aplicada**: os sete ganharam wrapper, seguindo exactamente o
+padrão dos ~60 já existentes no ficheiro:
+
+- `GetSubGroups`, `GetLinkedGroupsParticipants` — `(resultado, erro)`,
+  colocados a seguir a `GetGroupInfoFromLink` (secção de grupo).
+- `LinkGroup`, `UnlinkGroup` — só erro, mesma secção.
+- `NewsletterCreateAdminInvite`, `NewsletterAcceptAdminInvite`,
+  `NewsletterRevokeAdminInvite` — só erro, colocados a seguir a
+  `NewsletterChangeOwner` (secção de canal).
+
+Os três de canal usam só `errmap.ClassifyIQ`, sem o `errmap.ClassifyNewsletter`
+adicional que `NewsletterDemoteAdmin`/`NewsletterChangeOwner` têm: esse
+segundo nível existe para (código GraphQL, operação) específicos já MEDIDOS
+em produção, e não há medição para convite de admin — inventar um
+`OpNewsletterAdminInvite` sem essa medição seria especulação, que o
+`CLAUDE.md` proíbe ("Medir antes de projetar").
+
+**Anti-regressão**: `TestTodoMetodoComErroTemWrapper`
+(`pkg/infra/wa-noise/client/realclient_wrappers_test.go`), que já existia e
+já enumerava os sete em falta — não precisou de teste novo, só parou de
+falhar. `go test ./pkg/infra/wa-noise/client/... -race` verde.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->

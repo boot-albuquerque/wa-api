@@ -179,6 +179,70 @@ whatsmeow. O CI (`.github/workflows/go.yml`) só builda, testa e roda
   release do whatsmeow com suporte, a única via é aguardar um commit
   `proto: update to vNNNNNNNNNN` upstream ou abrir issue/PR lá.
 
+## Opções para reduzir a dependência manual do upstream
+
+Levantamento de 2026-08-26, feito para responder "como podemos gerar/atualizar
+os `.proto` do Noise sem depender do Tulir fazer isso manualmente?". Nenhuma
+das quatro foi implementada ainda — registradas aqui para exploração futura,
+cada uma com o trade-off que a distingue.
+
+### Opção 1 — Extrator próprio (reimplementar o pipeline privado)
+
+Reconstruir `parse-proto.js` (recuperável do diff de `3d63c6fc`, ver seção
+acima) e automatizar a etapa que hoje é manual: baixar `protos.js` do bundle
+JS do WhatsApp Web via browser instrumentado (Playwright/Puppeteer), rodar o
+parser, compilar com `protoc-gen-go`.
+
+- **Vantagem**: independência total do cronograma do Tulir; captura schema
+  novo no mesmo dia em que a Meta publica.
+  **Custo**: manter um extrator JS/Node que emula o module-loader do
+  WhatsApp Web — o mesmo tipo de manutenção reversa que o Tulir já faz, só
+  que duplicada por nós. Quebra toda vez que a Meta muda o bundler ou o
+  formato de `protos.js`.
+
+### Opção 2 — Diff automatizado de versão + gatilho de extração
+
+Um cron/CI que baixa periodicamente o bundle JS do WhatsApp Web, lê a versão
+de build exposta nele (o mesmo número usado nos commits `proto: update to
+vNNNNNNNNNN`), compara com a última versão sincronizada por nós, e só
+dispara a Opção 1 quando detecta mudança.
+
+- **Vantagem**: evita rodar o extrator caro a cada execução; sinaliza
+  proativamente quando há novidade, antes mesmo de o Tulir publicar.
+  **Custo**: ainda depende da Opção 1 existir por baixo — é uma otimização de
+  gatilho, não uma alternativa a ela.
+
+### Opção 3 — Geração Go a partir do `.proto` já existente
+
+Uma vez com o `.proto` atualizado (por qualquer via), `protoc-gen-go` já
+resolve a geração dos `.pb.go` de forma 100% automatizável — é o mesmo passo
+que o `generate.sh` do whatsmeow já fazia antes de ser removido do repo
+público. Não é alternativa às opções 1/2/4: é o passo final comum a todas,
+o único elo do pipeline que não depende de engenharia reversa.
+
+### Opção 4 — Espelhar o `proto/` do whatsmeow (vendoring automatizado)
+
+Em vez de extrair schema do WhatsApp Web diretamente, um workflow que watch
+o repositório upstream (`tulir/whatsmeow`) por novos commits `proto: update
+to vNNNNNNNNNN` em `proto/`, e abre PR automático de vendoring no `wa-api`
+quando detecta um.
+
+- **Vantagem**: barato — não precisa reimplementar extração de schema, só
+  monitorar commits. Consistente com o fato de já vendorizarmos
+  `internal/wa-noise` (ver [ADR-0002](adr/0002-vendorizar-whatsmeow-em-vez-de-reimplementar.md)).
+  **Custo**: não elimina a dependência do upstream, troca "depender de uma
+  pessoa lembrar" por "depender de um repo+CI lembrar" — continuamos atrás do
+  Tulir no tempo, nunca à frente.
+
+### Comparação
+
+| Opção | Elimina dependência do Tulir? | Custo de manutenção | Prazo de reação |
+|---|---|---|---|
+| 1. Extrator próprio | Sim | Alto (duplica engenharia reversa) | Mesmo dia da release da Meta |
+| 2. Diff de versão + gatilho | Só combinada com a 1 | Baixo (é só o gatilho) | Detecção imediata, extração conforme opção 1 |
+| 3. `protoc-gen-go` a partir do `.proto` | N/A (passo comum, não alternativa) | Nenhum (já automatizável hoje) | Instantâneo, dado o `.proto` |
+| 4. Espelhar `proto/` do upstream | Não | Muito baixo | Atraso = cadência do Tulir (~4-8 dias) |
+
 ## Fontes
 
 - https://github.com/tulir/whatsmeow/commit/3d63c6fcc1a7db114358782118f017e14200fac.patch (conteúdo recuperado de `generate.sh` e `parse-proto.js`)
