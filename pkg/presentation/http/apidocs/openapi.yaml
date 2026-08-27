@@ -20661,7 +20661,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ✅ Ler o QR code de emparelhamento
+      summary: ⬜ Ler o QR code de emparelhamento
       tags:
         - Sessões
   /session/s3/config:

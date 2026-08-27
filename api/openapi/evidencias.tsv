@@ -51,7 +51,7 @@ POST	/session/pairphone	⬜
 GET	/session/profile	✅
 GET	/session/profile/full	✅
 POST	/session/proxy	⬜
-GET	/session/qr	✅
+GET	/session/qr	⬜
 DELETE	/session/s3/config	⬜
 GET	/session/s3/config	✅
 POST	/session/s3/config	⬜
