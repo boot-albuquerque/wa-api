@@ -60,29 +60,29 @@ func TestNewsletter_CadaRotaChamaOMetodoCerto(t *testing.T) {
 		{"/newsletter/updates", func(h *NewsletterHandlers) http.Handler { return h.Updates },
 			`{"jid":"` + canalDeTeste + `","count":5,"after":"7"}`, "NewsletterMessageUpdates", canalDeTeste, "7"},
 		{"/newsletter/mark-viewed", func(h *NewsletterHandlers) http.Handler { return h.MarkViewed },
-			`{"jid":"` + canalDeTeste + `","serverIDs":[1,2]}`, "MarkNewsletterViewed", canalDeTeste, "[1 2]"},
+			`{"jid":"` + canalDeTeste + `","server_ids":[1,2]}`, "MarkNewsletterViewed", canalDeTeste, "[1 2]"},
 		{"/newsletter/react", func(h *NewsletterHandlers) http.Handler { return h.React },
-			`{"jid":"` + canalDeTeste + `","serverID":3,"reaction":"👍","messageID":"m1"}`,
+			`{"jid":"` + canalDeTeste + `","server_id":3,"reaction":"👍","message_id":"m1"}`,
 			"SendNewsletterReaction", canalDeTeste, "👍"},
 		{"/newsletter/subscribe", func(h *NewsletterHandlers) http.Handler { return h.Subscribe },
 			`{"jid":"` + canalDeTeste + `"}`, "SubscribeNewsletterLiveUpdates", canalDeTeste, ""},
 		{"/newsletter/demote", func(h *NewsletterHandlers) http.Handler { return h.Demote },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"DemoteNewsletterAdmin", canalDeTeste, "5516900000000@s.whatsapp.net"},
 		{"/newsletter/change-owner", func(h *NewsletterHandlers) http.Handler { return h.ChangeOwner },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"ChangeNewsletterOwner", canalDeTeste, "5516900000000@s.whatsapp.net"},
 		{"/newsletter/delete", func(h *NewsletterHandlers) http.Handler { return h.Delete },
-			`{"jid":"` + canalDeTeste + `","confirmJID":"` + canalDeTeste + `"}`,
+			`{"jid":"` + canalDeTeste + `","confirm_jid":"` + canalDeTeste + `"}`,
 			"DeleteNewsletter", canalDeTeste, ""},
 		{"/newsletter/admin-invite", func(h *NewsletterHandlers) http.Handler { return h.AdminInvite },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"CreateNewsletterAdminInvite", canalDeTeste, "5516900000000@s.whatsapp.net"},
 		{"/newsletter/admin-invite/accept", func(h *NewsletterHandlers) http.Handler { return h.AdminInviteAccept },
 			`{"jid":"` + canalDeTeste + `"}`,
 			"AcceptNewsletterAdminInvite", canalDeTeste, ""},
 		{"/newsletter/admin-invite/revoke", func(h *NewsletterHandlers) http.Handler { return h.AdminInviteRevoke },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"RevokeNewsletterAdminInvite", canalDeTeste, "5516900000000@s.whatsapp.net"},
 	}
 
@@ -346,7 +346,7 @@ func TestNewsletter_DeleteSemConfirmJID_E400(t *testing.T) {
 func TestNewsletter_DeleteConfirmJIDMismatch_E400(t *testing.T) {
 	nr := &contractsfake.NewsletterReader{}
 	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
-		`{"jid":"`+canalDeTeste+`","confirmJID":"999999999@newsletter"}`,
+		`{"jid":"`+canalDeTeste+`","confirm_jid":"999999999@newsletter"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
@@ -362,7 +362,7 @@ func TestNewsletter_DemoteFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).Demote, http.MethodPost, "/newsletter/demote",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -375,7 +375,7 @@ func TestNewsletter_ChangeOwnerFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).ChangeOwner, http.MethodPost, "/newsletter/change-owner",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -388,7 +388,7 @@ func TestNewsletter_DeleteFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
-		`{"jid":"`+canalDeTeste+`","confirmJID":"`+canalDeTeste+`"}`,
+		`{"jid":"`+canalDeTeste+`","confirm_jid":"`+canalDeTeste+`"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -441,7 +441,7 @@ func TestNewsletter_AdminInviteFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -467,7 +467,7 @@ func TestNewsletter_AdminInviteRevokeFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).AdminInviteRevoke, http.MethodPost, "/newsletter/admin-invite/revoke",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)

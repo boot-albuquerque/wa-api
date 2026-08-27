@@ -12,6 +12,7 @@ import (
 	"wa-api/internal/wa-noise/protocol/appstate"
 	"wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/pkg/domain"
 )
 
 func TestNewMiscAdapter(t *testing.T) {
@@ -144,8 +145,8 @@ func TestMiscAdapter_ListSubscribed_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSubscribed = %v", err)
 	}
-	if len(got.([]types.NewsletterMetadata)) != 0 {
-		t.Errorf("ListSubscribed = %+v, want empty", got)
+	if got == nil || len(got) != 0 {
+		t.Errorf("ListSubscribed = %+v, want empty non-nil", got)
 	}
 }
 
@@ -160,12 +161,11 @@ func TestMiscAdapter_ListSubscribed_FilterNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSubscribed = %v", err)
 	}
-	list := got.([]types.NewsletterMetadata)
-	if len(list) != 1 {
-		t.Errorf("ListSubscribed length = %d, want 1", len(list))
+	if len(got) != 1 {
+		t.Fatalf("ListSubscribed length = %d, want 1", len(got))
 	}
-	if list[0].ID.User != "n1" {
-		t.Errorf("ListSubscribed[0].ID.User = %q, want n1", list[0].ID.User)
+	if got[0].JID != domain.JID("n1@s.whatsapp.net") {
+		t.Errorf("ListSubscribed[0].JID = %q, want n1@s.whatsapp.net", got[0].JID)
 	}
 }
 

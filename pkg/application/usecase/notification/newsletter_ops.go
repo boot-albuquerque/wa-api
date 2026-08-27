@@ -83,14 +83,24 @@ type NewsletterRequest struct {
 
 // NewsletterResult carrega o que a operação devolveu.
 //
-// `Data` é `any` pela mesma razão da porta: NewsletterMetadata é tipo do
-// vendor e traduzi-lo arrastaria a árvore do protocolo para o domínio.
-// `Duration` existe separado porque só o subscribe devolve tempo, e enfiá-lo
-// em Data faria o cliente ter de adivinhar quando olhar para lá.
+// SEM ETIQUETAS `json`, e a ausência é o ponto: este tipo já não é o formato de
+// fio. Era — `Data any` ia direto para o codificador, o que fazia a forma da
+// resposta de `/newsletter/info` ser decidida pelo motor da sessão. A forma
+// pública vive agora em `pkg/presentation/http/dto/newsletter`.
+//
+// Os três campos de carga são exclusivos por operação, e são campos SEPARADOS
+// em vez de um `any` porque é isso que dá erro de compilação quando o
+// apresentador lê o campo errado: com `any`, ler `Messages` de um `info` seria
+// uma asserção de tipo que falha em runtime e serve `null`.
 type NewsletterResult struct {
-	Data            any    `json:"data,omitempty"`
-	DurationSeconds int64  `json:"duration_seconds,omitempty"`
-	Status          string `json:"status"`
+	// Metadata é preenchido por create, info e info_invite.
+	Metadata *domain.NewsletterMetadata
+	// Messages é preenchido por messages e updates.
+	Messages []domain.NewsletterMessage
+	// Duration é preenchida só por subscribe: é por quanto tempo as
+	// atualizações ao vivo valem, e vem do servidor.
+	Duration time.Duration
+	Status   string
 }
 
 // NewsletterOpsUseCase executa as onze operações.
@@ -116,7 +126,7 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 		return nil, err
 	}
 
-	data, dur, err := uc.dispatch(ctx, userID, req)
+	result, err := uc.dispatch(ctx, userID, req)
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
@@ -130,71 +140,61 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 	}
 
 	uc.logger.Info(ctx, "newsletter operation done", "user_id", userID, "op", string(req.Op))
-	return &NewsletterResult{Data: data, DurationSeconds: int64(dur.Seconds()), Status: domain.StatusSent}, nil
+	result.Status = domain.StatusSent
+	return &result, nil
 }
 
 // dispatch chama a porta. Separado do Execute para que a guarda de sessão, a
 // validação e a tradução de erro não fiquem enterradas num switch de onze
 // ramos — e para que o switch seja legível como a tabela que ele é.
-func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req NewsletterRequest) (any, time.Duration, error) {
+func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req NewsletterRequest) (NewsletterResult, error) {
 	n := uc.newsletters
 	switch req.Op {
 	case NewsletterOpCreate:
-		d, err := n.CreateNewsletter(ctx, userID, req.Name, req.Description, req.Picture)
-		return d, 0, err
+		m, err := n.CreateNewsletter(ctx, userID, req.Name, req.Description, req.Picture)
+		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpInfo:
-		d, err := n.NewsletterInfo(ctx, userID, req.JID)
-		return d, 0, err
+		m, err := n.NewsletterInfo(ctx, userID, req.JID)
+		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpInfoInvite:
-		d, err := n.NewsletterInfoWithInvite(ctx, userID, req.Invite)
-		return d, 0, err
+		m, err := n.NewsletterInfoWithInvite(ctx, userID, req.Invite)
+		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpFollow:
-		err := n.FollowNewsletter(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, n.FollowNewsletter(ctx, userID, req.JID)
 	case NewsletterOpUnfollow:
-		err := n.UnfollowNewsletter(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, n.UnfollowNewsletter(ctx, userID, req.JID)
 	case NewsletterOpMute:
-		err := n.ToggleNewsletterMute(ctx, userID, req.JID, req.Mute)
-		return nil, 0, err
+		return NewsletterResult{}, n.ToggleNewsletterMute(ctx, userID, req.JID, req.Mute)
 	case NewsletterOpMessages:
-		d, err := n.NewsletterMessages(ctx, userID, req.JID, req.Count, req.Before)
-		return d, 0, err
+		msgs, err := n.NewsletterMessages(ctx, userID, req.JID, req.Count, req.Before)
+		return NewsletterResult{Messages: msgs}, err
 	case NewsletterOpUpdates:
-		d, err := n.NewsletterMessageUpdates(ctx, userID, req.JID, req.Count, req.Since, req.After)
-		return d, 0, err
+		msgs, err := n.NewsletterMessageUpdates(ctx, userID, req.JID, req.Count, req.Since, req.After)
+		return NewsletterResult{Messages: msgs}, err
 	case NewsletterOpMarkViewed:
-		err := n.MarkNewsletterViewed(ctx, userID, req.JID, req.ServerIDs)
-		return nil, 0, err
+		return NewsletterResult{}, n.MarkNewsletterViewed(ctx, userID, req.JID, req.ServerIDs)
 	case NewsletterOpReact:
-		err := n.SendNewsletterReaction(ctx, userID, req.JID, req.ServerID, req.Reaction, req.MessageID)
-		return nil, 0, err
+		return NewsletterResult{}, n.SendNewsletterReaction(ctx, userID, req.JID, req.ServerID, req.Reaction, req.MessageID)
 	case NewsletterOpSubscribe:
 		dur, err := n.SubscribeNewsletterLiveUpdates(ctx, userID, req.JID)
-		return nil, dur, err
+		return NewsletterResult{Duration: dur}, err
 	case NewsletterOpDemote:
-		err := n.DemoteNewsletterAdmin(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, n.DemoteNewsletterAdmin(ctx, userID, req.JID, req.UserJID)
 	case NewsletterOpChangeOwner:
-		err := n.ChangeNewsletterOwner(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, n.ChangeNewsletterOwner(ctx, userID, req.JID, req.UserJID)
 	case NewsletterOpDelete:
-		err := n.DeleteNewsletter(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, n.DeleteNewsletter(ctx, userID, req.JID)
 	case NewsletterOpAdminInvite:
-		err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
 	case NewsletterOpAdminInviteAccept:
-		err := n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
 	case NewsletterOpAdminInviteRevoke:
-		err := n.RevokeNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, n.RevokeNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
 	}
 	// Inalcançável enquanto validateNewsletter correr primeiro. Fica como erro
 	// e não como panic porque uma operação nova acrescentada ao switch da
 	// validação e esquecida aqui tem de virar 4xx, não derrubar o processo.
-	return nil, 0, apperr.New("unknown_newsletter_op", apperr.CategoryValidation,
+	return NewsletterResult{}, apperr.New("unknown_newsletter_op", apperr.CategoryValidation,
 		"unknown newsletter operation", false, nil)
 }
 

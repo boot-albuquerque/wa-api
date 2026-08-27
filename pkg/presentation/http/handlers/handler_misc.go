@@ -8,6 +8,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtonewsletter "wa-api/pkg/presentation/http/dto/newsletter"
 
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
@@ -68,7 +69,7 @@ func (h *ListNewsletterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtonewsletter.PresentListNewsletters(rsp), nil)
 }
 
 // DeleteUserCompleteHandler handles DELETE /admin/users/{id}/full
