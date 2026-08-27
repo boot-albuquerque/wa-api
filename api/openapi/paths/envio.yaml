@@ -492,7 +492,7 @@
       **Como se prova, sem olhar para o ecrã**: o autocolante enviado é gravado
       em `message_history` (`adapters/chat/messenger.go:570`), logo
       `GET /chats/history` devolve o descritor em `data_json`, e
-      `POST /chats/downloadsticker` traz os bytes de volta — que se verificam
+      `POST /chats/download/sticker` traz os bytes de volta — que se verificam
       como `RIFF`…`WEBP` de 512×512. Procedimento em `HUMAN-LAST.md` B.1.
 
       **Autenticação**: token de sessão.

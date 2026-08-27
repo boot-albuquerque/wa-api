@@ -25,14 +25,17 @@ quatro dos oito estavam factualmente errados (`OBSERVADORES-AMBAR.md`).
 
 ## O contrato descreve um nome por operação
 
-O router serve **235 rotas**; o contrato documenta **137**. A diferença são as
-91 formas antigas pluralizadas (F269) mais as cinco `/chat/download*`
-(CAP-10) — 96 no total —, que **continuam a responder** e saíram da
-especificação. `POST /chats/download/{kind}` é a rota nova que as
-consolida, com o kind na relação do caminho: as CINCO rotas
-`/chats/downloadimage` etc. (a forma intermédia que a F269 tinha
-pluralizado) foram RETIRADAS do contrato — e do serviço — a favor dela,
-porque continuavam a violar a regra 2 (verbo colado ao tipo no nome).
+O router serve rotas antigas pluralizadas (F269) que **continuam a
+responder** e saíram da especificação — mesma política de coexistência
+permanente descrita em `api/openapi/CAMINHOS-CANONICOS.md`.
+`POST /chats/download/{kind}` (CAP-10) é a rota que consolida as cinco
+antigas `/chat/download{tipo}`, com o kind na relação do caminho: a forma
+intermédia (`/chats/downloadimage` etc., que a F269 tinha pluralizado) foi
+RETIRADA do contrato e do serviço no mesmo dia em que nasceu, e as CINCO
+formas originais (`/chat/downloadimage` etc.) foram removidas do serviço em
+2026-08-27 (HOUSEKEEP.md F297) — reversão explícita, só para esta família,
+da política de coexistência permanente, porque não havia consumidor real a
+proteger antes do lançamento. Devolvem `404` agora.
 
 Documentar as duas formas punha 232 operações para 141 capacidades, e obrigava
 o leitor a escolher entre `/chat/list` e `/chats/list` sem elemento para
@@ -134,7 +137,7 @@ falsos**, e estão substituídos abaixo.
 | Endpoint | Motivo preciso |
 |---|---|
 | `POST /chats/request-unavailable-message` | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1. |
-| `POST /chats/send/sticker` | 200 e a mensagem chegou; bolha vazia porque **o WebP de entrada nao e convertido** — `http.DetectContentType` devolve `image/webp` (medido) e esse tipo cai no `default` de `ConvertToWebPSticker` (`media/sticker/exif.go:62`), logo nao passa pelo `scale=512:512`. **So falta fixture**: um PNG 512x512 forca a conversao. Observador ja existe e e ✅ — `GET /chats/history` + `POST /chats/downloadsticker` + verificacao dos bytes RIFF/WEBP. Achado F279. |
+| `POST /chats/send/sticker` | 200 e a mensagem chegou; bolha vazia porque **o WebP de entrada nao e convertido** — `http.DetectContentType` devolve `image/webp` (medido) e esse tipo cai no `default` de `ConvertToWebPSticker` (`media/sticker/exif.go:62`), logo nao passa pelo `scale=512:512`. **So falta fixture**: um PNG 512x512 forca a conversao. Observador ja existe e e ✅ — `GET /chats/history` + `POST /chats/download/sticker` + verificacao dos bytes RIFF/WEBP. Achado F279. |
 | `POST /groups/{group_jid}/join-requests` | 200 contra fila VAZIA, que nao prova nada. **Observador existe**: `GET /groups/{group_jid}/join-requests` (✅) antes/depois, mais `POST /groups/info`. A pre-condicao e criavel so por API — `JoinWithLink` devolve `membership_approval_request` quando o grupo exige aprovacao (`capabilities/group/invite.go:117`) —, mas exige DUAS sessoes emparelhadas. Ver `HUMAN-LAST.md` C.1. Achado F280: o resultado por participante que o WhatsApp devolve e descartado em `adapters/group/participants.go:81`. |
 | `POST /newsletters/mark-viewed` | 200 com data:null. **O observador existe por desenho e esta inalcancavel**: `NewsletterMarkViewed` incrementa o contador de vistas (`core/newsletter.go:52`) e o contador so se le por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`) — que e `POST /newsletters/updates`, a rota ❌ da F265. Via alternativa nunca exercitada: `POST /newsletters/subscribe` + evento `NewsletterLiveUpdate`, que carrega `ViewsCount`. `POST /newsletters/messages` traz o campo mas mediu **0 em 60/60** e nao distingue. Ver `OBSERVADORES-AMBAR.md` §4. |
 | `POST /newsletters/react` | 200 com data:null. **O motivo antigo ficou obsoleto no proprio dia**: mediu-se um canal com sessenta publicacoes e `POST /newsletters/messages` devolveu `ReactionCounts` reais (ex.: `{'👍':3,'😂':58}`). O observador e a leitura antes/depois do mesmo `MessageServerID`, com o passo de REMOCAO (`reaction` vazio) a fechar a causalidade. Falta apenas uma sessao emparelhada e autorizacao para reagir numa conta real. Ver `HUMAN-LAST.md` B.3. |
@@ -230,7 +233,7 @@ verificáveis, e a diferença está agora visível em vez de escondida.
 | Conversas | `POST` | `/chats/react` | `POST /chat/react` | ✅ | Reagir a uma mensagem com um emoji | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Conversas | `POST` | `/chats/request-unavailable-message` | `POST /chat/request-unavailable-message` | 🟡 | Pedir ao par o reenvio de uma mensagem indecifrável | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1. |
 | Conversas | `POST` | `/messages/star` | `POST /message/star` | ✅ | Favoritar ou desfavoritar uma mensagem | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Descarga de mídia | `POST` | `/chats/download/{kind}` | `POST /chat/downloadimage`, `/chat/downloadvideo`, `/chat/downloadaudio`, `/chat/downloaddocument`, `/chat/downloadsticker` (CAP-10) | ⬜ | Descarregar a mídia de uma mensagem recebida, pelo kind no caminho | rota nova (CAP-10); ainda não medida contra um servidor real. |
+| Descarga de mídia | `POST` | `/chats/download/{kind}` | (nenhuma — as cinco `/chat/download*` foram removidas, F297) | ⬜ | Descarregar a mídia de uma mensagem recebida, pelo kind no caminho | rota nova (CAP-10); ainda não medida contra um servidor real. As cinco rotas por-kind que a antecediam foram removidas em 2026-08-27 (HOUSEKEEP.md F297). |
 | Envio de mensagens | `POST` | `/chats/send/audio` | `POST /chat/send/audio` | ✅ | Enviar um áudio ou mensagem de voz | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/buttons` | `POST /chat/send/buttons` | ✅ | Enviar uma mensagem com botões | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/carousel` | `POST /chat/send/carousel` | ✅ | Enviar um carrossel de cartões | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
@@ -243,7 +246,7 @@ verificáveis, e a diferença está agora visível em vez de escondida.
 | Envio de mensagens | `POST` | `/chats/send/location` | `POST /chat/send/location` | ✅ | Enviar uma localização | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/poll` | `POST /chat/send/poll` | ✅ | Criar uma enquete | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/pollvote` | `POST /chat/send/pollvote` | ✅ | Votar numa enquete | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
-| Envio de mensagens | `POST` | `/chats/send/sticker` | `POST /chat/send/sticker` | 🟡 | Enviar um autocolante | 200 e a mensagem chegou; bolha vazia porque **o WebP de entrada nao e convertido** — `http.DetectContentType` devolve `image/webp` (medido) e esse tipo cai no `default` de `ConvertToWebPSticker` (`media/sticker/exif.go:62`), logo nao passa pelo `scale=512:512`. **So falta fixture**: um PNG 512x512 forca a conversao. Observador ja existe e e ✅ — `GET /chats/history` + `POST /chats/downloadsticker` + verificacao dos bytes RIFF/WEBP. Achado F279. |
+| Envio de mensagens | `POST` | `/chats/send/sticker` | `POST /chat/send/sticker` | 🟡 | Enviar um autocolante | 200 e a mensagem chegou; bolha vazia porque **o WebP de entrada nao e convertido** — `http.DetectContentType` devolve `image/webp` (medido) e esse tipo cai no `default` de `ConvertToWebPSticker` (`media/sticker/exif.go:62`), logo nao passa pelo `scale=512:512`. **So falta fixture**: um PNG 512x512 forca a conversao. Observador ja existe e e ✅ — `GET /chats/history` + `POST /chats/download/sticker` + verificacao dos bytes RIFF/WEBP. Achado F279. |
 | Envio de mensagens | `POST` | `/chats/send/template` | `POST /chat/send/template` | ✅ | Enviar uma mensagem de modelo | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/text` | `POST /chat/send/text` | ✅ | Enviar uma mensagem de texto | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |
 | Envio de mensagens | `POST` | `/chats/send/video` | `POST /chat/send/video` | ✅ | Enviar um vídeo | chamada real com resposta e efeito confirmado por segunda leitura ou pelo cliente. |

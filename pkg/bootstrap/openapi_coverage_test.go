@@ -113,18 +113,11 @@ func TestOpenAPICobreTodasAsRotasRegistadas(t *testing.T) {
 			linha.CanonicalMethod + " " + linha.CanonicalPath
 	}
 
-	// CAP-10 (2026-08-27): consolidação de MUITAS rotas legadas para UMA
-	// canónica nova, com um manipulador diferente do delas (despacho por
-	// {kind}) — não cabe em CaminhosCanonicos(), que assume o MESMO
-	// manipulador reaplicado a um caminho novo. Ver
-	// api/openapi/CAMINHOS-CANONICOS.md, secção CAP-10.
-	consolidadaEm := map[string]string{
-		"POST /chat/downloadimage":    "POST /chats/download/{kind}",
-		"POST /chat/downloadvideo":    "POST /chats/download/{kind}",
-		"POST /chat/downloadaudio":    "POST /chats/download/{kind}",
-		"POST /chat/downloaddocument": "POST /chats/download/{kind}",
-		"POST /chat/downloadsticker":  "POST /chats/download/{kind}",
-	}
+	// A consolidação CAP-10 das cinco rotas de download por-kind numa única
+	// canónica (/chats/download/{kind}) foi REVERTIDA em 2026-08-27
+	// (HOUSEKEEP.md F297, corte-limpo explícito): as cinco rotas legadas
+	// deixaram de existir, não apenas de ser documentadas, então já não
+	// precisam de exceção aqui — `registadas` nunca mais as inclui.
 
 	var faltam []string
 	for _, chave := range registadas {
@@ -136,13 +129,6 @@ func TestOpenAPICobreTodasAsRotasRegistadas(t *testing.T) {
 				continue
 			}
 			faltam = append(faltam, chave+" (legada) e "+canonica+" (canónica): NENHUMA documentada")
-			continue
-		}
-		if canonica, ehConsolidada := consolidadaEm[chave]; ehConsolidada {
-			if _, ok := documentadas[canonica]; ok {
-				continue
-			}
-			faltam = append(faltam, chave+" (legada) e "+canonica+" (consolidação CAP-10): NENHUMA documentada")
 			continue
 		}
 		faltam = append(faltam, chave)

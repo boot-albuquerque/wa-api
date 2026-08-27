@@ -34,23 +34,23 @@ type downloadCapability struct {
 
 func downloadCapabilities() []downloadCapability {
 	return []downloadCapability{
-		{"Download Image", "/chat/downloadimage", domain.MediaKindImage,
+		{"Download Image", "/chats/download/image", domain.MediaKindImage,
 			func(md port.MediaDownloader, l port.Logger) func(context.Context, string, domain.DownloadRequest) (*domain.DownloadResult, error) {
 				return message.NewDownloadImageUseCase(md, l).Execute
 			}},
-		{"Download Video", "/chat/downloadvideo", domain.MediaKindVideo,
+		{"Download Video", "/chats/download/video", domain.MediaKindVideo,
 			func(md port.MediaDownloader, l port.Logger) func(context.Context, string, domain.DownloadRequest) (*domain.DownloadResult, error) {
 				return message.NewDownloadVideoUseCase(md, l).Execute
 			}},
-		{"Download Audio", "/chat/downloadaudio", domain.MediaKindAudio,
+		{"Download Audio", "/chats/download/audio", domain.MediaKindAudio,
 			func(md port.MediaDownloader, l port.Logger) func(context.Context, string, domain.DownloadRequest) (*domain.DownloadResult, error) {
 				return message.NewDownloadAudioUseCase(md, l).Execute
 			}},
-		{"Download Document", "/chat/downloaddocument", domain.MediaKindDocument,
+		{"Download Document", "/chats/download/document", domain.MediaKindDocument,
 			func(md port.MediaDownloader, l port.Logger) func(context.Context, string, domain.DownloadRequest) (*domain.DownloadResult, error) {
 				return message.NewDownloadDocumentUseCase(md, l).Execute
 			}},
-		{"Download Sticker", "/chat/downloadsticker", domain.MediaKindSticker,
+		{"Download Sticker", "/chats/download/sticker", domain.MediaKindSticker,
 			func(md port.MediaDownloader, l port.Logger) func(context.Context, string, domain.DownloadRequest) (*domain.DownloadResult, error) {
 				return message.NewDownloadStickerUseCase(md, l).Execute
 			}},

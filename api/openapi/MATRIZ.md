@@ -46,7 +46,7 @@ deixa quem lê sem saída:
 | `POST /s3/config` (infra) | `POST /s3/configure` (infra) — aliases (F251); idem HMAC |
 | `GET /session/s3/config` (sessões) | `GET /s3/config` (infra) — mesmo manipulador, caminho novo e antigo |
 | `POST /group/create` com `is_parent` (grupos) | é o que CRIA uma comunidade, cujas rotas são de canais |
-| `POST /chat/downloadimage` (conversas) | consome o descritor que vem no `data_json` de `GET /chat/history` |
+| `POST /chats/download/{kind}` (conversas) | consome o descritor que vem no `data_json` de `GET /chat/history` |
 | `POST /user/status` (sessões) | NÃO é status de 24 h; esse é `/status/set/*` (contactos) |
 
 ## Autenticação por grupo

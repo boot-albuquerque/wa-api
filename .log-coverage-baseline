@@ -1295,7 +1295,8 @@ rules_frozen=true
 # resto do ficheiro.
 # INTEGRACAO com errors-envelope (2026-08-27): func_coverage SOBE 590->592. Ratchet-UP.
 # INTEGRACAO com http-dto-paths (2026-08-27): func_coverage SOBE 592->596 (novos handlers de rota). Ratchet-UP.
-min_func_coverage=596
+# INTEGRACAO com http-dto-download-paths (2026-08-27): func_coverage CAI 596->594 (5 handlers/rotas legadas de download removidas, F328). Ratchet-DOWN justificado: deletar codigo nao e regressao.
+min_func_coverage=594
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1549,7 +1550,8 @@ min_func_coverage=596
 # canais/newsletters, re-medido: errpath_coverage SOBE 777->778. Ratchet-UP.
 #
 # INTEGRACAO com /admin (2026-08-27): errpath_coverage SOBE 778->779. Ratchet-UP.
-min_errpath_coverage=779
+# INTEGRACAO com http-dto-download-paths (2026-08-27): errpath_coverage CAI 779->777 (mesma remocao). Ratchet-DOWN justificado.
+min_errpath_coverage=777
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1607,7 +1609,8 @@ min_errpath_coverage=779
 # covered nao muda: nenhuma funcao que registava deixou de o fazer.
 # INTEGRACAO com errors-envelope (2026-08-27): min_eligible SOBE 991->992 (+1, ratchet-UP honesto).
 # INTEGRACAO com http-dto-paths (2026-08-27): min_eligible SOBE 992->1002 (+10, ratchet-UP honesto: 10 rotas cortadas ganharam handler/DTO proprio).
-min_eligible=1002
+# INTEGRACAO com http-dto-download-paths (2026-08-27): min_eligible CAI 1002->997 (-5, as cinco funcoes de handler dos downloads legados saem do universo elegivel ao serem apagadas, F328). Ratchet-DOWN justificado, nao regressao — covered nao muda.
+min_eligible=997
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

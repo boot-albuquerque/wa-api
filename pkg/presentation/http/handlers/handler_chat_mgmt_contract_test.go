@@ -110,7 +110,7 @@ func mgmtContractCases() []mgmtContractCase {
 		},
 		{
 			nome:      "downloadimage",
-			rota:      "/chat/downloadimage",
+			rota:      "/chats/download/image",
 			proibidas: []string{"Mimetype", "Data"},
 			serve: func(t *testing.T) *httptest.ResponseRecorder {
 				c := downloadRouteCases()[0]
@@ -119,7 +119,7 @@ func mgmtContractCases() []mgmtContractCase {
 						return []byte{0x01, 0x02, 0x03}, nil
 					},
 				}
-				return mgmtPost(t, c.router(md), c.route, c.body())
+				return mgmtPost(t, c.router(md), c.route(), c.body())
 			},
 		},
 	}
