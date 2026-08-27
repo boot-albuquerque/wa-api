@@ -9,6 +9,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/usecase/profile"
+	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 )
 
@@ -42,7 +43,7 @@ func serveFull(t *testing.T, uc ProfileFullUseCase, comUserInfo bool, id string)
 func TestProfileFull_CaminhoFeliz_200EEnvelope(t *testing.T) {
 	uc := &mockProfileFullUseCase{result: &profile.ProfileFullResult{
 		ProfileResult: profile.ProfileResult{Pushname: "Lucas"},
-		Privacy:       map[string]string{"last_seen": "contacts"},
+		Privacy:       domain.PrivacySettings{LastSeen: "contacts"},
 	}}
 
 	rec := serveFull(t, uc, true, "user-1")

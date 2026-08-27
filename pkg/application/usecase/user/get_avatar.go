@@ -23,7 +23,7 @@ func NewGetAvatarUseCase(cd appport.AvatarReader, jr appport.JIDResolver, logger
 }
 
 // Execute retrieves avatar info
-func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req domain.GetAvatarRequest) (map[string]interface{}, error) {
+func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req domain.GetAvatarRequest) (*domain.AvatarInfo, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
@@ -56,8 +56,8 @@ func (uc *GetAvatarUseCase) Execute(ctx context.Context, userID string, req doma
 
 	uc.logger.Info(ctx, "Got avatar", "id", pic.ID, "url", pic.URL, "user_id", userID)
 
-	return map[string]interface{}{
-		"id":  pic.ID,
-		"url": pic.URL,
-	}, nil
+	// The domain value goes back untouched. Building a map here was what put
+	// the KEY NAMES of the public response inside a use case, which is the
+	// coupling the DTO layer exists to remove.
+	return pic, nil
 }

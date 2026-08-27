@@ -114,9 +114,13 @@ type DeleteUserRequest struct {
 	UserID string
 }
 
-// CheckUserRequest é o request para verificar se um usuário está no WhatsApp
+// CheckUserRequest é a entrada dos casos de uso que consultam telefones.
+//
+// Sem etiquetas `json`: deixou de ser o corpo de POST /user/check e de
+// POST /user/info na migração da família de utilizadores. Quem descodifica é
+// pkg/presentation/http/dto/user.CheckUserRequest.
 type CheckUserRequest struct {
-	Phone []string `json:"phone"`
+	Phone []string
 }
 
 // GetUserLIDRequest é o request para obter o LID de um usuário
@@ -124,23 +128,21 @@ type GetUserLIDRequest struct {
 	JID string // from URL
 }
 
-// BlockUserRequest é o request para bloquear um usuário
+// BlockUserRequest é a entrada do caso de uso de bloqueio.
+//
+// Sem etiquetas `json` e sem ChatTarget: deixou de ser o corpo de
+// POST /user/block. Quem descodifica, resolve o alias `chat` e valida é
+// pkg/presentation/http/dto/user.BlockUserRequest.
 type BlockUserRequest struct {
-	ChatTarget
-	Phone string `json:"Phone,omitempty"`
-	JID   string `json:"JID,omitempty"`
+	Phone string
+	JID   string
 }
 
-func (r *BlockUserRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
-
-// UnblockUserRequest é o request para desbloquear um usuário
+// UnblockUserRequest é a entrada do caso de uso de desbloqueio.
 type UnblockUserRequest struct {
-	ChatTarget
-	Phone string `json:"Phone,omitempty"`
-	JID   string `json:"JID,omitempty"`
+	Phone string
+	JID   string
 }
-
-func (r *UnblockUserRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // ProxyConfig representa a configuração de proxy
 type ProxyConfig struct {

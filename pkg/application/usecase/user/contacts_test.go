@@ -2,7 +2,6 @@ package user_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 
@@ -144,7 +143,7 @@ func TestGetContactsUseCase_Execute(t *testing.T) {
 	t.Run("erro do adapter sobe sem embrulho", func(t *testing.T) {
 		t.Parallel()
 		cd := &contractsfake.ContactDirectory{
-			GetAllContactsFunc: func(context.Context, string) (any, int, error) { return nil, 0, boom },
+			GetAllContactsFunc: func(context.Context, string) ([]domain.Contact, int, error) { return nil, 0, boom },
 		}
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetContactsUseCase(cd, logger)
@@ -161,8 +160,8 @@ func TestGetContactsUseCase_Execute(t *testing.T) {
 	t.Run("sucesso registra a contagem", func(t *testing.T) {
 		t.Parallel()
 		cd := &contractsfake.ContactDirectory{
-			GetAllContactsFunc: func(context.Context, string) (any, int, error) {
-				return []string{"a", "b"}, 2, nil
+			GetAllContactsFunc: func(context.Context, string) ([]domain.Contact, int, error) {
+				return []domain.Contact{{JID: "a@s.whatsapp.net"}, {JID: "b@lid"}}, 2, nil
 			},
 		}
 		logger := &contractsfake.Logger{}
@@ -172,8 +171,7 @@ func TestGetContactsUseCase_Execute(t *testing.T) {
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
-		list, ok := got.([]string)
-		if !ok || len(list) != 2 {
+		if len(got) != 2 {
 			t.Fatalf("resultado = %#v, queria os dois contatos", got)
 		}
 		rec, ok := logger.Find("Retrieved contacts")
@@ -274,7 +272,7 @@ func TestGetAvatarUseCase_Execute(t *testing.T) {
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
-			if got["id"] != "pic-1" || got["url"] != "https://img/1.jpg" {
+			if got == nil || got.ID != "pic-1" || got.URL != "https://img/1.jpg" {
 				t.Errorf("resultado = %v", got)
 			}
 			if len(cd.GetProfilePictureCalls) != 1 || !cd.GetProfilePictureCalls[0].Preview {
@@ -307,11 +305,11 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 	t.Run("telefone que não parseia é pulado, não é erro", func(t *testing.T) {
 		t.Parallel()
 		cd := &contractsfake.ContactDirectory{
-			GetUserInfoFunc: func(_ context.Context, _ string, jids []domain.JID) (any, error) {
+			GetUserInfoFunc: func(_ context.Context, _ string, jids []domain.JID) ([]domain.UserInfo, error) {
 				if len(jids) != 1 || jids[0] != domain.JID("5511987654321") {
 					t.Errorf("jids = %v, queria só o telefone válido", jids)
 				}
-				return map[string]string{"5511987654321": "Alice"}, nil
+				return []domain.UserInfo{{JID: "5511987654321", PushName: "Alice"}}, nil
 			},
 		}
 		jr := &contractsfake.JIDResolver{
@@ -325,16 +323,12 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetUserUseCase(cd, jr, logger)
 
-		data, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321", "quebrado"}})
+		got, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321", "quebrado"}})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
-		var payload map[string]map[string]string
-		if err := json.Unmarshal(data, &payload); err != nil {
-			t.Fatalf("resposta não é JSON: %v", err)
-		}
-		if payload["users"]["5511987654321"] != "Alice" {
-			t.Errorf("payload = %v", payload)
+		if len(got) != 1 || got[0].PushName != "Alice" {
+			t.Errorf("resultado = %+v", got)
 		}
 		if !logger.Logged("Failed to parse JID") {
 			t.Error("esperava aviso do telefone descartado")
@@ -344,7 +338,7 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 	t.Run("falha do adapter é embrulhada", func(t *testing.T) {
 		t.Parallel()
 		cd := &contractsfake.ContactDirectory{
-			GetUserInfoFunc: func(context.Context, string, []domain.JID) (any, error) { return nil, boom },
+			GetUserInfoFunc: func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) { return nil, boom },
 		}
 		logger := &contractsfake.Logger{}
 		uc := user.NewGetUserUseCase(cd, &contractsfake.JIDResolver{}, logger)
@@ -358,27 +352,10 @@ func TestGetUserUseCase_Execute(t *testing.T) {
 		}
 	})
 
-	t.Run("resposta não serializável vira erro de marshal", func(t *testing.T) {
-		t.Parallel()
-		cd := &contractsfake.ContactDirectory{
-			// Um canal não tem representação JSON: é o gatilho do ramo de
-			// erro de serialização sem precisar de tipo artificial.
-			GetUserInfoFunc: func(context.Context, string, []domain.JID) (any, error) {
-				return make(chan int), nil
-			},
-		}
-		logger := &contractsfake.Logger{}
-		uc := user.NewGetUserUseCase(cd, &contractsfake.JIDResolver{}, logger)
-
-		var unsupported *json.UnsupportedTypeError
-		_, err := uc.Execute(context.Background(), "u1", domain.CheckUserRequest{Phone: []string{"5511987654321"}})
-		if !errors.As(err, &unsupported) {
-			t.Fatalf("err = %v, queria json.UnsupportedTypeError", err)
-		}
-		if !logger.Logged("Failed to marshal response") {
-			t.Error("esperava log do erro de serialização")
-		}
-	})
+	// O subteste "resposta não serializável vira erro de marshal" saiu com o
+	// ramo que ele exercitava: o caso de uso deixou de montar o corpo HTTP
+	// (json.Marshal de {"users": …}), que é decisão da fronteira. Sem esse
+	// ramo, o teste não media nada.
 }
 
 func TestGetUserLIDUseCase_Execute(t *testing.T) {

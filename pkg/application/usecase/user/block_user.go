@@ -24,11 +24,11 @@ func NewBlockUserUseCase(bm appport.BlocklistManager, jr appport.JIDResolver, lo
 
 // BlockResult representa o resultado da operação de bloqueio
 type BlockResult struct {
-	Details      string   `json:"Details"`
-	JID          string   `json:"JID"`
-	Blocklist    []string `json:"Blocklist"`
-	DHash        string   `json:"DHash"`
-	RequestedJID string   `json:"RequestedJID,omitempty"`
+	Details      string
+	JID          string
+	Blocklist    []string
+	DHash        string
+	RequestedJID string
 }
 
 // Execute bloqueia um usuário
