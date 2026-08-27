@@ -31458,3 +31458,55 @@ em prosa portuguesa que descreve o comportamento a par das chaves, e misturá-lo
 com o diff de código tornaria a revisão de ambos pior.
 
 <!-- f-status: aberto -->
+
+## F299 — uma migração que só ACRESCENTA funções de mapeamento baixou um gate de rácio, sem defeito nenhum
+
+**Data/contexto**: 2026-08-27, migração para DTO da família sessão.
+
+**Onde**: `cmd/logcov/rules.go:173` (`ruleX1Trivial`), contra os apresentadores
+novos de `pkg/presentation/http/dto/{storage,webhook}`.
+
+**Problema**, medido dos dois lados:
+
+| | `func_coverage` | `eligible` | veredicto |
+|---|---|---|---|
+| `1e7db641` (antes) | 589 (piso 589) | 993 | verde |
+| depois da migração | **587** | **996** | **vermelho** |
+
+Nenhuma linha de log foi removida. O que aconteceu é que a regra **X1** deixa
+fora do DENOMINADOR toda função com **até dois** statements e sem caminho de
+saída, e três dos trinta e dois apresentadores novos tinham mais:
+
+```
+dto/storage.PresentProxyConfig    4 statements
+dto/webhook.PresentGetWebhook     3
+dto/webhook.PresentUpdateWebhook  3
+```
+
+Os três são mapeamento campo a campo, sem E/S e sem erro: **não há nada que
+registar neles**. Acrescentar um log satisfaria a métrica sem satisfazer o que
+ela mede — que é exactamente o modo de falha que um gate de rácio convida.
+
+**Correção aplicada**: o corpo dos três encolheu para dois statements, com a
+regra partilhada extraída (`webhook.nonNilStrings`, `storage.copyBool` +
+`storage.boolPtr`). O conjunto de `ELIGIBLE` do golden voltou a ser IDÊNTICO
+ao de `1e7db641` — `diff` das duas listas devolve vazio — e o gate voltou a
+589/993.
+
+**O que isto ensina, e que vale para as outras cinco famílias que vão migrar**:
+um gate de RÁCIO pode ficar vermelho por crescimento do denominador, sem que
+nada tenha piorado. Quem migrar uma família a seguir vai acrescentar dezenas de
+apresentadores; se algum passar de dois statements, o gate cai pelo mesmo
+motivo. **Escreva o apresentador como uma expressão só**, e ponha a regra
+partilhada numa função à parte.
+
+E o método que separou "eu parti isto" de "já estava partido" foi **medir o
+gate no commit ANTERIOR**, com a árvore limpa. Sem essa medição, este achado
+teria ido para o relatório como "gate pré-existente vermelho", que é o que a
+F296 legitimamente diz de outros dois — e teria ficado escondido debaixo dela.
+
+**Status**: **corrigido** em `abe3e88d`, com a medição dos dois lados colada
+acima. O teste que o trava é o próprio `make log-coverage-gate`, que falha
+fechado no estágio *ratchet*.
+
+<!-- f-status: fechado -->
