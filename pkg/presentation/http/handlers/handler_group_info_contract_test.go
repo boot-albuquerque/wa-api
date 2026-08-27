@@ -30,6 +30,12 @@ import (
 //  3. as chaves ANTIGAS desapareceram. "a chave nova existe" não prova
 //     migração: um struct pode carregar as duas.
 
+// contractUserID é o id de sessão que withContractUser injecta. Constante
+// porque os dublês das outras famílias precisam de semear as suas lojas sob
+// exactamente este id — semear sob outro devolve o registo vazio, e o teste
+// passa a medir o vazio (ADR-0004).
+const contractUserID = "u1"
+
 // contractUser satisfaz a interface userInfo que sessionUser lê do contexto.
 type contractUser struct{ id string }
 
@@ -46,7 +52,7 @@ func (u contractUser) Get(key string) string {
 // SUCESSO).
 func withContractUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), appport.UserInfoKey, contractUser{id: "u1"})
+		ctx := context.WithValue(r.Context(), appport.UserInfoKey, contractUser{id: contractUserID})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
