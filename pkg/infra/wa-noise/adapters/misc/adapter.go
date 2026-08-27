@@ -154,7 +154,7 @@ func (a *MiscAdapter) ProfileAccess(_ context.Context, txtID string) (appport.Pr
 }
 
 // ListSubscribed devolve as newsletters assinadas pela sessão.
-func (a *MiscAdapter) ListSubscribed(ctx context.Context, txtID string) (any, error) {
+func (a *MiscAdapter) ListSubscribed(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -163,14 +163,7 @@ func (a *MiscAdapter) ListSubscribed(ctx context.Context, txtID string) (any, er
 	if err != nil {
 		return nil, err
 	}
-
-	newsletter := make([]types.NewsletterMetadata, 0, len(resp))
-	for _, info := range resp {
-		if info != nil {
-			newsletter = append(newsletter, *info)
-		}
-	}
-	return newsletter, nil
+	return mapNewsletterMetadataList(resp), nil
 }
 
 // SyncContactRoster força o pull do patch de app-state que carrega a agenda
@@ -242,27 +235,35 @@ var (
 // cada rota nova ter de descobrir onde encaixar.
 
 // CreateNewsletter cria um canal.
-func (a *MiscAdapter) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error) {
+func (a *MiscAdapter) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (*domain.NewsletterMetadata, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
-	return client.CreateNewsletter(ctxWithTimeout, wa.CreateNewsletterParams{
+	created, err := client.CreateNewsletter(ctxWithTimeout, wa.CreateNewsletterParams{
 		Name: name, Description: description, Picture: picture,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return mapNewsletterMetadata(created), nil
 }
 
 // NewsletterInfo devolve os metadados de um canal pelo JID.
-func (a *MiscAdapter) NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (any, error) {
+func (a *MiscAdapter) NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (*domain.NewsletterMetadata, error) {
 	client, parsed, err := a.clientAndJID(txtID, jid)
 	if err != nil {
 		return nil, err
 	}
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
-	return client.GetNewsletterInfo(ctxWithTimeout, parsed)
+	info, err := client.GetNewsletterInfo(ctxWithTimeout, parsed)
+	if err != nil {
+		return nil, err
+	}
+	return mapNewsletterMetadata(info), nil
 }
 
 // NewsletterInfoWithInvite devolve os metadados pelo CÓDIGO de convite.
@@ -271,14 +272,18 @@ func (a *MiscAdapter) NewsletterInfo(ctx context.Context, txtID string, jid doma
 // link partilhado, não um identificador de conversa. Traduzi-la como JID
 // falharia — e falharia com uma mensagem sobre JID inválido, que mandaria quem
 // investiga para o lado errado.
-func (a *MiscAdapter) NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (any, error) {
+func (a *MiscAdapter) NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (*domain.NewsletterMetadata, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
-	return client.GetNewsletterInfoWithInvite(ctxWithTimeout, inviteKey)
+	info, err := client.GetNewsletterInfoWithInvite(ctxWithTimeout, inviteKey)
+	if err != nil {
+		return nil, err
+	}
+	return mapNewsletterMetadata(info), nil
 }
 
 // FollowNewsletter passa a seguir o canal.
@@ -330,29 +335,37 @@ func (a *MiscAdapter) ToggleNewsletterMute(ctx context.Context, txtID string, ji
 // messagesAttrs) — deixando o servidor usar o padrão dele. É por isso que não
 // inventamos um limite aqui: escolher um por omissão seria decidir em nome do
 // WhatsApp.
-func (a *MiscAdapter) NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) (any, error) {
+func (a *MiscAdapter) NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) ([]domain.NewsletterMessage, error) {
 	client, parsed, err := a.clientAndJID(txtID, jid)
 	if err != nil {
 		return nil, err
 	}
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
-	return client.GetNewsletterMessages(ctxWithTimeout, parsed, &wa.GetNewsletterMessagesParams{
+	msgs, err := client.GetNewsletterMessages(ctxWithTimeout, parsed, &wa.GetNewsletterMessagesParams{
 		Count: count, Before: types.MessageServerID(serverIDFromText(before)),
 	})
+	if err != nil {
+		return nil, err
+	}
+	return mapNewsletterMessages(msgs), nil
 }
 
 // NewsletterMessageUpdates devolve ATUALIZAÇÕES de mensagens já vistas.
-func (a *MiscAdapter) NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) (any, error) {
+func (a *MiscAdapter) NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) ([]domain.NewsletterMessage, error) {
 	client, parsed, err := a.clientAndJID(txtID, jid)
 	if err != nil {
 		return nil, err
 	}
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
-	return client.GetNewsletterMessageUpdates(ctxWithTimeout, parsed, &wa.GetNewsletterUpdatesParams{
+	updates, err := client.GetNewsletterMessageUpdates(ctxWithTimeout, parsed, &wa.GetNewsletterUpdatesParams{
 		Count: count, Since: since, After: types.MessageServerID(serverIDFromText(after)),
 	})
+	if err != nil {
+		return nil, err
+	}
+	return mapNewsletterMessages(updates), nil
 }
 
 // MarkNewsletterViewed marca mensagens como vistas.

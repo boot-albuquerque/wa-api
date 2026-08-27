@@ -31629,3 +31629,252 @@ apresentador novo — só chamá-los.
 outro worker, e tocar-lhe agora criaria conflito de merge sem ganho.
 
 <!-- f-status: aberto -->
+## F303 — três achados de contrato que a migração DTO da família de canais destapou, e um que ela criou
+
+**Data/contexto**: 2026-08-27, migração da família de canais (dezoito rotas)
+para a camada de DTO. Registados aqui porque nenhum deles é a tarefa —
+a tarefa era a forma do JSON — e os três primeiros foram corrigidos de
+passagem porque o mesmo ficheiro tinha de ser tocado.
+
+### (a) `/newsletter/subscribe` deitava fora a única coisa que devolve
+
+**Onde**: `pkg/presentation/http/handlers/handler_newsletter.go:128` (antes da
+migração):
+
+```go
+customhttp.RespondJSON(w, http.StatusOK, rsp.Data, nil)
+```
+
+**Problema**: `NewsletterResult` tinha três campos — `Data`, `DurationSeconds`
+e `Status` — e o manipulador serializava só o primeiro. A subscrição de
+actualizações ao vivo deixa `Data` a nil e enche `DurationSeconds`, logo a
+rota respondia `data: null`. O arrendamento que o WhatsApp concede, e que diz
+ao chamador quando repetir a chamada, era calculado no use case e nunca saía
+do processo. O mesmo apagava o `status` das outras onze operações.
+
+Estava DOCUMENTADO como ressalva em `api/openapi/paths/canal.yaml`
+("a duração não é devolvida"), o que o torna um defeito conhecido e não
+descoberto — e o `TestNewsletterResult_DurationSeconds_SerializesAsSeconds`
+provava a conversão de nanossegundos para segundos num campo que nenhum
+cliente via.
+
+**Correção aplicada**: `dtonewsletter.PresentNewsletterSubscribe` e
+`PresentNewsletterAck`. Travado por
+`TestCanal_ContratoPublico_SubscribeEntregaADuracao` e
+`TestCanal_ContratoPublico_OperacaoSemCargaDizStatus`.
+
+**Status**: corrigido nesta sessão.
+
+### (b) cinco chaves de PEDIDO em camelCase, nas únicas structs anónimas da família
+
+**Onde**: `handler_newsletter.go:60-66` (antes):
+
+```go
+ServerIDs []int  `json:"serverIDs"`
+ServerID  int    `json:"serverID"`
+MessageID string `json:"messageID"`
+UserJID    string `json:"userJID"`
+ConfirmJID string `json:"confirmJID"`
+```
+
+**Problema**: nenhuma passa `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, a regra do
+contrato público. Repare que as OUTRAS onze chaves do mesmo struct já estavam
+correctas (`jid`, `invite`, `name`, `count`, `before`) — o que mostra que a
+divergência não foi uma convenção antiga, foi cinco linhas escritas noutro dia.
+
+**Correção aplicada**: renomeadas em corte a seco, sem alias.
+`TestCanal_ContratoPublico_PedidoUsaSnakeCase` afirma que a grafia nova CHEGA
+à porta, e `..._GrafiaAntigaDoPedidoNaoEAceite` afirma que a antiga já não
+funciona — a segunda é a que impede o "aceitar as duas para sempre".
+
+**Status**: corrigido nesta sessão.
+
+### (c) a recusa de `since` respondia o código genérico do estado
+
+**Onde**: `handler_newsletter.go:115` (antes) — `time.Parse` falhava e o erro
+cru ia para `RespondJSON` com `400`, que o traduzia no par genérico
+`invalid_request` / "Requisição inválida.".
+
+**Problema**: `invalid_request` diz "algo estava mal" e nada mais, num pedido
+em que se sabe exactamente qual campo estava mal. É o caso que
+`docs/HTTP-DTO-CONVENTIONS.md` §7 nomeia ("prefira um código PRÓPRIO ao
+genérico") e era a única validação das dezoito rotas fora da taxonomia
+`apperr`.
+
+**Correção aplicada**: `NewsletterRequest.Validate` devolve
+`apperr.New("invalid_since", CategoryValidation, …)`.
+
+**Status**: corrigido nesta sessão.
+
+### (d) o que a migração DESTRUIU: a árvore da mensagem em `/newsletter/messages`
+
+**Onde**: `pkg/domain/newsletter.go`, `NewsletterMessage` — o campo `Message
+*waE2E.Message` não existe.
+
+**Problema**: a rota servia a mensagem do protocolo inteira, e as chaves dela
+são o camelCase gerado pelo protoc (`extendedTextMessage`, `fileLength`,
+`directPath`). Nenhuma passa a regra de nomes, e nenhuma é nossa para
+renomear. As três saídas eram: renomear a árvore (impossível de manter contra
+um `.proto` do vendor), isentar a rota da regra (que enfraquece a asserção
+partilhada pelas seis famílias), ou deixá-la cair.
+
+**Decisão**: deixar cair, extraindo o texto legível para `text`. É uma PERDA
+real de dado no fio: uma publicação com imagem deixa de dizer o `mimetype`, as
+dimensões ou o `directPath` da média. O que se preservou é o que a medição de
+2026-08-26 diz que um cliente podia usar — e essa mesma medição escreve que a
+forma de dentro daquelas chaves "muda com o cliente que publicou".
+
+**Correção sugerida, se a perda incomodar**: um `media` tipado no DTO, com os
+cinco ou seis campos que valem para todos os tipos de média
+(`mimetype`, `file_length`, `width`, `height`, `direct_path`, `seconds`),
+alimentado por um mapeador no adaptador. Não foi feito porque exigiria decidir
+o subconjunto sem medição de campo a suportá-lo, e este projecto tem regra
+contra isso.
+
+**Status**: NÃO corrigido, e é decisão registada, não omissão.
+
+### (e) e o que ela mudou de FORMA: `reaction_counts` -> `reactions[]`
+
+**Problema**: o objecto de contagens era indexado por EMOJI. Nenhum emoji pode
+satisfazer `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, logo o helper partilhado
+`AssertPublicJSONUsesCanonicalNaming` recusa a rota inteira — e recusa com
+razão, porque a regra diz "toda chave de objecto, recursivamente".
+
+Medido, e foi assim que apareceu:
+
+```
+--- FAIL: TestCanal_ContratoPublico_NomesCanonicos/messages
+    2 chave(s) fora do snake_case minúsculo exigido pelo contrato público:
+      ❤  em  $.data.messages[0].reaction_counts.❤
+      ❤️  em  $.data.messages[0].reaction_counts.❤️
+```
+
+**Decisão**: array de `{emoji, count}`, ordenado por contagem decrescente. A
+alternativa — abrir uma excepção no helper — enfraqueceria a asserção para as
+seis famílias por causa de um campo.
+
+**A ordenação não é estética**: sem ela a mesma publicação serializa diferente
+a cada pedido, porque a ordem de iteração de mapa em Go é aleatória por
+desenho. Travado por `TestCanal_ContratoPublico_ReacoesSaoDeterministas`, que
+faz vinte pedidos e compara os corpos — uma passagem só passaria por sorte.
+
+**Status**: corrigido nesta sessão.
+
+### Controlos negativos EXECUTADOS
+
+1. `json:"subscriber_count"` -> `json:"subscriberCount"`:
+   `TestCanal_ContratoPublico_NomesCanonicos` falha em `info`, `create` e
+   `list`, nomeando o caminho `$.data.newsletter.subscriberCount`.
+2. `sort.Slice` removido do apresentador de reacções:
+   `..._PublicacaoMapeada` falha na ordem esperada e
+   `..._ReacoesSaoDeterministas` falha colando os dois corpos divergentes.
+3. `PresentNewsletterInfo(rsp.Metadata)` trocado por `rsp.Metadata`:
+   `..._NomesCanonicos` falha com VINTE chaves PascalCase, `$.data.JID` a
+   `$.data.Viewer.Role` — que é exactamente a forma que a rota servia antes.
+
+<!-- f-status: corrigido -->
+
+## F304 — condensar `return X{}, n.Chamada(...)` custou onze caminhos de saída na cobertura de log, sem mudar comportamento nenhum
+
+**Data/contexto**: 2026-08-27, migração DTO da família de canais. É o caso que
+a regra "medir onde deveria PIORAR" do `CLAUDE.md` existe para apanhar: passou
+em `go build`, `go vet`, na suíte inteira e nos três controlos negativos, e só
+apareceu no gate de cobertura de log.
+
+**Onde**: `pkg/application/usecase/notification/newsletter_ops.go`, no `switch`
+de `dispatch`. A primeira versão da reescrita condensou os onze ramos sem
+carga:
+
+```go
+case NewsletterOpFollow:
+    return NewsletterResult{}, n.FollowNewsletter(ctx, userID, req.JID)
+```
+
+em vez da forma que lá estava:
+
+```go
+case NewsletterOpFollow:
+    err := n.FollowNewsletter(ctx, userID, req.JID)
+    return NewsletterResult{}, err
+```
+
+**Problema**, medido com `go run ./cmd/logcov -by-package ./pkg` antes e
+depois:
+
+```
+pkg/application/usecase/notification   errpath  88.9%  ->  48.1%   (27 caminhos)
+total do repositório                   errpath  77.7%  ->  77.3%
+```
+
+Onze caminhos de saída deixaram de contar como cobertos. O analisador
+reconhece a propagação da causa quando o erro passa por uma variável e não
+quando a chamada está na posição de retorno — e o comportamento em execução é
+byte a byte o mesmo.
+
+**A medição que o revelou não foi de propósito**: o alvo era o `min_eligible`,
+que TINHA de subir por causa das funções novas. Os números de `errpath` vieram
+no mesmo relatório e não batiam. Sem `-by-package` teriam ficado por
+explicar — a linha total caiu 0,4 ponto, que parece ruído até se ver que um
+pacote caiu 40.
+
+**Correção aplicada**: forma longa restaurada nos onze ramos, com o motivo
+escrito por cima do `switch` — "não volte a encurtar" e o número ao lado, para
+que a próxima pessoa que ache o `switch` verboso saiba o que custa.
+
+**Anti-regressão**: `min_errpath_coverage` fica em 777 em
+`.log-coverage-baseline`, e a nota lá escrita nomeia este caso. Reintroduzir a
+forma curta faz `TestBaselineBateComAMedicao` falhar com
+`min_errpath_coverage = 777 no baseline, medido 773` — que foi exactamente a
+saída medida.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F305 — os apresentadores de DTO diluem `func_coverage` e não podem ser instrumentados: `pkg/presentation/http/dto/` entrou em `.logcov-exclude`
+
+**Data/contexto**: 2026-08-27, mesma sessão. Registado porque a decisão MEXEU
+NUM GATE, e um gate mexido sem registo é um gate afrouxado em silêncio.
+
+**Problema**: a família de canais acrescentou sete funções elegíveis em
+`pkg/presentation/http/dto/newsletter` (a fundação já tinha acrescentado duas
+em `dto/group`). Nenhuma loga, e o denominador cresceu sem o numerador:
+
+```
+ANTES  (1e7db641)          eligible=993   585 covered   func 58.9%
+DEPOIS (sem exclusão)      eligible=1000  585 covered   func 58.5%   <- abaixo do piso
+DEPOIS (com dto/ excluído) eligible=991   585 covered   func 59.0%
+```
+
+O numerador é 585 nos três estados. Nada que registava deixou de registar; é
+diluição. Com as seis famílias migradas seriam ~40 funções, e o gate estaria a
+punir cada migração correcta — a dinâmica que a F204 já tinha medido nos
+wrappers da fachada.
+
+**Por que a exclusão é mais forte aqui que nos adaptadores (F193) e na fachada
+(F204)**: aqueles são "código nosso que ESCOLHEMOS não instrumentar". Este
+**não pode** ser instrumentado: a porta `Logger` vive em
+`pkg/application/contracts`, e `docs/HTTP-DTO-CONVENTIONS.md` §3 declara a
+regra de importação de sentido único — o pacote `dto` importa `pkg/domain` e
+nada acima. Um apresentador que quisesse logar teria de importar a camada de
+aplicação, que é o acoplamento que esta camada existe para quebrar.
+
+E não haveria o que dizer: um apresentador é projecção campo a campo, sem modo
+de falha, no caminho de TODA resposta. É a mesma justificação da isenção de
+`classifyMessage`, mas por pacote em vez de por anotação — o orçamento de
+`//log:exempt` está esgotado (2 de 2) e não seria o instrumento certo para
+nove funções que vão ser quarenta.
+
+**O que NÃO foi excluído**: `pkg/presentation/http/handlers/`, a 93,5%. É lá
+que a recusa de um pedido e a falha de uma operação são registadas.
+
+**Efeito no baseline**: `min_func_coverage` 589 -> 590 (sobe),
+`min_errpath_coverage` fica em 777, `min_eligible` 993 -> 991 (**desce**, e a
+descida é o alarme do ficheiro a disparar como devia — está anotada lá com os
+três estados medidos).
+
+**Status**: corrigido nesta sessão. Se um dia entrar decisão dentro de um
+apresentador, a linha sai de `.logcov-exclude` e o piso é recalculado — está
+escrito no próprio ficheiro.
+
+<!-- f-status: corrigido -->

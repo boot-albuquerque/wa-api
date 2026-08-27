@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -10,68 +9,24 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// F231: duration_seconds must serialize as SECONDS, not nanoseconds.
+// F231 — a duração da subscrição em SEGUNDOS, não em nanossegundos.
 //
-// The defect: time.Duration's underlying integer is nanoseconds, and
-// encoding/json serializes it as such. A 90-second subscription came out as
-// 90000000000, which read as seconds is 2854 years.
-
-func TestNewsletterResult_DurationSeconds_SerializesAsSeconds(t *testing.T) {
-	r := NewsletterResult{
-		DurationSeconds: int64((90 * time.Second).Seconds()),
-		Status:          "sent",
-	}
-	b, err := json.Marshal(r)
-	if err != nil {
-		t.Fatalf("Marshal = %v", err)
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatalf("Unmarshal = %v", err)
-	}
-
-	ds, ok := got["duration_seconds"]
-	if !ok {
-		t.Fatal("duration_seconds missing from JSON output")
-	}
-	if ds != float64(90) {
-		t.Fatalf("duration_seconds = %v, want 90 (got nanoseconds?)", ds)
-	}
-}
-
-// F231: zero duration is omitted by omitempty. This is correct: the field
-// only has meaning for the subscribe operation, and non-subscribe operations
-// return zero. Showing "duration_seconds: 0" on follow/unfollow/info would
-// be noise.
-func TestNewsletterResult_ZeroDuration_OmittedFromJSON(t *testing.T) {
-	r := NewsletterResult{
-		DurationSeconds: 0,
-		Status:          "sent",
-	}
-	b, err := json.Marshal(r)
-	if err != nil {
-		t.Fatalf("Marshal = %v", err)
-	}
-
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatalf("Unmarshal = %v", err)
-	}
-
-	if _, present := got["duration_seconds"]; present {
-		t.Fatalf("duration_seconds present in JSON for zero duration; want omitted")
-	}
-}
-
-// F231: the conversion in Execute must produce the right integer.
-// 90 seconds → DurationSeconds = 90, not 90000000000.
+// O defeito: o inteiro por baixo de time.Duration é nanossegundos, e o
+// encoding/json serializava-o tal e qual. Uma subscrição de 90 segundos saía
+// 90000000000, que lido como segundos são 2854 anos.
 //
-// This test exercises the ACTUAL conversion path through Execute, not the
-// struct directly. The port fake returns 90*time.Second from
-// SubscribeNewsletterLiveUpdates, and the result must show 90 — not the
-// nanosecond integer that encoding/json would produce from time.Duration.
-func TestNewsletterOps_Execute_DurationInSeconds(t *testing.T) {
+// ONDE A F231 VIVE AGORA. Este ficheiro tinha três testes; dois deles
+// serializavam `NewsletterResult` com `json.Marshal` e afirmavam a chave
+// `duration_seconds` do corpo. Isso deixou de fazer sentido na migração para
+// DTO: `NewsletterResult` já não tem etiquetas `json` e já não é o formato de
+// fio. A conversão passou para o apresentador, e é lá que a F231 está travada —
+// ver TestPresentNewsletterSubscribe_DuracaoEmSegundos em
+// pkg/presentation/http/dto/newsletter.
+//
+// O que sobra AQUI é a metade que continua a ser da aplicação: que o use case
+// entrega a duração que a porta lhe deu, sem a truncar nem a converter.
+
+func TestNewsletterOps_Execute_CarregaDuracaoDaPorta(t *testing.T) {
 	nr := &contractsfake.NewsletterReader{
 		SubscribeLiveFunc: func(_ context.Context, _ string, _ domain.JID) (time.Duration, error) {
 			return 90 * time.Second, nil
@@ -88,20 +43,14 @@ func TestNewsletterOps_Execute_DurationInSeconds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute = %v", err)
 	}
-	if result.DurationSeconds != 90 {
-		t.Fatalf("DurationSeconds = %d, want 90 (got nanoseconds?)", result.DurationSeconds)
+	if result.Duration != 90*time.Second {
+		t.Fatalf("Duration = %v, quero 90s", result.Duration)
 	}
-
-	b, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("Marshal = %v", err)
-	}
-	var wire map[string]any
-	if err := json.Unmarshal(b, &wire); err != nil {
-		t.Fatalf("Unmarshal = %v", err)
-	}
-	if wire["duration_seconds"] != float64(90) {
-		t.Fatalf("wire duration_seconds = %v, want 90", wire["duration_seconds"])
+	// As outras cargas ficam vazias: uma subscrição não devolve canal nem
+	// publicações, e um resultado que trouxesse ambos faria o apresentador
+	// escolher a forma errada sem que nada o acusasse.
+	if result.Metadata != nil || result.Messages != nil {
+		t.Fatalf("subscribe encheu carga que não é dele: %+v", result)
 	}
 }
 

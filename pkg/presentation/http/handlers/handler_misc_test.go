@@ -116,7 +116,9 @@ func TestListNewsletterHandler_SessionFailure(t *testing.T) {
 
 func TestListNewsletterHandler_ListFailure(t *testing.T) {
 	nr := &contractsfake.NewsletterReader{
-		ListSubscribedFunc: func(context.Context, string) (any, error) { return nil, ipmErrBoom },
+		ListSubscribedFunc: func(context.Context, string) ([]domain.NewsletterMetadata, error) {
+			return nil, ipmErrBoom
+		},
 	}
 
 	rec, recs := ipmServe(t, newsletterHandler(nr), http.MethodGet, "/newsletter/list", "",

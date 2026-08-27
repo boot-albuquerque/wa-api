@@ -315,14 +315,14 @@ responder, mas saíram do contrato.
 
 #### `/newsletter/demote` — despromover admin
 
-Corpo: `{"jid": "<canal>", "userJID": "<admin-a-despromover>"}`.
+Corpo: `{"jid": "<canal>", "user_jid": "<admin-a-despromover>"}`.
 
 Transforma um administrador do canal em assinante simples. Exige que o
 chamador seja dono do canal.
 
 #### `/newsletter/change-owner` — transferir posse
 
-Corpo: `{"jid": "<canal>", "userJID": "<novo-dono>"}`.
+Corpo: `{"jid": "<canal>", "user_jid": "<novo-dono>"}`.
 
 Transfere a posse do canal para outro utilizador. O chamador perde a posse;
 o alvo torna-se o novo dono. **Irreversível sem a cooperação do novo dono.**
@@ -335,11 +335,11 @@ para 0, o `info` passou a `state: non_existing`, e o link público de convite
 passou a `Link de convite inválido`.
 
 Método: **DELETE** (não POST).
-Corpo: `{"jid": "<canal>", "confirmJID": "<canal>"}`.
+Corpo: `{"jid": "<canal>", "confirm_jid": "<canal>"}`.
 
 Apaga permanentemente o canal. **IRREVERSÍVEL — o canal e todo o conteúdo
-são destruídos.** A confirmação explícita é obrigatória: `confirmJID` tem
-de ser idêntico a `jid`. Corpo sem `confirmJID`, ou com valor diferente de
+são destruídos.** A confirmação explícita é obrigatória: `confirm_jid` tem
+de ser idêntico a `jid`. Corpo sem `confirm_jid`, ou com valor diferente de
 `jid`, devolve 400.
 
 **Query IDs (F233b/c)**: os IDs iniciais vieram do Baileys e **estavam
@@ -944,14 +944,14 @@ F260 do HOUSEKEEP foi corrigida por causa disto.
 | `POST /newsletter/subscribe` | ✅ | `{"jid":"1203…@newsletter"}` |
 | `POST /newsletter/mute` | ✅ | `{"jid":"1203…@newsletter","mute":true}` |
 | `POST /newsletter/messages` | ✅ | `{"jid":"1203…@newsletter","count":5}` |
-| `POST /newsletter/mark-viewed` | 🟡 | `{"jid":"1203…@newsletter","serverIDs":[1]}` |
-| `POST /newsletter/react` | 🟡 | `{"jid":"1203…@newsletter","serverID":1,"reaction":"👍"}` |
-| `POST /newsletter/admin-invite` | ✅ | `{"jid":"1203…@newsletter","userJID":"90937376170214@lid"}` |
+| `POST /newsletter/mark-viewed` | 🟡 | `{"jid":"1203…@newsletter","server_ids":[1]}` |
+| `POST /newsletter/react` | 🟡 | `{"jid":"1203…@newsletter","server_id":1,"reaction":"👍"}` |
+| `POST /newsletter/admin-invite` | ✅ | `{"jid":"1203…@newsletter","user_jid":"90937376170214@lid"}` |
 | `POST /newsletter/admin-invite/accept` | ✅ | `{"jid":"1203…@newsletter"}` |
-| `POST /newsletter/admin-invite/revoke` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
-| `POST /newsletter/change-owner` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
-| `POST /newsletter/demote` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
-| `DELETE /newsletter/delete` | ✅ | `{"jid":"1203…@newsletter","confirmJID":"1203…@newsletter"}` |
+| `POST /newsletter/admin-invite/revoke` | ✅ | `{"jid":"1203…@newsletter","user_jid":"…@lid"}` |
+| `POST /newsletter/change-owner` | ✅ | `{"jid":"1203…@newsletter","user_jid":"…@lid"}` |
+| `POST /newsletter/demote` | ✅ | `{"jid":"1203…@newsletter","user_jid":"…@lid"}` |
+| `DELETE /newsletter/delete` | ✅ | `{"jid":"1203…@newsletter","confirm_jid":"1203…@newsletter"}` |
 | `POST /newsletter/updates` | ❌ | `{"jid":"1203…@newsletter","count":5}` → **`500` ao fim de 30 s**, `context deadline exceeded`. Ver HOUSEKEEP F265. |
 
 **A cadeia de administração de canal está fechada** (F233), e é a única forma
@@ -962,7 +962,7 @@ create → admin-invite → admin-invite/accept → change-owner → demote → 
  owner      (convite)        role=admin         role=owner    subscriber  non_existing
 ```
 
-O `userJID` pode ir em PN ou LID — a resolução PN→LID é feita antes do envio
+O `user_jid` pode ir em PN ou LID — a resolução PN→LID é feita antes do envio
 (F233c).
 
 ### user — 16 rotas
@@ -1076,13 +1076,13 @@ cliente que leia `error.code` parte aqui.
 
 ### `DELETE /newsletter/delete` — irreversível
 
-Exige `confirmJID` **igual** ao `jid` do canal. Sem ele, ou com valor
+Exige `confirm_jid` **igual** ao `jid` do canal. Sem ele, ou com valor
 diferente, devolve `400 missing_confirm_jid` e **não contacta o WhatsApp**.
 
 ```bash
 curl -X DELETE http://localhost:8080/newsletter/delete \
   -H 'token: <TOKEN>' -H 'Content-Type: application/json' \
-  -d '{"jid":"1203…@newsletter","confirmJID":"1203…@newsletter"}'
+  -d '{"jid":"1203…@newsletter","confirm_jid":"1203…@newsletter"}'
 ```
 
 Só o dono pode apagar. Depois de apagado:

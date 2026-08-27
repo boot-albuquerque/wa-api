@@ -51,12 +51,11 @@ import (
 // maxPendingRespondJSONSites é a CATRACA. Baixe-o quando uma família migrar;
 // nunca o suba.
 //
-// 108 na fundação da migração DTO (2026-08-27, /group/info). 81 depois da
-// família sessão + configuração de webhook + configuração de armazenamento;
-// depois da integração com a família de utilizadores, contactos e blocklist
-// (doze sítios adicionais fechados), o valor foi re-medido — ver o commit de
-// integração para o número exacto.
-const maxPendingRespondJSONSites = 69
+//	108 — 2026-08-27, fundação da migração DTO (/group/info)
+//	 81 — família sessão + configuração de webhook + configuração de armazenamento
+//	 69 — integração com a família de utilizadores, contactos e blocklist
+//	 67 — integração com a família de canais/newsletters
+const maxPendingRespondJSONSites = 67
 
 // updateLedger reescreve o livro-razão em vez de o comparar.
 var updateLedger = flag.Bool("update-ledger", false,

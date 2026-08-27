@@ -121,8 +121,8 @@ handler_misc.go	*GetHealthHandler.ServeHTTP	dtohealth.PresentHealth(…)	dto	1
 handler_misc.go	*GetHealthHandler.ServeHTTP	nil	nil	1
 handler_misc.go	*GetPrivacySettingsHandler.ServeHTTP	dtouser.PresentPrivacySettings(…)	dto	1
 handler_misc.go	*GetPrivacySettingsHandler.ServeHTTP	nil	nil	1
+handler_misc.go	*ListNewsletterHandler.ServeHTTP	dtonewsletter.PresentListNewsletters(…)	dto	1
 handler_misc.go	*ListNewsletterHandler.ServeHTTP	nil	nil	1
-handler_misc.go	*ListNewsletterHandler.ServeHTTP	rsp	pendente	1
 handler_misc.go	*MuteChatHandler.ServeHTTP	nil	nil	2
 handler_misc.go	*MuteChatHandler.ServeHTTP	rsp	pendente	1
 handler_misc.go	*PinChatHandler.ServeHTTP	nil	nil	2
@@ -134,7 +134,10 @@ handler_misc.go	*RequestUnavailableMessageHandler.ServeHTTP	rsp	pendente	1
 handler_misc.go	*SetPrivacySettingHandler.ServeHTTP	dtouser.PresentPrivacySettings(…)	dto	1
 handler_misc.go	*SetPrivacySettingHandler.ServeHTTP	nil	nil	3
 handler_newsletter.go	*newsletterOpHandler.ServeHTTP	nil	nil	2
-handler_newsletter.go	*newsletterOpHandler.ServeHTTP	rsp.Data	pendente	1
+handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterAck(…)	dto	2
+handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterInfo(…)	dto	1
+handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterMessages(…)	dto	1
+handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterSubscribe(…)	dto	1
 handler_presence.go	*ChatPresenceHandler.ServeHTTP	map[string]string{…}	pendente	1
 handler_presence.go	*ChatPresenceHandler.ServeHTTP	nil	nil	2
 handler_presence.go	*MarkReadHandler.ServeHTTP	map[string]string{…}	pendente	1

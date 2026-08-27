@@ -533,15 +533,20 @@ func TestChatPinner(t *testing.T) {
 func TestNewsletterReader(t *testing.T) {
 	f := &contractsfake.NewsletterReader{}
 	got, err := f.ListSubscribed(context.Background(), "u1")
-	if err != nil || got != nil {
-		t.Errorf("zero-value = %v, %v", got, err)
+	// O zero-value devolve fatia VAZIA e não nil: é o que os dois adaptadores
+	// reais devolvem (ambos constroem com make), e um dublê que devolvesse nil
+	// abençoaria um ramo que a produção não alcança (ARMADILHAS #1).
+	if err != nil || got == nil || len(got) != 0 {
+		t.Errorf("zero-value = %#v, %v; quero fatia vazia não-nil", got, err)
 	}
-	f.ListSubscribedFunc = func(context.Context, string) (any, error) { return []string{"n1"}, nil }
+	f.ListSubscribedFunc = func(context.Context, string) ([]domain.NewsletterMetadata, error) {
+		return []domain.NewsletterMetadata{{JID: "n1@newsletter"}}, nil
+	}
 	got, err = f.ListSubscribed(context.Background(), "u2")
 	if err != nil {
 		t.Fatalf("Func = %v", err)
 	}
-	if list, ok := got.([]string); !ok || len(list) != 1 {
+	if len(got) != 1 || got[0].JID != "n1@newsletter" {
 		t.Errorf("Func devolveu %#v", got)
 	}
 	if len(f.ListSubscribedCalls) != 2 || f.ListSubscribedCalls[1].TxtID != "u2" {

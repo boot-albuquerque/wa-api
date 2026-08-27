@@ -235,6 +235,11 @@ func TestReadExcludeFile(t *testing.T) {
 		// nao codigo de producao a instrumentar. Entra aqui pela mesma razao
 		// que as linhas acima: tornar a exclusao VISIVEL.
 		"pkg/presentation/http/contracttest/",
+		// F305 (2026-08-27, familia de canais): pkg/presentation/http/dto/ sao
+		// os apresentadores da fronteira HTTP, sem modo de falha, que nao pode
+		// logar (regra de importacao de sentido unico de
+		// docs/HTTP-DTO-CONVENTIONS.md paragrafo 3). Ver .logcov-exclude para a medicao.
+		"pkg/presentation/http/dto/",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("excludes = %v, quero %v", got, want)
