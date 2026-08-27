@@ -31335,3 +31335,122 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — `TestTodoMetodoComErroTemWrapper` já falhava neste ramo, e é de grupos/canais
+
+**Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores,
+contactos e blocklist. Achado de lado, ao correr a suíte inteira.
+
+**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers_test.go:56`.
+
+**Problema**: sete métodos da interface `Client` devolvem erro e não têm
+wrapper que o traduza no `RealClient` — `LinkGroup`, `UnlinkGroup`,
+`NewsletterAcceptAdminInvite`, `NewsletterCreateAdminInvite`, `GetSubGroups`,
+`NewsletterRevokeAdminInvite`, `GetLinkedGroupsParticipants`. Sem wrapper, o
+método é PROMOVIDO do cliente do SDK e devolve o erro cru, e uma recusa do
+servidor do WhatsApp volta ao cliente como 500 nessa rota (é o mecanismo da
+F204).
+
+**Medição de que é pré-existente**, e é o ponto desta entrada:
+
+```
+$ git stash -q && go test ./pkg/infra/wa-noise/client/ 2>&1 | tail -3
+        Sem wrapper, o método é PROMOVIDO de *wanoise.Client e devolve o erro cru do SDK; …
+FAIL
+FAIL	wa-api/pkg/infra/wa-noise/client	0.276s
+$ git stash pop -q
+```
+
+Falha idêntica com a árvore limpa em `1e7db641` e depois das alterações desta
+sessão. Os sete métodos são de grupos e de canais — nenhum toca a família de
+utilizadores.
+
+**Nota sobre o `make check`**: este pacote NÃO está na lista de pacotes que o
+alvo `test` corre, e por isso o gate fica verde com o defeito no lugar. Isso é
+um segundo achado dentro do primeiro: o `go test ./...` vê-o e o `make check`
+não.
+
+**Correção sugerida**: escrever os sete wrappers a chamar
+`errmap.ClassifyIQ`, como os restantes; e, separadamente, perceber por que
+`pkg/infra/wa-noise/client` está fora da lista do alvo `test`.
+
+**Status**: NÃO corrigido. Fora do âmbito desta tarefa, e o `CLAUDE.md` proíbe
+corrigir defeito pré-existente fora de âmbito sem perguntar. Pergunta em
+aberto: corrigir agora ou deixar pendente?
+
+<!-- f-status: aberto -->
+
+## F298 — o corte a seco não alcança o nome de PEDIDO quando ele só difere na caixa
+
+**Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores.
+Achado por um teste que escrevi para provar o corte a seco e que FALHOU.
+
+**Onde**: `pkg/presentation/http/dto/user/request.go` (e todo DTO de pedido que
+venha a renomear um campo mudando só a caixa).
+
+**Problema**: a norma diz que a migração é a seco — "a etiqueta `json` antiga é
+removida ou alterada, e pronto". Para as respostas isso é verdade. Para os
+PEDIDOS não é, e a razão é do `encoding/json`: ele casa nomes de campo **sem
+distinguir maiúsculas**. Renomear `Phone` para `phone` não remove nada — o
+corpo antigo continua a ser aceite.
+
+Medido, e o teste que o mede está em
+`pkg/presentation/http/dto/user/request_test.go`
+(`TestNomesDePedidoAceitamCaixaDiferente`):
+
+```
+$ # com json:"phone" na struct
+$ echo '{"Phone":"5511","JID":"5511@lid"}' | decodePorRota -> Phone=5511 JID=5511@lid
+```
+
+A primeira versão desse teste afirmava o contrário — "as chaves antigas
+deixaram de ser lidas" — e falhou com
+`as chaves antigas ainda são lidas: {ChatTarget:{ChatAlias:} Phone:antigo JID:antigo@lid}`.
+
+**Por que importa**: `docs/HTTP-DTO-CONVENTIONS.md` §11 promete corte a seco sem
+distinguir pedido de resposta, e uma revisão que leia só a norma conclui que o
+nome antigo desapareceu. Ele não desapareceu; deixou de ser documentado.
+
+**Correção sugerida**: acrescentar a ressalva à §11 da norma — o corte a seco
+vale para as RESPOSTAS, e nos pedidos um nome que difira só na caixa continua
+aceite pelo descodificador. Quem quiser recusá-lo de facto precisa de casamento
+estrito (`UnmarshalJSON` próprio, ou um descodificador que compare a chave crua
+antes de a passar ao `encoding/json`) — não de uma mudança de etiqueta.
+
+**Status**: NÃO corrigido no código, e é decisão deliberada: recusar o nome
+antigo seria mudança de comportamento fora do âmbito, e a norma é que está
+imprecisa, não o código. Documentado em três sítios — o teste, o comentário do
+`request.go` e o esquema `PedidoBloqueio` do OpenAPI.
+
+<!-- f-status: aberto -->
+
+## F299 — `/session/profile/full` serve PascalCase em `user_info` e `privacy`
+
+**Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores.
+Atravessa a fronteira entre duas famílias, e por isso fica registado aqui em
+vez de ser corrigido de passagem.
+
+**Onde**: `pkg/application/usecase/profile/get_profile_full.go:41-48`.
+
+**Problema**: `ProfileFullResult` ainda É o formato de fio de
+`GET /session/profile/full` — tem etiquetas `json` e vai directo ao
+`RespondJSON`. Os campos `UserInfo` e `Privacy` deixaram de ser `any` nesta
+sessão (passaram a `[]domain.UserInfo` e `domain.PrivacySettings`), mas os
+tipos de domínio não têm etiquetas `json`, de propósito — logo o codificador
+emite os nomes de campo Go: `JID`, `Status`, `PictureID`, `GroupAdd`,
+`LastSeen`.
+
+**Não é regressão**: antes serviam os tipos do SDK, que também não têm
+etiquetas, e emitiam exactamente as mesmas chaves em PascalCase. O corpo é o
+mesmo; o que mudou foi de onde ele vem.
+
+**Correção sugerida**: é escopo da família SESSÃO. Quando essa migração
+acontecer, os dois campos apresentam-se com
+`dtouser.PresentUserInfo`/`PresentPrivacySettings`, que já existem e já servem
+`jid`, `picture_id`, `group_add`, `last_seen`. Não é preciso escrever
+apresentador novo — só chamá-los.
+
+**Status**: NÃO corrigido, deliberadamente: a rota é de outra família e de
+outro worker, e tocar-lhe agora criaria conflito de merge sem ganho.
+
+<!-- f-status: aberto -->
