@@ -32892,9 +32892,9 @@ tinham ficado fora do levantamento inicial: decodificavam
   da F322), mas falta a camada de DTO que a `docs/HTTP-DTO-CONVENTIONS.md`
   exige — sem ela, um rename futuro em `pkg/domain` muda o contrato
   publicado sem erro de compilação a avisar. Nota lateral fora do âmbito
-  desta família: `RejectCallResult` (`/call/reject`, mesmo ficheiro) tem
-  `json:"Details"`/`json:"CallID"` em PascalCase real — registado para quem
-  tiver a família de chamadas.
+  desta família: `RejectCallResult` (`/call/reject`, mesmo ficheiro) tinha
+  `json:"Details"`/`json:"CallID"` em PascalCase real — corrigido na
+  auditoria final da integração, ver F333.
 
 **Verificação de completude, rota a rota** (`pkg/bootstrap/wiring_routes.go`,
 prefixos `/chat/send`, `/chat`, `/message`, `/user/presence`): as dezasseis
@@ -33488,3 +33488,70 @@ regredir mais e a torná-lo visível a quem rodar `go test ./...` sem ler o
 HOUSEKEEP inteiro primeiro.
 
 <!-- f-status: aberto -->
+
+## F333 — `POST /call/reject` servia `Details`/`CallID` em PascalCase real, vivo, sem gate nenhum a apanhar
+
+**Data/contexto**: 2026-08-27, auditoria final independente da árvore
+integrada (worker sem participação nas correcções, per protocolo). A F323 já
+tinha deixado uma nota lateral sobre isto ("fora do âmbito desta família"),
+mas nenhuma família chegou a reclamá-lo, e nenhum dos três gates permanentes
+(F330) o cobria: `naming_paths_gate_test.go` e `naming_openapi_gate_test.go`
+não inspeccionam corpo de resposta; `naming_gate_live_test.go` cobre seis
+famílias (sessão, grupo, mensagens, utilizadores, admin, canais) e nunca
+tocou `/call/reject`, que não pertence a nenhuma delas.
+
+**Onde**: `pkg/domain/call.go:10-13`, `RejectCallResult`:
+
+```go
+type RejectCallResult struct {
+	Details string `json:"Details"`
+	CallID  string `json:"CallID"`
+}
+```
+
+`RejectCallHandler.ServeHTTP` (`pkg/presentation/http/handlers/handler_misc.go:136`)
+devolve este struct directo por `RespondJSON`, sem apresentador — a mesma
+classe de defeito que a F323 já apanhou nos vizinhos (`mute`/`archive`/`pin`/
+`request-unavailable-message`), só que aqui a etiqueta em si já estava
+errada, não só a camada em falta.
+
+**Como escapou**: nenhuma branch isolada desta iniciativa tocou
+`pkg/domain/call.go` nem `/call/reject` — não é parte de nenhuma das seis
+famílias migradas. A F323 mediu-o de passagem e registou-o como nota, mas
+"registado" não é "coberto por gate", e foi preciso um auditor sem tarefa
+própria, a percorrer TODOS os pontos de chamada de `RespondJSON` (incluindo
+os classificados "pendente" no livro-razão, que um grep por padrão textual
+não alcança), para o encontrar.
+
+**Correcção aplicada**: as duas etiquetas passaram a `json:"details"` e
+`json:"call_id"` — correcção mínima, directo no struct de domínio, sem DTO
+novo, seguindo o mesmo precedente da F317/F318 (achado do mesmo porte,
+mesma correcção).
+
+**Anti-regressão**: `TestMiscBodyHandlers_Success`
+(`handler_misc_test.go`) ganhou uma chamada a
+`contracttest.AssertPublicJSONUsesCanonicalNaming` sobre o corpo de sucesso
+— recursiva e aplicada aos OITO handlers da tabela `miscBodyCases()`, não só
+ao `RejectCall`, para que o PRÓXIMO domain struct servido sem apresentador
+seja apanhado aqui, não descoberto por auditoria de novo. Controlo negativo
+EXECUTADO: as etiquetas voltaram a `"Details"`/`"CallID"`, o subteste
+`RejectCall` falhou com
+
+```
+handler_misc_test.go:348: 2 chave(s) fora do snake_case minúsculo exigido pelo contrato público (docs/HTTP-DTO-CONVENTIONS.md):
+      CallID  em  $.data.CallID
+      Details  em  $.data.Details
+```
+
+— os outros quatro subtestes continuaram verdes (prova de que a asserção
+mede o handler certo, não o conjunto todo) —, e a correcção foi restaurada.
+
+**O que isto ensina**: um achado registado numa nota lateral, sem dono nem
+gate, é indistinguível de um achado nunca encontrado — a distinção só
+existe para quem já leu aquela entrada específica do HOUSEKEEP. A auditoria
+final não é burocracia: é o único ponto desta iniciativa em que alguém
+percorreu a superfície INTEIRA sem estar preso ao âmbito de uma família.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->

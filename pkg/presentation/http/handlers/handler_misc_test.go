@@ -19,6 +19,7 @@ import (
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/presentation/http/contracttest"
 )
 
 // Fase 12 — os oito handlers de miscelanea: /health, /newsletter/list,
@@ -339,6 +340,12 @@ func TestMiscBodyHandlers_Success(t *testing.T) {
 			if env := decodeEnvelope(t, rec); !env.Success {
 				t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 			}
+			// F333: nenhum destes oito handlers tinha o corpo do 200
+			// verificado por nomenclatura — foi assim que RejectCallResult
+			// (json:"Details"/json:"CallID", pkg/domain/call.go) escapou a
+			// todos os gates. Recursivo: apanha um struct de domínio servido
+			// directo em QUALQUER um dos oito, não só o que já foi achado.
+			contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())
 			assertNoOutcomeLog(t, recs)
 		})
 	}
