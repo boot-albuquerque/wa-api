@@ -63,7 +63,7 @@
             phone: ['554192421234']
     responses:
       '200':
-        description: Uma entrada por número consultado.
+        description: Uma entrada por número consultado, em `data.users`.
         content:
           application/json:
             schema:
@@ -72,16 +72,31 @@
                 - type: object
                   properties:
                     data:
-                      type: array
-                      items:
-                        $ref: '#/components/schemas/ResultadoVerificacaoNumero'
+                      type: object
+                      required: [users]
+                      properties:
+                        users:
+                          type: array
+                          description: |
+                            Uma entrada por número que o servidor reconheceu.
+                            Sempre presente; `[]` (nunca `null`) quando nenhum
+                            produziu entrada.
+
+                            **`data` passou a ser um OBJECTO com `users`
+                            dentro, na migração de DTO de 2026-08-27** — era o
+                            array directamente. O embrulho é onde um `meta` de
+                            paginação caberia sem mexer nos campos existentes,
+                            e alinha esta rota com `POST /user/info`.
+                          items:
+                            $ref: '#/components/schemas/ResultadoVerificacaoNumero'
             example:
               code: 200
               data:
-                - query: '554192421234'
-                  is_in_whatsapp: true
-                  jid: 554192421234@s.whatsapp.net
-                  verified_name: ''
+                users:
+                  - query: '554192421234'
+                    is_in_whatsapp: true
+                    jid: 554192421234@s.whatsapp.net
+                    verified_name: ''
               success: true
       '400':
         $ref: '#/components/responses/CorpoInvalido'
@@ -140,7 +155,7 @@
             phone: ['554192421234@s.whatsapp.net']
     responses:
       '200':
-        description: Bloco `users`, indexado pelo JID consultado.
+        description: Bloco `users`, um elemento por JID consultado.
         content:
           application/json:
             schema:
@@ -154,15 +169,17 @@
               code: 200
               data:
                 users:
-                  554192421234@s.whatsapp.net:
-                    VerifiedName: null
-                    Status: ''
-                    PictureID: ''
-                    Devices:
+                  - jid: 554192421234@s.whatsapp.net
+                    lid: 90937376170214@lid
+                    status: ''
+                    picture_id: ''
+                    verified_name: ''
+                    devices:
                       - 554192421234@s.whatsapp.net
                       - 554192421234:41@s.whatsapp.net
                       - 554192421234:76@s.whatsapp.net
-                    LID: 90937376170214@lid
+                    push_name: ''
+                    business_name: ''
               success: true
       '400':
         $ref: '#/components/responses/CorpoInvalido'
@@ -195,17 +212,18 @@
       Não se pode assumir nem um espaço nem o outro. Quem quiser casar isto com
       uma agenda por telefone tem de resolver cada `@lid` —
       `GET /user/profile/{jid}` faz a tradução nos dois sentidos. O `@bot` é um
-      terceiro espaço (medido: `867051314767696@bot`, `PushName: "Meta AI"`) e
+      terceiro espaço (medido: `867051314767696@bot`, `push_name: "Meta AI"`) e
       não é contacto humano.
 
-      **Segunda ressalva medida**: `FullName` costuma vir VAZIO e o nome real
-      está em `PushName`. Numa conta WhatsApp Business, apenas **1** dos 461
-      contactos tinha `FullName`, contra 460 com `PushName`. Um cliente que
-      leia apenas `FullName` vê uma agenda sem nomes.
+      **Segunda ressalva medida**: `full_name` costuma vir VAZIO e o nome real
+      está em `push_name`. Numa conta WhatsApp Business, apenas **1** dos 461
+      contactos tinha `full_name`, contra 460 com `push_name`. Um cliente que
+      leia apenas `full_name` vê uma agenda sem nomes.
 
       **Terceira ressalva medida**: numa conta com muitos grupos, **2175 dos
-      3456 contactos não têm nome nenhum** — nem `FullName`, nem `PushName`,
-      nem `BusinessName`, nem `FirstName`. Para 2199 deles há `RedactedPhone`
+      3456 contactos não têm nome nenhum** — nem `full_name`, nem `push_name`,
+      nem `business_name`, nem `first_name`. Para 2199 deles havia
+      `RedactedPhone`, que a migração de DTO removeu (ver `ContactoDoRoster`)
       (`+55∙∙∙∙∙∙∙∙45`), que é apresentável mas não serve para enviar mensagem.
 
       **Tamanho**: 61 459 bytes para 461 contactos, 498 688 para 3456. Não há
@@ -230,12 +248,17 @@
               code: 200
               data:
                 90937376170214@lid:
-                  Found: true
-                  FirstName: ''
-                  FullName: ''
-                  PushName: Janio Gonzalez
-                  BusinessName: ''
-                  RedactedPhone: ''
+                  contacts:
+                    - jid: 90937376170214@lid
+                      phone_number: ''
+                      lid: 90937376170214@lid
+                      found: true
+                      first_name: ''
+                      full_name: ''
+                      push_name: Janio Gonzalez
+                      business_name: ''
+                      is_business: false
+                  count: 1
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -347,7 +370,7 @@
           schema:
             $ref: '#/components/schemas/PedidoAvatar'
           example:
-            Phone: 554192421234@s.whatsapp.net
+            phone: 554192421234@s.whatsapp.net
             Preview: true
     responses:
       '200':
@@ -469,14 +492,16 @@
                 avatar_url: ''
                 avatar_id: ''
                 user_info:
-                  554192421234@s.whatsapp.net:
-                    VerifiedName: null
-                    Status: ''
-                    PictureID: ''
-                    Devices:
+                  - jid: 554192421234@s.whatsapp.net
+                    lid: 90937376170214@lid
+                    status: ''
+                    picture_id: ''
+                    verified_name: ''
+                    devices:
                       - 554192421234@s.whatsapp.net
                       - 554192421234:41@s.whatsapp.net
-                    LID: 90937376170214@lid
+                    push_name: ''
+                    business_name: ''
                 unavailable:
                   avatar: avatar hidden by privacy settings
               success: true
@@ -596,14 +621,18 @@
       versiona a lista.
 
       **Quando usar**: para saber, antes de enviar, se um destino está
-      bloqueado; e para detectar mudanças na lista comparando o `DHash` em
+      bloqueado; e para detectar mudanças na lista comparando o `dhash` em
       vez de percorrer as entradas.
 
-      **Ressalva de formato, medida**: esta é a única rota do grupo que **NÃO
-      usa o envelope comum**. O manipulador serializa o resultado e escreve-o
-      directamente (`handler_blocklist.go:66-73`), portanto a resposta é
-      `{"Blocklist":[…],"DHash":"…"}` — sem `code`, sem `data`, sem `success`.
-      Um cliente que leia `data` encontra `undefined` aqui.
+      **Ressalva de formato, resolvida**: esta ERA a única rota do grupo que
+      não usava o envelope comum. O manipulador serializava o resultado e
+      escrevia-o directamente, portanto a resposta medida a 2026-08-26 era
+      `{"Blocklist":[…],"DHash":"…"}` — sem `code`, sem `data`, sem `success`,
+      e um cliente que lesse `data` encontrava `undefined`.
+
+      **A excepção acabou na migração de DTO de 2026-08-27**: a rota passa por
+      `RespondJSON` como todas as outras, e o corpo abaixo é o de `data`. As
+      duas chaves mudaram de nome junto — `blocklist` e `dhash`.
 
       **Contraste com a escrita**: esta LEITURA funciona. As duas rotas que
       alteram a lista (`POST /user/block` e `POST /user/unblock`) estão hoje
@@ -615,15 +644,23 @@
     responses:
       '200':
         description: |
-          A lista de bloqueados, **sem envelope**. Medido: numa conta sem
-          bloqueios, `Blocklist` vem como array vazio.
+          A lista de bloqueados. Medido: numa conta sem bloqueios, `blocklist`
+          vem como array vazio.
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ListaBloqueados'
+              allOf:
+                - $ref: '#/components/schemas/Envelope'
+                - type: object
+                  properties:
+                    data:
+                      $ref: '#/components/schemas/ListaBloqueados'
             example:
-              Blocklist: []
-              DHash: '1787412261963655'
+              code: 200
+              data:
+                blocklist: []
+                dhash: '1787412261963655'
+              success: true
       '400':
         $ref: '#/components/responses/SemSessao'
       '401':
@@ -649,8 +686,8 @@
       enviamos. `GET /user/blocklist` continua a funcionar — é só a escrita
       que é recusada.
 
-      **Regras**, para quando voltar a funcionar: basta um de `JID` ou
-      `Phone`, com `JID` a ganhar quando os dois vierem. A resolução é
+      **Regras**, para quando voltar a funcionar: basta um de `jid` ou
+      `phone`, com `jid` a ganhar quando os dois vierem. A resolução é
       LENIENTE por decisão registada (F203): um número nu é aceite.
 
       **Autenticação**: token de sessão.
@@ -663,7 +700,7 @@
           schema:
             $ref: '#/components/schemas/PedidoBloqueio'
           example:
-            Phone: 554192421234@s.whatsapp.net
+            phone: 554192421234@s.whatsapp.net
     responses:
       '200':
         description: |
@@ -681,14 +718,15 @@
             example:
               code: 200
               data:
-                Details: User blocked
-                JID: 554192421234@s.whatsapp.net
-                Blocklist: [554192421234@s.whatsapp.net]
-                DHash: '1787412261963655'
+                details: User blocked
+                jid: 554192421234@s.whatsapp.net
+                requested_jid: 554192421234@s.whatsapp.net
+                blocklist: [554192421234@s.whatsapp.net]
+                dhash: '1787412261963655'
               success: true
       '400':
         description: |
-          Nem `Phone` nem `JID` no corpo (`missing_phone_or_jid`),
+          Nem `phone` nem `jid` no corpo (`missing_phone_or_jid`),
           identificador que não parseia (`invalid_phone_or_jid`), corpo
           ilegível (`could_not_decode_payload`) ou sessão inexistente
           (`no_session`).
@@ -700,7 +738,7 @@
               code: 400
               error:
                 code: missing_phone_or_jid
-                message: missing Phone or JID
+                message: missing phone or jid in payload
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -736,8 +774,8 @@
       lista, e por isso falham juntas. Causa por apurar — F264 no
       `HOUSEKEEP.md`.
 
-      **Regras**, para quando voltar a funcionar: basta um de `JID` ou
-      `Phone`, com `JID` a ganhar quando os dois vierem, e a resolução aceita
+      **Regras**, para quando voltar a funcionar: basta um de `jid` ou
+      `phone`, com `jid` a ganhar quando os dois vierem, e a resolução aceita
       número nu (F203).
 
       **Autenticação**: token de sessão.
@@ -750,7 +788,7 @@
           schema:
             $ref: '#/components/schemas/PedidoBloqueio'
           example:
-            Phone: 554192421234@s.whatsapp.net
+            phone: 554192421234@s.whatsapp.net
     responses:
       '200':
         description: |
@@ -768,14 +806,15 @@
             example:
               code: 200
               data:
-                Details: User unblocked
-                JID: 554192421234@s.whatsapp.net
-                Blocklist: []
-                DHash: '1787412261963655'
+                details: User unblocked
+                jid: 554192421234@s.whatsapp.net
+                requested_jid: 554192421234@s.whatsapp.net
+                blocklist: []
+                dhash: '1787412261963655'
               success: true
       '400':
         description: |
-          Nem `Phone` nem `JID` no corpo (`missing_phone_or_jid`),
+          Nem `phone` nem `jid` no corpo (`missing_phone_or_jid`),
           identificador que não parseia (`invalid_phone_or_jid`), corpo
           ilegível (`could_not_decode_payload`) ou sessão inexistente
           (`no_session`).
@@ -787,7 +826,7 @@
               code: 400
               error:
                 code: missing_phone_or_jid
-                message: missing Phone or JID
+                message: missing phone or jid in payload
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -956,12 +995,17 @@
       `POST /status/set/*` pode ir.
 
       **A ressalva que apanha quem escreve um cliente**: leitura e escrita
-      usam **vocabulários diferentes**. Aqui as chaves vêm em `PascalCase`
-      (`GroupAdd`, `LastSeen`, `ReadReceipts`…); o `POST` neste mesmo caminho
-      recebe o nome em minúsculas (`groupadd`, `last`, `readreceipts`…). E a
-      leitura devolve TRÊS chaves que a escrita não conhece — `Messages`,
-      `Defense` e `Stickers` não constam da tabela de validação
-      (`pkg/domain/privacy.go:54-62`), logo não são definíveis por esta API.
+      usam **vocabulários diferentes, e continuam a usar**. Aqui as chaves são
+      `snake_case` (`group_add`, `last_seen`, `read_receipts`…); o `POST` neste
+      mesmo caminho recebe o nome em minúsculas SEM separador (`groupadd`,
+      `last`, `readreceipts`…). A assimetria é do WhatsApp — os nomes de
+      escrita são os do protocolo —, não uma escolha nossa, e a migração de DTO
+      de 2026-08-27 não a resolveu: só alinhou a LEITURA com o resto do
+      contrato, que até aí devolvia `PascalCase` (`GroupAdd`, `LastSeen`).
+
+      E a leitura devolve TRÊS chaves que a escrita não conhece — `messages`,
+      `defense` e `stickers` não constam da tabela de validação
+      (`pkg/domain/privacy.go`), logo não são definíveis por esta API.
 
       **Autenticação**: token de sessão.
     security:
@@ -981,16 +1025,16 @@
             example:
               code: 200
               data:
-                GroupAdd: all
-                LastSeen: contacts
-                Status: contacts
-                Profile: all
-                ReadReceipts: all
-                CallAdd: all
-                Online: all
-                Messages: all
-                Defense: 'off'
-                Stickers: contacts
+                group_add: all
+                last_seen: contacts
+                status: contacts
+                profile: all
+                read_receipts: all
+                call_add: all
+                online: all
+                messages: all
+                defense: 'off'
+                stickers: contacts
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1070,13 +1114,16 @@
             example:
               code: 200
               data:
-                GroupAdd: all
-                LastSeen: contacts
-                Status: contacts
-                Profile: all
-                ReadReceipts: all
-                CallAdd: all
-                Online: all
+                group_add: all
+                last_seen: contacts
+                status: contacts
+                profile: all
+                read_receipts: all
+                call_add: all
+                online: all
+                messages: all
+                defense: 'off'
+                stickers: contacts
               success: true
       '400':
         description: |
