@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -56,7 +57,7 @@ func (h *SendStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendSticker(result), nil)
 }
 
 // SendVideoHandler é o handler HTTP para POST /chat/send/video.
@@ -102,7 +103,7 @@ func (h *SendVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendVideo(result), nil)
 }
 
 // SendContactHandler é o handler HTTP para POST /chat/send/contact.

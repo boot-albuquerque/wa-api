@@ -44,9 +44,9 @@ func (r *SendMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAl
 
 // SendMessageResult representa o resultado do envio de mensagem.
 type SendMessageResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // LinkPreviewData é a metadata de Open Graph resolvida para a primeira URL
@@ -110,9 +110,9 @@ func (r *SendImageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlia
 
 // SendImageResult representa o resultado do envio de imagem.
 type SendImageResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // MediaPayload é o anexo já resolvido (bytes em mãos, MIME decidido) que um
@@ -154,9 +154,9 @@ func (r *SendDocumentRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatA
 
 // SendDocumentResult representa o resultado do envio de documento.
 type SendDocumentResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // SendAudioRequest representa o payload de envio de áudio. Audio é uma
@@ -195,9 +195,9 @@ func (r *SendAudioRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlia
 
 // SendAudioResult representa o resultado do envio de áudio.
 type SendAudioResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 
 	// CaptionMessageID e CaptionStatus descrevem a legenda, que vai como
 	// mensagem SEPARADA porque o protocolo não tem campo de legenda em áudio
@@ -206,8 +206,8 @@ type SendAudioResult struct {
 	// São dois campos e não um porque o envio NÃO é atómico: o áudio pode sair
 	// e a legenda falhar. Sem `CaptionStatus`, o cliente veria um 200 e teria
 	// de adivinhar se a legenda chegou.
-	CaptionMessageID string `json:"caption_message_id,omitempty"`
-	CaptionStatus    string `json:"caption_status,omitempty"`
+	CaptionMessageID string
+	CaptionStatus    string
 }
 
 // Estados possíveis de CaptionStatus.
@@ -252,9 +252,9 @@ func (r *SendStickerRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAl
 
 // SendStickerResult representa o resultado do envio de sticker.
 type SendStickerResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // SendVideoRequest representa o payload de envio de vídeo. Video é uma
@@ -280,9 +280,9 @@ func (r *SendVideoRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlia
 
 // SendVideoResult representa o resultado do envio de vídeo.
 type SendVideoResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // SendContactRequest representa o payload de envio de contato.
@@ -299,9 +299,9 @@ func (r *SendContactRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAl
 
 // SendContactResult representa o resultado do envio de contato.
 type SendContactResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // SendLocationRequest representa o payload de envio de localização.
@@ -328,9 +328,9 @@ func (r *SendLocationRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatA
 
 // SendLocationResult representa o resultado do envio de localização.
 type SendLocationResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // LocationPayload é a metadata de protocolo pura que
@@ -438,9 +438,9 @@ func (r *SendButtonsRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAl
 // em send_wire_contract_test.go. Decisão F131 (manter a forma ATUAL, e não a
 // histórica {Details, Timestamp, Id}) não se reabre aqui.
 type SendButtonsResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // ButtonsPayload é a metadata de protocolo que
@@ -538,9 +538,9 @@ func (r *SendListRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias
 // como a DÉCIMA SEGUNDA entrada. Decisão F131 (forma ATUAL, não a histórica
 // {Details, Timestamp, Id}) não se reabre aqui.
 type SendListResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // ListPayload é a metadata de protocolo que port.SimpleMessenger.SendList
@@ -578,9 +578,9 @@ func (r *SendPollRequest) ResolveChat() { ResolveChatField(&r.Group, r.ChatAlias
 // status}, travada em send_wire_contract_test.go. Sem ele, /chat/send/poll
 // seria a única a devolver o instante do envio como nada.
 type SendPollResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // PollPayload é a metadata de protocolo pura que
@@ -626,9 +626,9 @@ func (r *SendPollVoteRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatA
 // SendPollVoteResult represents the response for POST /chat/send/pollvote.
 // Same shape as every other send capability: {message_id, timestamp, status}.
 type SendPollVoteResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // PollVotePayload is the protocol-pure metadata that
@@ -698,9 +698,9 @@ type StoredMessageData struct {
 // SendForwardResult represents the response for POST /chat/send/forward.
 // Same shape as every other send capability: {message_id, timestamp, status}.
 type SendForwardResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // DeleteMessageRequest representa o payload de exclusão de mensagem.
@@ -721,9 +721,9 @@ func (r *DeleteMessageRequest) ResolveChat() { ResolveChatField(&r.Phone, r.Chat
 // SendMessageResult/SendLocationResult, dos quais só divergiam porque
 // nunca tinham chegado a enviar nada.
 type DeleteMessageResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // SendEditMessageRequest representa o payload de edição de mensagem.
@@ -751,9 +751,9 @@ type EditContextInfo struct {
 // Mesma disciplina de DeleteMessageResult quanto a Timestamp (CAP-10,
 // HOUSEKEEP F131).
 type SendEditMessageResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // SendReactionResult é o resultado de POST /chat/react.
@@ -768,9 +768,9 @@ type SendEditMessageResult struct {
 // Tipar o resultado não é cerimónia: é o que põe a rota debaixo da mesma
 // disciplina das outras, incluindo a trava de nomes de wire.
 type SendReactionResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // Os três tipos de botão de template que o histórico reconhecia
@@ -833,9 +833,9 @@ func (r *SendTemplateRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatA
 // (F137) e SendPollResult (CAP-14): as capabilities de envio têm a forma
 // {message_id, timestamp, status}, travada em send_wire_contract_test.go.
 type SendTemplateResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }
 
 // TemplatePayload é a metadata de protocolo pura que
@@ -938,7 +938,7 @@ type SendCarouselCardRequest struct {
 // SendCarouselResult is the response for POST /chat/send/carousel.
 // Same shape as every other send capability: {message_id, timestamp, status}.
 type SendCarouselResult struct {
-	MessageID string `json:"message_id"`
-	Timestamp int64  `json:"timestamp,omitempty"`
-	Status    string `json:"status"`
+	MessageID string
+	Timestamp int64
+	Status    string
 }

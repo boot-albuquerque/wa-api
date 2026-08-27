@@ -88,7 +88,12 @@ func sendWireResult(id string) domain.MessageSendResult {
 // assertSendWireKeys confere, chave por chave, a PRESENCA das esperadas, a
 // AUSENCIA das de vocabulario alheio, e denuncia qualquer chave inesperada
 // nomeando-a.
-func assertSendWireKeys(t *testing.T, rota string, obj map[string]any) {
+// chavesExtra sao as chaves que UMA capability serve alem das tres comuns. So
+// o audio tem: a legenda vai como mensagem SEPARADA (F116), e sem
+// caption_status o cliente veria 200 sem saber se ela chegou. Elas entram aqui,
+// uma a uma e por capability, e NAO na lista comum — se entrassem na comum, a
+// assercao de presenca deixaria de morder nas outras catorze.
+func assertSendWireKeys(t *testing.T, rota string, obj map[string]any, chavesExtra ...string) {
 	t.Helper()
 
 	for _, chave := range sendResultWireKeys {
@@ -112,10 +117,17 @@ func assertSendWireKeys(t *testing.T, rota string, obj map[string]any) {
 	for _, chave := range sendResultWireKeys {
 		permitidas[chave] = true
 	}
+	for _, chave := range chavesExtra {
+		if _, ok := obj[chave]; !ok {
+			t.Errorf("%s: a chave extra %q desta capability SUMIU do wire. Presentes: %v",
+				rota, chave, sendWireChavesOrdenadas(obj))
+		}
+		permitidas[chave] = true
+	}
 	for chave := range obj {
 		if !permitidas[chave] {
-			t.Errorf("%s: chave INESPERADA %q no wire. O contrato e' exatamente %v.",
-				rota, chave, sendResultWireKeys)
+			t.Errorf("%s: chave INESPERADA %q no wire. O contrato e' exatamente %v mais %v.",
+				rota, chave, sendResultWireKeys, chavesExtra)
 		}
 	}
 }
@@ -139,6 +151,8 @@ type sendWireCase struct {
 	nome  string
 	rota  string
 	serve func(t *testing.T) *httptest.ResponseRecorder
+	// extra sao as chaves proprias desta capability, alem das tres comuns.
+	extra []string
 }
 
 // sendWireCases enumera as QUINZE capabilities de envio, uma por entrada. Cada
@@ -184,6 +198,7 @@ func sendWireCases() []sendWireCase {
 				return sendWirePost(t, sendAudioRouter(mm, &contractsfake.JIDResolver{}, defaultSendAudioFetcher()),
 					"/chat/send/audio", `{"Phone":"5511999999999","Audio":"`+sendAudioTestURL+`"}`)
 			},
+			extra: []string{"caption_message_id", "caption_status"},
 		},
 		{
 			nome: "video",
@@ -389,7 +404,7 @@ func TestSendWireContract_FieldNames(t *testing.T) {
 			if err := json.Unmarshal(env.Data, &obj); err != nil {
 				t.Fatalf("%s: data nao e' um objeto: %v (corpo: %s)", caso.rota, err, rec.Body.String())
 			}
-			assertSendWireKeys(t, caso.rota, obj)
+			assertSendWireKeys(t, caso.rota, obj, caso.extra...)
 		})
 	}
 }

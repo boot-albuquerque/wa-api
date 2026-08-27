@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -66,5 +67,5 @@ func (h *SendEditMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendEditMessage(result), nil)
 }

@@ -5,6 +5,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	"wa-api/pkg/application/usecase/message"
 
@@ -38,7 +39,7 @@ func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentSendReaction(rsp), nil)
 }
 
 // ReactionHandlers agrupa os handlers de reacao a mensagem (/chat/react).

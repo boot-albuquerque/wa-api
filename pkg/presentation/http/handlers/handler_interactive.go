@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
@@ -58,7 +59,7 @@ func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendContact(result), nil)
 }
 
 // SendLocationHandler é o handler HTTP para POST /chat/send/location.
@@ -106,7 +107,7 @@ func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendLocation(result), nil)
 }
 
 // SendPollHandler é o handler HTTP para POST /chat/send/poll.
@@ -154,7 +155,7 @@ func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendPoll(result), nil)
 }
 
 // SendPollVoteHandler é o handler HTTP para POST /chat/send/pollvote.
@@ -202,7 +203,7 @@ func (h *SendPollVoteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendPollVote(result), nil)
 }
 
 // DeleteMessageHandler é o handler HTTP para POST /chat/delete/message.
