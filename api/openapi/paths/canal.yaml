@@ -1535,7 +1535,7 @@
       o alias universal `chat`: a struct do pedido não o inclui.
 
       **Resposta**: `data` traz apenas a confirmação textual
-      `{"Details": "Group linked to community successfully"}`, escrita pelo
+      `{"details": "Group linked to community successfully"}`, escrita pelo
       manipulador — não vem do WhatsApp. Confirme o efeito por
       `POST /community/subgroups`.
 
@@ -1566,7 +1566,7 @@
             example:
               code: 200
               data:
-                Details: Group linked to community successfully
+                details: Group linked to community successfully
               success: true
       '400':
         description: |
@@ -1598,14 +1598,14 @@
       cliente (F237).
 
       **Regra que a medição confirmou**: o grupo de avisos
-      (`IsDefaultSubGroup: true`) nasce com a comunidade e permanece — foi ele
+      (`is_default_sub_group: true`) nasce com a comunidade e permanece — foi ele
       que sobrou quando a contagem voltou a 1.
 
       **Regras**: `community_jid` e `group_jid` são obrigatórios; o alias `chat`
       não é aceite aqui.
 
       **Resposta**: `data` traz a confirmação textual
-      `{"Details": "Group unlinked from community successfully"}`, escrita pelo
+      `{"details": "Group unlinked from community successfully"}`, escrita pelo
       manipulador. Confirme por `POST /community/subgroups`.
 
       **Autenticação**: token de sessão.
@@ -1635,7 +1635,7 @@
             example:
               code: 200
               data:
-                Details: Group unlinked from community successfully
+                details: Group unlinked from community successfully
               success: true
       '400':
         description: Falta o `community_jid` ou o `group_jid`, ou um deles não é um JID válido.

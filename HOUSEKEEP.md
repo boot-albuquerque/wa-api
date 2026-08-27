@@ -33594,3 +33594,122 @@ falhar. `go test ./pkg/infra/wa-noise/client/... -race` verde.
 **Status**: corrigido.
 
 <!-- f-status: corrigido -->
+
+## F335 — fecha F332 para infra, contactos, grupo e canal: especificação OpenAPI sincronizada com o código já migrado
+
+**Data/contexto**: 2026-08-27, worktree `worktree/openapi-gap-infra`, tarefa
+final de limpeza da normalização de contrato HTTP (F296–F334). O lado Go
+estava 100% migrado para DTO com `snake_case`; a especificação OpenAPI
+`api/openapi/{paths,schemas}/*.yaml` ainda descrevia nomes PascalCase/
+camelCase antigos em `properties` e em `example`/`examples`. Escopo desta
+sessão: `infra.yaml` (hmac/s3/proxy/webhook/call/admin), `contacto.yaml`
+(users/contacts/status/presence/avatar), `grupo.yaml` (só as violações de
+`InfoGrupo`/`ParticipanteGrupo`) e `canal.yaml` (newsletters/comunidades) —
+explicitamente FORA de escopo: `envio.yaml`, `conversa.yaml`, `sessao.yaml`
+(famílias mensagens/sessão, donas de outros workers em paralelo).
+
+**Medição do ponto de partida**: `TestOpenAPISchemaPropertyNamesAreCanonical`
++ `TestOpenAPIExampleKeysAreCanonical` (`pkg/bootstrap/naming_openapi_gate_test.go`)
+reportaram 439 linhas de violação na árvore inteira. Filtradas ao meu
+escopo por schema/rota, ficaram ~90 linhas reais (o resto já era de
+`envio.yaml`/`sessao.yaml`/`conversa.yaml`, ou chave dinâmica de JID/hash já
+isenta pelo gate).
+
+**Correções por ficheiro**:
+
+- **`api/openapi/paths/infra.yaml` + `schemas/infra.yaml`**: `Details`→
+  `details`, `Enabled`→`enabled`, `History`→`history`, `Bucket`→`bucket`,
+  `Region`→`region`, `Set`→`set`, `ProxyURL`→`proxy_url`, `CallID`→
+  `call_id`, nas rotas `/webhook`, `/webhook/history`, `/s3/config`,
+  `/s3/configure`, `/s3/test`, `/hmac/config`, `/hmac/configure`,
+  `/proxy/set` e `/call/reject` — a última documentada aqui e não em
+  `envio.yaml` como a directiva original supunha (confirmado por
+  `grep "call/reject" api/openapi/paths/*.yaml`, que só bate em
+  `infra.yaml`). Corrigidas também descrições que ainda alegavam
+  `omitempty` num campo que a migração DTO tornou sempre presente
+  (`ResultadoConfiguracaoS3.enabled`, `ResultadoConfiguracaoHmac.enabled`,
+  `ResultadoProxy.set`/`proxy_url` — comparado contra
+  `pkg/presentation/http/dto/storage/storage.go` e `dto/webhook/webhook.go`,
+  que são a fonte da verdade e não têm `omitempty` nenhum).
+- **`api/openapi/schemas/base.yaml`**: `Detalhes.properties.Details` →
+  `details` — schema PARTILHADA por `grupo.yaml`, `canal.yaml`,
+  `conversa.yaml` e `infra.yaml`. Corrigida aqui porque bloqueava o gate em
+  ficheiros do meu escopo (`infra.yaml`, `canal.yaml`) e é uma mudança de
+  uma linha, sem risco de conflito com as famílias mensagens/sessão que
+  também a referenciam.
+- **`api/openapi/paths/contacto.yaml` + `schemas/contacto.yaml`**: `Preview`→
+  `preview` em `/user/avatar`; `Phone`→`phone` e `Details`→`details` em
+  `/user/presence` e `/user/presence/subscribe` (incluindo
+  `PedidoSubscricaoPresenca.required` e a propriedade `Phone`→`phone`).
+  Achado ADICIONAL fora da lista de dicas da directiva original: as três
+  rotas `/status/set/{image,video,audio}` também vivem neste ficheiro, e os
+  seus schemas `PedidoStatusImagem`/`PedidoStatusVideo`/`PedidoStatusAudio`
+  estavam inteiramente em PascalCase (`Image`, `Caption`, `Id`, `MimeType`,
+  `JPEGThumbnail`, `Video`, `Audio`) — só apanhado porque medi o gate por
+  ficheiro, e não só pelas palavras-chave sugeridas (`/hmac|/s3|/…|/call`).
+  Confirmado contra `pkg/presentation/http/dto/session/request.go`
+  (`PublishStatusImageRequest`, `PublishStatusVideoRequest`,
+  `PublishStatusAudioRequest`), que já usa `image`/`caption`/`id`/
+  `mime_type`/`jpeg_thumbnail` em todas as três — inclusive unificando a
+  divergência histórica `mimetype` (áudio) vs `MimeType` (imagem/vídeo) num
+  só `mime_type`. `/user/status` (singular) NÃO é meu: mapeia para
+  `POST /users/status` mas o fragmento fonte vive em `sessao.yaml`
+  (confirmado por `grep -n "^/user/status:" api/openapi/paths/*.yaml`).
+- **`api/openapi/schemas/grupo.yaml`**: **remoção**, não renomeação, dos
+  schemas `InfoGrupo` e `ParticipanteGrupo` (sem sufixo). Achado que a
+  directiva original não previa: estes dois schemas descreviam a struct de
+  protocolo do wa-noise servida DIRECTAMENTE, sem DTO, e o próprio ficheiro
+  já dizia (linha 1559, antes da remoção) que ficavam "só como registo do
+  formato ANTERIOR" — a forma viva, usada por TODAS as rotas da família
+  desde F312/F313/F316, é `InfoGrupoCanonico`/`ParticipanteGrupoCanonico`.
+  Confirmei por `grep` que nenhum `$ref` no documento apontava para
+  `InfoGrupo`/`ParticipanteGrupo` (só para as variantes `Canonico`) — eram
+  schemas ÓRFÃOS, cuja única função era fazer o gate F330 falhar contra um
+  formato que a API já não serve. Renomear os campos manteria um documento
+  morto tecnicamente "canónico" mas continuaria a descrever uma resposta
+  que nenhuma rota produz — pior que remover, porque um cliente podia achar
+  que `InfoGrupo` ainda é um contrato válido. A prosa de duas rotas em
+  `paths/grupo.yaml` que ainda dizia "as restantes rotas desta família ainda
+  devolvem a forma antiga" (stale desde a conclusão de F312/F313/F316) foi
+  corrigida para reflectir que toda a família migrou.
+- **`api/openapi/paths/canal.yaml`**: `Details`→`details` nas respostas e na
+  prosa de `POST /community/link` e `POST /community/unlink` — mapeiam,
+  via `caminhos.tsv`, para `PUT`/`DELETE
+  /communities/{community_jid}/subgroups/{group_jid}`, que é onde o gate
+  reportava a violação (o caminho de origem `/community/link` não aparecia
+  na lista porque o gate corre contra o documento GERADO, pós-`applyCanonicalPaths`).
+  Também `IsDefaultSubGroup`→`is_default_sub_group` numa frase de prosa.
+  `api/openapi/schemas/canal.yaml` não teve NENHUMA violação própria —
+  confirmado antes de mexer, como a directiva pedia: o essencial da família
+  newsletter/canal já estava corrigido por F303/F320.
+
+**Verificação**: `go run ./cmd/openapidoc` regenerou
+`pkg/presentation/http/apidocs/openapi.yaml` sem erro (118 caminhos). Os
+dois testes de gate, filtrados ao meu escopo, foram de ~90 violações reais
+para 0 — todas as linhas restantes (331 no total, na árvore inteira) mapeiam
+para `envio.yaml`/`sessao.yaml`/`conversa.yaml` (escopo de outros workers) ou
+são chave dinâmica de JID/hash isenta pelo próprio gate
+(`dynamicExampleKey`, `naming_openapi_gate_test.go`). `go build ./...`,
+`go vet ./...` e `go test ./pkg/bootstrap/... ./pkg/presentation/...` verdes.
+Os testes de contrato citados pela directiva —
+`TestFamiliaGrupo_ContratoPublico_NomesCanonicos`,
+`TestFamiliaGrupo_ContratoPublico_ChavesAntigasSumiram`,
+`TestFamiliaGrupo_ValoresMapeados`, `TestFamiliaGrupo_VazioEZero`
+(`pkg/presentation/http/handlers/handler_group_family_contract_test.go`),
+e toda a suite `TestCheckUser_*`/`TestGetUser*`/`TestBlock*`/
+`TestGetAvatar_*`/`TestGetContacts_*`/`TestContactsLastActivity_*`/
+`TestGetPrivacySettings_*`/`TestSetPrivacySetting_*`
+(`handler_user_contract_test.go`) e `TestAdminUsers_*`
+(`pkg/bootstrap/admin_users_contract_test.go`) — passam, confirmando que a
+reescrita de `InfoGrupoCanonico`/DTOs bate com o contrato real e não só com
+a leitura do código feita aqui.
+
+**Não corrigido, fora de escopo desta sessão**: as violações remanescentes
+em `envio.yaml`, `sessao.yaml` e `conversa.yaml` — pertencem aos workers das
+famílias mensagens e sessão, que trabalham em branches/worktrees paralelos
+sobre esses mesmos ficheiros. Ver F332 para a medição agregada original.
+
+**Status**: corrigido (para o escopo desta sessão — infra, contactos, grupo,
+canal, e o schema partilhado `Detalhes`).
+
+<!-- f-status: corrigido -->

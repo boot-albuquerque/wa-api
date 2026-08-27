@@ -1204,7 +1204,7 @@ components:
     Detalhes:
       description: Confirmação textual de uma operação sem carga útil própria.
       properties:
-        Details:
+        details:
           description: |
             Confirmação textual, em **inglês**, gerada pelo servidor.
 
@@ -1988,321 +1988,6 @@ components:
           - chat_jid: 120363411669320145@g.us
             last_updated: "2026-08-24T19:01:14.41138-04:00"
       type: object
-    InfoGrupo:
-      description: |
-        Metadados de um grupo. Devolvido por `POST /group/info` (dentro de
-        `group_info`), por `POST /group/list` (uma entrada por grupo) e por
-        `POST /group/inviteinfo` (dentro de `invite_info`).
-
-        **TODAS as propriedades aparecem SEMPRE, nas três origens, e NENHUMA vem
-        `null`** — medido em 2026-08-26. O tipo do protocolo
-        (`internal/wa-noise/protocol/types/group.go:15-42`) não tem `omitempty`, e
-        não tem campo ponteiro. A pergunta útil sobre este objecto nunca é "o campo
-        veio?", é "o campo veio VAZIO?".
-
-        **As três origens não trazem o mesmo CONTEÚDO**, e isso foi medido:
-        `POST /group/list` devolve `ParticipantCount: 0` para todos os grupos,
-        enquanto `POST /group/info` e `POST /group/inviteinfo` sobre o MESMO grupo,
-        no mesmo minuto, devolveram `2`. Para contar membros use `Participants`,
-        que vem correcto nas três. A resposta de `/group/inviteinfo` traz
-        `AnnounceVersionID`, `ParticipantVersionID` e `MemberAddMode` como `""`.
-      properties:
-        AddressingMode:
-          description: |
-            Que forma de identificador o grupo usa no fio. Veio `lid` em todos os
-            grupos medidos. **Sempre presente**, nunca `null`.
-
-            Não é declarado como `enum`: o tipo é `string` livre no protocolo
-            (`internal/wa-noise/protocol/types/group.go:33`) e o conjunto de
-            valores possíveis não foi determinado com segurança pela
-            implementação atual.
-          example: lid
-          nullable: false
-          type: string
-        AnnounceVersionID:
-          description: |
-            Versão do estado de anúncio, atribuída pelo servidor. É um número
-            embrulhado em TEXTO, tal como o WhatsApp o dá.
-
-            **Sempre presente**, nunca `null`. **Medido `""` na resposta de
-            `POST /group/inviteinfo`** — o convite não traz versões — e preenchido
-            em `/group/info` e `/group/list`.
-          example: "1787748173200757"
-          nullable: false
-          type: string
-        CreatorCountryCode:
-          description: |
-            País da conta que criou o grupo, em duas letras. **Sempre presente**,
-            nunca `null`; `""` quando o WhatsApp não o dá.
-          example: BR
-          nullable: false
-          type: string
-        DefaultMembershipApprovalMode:
-          description: |
-            Só vem preenchido em comunidades, com `request_required` — medido.
-            **Sempre presente**, nunca `null`; `""` em grupo normal.
-
-            Não é declarado como `enum` de propósito: o valor vem do WhatsApp e o
-            conjunto completo não foi determinado com segurança pela
-            implementação atual — o tipo é `string` livre
-            (`internal/wa-noise/protocol/types/group.go:51`).
-          example: ""
-          nullable: false
-          type: string
-        DisappearingTimer:
-          description: |
-            Duração das mensagens temporárias, em SEGUNDOS — `86400` para as 24
-            horas que `POST /group/ephemeral` pede como `"24h"`. A rota recebe
-            texto e a leitura devolve segundos.
-
-            **`0` tem significado**: temporizador DESLIGADO. Não é ausência nem
-            "sem limite". O campo está sempre presente e nunca vem `null`, logo
-            `0` é a única forma de "desligado".
-          example: 86400
-          minimum: 0
-          nullable: false
-          type: integer
-        GroupCreated:
-          description: |
-            Quando o grupo foi criado. **Sempre presente**, nunca `null`; sendo
-            `time.Time` não-ponteiro, um valor por definir sairia como
-            `0001-01-01T00:00:00Z` — não foi observado.
-          example: "2026-08-26T08:42:47-04:00"
-          format: date-time
-          nullable: false
-          type: string
-        IsAnnounce:
-          description: |
-            Só administradores enviam mensagens. É o que `POST /group/announce`
-            alterna. **Sempre presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        IsDefaultSubGroup:
-          description: |
-            Este é o sub-grupo de avisos que o WhatsApp cria sozinho ao criar uma
-            comunidade. Não foi criado por ninguém e não deve ser apagado.
-            **Sempre presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        IsEphemeral:
-          description: |
-            O grupo tem mensagens temporárias ligadas. **Sempre presente**, nunca
-            `null`. Redundante com `DisappearingTimer > 0`, e medido coerente com
-            ele nos dois grupos observados.
-          example: true
-          nullable: false
-          type: boolean
-        IsIncognito:
-          description: |
-            Grupo em que os participantes não vêem os números uns dos outros. Os
-            sub-grupos de aviso criados automaticamente por uma comunidade vêm
-            com este campo verdadeiro. **Sempre presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        IsJoinApprovalRequired:
-          description: |
-            Entrar exige aprovação de um administrador. É o que
-            `POST /group/joinapprovalmode` alterna, e é o que faz
-            `GET /group/requestparticipants` ter alguma coisa para listar.
-            **Sempre presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        IsLocked:
-          description: |
-            Só administradores editam nome, descrição e foto. É o que
-            `POST /group/locked` alterna. **Sempre presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        IsParent:
-          description: |
-            Este "grupo" é na verdade uma COMUNIDADE. É o que
-            `POST /group/create` com `is_parent: true` produz. **Sempre
-            presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        JID:
-          description: |
-            Identificador do grupo. **Sempre presente e sempre preenchido** nas
-            três origens medidas; nunca `null`.
-          example: 120363411669320145@g.us
-          nullable: false
-          type: string
-        LinkedParentJID:
-          description: |
-            A comunidade de que este grupo é sub-grupo. **Sempre presente**, nunca
-            `null`; `""` num grupo solto — que é como se detecta que ele não
-            pertence a comunidade nenhuma.
-          example: ""
-          nullable: false
-          type: string
-        MemberAddMode:
-          description: |
-            Quem pode acrescentar membros. Os dois valores do protocolo são
-            `admin_add` e `all_member_add`
-            (`internal/wa-noise/protocol/types/group.go:9-12`).
-
-            **Sempre presente**, nunca `null`. **Medido `""` em
-            `POST /group/inviteinfo`**, e é por isso que `''` entra na lista: é um
-            estado real da resposta, e não um valor do protocolo.
-
-            É campo de RESPOSTA — nenhuma rota desta API o envia nem o altera —
-            logo não há validação de entrada a violar. Um valor DESCONHECIDO, se o
-            WhatsApp vier a introduzir um, é devolvido tal e qual, sem erro e sem
-            aviso: o tipo é `string` livre e nada no caminho o valida contra a
-            lista. Quem consumir tem de tratar valor fora da lista, não presumir
-            que ela é fechada.
-          enum:
-            - admin_add
-            - all_member_add
-            - ""
-          example: admin_add
-          nullable: false
-          type: string
-        Name:
-          description: |
-            Nome do grupo, o que `POST /group/name` altera. **Sempre presente**,
-            nunca `null`. `""` é possível — nenhuma rota desta API o consegue
-            produzir, porque `/group/name` recusa nome vazio.
-          example: Equipa de entregas
-          nullable: false
-          type: string
-        NameSetAt:
-          description: |
-            Quando o nome actual foi definido. **Sempre presente**, nunca `null`:
-            é `time.Time` não-ponteiro, logo um valor por definir sai como
-            `0001-01-01T00:00:00Z`, o zero do Go.
-          example: "2026-08-26T08:42:49-04:00"
-          format: date-time
-          nullable: false
-          type: string
-        NameSetBy:
-          description: |
-            Quem definiu o nome actual, em forma LID. **Sempre presente**, nunca
-            `null`; `""` quando o WhatsApp não o diz.
-          example: 90937376170214@lid
-          nullable: false
-          type: string
-        NameSetByPN:
-          description: |
-            O mesmo, em forma PN. **Sempre presente**, nunca `null`; `""` quando
-            só há forma LID.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
-        OwnerJID:
-          description: |
-            Quem criou o grupo, em forma LID. **Sempre presente**, nunca `null`;
-            `""` num grupo cujo criador o WhatsApp não revele.
-          example: 90937376170214@lid
-          nullable: false
-          type: string
-        OwnerPN:
-          description: |
-            O mesmo criador, em forma PN. **Sempre presente**, nunca `null`; `""`
-            quando o WhatsApp só dá a forma LID.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
-        ParticipantCount:
-          description: |
-            Número de membros. **Sempre presente**, nunca `null`.
-
-            **Medido a ZERO em `POST /group/list`** para todos os grupos,
-            incluindo os que `POST /group/info` e `POST /group/inviteinfo` contam
-            correctamente no mesmo instante. Aqui `0` NÃO significa "grupo sem
-            membros": significa "esta origem não preencheu o campo". Não use este
-            campo a partir da listagem; conte `Participants`.
-          example: 2
-          minimum: 0
-          nullable: false
-          type: integer
-        ParticipantVersionID:
-          description: |
-            Versão da lista de participantes, atribuída pelo servidor. Muda a cada
-            entrada ou saída. É um número embrulhado em TEXTO.
-
-            **Sempre presente**, nunca `null`. **Medido `""` em
-            `POST /group/inviteinfo`.**
-          example: "1787748408570878"
-          nullable: false
-          type: string
-        Participants:
-          description: |
-            Os membros. Vem correcta nas três origens — ao contrário de
-            `ParticipantCount`.
-
-            **Sempre presente** e, nas leituras medidas, sempre uma lista não
-            vazia (a própria conta está lá). O tipo é uma fatia Go não-ponteiro,
-            logo uma fatia `nil` sairia como `null` e NÃO como `[]` — não foi
-            observado, mas quem itera sobre a resposta deve tratar `null` como
-            lista vazia. A ordem não é significativa e não é estável entre
-            chamadas.
-          items:
-            $ref: '#/components/schemas/ParticipanteGrupo'
-          nullable: false
-          type: array
-        Suspended:
-          description: |
-            O grupo está suspenso pelo WhatsApp. **Sempre presente**, nunca
-            `null`.
-          example: false
-          nullable: false
-          type: boolean
-        Topic:
-          description: |
-            Descrição do grupo, o que `POST /group/topic` altera. **Sempre
-            presente**, nunca `null`. **Medido `""` num grupo sem descrição** — é
-            assim que se detecta a ausência de tópico, e não por o campo faltar.
-          example: Combinações de rota do turno da manhã
-          nullable: false
-          type: string
-        TopicDeleted:
-          description: |
-            A descrição foi apagada, e não apenas nunca definida. **Sempre
-            presente**, nunca `null` nem ausente — `false` é uma afirmação, não
-            uma ausência de informação.
-          example: false
-          nullable: false
-          type: boolean
-        TopicID:
-          description: |
-            Identificador da descrição actual. Tem a forma de um `message_id`
-            porque a descrição de grupo VIAJA como mensagem no protocolo.
-            **Sempre presente**, nunca `null`; medido `""` em grupo sem descrição.
-          example: 3EB0A4B2AFD45E625C0917
-          nullable: false
-          type: string
-        TopicSetAt:
-          description: |
-            Quando a descrição actual foi definida. **Sempre presente e nunca
-            `null`.** Num grupo sem descrição vem `0001-01-01T00:00:00Z`, o zero
-            do Go — medido. Quem comparar datas tem de tratar esse valor como
-            "nunca", porque ele não é `null` nem ausente.
-          example: "2026-08-26T08:42:50-04:00"
-          format: date-time
-          nullable: false
-          type: string
-        TopicSetBy:
-          description: |
-            Quem definiu a descrição, em forma LID. **Sempre presente**, nunca
-            `null`; medido `""` em grupo sem descrição.
-          example: 90937376170214@lid
-          nullable: false
-          type: string
-        TopicSetByPN:
-          description: |
-            O mesmo, em forma PN. **Sempre presente**, nunca `null`; medido `""`
-            em grupo sem descrição.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
-      type: object
     InfoGrupoCanonico:
       description: |
         Metadados de um grupo, na forma CANÓNICA — `snake_case` minúsculo,
@@ -2647,17 +2332,17 @@ components:
         É a resposta de `GET /webhook/history` e das escritas. Nenhum campo vem
         `null`.
       properties:
-        Details:
+        details:
           description: |
             Confirmação textual. **Só aparece na escrita** — na leitura a chave
             está ausente (`omitempty`), medido a 2026-08-26:
-            `GET /webhook/history` devolve apenas `{"History": 100}`. Nunca
+            `GET /webhook/history` devolve apenas `{"history": 100}`. Nunca
             `null`.
           example: History configured successfully
           nullable: false
           readOnly: true
           type: string
-        History:
+        history:
           description: |
             Quantas mensagens são gravadas por conversa. **`0` significa gravação
             desactivada.**
@@ -2671,7 +2356,7 @@ components:
           readOnly: true
           type: integer
       required:
-        - History
+        - history
       type: object
     LinhaLista:
       description: |
@@ -3359,113 +3044,6 @@ components:
         - total
         - limit
         - offset
-      type: object
-    ParticipanteGrupo:
-      description: |
-        Um membro do grupo. Medido em `POST /group/info` — os três identificadores
-        vêm sempre juntos, e `JID` é igual a `LID` nos grupos cujo
-        `AddressingMode` é `lid`, que é o caso de todos os grupos medidos.
-
-        **Todas as propriedades abaixo aparecem SEMPRE**: o tipo do protocolo
-        (`internal/wa-noise/protocol/types/group.go:94-108`) não tem `omitempty` em
-        campo nenhum, logo o Go serializa também o valor zero. Ler este objecto
-        nunca exige verificar ausência — exige verificar VAZIO.
-      properties:
-        AddRequest:
-          description: |
-            Presente quando adicionar este participante gerou um convite em vez de
-            uma adesão.
-
-            **É o ÚNICO campo ponteiro deste objecto**
-            (`internal/wa-noise/protocol/types/group.go:107`), logo é o único que
-            vem `null` — e veio `null` em TODAS as respostas medidas
-            (`/group/info`, `/group/list`, `/group/inviteinfo`). Nunca é omitido:
-            ou vem preenchido, ou vem literalmente `null`. Quem o desreferenciar
-            sem verificar parte.
-          nullable: true
-          properties:
-            Code:
-              description: |
-                Código do convite gerado para este participante. Nunca `null`
-                quando `AddRequest` não for `null`. **Não observado com dados** —
-                nenhuma resposta medida trouxe `AddRequest` preenchido.
-              example: IVccRoDVSbpHKNkgNxyZx4
-              nullable: false
-              type: string
-            Expiration:
-              description: |
-                Instante em que o convite deixa de valer. Nunca `null`; sendo um
-                `time.Time` não-ponteiro, um valor por definir sai como
-                `0001-01-01T00:00:00Z` — o zero do Go — e não como `null`.
-                **Não observado com dados.**
-              example: "2026-08-27T08:42:47-04:00"
-              format: date-time
-              nullable: false
-              type: string
-          type: object
-        DisplayName:
-          description: |
-            Só vem preenchido para participantes anónimos de grupos em modo
-            anúncio; nos grupos medidos veio sempre `""`.
-
-            **Nunca ausente e nunca `null`** — o campo existe sempre, e `""` é a
-            forma normal de "não se aplica".
-          example: ""
-          nullable: false
-          type: string
-        Error:
-          description: |
-            Código de falha ao ADICIONAR este participante. Só é diferente de zero
-            na resposta de `POST /group/create` e de `POST /group/updateparticipants`,
-            onde parte dos participantes pode falhar sem que a operação falhe.
-
-            **`0` significa "sem falha"**, e é o valor em toda leitura
-            (`/group/info`, `/group/list`, `/group/inviteinfo`) — nunca ausente,
-            nunca `null`. O significado dos valores diferentes de zero vem do
-            WhatsApp e não foi determinado com segurança pela implementação actual.
-          example: 0
-          minimum: 0
-          nullable: false
-          type: integer
-        IsAdmin:
-          description: |
-            Administrador do grupo. **Sempre presente**, nunca `null` nem ausente:
-            `false` significa "não é administrador", e não "não se sabe".
-          example: false
-          nullable: false
-          type: boolean
-        IsSuperAdmin:
-          description: |
-            Criador do grupo. Um super-administrador é também administrador.
-            **Sempre presente**, nunca `null`.
-          example: false
-          nullable: false
-          type: boolean
-        JID:
-          description: |
-            Identificador a usar para falar com este participante. É sempre igual
-            a `LID` ou a `PhoneNumber` — nunca uma terceira forma.
-
-            **Sempre presente**, nunca `null`. Vem `""` quando o WhatsApp não o
-            deu — o que aconteceria numa entrada de erro da resposta de
-            `POST /group/create`; não foi observado com dados.
-          example: 90937376170214@lid
-          nullable: false
-          type: string
-        LID:
-          description: |
-            O identificador opaco do participante. **Sempre presente**, nunca
-            `null`; `""` num grupo cujo `AddressingMode` não seja `lid`.
-          example: 90937376170214@lid
-          nullable: false
-          type: string
-        PhoneNumber:
-          description: |
-            O número, em forma PN. **Sempre presente**, nunca `null`; `""` num
-            participante que só tenha LID.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
       type: object
     ParticipanteGrupoCanonico:
       description: |
@@ -8199,8 +7777,9 @@ components:
     PedidoStatusAudio:
       description: |
         Áudio a publicar como status. **Não aceita legenda nem miniatura** — a
-        struct não tem `Caption` nem `JPEGThumbnail` (`pkg/domain/session.go:117-121`),
-        e enviá-los é ignorado, como qualquer campo desconhecido (o servidor regista
+        struct não tem `caption` nem `jpeg_thumbnail`
+        (`pkg/presentation/http/dto/session/request.go`), e enviá-los é ignorado,
+        como qualquer campo desconhecido (o servidor regista
         `unknown field "<nome>"`; ver "Campos que a API não conhece").
 
         Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
@@ -8208,9 +7787,9 @@ components:
         modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
         `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       example:
-        Audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
+        audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
       properties:
-        Audio:
+        audio:
           description: |
             O áudio, como URI de dados começado por `data:audio/` **ou** como URL
             `http(s)://`. O limite é de 16 MiB depois de descodificado.
@@ -8236,7 +7815,7 @@ components:
           minLength: 1
           nullable: false
           type: string
-        Id:
+        id:
           description: |
             Identificador a atribuir à mensagem. Ausente, `null` e `""` são
             indistinguíveis e significam "gera tu". **Não é chave de
@@ -8244,13 +7823,13 @@ components:
           example: 3EB0A4B2AFD45E625C0917
           nullable: false
           type: string
-        mimetype:
+        mime_type:
           description: |
-            Tipo do áudio. Repare que, ao contrário das rotas de imagem e vídeo, o
-            campo é declarado em MINÚSCULAS (`mimetype`, não `MimeType`) —
-            divergência real da implementação (`pkg/domain/session.go:120`). Como o
-            `encoding/json` do Go casa nomes ignorando maiúsculas, `MimeType`
-            continua a ser aceite; `mimetype` é o nome declarado.
+            Tipo do áudio. **Antes da migração de DTO esta rota chamava o campo
+            `mimetype`, minúsculo**, enquanto imagem e vídeo usavam `MimeType`
+            (`pkg/domain/session.go:120`) — três rotas, duas grafias, para a
+            mesma ideia. `pkg/presentation/http/dto/session/request.go` unificou
+            as três em `mime_type`.
 
             Ausente, `null` e `""` são indistinguíveis e significam "detecta tu".
             A cascata de detecção tem quatro degraus, nesta ordem
@@ -8271,7 +7850,7 @@ components:
           nullable: false
           type: string
       required:
-        - Audio
+        - audio
       type: object
     PedidoStatusImagem:
       description: |
@@ -8284,10 +7863,10 @@ components:
         modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
         `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       example:
-        Caption: Estamos abertos até às 20h.
-        Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+        caption: Estamos abertos até às 20h.
+        image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
       properties:
-        Caption:
+        caption:
           description: |
             Legenda a mostrar sob a imagem.
 
@@ -8298,20 +7877,20 @@ components:
           example: Estamos abertos até às 20h.
           nullable: false
           type: string
-        Id:
+        id:
           description: |
             Identificador a atribuir à mensagem. Ausente, `null` e `""` são
             indistinguíveis e significam "gera tu" — o servidor gera um, e é esse
             que volta em `message_id` na resposta.
 
-            **Não é chave de idempotência.** Publicar duas vezes com o mesmo `Id`
+            **Não é chave de idempotência.** Publicar duas vezes com o mesmo `id`
             publica duas vezes; não foi medido que o servidor o use para
             deduplicar (ver secção 18 do contrato arquitectural). O formato não é
             validado por nós.
           example: 3EB0A4B2AFD45E625C0917
           nullable: false
           type: string
-        Image:
+        image:
           description: |
             A imagem, como URI de dados começado por `data:image` **ou** como URL
             `http(s)://`. O limite é de 16 MiB depois de descodificada, e é
@@ -8338,7 +7917,7 @@ components:
           minLength: 1
           nullable: false
           type: string
-        JPEGThumbnail:
+        jpeg_thumbnail:
           description: |
             Miniatura JPEG, em base64, para o cliente desenhar antes de baixar a
             imagem.
@@ -8353,7 +7932,7 @@ components:
           format: byte
           nullable: true
           type: string
-        MimeType:
+        mime_type:
           description: |
             Tipo da imagem.
 
@@ -8370,7 +7949,7 @@ components:
           nullable: false
           type: string
       required:
-        - Image
+        - image
       type: object
     PedidoStatusVideo:
       description: |
@@ -8382,10 +7961,10 @@ components:
         modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
         `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       example:
-        Caption: Bastidores de hoje.
-        Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+        caption: Bastidores de hoje.
+        video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
       properties:
-        Caption:
+        caption:
           description: |
             Legenda a mostrar sob o vídeo. Opcional: ausente, `null` e `""` são
             indistinguíveis e significam "sem legenda". Não há `trim` nem limite de
@@ -8393,7 +7972,7 @@ components:
           example: Bastidores de hoje.
           nullable: false
           type: string
-        Id:
+        id:
           description: |
             Identificador a atribuir à mensagem. Ausente, `null` e `""` são
             indistinguíveis e significam "gera tu". **Não é chave de
@@ -8401,7 +7980,7 @@ components:
           example: 3EB0A4B2AFD45E625C0917
           nullable: false
           type: string
-        JPEGThumbnail:
+        jpeg_thumbnail:
           description: |
             Miniatura JPEG, em base64, para o cliente desenhar antes de baixar o
             vídeo. É `[]byte` em Go: `null` dá `nil`, `""` dá fatia vazia, e as
@@ -8410,7 +7989,7 @@ components:
           format: byte
           nullable: true
           type: string
-        MimeType:
+        mime_type:
           description: |
             Tipo do vídeo. Ausente, `null` e `""` são indistinguíveis e significam
             "detecta tu" (`http.DetectContentType` sobre os bytes).
@@ -8421,7 +8000,7 @@ components:
           example: video/mp4
           nullable: false
           type: string
-        Video:
+        video:
           description: |
             O vídeo, como URI de dados **ou** como URL `http(s)://`. O limite é de
             100 MiB depois de descodificado.
@@ -8453,7 +8032,7 @@ components:
           nullable: false
           type: string
       required:
-        - Video
+        - video
       type: object
     PedidoSubscricaoPresenca:
       description: |
@@ -8464,7 +8043,16 @@ components:
         modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
         `400 unknown_field`. Ver a secção "Campos que a API não conhece".
       properties:
-        Phone:
+        chat:
+          description: |
+            Nome universal do destino (F225). Copiado para `phone` apenas quando
+            `phone` está vazio, logo `phone` ganha quando os dois vierem. Ausente,
+            `null` e `""` são indistinguíveis — medido: `{"chat":""}` dá
+            `400 missing_phone`.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        phone:
           description: |
             Contacto a subscrever. Aceita número nu, JID de telefone ou LID — a
             resolução é leniente e aplica o servidor por omissão quando falta o
@@ -8475,7 +8063,7 @@ components:
             | ausente | não | `400 missing_phone` |
             | `null` | não | `400 missing_phone` — indistinguível de ausente |
             | `""` | não | `400 missing_phone` — indistinguível de ausente |
-            | `"   "` | **não, e com OUTRO código** | `400 invalid_phone`: a guarda é `len(Phone) < 1` e três espaços têm comprimento 3 — **não há `trim`** (`subscribe_presence.go:31-33`) |
+            | `"   "` | **não, e com OUTRO código** | `400 invalid_phone`: a guarda é `len(phone) < 1` e três espaços têm comprimento 3 — **não há `trim`** (`subscribe_presence.go:31-33`) |
             | `"lixo"` | não | `400 invalid_phone` |
             | `123` | não | `400 could_not_decode_payload` |
             | preenchido | sim | — |
@@ -8483,17 +8071,8 @@ components:
           minLength: 1
           nullable: false
           type: string
-        chat:
-          description: |
-            Nome universal do destino (F225). Copiado para `Phone` apenas quando
-            `Phone` está vazio, logo `Phone` ganha quando os dois vierem. Ausente,
-            `null` e `""` são indistinguíveis — medido: `{"chat":""}` dá
-            `400 missing_phone`.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
       required:
-        - Phone
+        - phone
       type: object
     PedidoTemporizadorDaConversa:
       description: |
@@ -9762,22 +9341,22 @@ components:
         Resposta das escritas de HMAC — `POST /hmac/config`, `POST /hmac/configure`
         e `DELETE /hmac/config`. Nenhum campo vem `null`.
       properties:
-        Details:
+        details:
           description: |
             Confirmação textual: `HMAC configuration saved successfully` na
             gravação, `HMAC configuration deleted successfully` na revogação.
-            **Sempre presente** nestas rotas — o `omitempty` nunca dispara,
-            porque o texto nunca é vazio. Nunca `null`.
+            **Sempre presente** nestas rotas — o texto nunca é vazio. Nunca
+            `null`.
           example: HMAC configuration saved successfully
           nullable: false
           readOnly: true
           type: string
-        Enabled:
+        enabled:
           description: |
             Estado DEPOIS da operação: `true` quando a chave ficou gravada.
-            **Ausente quando `false`** (`omitempty`), portanto a revogação
-            responde só com `Details`, e a ausência desta chave é a confirmação
-            de que a chave saiu. Nunca `null`.
+            **Sempre presente**, mesmo quando `false` — a resposta perdeu o
+            `omitempty` na migração DTO exactamente para que a revogação continue
+            a trazer a chave em vez de a esconder. Nunca `null`.
           example: true
           nullable: false
           readOnly: true
@@ -9788,22 +9367,22 @@ components:
         Resposta das escritas de S3 — `POST /s3/config`, `POST /s3/configure` e
         `DELETE /s3/config`. Nenhum campo vem `null`.
       properties:
-        Details:
+        details:
           description: |
             Confirmação textual da operação: `S3 configuration saved successfully`
             na escrita, `S3 configuration deleted successfully` na remoção.
-            **Sempre presente** nestas três rotas — o `omitempty` da struct nunca
-            dispara, porque o texto nunca é vazio. Nunca `null`.
+            **Sempre presente** nestas três rotas — o texto nunca é vazio. Nunca
+            `null`.
           example: S3 configuration saved successfully
           nullable: false
           readOnly: true
           type: string
-        Enabled:
+        enabled:
           description: |
-            Estado DEPOIS da operação. **Ausente quando `false`** (`omitempty`) —
-            logo a remoção, e a gravação com `enabled: false`, respondem só com
-            `Details`, e a ausência desta chave é a confirmação de que ficou
-            desligado. Medido a 2026-08-26. Nunca `null`.
+            Estado DEPOIS da operação. **Sempre presente**, mesmo quando `false`
+            — a resposta perdeu o `omitempty` na migração DTO exactamente para que
+            a remoção, e a gravação com `enabled: false`, continuem a trazer a
+            chave em vez de a esconder. Medido a 2026-08-26. Nunca `null`.
           example: true
           nullable: false
           readOnly: true
@@ -10182,24 +9761,24 @@ components:
       type: object
     ResultadoProxy:
       description: |
-        Resposta de `POST /proxy/set` e de `POST /session/proxy`. **A forma difere
-        entre os dois ramos**: ligar traz `Details`, `Set`, `ProxyURL` e
-        `webhook_use_proxy`; desligar responde só `Details`.
+        Resposta de `POST /proxy/set` e de `POST /session/proxy`. **As quatro
+        chaves aparecem sempre** — a resposta perdeu o `omitempty` na migração
+        DTO — e é o VALOR que difere entre os dois ramos: desligar responde
+        `set: false`, `proxy_url: ""` e `webhook_use_proxy: null`.
       properties:
-        Details:
+        details:
           description: |
             `Proxy configured successfully` ao ligar, `Proxy disabled successfully`
-            ao desligar. **Sempre presente** nos dois ramos — o `omitempty` nunca
-            dispara, porque o texto nunca é vazio. Nunca `null`.
+            ao desligar. **Sempre presente** nos dois ramos, porque o texto nunca
+            é vazio. Nunca `null`.
           example: Proxy configured successfully
           nullable: false
           readOnly: true
           type: string
-        ProxyURL:
+        proxy_url:
           description: |
             Eco do URL gravado, **tal e qual foi enviado, incluindo as credenciais
-            do userinfo**. Presente só no ramo de ligar; ausente no de desligar
-            (`omitempty`).
+            do userinfo**. **Sempre presente**; vem `""` no ramo de desligar.
 
             É o único ponto da API em que um `proxy_url` volta em claro. Trate
             esta resposta como contendo segredo: não a registe em log nem a
@@ -10208,11 +9787,10 @@ components:
           nullable: false
           readOnly: true
           type: string
-        Set:
+        set:
           description: |
-            Presente só no ramo de ligar, e aí sempre `true`. **Ausente no ramo de
-            desligar**, porque `false` é omitido (`omitempty`) — a ausência desta
-            chave é a confirmação de que o proxy saiu. Nunca `null`.
+            `true` no ramo de ligar. **Sempre presente**, incluindo `false` no
+            ramo de desligar — a chave já não é omitida. Nunca `null`.
           example: true
           nullable: false
           readOnly: true
@@ -10222,9 +9800,9 @@ components:
             Valor efectivamente persistido pela resolução do servidor — o pedido,
             ou o gravado, ou o padrão da instalação, nessa ordem.
 
-            Presente só no ramo de ligar. **Ausente no de desligar**, porque o
-            campo é `*bool` com `omitempty` e ali fica `nil`. Quando presente,
-            nunca vem `null`.
+            Presente nos dois ramos. **`null` no ramo de desligar**, porque o
+            campo é `*bool` e ali a resolução não corre — é um terceiro estado
+            real, não "campo ausente". Quando não-nulo, vem `true` ou `false`.
           example: false
           nullable: true
           readOnly: true
@@ -10251,7 +9829,7 @@ components:
         Resposta de `POST /call/reject`. **As duas propriedades vêm sempre** — não
         há `omitempty` em nenhuma — e nenhuma vem `null`.
       properties:
-        CallID:
+        call_id:
           description: |
             Eco do `call_id` recusado, para casar com o evento de origem. Sempre
             presente, nunca `null`.
@@ -10259,7 +9837,7 @@ components:
           nullable: false
           readOnly: true
           type: string
-        Details:
+        details:
           description: |
             Confirmação textual da recusa. Sempre presente, nunca `null`.
           example: Call rejected
@@ -10267,8 +9845,8 @@ components:
           readOnly: true
           type: string
       required:
-        - Details
-        - CallID
+        - details
+        - call_id
       type: object
     ResultadoSincronizacaoContactos:
       description: Resposta de `POST /user/contacts/sync`.
@@ -10379,31 +9957,15 @@ components:
         Resposta de `POST /session/s3/test` e de `POST /s3/test`.
 
         **A rota testa o que está GRAVADO**, não o que o corpo do pedido traz — o
-        corpo é ignorado. `Bucket` e `Region` ecoam a configuração que foi
+        corpo é ignorado. `bucket` e `region` ecoam a configuração que foi
         testada, e é o que distingue "testei o que gravou" de "respondi 200".
         Nenhuma credencial aparece aqui, e nenhum campo vem `null`.
       properties:
-        Bucket:
+        bucket:
           description: |
-            Bucket que foi testado, lido da configuração gravada. **Ausente
-            quando `""`** (`omitempty`). Nunca `null`.
+            Bucket que foi testado, lido da configuração gravada. **Sempre
+            presente**, mesmo vazio. Nunca `null`.
           example: wa-api-midia
-          nullable: false
-          readOnly: true
-          type: string
-        Details:
-          description: |
-            Confirmação textual. **Sempre presente** neste corpo, porque só existe
-            no caminho de sucesso, onde o texto nunca é vazio. Nunca `null`.
-          example: S3 connection test successful
-          nullable: false
-          readOnly: true
-          type: string
-        Region:
-          description: |
-            Região que foi testada, lida da configuração gravada. **Ausente
-            quando `""`** (`omitempty`). Nunca `null`.
-          example: sa-east-1
           nullable: false
           readOnly: true
           type: string
@@ -10419,6 +9981,22 @@ components:
           nullable: false
           readOnly: true
           type: boolean
+        details:
+          description: |
+            Confirmação textual. **Sempre presente** neste corpo, porque só existe
+            no caminho de sucesso, onde o texto nunca é vazio. Nunca `null`.
+          example: S3 connection test successful
+          nullable: false
+          readOnly: true
+          type: string
+        region:
+          description: |
+            Região que foi testada, lida da configuração gravada. **Sempre
+            presente**, mesmo vazia. Nunca `null`.
+          example: sa-east-1
+          nullable: false
+          readOnly: true
+          type: string
       required:
         - connected
       type: object
@@ -12095,8 +11673,8 @@ paths:
               example:
                 code: 200
                 data:
-                  CallID: 3EB0A4B2AFD45E625C0917
-                  Details: Call rejected
+                  call_id: 3EB0A4B2AFD45E625C0917
+                  details: Call rejected
                 success: true
               schema:
                 allOf:
@@ -12106,7 +11684,7 @@ paths:
                         $ref: '#/components/schemas/ResultadoRecusarChamada'
                     type: object
           description: |
-            A recusa foi aceite pelo WhatsApp. O `CallID` ecoa o identificador
+            A recusa foi aceite pelo WhatsApp. O `call_id` ecoa o identificador
             recusado, para casar com o evento de origem.
         "400":
           content:
@@ -15315,14 +14893,14 @@ paths:
         cliente (F237).
 
         **Regra que a medição confirmou**: o grupo de avisos
-        (`IsDefaultSubGroup: true`) nasce com a comunidade e permanece — foi ele
+        (`is_default_sub_group: true`) nasce com a comunidade e permanece — foi ele
         que sobrou quando a contagem voltou a 1.
 
         **Regras**: `community_jid` e `group_jid` são obrigatórios; o alias `chat`
         não é aceite aqui.
 
         **Resposta**: `data` traz a confirmação textual
-        `{"Details": "Group unlinked from community successfully"}`, escrita pelo
+        `{"details": "Group unlinked from community successfully"}`, escrita pelo
         manipulador. Confirme por `POST /community/subgroups`.
 
         **Autenticação**: token de sessão.
@@ -15357,7 +14935,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group unlinked from community successfully
+                  details: Group unlinked from community successfully
                 success: true
               schema:
                 allOf:
@@ -15403,7 +14981,7 @@ paths:
         o alias universal `chat`: a struct do pedido não o inclui.
 
         **Resposta**: `data` traz apenas a confirmação textual
-        `{"Details": "Group linked to community successfully"}`, escrita pelo
+        `{"details": "Group linked to community successfully"}`, escrita pelo
         manipulador — não vem do WhatsApp. Confirme o efeito por
         `POST /community/subgroups`.
 
@@ -15439,7 +15017,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Group linked to community successfully
+                  details: Group linked to community successfully
                 success: true
               schema:
                 allOf:
@@ -15498,12 +15076,12 @@ paths:
         **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`
         quando a sessão existe mas não está emparelhada.
 
-        **FORMA DA RESPOSTA — esta rota é a primeira migrada.** As chaves de
+        **FORMA DA RESPOSTA — esta rota foi a primeira migrada.** As chaves de
         `group_info` são `snake_case` minúsculo (`jid`, `owner_jid`, `is_admin`),
         produzidas por um apresentador escrito à mão, e já não são os nomes de
         campo do Go que a serialização directa da struct de protocolo emitia
-        (`JID`, `OwnerJID`, `IsAdmin`). As restantes rotas desta família ainda
-        devolvem a forma antiga — ver `InfoGrupo` contra `InfoGrupoCanonico`, e
+        (`JID`, `OwnerJID`, `IsAdmin`). Toda a família de grupo e comunidade
+        migrou desde então para a mesma forma — ver `InfoGrupoCanonico` e
         `docs/HTTP-DTO-CONVENTIONS.md`.
 
         Campos de protocolo que a forma canónica NÃO traz: `OwnerPN`, `TopicID`,
@@ -17281,7 +16859,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: HMAC configuration deleted successfully
+                  details: HMAC configuration deleted successfully
+                  enabled: false
                 success: true
               schema:
                 allOf:
@@ -17290,9 +16869,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
                     type: object
-          description: |
-            Chave revogada. `Enabled` vem `false` — logo, omitido do corpo, e a
-            sua ausência é a confirmação.
+          description: Chave revogada. `enabled` vem `false`.
         "400":
           $ref: '#/components/responses/SemSessao'
         "401":
@@ -17380,8 +16957,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: HMAC configuration saved successfully
-                  Enabled: true
+                  details: HMAC configuration saved successfully
+                  enabled: true
                 success: true
               schema:
                 allOf:
@@ -17390,7 +16967,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
                     type: object
-          description: 'Chave gravada. `Enabled: true` reporta o estado DEPOIS da operação.'
+          description: 'Chave gravada. `enabled: true` reporta o estado DEPOIS da operação.'
         "400":
           content:
             application/json:
@@ -17445,8 +17022,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: HMAC configuration saved successfully
-                  Enabled: true
+                  details: HMAC configuration saved successfully
+                  enabled: true
                 success: true
               schema:
                 allOf:
@@ -19368,9 +18945,9 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Proxy configured successfully
-                  ProxyURL: socks5://utilizador:senha@proxy.exemplo.com.br:1080
-                  Set: true
+                  details: Proxy configured successfully
+                  proxy_url: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+                  set: true
                   webhook_use_proxy: false
                 success: true
               schema:
@@ -19382,8 +18959,8 @@ paths:
                     type: object
           description: |
             Configuração gravada. O corpo **difere entre os dois ramos**: ligar
-            ecoa `Set`, `ProxyURL` e `webhook_use_proxy`; desligar responde só
-            `Details`.
+            ecoa `set`, `proxy_url` e `webhook_use_proxy`; desligar responde só
+            `details`.
         "400":
           content:
             application/json:
@@ -19430,7 +19007,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: S3 configuration deleted successfully
+                  details: S3 configuration deleted successfully
+                  enabled: false
                 success: true
               schema:
                 allOf:
@@ -19439,7 +19017,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/ResultadoConfiguracaoS3'
                     type: object
-          description: Configuração removida. `Enabled` vem `false`, logo omitido do corpo.
+          description: Configuração removida. `enabled` vem `false`.
         "400":
           $ref: '#/components/responses/SemSessao'
         "401":
@@ -19555,8 +19133,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: S3 configuration saved successfully
-                  Enabled: true
+                  details: S3 configuration saved successfully
+                  enabled: true
                 success: true
               schema:
                 allOf:
@@ -19565,7 +19143,7 @@ paths:
                       data:
                         $ref: '#/components/schemas/ResultadoConfiguracaoS3'
                     type: object
-          description: Configuração gravada. `Enabled` ecoa o estado pedido.
+          description: Configuração gravada. `enabled` ecoa o estado pedido.
         "400":
           content:
             application/json:
@@ -19630,8 +19208,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: S3 configuration saved successfully
-                  Enabled: true
+                  details: S3 configuration saved successfully
+                  enabled: true
                 success: true
               schema:
                 allOf:
@@ -19695,10 +19273,10 @@ paths:
               example:
                 code: 200
                 data:
-                  Bucket: wa-api-midia
-                  Details: S3 connection test successful
-                  Region: sa-east-1
+                  bucket: wa-api-midia
                   connected: true
+                  details: S3 connection test successful
+                  region: sa-east-1
                 success: true
               schema:
                 allOf:
@@ -19708,7 +19286,7 @@ paths:
                         $ref: '#/components/schemas/ResultadoTesteS3'
                     type: object
           description: |
-            O bucket respondeu. `Bucket` e `Region` ecoam a configuração
+            O bucket respondeu. `bucket` e `region` ecoam a configuração
             **testada** — é o que distingue "testei o que gravaste" de "respondi
             200". Nenhuma credencial aparece.
         "400":
@@ -21032,12 +20610,12 @@ paths:
         Publica um áudio como status. Não aceita legenda — o áudio de status não
         a tem.
 
-        **Regras**: `Audio` aceita URI de dados começado por `data:audio/`
+        **Regras**: `audio` aceita URI de dados começado por `data:audio/`
         **ou** URL `http(s)://`. O limite é de 16 MiB depois de descodificado.
-        O campo de tipo chama-se `mimetype`, em minúsculas, e não `MimeType`
-        como nas rotas de imagem e vídeo — é divergência real da implementação
-        (`pkg/domain/session.go:120`), embora o casamento de nomes do Go, que
-        ignora maiúsculas, aceite as duas grafias.
+        O campo de tipo chama-se `mime_type`, igual ao das rotas de imagem e
+        vídeo — a migração para DTO (`pkg/presentation/http/dto/session/request.go`)
+        unificou a grafia; antes disso a rota de áudio usava `mimetype` e as
+        outras duas `MimeType`.
 
         **A mesma ressalva do `200`, medida**: os destinatários saem do campo
         `FullName` dos contactos, e numa conta WhatsApp Business isso deu
@@ -21051,7 +20629,7 @@ paths:
         content:
           application/json:
             example:
-              Audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
+              audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
             schema:
               $ref: '#/components/schemas/PedidoStatusAudio'
         required: true
@@ -21088,7 +20666,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `Audio` ausente (`missing_audio`), origem que não é URI de dados
+            `audio` ausente (`missing_audio`), origem que não é URI de dados
             `data:audio/` nem URL (`unsupported_audio_source`), URI de dados
             ilegível (`invalid_data_uri`), áudio acima do limite
             (`audio_too_large`), corpo descodificado vazio (`empty_audio_body`),
@@ -21112,7 +20690,7 @@ paths:
         escolher destinatários um a um. Quem vê é decidido pela privacidade de
         status da conta, legível em `GET /user/privacy`.
 
-        **Regras**: `Image` aceita URI de dados começado por `data:image` **ou**
+        **Regras**: `image` aceita URI de dados começado por `data:image` **ou**
         URL `http(s)://`; qualquer outra coisa é recusada com
         `unsupported_image_source`. O limite é de 16 MiB depois de
         descodificada, verificado ANTES da descodificação quando o URI declara
@@ -21138,8 +20716,8 @@ paths:
         content:
           application/json:
             example:
-              Caption: Estamos abertos até às 20h.
-              Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+              caption: Estamos abertos até às 20h.
+              image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
             schema:
               $ref: '#/components/schemas/PedidoStatusImagem'
         required: true
@@ -21176,7 +20754,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `Image` ausente (`missing_image`), origem que não é URI de dados nem
+            `image` ausente (`missing_image`), origem que não é URI de dados nem
             URL (`unsupported_image_source`), URI de dados ilegível
             (`invalid_data_uri`), imagem acima do limite (`image_too_large`),
             corpo descodificado vazio (`empty_image_body`), tipo resolvido que
@@ -21198,7 +20776,7 @@ paths:
         Publica um vídeo como status, com as mesmas regras de difusão da rota de
         imagem.
 
-        **Regras**: `Video` aceita URI de dados **ou** URL `http(s)://`. Repare
+        **Regras**: `video` aceita URI de dados **ou** URL `http(s)://`. Repare
         em duas diferenças reais face à rota de imagem: o prefixo aceite é
         `data:` (e não `data:video`), e o tipo resolvido **não** é verificado
         contra `video/` — um URI de dados de outro tipo passa por aqui. O limite
@@ -21217,8 +20795,8 @@ paths:
         content:
           application/json:
             example:
-              Caption: Bastidores de hoje.
-              Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+              caption: Bastidores de hoje.
+              video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
             schema:
               $ref: '#/components/schemas/PedidoStatusVideo'
         required: true
@@ -21255,7 +20833,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `Video` ausente (`missing_video`), origem que não é URI de dados nem
+            `video` ausente (`missing_video`), origem que não é URI de dados nem
             URL (`unsupported_video_source`), URI de dados ilegível
             (`invalid_data_uri`), vídeo acima do limite (`video_too_large`),
             corpo descodificado vazio (`empty_video_body`), falha ao baixar o
@@ -21284,8 +20862,8 @@ paths:
         corpo — vem o URL, temporário e assinado pelo WhatsApp, e é dele que se
         baixa.
 
-        **Regras**: `Phone` é obrigatório e aceita número nu, JID de telefone ou
-        LID. `Preview: true` devolve a miniatura; o padrão é a imagem em tamanho
+        **Regras**: `phone` é obrigatório e aceita número nu, JID de telefone ou
+        LID. `preview: true` devolve a miniatura; o padrão é a imagem em tamanho
         cheio.
 
         **As duas recusas que não são falhas**, e que são distintas de propósito:
@@ -21303,8 +20881,8 @@ paths:
         content:
           application/json:
             example:
-              Preview: true
               phone: 554192421234@s.whatsapp.net
+              preview: true
             schema:
               $ref: '#/components/schemas/PedidoAvatar'
         required: true
@@ -21338,7 +20916,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `Phone` ausente (`missing_phone`), corpo ilegível
+            `phone` ausente (`missing_phone`), corpo ilegível
             (`could_not_decode_payload`), identificador que não parseia
             (`invalid_phone`) ou sessão inexistente (`no_session`).
         "401":
@@ -22193,7 +21771,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Presence sent
+                  details: Presence sent
                 success: true
               schema:
                 allOf:
@@ -22238,7 +21816,7 @@ paths:
         sem estar a perguntar em ciclo. As notificações chegam depois pelos
         canais de eventos (WebSocket, webhook), **não** nesta resposta.
 
-        **Regras**: `Phone` é obrigatório e aceita número nu, JID de telefone ou
+        **Regras**: `phone` é obrigatório e aceita número nu, JID de telefone ou
         LID. O `200` diz que a subscrição foi pedida — não garante que alguma
         notificação venha a chegar, que depende também da privacidade do
         contacto.
@@ -22248,7 +21826,7 @@ paths:
         content:
           application/json:
             example:
-              Phone: 554192421234@s.whatsapp.net
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoSubscricaoPresenca'
         required: true
@@ -22259,7 +21837,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Presence subscription updated
+                  details: Presence subscription updated
                 success: true
               schema:
                 allOf:
@@ -22281,7 +21859,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            `Phone` ausente (`missing_phone`), identificador que não parseia
+            `phone` ausente (`missing_phone`), identificador que não parseia
             (`invalid_phone`), corpo ilegível (`could_not_decode_payload`) ou
             sessão inexistente (`no_session`).
         "401":
@@ -22735,7 +22313,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Webhook and events deleted successfully
+                  details: Webhook and events deleted successfully
                 success: true
               schema:
                 allOf:
@@ -22991,7 +22569,7 @@ paths:
         conversa no banco local.
 
         `0` significa gravação **desactivada**, e é resposta legítima — o campo
-        `History` vem sempre presente, sem `omitempty`, exactamente para que o
+        `history` vem sempre presente, sem `omitempty`, exactamente para que o
         zero seja distinguível de "campo ausente".
 
         **Para LER o histórico de mensagens de uma conversa** use
@@ -23008,7 +22586,7 @@ paths:
               example:
                 code: 200
                 data:
-                  History: 100
+                  history: 100
                 success: true
               schema:
                 allOf:
@@ -23061,8 +22639,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: History configured successfully
-                  History: 100
+                  details: History configured successfully
+                  history: 100
                 success: true
               schema:
                 allOf:

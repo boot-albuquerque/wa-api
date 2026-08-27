@@ -1109,18 +1109,18 @@ PedidoSubscricaoPresenca:
     desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
     modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
     `400 unknown_field`. Ver a secção "Campos que a API não conhece".
-  required: [Phone]
+  required: [phone]
   properties:
     chat:
       type: string
       nullable: false
       description: |
-        Nome universal do destino (F225). Copiado para `Phone` apenas quando
-        `Phone` está vazio, logo `Phone` ganha quando os dois vierem. Ausente,
+        Nome universal do destino (F225). Copiado para `phone` apenas quando
+        `phone` está vazio, logo `phone` ganha quando os dois vierem. Ausente,
         `null` e `""` são indistinguíveis — medido: `{"chat":""}` dá
         `400 missing_phone`.
       example: 554192421234@s.whatsapp.net
-    Phone:
+    phone:
       type: string
       nullable: false
       minLength: 1
@@ -1134,7 +1134,7 @@ PedidoSubscricaoPresenca:
         | ausente | não | `400 missing_phone` |
         | `null` | não | `400 missing_phone` — indistinguível de ausente |
         | `""` | não | `400 missing_phone` — indistinguível de ausente |
-        | `"   "` | **não, e com OUTRO código** | `400 invalid_phone`: a guarda é `len(Phone) < 1` e três espaços têm comprimento 3 — **não há `trim`** (`subscribe_presence.go:31-33`) |
+        | `"   "` | **não, e com OUTRO código** | `400 invalid_phone`: a guarda é `len(phone) < 1` e três espaços têm comprimento 3 — **não há `trim`** (`subscribe_presence.go:31-33`) |
         | `"lixo"` | não | `400 invalid_phone` |
         | `123` | não | `400 could_not_decode_payload` |
         | preenchido | sim | — |
@@ -1357,9 +1357,9 @@ PedidoStatusImagem:
     desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
     modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
     `400 unknown_field`. Ver a secção "Campos que a API não conhece".
-  required: [Image]
+  required: [image]
   properties:
-    Image:
+    image:
       type: string
       nullable: false
       minLength: 1
@@ -1386,7 +1386,7 @@ PedidoStatusImagem:
         (`publish_image.go:88-90`). Um `data:application/octet-stream;base64,…`
         cai em `unsupported_image_source`, e não em erro de tipo.
       example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-    Caption:
+    caption:
       type: string
       nullable: false
       description: |
@@ -1397,7 +1397,7 @@ PedidoStatusImagem:
         legenda". **Não há `trim` nem limite de comprimento** na
         implementação — `"   "` é aceite e publicado tal e qual.
       example: Estamos abertos até às 20h.
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -1405,12 +1405,12 @@ PedidoStatusImagem:
         indistinguíveis e significam "gera tu" — o servidor gera um, e é esse
         que volta em `message_id` na resposta.
 
-        **Não é chave de idempotência.** Publicar duas vezes com o mesmo `Id`
+        **Não é chave de idempotência.** Publicar duas vezes com o mesmo `id`
         publica duas vezes; não foi medido que o servidor o use para
         deduplicar (ver secção 18 do contrato arquitectural). O formato não é
         validado por nós.
       example: 3EB0A4B2AFD45E625C0917
-    MimeType:
+    mime_type:
       type: string
       nullable: false
       description: |
@@ -1426,7 +1426,7 @@ PedidoStatusImagem:
         `400 invalid_image_mime_type`. Ou seja: declarar `image/png` para um
         JPEG passa, e declarar `text/plain` para um PNG legítimo é recusado.
       example: image/png
-    JPEGThumbnail:
+    jpeg_thumbnail:
       type: string
       format: byte
       nullable: true
@@ -1442,8 +1442,8 @@ PedidoStatusImagem:
 
         O conteúdo não é validado como sendo de facto um JPEG.
   example:
-    Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-    Caption: Estamos abertos até às 20h.
+    image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+    caption: Estamos abertos até às 20h.
 
 PedidoStatusVideo:
   type: object
@@ -1455,9 +1455,9 @@ PedidoStatusVideo:
     desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
     modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
     `400 unknown_field`. Ver a secção "Campos que a API não conhece".
-  required: [Video]
+  required: [video]
   properties:
-    Video:
+    video:
       type: string
       nullable: false
       minLength: 1
@@ -1488,7 +1488,7 @@ PedidoStatusVideo:
            dados de outro tipo, ou um URL que sirva outra coisa, passa por
            aqui sem recusa.
       example: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
-    Caption:
+    caption:
       type: string
       nullable: false
       description: |
@@ -1496,7 +1496,7 @@ PedidoStatusVideo:
         indistinguíveis e significam "sem legenda". Não há `trim` nem limite de
         comprimento.
       example: Bastidores de hoje.
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -1504,7 +1504,7 @@ PedidoStatusVideo:
         indistinguíveis e significam "gera tu". **Não é chave de
         idempotência** — publicar duas vezes publica duas vezes.
       example: 3EB0A4B2AFD45E625C0917
-    MimeType:
+    mime_type:
       type: string
       nullable: false
       description: |
@@ -1515,7 +1515,7 @@ PedidoStatusVideo:
         contrário da rota de imagem, **o resultado não é verificado contra
         `video/`**: qualquer valor passa.
       example: video/mp4
-    JPEGThumbnail:
+    jpeg_thumbnail:
       type: string
       format: byte
       nullable: true
@@ -1525,24 +1525,25 @@ PedidoStatusVideo:
         duas significam "sem miniatura". Cadeia que não é base64 válido dá
         `400 could_not_decode_payload`. O conteúdo não é validado como JPEG.
   example:
-    Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
-    Caption: Bastidores de hoje.
+    video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+    caption: Bastidores de hoje.
 
 PedidoStatusAudio:
   type: object
   description: |
     Áudio a publicar como status. **Não aceita legenda nem miniatura** — a
-    struct não tem `Caption` nem `JPEGThumbnail` (`pkg/domain/session.go:117-121`),
-    e enviá-los é ignorado, como qualquer campo desconhecido (o servidor regista
+    struct não tem `caption` nem `jpeg_thumbnail`
+    (`pkg/presentation/http/dto/session/request.go`), e enviá-los é ignorado,
+    como qualquer campo desconhecido (o servidor regista
     `unknown field "<nome>"`; ver "Campos que a API não conhece").
 
     Campos desconhecidos no corpo são ignorados, mas **já não em silêncio**:
     desde 2026-08-26 o servidor regista `unknown field "<nome>"` no log, e o
     modo `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com
     `400 unknown_field`. Ver a secção "Campos que a API não conhece".
-  required: [Audio]
+  required: [audio]
   properties:
-    Audio:
+    audio:
       type: string
       nullable: false
       minLength: 1
@@ -1568,7 +1569,7 @@ PedidoStatusAudio:
         vizinhas usam três regras diferentes para a mesma ideia
         (`publish_audio.go:19`, `publish_image.go:17`, `publish_video.go:17`).
       example: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -1576,15 +1577,15 @@ PedidoStatusAudio:
         indistinguíveis e significam "gera tu". **Não é chave de
         idempotência.**
       example: 3EB0A4B2AFD45E625C0917
-    mimetype:
+    mime_type:
       type: string
       nullable: false
       description: |
-        Tipo do áudio. Repare que, ao contrário das rotas de imagem e vídeo, o
-        campo é declarado em MINÚSCULAS (`mimetype`, não `MimeType`) —
-        divergência real da implementação (`pkg/domain/session.go:120`). Como o
-        `encoding/json` do Go casa nomes ignorando maiúsculas, `MimeType`
-        continua a ser aceite; `mimetype` é o nome declarado.
+        Tipo do áudio. **Antes da migração de DTO esta rota chamava o campo
+        `mimetype`, minúsculo**, enquanto imagem e vídeo usavam `MimeType`
+        (`pkg/domain/session.go:120`) — três rotas, duas grafias, para a
+        mesma ideia. `pkg/presentation/http/dto/session/request.go` unificou
+        as três em `mime_type`.
 
         Ausente, `null` e `""` são indistinguíveis e significam "detecta tu".
         A cascata de detecção tem quatro degraus, nesta ordem
@@ -1603,4 +1604,4 @@ PedidoStatusAudio:
         como no vídeo, o resultado **não é verificado** contra `audio/`.
       example: audio/mp4
   example:
-    Audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
+    audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==

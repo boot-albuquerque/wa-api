@@ -940,19 +940,19 @@ LimiteHistorico:
 
     É a resposta de `GET /webhook/history` e das escritas. Nenhum campo vem
     `null`.
-  required: [History]
+  required: [history]
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       readOnly: true
       description: |
         Confirmação textual. **Só aparece na escrita** — na leitura a chave
         está ausente (`omitempty`), medido a 2026-08-26:
-        `GET /webhook/history` devolve apenas `{"History": 100}`. Nunca
+        `GET /webhook/history` devolve apenas `{"history": 100}`. Nunca
         `null`.
       example: History configured successfully
-    History:
+    history:
       type: integer
       nullable: false
       readOnly: true
@@ -1227,25 +1227,25 @@ ResultadoConfiguracaoS3:
     Resposta das escritas de S3 — `POST /s3/config`, `POST /s3/configure` e
     `DELETE /s3/config`. Nenhum campo vem `null`.
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       readOnly: true
       description: |
         Confirmação textual da operação: `S3 configuration saved successfully`
         na escrita, `S3 configuration deleted successfully` na remoção.
-        **Sempre presente** nestas três rotas — o `omitempty` da struct nunca
-        dispara, porque o texto nunca é vazio. Nunca `null`.
+        **Sempre presente** nestas três rotas — o texto nunca é vazio. Nunca
+        `null`.
       example: S3 configuration saved successfully
-    Enabled:
+    enabled:
       type: boolean
       nullable: false
       readOnly: true
       description: |
-        Estado DEPOIS da operação. **Ausente quando `false`** (`omitempty`) —
-        logo a remoção, e a gravação com `enabled: false`, respondem só com
-        `Details`, e a ausência desta chave é a confirmação de que ficou
-        desligado. Medido a 2026-08-26. Nunca `null`.
+        Estado DEPOIS da operação. **Sempre presente**, mesmo quando `false`
+        — a resposta perdeu o `omitempty` na migração DTO exactamente para que
+        a remoção, e a gravação com `enabled: false`, continuem a trazer a
+        chave em vez de a esconder. Medido a 2026-08-26. Nunca `null`.
       example: true
 
 ResultadoTesteS3:
@@ -1254,7 +1254,7 @@ ResultadoTesteS3:
     Resposta de `POST /session/s3/test` e de `POST /s3/test`.
 
     **A rota testa o que está GRAVADO**, não o que o corpo do pedido traz — o
-    corpo é ignorado. `Bucket` e `Region` ecoam a configuração que foi
+    corpo é ignorado. `bucket` e `region` ecoam a configuração que foi
     testada, e é o que distingue "testei o que gravou" de "respondi 200".
     Nenhuma credencial aparece aqui, e nenhum campo vem `null`.
   required: [connected]
@@ -1270,7 +1270,7 @@ ResultadoTesteS3:
         um `400 s3_not_enabled` é o que se recebe quando o S3 está desligado.
         Nunca `null`.
       example: true
-    Details:
+    details:
       type: string
       nullable: false
       readOnly: true
@@ -1278,21 +1278,21 @@ ResultadoTesteS3:
         Confirmação textual. **Sempre presente** neste corpo, porque só existe
         no caminho de sucesso, onde o texto nunca é vazio. Nunca `null`.
       example: S3 connection test successful
-    Bucket:
+    bucket:
       type: string
       nullable: false
       readOnly: true
       description: |
-        Bucket que foi testado, lido da configuração gravada. **Ausente
-        quando `""`** (`omitempty`). Nunca `null`.
+        Bucket que foi testado, lido da configuração gravada. **Sempre
+        presente**, mesmo vazio. Nunca `null`.
       example: wa-api-midia
-    Region:
+    region:
       type: string
       nullable: false
       readOnly: true
       description: |
-        Região que foi testada, lida da configuração gravada. **Ausente
-        quando `""`** (`omitempty`). Nunca `null`.
+        Região que foi testada, lida da configuração gravada. **Sempre
+        presente**, mesmo vazia. Nunca `null`.
       example: sa-east-1
 
 PedidoConfiguracaoHmac:
@@ -1357,25 +1357,25 @@ ResultadoConfiguracaoHmac:
     Resposta das escritas de HMAC — `POST /hmac/config`, `POST /hmac/configure`
     e `DELETE /hmac/config`. Nenhum campo vem `null`.
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       readOnly: true
       description: |
         Confirmação textual: `HMAC configuration saved successfully` na
         gravação, `HMAC configuration deleted successfully` na revogação.
-        **Sempre presente** nestas rotas — o `omitempty` nunca dispara,
-        porque o texto nunca é vazio. Nunca `null`.
+        **Sempre presente** nestas rotas — o texto nunca é vazio. Nunca
+        `null`.
       example: HMAC configuration saved successfully
-    Enabled:
+    enabled:
       type: boolean
       nullable: false
       readOnly: true
       description: |
         Estado DEPOIS da operação: `true` quando a chave ficou gravada.
-        **Ausente quando `false`** (`omitempty`), portanto a revogação
-        responde só com `Details`, e a ausência desta chave é a confirmação
-        de que a chave saiu. Nunca `null`.
+        **Sempre presente**, mesmo quando `false` — a resposta perdeu o
+        `omitempty` na migração DTO exactamente para que a revogação continue
+        a trazer a chave em vez de a esconder. Nunca `null`.
       example: true
 
 PedidoProxy:
@@ -1478,36 +1478,35 @@ PedidoProxy:
 ResultadoProxy:
   type: object
   description: |
-    Resposta de `POST /proxy/set` e de `POST /session/proxy`. **A forma difere
-    entre os dois ramos**: ligar traz `Details`, `Set`, `ProxyURL` e
-    `webhook_use_proxy`; desligar responde só `Details`.
+    Resposta de `POST /proxy/set` e de `POST /session/proxy`. **As quatro
+    chaves aparecem sempre** — a resposta perdeu o `omitempty` na migração
+    DTO — e é o VALOR que difere entre os dois ramos: desligar responde
+    `set: false`, `proxy_url: ""` e `webhook_use_proxy: null`.
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       readOnly: true
       description: |
         `Proxy configured successfully` ao ligar, `Proxy disabled successfully`
-        ao desligar. **Sempre presente** nos dois ramos — o `omitempty` nunca
-        dispara, porque o texto nunca é vazio. Nunca `null`.
+        ao desligar. **Sempre presente** nos dois ramos, porque o texto nunca
+        é vazio. Nunca `null`.
       example: Proxy configured successfully
-    Set:
+    set:
       type: boolean
       nullable: false
       readOnly: true
       description: |
-        Presente só no ramo de ligar, e aí sempre `true`. **Ausente no ramo de
-        desligar**, porque `false` é omitido (`omitempty`) — a ausência desta
-        chave é a confirmação de que o proxy saiu. Nunca `null`.
+        `true` no ramo de ligar. **Sempre presente**, incluindo `false` no
+        ramo de desligar — a chave já não é omitida. Nunca `null`.
       example: true
-    ProxyURL:
+    proxy_url:
       type: string
       nullable: false
       readOnly: true
       description: |
         Eco do URL gravado, **tal e qual foi enviado, incluindo as credenciais
-        do userinfo**. Presente só no ramo de ligar; ausente no de desligar
-        (`omitempty`).
+        do userinfo**. **Sempre presente**; vem `""` no ramo de desligar.
 
         É o único ponto da API em que um `proxy_url` volta em claro. Trate
         esta resposta como contendo segredo: não a registe em log nem a
@@ -1521,9 +1520,9 @@ ResultadoProxy:
         Valor efectivamente persistido pela resolução do servidor — o pedido,
         ou o gravado, ou o padrão da instalação, nessa ordem.
 
-        Presente só no ramo de ligar. **Ausente no de desligar**, porque o
-        campo é `*bool` com `omitempty` e ali fica `nil`. Quando presente,
-        nunca vem `null`.
+        Presente nos dois ramos. **`null` no ramo de desligar**, porque o
+        campo é `*bool` e ali a resolução não corre — é um terceiro estado
+        real, não "campo ausente". Quando não-nulo, vem `true` ou `false`.
       example: false
 
 Etiqueta:
@@ -1712,16 +1711,16 @@ ResultadoRecusarChamada:
   description: |
     Resposta de `POST /call/reject`. **As duas propriedades vêm sempre** — não
     há `omitempty` em nenhuma — e nenhuma vem `null`.
-  required: [Details, CallID]
+  required: [details, call_id]
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       readOnly: true
       description: |
         Confirmação textual da recusa. Sempre presente, nunca `null`.
       example: Call rejected
-    CallID:
+    call_id:
       type: string
       nullable: false
       readOnly: true

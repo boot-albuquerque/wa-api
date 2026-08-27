@@ -346,8 +346,8 @@
       corpo — vem o URL, temporário e assinado pelo WhatsApp, e é dele que se
       baixa.
 
-      **Regras**: `Phone` é obrigatório e aceita número nu, JID de telefone ou
-      LID. `Preview: true` devolve a miniatura; o padrão é a imagem em tamanho
+      **Regras**: `phone` é obrigatório e aceita número nu, JID de telefone ou
+      LID. `preview: true` devolve a miniatura; o padrão é a imagem em tamanho
       cheio.
 
       **As duas recusas que não são falhas**, e que são distintas de propósito:
@@ -371,7 +371,7 @@
             $ref: '#/components/schemas/PedidoAvatar'
           example:
             phone: 554192421234@s.whatsapp.net
-            Preview: true
+            preview: true
     responses:
       '200':
         description: Ponteiro para a foto. A imagem baixa-se do `url`.
@@ -392,7 +392,7 @@
               success: true
       '400':
         description: |
-          `Phone` ausente (`missing_phone`), corpo ilegível
+          `phone` ausente (`missing_phone`), corpo ilegível
           (`could_not_decode_payload`), identificador que não parseia
           (`invalid_phone`) ou sessão inexistente (`no_session`).
         content:
@@ -894,7 +894,7 @@
             example:
               code: 200
               data:
-                Details: Presence sent
+                details: Presence sent
               success: true
       '400':
         description: |
@@ -927,7 +927,7 @@
       sem estar a perguntar em ciclo. As notificações chegam depois pelos
       canais de eventos (WebSocket, webhook), **não** nesta resposta.
 
-      **Regras**: `Phone` é obrigatório e aceita número nu, JID de telefone ou
+      **Regras**: `phone` é obrigatório e aceita número nu, JID de telefone ou
       LID. O `200` diz que a subscrição foi pedida — não garante que alguma
       notificação venha a chegar, que depende também da privacidade do
       contacto.
@@ -942,7 +942,7 @@
           schema:
             $ref: '#/components/schemas/PedidoSubscricaoPresenca'
           example:
-            Phone: 554192421234@s.whatsapp.net
+            phone: 554192421234@s.whatsapp.net
     responses:
       '200':
         description: Subscrição pedida ao WhatsApp.
@@ -958,11 +958,11 @@
             example:
               code: 200
               data:
-                Details: Presence subscription updated
+                details: Presence subscription updated
               success: true
       '400':
         description: |
-          `Phone` ausente (`missing_phone`), identificador que não parseia
+          `phone` ausente (`missing_phone`), identificador que não parseia
           (`invalid_phone`), corpo ilegível (`could_not_decode_payload`) ou
           sessão inexistente (`no_session`).
         content:
@@ -1158,7 +1158,7 @@
       escolher destinatários um a um. Quem vê é decidido pela privacidade de
       status da conta, legível em `GET /user/privacy`.
 
-      **Regras**: `Image` aceita URI de dados começado por `data:image` **ou**
+      **Regras**: `image` aceita URI de dados começado por `data:image` **ou**
       URL `http(s)://`; qualquer outra coisa é recusada com
       `unsupported_image_source`. O limite é de 16 MiB depois de
       descodificada, verificado ANTES da descodificação quando o URI declara
@@ -1189,8 +1189,8 @@
           schema:
             $ref: '#/components/schemas/PedidoStatusImagem'
           example:
-            Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-            Caption: Estamos abertos até às 20h.
+            image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+            caption: Estamos abertos até às 20h.
     responses:
       '200':
         description: |
@@ -1214,7 +1214,7 @@
               success: true
       '400':
         description: |
-          `Image` ausente (`missing_image`), origem que não é URI de dados nem
+          `image` ausente (`missing_image`), origem que não é URI de dados nem
           URL (`unsupported_image_source`), URI de dados ilegível
           (`invalid_data_uri`), imagem acima do limite (`image_too_large`),
           corpo descodificado vazio (`empty_image_body`), tipo resolvido que
@@ -1244,7 +1244,7 @@
       Publica um vídeo como status, com as mesmas regras de difusão da rota de
       imagem.
 
-      **Regras**: `Video` aceita URI de dados **ou** URL `http(s)://`. Repare
+      **Regras**: `video` aceita URI de dados **ou** URL `http(s)://`. Repare
       em duas diferenças reais face à rota de imagem: o prefixo aceite é
       `data:` (e não `data:video`), e o tipo resolvido **não** é verificado
       contra `video/` — um URI de dados de outro tipo passa por aqui. O limite
@@ -1268,8 +1268,8 @@
           schema:
             $ref: '#/components/schemas/PedidoStatusVideo'
           example:
-            Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
-            Caption: Bastidores de hoje.
+            video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+            caption: Bastidores de hoje.
     responses:
       '200':
         description: |
@@ -1293,7 +1293,7 @@
               success: true
       '400':
         description: |
-          `Video` ausente (`missing_video`), origem que não é URI de dados nem
+          `video` ausente (`missing_video`), origem que não é URI de dados nem
           URL (`unsupported_video_source`), URI de dados ilegível
           (`invalid_data_uri`), vídeo acima do limite (`video_too_large`),
           corpo descodificado vazio (`empty_video_body`), falha ao baixar o
@@ -1322,12 +1322,12 @@
       Publica um áudio como status. Não aceita legenda — o áudio de status não
       a tem.
 
-      **Regras**: `Audio` aceita URI de dados começado por `data:audio/`
+      **Regras**: `audio` aceita URI de dados começado por `data:audio/`
       **ou** URL `http(s)://`. O limite é de 16 MiB depois de descodificado.
-      O campo de tipo chama-se `mimetype`, em minúsculas, e não `MimeType`
-      como nas rotas de imagem e vídeo — é divergência real da implementação
-      (`pkg/domain/session.go:120`), embora o casamento de nomes do Go, que
-      ignora maiúsculas, aceite as duas grafias.
+      O campo de tipo chama-se `mime_type`, igual ao das rotas de imagem e
+      vídeo — a migração para DTO (`pkg/presentation/http/dto/session/request.go`)
+      unificou a grafia; antes disso a rota de áudio usava `mimetype` e as
+      outras duas `MimeType`.
 
       **A mesma ressalva do `200`, medida**: os destinatários saem do campo
       `FullName` dos contactos, e numa conta WhatsApp Business isso deu
@@ -1346,7 +1346,7 @@
           schema:
             $ref: '#/components/schemas/PedidoStatusAudio'
           example:
-            Audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
+            audio: data:audio/mp4;base64,AAAAHGZ0eXBNNEEgAAAAAE00QSBtcDQyaXNvbQ==
     responses:
       '200':
         description: |
@@ -1370,7 +1370,7 @@
               success: true
       '400':
         description: |
-          `Audio` ausente (`missing_audio`), origem que não é URI de dados
+          `audio` ausente (`missing_audio`), origem que não é URI de dados
           `data:audio/` nem URL (`unsupported_audio_source`), URI de dados
           ilegível (`invalid_data_uri`), áudio acima do limite
           (`audio_too_large`), corpo descodificado vazio (`empty_audio_body`),
