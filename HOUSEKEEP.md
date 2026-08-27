@@ -30139,3 +30139,129 @@ por causa deste item pré-existente e em `TestHousekeepEntriesAreMachineReadable
 
 <!-- f-status: aberto -->
 
+## F279 — imutabilidade de `engine` é política de UM caso de uso, não do repositório: `UserRepository.UpdateUser` aceita trocar o engine de uma sessão já existente
+
+**Data**: 2026-08-26
+**Contexto**: worktree `feature/capability-final-audit` — auditoria adversarial
+independente das 8 invariantes de engine/ownership/capability listadas no
+item 114 do prompt arquitetural (checkpoint `checkpoint/engine-capability-wave4`).
+Invariante 2: "engine de uma sessão é imutável". Achado por um subagente de
+auditoria dedicado a esta invariante, via teste real (não leitura de código).
+
+**Onde**: `pkg/infra/db/user_repository.go:162-172` (`UserRepository.UpdateUser`)
+vs. `pkg/application/usecase/user/edit_user.go:66-73`
+(`EditUserUseCase.Execute`).
+
+**Problema, com evidência**: a única checagem de imutabilidade de `engine`
+que existe no projeto hoje é dentro de `EditUserUseCase.Execute`, que compara
+`req.Engine` (do payload HTTP) contra o valor atual lido via `ListUsers` e
+recusa com `engine_immutable` (409) se divergirem — e, coerentemente, **nunca
+seta `UserUpdate.Engine`** ao montar o update (confirmado por grep: nenhum
+outro chamador de produção seta `UserUpdate.Engine` também).
+
+`UserRepository.UpdateUser`, a camada abaixo, não sabe nada disso: quando
+`upd.Engine != nil`, ela só valida `upd.Engine.IsValidForCreate()`
+(rejeita engine inválido/`legacy_unknown`) e grava — **sem comparar contra o
+engine já gravado na linha**. Teste de ataque
+(`TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation`, em
+`pkg/infra/db/capability_audit_user_test.go`) chama `UpdateUser` diretamente
+com `domain.UserUpdate{Engine: &novoEngine}`, contornando o caso de uso, e o
+engine da linha muda de `wa_noise` para `wa_headless` sem erro nenhum:
+
+```
+capability_audit_user_test.go:188: BROKE invariant 2 at the repository
+layer: engine went from "wa_noise" to "wa_headless" via
+UserRepository.UpdateUser, with no comparison against the row's prior value.
+```
+
+Ou seja: a invariante 2 vale HOJE só porque existe um único caminho de
+produção (`EditUserUseCase`) que decide não usar o poder que o repositório
+concede. Qualquer chamador futuro de `UserRepository.UpdateUser` — outro caso
+de uso, uma ferramenta administrativa, um script de manutenção, um handler
+novo que monte `UserUpdate` diretamente — pode trocar o engine de uma sessão
+já existente e ativa em silêncio, sem passar pela checagem de
+`engine_immutable`. Isso é exatamente o tipo de invariante que devia estar na
+camada mais baixa que a garante estruturalmente (repositório ou domínio), não
+espalhada como convenção de um único chamador.
+
+**Correção sugerida**: mover a comparação para dentro de
+`UserRepository.UpdateUser` (ou para um método de domínio que o repositório
+chame antes de montar o `UPDATE`): ler o `engine` atual da linha (já é feito
+implicitamente por `ListUsers` no caso de uso — dá para reaproveitar dentro
+da própria transação/consulta do repositório) e recusar com
+`domain.ErrEngineImmutable` (ou o sentinel equivalente) se `upd.Engine`
+divergir do valor already-gravado, devolvendo o mesmo comportamento que
+`EditUserUseCase` já expõe hoje na fronteira HTTP — só que garantido pela
+camada que todo chamador atravessa, não pela disciplina de um caso de uso
+específico.
+
+**Status**: não corrigido nesta sessão — o papel desta worktree é auditar e
+reportar, não corrigir (instrução explícita do prompt de auditoria). Teste do
+defeito commitado em `pkg/infra/db/capability_audit_user_test.go`
+(`TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation`), controle
+de contraste em `TestAudit_Invariant2_UseCaseComparisonRejectsDivergence`
+(confirma que o caso de uso, sozinho, recusa a mesma mudança). Falta o
+controle negativo formal exigido pela política deste projeto para achados
+corrigidos (não se aplica ainda — achado não corrigido) e falta decidir se a
+correção entra nesta worktree de auditoria ou numa worktree de correção
+separada; perguntar ao usuário antes de agir.
+
+<!-- f-status: aberto -->
+
+## F280 — "claim mais recente vence" (invariante 4) é, na implementação, "quem chega por último ao banco vence" — não há comparação de recência de token/claim
+
+**Data**: 2026-08-26
+**Contexto**: mesma auditoria adversarial (F279). Invariante 4 do item 114:
+"o claim autenticado mais recente vence (newest wins)". Achado por um
+subagente dedicado às invariantes 4-6, com Postgres real.
+
+**Onde**: `pkg/infra/db/account_ownership.go`, `ClaimAccountIdentity`.
+
+**Problema, com evidência**: a função já documenta o comportamento no próprio
+comentário — "the caller of THIS call always wins — there is no notion of
+refusing a claim, only of recording who held it before" — ou seja, implementa
+**ordem de chegada da chamada ao banco**, não recência de emissão do
+claim/token do chamador. Não existe nenhum campo que carregue "quando o
+token foi emitido" comparado contra o dono atual; o único timestamp é
+`claimed_at`, atribuído por `time.Now()` no momento do INSERT, que por
+definição segue a mesma ordem de chegada.
+
+Teste de ataque
+(`TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency`, em
+`pkg/infra/db/account_ownership_audit_test.go`): sessão B é criada com um
+"token mais novo" logicamente, mas sua chamada a `ClaimAccountIdentity`
+chega ao banco PRIMEIRO; sessão A é logicamente mais antiga mas chama
+DEPOIS (simulando rede lenta/retry/fila). Resultado: A (mais antiga,
+chegando por último) supera B (mais nova, chegando primeiro) — o oposto do
+que "newest wins" pede se "newest" for lido como "claim mais recente do
+chamador" em vez de "chamada mais recente ao banco":
+
+```
+QUEBROU invariante 4 (formulação do prompt): o claim mais ANTIGO
+(session-A, chegada por último) tornou-se o dono ativo, suplantando o claim
+mais NOVO (session-B, chegada primeiro).
+```
+
+**Isto pode ser decisão de design aceitável** (last-writer-wins operacional
+por ordem de chegada é uma política coerente e simples, e nenhuma das ondas
+anteriores parece ter tido acesso a um timestamp de emissão de token
+confiável para comparar), mas diverge do texto literal da invariante 4 tal
+como está escrita no prompt arquitetural, e essa divergência não estava
+registrada em nenhum ADR/HOUSEKEEP antes deste achado.
+
+**Correção sugerida**: (a) se "chegada ao banco" for a política pretendida,
+reescrever a invariante 4 no documento de arquitetura para dizer isso
+explicitamente ("último a chamar vence", não "mais recente vence"), fechando
+a divergência por decisão consciente; ou (b) se recência real de claim for
+necessária (ex.: para tolerar reconexão fora de ordem), introduzir um
+timestamp de emissão do lado do chamador e comparar em
+`ClaimAccountIdentity` antes de aceitar a supersessão.
+
+**Status**: não corrigido nesta sessão — é achado de auditoria, não de
+implementação; decisão (a) vs (b) é do usuário/arquiteto do projeto, não da
+worktree de auditoria. Teste do defeito commitado em
+`pkg/infra/db/account_ownership_audit_test.go`
+(`TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency`).
+
+<!-- f-status: aberto -->
+
