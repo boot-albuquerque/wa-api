@@ -31335,3 +31335,148 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — três achados de contrato que a migração DTO da família de canais destapou, e um que ela criou
+
+**Data/contexto**: 2026-08-27, migração da família de canais (dezoito rotas)
+para a camada de DTO. Registados aqui porque nenhum deles é a tarefa —
+a tarefa era a forma do JSON — e os três primeiros foram corrigidos de
+passagem porque o mesmo ficheiro tinha de ser tocado.
+
+### (a) `/newsletter/subscribe` deitava fora a única coisa que devolve
+
+**Onde**: `pkg/presentation/http/handlers/handler_newsletter.go:128` (antes da
+migração):
+
+```go
+customhttp.RespondJSON(w, http.StatusOK, rsp.Data, nil)
+```
+
+**Problema**: `NewsletterResult` tinha três campos — `Data`, `DurationSeconds`
+e `Status` — e o manipulador serializava só o primeiro. A subscrição de
+actualizações ao vivo deixa `Data` a nil e enche `DurationSeconds`, logo a
+rota respondia `data: null`. O arrendamento que o WhatsApp concede, e que diz
+ao chamador quando repetir a chamada, era calculado no use case e nunca saía
+do processo. O mesmo apagava o `status` das outras onze operações.
+
+Estava DOCUMENTADO como ressalva em `api/openapi/paths/canal.yaml`
+("a duração não é devolvida"), o que o torna um defeito conhecido e não
+descoberto — e o `TestNewsletterResult_DurationSeconds_SerializesAsSeconds`
+provava a conversão de nanossegundos para segundos num campo que nenhum
+cliente via.
+
+**Correção aplicada**: `dtonewsletter.PresentNewsletterSubscribe` e
+`PresentNewsletterAck`. Travado por
+`TestCanal_ContratoPublico_SubscribeEntregaADuracao` e
+`TestCanal_ContratoPublico_OperacaoSemCargaDizStatus`.
+
+**Status**: corrigido nesta sessão.
+
+### (b) cinco chaves de PEDIDO em camelCase, nas únicas structs anónimas da família
+
+**Onde**: `handler_newsletter.go:60-66` (antes):
+
+```go
+ServerIDs []int  `json:"serverIDs"`
+ServerID  int    `json:"serverID"`
+MessageID string `json:"messageID"`
+UserJID    string `json:"userJID"`
+ConfirmJID string `json:"confirmJID"`
+```
+
+**Problema**: nenhuma passa `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, a regra do
+contrato público. Repare que as OUTRAS onze chaves do mesmo struct já estavam
+correctas (`jid`, `invite`, `name`, `count`, `before`) — o que mostra que a
+divergência não foi uma convenção antiga, foi cinco linhas escritas noutro dia.
+
+**Correção aplicada**: renomeadas em corte a seco, sem alias.
+`TestCanal_ContratoPublico_PedidoUsaSnakeCase` afirma que a grafia nova CHEGA
+à porta, e `..._GrafiaAntigaDoPedidoNaoEAceite` afirma que a antiga já não
+funciona — a segunda é a que impede o "aceitar as duas para sempre".
+
+**Status**: corrigido nesta sessão.
+
+### (c) a recusa de `since` respondia o código genérico do estado
+
+**Onde**: `handler_newsletter.go:115` (antes) — `time.Parse` falhava e o erro
+cru ia para `RespondJSON` com `400`, que o traduzia no par genérico
+`invalid_request` / "Requisição inválida.".
+
+**Problema**: `invalid_request` diz "algo estava mal" e nada mais, num pedido
+em que se sabe exactamente qual campo estava mal. É o caso que
+`docs/HTTP-DTO-CONVENTIONS.md` §7 nomeia ("prefira um código PRÓPRIO ao
+genérico") e era a única validação das dezoito rotas fora da taxonomia
+`apperr`.
+
+**Correção aplicada**: `NewsletterRequest.Validate` devolve
+`apperr.New("invalid_since", CategoryValidation, …)`.
+
+**Status**: corrigido nesta sessão.
+
+### (d) o que a migração DESTRUIU: a árvore da mensagem em `/newsletter/messages`
+
+**Onde**: `pkg/domain/newsletter.go`, `NewsletterMessage` — o campo `Message
+*waE2E.Message` não existe.
+
+**Problema**: a rota servia a mensagem do protocolo inteira, e as chaves dela
+são o camelCase gerado pelo protoc (`extendedTextMessage`, `fileLength`,
+`directPath`). Nenhuma passa a regra de nomes, e nenhuma é nossa para
+renomear. As três saídas eram: renomear a árvore (impossível de manter contra
+um `.proto` do vendor), isentar a rota da regra (que enfraquece a asserção
+partilhada pelas seis famílias), ou deixá-la cair.
+
+**Decisão**: deixar cair, extraindo o texto legível para `text`. É uma PERDA
+real de dado no fio: uma publicação com imagem deixa de dizer o `mimetype`, as
+dimensões ou o `directPath` da média. O que se preservou é o que a medição de
+2026-08-26 diz que um cliente podia usar — e essa mesma medição escreve que a
+forma de dentro daquelas chaves "muda com o cliente que publicou".
+
+**Correção sugerida, se a perda incomodar**: um `media` tipado no DTO, com os
+cinco ou seis campos que valem para todos os tipos de média
+(`mimetype`, `file_length`, `width`, `height`, `direct_path`, `seconds`),
+alimentado por um mapeador no adaptador. Não foi feito porque exigiria decidir
+o subconjunto sem medição de campo a suportá-lo, e este projecto tem regra
+contra isso.
+
+**Status**: NÃO corrigido, e é decisão registada, não omissão.
+
+### (e) e o que ela mudou de FORMA: `reaction_counts` -> `reactions[]`
+
+**Problema**: o objecto de contagens era indexado por EMOJI. Nenhum emoji pode
+satisfazer `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, logo o helper partilhado
+`AssertPublicJSONUsesCanonicalNaming` recusa a rota inteira — e recusa com
+razão, porque a regra diz "toda chave de objecto, recursivamente".
+
+Medido, e foi assim que apareceu:
+
+```
+--- FAIL: TestCanal_ContratoPublico_NomesCanonicos/messages
+    2 chave(s) fora do snake_case minúsculo exigido pelo contrato público:
+      ❤  em  $.data.messages[0].reaction_counts.❤
+      ❤️  em  $.data.messages[0].reaction_counts.❤️
+```
+
+**Decisão**: array de `{emoji, count}`, ordenado por contagem decrescente. A
+alternativa — abrir uma excepção no helper — enfraqueceria a asserção para as
+seis famílias por causa de um campo.
+
+**A ordenação não é estética**: sem ela a mesma publicação serializa diferente
+a cada pedido, porque a ordem de iteração de mapa em Go é aleatória por
+desenho. Travado por `TestCanal_ContratoPublico_ReacoesSaoDeterministas`, que
+faz vinte pedidos e compara os corpos — uma passagem só passaria por sorte.
+
+**Status**: corrigido nesta sessão.
+
+### Controlos negativos EXECUTADOS
+
+1. `json:"subscriber_count"` -> `json:"subscriberCount"`:
+   `TestCanal_ContratoPublico_NomesCanonicos` falha em `info`, `create` e
+   `list`, nomeando o caminho `$.data.newsletter.subscriberCount`.
+2. `sort.Slice` removido do apresentador de reacções:
+   `..._PublicacaoMapeada` falha na ordem esperada e
+   `..._ReacoesSaoDeterministas` falha colando os dois corpos divergentes.
+3. `PresentNewsletterInfo(rsp.Metadata)` trocado por `rsp.Metadata`:
+   `..._NomesCanonicos` falha com VINTE chaves PascalCase, `$.data.JID` a
+   `$.data.Viewer.Role` — que é exactamente a forma que a rota servia antes.
+
+<!-- f-status: corrigido -->
