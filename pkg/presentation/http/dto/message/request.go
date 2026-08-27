@@ -772,3 +772,64 @@ func (r ReactRequest) ToDomain() domain.ReactRequest {
 		Participant: r.Participant,
 	}
 }
+
+// SendPresenceRequest is the body of POST /user/presence.
+type SendPresenceRequest struct {
+	Type string `json:"type"`
+}
+
+// ToDomain produces the use-case input.
+func (r SendPresenceRequest) ToDomain() domain.SendPresenceRequest {
+	return domain.SendPresenceRequest{Type: r.Type}
+}
+
+// SubscribePresenceRequest is the body of POST /user/presence/subscribe.
+type SubscribePresenceRequest struct {
+	ChatTarget
+	Phone string `json:"phone"`
+}
+
+func (r *SubscribePresenceRequest) ResolveChat() { resolveChatField(&r.Phone, r.ChatAlias) }
+
+// ToDomain produces the use-case input.
+func (r SubscribePresenceRequest) ToDomain() domain.SubscribePresenceRequest {
+	return domain.SubscribePresenceRequest{Phone: r.Phone}
+}
+
+// ChatPresenceRequest is the body of POST /chat/presence.
+type ChatPresenceRequest struct {
+	ChatTarget
+	Phone string `json:"phone"`
+	State string `json:"state"`
+	Media string `json:"media"`
+}
+
+func (r *ChatPresenceRequest) ResolveChat() { resolveChatField(&r.Phone, r.ChatAlias) }
+
+// ToDomain produces the use-case input.
+func (r ChatPresenceRequest) ToDomain() domain.ChatPresenceRequest {
+	return domain.ChatPresenceRequest{Phone: r.Phone, State: r.State, Media: r.Media}
+}
+
+// MarkReadRequest is the body of POST /chat/markread.
+//
+// chat_phone/sender_phone are the only spellings accepted — see
+// HOUSEKEEP.md F302 for why domain.MarkReadRequest's "Chat"/"Sender" legacy
+// fields do NOT get a wire name here: they resolve to an empty JID
+// (mark_read.go never ported that parsing) and are kept only because a test
+// locks that as inherited upstream behaviour, not because a client should be
+// able to reach them.
+type MarkReadRequest struct {
+	ID          []string `json:"id"`
+	ChatPhone   string   `json:"chat_phone"`
+	SenderPhone string   `json:"sender_phone"`
+}
+
+// ToDomain produces the use-case input.
+func (r MarkReadRequest) ToDomain() domain.MarkReadRequest {
+	return domain.MarkReadRequest{
+		Id:          r.ID,
+		ChatPhone:   r.ChatPhone,
+		SenderPhone: r.SenderPhone,
+	}
+}

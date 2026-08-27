@@ -72,7 +72,7 @@ func mgmtContractCases() []mgmtContractCase {
 				d := newPresenceDeps()
 				return mgmtPost(t, mgmtRouter("/chat/presence",
 					NewChatPresenceHandler(message.NewChatPresenceUseCase(d.presence, d.jids, log))),
-					"/chat/presence", `{"Phone":"5511999999999","State":"composing"}`)
+					"/chat/presence", `{"phone":"5511999999999","state":"composing"}`)
 			},
 		},
 		{
@@ -83,7 +83,7 @@ func mgmtContractCases() []mgmtContractCase {
 				d := newPresenceDeps()
 				return mgmtPost(t, mgmtRouter("/chat/markread",
 					NewMarkReadHandler(message.NewMarkReadUseCase(d.messenger, d.jids, log))),
-					"/chat/markread", `{"Id":["MSG1"],"ChatPhone":"5511999999999"}`)
+					"/chat/markread", `{"id":["MSG1"],"chat_phone":"5511999999999"}`)
 			},
 		},
 		{

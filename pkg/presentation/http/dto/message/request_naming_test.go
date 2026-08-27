@@ -57,6 +57,10 @@ func requestTypes() []any {
 		DeleteMessageRequest{},
 		SendEditMessageRequest{},
 		ReactRequest{},
+		SendPresenceRequest{},
+		SubscribePresenceRequest{},
+		ChatPresenceRequest{},
+		MarkReadRequest{},
 	}
 }
 

@@ -3927,11 +3927,14 @@ pkg/presentation/http/dto/group.PresentGetGroupInfo	EXCLUDED	X1
 pkg/presentation/http/dto/group.PresentGroupInfo	ELIGIBLE	uncovered:L1
 pkg/presentation/http/dto/group.PresentGroupParticipant	EXCLUDED	X1
 pkg/presentation/http/dto/group.presentTime	ELIGIBLE	uncovered:L1
+pkg/presentation/http/dto/message.ChatPresenceRequest.ResolveChat	EXCLUDED	X1
+pkg/presentation/http/dto/message.ChatPresenceRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.DeleteMessageRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/message.DeleteMessageRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.InteractiveButtonRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.ListRowRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.ListSectionRequest.ToDomain	ELIGIBLE	uncovered:L1
+pkg/presentation/http/dto/message.MarkReadRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.PresentAction	EXCLUDED	X1
 pkg/presentation/http/dto/message.PresentChatHistoryMessage	EXCLUDED	X1
 pkg/presentation/http/dto/message.PresentChatHistoryMessages	ELIGIBLE	uncovered:L1
@@ -3988,6 +3991,7 @@ pkg/presentation/http/dto/message.SendPollRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendPollRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendPollVoteRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendPollVoteRequest.ToDomain	EXCLUDED	X1
+pkg/presentation/http/dto/message.SendPresenceRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendStickerRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendStickerRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendTemplateRequest.ResolveChat	EXCLUDED	X1
@@ -3996,6 +4000,8 @@ pkg/presentation/http/dto/message.SendTextRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendTextRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendVideoRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/message.SendVideoRequest.ToDomain	EXCLUDED	X1
+pkg/presentation/http/dto/message.SubscribePresenceRequest.ResolveChat	EXCLUDED	X1
+pkg/presentation/http/dto/message.SubscribePresenceRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.TemplateButtonRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/message.interactiveButtonsToDomain	ELIGIBLE	uncovered:L1
 pkg/presentation/http/dto/message.presentInstant	ELIGIBLE	uncovered:L1

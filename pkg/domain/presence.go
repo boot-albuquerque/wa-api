@@ -4,13 +4,13 @@ import "time"
 
 // SendPresenceRequest para POST /chat/presence
 type SendPresenceRequest struct {
-	Type string `json:"type"` // "available", "unavailable"
+	Type string // "available", "unavailable"
 }
 
 // SubscribePresenceRequest para POST /chat/presence/subscribe
 type SubscribePresenceRequest struct {
 	ChatTarget
-	Phone string `json:"Phone"`
+	Phone string
 }
 
 func (r *SubscribePresenceRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -18,9 +18,9 @@ func (r *SubscribePresenceRequest) ResolveChat() { ResolveChatField(&r.Phone, r.
 // ChatPresenceRequest para POST /chat/presence/chat
 type ChatPresenceRequest struct {
 	ChatTarget
-	Phone string `json:"Phone"`
-	State string `json:"State"` // "typing", "paused", "recording"
-	Media string `json:"Media"` // optional media type
+	Phone string
+	State string // "typing", "paused", "recording"
+	Media string // optional media type
 }
 
 func (r *ChatPresenceRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
@@ -38,11 +38,17 @@ func (r *ReactRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // MarkReadRequest para POST /chat/markread
 type MarkReadRequest struct {
-	Id          []string `json:"Id"`
-	ChatPhone   string   `json:"ChatPhone"`   // new standardized field
-	SenderPhone string   `json:"SenderPhone"` // new standardized field
-	Chat        string   `json:"Chat"`        // legacy field
-	Sender      string   `json:"Sender"`      // legacy field
+	Id          []string
+	ChatPhone   string
+	SenderPhone string
+	// Chat e Sender são campos legados que nunca tiveram o parsing portado
+	// (ver mark_read.go): satisfazem a exigência de "chat informado" mas
+	// resolvem para JID vazio. Não têm mais forma de ser preenchidos pelo
+	// fio — a rota HTTP só expõe chat_phone/sender_phone — mas continuam
+	// aqui porque TestMarkRead_LegacyFieldsResolveToEmptyJID trava esse
+	// comportamento como herdado do upstream, não acidental.
+	Chat   string
+	Sender string
 }
 
 // PresenceType é o estado de presença global da sessão, em termos de

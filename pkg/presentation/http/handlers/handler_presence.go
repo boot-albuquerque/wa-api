@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 
-	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
 	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
@@ -24,7 +23,7 @@ func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var req domain.SendPresenceRequest
+	var req dtomessage.SendPresenceRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -33,7 +32,7 @@ func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+	if err := h.uc.Execute(r.Context(), id, req.ToDomain()); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -55,7 +54,7 @@ func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	var req domain.SubscribePresenceRequest
+	var req dtomessage.SubscribePresenceRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -64,7 +63,7 @@ func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+	if err := h.uc.Execute(r.Context(), id, req.ToDomain()); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -84,7 +83,7 @@ func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var req domain.ChatPresenceRequest
+	var req dtomessage.ChatPresenceRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -93,7 +92,7 @@ func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+	if err := h.uc.Execute(r.Context(), id, req.ToDomain()); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
@@ -113,7 +112,7 @@ func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.MarkReadRequest
+	var req dtomessage.MarkReadRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -122,7 +121,7 @@ func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	if err := h.uc.Execute(r.Context(), id, req); err != nil {
+	if err := h.uc.Execute(r.Context(), id, req.ToDomain()); err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
