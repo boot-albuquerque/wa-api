@@ -22,6 +22,7 @@ import (
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/wa-noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
+	dtostorage "wa-api/pkg/presentation/http/dto/storage"
 	"wa-api/pkg/presentation/http/handlers"
 )
 
@@ -384,7 +385,7 @@ func TestHmacRoute_DeleteComBancoQuebrado_500SemLimparOCache(t *testing.T) {
 func hmacKeyFromEnvelope(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	env := decodeEnvelope(t, rec)
-	var view domain.HmacConfigView
+	var view dtostorage.HmacConfigViewResponse
 	if err := json.Unmarshal(env.Data, &view); err != nil {
 		t.Fatalf("data nao e' HmacConfigView: %v (corpo: %s)", err, rec.Body.String())
 	}

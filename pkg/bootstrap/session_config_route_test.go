@@ -447,7 +447,7 @@ func TestSessionConfigRoute_SetProxyEsquemas(t *testing.T) {
 				// "gravei o que voce pediu" de "respondi 200".
 				var envelope struct {
 					Data struct {
-						ProxyURL string `json:"ProxyURL"`
+						ProxyURL string `json:"proxy_url"`
 					} `json:"data"`
 				}
 				if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {

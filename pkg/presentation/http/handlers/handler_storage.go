@@ -7,7 +7,8 @@ import (
 	customhttp "wa-api/pkg/presentation/http"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
+	dtostorage "wa-api/pkg/presentation/http/dto/storage"
+	dtowebhook "wa-api/pkg/presentation/http/dto/webhook"
 
 	"wa-api/pkg/application/usecase/storage"
 
@@ -47,19 +48,19 @@ func (h *ConfigureS3Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
-	var req domain.S3ConfigRequest
+	var req dtostorage.S3ConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
+	rsp, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentS3Config(rsp), nil)
 }
 
 // GetS3ConfigHandler handles GET /storage/s3/config
@@ -87,7 +88,7 @@ func (h *GetS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentS3ConfigView(rsp), nil)
 }
 
 // TestS3ConnectionHandler handles POST /storage/s3/test
@@ -121,7 +122,7 @@ func (h *TestS3ConnectionHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentS3Test(rsp), nil)
 }
 
 // DeleteS3ConfigHandler handles DELETE /storage/s3/config
@@ -151,7 +152,7 @@ func (h *DeleteS3ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentS3Config(rsp), nil)
 }
 
 // ConfigureHmacHandler handles POST /storage/hmac/configure
@@ -173,19 +174,19 @@ func (h *ConfigureHmacHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
-	var req domain.HmacConfigRequest
+	var req dtostorage.HmacConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
+	rsp, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentHmacConfig(rsp), nil)
 }
 
 // GetHmacConfigHandler handles GET /storage/hmac/config
@@ -217,7 +218,7 @@ func (h *GetHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentHmacConfigView(rsp), nil)
 }
 
 // DeleteHmacConfigHandler handles DELETE /storage/hmac/config
@@ -247,7 +248,7 @@ func (h *DeleteHmacConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentHmacConfig(rsp), nil)
 }
 
 // SetProxyHandler handles POST /storage/proxy
@@ -267,19 +268,19 @@ func (h *SetProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
-	var req domain.ProxyConfigRequest
+	var req dtostorage.ProxyConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
+	rsp, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtostorage.PresentProxyConfig(rsp), nil)
 }
 
 // SetHistoryHandler handles POST /storage/history
@@ -301,19 +302,19 @@ func (h *SetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errMissingSessionID)
 		return
 	}
-	var req domain.WebhookHistoryRequest
+	var req dtowebhook.HistoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Msg("could not decode payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), txtID, req)
+	rsp, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("user", txtID).Msg("storage use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtowebhook.PresentHistory(rsp), nil)
 }
 
 // GetHistoryHandler handles GET /storage/history
@@ -341,5 +342,5 @@ func (h *GetHistoryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtowebhook.PresentHistory(rsp), nil)
 }

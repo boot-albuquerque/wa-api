@@ -11,10 +11,21 @@ import (
 )
 
 // ProxyConfig holds per-user proxy settings for WhatsApp and webhook delivery.
+//
+// It is NOT a wire format, and it is not a queue message either: nothing in
+// this module references it — measured 2026-08-27 with a whole-tree grep, and
+// the build agrees, since deleting the tags below broke nothing. Its `json`
+// tags were `proxyURL` and `webhookUseProxy`, camelCase, and they read as a
+// public contract that does not exist. They are gone rather than renamed: the
+// live shapes are domain.ProxySummary (served by GET /session/status through
+// pkg/presentation/http/dto/session) and messaging.ProxyConfigResponse.
+//
+// Kept, un-tagged, rather than deleted in a naming migration. Recorded in
+// HOUSEKEEP as a deletion candidate.
 type ProxyConfig struct {
-	Enabled         bool   `json:"enabled"`
-	ProxyURL        string `json:"proxyURL"`
-	WebhookUseProxy *bool  `json:"webhookUseProxy,omitempty"`
+	Enabled         bool
+	ProxyURL        string
+	WebhookUseProxy *bool
 }
 
 // Update entry in User map
