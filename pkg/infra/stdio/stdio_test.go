@@ -290,6 +290,58 @@ func TestRouteRequest_RotasDinamicas(t *testing.T) {
 			line:     `{"id":1,"method":"chat.history","params":{"chat_jid":"c@s.whatsapp.net","limit":25}}`,
 			wantPath: "/chat/history", wantQuery: "chat_jid=c@s.whatsapp.net&limit=25", wantVerb: http.MethodGet,
 		},
+		// Rotas cortadas para a forma canónica com group_jid/chat_jid/
+		// poll_message_id/invite_code no caminho (worktree http-dto-paths).
+		{
+			name:     "group info",
+			line:     `{"id":1,"method":"group.info","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us", wantVerb: http.MethodGet,
+		},
+		{
+			name:     "group invitelink",
+			line:     `{"id":1,"method":"group.invitelink","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us/invite-link", wantVerb: http.MethodGet,
+		},
+		{
+			name:     "group inviteinfo",
+			line:     `{"id":1,"method":"group.inviteinfo","params":{"Code":"IVccRoDVSbpHKNkgNxyZx4"}}`,
+			wantPath: "/groups/invite-links/IVccRoDVSbpHKNkgNxyZx4", wantVerb: http.MethodGet,
+		},
+		{
+			name:     "group name",
+			line:     `{"id":1,"method":"group.name","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us/name", wantVerb: http.MethodPut,
+		},
+		{
+			name:     "group topic",
+			line:     `{"id":1,"method":"group.topic","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us/topic", wantVerb: http.MethodPut,
+		},
+		{
+			name:     "group announce",
+			line:     `{"id":1,"method":"group.announce","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us/announce-only", wantVerb: http.MethodPut,
+		},
+		{
+			name:     "group locked",
+			line:     `{"id":1,"method":"group.locked","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us/locked", wantVerb: http.MethodPut,
+		},
+		{
+			name:     "group ephemeral",
+			line:     `{"id":1,"method":"group.ephemeral","params":{"groupJID":"120363000000000000@g.us"}}`,
+			wantPath: "/groups/120363000000000000@g.us/ephemeral", wantVerb: http.MethodPut,
+		},
+		{
+			name:     "chat markread",
+			line:     `{"id":1,"method":"chat.markread","params":{"ChatPhone":"55@s.whatsapp.net"}}`,
+			wantPath: "/chats/55@s.whatsapp.net/read", wantVerb: http.MethodPost,
+		},
+		{
+			name:     "chat send pollvote",
+			line:     `{"id":1,"method":"chat.send.pollvote","params":{"PollMessageId":"3EB0A4B2AFD45E625C0917"}}`,
+			wantPath: "/polls/3EB0A4B2AFD45E625C0917/votes", wantVerb: http.MethodPost,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -321,6 +373,10 @@ func TestRouteRequest_ParamObrigatorioAusente(t *testing.T) {
 		{name: "admin full sem userId", line: `{"id":1,"method":"admin.users.delete.full"}`, param: "userId"},
 		{name: "lid sem jid", line: `{"id":1,"method":"user.lid","params":{"jid":""}}`, param: "jid"},
 		{name: "history sem chat_jid", line: `{"id":1,"method":"chat.history","params":{"chat_jid":42}}`, param: "chat_jid"},
+		{name: "group info sem groupJID", line: `{"id":1,"method":"group.info","params":{}}`, param: "groupJID"},
+		{name: "group inviteinfo sem Code", line: `{"id":1,"method":"group.inviteinfo","params":{}}`, param: "Code"},
+		{name: "chat markread sem ChatPhone", line: `{"id":1,"method":"chat.markread","params":{}}`, param: "ChatPhone"},
+		{name: "chat send pollvote sem PollMessageId", line: `{"id":1,"method":"chat.send.pollvote","params":{}}`, param: "PollMessageId"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

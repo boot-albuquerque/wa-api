@@ -1264,7 +1264,16 @@ rules_frozen=true
 # servida seria ruido puro, e //log:exempt esta' orcado por
 # max_exempt_annotations (ratchet-DOWN), logo nao e' saida.
 # covered NAO muda; eligible +2 faz a razao cair.
-min_func_coverage=589
+# http-dto-paths (2026-08-27): corte de /group/info, /group/invitelink,
+# /group/inviteinfo, /group/name, /group/topic, /group/announce,
+# /group/locked, /group/ephemeral, /chat/markread e /chat/send/pollvote para
+# a forma canonica com group_jid/chat_jid/poll_message_id/invite_code no
+# CAMINHO em vez do corpo. Dez funcoes novas em pkg/infra/stdio (as
+# buildPath das rotas dinamicas correspondentes), cada uma com o mesmo
+# log.Debug() das irmas ja existentes (chatDownloadMediaPath, userLidPath) —
+# min_func_coverage SOBE 589->593 (as dez entram JA cobertas, exercitadas por
+# TestRouteRequest_RotasDinamicas em pkg/infra/stdio/stdio_test.go).
+min_func_coverage=593
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1542,7 +1551,14 @@ min_errpath_coverage=777
 # handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
 # SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
 # como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
-min_eligible=993
+# http-dto-paths (2026-08-27): min_eligible SOBE 993->1003 (+10, ratchet-UP
+# honesto). ENTRAM (10), pkg/infra/stdio: groupInfoPath, groupInviteLinkPath,
+# groupInviteInfoPath, groupNamePath, groupTopicPath, groupAnnouncePath,
+# groupLockedPath, groupEphemeralPath, chatMarkReadPath, chatSendPollVotePath
+# — as rotas dinamicas que passaram a resolver o group_jid/chat_jid/
+# poll_message_id/invite_code no caminho HTTP em vez de o body. Ver
+# HOUSEKEEP.md, entrada do corte de caminhos concatenados.
+min_eligible=1003
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

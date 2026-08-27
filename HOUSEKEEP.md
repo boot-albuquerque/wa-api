@@ -31335,3 +31335,139 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — corte a hard das 10 rotas ainda concatenadas/sem `group_jid` no caminho (worktree `http-dto-paths`)
+
+**Data/contexto**: 2026-08-27, continuação da normalização do contrato HTTP
+para `snake_case` + `kebab-case` + `/` para hierarquia de recurso
+(`docs/HTTP-DTO-CONVENTIONS.md`, `api/openapi/CONTRATO-ARQUITETURAL.md`).
+Onda anterior (`pkg/bootstrap/canonico.go` + `caminhos.tsv`) já tinha
+pluralizado o prefixo de 91 rotas, mas deixou 4 delas com a palavra composta
+colada (`inviteinfo`, `invitelink`, `markread`, `pollvote`) e outras 6 sem
+`group_jid` no caminho apesar de operarem sobre um grupo específico. Diretiva
+do utilizador: **corte a hard**, sem clientes reais ainda — apagar o caminho
+antigo, não o manter registado, não o marcar depreciado.
+
+**Antes → depois** (todas migraram de corpo-só para path-param; onde o
+método mudou, é porque a operação passou a ser modelada como GET/PUT
+semântico em vez de POST genérico):
+
+| Antes | Depois |
+|---|---|
+| `POST /group/inviteinfo` (alias prévio: `POST /groups/inviteinfo`) | `GET /groups/invite-links/{invite_code}` |
+| `POST /group/invitelink` (alias prévio: `POST /groups/invitelink`) | `GET /groups/{group_jid}/invite-link` |
+| `POST /chat/markread` (alias prévio: `POST /chats/markread`) | `POST /chats/{chat_jid}/read` |
+| `POST /chat/send/pollvote` (alias prévio: `POST /chats/send/pollvote`) | `POST /polls/{poll_message_id}/votes` |
+| `POST /group/info` (alias prévio: `POST /groups/info`) | `GET /groups/{group_jid}` |
+| `POST /group/name` (alias prévio: `POST /groups/name`) | `PUT /groups/{group_jid}/name` |
+| `POST /group/topic` (alias prévio: `POST /groups/topic`) | `PUT /groups/{group_jid}/topic` |
+| `POST /group/announce` (alias prévio: `POST /groups/announce`) | `PUT /groups/{group_jid}/announce-only` |
+| `POST /group/locked` (alias prévio: `POST /groups/locked`) | `PUT /groups/{group_jid}/locked` |
+| `POST /group/ephemeral` (alias prévio: `POST /groups/ephemeral`) | `PUT /groups/{group_jid}/ephemeral` |
+
+**Decisões de modelagem que valem registo**:
+
+- **`inviteinfo` NÃO ficou sob `/groups/{group_jid}/...`.** O handler
+  (`get_group_invite_info.go`) recebe um `Code` de convite, não um
+  `group_jid` — o JID do grupo só se descobre LENDO esta resposta. Modelá-la
+  sob `group_jid` exigiria o chamador já saber o que está a perguntar. Ficou
+  como colecção irmã de `invite-link`: `/groups/invite-links/{invite_code}`.
+- **`invitelink` e `inviteinfo` viraram GET.** Já eram leituras idempotentes;
+  só estavam em POST porque toda a família tinha nascido em POST. `info`,
+  `name`, `topic`, `announce`, `locked`, `ephemeral` também mudaram de método
+  onde fazia sentido: leitura pura (`info`) foi para GET, escrita de campo
+  único foi para PUT — o padrão que `/groups/{group_jid}/photo` e
+  `/groups/{group_jid}/settings/join-approval` já estabeleciam na onda
+  anterior.
+- **`announce` ficou `announce-only`, não `settings/announce`.** As seis
+  rotas de configuração de grupo não são todas do mesmo tipo: `photo` e
+  `settings/join-approval` já estabeleciam DOIS padrões diferentes
+  (propriedade direta vs. sub-recurso `settings/`). Optei por manter
+  `announce-only` e `locked` como propriedades diretas (`/groups/{jid}/X`),
+  não sub-recursos de `settings/`, para não introduzir um TERCEIRO padrão
+  a meio da família — mas é uma escolha, não a única defensável, e vale
+  segunda opinião.
+- **`/groups/create`, `/groups/join`, `/groups/leave`, `/groups/list` NÃO
+  mudaram** — são genuinamente operações de colecção sem `group_jid`
+  conhecido, conforme instrução explícita.
+
+**Mecanismo**: `pkg/presentation/http/canonico.go` já tinha
+`injectPathParams` (copia o valor do path param para o corpo JSON antes de
+chamar o handler, sem sobrescrever um campo já presente no corpo) — só era
+usado internamente por `RegisterCanonicalAliases`. Exportei-o como
+`InjectPathParams` para que `wiring_routes.go` o use directamente nas 10
+rotas cortadas, que registam SÓ a forma canónica (sem passar pela tabela de
+alias, que exige a rota legada continuar registada — incompatível com corte
+a hard). Acrescentei ao mapa `bodyFieldForPathParam`: `chat_jid`→`ChatPhone`,
+`poll_message_id`→`PollMessageId`, `invite_code`→`Code`.
+
+**stdio**: as 10 rotas tinham entrada estática em `pkg/infra/stdio/`
+apontando para o caminho antigo. Viraram `dynamicRoute` com `buildPath` que
+lê o mesmo campo do corpo RPC (`groupJID`/`ChatPhone`/`PollMessageId`/`Code`)
+e monta o caminho novo — o stdio continua a enviar TODOS os params como
+corpo, então nada mudou do lado do chamador RPC, só o caminho HTTP
+sintetizado internamente.
+
+**Ficheiros tocados**: `pkg/presentation/http/canonico.go` (export +
+3 entradas no mapa), `pkg/bootstrap/wiring_routes.go` (10 registos
+directos), `pkg/bootstrap/caminhos.tsv` + `api/openapi/caminhos.tsv` (10
+linhas removidas — já não são alias, são rota própria),
+`pkg/infra/stdio/stdio_routes_group.go` + `stdio_routes_chat.go` (8 + 2
+`dynamicRoute`), `pkg/bootstrap/stdio_route_consistency_test.go` (10
+`structuralExceptions` citando as `dynamicRoute` novas),
+`api/openapi/paths/grupo.yaml` + `conversa.yaml` + `envio.yaml` (chave do
+caminho + `parameters:` do path param, escritos à mão porque
+`cmd/openapidoc`'s `applyCanonicalPaths` só move operações que ainda estão
+na tabela de alias), `api/openapi/evidencias.tsv` (10 linhas com o caminho
+novo), `pkg/presentation/http/handlers/handler_presence.go` +
+`handler_interactive.go` (constantes de log `route` actualizadas),
+`pkg/presentation/http/handlers/handler_group_info_contract_test.go`
+(teste de contrato pré-existente para `GetGroupInfo` migrado para a rota
+real GET com path param), `pkg/bootstrap/golden_test.go`
+(`pathParamValues` com os 4 novos nomes de param) + 10 fixtures novas em
+`pkg/bootstrap/testdata/golden/`.
+
+**Testes novos**: `pkg/presentation/http/handlers/route_cutover_contract_test.go`
+— as 4 rotas do item 1 da tarefa (`inviteinfo`, `invitelink`, `markread`,
+`pollvote`), cada uma montada EXACTAMENTE como `wiring_routes.go` monta
+(registry real + `InjectPathParams` + mux), com corpo que OMITE o campo que
+agora vem do caminho, provando que o path param é o que chega ao use case.
+Controlo negativo: a MESMA requisição contra uma rota que NÃO envolve o
+handler em `InjectPathParams` — falha com a recusa de campo em falta
+(`missing_group_jid`/`missing_code`/`missing_chatphone`/`missing_poll_message_id`),
+confirmado na saída (nível `debug`, campo `code`) de cada teste ao correr
+`go test ./pkg/presentation/http/handlers/... -run TestSendPollVote_CaminhoDoPollMessageIDChegaAoUseCase|TestMarkRead_...|TestGetGroupInviteLink_...|TestGetGroupInviteInfo_... -v`.
+`pkg/infra/stdio/stdio_test.go`: 10 casos novos em
+`TestRouteRequest_RotasDinamicas` (caminho HTTP sintetizado correcto) e 4 em
+`TestRouteRequest_ParamObrigatorioAusente` (RPC sem o campo falha com o
+parâmetro certo).
+
+**Gates de cobertura afectados** (não é regressão, é o corte a mudar o
+denominador — ver `.log-coverage-baseline`, entradas datadas 2026-08-27):
+`min_eligible` 993→1003 (+10: as `buildPath` novas do stdio), `min_func_coverage`
+589→593 (as 10 entram JÁ cobertas, com `log.Debug()` igual às irmãs
+`chatDownloadMediaPath`/`userLidPath`, exercitadas pelo teste da tabela
+acima). `cmd/logcov/testdata/eligible.golden` regenerado.
+
+**Status**: **corrigido** nesta sessão. `go build ./...` verde. `go test ./...`
+verde, com a única excepção pré-existente e sem relação
+(`TestTodoMetodoComErroTemWrapper`, `pkg/infra/wa-noise/client` — 7 métodos
+de newsletter/community sem wrapper de `errmap`, confirmado sem diff nesse
+ficheiro nesta sessão; fora do âmbito desta tarefa).
+
+`make check` corrido por completo: `build`, `vet`, `fmt-gate`, `test`, `lint`
+(informativo — complexidade máxima ficou em 50, igual ao piso; a contagem de
+issues subiu 575→608, mas quase todas em ficheiros que esta sessão não tocou
+— `pkg/bootstrap/main.go`, `eventhandler.go` etc. — não actualizei
+`.golangci-baseline` porque não é gate bloqueante e a atribuição exigiria
+medição própria, fora do âmbito), `log-coverage-gate` (verde, `func_coverage`
+593/593, `errpath_coverage` 777/777, `eligible` 1003/1003 — os quatro exactos,
+ver acima), `handler-route`, `waclient-facade`, `waclient-filesize` e
+`waclient-test` (os quatro últimos corridos individualmente porque
+`coverage-gate` interrompeu a cadeia do `make check` antes deles). Único alvo
+vermelho: `coverage-gate`, com `go: no such tool "covdata"` — **F305**
+(achado de sessão irmã nesta mesma máquina, referenciado aqui e não
+re-diagnosticado): ferramenta ausente do toolchain desta máquina, determinístico,
+sem relação com código. Não bloqueia o commit desta tarefa.
+
+<!-- f-status: corrigido -->

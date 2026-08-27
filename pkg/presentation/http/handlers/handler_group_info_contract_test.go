@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,13 +51,16 @@ func withContractUser(next http.Handler) http.Handler {
 }
 
 // groupInfoRouter monta a rota EXACTAMENTE como wiring_routes.go a monta:
-// registry.Register("/group/info", ..., "POST") aplicado a um mux.Router.
+// registry.Register("/groups/{group_jid}", customhttp.InjectPathParams(...),
+// "GET") aplicado a um mux.Router. group_jid vai no CAMINHO desde o corte
+// para a forma canónica (worktree http-dto-paths) — ver
+// pkg/bootstrap/wiring_routes.go.
 func groupInfoRouter(t *testing.T, f *grpFakes) *mux.Router {
 	t.Helper()
 	registry := customhttp.NewHandlerRegistry()
-	registry.Register("/group/info",
-		withContractUser(NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger))),
-		http.MethodPost)
+	registry.Register("/groups/{group_jid}",
+		customhttp.InjectPathParams(withContractUser(NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger)))),
+		http.MethodGet)
 	router := mux.NewRouter()
 	registry.Apply(router)
 	return router
@@ -119,8 +121,7 @@ func TestGetGroupInfo_ContratoPublico_NomesCanonicos(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
@@ -142,8 +143,7 @@ func TestGetGroupInfo_ContratoPublico_ChavesAntigasSumiram(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	contracttest.AssertNoKeys(t, rec.Body.Bytes(),
@@ -163,8 +163,7 @@ func TestGetGroupInfo_ContratoPublico_ValoresMapeados(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	var envelope struct {
@@ -239,8 +238,7 @@ func TestGetGroupInfo_ContratoPublico_ZeroNaoViraDataFalsa(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363000000000000@g.us"}`))
+	req := httptest.NewRequest(http.MethodGet, "/groups/120363000000000000@g.us", nil)
 	groupInfoRouter(t, f).ServeHTTP(rec, req)
 
 	var envelope struct {

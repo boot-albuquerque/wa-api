@@ -753,7 +753,7 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/chat/markread:
+/chats/{chat_jid}/read:
   post:
     tags: [Conversas]
     summary: Marcar mensagens como lidas
@@ -769,7 +769,7 @@
       - O campo que a implementação RESOLVE é `ChatPhone`. O nome antigo
         `Chat` é aceite pelo desserializador, mas o ramo que o converteria em
         JID está por implementar (`mark_read.go:41`), e a conversa segue
-        VAZIA para o WhatsApp. Use `ChatPhone`.
+        VAZIA para o WhatsApp. Use `ChatPhone`, ou o `chat_jid` do caminho.
       - Sem nenhum dos dois, é `400 missing_chatphone`, medido.
       - `Id` é uma LISTA. Vazia é `400 missing_id`.
       - `SenderPhone` só faz sentido em grupo, e é opcional.
@@ -779,6 +779,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: chat_jid
+        in: path
+        required: true
+        description: |
+          JID da conversa. Substitui o campo `ChatPhone` do corpo — se ambos
+          vierem, o **corpo ganha**.
+        schema: {type: string, example: 554192421234@s.whatsapp.net}
     requestBody:
       required: true
       content:

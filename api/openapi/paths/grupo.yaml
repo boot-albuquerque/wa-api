@@ -11,14 +11,14 @@
 #   - `/group/updateparticipants` não sabe promover nem despromover (F263);
 #   - `GET /group/requestparticipants` lê o corpo — e também a query string.
 
-/group/announce:
-  post:
+/groups/{group_jid}/announce-only:
+  put:
     tags: [Grupos]
     summary: Fechar ou abrir o grupo à escrita de não-administradores
     description: |
       Liga ou desliga o modo anúncio: com ele ligado, só administradores
       enviam mensagens no grupo. O estado resultante aparece em
-      `POST /group/info` como `IsAnnounce`.
+      `GET /groups/{group_jid}` como `IsAnnounce`.
 
       **Quando usar**: em grupos de difusão — avisos de turno, comunicados —
       onde a conversa de volta é ruído.
@@ -31,6 +31,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
       required: true
       content:
@@ -110,7 +118,7 @@
       '200':
         description: |
           Grupo criado. O corpo traz os metadados completos do grupo novo,
-          na mesma forma que `POST /group/info` devolve.
+          na mesma forma que `GET /groups/{group_jid}` devolve.
         content:
           application/json:
             schema:
@@ -162,8 +170,8 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/group/ephemeral:
-  post:
+/groups/{group_jid}/ephemeral:
+  put:
     tags: [Grupos]
     summary: Definir o tempo das mensagens temporárias do grupo
     description: |
@@ -182,12 +190,21 @@
       **O campo do grupo é `groupjid`**, todo em minúsculas
       (`pkg/domain/group.go:186`).
 
-      **Leitura de volta**: `POST /group/info` devolve `DisappearingTimer` em
-      SEGUNDOS — `86400` para as 24 horas que aqui se pedem como texto.
+      **Leitura de volta**: `GET /groups/{group_jid}` devolve
+      `DisappearingTimer` em SEGUNDOS — `86400` para as 24 horas que aqui se
+      pedem como texto.
 
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupjid` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
       required: true
       content:
@@ -224,8 +241,8 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/group/info:
-  post:
+/groups/{group_jid}:
+  get:
     tags: [Grupos]
     summary: Consultar os metadados de um grupo
     description: |
@@ -234,7 +251,7 @@
       administrador.
 
       **Quando usar**: sempre que precisar da contagem de membros ou de saber
-      quem é administrador. `POST /group/list` traz a mesma forma mas
+      quem é administrador. `POST /groups/list` traz a mesma forma mas
       **devolve `ParticipantCount` a zero** — medido no mesmo minuto, para o
       mesmo grupo, contra o `2` correcto desta rota.
 
@@ -267,8 +284,16 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
-      required: true
+      required: false
       content:
         application/json:
           schema:
@@ -343,8 +368,8 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/group/inviteinfo:
-  post:
+/groups/invite-links/{invite_code}:
+  get:
     tags: [Grupos]
     summary: Inspecionar um convite sem entrar no grupo
     description: |
@@ -356,21 +381,31 @@
       sobretudo se `IsJoinApprovalRequired` é verdadeiro — nesse caso
       `POST /group/join` produz uma SOLICITAÇÃO em vez de uma entrada.
 
-      **Regras**: o campo chama-se `Code`, com maiúscula
-      (`pkg/domain/group.go:42-44`); `inviteLink` devolve
-      `400 missing_code`. O valor é o código nu. **Medido**: o URL completo
-      também devolve `200`, porque a biblioteca corta o prefixo
+      **Regras**: o código não pertence a um grupo já conhecido pela sessão —
+      é por isso que esta rota não vive sob `/groups/{group_jid}`: o
+      identificador que o chamador tem É o código, não o JID (que só se
+      descobre lendo esta resposta). Ausente devolve `400 missing_code`. O
+      valor é o código nu. **Medido**: o URL completo também devolve `200`,
+      porque a biblioteca corta o prefixo
       (`internal/wa-noise/capabilities/group/invite.go:83`).
 
       **Ressalva medida**: a resposta traz `AnnounceVersionID`,
       `ParticipantVersionID` e `MemberAddMode` VAZIOS, ao contrário de
-      `POST /group/info` sobre o mesmo grupo.
+      `GET /groups/{group_jid}` sobre o mesmo grupo.
 
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: invite_code
+        in: path
+        required: true
+        description: |
+          Código do convite (sem o prefixo do link). Substitui o campo
+          `Code` do corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: IVccRoDVSbpHKNkgNxyZx4}
     requestBody:
-      required: true
+      required: false
       content:
         application/json:
           schema:
@@ -432,7 +467,7 @@
       '500':
         description: |
           O convite foi revogado, é inválido, ou o WhatsApp não respondeu.
-          Ao contrário de `/group/info`, esta rota NÃO traduz a recusa do
+          Ao contrário de `GET /groups/{group_jid}`, esta rota NÃO traduz a recusa do
           WhatsApp para `422`: o use case embrulha o erro com `fmt.Errorf`
           (`get_group_invite_info.go:44`), logo a recusa de convite chega
           como `500` de texto genérico.
@@ -447,8 +482,8 @@
                 message: Ocorreu um erro interno.
               success: false
 
-/group/invitelink:
-  post:
+/groups/{group_jid}/invite-link:
+  get:
     tags: [Grupos]
     summary: Obter o link de convite de um grupo
     description: |
@@ -473,8 +508,16 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
-      required: true
+      required: false
       content:
         application/json:
           schema:
@@ -535,9 +578,9 @@
       domínio recebe `400`. É o achado F267.
 
       O valor é o **código nu** — `IVccRoDVSbpHKNkgNxyZx4` — e não o URL,
-      que é o que `POST /group/invitelink` devolve.
+      que é o que `GET /groups/{group_jid}/invite-link` devolve.
 
-      **Quando usar**: depois de `POST /group/inviteinfo`, que diz o que há
+      **Quando usar**: depois de `GET /groups/invite-links/{invite_code}`, que diz o que há
       do outro lado sem aderir.
 
       **Ressalva NÃO medida**: num grupo com `IsJoinApprovalRequired`, o
@@ -618,7 +661,7 @@
       (`pkg/domain/group_request.go:40`). `mode` ausente vale `false`, logo
       um pedido só com o grupo **DESLIGA** a exigência — não a consulta.
       Para ler o estado actual use `IsJoinApprovalRequired` de
-      `POST /group/info`.
+      `GET /groups/{group_jid}`.
 
       **Erros**: `missing_group_jid`, `invalid_group_jid`, `no_session`, no
       envelope novo — esta rota não passa por `rejectMissingField`.
@@ -745,14 +788,14 @@
     summary: Listar os grupos da sessão
     description: |
       Devolve todos os grupos de que a conta participa, cada um com os mesmos
-      metadados que `POST /group/info` traz.
+      metadados que `GET /groups/{group_jid}` traz.
 
       **Quando usar**: para descobrir os JIDs dos grupos. É a rota de partida
       de quase tudo o resto desta família.
 
       **Ressalva MEDIDA, e que muda o que se pode fazer com a resposta**:
       `ParticipantCount` vem **zero** para todos os grupos aqui, enquanto
-      `POST /group/info` sobre o mesmo grupo, no mesmo minuto, devolveu `2`.
+      `GET /groups/{group_jid}` sobre o mesmo grupo, no mesmo minuto, devolveu `2`.
       Para contar membros a partir desta listagem, conte `Participants`, que
       vem correcta.
 
@@ -821,21 +864,21 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/group/locked:
-  post:
+/groups/{group_jid}/locked:
+  put:
     tags: [Grupos]
     summary: Trancar ou destrancar a edição dos metadados do grupo
     description: |
       Liga ou desliga a tranca: com ela ligada, só administradores mudam
       nome, descrição e foto do grupo. O estado resultante aparece em
-      `POST /group/info` como `IsLocked`.
+      `GET /groups/{group_jid}` como `IsLocked`.
 
       **Quando usar**: em grupos grandes, para que a identidade do grupo não
       dependa da boa-fé de todos os membros.
 
-      **Não confundir com `POST /group/announce`**: a tranca governa quem
-      edita os METADADOS; o anúncio governa quem envia MENSAGENS. São
-      independentes e podem estar ligados ao mesmo tempo.
+      **Não confundir com `PUT /groups/{group_jid}/announce-only`**: a
+      tranca governa quem edita os METADADOS; o anúncio governa quem envia
+      MENSAGENS. São independentes e podem estar ligados ao mesmo tempo.
 
       **Regras**: `locked` ausente vale `false`, logo um pedido só com o
       grupo DESTRANCA. O manipulador não valida campo nenhum: um pedido sem
@@ -844,6 +887,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
       required: true
       content:
@@ -878,13 +929,13 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/group/name:
-  post:
+/groups/{group_jid}/name:
+  put:
     tags: [Grupos]
     summary: Mudar o nome de um grupo
     description: |
       Renomeia o grupo. O nome novo aparece de imediato em
-      `POST /group/info`, junto com `NameSetAt` e `NameSetBy`.
+      `GET /groups/{group_jid}`, junto com `NameSetAt` e `NameSetBy`.
 
       **Quando usar**: para manter o nome alinhado com a operação — o nome é
       o que aparece na lista de conversas de cada membro.
@@ -904,6 +955,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
       required: true
       content:
@@ -1205,13 +1264,13 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/group/topic:
-  post:
+/groups/{group_jid}/topic:
+  put:
     tags: [Grupos]
     summary: Mudar a descrição de um grupo
     description: |
-      Define a descrição (tópico) do grupo. Aparece em `POST /group/info`
-      como `Topic`, com `TopicSetAt` e `TopicSetBy`.
+      Define a descrição (tópico) do grupo. Aparece em
+      `GET /groups/{group_jid}` como `Topic`, com `TopicSetAt` e `TopicSetBy`.
 
       **Detalhe do protocolo que a resposta revela**: a descrição VIAJA como
       mensagem — por isso `TopicID` tem a forma de um `message_id`, e por
@@ -1232,6 +1291,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: group_jid
+        in: path
+        required: true
+        description: |
+          JID do grupo, no servidor `@g.us`. Substitui o campo `groupJID` do
+          corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 120363411669320145@g.us}
     requestBody:
       required: true
       content:

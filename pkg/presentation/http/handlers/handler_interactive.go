@@ -157,7 +157,7 @@ func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, http.StatusOK, result, nil)
 }
 
-// SendPollVoteHandler é o handler HTTP para POST /chat/send/pollvote.
+// SendPollVoteHandler é o handler HTTP para POST /polls/{poll_message_id}/votes.
 type SendPollVoteHandler struct {
 	usecase *message.SendPollVoteUseCase
 }
@@ -167,9 +167,9 @@ func NewSendPollVoteHandler(uc *message.SendPollVoteUseCase) *SendPollVoteHandle
 	return &SendPollVoteHandler{usecase: uc}
 }
 
-// ServeHTTP implementa http.Handler para POST /chat/send/pollvote.
+// ServeHTTP implementa http.Handler para POST /polls/{poll_message_id}/votes.
 func (h *SendPollVoteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/pollvote"
+	const route = "/polls/{poll_message_id}/votes"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {

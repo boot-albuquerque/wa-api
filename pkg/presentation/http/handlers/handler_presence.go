@@ -106,7 +106,7 @@ func NewMarkReadHandler(uc *message.MarkReadUseCase) *MarkReadHandler {
 	return &MarkReadHandler{uc: uc}
 }
 func (h *MarkReadHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/markread"
+	const route = "/chats/{chat_jid}/read"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

@@ -56,7 +56,7 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 		// vir no corpo. O manipulador continua a lê-lo do corpo — logo o
 		// adaptador injecta-o antes de lhe passar o pedido.
 		if strings.Contains(linha.CanonicalPath, "{") {
-			manipulador = injectPathParams(manipulador)
+			manipulador = InjectPathParams(manipulador)
 		}
 		r.Register(linha.CanonicalPath, manipulador, linha.CanonicalMethod)
 	}
@@ -71,18 +71,25 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 // o objectivo desta camada é exactamente o contrário: caminho novo, corpo
 // igual.
 var bodyFieldForPathParam = map[string]string{
-	"group_jid":     "groupJID",
-	"community_jid": "communityJID",
+	"group_jid":       "groupJID",
+	"community_jid":   "communityJID",
+	"chat_jid":        "ChatPhone",
+	"poll_message_id": "PollMessageId",
+	"invite_code":     "Code",
 }
 
-// injectPathParams copia os parâmetros do caminho para o corpo JSON, e só
+// InjectPathParams copia os parâmetros do caminho para o corpo JSON, e só
 // então chama o manipulador original.
 //
 // NÃO SOBRESCREVE. Se o corpo já trouxer o campo, o corpo ganha — o caminho é
 // a forma nova de dizer a mesma coisa, e não uma autoridade sobre quem já a
 // dizia. Isso mantém a rota canónica utilizável por um cliente que ainda
 // envie o identificador no corpo, durante a migração.
-func injectPathParams(next http.Handler) http.Handler {
+//
+// Exportada porque também é usada por rotas cortadas directamente para a
+// forma canónica (sem passar por RegisterCanonicalAliases) — ver
+// pkg/bootstrap/wiring_routes.go.
+func InjectPathParams(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		if len(vars) == 0 {

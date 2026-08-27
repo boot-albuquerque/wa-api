@@ -787,7 +787,7 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/chat/send/pollvote:
+/polls/{poll_message_id}/votes:
   post:
     tags: [Envio de mensagens]
     summary: Votar numa enquete
@@ -816,6 +816,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: poll_message_id
+        in: path
+        required: true
+        description: |
+          ID da mensagem de enquete original. Substitui o campo
+          `PollMessageId` do corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 3EB0A4B2AFD45E625C0917}
     requestBody:
       required: true
       content:
