@@ -21,6 +21,14 @@
       na resposta de `POST /admin/users`, e não é recuperável depois. Perdido o
       token, cria-se outra sessão.
 
+      **Instalação sem sessões devolve `data: []`**, e nunca `null`: só uma
+      das duas formas se percorre sem verificação.
+
+      **Nomes**: esta família migrou para a camada de DTO. `loggedIn` passou a
+      `logged_in`, `proxyUrl` a `proxy_url`, `webhookUseProxy` a
+      `webhook_use_proxy`, e nenhum campo é omitido quando está vazio.
+      `s3_config.access_key`, que vinha sempre como `***`, **desapareceu**.
+
       **Quando usar**: em painéis de operação, para saber que sessões existem e
       quais estão ligadas e autenticadas.
 
@@ -32,7 +40,8 @@
       - TokenAdmin: []
     responses:
       '200':
-        description: Lista de sessões. Vazia se não houver nenhuma.
+        description: |
+          Lista de sessões. `[]` se não houver nenhuma — nunca `null`.
         content:
           application/json:
             schema:
@@ -52,11 +61,14 @@
                   token: ''
                   webhook: ''
                   jid: 5516981818244:25@s.whatsapp.net
+                  qrcode: ''
                   connected: true
-                  loggedIn: true
-                  proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                  logged_in: true
+                  expiration: 0
+                  events: All
+                  hmac_configured: false
+                  proxy_config: {enabled: false, proxy_url: '', webhook_use_proxy: true}
                   s3_config:
-                    access_key: '***'
                     bucket: ''
                     enabled: false
                     endpoint: ''
@@ -95,10 +107,16 @@
       - `events` é uma lista separada por vírgulas, e cada nome é validado:
         um nome desconhecido dá `400 invalid_event_type`, indicando qual.
         `All` recebe todos os eventos.
-      - `hmacKey`, quando presente, tem de ter pelo menos **32 caracteres**
+      - `hmac_key`, quando presente, tem de ter pelo menos **32 caracteres**
         (`400 hmac_key_too_short`). É guardada cifrada e nunca mais sai.
-      - `s3Config`/`proxyConfig` são aceites também em `snake_case`
-        (`s3_config`, `proxy_config`); o camelCase vence quando ambos vierem.
+
+      **Nomes**: o corpo é todo em `snake_case` — `hmac_key`, `proxy_config`,
+      `s3_config`, e dentro deles `proxy_url`, `access_key`, `path_style`,
+      `public_url`, `media_delivery`, `retention_days`, `webhook_use_proxy`.
+      O camelCase de antes deixou de ser lido na migração para DTO: ele
+      existia porque a RESPOSTA era snake_case, e alinhar os dois lados
+      dispensou a grafia dupla. Um corpo com os nomes antigos perde esses
+      campos, e o servidor regista `unknown field`.
 
       **Autenticação**: token de administração, no cabeçalho `Authorization`,
       sem prefixo `Bearer`. É regerado a cada arranque e fica em
@@ -116,8 +134,8 @@
             token: tk_EXEMPLO_NAO_USE_gere_o_seu
             events: Message,Receipt,Connected
             history: 100
-            proxyConfig: {enabled: false, proxyUrl: ''}
-            s3Config: {enabled: false, mediaDelivery: base64, retentionDays: 30}
+            proxy_config: {enabled: false, proxy_url: ''}
+            s3_config: {enabled: false, media_delivery: base64, retention_days: 30}
     responses:
       '200':
         description: |
@@ -139,11 +157,15 @@
                 name: filarapida
                 token: tk_EXEMPLO_NAO_USE_gere_o_seu
                 webhook: ''
+                jid: ''
+                qrcode: ''
                 connected: false
+                logged_in: false
+                expiration: 0
                 events: Message,Receipt,Connected
-                proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                hmac_configured: false
+                proxy_config: {enabled: false, proxy_url: '', webhook_use_proxy: true}
                 s3_config:
-                  access_key: '***'
                   bucket: ''
                   enabled: false
                   endpoint: ''
@@ -195,10 +217,13 @@
       O mesmo manipulador da listagem, filtrado por `id`. Por isso **devolve um
       ARRAY**, e não um objecto — com um elemento quando a sessão existe.
 
-      **Sessão inexistente responde `200` com `data: null`, e não `404`.**
-      Medido a 2026-08-26 contra
-      `/admin/users/00000000000000000000000000000000`. Um cliente que espere
-      `404` para "não existe" não o vai receber aqui; teste `data`.
+      **Sessão inexistente responde `200` com `data: []`, e não `404`.** Um
+      cliente que espere `404` para "não existe" não o vai receber aqui; teste
+      o comprimento de `data`.
+
+      Até à migração para DTO este caso devolvia `data: null`, porque o use
+      case fazia `append` sobre uma fatia nil; hoje a colecção vazia é sempre
+      `[]`.
 
       Tal como na listagem, `token` vem sempre vazio.
 
@@ -211,7 +236,7 @@
     responses:
       '200':
         description: |
-          Array com a sessão pedida, ou `null` quando o identificador não
+          Array com a sessão pedida, ou `[]` quando o identificador não
           corresponde a nenhuma.
         content:
           application/json:
@@ -222,7 +247,7 @@
                   properties:
                     data:
                       type: array
-                      nullable: true
+                      nullable: false
                       items:
                         $ref: '#/components/schemas/UtilizadorAdmin'
             example:
@@ -233,11 +258,14 @@
                   token: ''
                   webhook: ''
                   jid: 5516981818244:25@s.whatsapp.net
+                  qrcode: ''
                   connected: true
-                  loggedIn: true
-                  proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                  logged_in: true
+                  expiration: 0
+                  events: All
+                  hmac_configured: false
+                  proxy_config: {enabled: false, proxy_url: '', webhook_use_proxy: true}
                   s3_config:
-                    access_key: '***'
                     bucket: ''
                     enabled: false
                     endpoint: ''
@@ -268,13 +296,18 @@
       **Um pedido sem nenhum campo útil** (`{}` ou só campos vazios) responde
       `400 no_fields_to_update`, e não `500`.
 
-      **`s3Config` e `proxyConfig` são aceites também em `snake_case`**
-      (`s3_config`, `proxy_config`) porque a resposta de leitura usa
-      snake_case, e o ciclo natural — ler, alterar um campo, reenviar — chegava
-      com o nome da resposta e era **ignorado em silêncio com `200`**. O
-      camelCase vence quando os dois nomes vierem no mesmo corpo.
+      **O corpo é todo em `snake_case`** — `s3_config`, `proxy_config`, e
+      dentro deles `proxy_url`, `access_key`, `path_style`, `public_url`,
+      `media_delivery`, `retention_days`, `webhook_use_proxy`. É o mesmo nome
+      que a leitura devolve, o que torna o ciclo natural — ler, alterar um
+      campo, reenviar — simétrico por construção. O camelCase de antes deixou
+      de ser lido.
 
-      Uma alteração de `proxyConfig` com `enabled: false` limpa o `proxy_url`
+      **Não reenvie a resposta inteira como corpo**: ela não traz `access_key`
+      nem `secret_key`, e um bloco `s3_config` presente **substitui o bloco
+      todo**, gravando no valor zero o que não vier nele.
+
+      Uma alteração de `proxy_config` com `enabled: false` limpa o `proxy_url`
       gravado.
 
       **Autenticação**: token de administração, no cabeçalho `Authorization`,
@@ -376,7 +409,7 @@
       | termina a ligação ao WhatsApp | **não** | faz `logout` e `disconnect` antes |
       | ficheiros em `<datadir>/files/<id>` | **deixa** | apaga a pasta inteira |
       | objectos no S3 | não apaga | **também não apaga** — ver abaixo |
-      | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid}` |
+      | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid, details}` |
 
       Ou seja: esta rota deixa para trás a sessão viva na memória do processo e
       a mídia em disco. Use `/full` quando a intenção for remover o
@@ -476,11 +509,13 @@
       '200':
         description: |
           Sessão removida. O corpo traz a identificação de quem foi apagado,
-          para o registo de auditoria de quem chamou.
+          para o registo de auditoria de quem chamou, mais o `details`.
 
-          Repare que o use case constrói também um `details` e um `success`
-          próprios que **não chegam ao fio**: o manipulador entrega apenas o
-          `data` ao envelope comum.
+          O `details` é acréscimo da migração para DTO: o use case sempre o
+          calculou e o manipulador deitava-o fora. O `code` e o `success` que
+          o mesmo resultado carregava eram uma segunda cópia do envelope
+          dentro do domínio, e saíram — o estado HTTP passou a ser escrito na
+          fronteira.
         content:
           application/json:
             schema:
@@ -496,6 +531,7 @@
                 id: 918e37366f27e1125ee0482a793267e1
                 name: filarapida
                 jid: 5516981818244:25@s.whatsapp.net
+                details: user instance removed completely
               success: true
       '400':
         description: Identificador em falta no caminho.
