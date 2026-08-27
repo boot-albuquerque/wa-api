@@ -286,8 +286,8 @@ PedidoFavoritarMensagem:
 PedidoApagarMensagem:
   type: object
   description: |
-    Revoga ("apagar para todos") uma mensagem própria. `Phone` é o destino da
-    conversa; `chat` é aceite como alias e só vale quando `Phone` faltar.
+    Revoga ("apagar para todos") uma mensagem própria. `phone` é o destino da
+    conversa; `chat` é aceite como alias e só vale quando `phone` faltar.
 
     **Ordem das recusas, medida**: `missing_phone` → `missing_id` →
     `invalid_phone`.
@@ -295,9 +295,9 @@ PedidoApagarMensagem:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Id]
+  required: [id]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       description: |
@@ -310,10 +310,10 @@ PedidoApagarMensagem:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        Nome universal do destino. Só vale quando `phone` estiver ausente,
         `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -334,7 +334,7 @@ ResultadoApagarMensagem:
       type: string
       nullable: false
       description: |
-        `message_id` da mensagem revogada — o mesmo `Id` que entrou, ecoado.
+        `message_id` da mensagem revogada — o mesmo `id` que entrou, ecoado.
         **Sempre presente**: não tem `omitempty`
         (`pkg/domain/message.go:723`). Nunca `null`.
       example: 3EB0A4B2AFD45E625C0917
@@ -371,9 +371,9 @@ PedidoReagir:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Body, Id]
+  required: [body, id]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       description: |
@@ -386,10 +386,10 @@ PedidoReagir:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        Nome universal do destino. Só vale quando `phone` estiver ausente,
         `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
-    Body:
+    body:
       type: string
       nullable: false
       description: |
@@ -406,7 +406,7 @@ PedidoReagir:
 
         Não há lista fechada: o servidor não valida o conteúdo.
       example: 👍
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -418,7 +418,7 @@ PedidoReagir:
         ao WhatsApp. É a única forma de dizer "a mensagem é minha" nesta
         rota; não há campo booleano para isso.
       example: 3EB0A4B2AFD45E625C0917
-    Participant:
+    participant:
       type: string
       nullable: false
       description: |
@@ -430,11 +430,11 @@ PedidoReagir:
         | `null` | sim | idêntico a ausente |
         | `""` | sim | idêntico a ausente |
         | mal formado | sim | **DESCARTADO EM SILÊNCIO** — não é `400` |
-        | válido | sim | usado, salvo se o `Id` trouxer o prefixo `me:` |
+        | válido | sim | usado, salvo se o `id` trouxer o prefixo `me:` |
 
         Duas formas de ser ignorado sem aviso: um JID que não resolve é
         descartado (comportamento preservado do upstream), e o campo inteiro
-        é ignorado quando `Id` começa por `me:`.
+        é ignorado quando `id` começa por `me:`.
       example: 554192421234@s.whatsapp.net
 
 PedidoMarcarLida:
@@ -442,23 +442,27 @@ PedidoMarcarLida:
   description: |
     Marca uma ou mais mensagens como lidas.
 
-    **Use `ChatPhone`, não `Chat`.** Os dois nomes são aceites pelo
-    desserializador, mas só `ChatPhone` é RESOLVIDO: o ramo de `Chat` está
-    por implementar (`mark_read.go:41`, `jidChat = ""`) e faz a conversa
-    seguir vazia para o WhatsApp. Sem nenhum dos dois é
-    `400 missing_chatphone`, medido.
+    **`chat_phone` e `sender_phone` são as ÚNICAS grafias aceites.** Antes da
+    migração para DTO, o manipulador decodificava `domain.MarkReadRequest`
+    directamente, que também aceitava os nomes antigos `Chat`/`Sender` — mas
+    nenhum dos dois alguma vez foi RESOLVIDO (`mark_read.go:41`,
+    `jidChat = ""`; comportamento herdado do upstream, travado por
+    `TestMarkRead_LegacyFieldsResolveToEmptyJID`). A migração para
+    `dto/message.MarkReadRequest` (HOUSEKEEP F322) tirou os dois campos do
+    DTO de pedido: continuam a existir no domínio, mas **sem forma de lá
+    chegar pelo fio** — mandar `"Chat"` ou `"Sender"` hoje é campo
+    desconhecido, ignorado como qualquer outro. Sem `chat_phone` nem `chat`
+    (nome antigo, já não aceite) é `400 missing_chatphone`, medido.
 
     **Ordem das recusas, medida**: `missing_chatphone` →
-    `invalid_chatphone` → `invalid_senderphone` → `missing_id`. Um pedido só
-    com `Chat` (o campo antigo) passa a guarda do destino e cai em
-    `missing_id`, o que confirma que `Chat` é aceite sem ser usado.
+    `invalid_chatphone` → `invalid_senderphone` → `missing_id`.
 
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Id]
+  required: [id]
   properties:
-    Id:
+    id:
       type: array
       nullable: false
       minItems: 1
@@ -481,37 +485,21 @@ PedidoMarcarLida:
         nullable: false
         description: '`message_id` de uma mensagem. Não é verificado que exista.'
       example: [3EB0A4B2AFD45E625C0917]
-    ChatPhone:
+    chat_phone:
       type: string
       nullable: false
       description: |
-        JID ou número da conversa. É o campo que a implementação resolve.
-        Ausente, `null` e `""` são o mesmo estado e fazem cair para `Chat`;
-        sem os dois é `400 missing_chatphone` (medido), e mal formado é
+        JID ou número da conversa. Ausente, `null` e `""` são o mesmo estado
+        e dão `400 missing_chatphone` (medido); mal formado é
         `400 invalid_chatphone` (medido).
       example: 554192421234@s.whatsapp.net
-    SenderPhone:
+    sender_phone:
       type: string
       nullable: false
       description: |
         JID de quem escreveu as mensagens, em conversa de grupo. Opcional:
         ausente, `null` e `""` são o mesmo estado e a marcação segue sem
         remetente. Preenchido mal formado é `400 invalid_senderphone`.
-      example: 554192421234@s.whatsapp.net
-    Chat:
-      type: string
-      nullable: false
-      description: |
-        Nome antigo de `ChatPhone`. **Aceite, mas NÃO resolvido**: quando é
-        o único destino, o pedido passa a validação e a conversa segue VAZIA
-        para o WhatsApp. Ausente, `null` e `""` são o mesmo estado. Não use.
-      example: 554192421234@s.whatsapp.net
-    Sender:
-      type: string
-      nullable: false
-      description: |
-        Nome antigo de `SenderPhone`. Aceite, mas não resolvido — mesmo
-        buraco de `Chat`. Ausente, `null` e `""` são o mesmo estado.
       example: 554192421234@s.whatsapp.net
 
 PedidoPresencaNaConversa:
@@ -527,9 +515,9 @@ PedidoPresencaNaConversa:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [State]
+  required: [state]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       description: |
@@ -542,10 +530,10 @@ PedidoPresencaNaConversa:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        Nome universal do destino. Só vale quando `phone` estiver ausente,
         `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
-    State:
+    state:
       type: string
       nullable: false
       description: |
@@ -569,9 +557,9 @@ PedidoPresencaNaConversa:
         As duas constantes que a biblioteca define são `composing` e
         `paused` (`internal/wa-noise/protocol/types/presence.go:17-18`).
         **Não existe um estado `recording`**: "a gravar" exprime-se como
-        `State: composing` com `Media: audio`.
+        `state: composing` com `media: audio`.
       example: composing
-    Media:
+    media:
       type: string
       nullable: false
       description: |
@@ -582,10 +570,10 @@ PedidoPresencaNaConversa:
         | ausente | sim | igual a `""` — mensagem de texto |
         | `null` | sim | igual a `""` |
         | `""` | sim | mensagem de texto |
-        | `audio` | sim | com `State: composing`, anuncia "a gravar" |
+        | `audio` | sim | com `state: composing`, anuncia "a gravar" |
         | qualquer outro texto | sim | não é validado; segue para o protocolo |
 
-        **Só tem efeito quando `State` é `composing`**: em qualquer outro
+        **Só tem efeito quando `state` é `composing`**: em qualquer outro
         estado o valor é descartado sem aviso
         (`internal/wa-noise/core/presence.go:142`). As duas constantes
         conhecidas são `""` (texto) e `audio`.
@@ -796,6 +784,21 @@ PedidoDescargaDeMidia:
     de `Message.imageMessage` / `videoMessage` / `audioMessage` /
     `documentMessage` / `stickerMessage`, com estes nomes de origem:
 
+    **Este esquema descreve as etiquetas PascalCase REAIS do fio, e a
+    grafia é deliberada, não um esquecimento da normalização.** As outras
+    famílias desta migração (`docs/HTTP-DTO-CONVENTIONS.md`) passaram por uma
+    camada de DTO que reescreve as etiquetas para `snake_case`; esta rota
+    (`POST /chats/download/{kind}`) ainda decodifica `domain.DownloadRequest`
+    directamente — `pkg/domain/download.go:33-42` — e essa struct carrega as
+    etiquetas `json:"Url"`, `json:"DirectPath"`, `json:"MediaKey"`,
+    `json:"Mimetype"`, `json:"FileEncSHA256"`, `json:"FileSHA256"` e
+    `json:"FileLength"` tal como estão aqui, confirmado por
+    `pkg/presentation/http/handlers/handler_download_media_test.go`. Corrigir
+    este esquema para `snake_case` sem tocar no código produziria um contrato
+    que o servidor não fala — worker de OpenAPI não deve mudar comportamento
+    de rota. Ver `ResultadoDescargaDeMidia` para o lado que JÁ migrou (a
+    resposta), e `HOUSEKEEP.md` para o registo desta divergência.
+
     | campo daqui | campo no `data_json` | obrigatório de verdade? |
     |---|---|---|
     | `Url` | `URL` | um dos dois |
@@ -944,11 +947,18 @@ ResultadoDescargaDeMidia:
   type: object
   description: |
     O conteúdo binário, já decifrado e codificado como Data URL. Os dois
-    campos não têm `omitempty` (`pkg/domain/download.go:76-79`), logo
-    aparecem **sempre**, e nenhum vem `null`.
-  required: [Mimetype, Data]
+    campos não têm `omitempty` (`pkg/presentation/http/dto/message/chat.go`,
+    `DownloadResponse`), logo aparecem **sempre**, e nenhum vem `null`.
+
+    **Só a RESPOSTA passou pela migração para DTO** — `dtomessage.
+    PresentDownload` serve `mimetype`/`data` em minúsculas. O PEDIDO
+    (`PedidoDescargaDeMidia`) continua a decodificar `domain.DownloadRequest`
+    directamente, com as etiquetas antigas — os dois lados desta rota estão
+    em estados diferentes de propósito, não por descuido; ver a nota nesse
+    esquema.
+  required: [mimetype, data]
   properties:
-    Mimetype:
+    mimetype:
       type: string
       nullable: false
       description: |
@@ -957,7 +967,7 @@ ResultadoDescargaDeMidia:
         vir `""` porque um `Mimetype` vazio derruba a resposta antes de
         chegar aqui (ver o pedido).
       example: image/png
-    Data:
+    data:
       type: string
       nullable: false
       description: |

@@ -620,12 +620,12 @@
 
       **Regras**:
 
-      - `Phone` (ou o alias `chat`) e `Id` são obrigatórios; faltar `Id` é
+      - `phone` (ou o alias `chat`) e `id` são obrigatórios; faltar `id` é
         `400 missing_id`, medido.
       - `message_id` na resposta é o da mensagem APAGADA, e não o da mensagem
         de revogação que o envio criou — é o que responde à pergunta do
         cliente.
-      - Um `Id` inexistente NÃO é recusado: o WhatsApp aceita a revogação de
+      - Um `id` inexistente NÃO é recusado: o WhatsApp aceita a revogação de
         um id que não conhece e nada acontece do outro lado.
 
       **Nota de nomes**: esta rota é a canónica. `POST /chat/delete` existiu
@@ -642,8 +642,8 @@
           schema:
             $ref: '#/components/schemas/PedidoApagarMensagem'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Id: 3EB0A4B2AFD45E625C0917
+            phone: 554192421234@s.whatsapp.net
+            id: 3EB0A4B2AFD45E625C0917
     responses:
       '200':
         description: A revogação foi aceite pelo WhatsApp.
@@ -662,8 +662,8 @@
               success: true
       '400':
         description: |
-          Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
-          ausentes (`missing_phone`), `Id` ausente (`missing_id`), destino
+          Corpo ilegível (`could_not_decode_payload`), `phone` e `chat`
+          ausentes (`missing_phone`), `id` ausente (`missing_id`), destino
           mal formado (`invalid_phone`) ou sessão inexistente
           (`no_session`).
         content:
@@ -693,13 +693,13 @@
 
       **Regras**:
 
-      - Para RETIRAR a reação, envie `Body: "remove"`. String vazia não
+      - Para RETIRAR a reação, envie `body: "remove"`. String vazia não
         serve: é `400 missing_body`, medido.
-      - O `Id` aceita o prefixo `me:` para marcar a mensagem como própria
+      - O `id` aceita o prefixo `me:` para marcar a mensagem como própria
         (`me:3EB0A4B2AFD45E625C0917`); o prefixo é retirado antes de seguir
         para o WhatsApp.
-      - Em grupo, `Participant` diz quem escreveu a mensagem reagida. Um
-        `Participant` que não resolve é IGNORADO em silêncio, e não recusado.
+      - Em grupo, `participant` diz quem escreveu a mensagem reagida. Um
+        `participant` que não resolve é IGNORADO em silêncio, e não recusado.
       - A resposta tem a mesma forma das rotas de envio, porque reagir é
         enviar uma mensagem: `message_id` é o da mensagem REAGIDA.
 
@@ -713,9 +713,9 @@
           schema:
             $ref: '#/components/schemas/PedidoReagir'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Id: 3EB0A4B2AFD45E625C0917
-            Body: 👍
+            phone: 554192421234@s.whatsapp.net
+            id: 3EB0A4B2AFD45E625C0917
+            body: 👍
     responses:
       '200':
         description: A reação foi aceite pelo WhatsApp.
@@ -734,8 +734,8 @@
               success: true
       '400':
         description: |
-          Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
-          ausentes (`missing_phone`), `Body` vazio (`missing_body`), `Id`
+          Corpo ilegível (`could_not_decode_payload`), `phone` e `chat`
+          ausentes (`missing_phone`), `body` vazio (`missing_body`), `id`
           ausente (`missing_id`), destino mal formado (`invalid_phone`) ou
           sessão inexistente (`no_session`).
         content:
@@ -766,13 +766,15 @@
 
       **Regras, e uma ressalva medida**:
 
-      - O campo que a implementação RESOLVE é `ChatPhone`. O nome antigo
-        `Chat` é aceite pelo desserializador, mas o ramo que o converteria em
-        JID está por implementar (`mark_read.go:41`), e a conversa segue
-        VAZIA para o WhatsApp. Use `ChatPhone`, ou o `chat_jid` do caminho.
+      - O campo do corpo é `chat_phone`. Antes da migração para DTO
+        (HOUSEKEEP F322), o manipulador aceitava também o nome antigo `Chat`
+        — mas o ramo que o converteria em JID nunca foi implementado
+        (`mark_read.go:41`), e a conversa seguia VAZIA para o WhatsApp. O
+        campo antigo saiu do DTO de pedido: hoje é apenas `chat_phone`, ou o
+        `chat_jid` do caminho.
       - Sem nenhum dos dois, é `400 missing_chatphone`, medido.
-      - `Id` é uma LISTA. Vazia é `400 missing_id`.
-      - `SenderPhone` só faz sentido em grupo, e é opcional.
+      - `id` é uma LISTA. Vazia é `400 missing_id`.
+      - `sender_phone` só faz sentido em grupo, e é opcional.
       - Esta rota NÃO aceita o alias universal `chat` — o tipo de pedido não
         o declara.
 
@@ -784,7 +786,7 @@
         in: path
         required: true
         description: |
-          JID da conversa. Substitui o campo `ChatPhone` do corpo — se ambos
+          JID da conversa. Substitui o campo `chat_phone` do corpo — se ambos
           vierem, o **corpo ganha**.
         schema: {type: string, example: 554192421234@s.whatsapp.net}
     requestBody:
@@ -794,8 +796,8 @@
           schema:
             $ref: '#/components/schemas/PedidoMarcarLida'
           example:
-            ChatPhone: 554192421234@s.whatsapp.net
-            Id: [3EB0A4B2AFD45E625C0917]
+            chat_phone: 554192421234@s.whatsapp.net
+            id: [3EB0A4B2AFD45E625C0917]
     responses:
       '200':
         description: Os recibos foram enviados ao WhatsApp.
@@ -810,13 +812,13 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Message marked as read}
+              data: {details: Message marked as read}
               success: true
       '400':
         description: |
-          Corpo ilegível (`could_not_decode_payload`), `ChatPhone` ausente
+          Corpo ilegível (`could_not_decode_payload`), `chat_phone` ausente
           (`missing_chatphone`), destino mal formado (`invalid_chatphone`,
-          `invalid_senderphone`), lista `Id` vazia (`missing_id`) ou sessão
+          `invalid_senderphone`), lista `id` vazia (`missing_id`) ou sessão
           inexistente (`no_session`).
         content:
           application/json:
@@ -839,23 +841,23 @@
     summary: Anunciar "a escrever" ou "a gravar" numa conversa
     description: |
       Mostra ao outro lado que se está a escrever ou a gravar áudio
-      (`State: composing` com `Media: audio`).
+      (`state: composing` com `media: audio`).
 
       **Quando usar**: antes de enviar uma mensagem que demore a ser
       composta, para que a conversa não pareça parada.
 
       **Regras**:
 
-      - `State` é obrigatório; ausente, `null` e `""` dão todos
+      - `state` é obrigatório; ausente, `null` e `""` dão todos
         `400 missing_state`, medido.
-      - **Não há enum no servidor.** `State` vai como está para o protocolo,
+      - **Não há enum no servidor.** `state` vai como está para o protocolo,
         logo um valor desconhecido não é recusado com `400` — o que o
         WhatsApp faz com ele não foi medido aqui. As duas constantes que a
         biblioteca define são `composing` e `paused`
         (`internal/wa-noise/protocol/types/presence.go:17-18`).
       - **Não existe um estado `recording`.** "A gravar" exprime-se como
-        `State: composing` com `Media: audio`.
-      - `Media` só tem efeito quando `State` é `composing`; em qualquer
+        `state: composing` com `media: audio`.
+      - `media` só tem efeito quando `state` é `composing`; em qualquer
         outro estado é descartado sem aviso
         (`internal/wa-noise/core/presence.go:142`). Os dois valores
         conhecidos são `""` (texto) e `audio`.
@@ -874,9 +876,9 @@
           schema:
             $ref: '#/components/schemas/PedidoPresencaNaConversa'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            State: composing
-            Media: ''
+            phone: 554192421234@s.whatsapp.net
+            state: composing
+            media: ''
     responses:
       '200':
         description: O estado foi anunciado ao WhatsApp.
@@ -891,12 +893,12 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Chat presence sent}
+              data: {details: Chat presence sent}
               success: true
       '400':
         description: |
-          Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
-          ausentes (`missing_phone`), `State` ausente (`missing_state`),
+          Corpo ilegível (`could_not_decode_payload`), `phone` e `chat`
+          ausentes (`missing_phone`), `state` ausente (`missing_state`),
           destino mal formado (`invalid_phone`) ou sessão inexistente
           (`no_session`).
         content:
@@ -962,7 +964,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Disappearing timer set}
+              data: {details: Disappearing timer set}
               success: true
       '400':
         description: |
@@ -1030,7 +1032,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Default disappearing timer set}
+              data: {details: Default disappearing timer set}
               success: true
       '400':
         description: |
@@ -1179,6 +1181,13 @@
       `pkg/presentation/http/canonico.go`: o novo lugar não sobrescreve
       quem já dizia a mesma coisa).
 
+      **O PEDIDO ainda usa etiquetas PascalCase** (`Url`, `DirectPath`,
+      `MediaKey`, `Mimetype`, `FileEncSHA256`, `FileSHA256`, `FileLength`) —
+      é a única rota destes dois ficheiros que ainda não passou pela camada
+      de DTO (`pkg/domain/download.go:33-42`, confirmado por
+      `handler_download_media_test.go`); ver `PedidoDescargaDeMidia` para o
+      porquê. A RESPOSTA já migrou e serve `mimetype`/`data` em minúsculas.
+
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
@@ -1222,8 +1231,8 @@
             example:
               code: 200
               data:
-                Mimetype: image/png
-                Data: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+                mimetype: image/png
+                data: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
               success: true
       '400':
         description: |
