@@ -52,6 +52,13 @@ const (
 var ErrInvalidEngine = fmt.Errorf("invalid engine: must be %q or %q",
 	EngineWaNoise, EngineWaHeadless)
 
+// ErrEngineImmutable is returned when an update tries to change the engine
+// of a session that already has one recorded. See HOUSEKEEP F279: this was
+// enforced only by EditUserUseCase.Execute (application layer) until the
+// repository grew its own check, making the invariant structural instead of
+// a single call site's discipline.
+var ErrEngineImmutable = fmt.Errorf("engine is immutable after creation")
+
 // String makes Engine printable without a conversion at every call site.
 func (e Engine) String() string { return string(e) }
 

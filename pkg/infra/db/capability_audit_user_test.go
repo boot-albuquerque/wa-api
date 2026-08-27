@@ -15,6 +15,7 @@ package db_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"wa-api/pkg/domain"
@@ -136,28 +137,31 @@ func TestAudit_Invariant2_UseCaseComparisonRejectsDivergence(t *testing.T) {
 	// which the next test measures directly against the repository.)
 }
 
-// TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation is the
-// ATTACK: it calls UserRepository.UpdateUser directly - the same method
-// EditUserUseCase.Execute calls - with domain.UserUpdate.Engine set to a
-// DIFFERENT engine than the one the row was created with, bypassing the
-// use-case-level comparison at edit_user.go:66-73 entirely.
+// TestAudit_Invariant2_RepositoryRejectsEngineChangeAfterCreation is the
+// regression test for HOUSEKEEP F279. It calls UserRepository.UpdateUser
+// directly - the same method EditUserUseCase.Execute calls - with
+// domain.UserUpdate.Engine set to a DIFFERENT engine than the one the row
+// was created with, bypassing the use-case-level comparison at
+// edit_user.go:66-73 entirely.
 //
-// pkg/infra/db/user_repository.go:162-172 (UpdateUser) validates only
-// IsValidForCreate() on the incoming engine. It does not compare against
-// the row's current engine, does not reject a divergent value, and has no
-// awareness that engine is supposed to be immutable. The ONLY thing
-// stopping this write today is that EditUserUseCase, one layer up, never
-// sets upd.Engine on a divergent request (confirmed by the control test
-// above and by grep across the repo: pkg/application/usecase/user/
-// edit_user.go never assigns upd.Engine anywhere).
+// Before the F279 fix, pkg/infra/db/user_repository.go's UpdateUser
+// validated only IsValidForCreate() on the incoming engine: it never
+// compared against the row's current engine, and the ONLY thing stopping
+// this write was that EditUserUseCase, one layer up, never sets
+// upd.Engine on a divergent request. That made invariant 2 a single call
+// site's policy, not a repository/domain invariant.
 //
-// This means invariant 2 is NOT a repository/domain invariant - it is a
-// single call site's policy. Any other caller of UserRepository.UpdateUser
-// (a future use case, an admin tool, a maintenance script, test code
-// reused by mistake) can flip a session's engine with no error, no log
-// line distinguishing "changed" from "unchanged", and no database
-// constraint stopping it.
-func TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation(t *testing.T) {
+// UpdateUser now runs the write inside a transaction that locks the row,
+// reads its current engine, and refuses with domain.ErrEngineImmutable on
+// any divergence (see updateUserWithEngineGuard) - so this test attacks
+// the repository directly, same as before, and now expects the rejection.
+//
+// Negative control executed manually while writing this fix (not
+// committed as a mode switch, per project policy - see git history if the
+// commit that introduced updateUserWithEngineGuard needs to be re-read):
+// with that guard removed, this test goes back to FAILING with "UpdateUser
+// with a divergent engine unexpectedly succeeded" - so it does bite.
+func TestAudit_Invariant2_RepositoryRejectsEngineChangeAfterCreation(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
@@ -173,19 +177,15 @@ func TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation(t *testing.
 
 	newEngine := domain.EngineWaHeadless
 	err := repo.UpdateUser(ctx, rec.ID, domain.UserUpdate{Engine: &newEngine})
-	if err != nil {
-		t.Fatalf("UpdateUser with a divergent engine returned an error (would mean the repository itself enforces immutability): %v", err)
+	if err == nil {
+		t.Fatalf("UpdateUser with a divergent engine unexpectedly succeeded - the repository-level immutability guard (F279) did not fire")
+	}
+	if !errors.Is(err, domain.ErrEngineImmutable) {
+		t.Fatalf("UpdateUser error = %v, want errors.Is(err, domain.ErrEngineImmutable)", err)
 	}
 
 	after := engineOf(t, db, rec.ID)
-	if after == before {
-		t.Fatalf("expected the attack to succeed (before=%q after=%q) - if this fails, the repository has grown its own immutability guard and this test is stale", before, after)
+	if after != before {
+		t.Fatalf("engine changed despite the rejected update: before=%q after=%q", before, after)
 	}
-	if after != string(domain.EngineWaHeadless) {
-		t.Fatalf("engine after direct UpdateUser = %q, want %q (the value we asked for)", after, domain.EngineWaHeadless)
-	}
-
-	t.Logf("BROKE invariant 2 at the repository layer: engine went from %q to %q via UserRepository.UpdateUser, "+
-		"with no comparison against the row's prior value. Immutability is enforced only by "+
-		"pkg/application/usecase/user/edit_user.go:66-73, one layer above this repository method.", before, after)
 }

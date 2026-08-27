@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -119,7 +120,93 @@ func (r *UserRepository) UserExists(ctx context.Context, id string) (bool, error
 //
 // A ordem em que os campos entram no SET é a mesma que EditUserUseCase usava,
 // para que a instrução gerada seja idêntica à de antes.
+//
+// Engine immutability (HOUSEKEEP F279) is enforced HERE, not only by
+// EditUserUseCase.Execute: before this fix, a caller that built a
+// domain.UserUpdate directly — bypassing the use case — could flip a
+// session's engine in silence, because the repository only validated
+// IsValidForCreate() and never compared against the row's current value.
+// Making the invariant structural means reading the current engine inside
+// the same transaction that performs the write (SELECT ... FOR UPDATE),
+// so a concurrent writer cannot race between the read and the UPDATE.
 func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.UserUpdate) error {
+	if upd.Engine != nil {
+		return r.updateUserWithEngineGuard(ctx, id, upd)
+	}
+	return r.updateUser(ctx, id, upd)
+}
+
+// updateUserWithEngineGuard runs UpdateUser's write inside a transaction
+// that first locks the row and compares the persisted engine against
+// upd.Engine, refusing with domain.ErrEngineImmutable on any divergence.
+func (r *UserRepository) updateUserWithEngineGuard(ctx context.Context, id string, upd domain.UserUpdate) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Msg("failed to begin transaction for engine-guarded update")
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// FOR UPDATE row-locks against a concurrent writer on Postgres, closing
+	// the read-then-write race between this SELECT and the UPDATE below.
+	// SQLite (used by this package's unit tests, dbpkg.SQLitePragmas) has no
+	// such clause — its own serialized-transaction locking already gives the
+	// same guarantee inside a single process, which is all the test doubles
+	// exercise.
+	selectQuery := "SELECT engine FROM users WHERE id = $1"
+	if r.db.DriverName() == driverPostgres {
+		selectQuery += " FOR UPDATE"
+	}
+	var currentEngine sql.NullString
+	err = tx.GetContext(ctx, &currentEngine, selectQuery, id)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		// Same "no such row" as before this fix: let the UPDATE below run
+		// and affect zero rows, preserving prior behavior for a missing id.
+	case err != nil:
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Msg("failed to read current engine for immutability check")
+		return err
+	case currentEngine.Valid && currentEngine.String != upd.Engine.String():
+		log.Warn().Str("table", "users").Str("user_id", id).
+			Str("column", usersEngineColumn).
+			Str("current", currentEngine.String).Str("requested", upd.Engine.String()).
+			Msg("update user rejected: engine is immutable after creation")
+		return fmt.Errorf("%w (current %q, requested %q)",
+			domain.ErrEngineImmutable, currentEngine.String, upd.Engine.String())
+	}
+
+	if err := r.execUpdateUser(ctx, tx, id, upd); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		log.Error().Err(err).Str("table", "users").Str("user_id", id).
+			Msg("failed to commit engine-guarded update")
+		return err
+	}
+	committed = true
+	return nil
+}
+
+// sqlExecer is the subset of *sqlx.DB / *sqlx.Tx that execUpdateUser needs,
+// so the same query-building code runs on either.
+type sqlExecer interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+}
+
+// updateUser is the un-guarded path, used when upd.Engine is nil (no
+// immutability question to ask).
+func (r *UserRepository) updateUser(ctx context.Context, id string, upd domain.UserUpdate) error {
+	return r.execUpdateUser(ctx, r.db, id, upd)
+}
+
+func (r *UserRepository) execUpdateUser(ctx context.Context, exec sqlExecer, id string, upd domain.UserUpdate) error {
 	query := "UPDATE users SET "
 	args := []interface{}{}
 	argIndex := 1
@@ -197,7 +284,7 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 	// o token de um usuário para o token de outro passava silenciosamente.
 	// Quem rejeita é o índice UNIQUE de token_hash; o papel deste bloco é
 	// traduzir o erro do driver antes que ele vaze para o cliente HTTP.
-	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+	if _, err := exec.ExecContext(ctx, query, args...); err != nil {
 		if isUniqueViolation(err) {
 			log.Warn().Err(err).Str("table", "users").Str("user_id", id).
 				Str("column", "token_hash").Msg("update user rejected: duplicate token")
