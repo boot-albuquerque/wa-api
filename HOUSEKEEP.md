@@ -30588,3 +30588,67 @@ comentário dele). `no_session` é o segundo candidato, e há pelo menos um terc
 camadas e é escopo próprio; registado, com referência cruzada para F272.
 
 <!-- f-status: aberto -->
+
+## F285 — o `coverage-gate` está VERMELHO desde antes desta sessão, e por isso o piso `min_coverage=870` nunca chegou a ser aplicado; a cobertura real é 84,6%
+
+**Data**: 2026-08-27. **Contexto**: worktree `feature/pairing-explicit-engine`,
+ao correr `make check` no fim da tarefa. Achado de lado, e não da tarefa.
+
+**Onde**: `Makefile:251-281` (alvo `coverage-gate`), `.coverage-baseline`
+(`min_coverage=870`), e `internal/wa-headless/gate_test.go`
+(`TestHousekeepEntriesAreMachineReadable`).
+
+**Problema**: o `coverage-gate` corre os testes PRIMEIRO e só calcula a
+percentagem se eles passarem (`|| { ...; exit 1; }`, linha 262). Um teste está a
+falhar em `internal/wa-headless` — `TestHousekeepEntriesAreMachineReadable`, por
+causa da entrada H144, cujo status começa por uma palavra fora do vocabulário
+que o scan classifica. Logo o gate morre na linha 262 e **nunca chega à linha
+267**, onde a comparação com o piso acontece.
+
+Duas coisas decorrem, e a segunda é a que importa:
+
+1. o gate falha, e falha pelo motivo certo (testes vermelhos são testes
+   vermelhos) — não há bug no Makefile;
+2. o PISO nunca é avaliado. E quando se avalia à mão, ele não passa:
+
+```
+$ go tool cover -func=coverage.out | tail -1
+total:  (statements)  84.6%
+
+$ grep min_coverage .coverage-baseline
+min_coverage=870          # 87,0%
+```
+
+**Medido nas duas pontas, para não confundir causa com coincidência**: em
+worktree limpa de `f996279e` (o commit base desta) o mesmo comando dá **84,5%**,
+e o gate falha exactamente da mesma forma, pela mesma entrada H144. Portanto:
+
+- a cobertura NÃO foi derrubada por este trabalho — subiu 84,5% → 84,6%;
+- o piso declarado está 2,4 pontos acima do real, e está assim há tempo
+  suficiente para ninguém ter notado, precisamente porque o gate morre antes de
+  o ler.
+
+É a mesma família de armadilha da F99 que o próprio comentário do alvo descreve
+("o silêncio apagava a evidência necessária no caminho de falha"): aqui não há
+silêncio, há uma falha REAL a esconder uma segunda falha atrás dela.
+
+**Correção sugerida**, por ordem:
+
+1. consertar a H144 em `internal/wa-headless/HOUSEKEEP.md` — o status tem de
+   começar por uma palavra do vocabulário que `openStatusTokens` /
+   `closedStatusTokens` conhecem, ou a palavra nova entra na lista de propósito.
+   É uma linha de texto, e desbloqueia o gate;
+2. **só então** decidir o que fazer com `min_coverage`. Há duas respostas
+   defensáveis e uma indefensável: baixar para 845 e ratchet-UP daí (honesto,
+   admite o estado), ou subir a cobertura até 87,0% (mantém a promessa). A
+   indefensável é deixar o piso a 870 com o gate a nunca o ler — é a promessa
+   sem a verificação, que é pior que não ter promessa.
+
+**Status**: **não corrigido**. As duas metades são escopo alheio: a H144
+pertence ao HOUSEKEEP da biblioteca vendorizada e a decisão sobre o piso é do
+dono do repositório. Referência cruzada em `internal/wa-noise/HOUSEKEEP.md` não
+se aplica — o achado atravessa para `internal/wa-headless`, que tem o seu
+próprio ficheiro, e a entrada H144 já lá está; o que falta lá é a informação de
+que ela bloqueia um gate do repositório inteiro.
+
+<!-- f-status: aberto -->
