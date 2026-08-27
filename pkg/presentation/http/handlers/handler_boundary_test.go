@@ -182,12 +182,12 @@ func (s *spyPort) IsOnWhatsApp(context.Context, string, []string) ([]domain.What
 	return nil, s.err
 }
 
-func (s *spyPort) GetUserInfo(context.Context, string, []domain.JID) (any, error) {
+func (s *spyPort) GetUserInfo(context.Context, string, []domain.JID) ([]domain.UserInfo, error) {
 	s.calls++
 	return nil, s.err
 }
 
-func (s *spyPort) GetAllContacts(context.Context, string) (any, int, error) {
+func (s *spyPort) GetAllContacts(context.Context, string) ([]domain.Contact, int, error) {
 	s.calls++
 	return nil, 0, s.err
 }
