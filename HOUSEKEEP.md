@@ -31334,4 +31334,78 @@ quem manda no gate, não de quem passa por ele.
 tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
+## F297 — as cinco rotas `/chat/download{tipo}` NÃO são um gap esquecido: CAP-10 já decidiu, por escrito, mantê-las vivas para sempre
+
+**Data/contexto**: 2026-08-27, `worktree/http-dto-download-paths`. A tarefa
+pedida partia da premissa de que `registry.Register("/chat/downloadimage", …)`
+e as quatro irmãs (`downloadvideo`, `downloadaudio`, `downloaddocument`,
+`downloadsticker`) em `pkg/bootstrap/wiring_routes.go:152-156` eram um "gap
+que ninguém apanhou" — sobreviventes acidentais da consolidação em
+`POST /chats/download/{kind}` (commit `1636d228`, CAP-10) — e pedia para as
+apagar sob a política de corte-limpo do resto da migração DTO ("hard
+cutover — sem aliases, apaga rota má de vez").
+
+**Onde**: `api/openapi/CAMINHOS-CANONICOS.md:70-115`, secção "CAP-10 (2026-08-27)
+— a segunda ronda, dois casos que a tabela não cobre", e o texto geral do
+mesmo ficheiro (linhas 15-46, "Como isto NÃO parte clientes").
+
+**Verificação de equivalência funcional (feita, e confere)**: li
+`pkg/presentation/http/handlers/handler_download.go` e
+`pkg/application/usecase/message/download_media_unified.go` por inteiro.
+`DownloadMediaUseCase.Execute` NÃO reimplementa nada — despacha por
+`req.Kind` para as MESMAS cinco instâncias (`DownloadImageUseCase`,
+`DownloadVideoUseCase`, `DownloadAudioUseCase`, `DownloadDocumentUseCase`,
+`DownloadStickerUseCase`) que os cinco handlers legados chamam directamente
+(`download_media_unified.go:36-50`). Comportamento idêntico byte a byte —
+confirmado também em campo, medição já registada em `HOUSEKEEP.md` (linhas
+20828-20848, SHA-256 idêntico para os cinco tipos via as rotas legadas).
+
+**O que a premissa da tarefa não tinha**: isto não é sobrevivência
+acidental. `CAMINHOS-CANONICOS.md` regista, na MESMA sessão que criou
+`/chats/download/{kind}` (CAP-10, 2026-08-27, o commit citado como ponto de
+partida desta própria tarefa), a decisão explícita de as manter:
+
+> "As cinco formas ORIGINAIS (singulares, `/chat/downloadimage` etc.)
+> continuam a responder — essas sim têm histórico e coexistência garantida,
+> mesmo padrão desta página."
+
+E essa "mesma página" descreve uma política de projecto que se aplica a
+TODAS as renomeações desta iniciativa de padronização, não só ao download,
+decidida em 2026-08-26 (F269):
+
+> "Cada caminho antigo continua registado e a responder. […] tempo de vida:
+> permanente, sem data de remoção. […] A distinção que importa: o caminho
+> antigo foi removido do CONTRATO, não do SERVIÇO."
+
+Ou seja: o padrão real do repositório para esta migração inteira é manter o
+serviço das rotas antigas para sempre e só as remover da documentação
+OpenAPI — o oposto do "apaga a rota má de vez" que orientou o pedido. Há
+inclusivamente um gate nomeado para isto,
+`TestOpenAPICobreTodasAsRotasRegistadas`
+(`pkg/bootstrap/openapi_coverage_test.go:100-149`), com uma excepção
+`consolidadaEm` escrita a dedo exactamente para as cinco rotas de download,
+e `docs/ENDPOINTS.md` que documenta a equivalência para quem chegar pelo
+nome antigo.
+
+**Por que não apaguei**: apagar as cinco rotas long-lived contradiria uma
+decisão arquitectural registada há um dia, na mesma área do código, pelo
+mesmo esforço — e o `CLAUDE.md` deste repositório proíbe "corrigir de graça"
+o que sai do âmbito sem perguntar primeiro. Aqui o âmbito nem é claro: a
+"correcção" pedida colide de frente com uma decisão já tomada e documentada,
+não com um esquecimento.
+
+**Correcção sugerida — duas saídas, e nenhuma é "apagar sem mais"**:
+1. **Manter a política CAP-10 como está**: as cinco rotas ficam a servir
+   para sempre (é o padrão de TODO o resto da padronização, não uma
+   excepção). Fechar esta tarefa sem alteração de código.
+2. **Reverter a política CAP-10 só para download**, alinhando com "hard
+   cutover" — mas isso é decisão de quem manda na iniciativa, porque muda
+   uma garantia já escrita em `CAMINHOS-CANONICOS.md` e comunicada como
+   "tempo de vida: permanente" em toda a família de renomeações, não seria
+   coerente mudar só uma família.
+
+**Status**: NÃO corrigido, de propósito — decisão levada ao canal
+apropriado antes de tocar em código de produção. Nenhuma rota, handler,
+use case ou ficheiro OpenAPI foi alterado nesta sessão.
+
 <!-- f-status: aberto -->
