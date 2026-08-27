@@ -147,6 +147,13 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 // dispatch chama a porta. Separado do Execute para que a guarda de sessão, a
 // validação e a tradução de erro não fiquem enterradas num switch de onze
 // ramos — e para que o switch seja legível como a tabela que ele é.
+//
+// CADA RAMO ATRIBUI O ERRO ANTES DE O DEVOLVER, e a forma de duas linhas não é
+// desleixo: condensá-la em `return NewsletterResult{}, n.X(...)` custou eleven
+// caminhos de saída na medição de cobertura de log — 88,9% -> 48,1% neste
+// pacote, medido a 2026-08-27 com `go run ./cmd/logcov -by-package ./pkg`
+// antes e depois. O comportamento é idêntico; o que muda é o analisador deixar
+// de reconhecer a propagação da causa. Não volte a encurtar.
 func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req NewsletterRequest) (NewsletterResult, error) {
 	n := uc.newsletters
 	switch req.Op {
@@ -160,11 +167,14 @@ func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req
 		m, err := n.NewsletterInfoWithInvite(ctx, userID, req.Invite)
 		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpFollow:
-		return NewsletterResult{}, n.FollowNewsletter(ctx, userID, req.JID)
+		err := n.FollowNewsletter(ctx, userID, req.JID)
+		return NewsletterResult{}, err
 	case NewsletterOpUnfollow:
-		return NewsletterResult{}, n.UnfollowNewsletter(ctx, userID, req.JID)
+		err := n.UnfollowNewsletter(ctx, userID, req.JID)
+		return NewsletterResult{}, err
 	case NewsletterOpMute:
-		return NewsletterResult{}, n.ToggleNewsletterMute(ctx, userID, req.JID, req.Mute)
+		err := n.ToggleNewsletterMute(ctx, userID, req.JID, req.Mute)
+		return NewsletterResult{}, err
 	case NewsletterOpMessages:
 		msgs, err := n.NewsletterMessages(ctx, userID, req.JID, req.Count, req.Before)
 		return NewsletterResult{Messages: msgs}, err
@@ -172,24 +182,32 @@ func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req
 		msgs, err := n.NewsletterMessageUpdates(ctx, userID, req.JID, req.Count, req.Since, req.After)
 		return NewsletterResult{Messages: msgs}, err
 	case NewsletterOpMarkViewed:
-		return NewsletterResult{}, n.MarkNewsletterViewed(ctx, userID, req.JID, req.ServerIDs)
+		err := n.MarkNewsletterViewed(ctx, userID, req.JID, req.ServerIDs)
+		return NewsletterResult{}, err
 	case NewsletterOpReact:
-		return NewsletterResult{}, n.SendNewsletterReaction(ctx, userID, req.JID, req.ServerID, req.Reaction, req.MessageID)
+		err := n.SendNewsletterReaction(ctx, userID, req.JID, req.ServerID, req.Reaction, req.MessageID)
+		return NewsletterResult{}, err
 	case NewsletterOpSubscribe:
 		dur, err := n.SubscribeNewsletterLiveUpdates(ctx, userID, req.JID)
 		return NewsletterResult{Duration: dur}, err
 	case NewsletterOpDemote:
-		return NewsletterResult{}, n.DemoteNewsletterAdmin(ctx, userID, req.JID, req.UserJID)
+		err := n.DemoteNewsletterAdmin(ctx, userID, req.JID, req.UserJID)
+		return NewsletterResult{}, err
 	case NewsletterOpChangeOwner:
-		return NewsletterResult{}, n.ChangeNewsletterOwner(ctx, userID, req.JID, req.UserJID)
+		err := n.ChangeNewsletterOwner(ctx, userID, req.JID, req.UserJID)
+		return NewsletterResult{}, err
 	case NewsletterOpDelete:
-		return NewsletterResult{}, n.DeleteNewsletter(ctx, userID, req.JID)
+		err := n.DeleteNewsletter(ctx, userID, req.JID)
+		return NewsletterResult{}, err
 	case NewsletterOpAdminInvite:
-		return NewsletterResult{}, n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		return NewsletterResult{}, err
 	case NewsletterOpAdminInviteAccept:
-		return NewsletterResult{}, n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
+		err := n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
+		return NewsletterResult{}, err
 	case NewsletterOpAdminInviteRevoke:
-		return NewsletterResult{}, n.RevokeNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		err := n.RevokeNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		return NewsletterResult{}, err
 	}
 	// Inalcançável enquanto validateNewsletter correr primeiro. Fica como erro
 	// e não como panic porque uma operação nova acrescentada ao switch da

@@ -93,3 +93,37 @@ pkg/infra/wa-noise/client/
 # contar os seus 4 pontos no denominador diluiria o percentual sem dizer nada
 # sobre o repositorio real.
 pkg/presentation/http/contracttest/
+
+# pkg/presentation/http/dto/ — os APRESENTADORES da fronteira HTTP. MESMA
+# DECISÃO DE LAYERING que a dos adaptadores e a da fachada acima (F193, F204),
+# e aqui ela é mais forte que uma escolha: este pacote NÃO PODE logar.
+#
+# A porta `Logger` vive em `pkg/application/contracts`, e
+# `docs/HTTP-DTO-CONVENTIONS.md` §3 declara a regra de importação de sentido
+# único — o pacote `dto` importa `pkg/domain` e NADA acima dele. Um
+# apresentador que quisesse logar teria de importar a camada de aplicação, que
+# é exactamente o acoplamento que esta camada existe para quebrar. Não é "não
+# instrumentamos"; é "não há por onde".
+#
+# E não haveria o que dizer: um apresentador é uma projecção campo a campo, sem
+# modo de falha — não devolve erro, não chama nada que possa falhar, e é
+# executado no caminho de TODA resposta. Um log ali seria a F180 na sua pior
+# forma. Quem regista a falha continua a ser o use case, que tem o nome da
+# operação e o utilizador em mãos.
+#
+# Medido a 2026-08-27, com a família de canais migrada (a segunda das seis):
+#
+#   com os apresentadores    585/1000 = 58,5%   dos quais 0/9 são apresentadores
+#   sem os apresentadores    585/991  = 59,0%
+#
+# Nove funções em duas famílias. Com as seis migradas seriam ~40, e o gate
+# estaria a punir cada migração correcta — a mesma dinâmica que a F204 mediu
+# nos wrappers da fachada. Repare que o NUMERADOR não se mexe: 585 antes e
+# depois. É diluição, não regressão; nenhum código que registava deixou de o
+# fazer.
+#
+# O QUE NÃO É EXCLUÍDO: os manipuladores (`pkg/presentation/http/handlers/`)
+# continuam medidos, a 93,5%, e é lá que a recusa de um pedido e a falha de uma
+# operação são registadas. Se um dia entrar decisão dentro de um apresentador,
+# esta linha sai e o piso é recalculado.
+pkg/presentation/http/dto/

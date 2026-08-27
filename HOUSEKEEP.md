@@ -31480,3 +31480,108 @@ faz vinte pedidos e compara os corpos — uma passagem só passaria por sorte.
    `$.data.Viewer.Role` — que é exactamente a forma que a rota servia antes.
 
 <!-- f-status: corrigido -->
+
+## F298 — condensar `return X{}, n.Chamada(...)` custou onze caminhos de saída na cobertura de log, sem mudar comportamento nenhum
+
+**Data/contexto**: 2026-08-27, migração DTO da família de canais. É o caso que
+a regra "medir onde deveria PIORAR" do `CLAUDE.md` existe para apanhar: passou
+em `go build`, `go vet`, na suíte inteira e nos três controlos negativos, e só
+apareceu no gate de cobertura de log.
+
+**Onde**: `pkg/application/usecase/notification/newsletter_ops.go`, no `switch`
+de `dispatch`. A primeira versão da reescrita condensou os onze ramos sem
+carga:
+
+```go
+case NewsletterOpFollow:
+    return NewsletterResult{}, n.FollowNewsletter(ctx, userID, req.JID)
+```
+
+em vez da forma que lá estava:
+
+```go
+case NewsletterOpFollow:
+    err := n.FollowNewsletter(ctx, userID, req.JID)
+    return NewsletterResult{}, err
+```
+
+**Problema**, medido com `go run ./cmd/logcov -by-package ./pkg` antes e
+depois:
+
+```
+pkg/application/usecase/notification   errpath  88.9%  ->  48.1%   (27 caminhos)
+total do repositório                   errpath  77.7%  ->  77.3%
+```
+
+Onze caminhos de saída deixaram de contar como cobertos. O analisador
+reconhece a propagação da causa quando o erro passa por uma variável e não
+quando a chamada está na posição de retorno — e o comportamento em execução é
+byte a byte o mesmo.
+
+**A medição que o revelou não foi de propósito**: o alvo era o `min_eligible`,
+que TINHA de subir por causa das funções novas. Os números de `errpath` vieram
+no mesmo relatório e não batiam. Sem `-by-package` teriam ficado por
+explicar — a linha total caiu 0,4 ponto, que parece ruído até se ver que um
+pacote caiu 40.
+
+**Correção aplicada**: forma longa restaurada nos onze ramos, com o motivo
+escrito por cima do `switch` — "não volte a encurtar" e o número ao lado, para
+que a próxima pessoa que ache o `switch` verboso saiba o que custa.
+
+**Anti-regressão**: `min_errpath_coverage` fica em 777 em
+`.log-coverage-baseline`, e a nota lá escrita nomeia este caso. Reintroduzir a
+forma curta faz `TestBaselineBateComAMedicao` falhar com
+`min_errpath_coverage = 777 no baseline, medido 773` — que foi exactamente a
+saída medida.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F299 — os apresentadores de DTO diluem `func_coverage` e não podem ser instrumentados: `pkg/presentation/http/dto/` entrou em `.logcov-exclude`
+
+**Data/contexto**: 2026-08-27, mesma sessão. Registado porque a decisão MEXEU
+NUM GATE, e um gate mexido sem registo é um gate afrouxado em silêncio.
+
+**Problema**: a família de canais acrescentou sete funções elegíveis em
+`pkg/presentation/http/dto/newsletter` (a fundação já tinha acrescentado duas
+em `dto/group`). Nenhuma loga, e o denominador cresceu sem o numerador:
+
+```
+ANTES  (1e7db641)          eligible=993   585 covered   func 58.9%
+DEPOIS (sem exclusão)      eligible=1000  585 covered   func 58.5%   <- abaixo do piso
+DEPOIS (com dto/ excluído) eligible=991   585 covered   func 59.0%
+```
+
+O numerador é 585 nos três estados. Nada que registava deixou de registar; é
+diluição. Com as seis famílias migradas seriam ~40 funções, e o gate estaria a
+punir cada migração correcta — a dinâmica que a F204 já tinha medido nos
+wrappers da fachada.
+
+**Por que a exclusão é mais forte aqui que nos adaptadores (F193) e na fachada
+(F204)**: aqueles são "código nosso que ESCOLHEMOS não instrumentar". Este
+**não pode** ser instrumentado: a porta `Logger` vive em
+`pkg/application/contracts`, e `docs/HTTP-DTO-CONVENTIONS.md` §3 declara a
+regra de importação de sentido único — o pacote `dto` importa `pkg/domain` e
+nada acima. Um apresentador que quisesse logar teria de importar a camada de
+aplicação, que é o acoplamento que esta camada existe para quebrar.
+
+E não haveria o que dizer: um apresentador é projecção campo a campo, sem modo
+de falha, no caminho de TODA resposta. É a mesma justificação da isenção de
+`classifyMessage`, mas por pacote em vez de por anotação — o orçamento de
+`//log:exempt` está esgotado (2 de 2) e não seria o instrumento certo para
+nove funções que vão ser quarenta.
+
+**O que NÃO foi excluído**: `pkg/presentation/http/handlers/`, a 93,5%. É lá
+que a recusa de um pedido e a falha de uma operação são registadas.
+
+**Efeito no baseline**: `min_func_coverage` 589 -> 590 (sobe),
+`min_errpath_coverage` fica em 777, `min_eligible` 993 -> 991 (**desce**, e a
+descida é o alarme do ficheiro a disparar como devia — está anotada lá com os
+três estados medidos).
+
+**Status**: corrigido nesta sessão. Se um dia entrar decisão dentro de um
+apresentador, a linha sai de `.logcov-exclude` e o piso é recalculado — está
+escrito no próprio ficheiro.
+
+<!-- f-status: corrigido -->

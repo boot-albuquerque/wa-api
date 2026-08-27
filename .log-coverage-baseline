@@ -1264,7 +1264,7 @@ rules_frozen=true
 # servida seria ruido puro, e //log:exempt esta' orcado por
 # max_exempt_annotations (ratchet-DOWN), logo nao e' saida.
 # covered NAO muda; eligible +2 faz a razao cair.
-min_func_coverage=589
+min_func_coverage=590
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1542,7 +1542,7 @@ min_errpath_coverage=777
 # handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
 # SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
 # como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
-min_eligible=993
+min_eligible=991
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
@@ -1945,5 +1945,43 @@ max_exempt_annotations=2
 #   NewMuteChatUseCase, NewMuteChatHandler — X1, construtores triviais.
 #   contractsfake.ChatMuter.MuteChat, contractsfake.ChatOperations.MuteChat — X5.
 #   MiscAdapter.MuteChat — X5.
+#
+# max_exempt_annotations NAO muda (2).
+
+# --- 2026-08-27, migracao DTO da familia de CANAIS (a segunda das seis) ---
+#
+# Numeros MEDIDOS com `go run ./cmd/logcov ./pkg`, tres estados no mesmo dia:
+#
+#   ANTES (1e7db641)                eligible=993  585 covered  58.9% (589)  errpath 77.7% (777)
+#   DEPOIS, sem exclusao            eligible=1000 585 covered  58.5% (585)  errpath 77.7% (777)
+#   DEPOIS, com dto/ excluido       eligible=991  585 covered  59.0% (590)  errpath 77.7% (777)
+#
+# min_eligible 993 -> 991. E' uma DESCIDA, e a descida e' o alarme deste
+# ficheiro a disparar como devia: `pkg/presentation/http/dto/` entrou em
+# .logcov-exclude, e a justificativa esta' escrita la' — a camada de
+# apresentacao nao PODE logar (a porta Logger vive em pkg/application, e a
+# regra de importacao de sentido unico de docs/HTTP-DTO-CONVENTIONS.md §3
+# proibe o dto de a importar), e um apresentador nao tem modo de falha.
+#
+# O NUMERADOR nao se mexeu em nenhum dos tres estados: 585, 585, 585. Nada que
+# registava deixou de registar. As sete funcoes novas do dto/newsletter mais as
+# duas do dto/group sao diluicao pura, e com as seis familias migradas seriam
+# ~40 — o gate estaria a punir cada migracao correcta, que e' a dinamica que a
+# F204 ja tinha medido nos wrappers da fachada.
+#
+# min_func_coverage 589 -> 590 (ratchet-UP).
+# min_errpath_coverage FICA em 777, e ha uma historia nele que vale registar:
+#
+#   a primeira versao do `dispatch` de newsletter_ops.go condensava cada ramo
+#   em `return NewsletterResult{}, n.X(...)`. Comportamento identico ao da
+#   forma de duas linhas, e ainda assim custou ONZE caminhos de saida —
+#   pkg/application/usecase/notification caiu de 88,9% para 48,1%, medido com
+#   `-by-package` antes e depois. O analisador deixa de reconhecer a
+#   propagacao da causa quando a chamada esta' na posicao de retorno. A forma
+#   longa foi restaurada, com o motivo escrito por cima do switch para que
+#   ninguem a volte a encurtar por estetica.
+#
+#   Este e' o tipo de regressao que so' aparece medindo: passou em build, vet,
+#   nos testes todos e nos controlos negativos.
 #
 # max_exempt_annotations NAO muda (2).
