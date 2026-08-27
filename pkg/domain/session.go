@@ -1,6 +1,8 @@
 // Package domain contém as entidades centrais do domínio disparazaap-wa-api.
 package domain
 
+import "encoding/json"
+
 // ConnectRequest representa o payload de conexão.
 type ConnectRequest struct {
 	Subscribe []string `json:"subscribe,omitempty"`
@@ -41,8 +43,43 @@ type LogoutResult struct {
 }
 
 // PairPhoneRequest representa o payload de pareamento por telefone.
+//
+// # Por que `Phone` mantém a maiúscula e `phone_number` é apenas alias
+//
+// `Phone` é o nome histórico da rota desde 41bc8e2, e integradores escrevem
+// contra ele. Renomear seria mudança de contrato disfarçada de arrumação —
+// exatamente o que a F152 já registou sobre a mensagem `missing Phone in
+// payload`. O nome snake_case entra como ALIAS de leitura: pedidos novos podem
+// usar `phone_number`, os antigos continuam a funcionar, e nada precisa de ser
+// reescrito num dia marcado.
+//
+// `Engine` é obrigatório desde 2026-08-27 e não tem alias, porque não tem
+// história: nasceu snake_case. Ver pkg/pairing para a ordem em que é validado.
 type PairPhoneRequest struct {
-	Phone string `json:"Phone"`
+	Phone  string `json:"Phone"`
+	Engine string `json:"engine"`
+}
+
+// UnmarshalJSON aceita `phone_number` como alias de `Phone`.
+//
+// O alias só é aplicado quando `Phone` vem vazio: um pedido que mande os dois
+// campos não fica com o resultado dependente da ordem em que o JSON os lista,
+// que é o tipo de ambiguidade que só aparece em produção.
+func (p *PairPhoneRequest) UnmarshalJSON(data []byte) error {
+	// Alias evita recursão infinita: um tipo novo não tem este método.
+	type alias PairPhoneRequest
+	var wire struct {
+		alias
+		PhoneNumber string `json:"phone_number"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*p = PairPhoneRequest(wire.alias)
+	if p.Phone == "" {
+		p.Phone = wire.PhoneNumber
+	}
+	return nil
 }
 
 // PairPhoneResult representa o resultado do pareamento por telefone.

@@ -133,6 +133,17 @@ var PortCoverage = map[PortMethod]domain.Capability{
 	{"PhonePairer", "IsPaired"}:           domain.CapCheckPairingStatus,
 	{"PhonePairer", "RequestPairingCode"}: domain.CapRequestPairingCode,
 
+	{"PairingQRReader", "PairingQR"}: domain.CapGetPairingQR,
+
+	// SessionStarter does NOT embed SessionGuard — connect is what CREATES the
+	// session, so demanding one already exists is a contradiction (see the
+	// port's own doc comment). That puts it outside the gate's AST scan, so
+	// this row is not enforced by TestCoverageGate_EveryProviderDependent-
+	// MethodIsMapped; it is here so connect_session still appears in
+	// /session/capabilities and /admin/capabilities, which read PortCoverage's
+	// VALUES to build their capability list.
+	{"SessionStarter", "StartSession"}: domain.CapConnectSession,
+
 	{"SessionDisconnector", "Disconnect"}: domain.CapDisconnectSession,
 	{"SessionLogouter", "Logout"}:         domain.CapLogoutSession,
 

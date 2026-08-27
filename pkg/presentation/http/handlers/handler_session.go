@@ -11,6 +11,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/pairing"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -55,47 +56,40 @@ func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 // ConnectHandler handles GET /session/connect. After validation, it spawns
 // a goroutine to start the WhatsApp WebSocket connection.
 type ConnectHandler struct {
-	usecase        *session.ConnectUseCase
-	StartSession   func(userID, token string) // injected by bootstrap
-	CheckOwnership func(userID string) error  // injected by bootstrap (F108)
+	usecase *session.ConnectUseCase
+	pairing *pairing.Registry
 }
 
-func NewConnectHandler(uc *session.ConnectUseCase) *ConnectHandler {
-	return &ConnectHandler{usecase: uc}
-}
-
-// WithStartSession injects the session launcher (bootstrap's
-// SessionOrchestrator). The kill-channel is owned by the orchestrator's
-// attach hook, so the handler no longer creates one.
-func (h *ConnectHandler) WithStartSession(fn func(userID, token string)) *ConnectHandler {
-	h.StartSession = fn
-	return h
-}
-
-// WithCheckOwnership injects a synchronous ownership pre-check (F108).
+// NewConnectHandler builds the handler over the pairing provider registry.
 //
-// Without it, ownership is verified inside startSession — which runs in a
-// goroutine AFTER the handler already responded 200. If ownership is denied
-// the client receives 200 {"status":"connecting"} and nothing connects: the
-// response lies.
-func (h *ConnectHandler) WithCheckOwnership(fn func(userID string) error) *ConnectHandler {
-	h.CheckOwnership = fn
-	return h
+// Until 2026-08-27 it took two injected closures (StartSession, CheckOwnership)
+// wired straight to the wa-noise orchestrator, with no engine in sight. Both
+// now come from the provider the registry resolves for the engine the REQUEST
+// names and the TARGET session records. See pkg/pairing and HOUSEKEEP F273.
+func NewConnectHandler(uc *session.ConnectUseCase, reg *pairing.Registry) *ConnectHandler {
+	return &ConnectHandler{usecase: uc, pairing: reg}
 }
 
 func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id, ok := sessionUser(w, r)
+	actorID, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
-	hlog.FromRequest(r).Info().Str("handler", "Connect").Str("id", id).Msg("ConnectHandler called")
+	targetID := pairingTarget(r, actorID)
+	hlog.FromRequest(r).Info().Str("handler", "Connect").Str("id", targetID).Msg("ConnectHandler called")
+
+	starter, err := h.pairing.ResolveStarter(r.Context(), targetID, pairingEngineFromQuery(r))
+	if err != nil {
+		respondPairingRefusal(w, r, "Connect", targetID, err)
+		return
+	}
+
 	// ConnectUseCase.Execute nunca retorna erro hoje (session/connect.go) - o
 	// branch abaixo e' so' defesa contra uma mudanca futura que passe a
 	// devolver um, e por isso fica com um unico nivel (Error), nao o mesmo
 	// split Warn/Error dos outros handlers desta rota.
-	_, err := h.usecase.Execute(r.Context(), id, domain.ConnectRequest{})
-	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).Str("handler", "Connect").Str("user_id", id).Msg("session use case failed")
+	if _, err := h.usecase.Execute(r.Context(), targetID, domain.ConnectRequest{}); err != nil {
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "Connect").Str("user_id", targetID).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -106,27 +100,24 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// a request that will never connect. The check is idempotent: the
 	// orchestrator claims the same lease again inside Start, succeeds because
 	// the owner is the same process, and releases on failure via its own defer.
-	if h.CheckOwnership != nil {
-		if ownerErr := h.CheckOwnership(id); ownerErr != nil {
-			if isClientCausedSessionError(ownerErr) {
-				hlog.FromRequest(r).Warn().Err(ownerErr).Str("handler", "Connect").Str("user_id", id).Msg("session ownership denied")
-			} else {
-				hlog.FromRequest(r).Error().Err(ownerErr).Str("handler", "Connect").Str("user_id", id).Msg("session ownership denied")
-			}
-			customhttp.RespondJSON(w, 500, nil, ownerErr)
-			return
+	if ownerErr := starter.CheckOwnership(r.Context(), targetID); ownerErr != nil {
+		if isClientCausedSessionError(ownerErr) {
+			hlog.FromRequest(r).Warn().Err(ownerErr).Str("handler", "Connect").Str("user_id", targetID).Msg("session ownership denied")
+		} else {
+			hlog.FromRequest(r).Error().Err(ownerErr).Str("handler", "Connect").Str("user_id", targetID).Msg("session ownership denied")
 		}
+		customhttp.RespondJSON(w, 500, nil, ownerErr)
+		return
 	}
 
-	hlog.FromRequest(r).Info().Str("id", id).Bool("hasStartSession", h.StartSession != nil).Msg("ConnectHandler starting WhatsApp client")
-	// Fire-and-forget: start WhatsApp client in background
-	if h.StartSession != nil {
-		// sessionUser ja' validou acima que o contexto tem um userInfo valido
-		// (nao-nil) para esta requisicao — reassert sem checagem extra, mesmo
-		// padrao que sessionUser usa internamente (linha 32).
-		info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
-		go h.StartSession(id, info.Get("Token"))
-	}
+	hlog.FromRequest(r).Info().Str("id", targetID).Msg("ConnectHandler starting WhatsApp client")
+	// Fire-and-forget: start WhatsApp client in background. The token comes
+	// from the ACTOR's context — it is the credential the transport presents,
+	// which is a different question from which engine serves the session.
+	// sessionUser ja' validou acima que o contexto tem um userInfo valido.
+	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
+	starter.StartSession(r.Context(), targetID, info.Get("Token"))
+
 	customhttp.RespondJSON(w, 200, map[string]interface{}{"status": "connecting"}, nil)
 }
 
@@ -155,23 +146,49 @@ func (h *DisconnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-// GetQRHandler handles GET /session/qr/{id}
-type GetQRHandler struct{ usecase *session.GetQRUseCase }
+// GetQRHandler handles GET /session/qr?engine=...
+//
+// `engine` is a QUERY PARAMETER and not a body field because this route is a
+// GET and stays one: it reads the code the engine has in offer and has no side
+// effect, so it keeps caching, retries and browser navigation working. A GET
+// with a body is not a contract this repository is going to start. See the
+// GET-vs-POST note in HOUSEKEEP F281.
+type GetQRHandler struct {
+	logger  appport.Logger
+	pairing *pairing.Registry
+}
 
-func NewGetQRHandler(uc *session.GetQRUseCase) *GetQRHandler { return &GetQRHandler{uc} }
+// NewGetQRHandler builds the handler over the pairing provider registry.
+//
+// The use case is built PER REQUEST, from the port the registry resolves,
+// instead of once at wiring time from a fixed adapter — that fixed adapter was
+// the defect (HOUSEKEEP F273). GetQRUseCase holds only its port and a logger,
+// so building one costs a struct literal.
+func NewGetQRHandler(l appport.Logger, reg *pairing.Registry) *GetQRHandler {
+	return &GetQRHandler{logger: l, pairing: reg}
+}
+
 func (h *GetQRHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id, ok := sessionUser(w, r)
+	actorID, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id)
+	targetID := pairingTarget(r, actorID)
+
+	reader, err := h.pairing.ResolveQRReader(r.Context(), targetID, pairingEngineFromQuery(r))
+	if err != nil {
+		respondPairingRefusal(w, r, "GetQR", targetID, err)
+		return
+	}
+
+	rsp, err := session.NewGetQRUseCase(reader, h.logger).Execute(r.Context(), targetID)
 	if err != nil {
 		if isClientCausedSessionError(err) {
-			hlog.FromRequest(r).Warn().Err(err).Str("handler", "GetQR").Str("user_id", id).Msg("session use case failed")
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "GetQR").Str("user_id", targetID).Msg("session use case failed")
 			customhttp.RespondJSON(w, 500, nil, err)
 			return
 		}
-		hlog.FromRequest(r).Error().Err(err).Str("handler", "GetQR").Str("user_id", id).Msg("session use case failed")
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "GetQR").Str("user_id", targetID).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
@@ -201,31 +218,55 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	customhttp.RespondJSON(w, 200, rsp, nil)
 }
 
-// PairPhoneHandler handles POST /session/pairphone/{id}
-type PairPhoneHandler struct{ usecase *session.PairPhoneUseCase }
-
-func NewPairPhoneHandler(uc *session.PairPhoneUseCase) *PairPhoneHandler {
-	return &PairPhoneHandler{uc}
+// PairPhoneHandler handles POST /session/pairphone.
+//
+// Body: {"engine":"wa_noise","Phone":"5541999999999"}. `engine` is mandatory;
+// `phone_number` is accepted as a snake_case alias of `Phone` — see
+// domain.PairPhoneRequest for why the historical field keeps its capital.
+type PairPhoneHandler struct {
+	logger  appport.Logger
+	pairing *pairing.Registry
 }
+
+// NewPairPhoneHandler builds the handler over the pairing provider registry.
+// Same reason as GetQR: the use case is built per request from the resolved
+// port, because the wiring-time adapter was hardcoded to wa-noise (F273).
+func NewPairPhoneHandler(l appport.Logger, reg *pairing.Registry) *PairPhoneHandler {
+	return &PairPhoneHandler{logger: l, pairing: reg}
+}
+
 func (h *PairPhoneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id, ok := sessionUser(w, r)
+	actorID, ok := sessionUser(w, r)
 	if !ok {
 		return
 	}
+	targetID := pairingTarget(r, actorID)
+
 	var req domain.PairPhoneRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+
+	// The engine is resolved BEFORE the phone number is validated, and the
+	// order is load-bearing: a request naming an engine that does not serve
+	// pairing must be refused without a provider being touched, whatever else
+	// is wrong with it. PairPhoneUseCase's own missing_phone guard runs after.
+	pairer, err := h.pairing.ResolvePhonePairer(r.Context(), targetID, req.Engine)
+	if err != nil {
+		respondPairingRefusal(w, r, "PairPhone", targetID, err)
+		return
+	}
+
+	rsp, err := session.NewPairPhoneUseCase(pairer, h.logger).Execute(r.Context(), targetID, req)
 	if err != nil {
 		if isClientCausedSessionError(err) {
-			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PairPhone").Str("user_id", id).Msg("session use case failed")
+			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PairPhone").Str("user_id", targetID).Msg("session use case failed")
 			customhttp.RespondJSON(w, 500, nil, err)
 			return
 		}
-		hlog.FromRequest(r).Error().Err(err).Str("handler", "PairPhone").Str("user_id", id).Msg("session use case failed")
+		hlog.FromRequest(r).Error().Err(err).Str("handler", "PairPhone").Str("user_id", targetID).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}

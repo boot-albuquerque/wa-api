@@ -7,13 +7,11 @@ import (
 	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
 	wagroup "wa-api/pkg/infra/wa-noise/adapters/group"
 	wamisc "wa-api/pkg/infra/wa-noise/adapters/misc"
-	wapairing "wa-api/pkg/infra/wa-noise/adapters/pairing"
 	wapresence "wa-api/pkg/infra/wa-noise/adapters/presence"
 	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
 	"wa-api/pkg/capabilityregistry"
-	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/egress"
 	wahistory "wa-api/pkg/infra/history"
@@ -163,7 +161,6 @@ func initCustomHandlers(s *server) {
 	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
 	sessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
-	phonePairer := wapairing.NewPhonePairerAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
 
 	// Profile UseCase
@@ -172,12 +169,17 @@ func initCustomHandlers(s *server) {
 	// Session UseCases
 	connectUC := session.NewConnectUseCase(logger)
 	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
-	getQRUC := session.NewGetQRUseCase(sessionGuard, userRepo, logger)
+	// The pairing surface (QR, phone code, connect) is resolved PER REQUEST
+	// from the engine the request names and the target session records — see
+	// pkg/pairing and HOUSEKEEP F273. There is deliberately no getQRUC/
+	// pairPhoneUC here any more: a use case built at wiring time is a use case
+	// bound to one engine's adapter forever, which is the defect itself.
+	capabilities := capabilityregistry.NewCapabilityRegistry()
+	pairingRegistry := buildPairingRegistry(s, userRepo, waClientLookup, capabilities)
 	// O detacher e' o MESMO adapter que o orchestrator usa (Fase 2f): sem
 	// ele, o logout pela API apagava o store e deixava o cliente
 	// registrado, com /session/status mentindo loggedIn=true (F80).
 	logoutUC := session.NewLogoutUseCase(sessionGuard, NewSessionAttachHook(s), logger)
-	pairPhoneUC := session.NewPairPhoneUseCase(phonePairer, logger)
 	getStatusUC := session.NewGetStatusUseCase(sessionGuard, userRepo, logger)
 	setStatusMessageUC := session.NewSetStatusMessageUseCase(miscAdapter, logger)
 	requestHistorySyncUC := session.NewRequestHistorySyncUseCase(miscAdapter, logger)
@@ -241,11 +243,11 @@ func initCustomHandlers(s *server) {
 		SendTemplate:    handlers.NewSendTemplateHandler(sendTemplateUC),
 	}
 	sessionHandlers := &SessionHandlers{
-		Connect:            initConnectHandler(connectUC, s),
+		Connect:            handlers.NewConnectHandler(connectUC, pairingRegistry),
 		Disconnect:         handlers.NewDisconnectHandler(disconnectUC),
-		GetQR:              handlers.NewGetQRHandler(getQRUC),
+		GetQR:              handlers.NewGetQRHandler(logger, pairingRegistry),
 		Logout:             handlers.NewLogoutHandler(logoutUC),
-		PairPhone:          handlers.NewPairPhoneHandler(pairPhoneUC),
+		PairPhone:          handlers.NewPairPhoneHandler(logger, pairingRegistry),
 		GetStatus:          handlers.NewGetStatusHandler(getStatusUC),
 		SetStatusMessage:   handlers.NewSetStatusMessageHandler(setStatusMessageUC),
 		PublishStatusImage: handlers.NewPublishStatusImageHandler(publishStatusImageUC),
@@ -489,36 +491,8 @@ func initCustomHandlers(s *server) {
 		ChatHistory: chatHistoryHandlers,
 		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
 		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),
-		Capability:  handlers.NewCapabilityHandlers(userRepo, capabilityregistry.NewCapabilityRegistry()),
+		Capability:  handlers.NewCapabilityHandlers(userRepo, capabilities),
 	}
 }
 
-// initConnectHandler creates a ConnectHandler wired to the SessionOrchestrator.
-func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
-	h := handlers.NewConnectHandler(uc)
-	return h.WithStartSession(s.startSession).WithCheckOwnership(connectOwnershipCheck(s))
-}
 
-// connectOwnershipCheck returns a pre-check function for the ConnectHandler
-// (F108). The handler calls it SYNCHRONOUSLY before responding; a denial
-// becomes 409 at the HTTP boundary instead of a silent no-op behind a 200.
-//
-// The function calls claimSessionOwnership, which is idempotent for the same
-// owner: the goroutine's Start will claim the same lease again, succeed
-// because the owner is the same process, and release on failure via its own
-// defer. In `single` mode s.Leases is nil, so the claim always succeeds and
-// the handler never rejects.
-func connectOwnershipCheck(s *server) func(string) error {
-	return func(userID string) error {
-		if !claimSessionOwnership(s.Leases, userID) {
-			return apperr.New(
-				"session_owned_by_another_replica",
-				apperr.CategoryConflict,
-				"this session is owned by another replica; route the request to its owner",
-				false,
-				nil,
-			)
-		}
-		return nil
-	}
-}
