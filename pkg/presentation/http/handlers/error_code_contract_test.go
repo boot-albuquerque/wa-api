@@ -48,51 +48,30 @@ import (
 // wire exactly as a camelCase code born here would. Restricting the scan to
 // the handler package would leave the 284 call sites that actually raise these
 // codes unguarded.
+// codeSite is one literal error code and where it was written.
+type codeSite struct {
+	position string
+	code     string
+}
+
 func TestErrorCodesAreCanonicalSnakeCase(t *testing.T) {
 	root := repositoryPkgDir(t)
 
-	type finding struct {
-		position string
-		code     string
-	}
-	var offenders []finding
-	seen := map[string]bool{}
-
-	walkErr := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		fset := token.NewFileSet()
-		file, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			for _, lit := range errorCodeLiterals(n) {
-				code, unquoteErr := strconv.Unquote(lit.Value)
-				if unquoteErr != nil {
-					// A non-constant code (a concatenation, a variable). The
-					// canonical-naming rule cannot be decided statically for
-					// it; the round-trip tests below are what cover those.
-					continue
-				}
-				seen[code] = true
-				if !contracttest.IsCanonicalKey(code) {
-					offenders = append(offenders, finding{fset.Position(lit.Pos()).String(), code})
-				}
-			}
-			return true
-		})
-		return nil
-	})
-	if walkErr != nil {
-		t.Fatalf("walking %s: %v", root, walkErr)
+	sites, err := scanErrorCodeSites(root)
+	if err != nil {
+		t.Fatalf("scanning %s: %v", root, err)
 	}
 
-	if len(seen) == 0 {
+	distinct := map[string]bool{}
+	var offenders []codeSite
+	for _, site := range sites {
+		distinct[site.code] = true
+		if !contracttest.IsCanonicalKey(site.code) {
+			offenders = append(offenders, site)
+		}
+	}
+
+	if len(distinct) == 0 {
 		// A scan that finds nothing passes vacuously, which is the failure
 		// mode this whole gate exists to avoid — a renamed constructor would
 		// silently switch it off.
@@ -107,7 +86,54 @@ func TestErrorCodesAreCanonicalSnakeCase(t *testing.T) {
 		t.Fatalf("%d error code(s) are not canonical snake_case (^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$):%s",
 			len(offenders), b.String())
 	}
-	t.Logf("scanned %d distinct error codes, all canonical", len(seen))
+	t.Logf("scanned %d distinct error codes over %d sites, all canonical", len(distinct), len(sites))
+}
+
+// scanErrorCodeSites parses every non-test .go file under root and returns
+// every literal error code it finds, with its position.
+func scanErrorCodeSites(root string) ([]codeSite, error) {
+	var sites []codeSite
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !isProductionGoFile(path) {
+			return err
+		}
+		found, parseErr := errorCodeSitesInFile(path)
+		if parseErr != nil {
+			return parseErr
+		}
+		sites = append(sites, found...)
+		return nil
+	})
+	return sites, err
+}
+
+func isProductionGoFile(path string) bool {
+	return strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go")
+}
+
+// errorCodeSitesInFile is the per-file half, split out so neither this nor the
+// walk above carries the whole traversal in one function.
+func errorCodeSitesInFile(path string) ([]codeSite, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	var out []codeSite
+	ast.Inspect(file, func(n ast.Node) bool {
+		for _, lit := range errorCodeLiterals(n) {
+			code, unquoteErr := strconv.Unquote(lit.Value)
+			if unquoteErr != nil {
+				// A non-constant code (a concatenation, a variable). The
+				// canonical-naming rule cannot be decided statically for it;
+				// the round-trip tests below are what cover those.
+				continue
+			}
+			out = append(out, codeSite{fset.Position(lit.Pos()).String(), code})
+		}
+		return true
+	})
+	return out, nil
 }
 
 // errorCodeLiterals returns the string literals that a node contributes as
@@ -116,38 +142,50 @@ func TestErrorCodesAreCanonicalSnakeCase(t *testing.T) {
 func errorCodeLiterals(n ast.Node) []*ast.BasicLit {
 	switch node := n.(type) {
 	case *ast.CallExpr:
-		sel, ok := node.Fun.(*ast.SelectorExpr)
-		if !ok || sel.Sel.Name != "New" {
-			return nil
-		}
-		pkg, ok := sel.X.(*ast.Ident)
-		if !ok || pkg.Name != "apperr" || len(node.Args) == 0 {
-			return nil
-		}
-		if lit, ok := node.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
-			return []*ast.BasicLit{lit}
-		}
+		return apperrNewCodeLiteral(node)
 	case *ast.CompositeLit:
-		if !isAppErrorType(node.Type) {
-			return nil
-		}
-		var out []*ast.BasicLit
-		for _, elt := range node.Elts {
-			kv, ok := elt.(*ast.KeyValueExpr)
-			if !ok {
-				continue
-			}
-			key, ok := kv.Key.(*ast.Ident)
-			if !ok || key.Name != "Code" {
-				continue
-			}
-			if lit, ok := kv.Value.(*ast.BasicLit); ok && lit.Kind == token.STRING {
-				out = append(out, lit)
-			}
-		}
-		return out
+		return appErrorCodeFields(node)
 	}
 	return nil
+}
+
+// apperrNewCodeLiteral returns the first argument of an apperr.New call, when
+// that argument is a string literal.
+func apperrNewCodeLiteral(call *ast.CallExpr) []*ast.BasicLit {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "New" {
+		return nil
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	if !ok || pkg.Name != "apperr" || len(call.Args) == 0 {
+		return nil
+	}
+	if lit, ok := call.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
+		return []*ast.BasicLit{lit}
+	}
+	return nil
+}
+
+// appErrorCodeFields returns the Code field of an AppError composite literal,
+// when that field is a string literal.
+func appErrorCodeFields(lit *ast.CompositeLit) []*ast.BasicLit {
+	if !isAppErrorType(lit.Type) {
+		return nil
+	}
+	var out []*ast.BasicLit
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		if key, ok := kv.Key.(*ast.Ident); !ok || key.Name != "Code" {
+			continue
+		}
+		if value, ok := kv.Value.(*ast.BasicLit); ok && value.Kind == token.STRING {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // isAppErrorType reports whether an expression names apperr.AppError, with or

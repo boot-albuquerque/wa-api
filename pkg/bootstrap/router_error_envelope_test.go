@@ -68,6 +68,15 @@ func assertCanonicalErrorEnvelope(t *testing.T, rec *httptest.ResponseRecorder, 
 	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
 		t.Fatalf("body is not JSON (%v): %s", err, rec.Body.String())
 	}
+	assertEnvelopeShell(t, envelope, wantStatus, rec.Body.String())
+	assertErrorObject(t, envelope["error"], wantCode)
+}
+
+// assertEnvelopeShell checks everything OUTSIDE the error object: success is a
+// boolean and false, code is a number equal to the status actually written,
+// and no data rode along on a rejection.
+func assertEnvelopeShell(t *testing.T, envelope map[string]json.RawMessage, wantStatus int, raw string) {
+	t.Helper()
 
 	var success bool
 	if err := json.Unmarshal(envelope["success"], &success); err != nil {
@@ -86,19 +95,26 @@ func assertCanonicalErrorEnvelope(t *testing.T, rec *httptest.ResponseRecorder, 
 	}
 
 	if _, has := envelope["data"]; has {
-		t.Errorf("an error response carried data: %s", rec.Body.String())
+		t.Errorf("an error response carried data: %s", raw)
 	}
+}
+
+// assertErrorObject checks the `error` key itself: an OBJECT and never the
+// plain sentence these two routes used to write, with the expected code and a
+// non-empty message.
+func assertErrorObject(t *testing.T, raw json.RawMessage, wantCode string) {
+	t.Helper()
 
 	var asString string
-	if err := json.Unmarshal(envelope["error"], &asString); err == nil {
+	if err := json.Unmarshal(raw, &asString); err == nil {
 		t.Fatalf("error came back as the STRING %q: the contract requires an object for every status", asString)
 	}
 	var errObj struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}
-	if err := json.Unmarshal(envelope["error"], &errObj); err != nil {
-		t.Fatalf("error is not an object {code,message} (%v): %s", err, envelope["error"])
+	if err := json.Unmarshal(raw, &errObj); err != nil {
+		t.Fatalf("error is not an object {code,message} (%v): %s", err, raw)
 	}
 	if errObj.Code != wantCode {
 		t.Errorf("error.code = %q, want %q", errObj.Code, wantCode)
