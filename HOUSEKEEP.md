@@ -31335,3 +31335,173 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — quatro campos para o mesmo identificador de linha em `domain.ListRow`
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO. Achado
+levantado no enunciado da tarefa e resolvido nela, porque a regra de nome
+canónico do contrato público **forçou** a resposta em vez de a deixar à
+escolha.
+
+**Onde**: `pkg/domain/message.go:483-490` (antes desta sessão):
+
+```go
+type ListRow struct {
+	Title       string `json:"title"`
+	Description string `json:"desc"`
+	RowId       string `json:"RowId"`
+	RowID       string `json:"RowID"`
+	Rowid       string `json:"rowId"`
+	Rowid2      string `json:"rowID"`
+}
+```
+
+**Problema**: quatro campos Go, quatro grafias do MESMO conceito, aceites como
+cadeia de fallback (`RowId <- RowID <- rowId <- rowID <- título`). Sob a regra
+`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$` as quatro colapsam na MESMA chave, `row_id` —
+não há como manter as quatro e ser canónico.
+
+**Evidência de qual é a canónica**, medida por sítio de uso e não por gosto:
+
+```
+$ grep -rn "RowId\|RowID\|Rowid\|Rowid2" --include='*.go' pkg/ | grep -v _test
+pkg/application/usecase/message/send_list.go:155:  for _, candidate := range []string{row.RowId, row.RowID, row.Rowid, row.Rowid2}
+pkg/application/usecase/message/send_list.go:188:  RowId:       resolveRowID(row, title),
+pkg/infra/wa-noise/adapters/chat/messenger_list.go:57:  RowID: proto.String(row.RowId),
+```
+
+Só `RowId` é **escrito** pelo use case depois de normalizar, e só `RowId` é
+**lido** pelo adaptador. Os outros três nunca levaram valor para lá da
+fronteira: são exclusivamente pontos de entrada do wire.
+
+**Correção aplicada**: um campo, `RowID string`, com a etiqueta pública
+`row_id` no DTO de pedido (`dto/message.ListRowRequest`). A cadeia passa de
+cinco níveis a dois: `row_id <- (o título já resolvido e já trimado)`.
+
+**Testes que a travam**:
+- `pkg/application/usecase/message/send_list_test.go`,
+  `TestSendList_RowIDFallbackChain` — reescrito para os dois níveis, incluindo
+  o caso do espaço em branco, que continua a não contar como preenchido;
+- `pkg/presentation/http/dto/message/request_naming_test.go`,
+  `TestRequestDTOs_ChavesDuplicadasNaoExistem` — impede que dois campos voltem
+  a declarar a mesma chave. **Controlo negativo executado**: acrescentado um
+  segundo campo com `json:"row_id"`, o teste falha com
+  `a chave "row_id" é declarada por DOIS campos, RowID e RowIDAlias`.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F298 — a cadeia de corpo de `/chat/send/list` tinha dois pares de chaves que só diferiam na caixa
+
+**Data/contexto**: 2026-08-27, mesma migração. Irmão da F297, e do mesmo tipo:
+a regra de nome canónico não permite a escolha.
+
+**Onde**: `pkg/domain/message.go:518-521` (antes desta sessão) —
+`Desc`/`Body`/`Body2`/`Text` com etiquetas `"Desc"`, `"Body"`, `"body"`,
+`"text"`. `Body` e `body` são a MESMA chave em snake_case minúsculo, e `Text`
+e `text` também.
+
+**Problema, e por que não é só estética**: um cliente não podia mandar `Body` e
+`body` com significados diferentes e esperar resultado definido — o
+`encoding/json` do Go casa chaves **sem distinguir maiúsculas** na
+descodificação, então `{"Body":"A","body":"B"}` já era ambíguo ANTES desta
+sessão. A cadeia de quatro níveis documentava uma distinção que o
+descodificador nunca fez.
+
+**Correção aplicada**: a cadeia passa de quatro níveis a três,
+`desc <- body <- text`, e `SendListRequest.Body2` saiu do domínio junto com o
+ramo que o lia em `send_list.go`.
+
+**Teste que a trava**: `TestSendList_BodyFallbackChain`, reescrito para os três
+níveis, com o caso do espaço em branco preservado.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F299 — `/chat/send/forward` tinha duas chaves distintas que colapsavam em `chat`
+
+**Data/contexto**: 2026-08-27, mesma migração. O terceiro colapso, e o único em
+que a colisão obrigou a **inventar** um nome em vez de escolher entre os que
+havia.
+
+**Onde**: `pkg/domain/message.go`, `SendForwardRequest` — o tipo embutia
+`ChatTarget` (`json:"chat"`, o alias universal de destino) **e** declarava
+`Chat string json:"Chat"`, que na forma por chave (CAP-55) é a conversa de
+ONDE a mensagem original veio. São dois conceitos diferentes com a mesma
+palavra, e em snake_case minúsculo ficariam a mesma chave.
+
+**Correção aplicada**: o alias universal fica `chat` (é o que as outras
+dezasseis rotas usam, e mudá-lo aqui partiria a uniformidade); a conversa de
+origem passa a `chat_jid` em `dto/message.SendForwardRequest`.
+
+**Isto É uma mudança de contrato**, não uma renomeação de caixa: quem enviava
+`{"MessageID":"…","Chat":"…"}` passa a enviar
+`{"message_id":"…","chat_jid":"…"}`. Registado aqui porque é a única das três
+colisões em que o nome novo não estava já no código.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F300 — a especificação OpenAPI da família mensagens ficou a descrever os nomes ANTIGOS do pedido
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO.
+Dívida deixada de propósito e por isso registada, não esquecida.
+
+**Onde**: `api/openapi/schemas/envio.yaml` (133 propriedades) e
+`api/openapi/paths/envio.yaml`, que continuam a declarar `Phone`, `Body`,
+`MimeType`, `FileName`, `MentionedJid`, `PollMessageId`, `ButtonText`,
+`TopText`, `FooterText`, `StanzaId`, `QuotedText`, `LinkPreview`,
+`JPEGThumbnail`, `PngThumbnail`, `PackId`/`PackName`/`PackPublisher`,
+`ForwardingScore`, `DisplayText`, `PhoneNumber`, `CopyCode`, `buttonText`,
+`buttonId` e as QUATRO grafias de `RowId`.
+
+**Problema**: a especificação é o contrato publicado, e neste momento descreve
+um pedido que o servidor já não fala do mesmo modo. A parte que NÃO quebrou é
+grande — o `encoding/json` do Go casa chaves sem distinguir maiúsculas, logo
+`{"Phone":…}` continua a preencher `phone` — mas tudo o que difere por mais que
+a caixa (`MimeType` vs `mime_type`, `RowId` vs `row_id`, `Chat` vs `chat_jid`)
+está **errado** no documento.
+
+**Correção sugerida**: renomear as propriedades e reescrever as descrições das
+três cadeias de fallback, que hoje explicam distinções que deixaram de existir
+(F297, F298, F299). Não é rename mecânico: `RowId`/`RowID`/`rowId`/`rowID` são
+quatro blocos de propriedade que têm de virar UM, e as prosas de
+`BotaoInterativo` e de `/chat/send/list` descrevem os níveis pelo nome. Depois,
+`go run ./cmd/openapidoc` e `go build` — a especificação é EMBUTIDA no binário
+(ARMADILHAS #27).
+
+**Status**: NÃO corrigido. Não é omissão: é uma unidade de trabalho separável e
+sobretudo de PROSA, e fazê-la mecanicamente produziria um documento com quatro
+chaves `row_id` iguais e três descrições a contradizerem-se. Deixá-la para uma
+sessão que a faça inteira é melhor que meia.
+
+<!-- f-status: aberto -->
+
+## F301 — a validação da família mensagens continua no use case, e não no DTO de pedido
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO.
+
+**Onde**: `pkg/presentation/http/dto/message/request.go` — os vinte e cinco
+tipos de pedido têm `ToDomain()` e **não** têm `Validate()`.
+
+**Problema**: `docs/HTTP-DTO-CONVENTIONS.md` §6 põe `Validate()` no DTO de
+pedido, e aqui ela vive nos use cases (`missing_phone`, `missing_body`,
+`missing_filename`, `invalid_phone`, …).
+
+**Por que não foi movida agora**: os códigos de erro são estáveis e uma suíte
+grande afirma-os por código; mover a validação no MESMO commit que renomeia
+todas as chaves do fio juntaria uma renomeação e uma mudança de comportamento
+no mesmo diff, que é exactamente a mistura que o `CLAUDE.md` diz que uma
+revisão não consegue separar.
+
+**Correção sugerida**: mover rota a rota, cada uma com o seu código de erro
+ANTES e DEPOIS escrito na entrada, e com o teste de código de erro a passar
+sem alteração — se ele tiver de mudar, a validação mudou de comportamento e
+isso é outra decisão.
+
+**Status**: NÃO corrigido, deliberadamente. Seguimento nomeado.
+
+<!-- f-status: aberto -->

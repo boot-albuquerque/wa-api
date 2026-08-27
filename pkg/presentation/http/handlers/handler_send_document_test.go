@@ -156,8 +156,8 @@ func TestSendDocument_RejectUnauthenticated(t *testing.T) {
 // campo que Document tem e Image não — o 400 específico do CAP-04.
 func TestSendDocument_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"phone":    `{"document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`,
-		"document": `{"phone":"5511999999999","file_name":"a.pdf"}`,
+		"phone":     `{"document":"` + sendDocumentTestURL + `","file_name":"a.pdf"}`,
+		"document":  `{"phone":"5511999999999","file_name":"a.pdf"}`,
 		"file_name": `{"phone":"5511999999999","document":"` + sendDocumentTestURL + `"}`,
 	}
 	for field, body := range bodies {

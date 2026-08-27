@@ -1264,7 +1264,23 @@ rules_frozen=true
 # servida seria ruido puro, e //log:exempt esta' orcado por
 # max_exempt_annotations (ratchet-DOWN), logo nao e' saida.
 # covered NAO muda; eligible +2 faz a razao cair.
-min_func_coverage=589
+# FAMILIA MENSAGENS (2026-08-27): func_coverage DESCE 589->583 (-6).
+# justificativa: entram DEZ elegiveis no denominador sem log proprio, todos
+# em pkg/presentation/http/dto/message/, e nenhum deles e' codigo que um
+# operador possa querer observar. Enumerados, um por linha, porque afirmacao
+# agregada nao e' evidencia:
+#   ListSectionRequest.ToDomain, SendListRequest.ToDomain,
+#   SendCarouselRequest.ToDomain, SendTemplateRequest.ToDomain,
+#   interactiveButtonsToDomain — conversoes DTO->dominio, lacos de copia de
+#   campo, sem E/S e sem erro possivel;
+#   PresentChatHistoryMessages, PresentChatIndex, PresentChatIndexEntry-loop,
+#   presentInstant, presentOptionalString, presentTimestamp — apresentadores
+#   dominio->DTO, mesma natureza.
+# E' a MESMA razao que a fundacao registou para dto/group.PresentGroupInfo e
+# dto/group.presentTime: logar em cada resposta servida seria ruido puro, e
+# //log:exempt esta' orcado por max_exempt_annotations (ratchet-DOWN), logo nao
+# e' saida. covered NAO muda; eligible +10 faz a razao cair.
+min_func_coverage=583
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1542,7 +1558,11 @@ min_errpath_coverage=777
 # handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
 # SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
 # como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
-min_eligible=993
+# FAMILIA MENSAGENS (2026-08-27): min_eligible SOBE 993->1003 (+10, ratchet-UP
+# honesto). ENTRAM os dez de pkg/presentation/http/dto/message/ enumerados na
+# justificativa de min_func_coverage acima. SAI (0): nenhum pacote novo em
+# .logcov-exclude nesta mudanca.
+min_eligible=1003
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

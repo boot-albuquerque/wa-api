@@ -129,11 +129,11 @@ func TestSendPollVote_RejectUnauthenticated(t *testing.T) {
 
 func TestSendPollVote_RejectMissingRequiredField(t *testing.T) {
 	cases := map[string]struct{ body, cause string }{
-		"phone":                {`{"sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing Phone in payload"},
+		"phone":                  {`{"sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing Phone in payload"},
 		"poll_message_id":        {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing PollMessageId in payload"},
 		"poll_message_timestamp": {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","options":["12h"]}`, "missing PollMessageTimestamp in payload"},
-		"sender":               {`{"phone":"` + sendPollVoteGroup + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing Sender in payload"},
-		"Options_nenhuma":      {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100}`, "at least 1 option is required"},
+		"sender":                 {`{"phone":"` + sendPollVoteGroup + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing Sender in payload"},
+		"Options_nenhuma":        {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100}`, "at least 1 option is required"},
 	}
 	for field, tc := range cases {
 		t.Run(field, func(t *testing.T) {
