@@ -1,8 +1,28 @@
 // Package apperr defines the domain error type that gives call sites a
 // code, a category, and a retryable flag to base HTTP-boundary decisions
-// on. This package is additive: nothing in the repository constructs or
-// consumes AppError yet. Migrating the ~366 existing fmt.Errorf call sites
-// happens incrementally, in later phases, as each path is touched.
+// on.
+//
+// The package doc used to say "nothing in the repository constructs or
+// consumes AppError yet". That has not been true for some time, and a stale
+// doc here is expensive: the same claim was repeated in a HOUSEKEEP entry and
+// produced a plan for work that was already half done (see the note on
+// Category.HTTPStatus, which had exactly this defect). Measured 2026-08-27:
+//
+//   - CONSTRUCTED at ~285 call sites under pkg/, across
+//     pkg/application/usecase (the validation guards of the message, group and
+//     chat families), pkg/infra and pkg/presentation/http/handlers;
+//   - CONSUMED by pkg/presentation/http.RespondJSON, which derives BOTH the
+//     HTTP status (from Category.HTTPStatus) and the {"code","message"} object
+//     from it.
+//
+// The incremental migration is of the REMAINDER: roughly 305 fmt.Errorf and
+// errors.New call sites under pkg/ are still untyped. Most of them are not
+// HTTP-boundary errors at all (configuration parsing in pkg/bootstrap,
+// database plumbing in pkg/infra/db), and those are fine untyped — what
+// RespondJSON needs typed is the error a client can act on. Every literal
+// code, wherever it is constructed, is held to the canonical snake_case rule
+// by TestErrorCodesAreCanonicalSnakeCase in
+// pkg/presentation/http/handlers/error_code_contract_test.go.
 package apperr
 
 import (

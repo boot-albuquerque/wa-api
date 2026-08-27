@@ -9,6 +9,7 @@ import (
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
 
 	"github.com/patrickmn/go-cache"
@@ -40,6 +41,20 @@ type WebhookHandlerContext struct {
 	// defect was exactly this: writing only one cache. A nil fallback that
 	// writes only the token cache reintroduces it one layer up.
 	PublishUserInfo func(userID, token string, values interface{})
+}
+
+// webhookStoreError types a failure of the webhook row's persistence.
+//
+// The four codes are distinct per operation, and the driver's error is WRAPPED
+// rather than interpolated into Message: a database error text carries the
+// statement, and with it column names, the connection target and, on a
+// constraint violation, the offending value. RespondJSON never serialises the
+// wrapped chain — but writing it into Message would put it on the wire by
+// hand, past the very guard that exists to stop it.
+func webhookStoreError(code, cause string, err error) error {
+	return apperr.New(code, apperr.CategoryInternal,
+		"Não foi possível ler ou gravar a configuração de webhook.", true,
+		fmt.Errorf("%s: %w", cause, err))
 }
 
 // publishValues writes the updated values through PublishUserInfo.
@@ -77,7 +92,7 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Str("op", "select").
 			Str("user_id", txtid).
 			Msg("webhook database operation failed")
-		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not get webhook: %v", err))
+		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookReadFailed, "could not get webhook", err))
 		return
 	}
 	defer func() {
@@ -95,7 +110,7 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Str("op", "scan").
 				Str("user_id", txtid).
 				Msg("webhook database operation failed")
-			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not get webhook: %s", err))
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookReadFailed, "could not get webhook", err))
 			return
 		}
 	}
@@ -105,7 +120,7 @@ func (h *GetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Str("op", "iterate").
 			Str("user_id", txtid).
 			Msg("webhook database operation failed")
-		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not get webhook: %s", err))
+		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookReadFailed, "could not get webhook", err))
 		return
 	}
 	eventarray := strings.Split(events, ",")
@@ -138,7 +153,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("handler", "SetWebhook").
 			Msg("webhook request rejected")
-		customhttp.RespondJSON(w, http.StatusBadRequest, nil, fmt.Errorf("could not decode payload"))
+		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
 
@@ -164,7 +179,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Str("op", "update").
 				Str("user_id", txtid).
 				Msg("webhook database operation failed")
-			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not set webhook: %v", err))
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookWriteFailed, "could not set webhook", err))
 			return
 		}
 		if len(validEvents) > 0 {
@@ -178,7 +193,7 @@ func (h *SetWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Str("op", "update").
 				Str("user_id", txtid).
 				Msg("webhook database operation failed")
-			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not set webhook: %v", err))
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookWriteFailed, "could not set webhook", err))
 			return
 		}
 	}
@@ -216,7 +231,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		hlog.FromRequest(r).Warn().Err(err).
 			Str("handler", "UpdateWebhook").
 			Msg("webhook request rejected")
-		customhttp.RespondJSON(w, http.StatusBadRequest, nil, fmt.Errorf("could not decode payload"))
+		customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 		return
 	}
 
@@ -248,7 +263,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 				Str("op", "update").
 				Str("user_id", txtid).
 				Msg("webhook database operation failed")
-			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not update webhook: %v", err))
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookUpdateFailed, "could not update webhook", err))
 			return
 		}
 		if len(validEvents) > 0 {
@@ -262,7 +277,7 @@ func (h *UpdateWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 				Str("op", "update").
 				Str("user_id", txtid).
 				Msg("webhook database operation failed")
-			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not update webhook: %v", err))
+			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookUpdateFailed, "could not update webhook", err))
 			return
 		}
 	}
@@ -312,7 +327,7 @@ func (h *DeleteWebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			Str("op", "update").
 			Str("user_id", txtid).
 			Msg("webhook database operation failed")
-		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, fmt.Errorf("could not delete webhook: %v", err))
+		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, webhookStoreError(CodeWebhookDeleteFailed, "could not delete webhook", err))
 		return
 	}
 

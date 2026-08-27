@@ -83,8 +83,10 @@ func decodeAndRespond(w http.ResponseWriter, r *http.Request, v interface{}) boo
 // rejectEmptyElement rejects a list whose LENGTH passed but whose CONTENT
 // carries an empty entry. F101: validating only len(list) let participants:[""]
 // reach the JID parser, which crashed on it; the index says WHICH entry failed.
-func rejectEmptyElement(w http.ResponseWriter, r *http.Request, field string, index int, logMsg string) {
-	err := fmt.Errorf("empty %s at index %d", field, index)
+func rejectEmptyElement(w http.ResponseWriter, r *http.Request, code, field string, index int, logMsg string) {
+	err := apperr.New(code, apperr.CategoryValidation,
+		fmt.Sprintf("Entrada vazia em %q, na posição %d.", field, index), false,
+		fmt.Errorf("empty %s at index %d", field, index))
 	hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg(logMsg)
 	customhttp.RespondJSON(w, 400, nil, err)
 }
@@ -99,8 +101,20 @@ func firstEmpty(in []string) int {
 	return -1
 }
 
-func rejectMissingField(w http.ResponseWriter, r *http.Request, field, logMsg string) {
-	err := fmt.Errorf("missing %s", field)
+// rejectMissingField takes the error CODE explicitly instead of deriving it
+// from `field`. Deriving would be shorter and wrong twice over: the wire
+// spells the same field `groupJID` on one route and `groupjid` on another, and
+// neither spelling survives the canonical snake_case rule that every public
+// enumerated value obeys (docs/HTTP-DTO-CONVENTIONS.md §8). One condition, one
+// code, written where a reader can grep it.
+//
+// The pt-BR Message is what the client reads; the English cause is what the
+// log carries — AppError.Error() concatenates the two, so the outcome log
+// keeps naming the condition the way this repository's logs already do.
+func rejectMissingField(w http.ResponseWriter, r *http.Request, code, field, logMsg string) {
+	err := apperr.New(code, apperr.CategoryValidation,
+		fmt.Sprintf("Campo obrigatório ausente: %q.", field), false,
+		fmt.Errorf("missing %s", field))
 	hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg(logMsg)
 	customhttp.RespondJSON(w, 400, nil, err)
 }
@@ -116,21 +130,23 @@ func handleCreateGroup(uc *group.GroupManagementUseCase, w http.ResponseWriter, 
 		return
 	}
 	if req.Name == "" {
-		rejectMissingField(w, r, "name", "create group request rejected")
+		rejectMissingField(w, r, CodeMissingName, "name", "create group request rejected")
 		return
 	}
 	if req.IsParent && req.LinkedParentJID != "" {
-		err := fmt.Errorf("is_parent and linked_parent_jid are mutually exclusive")
+		err := apperr.New(CodeMutuallyExclusiveParent, apperr.CategoryValidation,
+			"Os campos \"is_parent\" e \"linked_parent_jid\" não podem ser enviados juntos.", false,
+			errors.New("is_parent and linked_parent_jid are mutually exclusive"))
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("create group request rejected")
 		customhttp.RespondJSON(w, 400, nil, err)
 		return
 	}
 	if !req.IsParent && len(req.Participants) < 1 {
-		rejectMissingField(w, r, "participants", "create group request rejected")
+		rejectMissingField(w, r, CodeMissingParticipants, "participants", "create group request rejected")
 		return
 	}
 	if i := firstEmpty(req.Participants); i >= 0 {
-		rejectEmptyElement(w, r, "participants", i, "create group request rejected")
+		rejectEmptyElement(w, r, CodeEmptyParticipant, "participants", i, "create group request rejected")
 		return
 	}
 	opts := domain.CreateGroupOpts{
@@ -154,7 +170,7 @@ func handleGroupJoin(uc *group.GroupManagementUseCase, w http.ResponseWriter, r 
 		return
 	}
 	if req.Code == "" {
-		rejectMissingField(w, r, "code", "join group request rejected")
+		rejectMissingField(w, r, CodeMissingInviteCode, "code", "join group request rejected")
 		return
 	}
 	_, err := uc.JoinGroup(r.Context(), id, req.Code)
@@ -176,7 +192,7 @@ func handleGroupLeave(uc *group.GroupManagementUseCase, w http.ResponseWriter, r
 	}
 	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.GroupJID == "" {
-		rejectMissingField(w, r, "groupJID", "leave group request rejected")
+		rejectMissingField(w, r, CodeMissingGroupJID, "groupJID", "leave group request rejected")
 		return
 	}
 	if err := uc.LeaveGroup(r.Context(), id, req.GroupJID); err != nil {
@@ -198,7 +214,7 @@ func handleSetGroupName(uc *group.GroupManagementUseCase, w http.ResponseWriter,
 	}
 	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Name == "" {
-		rejectMissingField(w, r, "name", "set group name request rejected")
+		rejectMissingField(w, r, CodeMissingName, "name", "set group name request rejected")
 		return
 	}
 	if err := uc.SetGroupName(r.Context(), id, req.GroupJID, req.Name); err != nil {
@@ -220,7 +236,7 @@ func handleSetGroupTopic(uc *group.GroupManagementUseCase, w http.ResponseWriter
 	}
 	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Topic == "" {
-		rejectMissingField(w, r, "topic", "set group topic request rejected")
+		rejectMissingField(w, r, CodeMissingTopic, "topic", "set group topic request rejected")
 		return
 	}
 	if err := uc.SetGroupTopic(r.Context(), id, req.GroupJID, req.Topic); err != nil {
@@ -242,13 +258,18 @@ func handleSetGroupPhoto(uc *group.GroupManagementUseCase, w http.ResponseWriter
 	}
 	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if req.Photo == "" {
-		rejectMissingField(w, r, "photo", "set group photo request rejected")
+		rejectMissingField(w, r, CodeMissingPhoto, "photo", "set group photo request rejected")
 		return
 	}
 	photoBytes, err := base64.StdEncoding.DecodeString(req.Photo)
 	if err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("photo is not valid base64")
-		customhttp.RespondJSON(w, 400, nil, fmt.Errorf("photo must be base64-encoded: %w", err))
+		// The decoder's own error is WRAPPED, not interpolated into Message:
+		// it quotes the offending byte, which is request data. It belongs in
+		// the log, which is where the wrapped cause goes, and never on the wire.
+		customhttp.RespondJSON(w, 400, nil, apperr.New(CodeInvalidPhotoEncoding, apperr.CategoryValidation,
+			"O campo \"photo\" precisa estar codificado em base64.", false,
+			fmt.Errorf("photo must be base64-encoded: %w", err)))
 		return
 	}
 	if err := uc.SetGroupPhoto(r.Context(), id, req.GroupJID, photoBytes); err != nil {
@@ -342,19 +363,19 @@ func handleUpdateGroupParticipants(uc *group.GroupManagementUseCase, w http.Resp
 	}
 	domain.ResolveChatField(&req.GroupJID, req.ChatAlias)
 	if len(req.Phone) < 1 {
-		rejectMissingField(w, r, "phones", "update group participants request rejected")
+		rejectMissingField(w, r, CodeMissingPhones, "phones", "update group participants request rejected")
 		return
 	}
 	if i := firstEmpty(req.Phone); i >= 0 {
-		rejectEmptyElement(w, r, "phones", i, "update group participants request rejected")
+		rejectEmptyElement(w, r, CodeEmptyPhone, "phones", i, "update group participants request rejected")
 		return
 	}
 	if req.Action == "" {
-		rejectMissingField(w, r, "action", "update group participants request rejected")
+		rejectMissingField(w, r, CodeMissingAction, "action", "update group participants request rejected")
 		return
 	}
 	if req.GroupJID == "" {
-		rejectMissingField(w, r, "groupjid", "update group participants request rejected")
+		rejectMissingField(w, r, CodeMissingGroupJID, "groupjid", "update group participants request rejected")
 		return
 	}
 	update, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, req.Phone)

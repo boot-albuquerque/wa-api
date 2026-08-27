@@ -31335,3 +31335,116 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — `GET /user/blocklist` escreve o corpo à mão e é a única rota que NÃO tem envelope
+
+**Data/contexto**: 2026-08-27, auditoria de fugas ao envelope canónico
+(`RespondJSON`) em toda a superfície HTTP. Achado incidental: a auditoria
+procurava fugas no ramo de ERRO e encontrou uma no ramo de SUCESSO.
+
+**Onde**: `pkg/presentation/http/handlers/handler_blocklist.go:60-73`
+
+```go
+// Serialize as JSON string to match the legacy s.Respond format
+responseJSON, err := json.Marshal(result)
+...
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusOK)
+_, _ = w.Write(responseJSON)
+_, _ = w.Write([]byte("\n"))
+```
+
+**Problema**: as outras 140 rotas respondem
+`{"success":true,"code":200,"data":{...}}`. Esta responde o objecto do caso de
+uso **nu**, sem `success`, sem `code` e sem `data`. Um cliente que leia
+`resp.data` em todas as rotas lê `undefined` nesta, e um que ramifique por
+`resp.success` vê `undefined` — que é *falsy*, ou seja, uma resposta de
+**sucesso** que se lê como falha.
+
+Os três ramos de ERRO deste mesmo ficheiro (linhas 38, 47, 56, 66) já passam
+por `RespondJSON` e estão correctos: a divergência é só o 200.
+
+O comentário diz "to match the legacy s.Respond format", e o formato legado
+já não existe em lado nenhum — é a última referência a ele no repositório.
+
+**Correção sugerida**: trocar as quatro linhas por
+`customhttp.RespondJSON(w, http.StatusOK, result, nil)`, e actualizar em
+conjunto (a) `pkg/presentation/http/handlers/handler_blocklist_test.go`, que
+hoje afirma a forma nua, e (b) o exemplo de `/user/blocklist` em
+`api/openapi/paths/`, regenerando com `go run ./cmd/openapidoc`.
+
+**Status**: NÃO corrigido, e de propósito. É rota da família `user`, que tem
+migração de DTO própria a decorrer em paralelo — mexer no mesmo ficheiro daqui
+punha renomeação de etiqueta e mudança de envelope no mesmo diff, que é
+exactamente o que o `CLAUDE.md` manda separar. Fica para essa migração, com o
+diagnóstico já feito.
+
+<!-- f-status: aberto -->
+
+## F298 — três escritas directas na `ResponseWriter` que são legítimas, e por quê
+
+**Data/contexto**: 2026-08-27, mesma auditoria da F297. Registado não porque
+haja defeito, mas porque a **próxima** auditoria vai reencontrá-las e gastar
+tempo a decidir de novo. O veredito fica escrito.
+
+**Onde, e o veredito de cada uma**:
+
+1. `pkg/bootstrap/health.go:157-158` (`/health/live`, `/livez`) e
+   `pkg/bootstrap/health.go:177-178` (`/health/ready`). **Isentas**: o
+   consumidor é o `HEALTHCHECK` do contentor e o kubelet, não um cliente da
+   API. `{"status":"ok"}` e o `ReadinessReport` são contrato com a
+   infraestrutura; embrulhá-los em `{"success":...,"data":...}` obrigaria a
+   reescrever as sondas, e o 503 do readiness já diz o que precisa de dizer
+   pela linha de estado.
+2. `pkg/presentation/http/apidocs/apidocs.go:72,76` e o `http.NotFound` do
+   ramo `default`. **Isentas**: servem `text/html` (o Swagger UI),
+   `application/yaml` (a especificação) e ficheiros estáticos. Não são
+   superfície JSON; um envelope aqui partiria o próprio Swagger UI.
+3. `pkg/presentation/http/devui/devui.go:154`. **Isenta**: o painel de
+   desenvolvimento, que só existe com `WA_API_DEV_UI` ligada, e cujo
+   `{"adminToken": ...}` é lido pelo JavaScript da própria página — um
+   consumidor que se muda no mesmo commit que o produtor.
+
+O que NÃO ficou isento, e foi corrigido nesta sessão: o 404 e o 405 do router
+(`pkg/bootstrap/router.go`), que respondiam `text/plain` por
+`http.NotFoundHandler` e `http.Error`. Esses SÃO superfície da API — um cliente
+que erra o caminho recebia uma frase em vez de `error.code`. Travado por
+`pkg/bootstrap/router_error_envelope_test.go`, com controlo negativo executado.
+
+**Status**: nao-se-faz (as três primeiras); a quarta foi corrigida nesta
+sessão.
+
+<!-- f-status: nao-se-faz -->
+
+## F299 — a doc do pacote `apperr` afirmava que ninguém o usava, e isso já era falso
+
+**Data/contexto**: 2026-08-27, granularidade de códigos de erro. Achado ao
+verificar a premissa da tarefa, que vinha da própria doc.
+
+**Onde**: `pkg/domain/apperr/apperr.go:1-5` (antes desta sessão)
+
+> "This package is additive: nothing in the repository constructs or consumes
+> AppError yet. Migrating the ~366 existing fmt.Errorf call sites happens
+> incrementally, in later phases".
+
+**Problema**: medido no mesmo dia, `apperr.New` tinha **~285 sítios de
+construção** em `pkg/`, com **123 códigos distintos**, e `RespondJSON`
+**consome-o** desde a fundação do envelope. O número "~366" também já não
+descrevia nada: restavam ~305 `fmt.Errorf`/`errors.New` em `pkg/`, e a maioria
+deles em `pkg/infra/db` e `pkg/bootstrap`, que **não são erros de fronteira
+HTTP** e não precisam de tipagem.
+
+É a mesma armadilha que o comentário de `Category.HTTPStatus` já tinha
+apanhado, e que está escrita lá: *comentário desactualizado vira plano errado*.
+Aqui custou uma tarefa inteira desenhada sobre a premissa de que a taxonomia
+não estava ligada.
+
+**Correção aplicada nesta sessão**: doc do pacote reescrita com os números
+medidos e a data, e a distinção entre "o que falta tipar" e "o que não precisa
+de tipo". Travado indirectamente por
+`TestErrorCodesAreCanonicalSnakeCase`, que falha se o conjunto de códigos
+desaparecer (a asserção `len(seen) == 0`).
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->

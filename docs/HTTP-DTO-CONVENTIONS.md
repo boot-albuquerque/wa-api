@@ -236,6 +236,7 @@ Para o erro que não passou pela taxonomia `apperr`:
 | 401 | `unauthorized` | Credenciais ausentes ou inválidas. |
 | 403 | `forbidden` | Operação não permitida. |
 | 404 | `not_found` | Recurso não encontrado. |
+| 405 | `method_not_allowed` | Método HTTP não permitido para este recurso. |
 | 409 | `conflict` | A requisição não pode ser atendida no estado atual. |
 | 422 | `unprocessable_entity` | A requisição foi recusada pelo destino. |
 | 429 | `rate_limited` | Limite de requisições excedido. |
@@ -245,9 +246,36 @@ Para o erro que não passou pela taxonomia `apperr`:
 | 504 | `gateway_timeout` | Tempo esgotado ao contactar um serviço externo. |
 | 500 e qualquer outro | `internal_error` | Ocorreu um erro interno. |
 
+O 405 entrou na tabela quando o router deixou de responder `text/plain` a um
+método errado. Sem ele, o ramo `default` teria devolvido `internal_error` num
+405 — "nós partimos" para um pedido cujo único defeito é o verbo.
+
 **Prefira um código PRÓPRIO ao genérico.** O genérico é a rede de segurança,
 não o destino: construa `apperr.New("missing_group_jid", apperr.CategoryValidation, …)`
 e o cliente sabe o que corrigir. `invalid_request` só diz "algo estava mal".
+
+### Onde o código nasce, e como se escreve
+
+O código é `snake_case`, pela MESMA regra das chaves (§8), porque é um valor
+enumerado que o servidor escreve. Isto é verificado, não confiado:
+`TestErrorCodesAreCanonicalSnakeCase`
+(`pkg/presentation/http/handlers/error_code_contract_test.go`) percorre `pkg/`
+inteiro por AST e recusa qualquer literal de código — em `apperr.New` ou num
+literal composto de `AppError` — que não case com a expressão.
+
+**Não derive o código do nome do campo.** O mesmo campo escreve-se `groupJID`
+numa rota e `groupjid` noutra, e nenhuma das duas grafias é canónica; derivar
+produziria dois códigos para uma condição, ambos inválidos. O código é
+explícito no sítio da chamada, como constante nomeada — ver
+`pkg/presentation/http/handlers/errors.go`.
+
+**Mensagem pt-BR, causa em inglês, e a causa vai EMBRULHADA.** `apperr.New`
+recebe as duas: `Message` é o que vai para o fio, o `err` embrulhado é o que
+vai para o log (`AppError.Error()` concatena os dois). Nunca interpole a causa
+dentro de `Message` — o texto de um erro de driver traz a instrução SQL e o
+alvo da ligação, e o de um descodificador de base64 traz um byte do PEDIDO.
+`RespondJSON` nunca serializa a cadeia embrulhada; escrevê-la em `Message`
+seria contorná-lo à mão.
 
 ### O campo `debug` em desenvolvimento: NÃO foi acrescentado
 

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -206,6 +207,15 @@ func innerRecoverMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Router-level boundary errors. They are untyped on purpose: RespondJSON's
+// per-status generic body already carries the right code for both
+// ("not_found", "method_not_allowed"), and inventing an AppError here would
+// duplicate that table in a second place, free to drift from it.
+var (
+	errRouteNotFound    = errors.New("no route matches the requested path")
+	errMethodNotAllowed = errors.New("method not allowed for the matched route")
+)
+
 // reportPanic is the shared body of both recover layers: it writes the panic
 // record into the supplied (already level-bound) event and responds 500. Only
 // the logger differs between the two callers — the response shape must not.
@@ -265,10 +275,20 @@ func buildRouter(d Deps) *mux.Router {
 	// WITHOUT applying router.Use middlewares (mux@v1.8.1 mux.go:151-165 —
 	// the middleware loop only runs on the matched-route branch). No
 	// authAlice here: there is no route or user to authenticate against.
-	router.NotFoundHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(http.NotFoundHandler())
+	//
+	// Both answer through RespondJSON, and not through http.NotFoundHandler /
+	// http.Error. Those two write `text/plain` with a bare sentence, which
+	// makes the 404 and the 405 the only two responses on this API a client
+	// cannot parse the same way as every other: no `success`, no `code`, and
+	// an `error` that is not an object. A client that mistypes a path would
+	// get a JSON decode failure instead of `error.code == "not_found"`.
+	router.NotFoundHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			customhttp.RespondJSON(w, http.StatusNotFound, nil, errRouteNotFound)
+		}))
 	router.MethodNotAllowedHandler = alice.New(boundaryLogMiddlewares(d.Log)...).Then(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "405 method not allowed", http.StatusMethodNotAllowed)
+			customhttp.RespondJSON(w, http.StatusMethodNotAllowed, nil, errMethodNotAllowed)
 		}))
 
 	// Admin routes — authAdmin middleware validates the admin token.
