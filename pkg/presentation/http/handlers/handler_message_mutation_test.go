@@ -115,7 +115,7 @@ func mutationCases() []mutationCase {
 		{
 			name:       "DeleteMessage",
 			paths:      deleteRoutePaths,
-			validBody:  `{"Phone":"5511999999999","Id":"3EB0ABC123"}`,
+			validBody:  `{"phone":"5511999999999","id":"3EB0ABC123"}`,
 			wantStatus: domain.StatusDeleted,
 			mutations:  func(cm *contractsfake.ChatMessenger) int { return len(cm.RevokeMessageCalls) },
 			portTxtID: func(cm *contractsfake.ChatMessenger) string {
@@ -125,14 +125,14 @@ func mutationCases() []mutationCase {
 				return cm.RevokeMessageCalls[0].TxtID
 			},
 			missingField: map[string]struct{ body, cause string }{
-				"Phone": {`{"Id":"3EB0ABC123"}`, "missing Phone in payload"},
-				"Id":    {`{"Phone":"5511999999999"}`, "missing Id in payload"},
+				"phone": {`{"id":"3EB0ABC123"}`, "missing Phone in payload"},
+				"id":    {`{"phone":"5511999999999"}`, "missing Id in payload"},
 			},
 		},
 		{
 			name:       "SendEditMessage",
 			paths:      []string{"/chat/send/edit"},
-			validBody:  `{"Phone":"5511999999999","Body":"corrigido","Id":"3EB0ABC123"}`,
+			validBody:  `{"phone":"5511999999999","body":"corrigido","id":"3EB0ABC123"}`,
 			wantStatus: domain.StatusSent,
 			mutations:  func(cm *contractsfake.ChatMessenger) int { return len(cm.EditMessageCalls) },
 			portTxtID: func(cm *contractsfake.ChatMessenger) string {
@@ -142,9 +142,9 @@ func mutationCases() []mutationCase {
 				return cm.EditMessageCalls[0].TxtID
 			},
 			missingField: map[string]struct{ body, cause string }{
-				"Phone": {`{"Body":"corrigido","Id":"3EB0ABC123"}`, "missing Phone in payload"},
-				"Body":  {`{"Phone":"5511999999999","Id":"3EB0ABC123"}`, "missing Body in payload"},
-				"Id":    {`{"Phone":"5511999999999","Body":"corrigido"}`, "missing Id in payload"},
+				"phone": {`{"body":"corrigido","id":"3EB0ABC123"}`, "missing Phone in payload"},
+				"body":  {`{"phone":"5511999999999","id":"3EB0ABC123"}`, "missing Body in payload"},
+				"id":    {`{"phone":"5511999999999","body":"corrigido"}`, "missing Id in payload"},
 			},
 		},
 	}
@@ -186,7 +186,7 @@ func TestMessageMutation_Success_ViaRegisteredRoute(t *testing.T) {
 					t.Errorf("status: got %q, want %q", data.Status, tc.wantStatus)
 				}
 				// O message_id é o da mensagem ALVO, como no histórico
-				// (`"Id": msgid`), NÃO o da mensagem de revogação/edição
+				// (`"id": msgid`), NÃO o da mensagem de revogação/edição
 				// que o envio criou.
 				if data.MessageID != "3EB0ABC123" {
 					t.Errorf("message_id: got %q, want %q (o ID da mensagem alvo)", data.MessageID, "3EB0ABC123")
@@ -237,7 +237,7 @@ func TestMessageMutation_RevokeTargetsOwnMessage(t *testing.T) {
 			cm := &contractsfake.ChatMessenger{}
 			jr := &contractsfake.JIDResolver{}
 
-			rec := mutationServe(t, cm, jr, path, `{"Phone":"5511999999999","Id":"3EB0ABC123","Participant":"5511888888888"}`, msgAuthed)
+			rec := mutationServe(t, cm, jr, path, `{"phone":"5511999999999","id":"3EB0ABC123","participant":"5511888888888"}`, msgAuthed)
 
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
@@ -264,7 +264,7 @@ func TestMessageMutation_EditForwardsTargetIDAndNewBody(t *testing.T) {
 	cm := &contractsfake.ChatMessenger{}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := mutationServe(t, cm, jr, "/chat/send/edit", `{"Phone":"5511999999999","Body":"texto corrigido","Id":"3EB0ABC123"}`, msgAuthed)
+	rec := mutationServe(t, cm, jr, "/chat/send/edit", `{"phone":"5511999999999","body":"texto corrigido","id":"3EB0ABC123"}`, msgAuthed)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
@@ -363,7 +363,7 @@ func TestMessageMutation_MissingSessionID(t *testing.T) {
 // OutcomeLogged sem substring continua exigindo o registro bem formado
 // (nível, req_id, campo error presente) e a ausência de segredos.
 func TestMessageMutation_MalformedBody(t *testing.T) {
-	const malformed = `{"Phone":"5511`
+	const malformed = `{"phone":"5511`
 	for _, tc := range mutationCases() {
 		for _, path := range tc.paths {
 			t.Run(tc.name+path, func(t *testing.T) {
@@ -494,9 +494,9 @@ func TestMessageMutation_DownstreamFailureNeverReturns200(t *testing.T) {
 // falha e o log de saida da rota REGISTRADA nao pode carregar nenhum deles.
 func TestMessageMutation_NoSecretLeak(t *testing.T) {
 	bodies := map[string]string{
-		"/chat/delete/message": `{"Phone":"` + logassertGlobalHMACKey + `","Id":"3EB0ABC123"}`,
-		"/chat/delete":         `{"Phone":"` + logassertGlobalHMACKey + `","Id":"3EB0ABC123"}`,
-		"/chat/send/edit":      `{"Phone":"` + logassertGlobalHMACKey + `","Body":"` + logassertGlobalEncryptionKey + `","Id":"3EB0ABC123"}`,
+		"/chat/delete/message": `{"phone":"` + logassertGlobalHMACKey + `","id":"3EB0ABC123"}`,
+		"/chat/delete":         `{"phone":"` + logassertGlobalHMACKey + `","id":"3EB0ABC123"}`,
+		"/chat/send/edit":      `{"phone":"` + logassertGlobalHMACKey + `","body":"` + logassertGlobalEncryptionKey + `","id":"3EB0ABC123"}`,
 	}
 	for path, body := range bodies {
 		t.Run(path, func(t *testing.T) {
@@ -538,7 +538,7 @@ func TestSendEditMessage_PhoneParseRejectedBeforeMissingID(t *testing.T) {
 	}
 
 	// Phone que não parseia E Id ausente: as DUAS guardas armadas.
-	const body = `{"Phone":"nao-e-um-telefone","Body":"corrigido"}`
+	const body = `{"phone":"nao-e-um-telefone","body":"corrigido"}`
 
 	rec, recs := mutationServeCapturingLog(t, cm, jr, "/chat/send/edit", body, msgAuthed)
 

@@ -31831,6 +31831,62 @@ saída medida.
 
 <!-- f-status: corrigido -->
 
+## F317 — quatro campos para o mesmo identificador de linha em `domain.ListRow`
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO. Achado
+levantado no enunciado da tarefa e resolvido nela, porque a regra de nome
+canónico do contrato público **forçou** a resposta em vez de a deixar à
+escolha.
+
+**Onde**: `pkg/domain/message.go:483-490` (antes desta sessão):
+
+```go
+type ListRow struct {
+	Title       string `json:"title"`
+	Description string `json:"desc"`
+	RowId       string `json:"RowId"`
+	RowID       string `json:"RowID"`
+	Rowid       string `json:"rowId"`
+	Rowid2      string `json:"rowID"`
+}
+```
+
+**Problema**: quatro campos Go, quatro grafias do MESMO conceito, aceites como
+cadeia de fallback (`RowId <- RowID <- rowId <- rowID <- título`). Sob a regra
+`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$` as quatro colapsam na MESMA chave, `row_id` —
+não há como manter as quatro e ser canónico.
+
+**Evidência de qual é a canónica**, medida por sítio de uso e não por gosto:
+
+```
+$ grep -rn "RowId\|RowID\|Rowid\|Rowid2" --include='*.go' pkg/ | grep -v _test
+pkg/application/usecase/message/send_list.go:155:  for _, candidate := range []string{row.RowId, row.RowID, row.Rowid, row.Rowid2}
+pkg/application/usecase/message/send_list.go:188:  RowId:       resolveRowID(row, title),
+pkg/infra/wa-noise/adapters/chat/messenger_list.go:57:  RowID: proto.String(row.RowId),
+```
+
+Só `RowId` é **escrito** pelo use case depois de normalizar, e só `RowId` é
+**lido** pelo adaptador. Os outros três nunca levaram valor para lá da
+fronteira: são exclusivamente pontos de entrada do wire.
+
+**Correção aplicada**: um campo, `RowID string`, com a etiqueta pública
+`row_id` no DTO de pedido (`dto/message.ListRowRequest`). A cadeia passa de
+cinco níveis a dois: `row_id <- (o título já resolvido e já trimado)`.
+
+**Testes que a travam**:
+- `pkg/application/usecase/message/send_list_test.go`,
+  `TestSendList_RowIDFallbackChain` — reescrito para os dois níveis, incluindo
+  o caso do espaço em branco, que continua a não contar como preenchido;
+- `pkg/presentation/http/dto/message/request_naming_test.go`,
+  `TestRequestDTOs_ChavesDuplicadasNaoExistem` — impede que dois campos voltem
+  a declarar a mesma chave. **Controlo negativo executado**: acrescentado um
+  segundo campo com `json:"row_id"`, o teste falha com
+  `a chave "row_id" é declarada por DOIS campos, RowID e RowIDAlias`.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
 ## F309 — `GET /user/blocklist` escreve o corpo à mão e é a única rota que NÃO tem envelope
 
 **Data/contexto**: 2026-08-27, auditoria de fugas ao envelope canónico
@@ -31939,6 +31995,34 @@ medidos e a data, e a distinção entre "o que falta tipar" e "o que não precis
 de tipo". Travado indirectamente por
 `TestErrorCodesAreCanonicalSnakeCase`, que falha se o conjunto de códigos
 desaparecer (a asserção `len(seen) == 0`).
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F318 — a cadeia de corpo de `/chat/send/list` tinha dois pares de chaves que só diferiam na caixa
+
+**Data/contexto**: 2026-08-27, mesma migração. Irmão da F317, e do mesmo tipo:
+a regra de nome canónico não permite a escolha.
+
+**Onde**: `pkg/domain/message.go:518-521` (antes desta sessão) —
+`Desc`/`Body`/`Body2`/`Text` com etiquetas `"Desc"`, `"Body"`, `"body"`,
+`"text"`. `Body` e `body` são a MESMA chave em snake_case minúsculo, e `Text`
+e `text` também.
+
+**Problema, e por que não é só estética**: um cliente não podia mandar `Body` e
+`body` com significados diferentes e esperar resultado definido — o
+`encoding/json` do Go casa chaves **sem distinguir maiúsculas** na
+descodificação, então `{"Body":"A","body":"B"}` já era ambíguo ANTES desta
+sessão. A cadeia de quatro níveis documentava uma distinção que o
+descodificador nunca fez.
+
+**Correção aplicada**: a cadeia passa de quatro níveis a três,
+`desc <- body <- text`, e `SendListRequest.Body2` saiu do domínio junto com o
+ramo que o lia em `send_list.go`.
+
+**Teste que a trava**: `TestSendList_BodyFallbackChain`, reescrito para os três
+níveis, com o caso do espaço em branco preservado.
 
 **Status**: corrigido nesta sessão.
 
@@ -32383,3 +32467,338 @@ próxima família ou fizer a integração final.
 `api/openapi/CONTRATO-ARQUITETURAL.md`.
 
 <!-- f-status: corrigido -->
+## F319 — `/chat/send/forward` tinha duas chaves distintas que colapsavam em `chat`
+
+**Data/contexto**: 2026-08-27, mesma migração. O terceiro colapso, e o único em
+que a colisão obrigou a **inventar** um nome em vez de escolher entre os que
+havia.
+
+**Onde**: `pkg/domain/message.go`, `SendForwardRequest` — o tipo embutia
+`ChatTarget` (`json:"chat"`, o alias universal de destino) **e** declarava
+`Chat string json:"Chat"`, que na forma por chave (CAP-55) é a conversa de
+ONDE a mensagem original veio. São dois conceitos diferentes com a mesma
+palavra, e em snake_case minúsculo ficariam a mesma chave.
+
+**Correção aplicada**: o alias universal fica `chat` (é o que as outras
+dezasseis rotas usam, e mudá-lo aqui partiria a uniformidade); a conversa de
+origem passa a `chat_jid` em `dto/message.SendForwardRequest`.
+
+**Isto É uma mudança de contrato**, não uma renomeação de caixa: quem enviava
+`{"MessageID":"…","Chat":"…"}` passa a enviar
+`{"message_id":"…","chat_jid":"…"}`. Registado aqui porque é a única das três
+colisões em que o nome novo não estava já no código.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F320 — a especificação OpenAPI da família mensagens ficou a descrever os nomes ANTIGOS do pedido
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO.
+Dívida deixada de propósito e por isso registada, não esquecida.
+
+**Onde**: `api/openapi/schemas/envio.yaml` (133 propriedades) e
+`api/openapi/paths/envio.yaml`, que continuam a declarar `Phone`, `Body`,
+`MimeType`, `FileName`, `MentionedJid`, `PollMessageId`, `ButtonText`,
+`TopText`, `FooterText`, `StanzaId`, `QuotedText`, `LinkPreview`,
+`JPEGThumbnail`, `PngThumbnail`, `PackId`/`PackName`/`PackPublisher`,
+`ForwardingScore`, `DisplayText`, `PhoneNumber`, `CopyCode`, `buttonText`,
+`buttonId` e as QUATRO grafias de `RowId`.
+
+**Problema**: a especificação é o contrato publicado, e neste momento descreve
+um pedido que o servidor já não fala do mesmo modo. A parte que NÃO quebrou é
+grande — o `encoding/json` do Go casa chaves sem distinguir maiúsculas, logo
+`{"Phone":…}` continua a preencher `phone` — mas tudo o que difere por mais que
+a caixa (`MimeType` vs `mime_type`, `RowId` vs `row_id`, `Chat` vs `chat_jid`)
+está **errado** no documento.
+
+**Correção sugerida**: renomear as propriedades e reescrever as descrições das
+três cadeias de fallback, que hoje explicam distinções que deixaram de existir
+(F317, F318, F319). Não é rename mecânico: `RowId`/`RowID`/`rowId`/`rowID` são
+quatro blocos de propriedade que têm de virar UM, e as prosas de
+`BotaoInterativo` e de `/chat/send/list` descrevem os níveis pelo nome. Depois,
+`go run ./cmd/openapidoc` e `go build` — a especificação é EMBUTIDA no binário
+(ARMADILHAS #27).
+
+**Status**: NÃO corrigido. Não é omissão: é uma unidade de trabalho separável e
+sobretudo de PROSA, e fazê-la mecanicamente produziria um documento com quatro
+chaves `row_id` iguais e três descrições a contradizerem-se. Deixá-la para uma
+sessão que a faça inteira é melhor que meia.
+
+<!-- f-status: aberto -->
+
+## F321 — a validação da família mensagens continua no use case, e não no DTO de pedido
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO.
+
+**Onde**: `pkg/presentation/http/dto/message/request.go` — os vinte e cinco
+tipos de pedido têm `ToDomain()` e **não** têm `Validate()`.
+
+**Problema**: `docs/HTTP-DTO-CONVENTIONS.md` §6 põe `Validate()` no DTO de
+pedido, e aqui ela vive nos use cases (`missing_phone`, `missing_body`,
+`missing_filename`, `invalid_phone`, …).
+
+**Por que não foi movida agora**: os códigos de erro são estáveis e uma suíte
+grande afirma-os por código; mover a validação no MESMO commit que renomeia
+todas as chaves do fio juntaria uma renomeação e uma mudança de comportamento
+no mesmo diff, que é exactamente a mistura que o `CLAUDE.md` diz que uma
+revisão não consegue separar.
+
+**Correção sugerida**: mover rota a rota, cada uma com o seu código de erro
+ANTES e DEPOIS escrito na entrada, e com o teste de código de erro a passar
+sem alteração — se ele tiver de mudar, a validação mudou de comportamento e
+isso é outra decisão.
+
+**Status**: NÃO corrigido, deliberadamente. Seguimento nomeado.
+
+<!-- f-status: aberto -->
+
+## F322 — quatro rotas de presença/leitura decodificavam direto para `domain.*Request`, com etiquetas PascalCase no fio
+
+**Data/contexto**: 2026-08-27, mesma migração (retomada do checkpoint
+`wip(dto): checkpoint antes de pausar o worker mensagens`). O enunciado da
+tarefa pedia para enumerar TODA rota da família mensagens — o levantamento
+inicial (commits `85c18841`, `e3e6d178`, `74939df7`) tinha coberto as
+dezasseis rotas de `/chat/send/*` e afins, mas não `/user/presence`,
+`/user/presence/subscribe`, `/chat/presence` e `/chat/markread`, que também
+vivem em `pkg/presentation/http/handlers/handler_presence.go` e importam
+`dtomessage` só para a RESPOSTA (`PresentAction`).
+
+**Onde**: `pkg/presentation/http/handlers/handler_presence.go`, as quatro
+`ServeHTTP` decodificavam `domain.SendPresenceRequest`,
+`domain.SubscribePresenceRequest`, `domain.ChatPresenceRequest` e
+`domain.MarkReadRequest` diretamente do corpo HTTP. Três desses tipos tinham
+etiqueta PascalCase (`json:"Phone"`, `json:"State"`, `json:"Media"`,
+`json:"Id"`, `json:"ChatPhone"`, `json:"SenderPhone"`) — exatamente o
+problema que `docs/HTTP-DTO-CONVENTIONS.md` §1 descreve, só que sobrevivera
+fora do escopo do levantamento inicial.
+
+**Correção aplicada**: quatro tipos novos em
+`pkg/presentation/http/dto/message/request.go` —
+`SendPresenceRequest`, `SubscribePresenceRequest`, `ChatPresenceRequest`,
+`MarkReadRequest` — com etiquetas `type`/`phone`/`state`/`media`/`chat`/
+`id`/`chat_phone`/`sender_phone` e `ToDomain()`. Os quatro handlers passam a
+decodificar o tipo do pacote `dto/message` e chamar `.ToDomain()` antes do
+caso de uso; as etiquetas PascalCase saíram de `pkg/domain/presence.go`
+(que já não é o fio, como o resto do domínio desta família).
+
+**`Chat`/`Sender` NÃO ganharam nome canónico — ficaram fora do DTO**. Esses
+dois campos de `domain.MarkReadRequest` nunca resolveram nada
+(`mark_read.go` deixa `jidChat`/`jidSender` vazios nesse ramo) e
+`TestMarkRead_LegacyFieldsResolveToEmptyJID` trava isso como comportamento
+HERDADO do upstream, não acidental — apagar os campos do domínio teria
+quebrado esse teste e mudado o comportamento que ele existe para preservar.
+A correção certa foi mais estreita: os campos continuam no domínio, só que
+sem forma de chegar lá pelo fio, porque o DTO só expõe `chat_phone` e
+`sender_phone`. Só um cliente que chame o caso de uso diretamente (nenhum
+chama) ainda os alcança.
+
+**Testes que travam**:
+- `pkg/presentation/http/dto/message/request_naming_test.go`,
+  `TestRequestDTOs_EtiquetasCanonicas` — os quatro tipos novos entraram em
+  `requestTypes()`. **Controlo negativo executado**: etiqueta de
+  `MarkReadRequest.ChatPhone` trocada de volta para `"ChatPhone"`, o teste
+  falhou com `MarkReadRequest.ChatPhone tem etiqueta "ChatPhone", fora de
+  ^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`; revertido.
+- `pkg/presentation/http/handlers/handler_presence_reaction_test.go`,
+  `handler_chat_mgmt_contract_test.go` (`TestChatMgmt_ContratoPublico_*`) e
+  `handler_nonsend_axes_test.go` — corpos de teste das quatro rotas passaram
+  de `{"Phone":…,"State":…}`/`{"Id":[…],"ChatPhone":…}` para
+  `{"phone":…,"state":…}`/`{"id":[…],"chat_phone":…}`; o teste de
+  `TestChatMgmt_ContratoPublico_NomesCanonicos` já afirma
+  `AssertPublicJSONUsesCanonicalNaming` pela rota REGISTRADA.
+
+**Nota sobre a especificação OpenAPI**: `api/openapi/paths/conversa.yaml` e
+`api/openapi/paths/contacto.yaml` continuam a documentar `Phone`, `State`,
+`Media`, `ChatPhone`, `SenderPhone` — a mesma classe de dívida que a F320 já
+registou para `envio.yaml`, só que num par de ficheiros diferente. Não
+corrigido pelo mesmo motivo da F320 (prosa, não rename mecânico); ver essa
+entrada para o raciocínio completo.
+
+**Gate do golden de logging**: `go run ./cmd/logcov -golden` regenerado —
+`ChatPresenceRequest.ResolveChat/ToDomain`, `MarkReadRequest.ToDomain`,
+`SendPresenceRequest.ToDomain`, `SubscribePresenceRequest.ResolveChat/ToDomain`
+entraram como `EXCLUDED` (funções de DTO sem chamada a logger, como as demais
+desta família).
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F323 — `/chat/mute`, `/chat/archive`, `/chat/pin` e `/chat/request-unavailable-message` decodificam `domain.*Request` diretamente; sem camada de DTO
+
+**Data/contexto**: 2026-08-27, mesma migração. Achado ao terminar a
+enumeração completa das rotas de `/chat/*` desta família — `handler_misc.go`
+tem quatro handlers de gestão de conversa que nunca passaram pela migração.
+
+**Onde**: `pkg/presentation/http/handlers/handler_misc.go` —
+`MuteChatHandler`, `ArchiveChatHandler`, `PinChatHandler`,
+`RequestUnavailableMessageHandler` decodificam `domain.MuteChatRequest`,
+`domain.ArchiveChatRequest`, `domain.PinChatRequest`,
+`domain.RequestUnavailableMessageRequest` directamente, e devolvem o
+`*domain.…Result` do caso de uso directamente a `RespondJSON`, sem
+apresentador.
+
+**Por que NÃO é a mesma classe de defeito da F322**: as etiquetas destes
+quatro pares pedido/resposta JÁ são `snake_case` minúsculo
+(`jid`, `mute`, `mute_duration`, `archive`, `pin`, `chat`, `sender`, `id`,
+`success`, `message`, `request_id`) — confirmado por
+`TestChatMgmt_ContratoPublico_NomesCanonicos` (subteste `ephemeral`, que
+partilha `handler_misc.go`) e por leitura directa de
+`pkg/domain/{mute,archive,pin,unavailable_message}.go`. O fio já está
+correcto; o que falta é só a camada — `docs/HTTP-DTO-CONVENTIONS.md` §1
+exige DTO próprio mesmo quando os nomes batem, porque sem ele um rename
+futuro em `pkg/domain` muda o contrato publicado sem erro de compilação
+nenhum a avisar (a garantia central da §5: "renomeie um campo em
+`domain.X` e `presenter.go` deixa de compilar" não existe aqui, já que não
+há `presenter.go` nenhum entre o domínio e `RespondJSON`).
+
+**Por que não foi corrigido nesta sessão**: é trabalho NOVO (quatro tipos de
+pedido, quatro apresentadores, testes de contrato para as quatro rotas) e
+não uma correcção de nome — misturá-lo com a F322 (que É correcção de nome)
+juntaria as duas classes de mudança no mesmo commit. Ver `CLAUDE.md`
+"idioma do código" e a política deste ficheiro sobre separar renomeação de
+mudança de comportamento — o mesmo princípio vale para separar renomeação de
+introdução de camada nova.
+
+**Correção sugerida**: seguir exactamente o padrão de `ReactRequest`
+(`dto/message/request.go`) — struct com as mesmas etiquetas já existentes,
+`ToDomain()`, e um `Present…` em `presenter.go` para cada `…Result`. Como os
+nomes não mudam, os testes de contrato existentes continuam a passar sem
+alteração; só ganham `AssertPublicJSONUsesCanonicalNaming` explícito em vez
+de depender de as etiquetas do domínio já estarem certas.
+
+**Nota lateral, fora do âmbito da família mensagens**: `RejectCallHandler`
+(mesmo ficheiro, rota `/call/reject`) devolve `domain.RejectCallResult` com
+`json:"Details"` e `json:"CallID"` — PascalCase real, não só falta de
+camada. Não é rota de mensagem (é de chamada) e por isso não foi tocada
+aqui; registada para quem tiver essa família.
+
+**Status**: NÃO corrigido. Seguimento nomeado.
+
+<!-- f-status: aberto -->
+
+## F324 — fecho da migração DTO da família MENSAGENS (2026-08-27)
+
+Encerra o trabalho retomado do checkpoint `wip(dto): checkpoint antes de
+pausar o worker mensagens`, sobre os três commits anteriores
+(`85c18841` respostas de envio, `e3e6d178` gestão, `74939df7` pedidos).
+
+**O que estava feito ao retomar**: as dezasseis rotas `/chat/send/*` mais
+`/chat/delete/message` e `/chat/send/edit` com DTO de pedido e resposta nos
+dois lados, incluindo o colapso das três colisões de nome (F317 `RowId`
+quádruplo, F318 `Body`/`body`/`Text`/`text`, F319 `Chat` duplo em
+`/chat/send/forward`) e `/message/star`, `/chat/react` já com DTO completo.
+
+**O que faltava e foi enumerado nesta sessão** — as quatro rotas de
+`/user/presence`, `/user/presence/subscribe`, `/chat/presence` e
+`/chat/markread`, que partilham `handler_presence.go` com `/chat/react` mas
+tinham ficado fora do levantamento inicial: decodificavam
+`domain.*Request` diretamente, três delas com etiqueta PascalCase no fio
+(F322, corrigido nesta sessão).
+
+**O que foi enumerado e fica registado, não corrigido**:
+- F320 — `api/openapi/schemas/envio.yaml` e `paths/envio.yaml` (mais,
+  identificado nesta sessão, `paths/conversa.yaml` e `paths/contacto.yaml`
+  para presença/leitura) continuam a descrever os nomes ANTIGOS do pedido;
+- F321 — a validação desta família continua nos casos de uso, não em
+  `Validate()` no DTO de pedido, por decisão deliberada de não misturar
+  rename com mudança de comportamento;
+- F323 — `/chat/mute`, `/chat/archive`, `/chat/pin` e
+  `/chat/request-unavailable-message` (`handler_misc.go`) decodificam
+  `domain.*Request` diretamente e devolvem `*domain.…Result` sem
+  apresentador. As etiquetas JÁ são `snake_case` (não é a classe de defeito
+  da F322), mas falta a camada de DTO que a `docs/HTTP-DTO-CONVENTIONS.md`
+  exige — sem ela, um rename futuro em `pkg/domain` muda o contrato
+  publicado sem erro de compilação a avisar. Nota lateral fora do âmbito
+  desta família: `RejectCallResult` (`/call/reject`, mesmo ficheiro) tem
+  `json:"Details"`/`json:"CallID"` em PascalCase real — registado para quem
+  tiver a família de chamadas.
+
+**Verificação de completude, rota a rota** (`pkg/bootstrap/wiring_routes.go`,
+prefixos `/chat/send`, `/chat`, `/message`, `/user/presence`): as dezasseis
+de envio + delete/edit/template — DTO nos dois lados; `/chat/react`,
+`/message/star` — DTO nos dois lados; `/chat/markread`,
+`/user/presence(/subscribe)`, `/chat/presence` — DTO nos dois lados
+(corrigido agora); `/chat/history` — presenter só, sem corpo de pedido
+(`GET`); `/chat/ephemeral(/default)`, `/chats/download/{kind}` e as cinco
+`/chat/download*` — já tinham DTO (fora do escopo desta sessão, confirmado
+por `TestChatMgmt_ContratoPublico_NomesCanonicos`); `/chat/mute`,
+`/chat/archive`, `/chat/pin`, `/chat/request-unavailable-message` — nomes
+corretos, camada ausente (F323, não corrigido). `/chat/send/pollvote` e
+`/chat/markread` mantiveram o CAMINHO intocado — só o corpo mudou — porque a
+renomeação de caminho é do worktree irmão `http-dto-paths`.
+
+**Gate arquitectural** (`respondjson_ledger_test.go`): sem mudança de
+classificação nesta sessão — os sítios tocados já chamavam `RespondJSON` com
+`dtomessage.Present…`; o `-update-ledger` não era necessário. As quatro rotas
+da F323 continuam classificadas como estavam antes (não afetadas por esta
+sessão).
+
+**Testes**: `go build ./...` limpo; `go test ./pkg/presentation/http/...
+./pkg/application/usecase/message/...` verde; `make check` completo
+(build + vet + fmt + `-race` + lint + cobertura + cobertura de log + carimbo
+de rota + fachada/tamanho/testes de `internal/wa-noise`) verde após
+regenerar `cmd/logcov/testdata/eligible.golden` (seis funções de DTO novas
+entraram como `EXCLUDED`, mesma classificação das demais desta família).
+
+**Status**: família MENSAGENS completa quanto a NOMES no fio (nenhuma rota
+serve etiqueta PascalCase/camelCase). Duas lacunas arquitecturais
+conscientes ficam abertas (F321 validação, F323 camada ausente em quatro
+rotas de gestão) e uma de documentação (F320, OpenAPI desatualizado) —
+nenhuma delas é uma rota servindo nome errado.
+
+<!-- f-status: corrigido -->
+
+## F325 — `make coverage-gate` falha nesta máquina por `covdata` ausente do toolchain baixado, alheio ao código
+
+**Data/contexto**: 2026-08-27, ao correr `make check` para fechar a migração
+da família mensagens.
+
+**Onde**: passo `coverage-gate` do `Makefile` (`go test … -coverpkg=<todos os
+pacotes>`), reproduzido de forma determinística DUAS vezes, sempre nos
+mesmos dois pacotes — nenhum deles tocado nesta sessão:
+
+```
+# wa-api/cmd/openapidoc
+go: no such tool "covdata"
+# wa-api/pkg/presentation/http/dto/group
+go: no such tool "covdata"
+```
+
+**Causa, medida e não suposta**: os dois pacotes NÃO têm ficheiros de teste
+(`?   wa-api/cmd/openapidoc  [no test files]`); com `-coverpkg` a incluir
+toda a árvore, o `go test` tenta construir o binário auxiliar `covdata` do
+toolchain para os agregar. `go env GOROOT` nesta máquina aponta para
+`.../go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64/` — um
+toolchain baixado que vive dentro do cache de módulos, **somente leitura**.
+Confirmado directamente: `go build -o $GOROOT/pkg/tool/darwin_arm64/covdata
+cmd/covdata` devolve `permission denied` a escrever nesse caminho. `go tool
+covdata` isolado (sem `-coverpkg` largo) funciona, porque nesse caminho o Go
+usa uma cópia em `$GOCACHE`, não o `pkg/tool` do GOROOT somente leitura.
+
+**Por que não é desta família nem desta sessão**: nenhum dos dois pacotes
+foi tocado pela migração de mensagens — `cmd/openapidoc` não tem testes
+nenhuns e nunca teve; `pkg/presentation/http/dto/group` é da família GRUPOS,
+worktree diferente. É uma propriedade da MÁQUINA (toolchain gerido por
+`GOTOOLCHAIN=auto`, instalado somente leitura), não do código nem do commit.
+
+**Impacto no resto do gate**: `build`, `vet`, `fmt-gate`, `go test -race`
+(TODOS os pacotes, incluindo os dois acima — que passam nesse passo, porque
+`-race` sozinho não passa `-coverpkg` largo), `TestGoldenBate` (após
+regenerar), `TestHousekeepTemUmaMarcaPorAchado`/`MarcaFechaOBloco` — todos
+verdes. Só `coverage-gate` (que depende de `covdata` para o `-coverpkg`
+largo) fica vermelho nesta máquina.
+
+**Correção sugerida**: não é código do repositório — é ambiente. Ou instalar
+um Go a partir de `go.dev`/Homebrew num GOROOT com permissão de escrita (em
+vez de deixar `GOTOOLCHAIN=auto` baixar para o cache de módulos), ou pré-
+construir `covdata` num `GOROOT` gravável e apontar `$PATH`/`go env -w
+GOROOT=…` para lá antes do `make check`.
+
+**Status**: NÃO corrigido — fora do âmbito desta tarefa (é ambiente da
+máquina, não da família mensagens) e envolveria mexer em configuração de
+toolchain fora deste repositório sem autorização. Registado para quem tiver
+acesso à máquina/CI para decidir.
+
+<!-- f-status: aberto -->

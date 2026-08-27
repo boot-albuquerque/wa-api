@@ -20,7 +20,7 @@ import (
 
 const sendForwardSentinelToken = "send-forward-sentinel-cause-a9c2e4"
 
-const sendForwardBody = `{"Phone":"5511999999999","Body":"forwarded text"}`
+const sendForwardBody = `{"phone":"5511999999999","body":"forwarded text"}`
 
 var errSendForwardSentinel = errors.New(sendForwardSentinelToken)
 
@@ -115,8 +115,8 @@ func TestSendForward_RejectMissingRequiredField(t *testing.T) {
 		name string
 		body string
 	}{
-		{"Phone", `{"Body":"fwd"}`},
-		{"Body", `{"Phone":"5511999999999"}`},
+		{"Phone", `{"body":"fwd"}`},
+		{"Body", `{"phone":"5511999999999"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,7 +196,7 @@ func TestSendForward_NoSecretLeak(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Body":"` + logassertGlobalHMACKey + `"}`
+	body := `{"phone":"5511999999999","body":"` + logassertGlobalHMACKey + `"}`
 	wrapped, capture := logassert.Wrap(sendForwardRouter(tm, jr))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/forward", strings.NewReader(body))
@@ -246,7 +246,7 @@ func TestSendForward_ClientSuppliedIDForwarded(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Body":"fwd","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","body":"fwd","id":"id-do-cliente"}`
 	rec := sendForwardServe(t, tm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -277,7 +277,7 @@ func TestSendForward_CustomForwardingScore(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Body":"fwd","ForwardingScore":7}`
+	body := `{"phone":"5511999999999","body":"fwd","forwarding_score":7}`
 	rec := sendForwardServe(t, tm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -335,7 +335,7 @@ func TestSendForwardByKey_Success_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","MessageID":"MSG_ABC"}`
+	body := `{"phone":"5511999999999","message_id":"MSG_ABC"}`
 	rec := sendForwardByKeyServe(t, fwd, smr, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -367,7 +367,7 @@ func TestSendForwardByKey_MessageNotFound_Returns404(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","MessageID":"NONEXISTENT"}`
+	body := `{"phone":"5511999999999","message_id":"NONEXISTENT"}`
 	rec := sendForwardByKeyServe(t, fwd, smr, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusNotFound {
@@ -402,7 +402,7 @@ func TestSendForwardByKey_BackwardCompat_BodyWithoutMessageID(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/forward",
-		strings.NewReader(`{"Phone":"5511999999999","Body":"old style text"}`))
+		strings.NewReader(`{"phone":"5511999999999","body":"old style text"}`))
 	r.ServeHTTP(rec, msgAuthed(req))
 
 	if rec.Code != http.StatusOK {

@@ -58,7 +58,9 @@ import (
 //	 62 — integração com a família /admin (ListUsers, AddUser, EditUser,
 //	      DeleteUser, DeleteUserComplete)
 //	 41 — integração com a família grupo/comunidade
-const maxPendingRespondJSONSites = 41
+//	  8 — integração com a família mensagens (envio + gestão + presença +
+//	      descarga + status)
+const maxPendingRespondJSONSites = 8
 
 // updateLedger reescreve o livro-razão em vez de o comparar.
 var updateLedger = flag.Bool("update-ledger", false,

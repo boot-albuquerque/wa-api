@@ -34,8 +34,8 @@ const sendTemplateSentinelToken = "send-template-sentinel-cause-7c31d5"
 const sendTemplatePhone = "5511999999999@s.whatsapp.net"
 
 // sendTemplateBody é o menor corpo VÁLIDO da rota: um botão já basta.
-const sendTemplateBody = `{"Phone":"` + sendTemplatePhone + `","Content":"Escolha","Footer":"Equipe",` +
-	`"Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]}`
+const sendTemplateBody = `{"phone":"` + sendTemplatePhone + `","content":"Escolha","footer":"Equipe",` +
+	`"buttons":[{"display_text":"Sim","type":"quickreply"}]}`
 
 var errSendTemplateSentinel = errors.New(sendTemplateSentinelToken)
 
@@ -87,10 +87,10 @@ type sendTemplateResultBody struct {
 // fronteira HTTP aqui, na ordem, com os campos que cada um usa.
 func TestSendTemplate_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500131)
-	body := `{"Phone":"` + sendTemplatePhone + `","Content":"Escolha uma opcao","Footer":"Equipe wa-api","Buttons":[` +
-		`{"DisplayText":"Sim","Id":"cta-42","Type":"quickreply"},` +
-		`{"DisplayText":"Site","Url":"https://example.invalid/promo","Type":"url"},` +
-		`{"DisplayText":"Ligar","PhoneNumber":"+5511987654321","Type":"call"}]}`
+	body := `{"phone":"` + sendTemplatePhone + `","content":"Escolha uma opcao","footer":"Equipe wa-api","buttons":[` +
+		`{"display_text":"Sim","id":"cta-42","type":"quickreply"},` +
+		`{"display_text":"Site","url":"https://example.invalid/promo","type":"url"},` +
+		`{"display_text":"Ligar","phone_number":"+5511987654321","type":"call"}]}`
 
 	sm := &contractsfake.SimpleMessenger{
 		SendTemplateFunc: func(_ context.Context, _ string, target domain.JID, payload domain.TemplatePayload, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
@@ -166,14 +166,14 @@ func TestSendTemplate_RejectUnauthenticated(t *testing.T) {
 // log: o status sozinho não distingue "faltou Phone" de "faltou Content" de
 // "faltou Footer" de "nenhum botão".
 func TestSendTemplate_RejectMissingRequiredField(t *testing.T) {
-	const buttons = `,"Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]`
+	const buttons = `,"buttons":[{"display_text":"Sim","type":"quickreply"}]`
 
 	cases := map[string]struct{ body, cause string }{
-		"Phone":           {`{"Content":"c","Footer":"f"` + buttons + `}`, "missing Phone in payload"},
-		"Content":         {`{"Phone":"` + sendTemplatePhone + `","Footer":"f"` + buttons + `}`, "missing Content in payload"},
-		"Footer":          {`{"Phone":"` + sendTemplatePhone + `","Content":"c"` + buttons + `}`, "missing Footer in payload"},
-		"Buttons_ausente": {`{"Phone":"` + sendTemplatePhone + `","Content":"c","Footer":"f"}`, "missing Buttons in payload"},
-		"Buttons_vazio":   {`{"Phone":"` + sendTemplatePhone + `","Content":"c","Footer":"f","Buttons":[]}`, "missing Buttons in payload"},
+		"phone":           {`{"content":"c","footer":"f"` + buttons + `}`, "missing Phone in payload"},
+		"content":         {`{"phone":"` + sendTemplatePhone + `","footer":"f"` + buttons + `}`, "missing Content in payload"},
+		"footer":          {`{"phone":"` + sendTemplatePhone + `","content":"c"` + buttons + `}`, "missing Footer in payload"},
+		"Buttons_ausente": {`{"phone":"` + sendTemplatePhone + `","content":"c","footer":"f"}`, "missing Buttons in payload"},
+		"Buttons_vazio":   {`{"phone":"` + sendTemplatePhone + `","content":"c","footer":"f","buttons":[]}`, "missing Buttons in payload"},
 	}
 	for field, tc := range cases {
 		t.Run(field, func(t *testing.T) {
@@ -216,7 +216,7 @@ func TestSendTemplate_InvalidPhoneNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	body := `{"Phone":"lixo","Content":"c","Footer":"f","Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]}`
+	body := `{"phone":"lixo","content":"c","footer":"f","buttons":[{"display_text":"Sim","type":"quickreply"}]}`
 	rec := sendTemplateServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -260,8 +260,8 @@ func TestSendTemplate_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"` + sendTemplatePhone + `","Content":"c","Footer":"f","Id":"id-do-cliente",` +
-		`"Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]}`
+	body := `{"phone":"` + sendTemplatePhone + `","content":"c","footer":"f","id":"id-do-cliente",` +
+		`"buttons":[{"display_text":"Sim","type":"quickreply"}]}`
 	rec := sendTemplateServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -287,8 +287,8 @@ func TestSendTemplate_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendTemplateRouter(sm, jr))
 
-	body := `{"Phone":"` + sendTemplatePhone + `","Content":"` + logassertGlobalHMACKey + `","Footer":"` +
-		logassertGlobalHMACKey + `","Buttons":[{"DisplayText":"` + logassertGlobalHMACKey + `","Type":"quickreply"}]}`
+	body := `{"phone":"` + sendTemplatePhone + `","content":"` + logassertGlobalHMACKey + `","footer":"` +
+		logassertGlobalHMACKey + `","buttons":[{"display_text":"` + logassertGlobalHMACKey + `","type":"quickreply"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/template", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -320,7 +320,7 @@ func TestSendTemplate_NoSecretLeak(t *testing.T) {
 // MAIS operável das duas: o erro cru diz onde o JSON quebrou. Registrada em
 // HOUSEKEEP F141, sem correção nesta sessão.
 func TestSendTemplate_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Phone":"55119`
+	const malformed = `{"phone":"55119`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -351,7 +351,7 @@ func TestSendTemplate_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 // lista) é 400 do cliente, não pânico e não 200. É a forma de corpo que o DTO
 // só passou a poder receber no CAP-15.
 func TestSendTemplate_MalformedButtons_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"` + sendTemplatePhone + `","Content":"c","Footer":"f","Buttons":{"DisplayText":"Sim"}}`
+	const body = `{"phone":"` + sendTemplatePhone + `","content":"c","footer":"f","buttons":{"display_text":"Sim"}}`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -362,7 +362,7 @@ func TestSendTemplate_MalformedButtons_ViaRegisteredRoute(t *testing.T) {
 	// A causa nomeia o CAMPO: sem `Buttons` no DTO o decoder nem chegaria a
 	// reclamar dele, e o corpo seria aceito com a lista simplesmente
 	// ausente — que é exatamente o estado anterior ao CAP-15 (F139).
-	logassert.OutcomeLogged(t, recs, "cannot unmarshal object", "SendTemplateRequest.Buttons")
+	logassert.OutcomeLogged(t, recs, "cannot unmarshal object", "SendTemplateRequest.buttons")
 	if n := len(sm.SendTemplateCalls); n != 0 {
 		t.Fatalf("Buttons malformado alcancou SendTemplate %d vez(es)", n)
 	}

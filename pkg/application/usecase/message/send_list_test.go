@@ -94,17 +94,20 @@ func TestSendList_MissingRequiredField(t *testing.T) {
 // TestSendList_BodyFallbackChain percorre os QUATRO níveis da cadeia do
 // corpo, um por vez: cada nível só é usado quando TODOS os anteriores vêm
 // vazios. Um teste que só exercitasse o primeiro nível não pegaria uma
-// inversão de ordem entre os quatro (HOUSEKEEP F149).
+// inversão de ordem entre eles (HOUSEKEEP F149).
+//
+// Eram QUATRO níveis (Desc <- Body <- body <- text) e passaram a TRÊS quando
+// os nomes do fio ficaram canónicos: `Body` e `body` são a mesma chave em
+// snake_case minúsculo, e `Text` e `text` também.
 func TestSendList_BodyFallbackChain(t *testing.T) {
 	cases := []struct {
 		name string
 		req  domain.SendListRequest
 		want string
 	}{
-		{"Desc vence todos", domain.SendListRequest{Desc: "A", Body: "B", Body2: "C", Text: "D"}, "A"},
-		{"Body quando Desc vazio", domain.SendListRequest{Body: "B", Body2: "C", Text: "D"}, "B"},
-		{"body quando Desc e Body vazios", domain.SendListRequest{Body2: "C", Text: "D"}, "C"},
-		{"text quando os tres primeiros vazios", domain.SendListRequest{Text: "D"}, "D"},
+		{"Desc vence todos", domain.SendListRequest{Desc: "A", Body: "B", Text: "D"}, "A"},
+		{"Body quando Desc vazio", domain.SendListRequest{Body: "B", Text: "D"}, "B"},
+		{"Text quando Desc e Body vazios", domain.SendListRequest{Text: "D"}, "D"},
 		{"espaco em branco nao conta como preenchido", domain.SendListRequest{Desc: "   ", Body: "B"}, "B"},
 	}
 	for _, tc := range cases {
@@ -126,21 +129,23 @@ func TestSendList_BodyFallbackChain(t *testing.T) {
 	}
 }
 
-// TestSendList_RowIDFallbackChain percorre os CINCO níveis da cadeia do
-// identificador de linha, nível por nível — o último não é um campo, é o
-// título já resolvido e já trimado.
+// TestSendList_RowIDFallbackChain percorre os DOIS níveis da cadeia do
+// identificador de linha — o segundo não é um campo, é o título já resolvido e
+// já trimado.
+//
+// Eram CINCO níveis (RowId <- RowID <- rowId <- rowID <- título). As quatro
+// grafias do identificador são a MESMA chave sob a regra de nome canónico, e
+// das quatro só RowId era escrito pelo use case e lido pelo adaptador — as
+// outras três nunca levaram valor para lá da fronteira.
 func TestSendList_RowIDFallbackChain(t *testing.T) {
 	cases := []struct {
 		name string
 		row  domain.ListRow
 		want string
 	}{
-		{"RowId vence todos", domain.ListRow{Title: "T", RowId: "a", RowID: "b", Rowid: "c", Rowid2: "d"}, "a"},
-		{"RowID quando RowId vazio", domain.ListRow{Title: "T", RowID: "b", Rowid: "c", Rowid2: "d"}, "b"},
-		{"rowId quando RowId e RowID vazios", domain.ListRow{Title: "T", Rowid: "c", Rowid2: "d"}, "c"},
-		{"rowID quando os tres primeiros vazios", domain.ListRow{Title: "T", Rowid2: "d"}, "d"},
-		{"titulo quando os quatro vazios", domain.ListRow{Title: "T"}, "T"},
-		{"espaco em branco nao conta como preenchido", domain.ListRow{Title: "T", RowId: "  ", RowID: "b"}, "b"},
+		{"row_id vence o titulo", domain.ListRow{Title: "T", RowID: "a"}, "a"},
+		{"titulo quando row_id vazio", domain.ListRow{Title: "T"}, "T"},
+		{"espaco em branco nao conta como preenchido", domain.ListRow{Title: "T", RowID: "  "}, "T"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -154,8 +159,8 @@ func TestSendList_RowIDFallbackChain(t *testing.T) {
 				t.Fatalf("caminho feliz falhou: %v", err)
 			}
 			got := sm.SendListCalls[0].Payload.Sections[0].Rows[0]
-			if got.RowId != tc.want {
-				t.Errorf("RowId: got %q, want %q", got.RowId, tc.want)
+			if got.RowID != tc.want {
+				t.Errorf("RowID: got %q, want %q", got.RowID, tc.want)
 			}
 			if got.Title != "T" {
 				t.Errorf("Title: got %q, want %q", got.Title, "T")

@@ -24,7 +24,7 @@ const sendPollVoteGroup = "120363313346913103@g.us"
 
 const sendPollVoteSender = "5511999999999@s.whatsapp.net"
 
-const sendPollVoteBody = `{"Phone":"` + sendPollVoteGroup + `","Sender":"` + sendPollVoteSender + `","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`
+const sendPollVoteBody = `{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`
 
 var errSendPollVoteSentinel = errors.New(sendPollVoteSentinelToken)
 
@@ -129,11 +129,11 @@ func TestSendPollVote_RejectUnauthenticated(t *testing.T) {
 
 func TestSendPollVote_RejectMissingRequiredField(t *testing.T) {
 	cases := map[string]struct{ body, cause string }{
-		"Phone":                {`{"Sender":"` + sendPollVoteSender + `","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`, "missing Phone in payload"},
-		"PollMessageId":        {`{"Phone":"` + sendPollVoteGroup + `","Sender":"` + sendPollVoteSender + `","PollMessageTimestamp":1755500100,"Options":["12h"]}`, "missing PollMessageId in payload"},
-		"PollMessageTimestamp": {`{"Phone":"` + sendPollVoteGroup + `","Sender":"` + sendPollVoteSender + `","PollMessageId":"3EB0POLL1","Options":["12h"]}`, "missing PollMessageTimestamp in payload"},
-		"Sender":               {`{"Phone":"` + sendPollVoteGroup + `","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`, "missing Sender in payload"},
-		"Options_nenhuma":      {`{"Phone":"` + sendPollVoteGroup + `","Sender":"` + sendPollVoteSender + `","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100}`, "at least 1 option is required"},
+		"phone":                  {`{"sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing Phone in payload"},
+		"poll_message_id":        {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing PollMessageId in payload"},
+		"poll_message_timestamp": {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","options":["12h"]}`, "missing PollMessageTimestamp in payload"},
+		"sender":                 {`{"phone":"` + sendPollVoteGroup + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, "missing Sender in payload"},
+		"Options_nenhuma":        {`{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100}`, "at least 1 option is required"},
 	}
 	for field, tc := range cases {
 		t.Run(field, func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestSendPollVote_InvalidPhoneNeverSends(t *testing.T) {
 		},
 	}
 
-	rec := sendPollVoteServe(t, cm, jr, `{"Phone":"lixo","Sender":"`+sendPollVoteSender+`","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`, msgAuthed)
+	rec := sendPollVoteServe(t, cm, jr, `{"phone":"lixo","sender":"`+sendPollVoteSender+`","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, msgAuthed)
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("JID invalido produziu 200: %s", rec.Body.String())
@@ -200,7 +200,7 @@ func TestSendPollVote_InvalidSenderNeverSends(t *testing.T) {
 		},
 	}
 
-	rec := sendPollVoteServe(t, cm, jr, `{"Phone":"`+sendPollVoteGroup+`","Sender":"sender-lixo","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`, msgAuthed)
+	rec := sendPollVoteServe(t, cm, jr, `{"phone":"`+sendPollVoteGroup+`","sender":"sender-lixo","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`, msgAuthed)
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("Sender invalido produziu 200: %s", rec.Body.String())
@@ -240,7 +240,7 @@ func TestSendPollVote_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"` + sendPollVoteGroup + `","Sender":"` + sendPollVoteSender + `","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"],"Id":"id-do-cliente"}`
+	body := `{"phone":"` + sendPollVoteGroup + `","sender":"` + sendPollVoteSender + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"],"id":"id-do-cliente"}`
 	rec := sendPollVoteServe(t, cm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -261,7 +261,7 @@ func TestSendPollVote_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendPollVoteRouter(cm, jr))
 
-	body := `{"Phone":"` + sendPollVoteGroup + `","Sender":"` + logassertGlobalHMACKey + `","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["` + logassertGlobalHMACKey + `"]}`
+	body := `{"phone":"` + sendPollVoteGroup + `","sender":"` + logassertGlobalHMACKey + `","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["` + logassertGlobalHMACKey + `"]}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/pollvote", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -276,7 +276,7 @@ func TestSendPollVote_NoSecretLeak(t *testing.T) {
 }
 
 func TestSendPollVote_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Phone":"12036`
+	const malformed = `{"phone":"12036`
 
 	cm := &contractsfake.ChatMessenger{}
 	jr := &contractsfake.JIDResolver{}

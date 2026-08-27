@@ -178,7 +178,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "SubscribePresence",
 			rota:        "/user/presence/subscribe",
-			validBody:   `{"Phone":"5511999999999"}`,
+			validBody:   `{"phone":"5511999999999"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				pc := &contractsfake.PresenceController{}
@@ -194,7 +194,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "ChatPresence",
 			rota:        "/chat/presence",
-			validBody:   `{"Phone":"5511999999999","State":"composing"}`,
+			validBody:   `{"phone":"5511999999999","state":"composing"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				pc := &contractsfake.PresenceController{}
@@ -210,7 +210,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "MarkRead",
 			rota:        "/chat/markread",
-			validBody:   `{"Id":["MSG1"],"ChatPhone":"5511999999999"}`,
+			validBody:   `{"id":["MSG1"],"chat_phone":"5511999999999"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				cm := &contractsfake.ChatMessenger{}
@@ -226,7 +226,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "React",
 			rota:        "/chat/react",
-			validBody:   `{"Phone":"5511999999999","Body":"ok","Id":"MSG1"}`,
+			validBody:   `{"phone":"5511999999999","body":"ok","id":"MSG1"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				cm := &contractsfake.ChatMessenger{}

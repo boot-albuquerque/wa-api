@@ -23,9 +23,9 @@ import (
 
 const sendCarouselPhone = "5511999999999@s.whatsapp.net"
 
-const sendCarouselBody = `{"Phone":"` + sendCarouselPhone + `","Body":"Escolha",` +
-	`"Cards":[{"Body":"Cartao 1","Buttons":[{"type":"reply","title":"Sim"}]},` +
-	`{"Body":"Cartao 2","Buttons":[{"type":"reply","title":"Nao"}]}]}`
+const sendCarouselBody = `{"phone":"` + sendCarouselPhone + `","body":"Escolha",` +
+	`"cards":[{"body":"Cartao 1","buttons":[{"type":"reply","title":"Sim"}]},` +
+	`{"body":"Cartao 2","buttons":[{"type":"reply","title":"Nao"}]}]}`
 
 func sendCarouselRouter(im *contractsfake.InteractiveMessenger, jr *contractsfake.JIDResolver, mf *contractsfake.MediaFetcher) http.Handler {
 	uc := message.NewSendCarouselUseCase(im, jr, mf, silentLogger{})
@@ -49,10 +49,10 @@ func sendCarouselServe(t *testing.T, im *contractsfake.InteractiveMessenger, jr 
 // {message_id, timestamp, status}.
 func TestSendCarousel_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500199)
-	body := `{"Phone":"` + sendCarouselPhone + `","Body":"Escolha uma opcao","Footer":"wa-api",` +
-		`"Cards":[` +
-		`{"Title":"Cartao A","Body":"Corpo A","Footer":"pe A","Buttons":[{"type":"reply","title":"Sim","id":"btn-a"}]},` +
-		`{"Title":"Cartao B","Body":"Corpo B","Buttons":[{"type":"cta_url","title":"Site","url":"https://example.invalid"}]}` +
+	body := `{"phone":"` + sendCarouselPhone + `","body":"Escolha uma opcao","footer":"wa-api",` +
+		`"cards":[` +
+		`{"title":"Cartao A","body":"Corpo A","footer":"pe A","buttons":[{"type":"reply","title":"Sim","id":"btn-a"}]},` +
+		`{"title":"Cartao B","body":"Corpo B","buttons":[{"type":"cta_url","title":"Site","url":"https://example.invalid"}]}` +
 		`]}`
 
 	im := &contractsfake.InteractiveMessenger{
@@ -118,10 +118,10 @@ func TestSendCarousel_RejectMissingFields(t *testing.T) {
 		name string
 		body string
 	}{
-		{"no phone", `{"Body":"x","Cards":[{"Body":"c","Buttons":[{"type":"reply","title":"y"}]}]}`},
-		{"no body", `{"Phone":"5511999999999","Cards":[{"Body":"c","Buttons":[{"type":"reply","title":"y"}]}]}`},
-		{"no cards", `{"Phone":"5511999999999","Body":"x","Cards":[]}`},
-		{"null cards", `{"Phone":"5511999999999","Body":"x"}`},
+		{"no phone", `{"body":"x","cards":[{"body":"c","buttons":[{"type":"reply","title":"y"}]}]}`},
+		{"no body", `{"phone":"5511999999999","cards":[{"body":"c","buttons":[{"type":"reply","title":"y"}]}]}`},
+		{"no cards", `{"phone":"5511999999999","body":"x","cards":[]}`},
+		{"null cards", `{"phone":"5511999999999","body":"x"}`},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,8 +137,8 @@ func TestSendCarousel_RejectMissingFields(t *testing.T) {
 // discarded is silently dropped; if ALL cards are dropped the request is
 // rejected.
 func TestSendCarousel_CardWithNoButtonsIsDropped(t *testing.T) {
-	body := `{"Phone":"` + sendCarouselPhone + `","Body":"Corpo",` +
-		`"Cards":[{"Body":"Cartao sem botao valido","Buttons":[{"type":"DESCONHECIDO","title":"X"}]}]}`
+	body := `{"phone":"` + sendCarouselPhone + `","body":"Corpo",` +
+		`"cards":[{"body":"Cartao sem botao valido","buttons":[{"type":"DESCONHECIDO","title":"X"}]}]}`
 	rec := sendCarouselServe(t, &contractsfake.InteractiveMessenger{}, &contractsfake.JIDResolver{}, body, msgAuthed)
 	if rec.Code == http.StatusOK {
 		t.Error("all cards dropped but got 200")
@@ -159,10 +159,10 @@ func TestSendCarousel_CardWithEmptyBodyIsDropped(t *testing.T) {
 			return domain.MessageSendResult{ID: "ok"}, nil
 		},
 	}
-	body := `{"Phone":"` + sendCarouselPhone + `","Body":"Corpo",` +
-		`"Cards":[` +
-		`{"Body":"  ","Buttons":[{"type":"reply","title":"X"}]},` +
-		`{"Body":"Valido","Buttons":[{"type":"reply","title":"Y"}]}]}`
+	body := `{"phone":"` + sendCarouselPhone + `","body":"Corpo",` +
+		`"cards":[` +
+		`{"body":"  ","buttons":[{"type":"reply","title":"X"}]},` +
+		`{"body":"Valido","buttons":[{"type":"reply","title":"Y"}]}]}`
 	rec := sendCarouselServe(t, im, &contractsfake.JIDResolver{}, body, msgAuthed)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
@@ -173,8 +173,8 @@ func TestSendCarousel_CardWithEmptyBodyIsDropped(t *testing.T) {
 // rules apply — title fallback, truncation, id fallback, unknown-type discard.
 func TestSendCarousel_ButtonNormalisationMatchesButtons(t *testing.T) {
 	longTitle := strings.Repeat("A", 25)
-	body := `{"Phone":"` + sendCarouselPhone + `","Body":"Corpo",` +
-		`"Cards":[{"Body":"Cartao","Buttons":[{"type":"reply","title":"` + longTitle + `"}]}]}`
+	body := `{"phone":"` + sendCarouselPhone + `","body":"Corpo",` +
+		`"cards":[{"body":"Cartao","buttons":[{"type":"reply","title":"` + longTitle + `"}]}]}`
 
 	im := &contractsfake.InteractiveMessenger{
 		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, payload domain.CarouselPayload, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
@@ -247,8 +247,8 @@ func TestSendCarousel_MalformedBody(t *testing.T) {
 // TestSendCarousel_ClientSuppliedIDIsForwarded confirms the optional `Id`
 // field reaches the port.
 func TestSendCarousel_ClientSuppliedIDIsForwarded(t *testing.T) {
-	body := `{"Phone":"` + sendCarouselPhone + `","Body":"Corpo","Id":"client-id-99",` +
-		`"Cards":[{"Body":"C","Buttons":[{"type":"reply","title":"Y"}]}]}`
+	body := `{"phone":"` + sendCarouselPhone + `","body":"Corpo","id":"client-id-99",` +
+		`"cards":[{"body":"C","buttons":[{"type":"reply","title":"Y"}]}]}`
 	im := &contractsfake.InteractiveMessenger{
 		SendCarouselFunc: func(_ context.Context, _ string, _ domain.JID, _ domain.CarouselPayload, _ *domain.ReplyContext, _ []string, id string) (domain.MessageSendResult, error) {
 			if id != "client-id-99" {

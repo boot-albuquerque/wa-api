@@ -9,6 +9,7 @@ import (
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 )
 
 // SetDisappearingTimerHandler handles POST /chat/ephemeral.
@@ -54,7 +55,7 @@ func (h *SetDisappearingTimerHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Disappearing timer set"}, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentAction(dtomessage.DetailsDisappearingSet), nil)
 }
 
 // SetDefaultDisappearingTimerHandler handles POST /chat/ephemeral/default.
@@ -93,5 +94,5 @@ func (h *SetDefaultDisappearingTimerHandler) ServeHTTP(w http.ResponseWriter, r 
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, map[string]string{"Details": "Default disappearing timer set"}, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentAction(dtomessage.DetailsDefaultDisappearingSet), nil)
 }

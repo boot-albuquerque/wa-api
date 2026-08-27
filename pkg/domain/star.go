@@ -11,6 +11,6 @@ type StarMessageRequest struct {
 
 // StarMessageResult is the response envelope for POST /message/star.
 type StarMessageResult struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
+	Success bool
+	Message string
 }

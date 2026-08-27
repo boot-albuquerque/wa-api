@@ -90,7 +90,7 @@ func presenceCases() []presenceCase {
 			build: func(d *presenceDeps) http.Handler {
 				return NewSubscribePresenceHandler(message.NewSubscribePresenceUseCase(d.presence, d.jids, log))
 			},
-			validBody:    `{"Phone":"5511999999999"}`,
+			validBody:    `{"phone":"5511999999999"}`,
 			emptyBodyErr: "missing Phone in Payload",
 			jidErr:       "could not parse Phone",
 			failOp: func(d *presenceDeps, err error) {
@@ -104,7 +104,7 @@ func presenceCases() []presenceCase {
 			build: func(d *presenceDeps) http.Handler {
 				return NewChatPresenceHandler(message.NewChatPresenceUseCase(d.presence, d.jids, log))
 			},
-			validBody:    `{"Phone":"5511999999999","State":"composing"}`,
+			validBody:    `{"phone":"5511999999999","state":"composing"}`,
 			emptyBodyErr: "missing Phone in Payload",
 			jidErr:       "could not parse Phone",
 			failOp: func(d *presenceDeps, err error) {
@@ -118,7 +118,7 @@ func presenceCases() []presenceCase {
 			build: func(d *presenceDeps) http.Handler {
 				return NewMarkReadHandler(message.NewMarkReadUseCase(d.messenger, d.jids, log))
 			},
-			validBody:    `{"Id":["MSG1"],"ChatPhone":"5511999999999"}`,
+			validBody:    `{"id":["MSG1"],"chat_phone":"5511999999999"}`,
 			emptyBodyErr: "missing ChatPhone in Payload",
 			jidErr:       "could not parse ChatPhone",
 			failOp: func(d *presenceDeps, err error) {
@@ -134,7 +134,7 @@ func presenceCases() []presenceCase {
 			build: func(d *presenceDeps) http.Handler {
 				return NewReactHandler(message.NewReactUseCase(d.messenger, d.jids, log))
 			},
-			validBody:    `{"Phone":"5511999999999","Body":"ok","Id":"MSG1"}`,
+			validBody:    `{"phone":"5511999999999","body":"ok","id":"MSG1"}`,
 			emptyBodyErr: "missing Phone in Payload",
 			jidErr:       "could not parse Phone",
 			failOp: func(d *presenceDeps, err error) {

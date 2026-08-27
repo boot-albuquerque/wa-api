@@ -80,6 +80,6 @@ func (r DownloadRequest) Descriptor(kind MediaKind) MediaDescriptor {
 
 // DownloadResult representa o resultado do download de mídia.
 type DownloadResult struct {
-	Mimetype string `json:"Mimetype"`
-	Data     string `json:"Data"` // base64 data URL
+	Mimetype string
+	Data     string // base64 data URL
 }
