@@ -2,6 +2,22 @@
 
 **Decisão de 2026-08-26**, a executar a F269 ponto 1 e 2.
 
+**Reversão de 2026-08-27** (ver `HOUSEKEEP.md`): a política abaixo, de manter
+o caminho antigo registado e a responder para sempre, foi **revertida por
+directiva explícita do utilizador**. O projecto não tem consumidores reais
+antes do lançamento — não há cliente a proteger de um corte, e manter as
+duas formas era pagar o custo de compatibilidade sem ter quem a use. A regra
+actual é **corte limpo**: para cada linha da tabela, só o caminho canónico
+fica registado; o antigo devolve 404. Esta secção fica como **registo
+histórico da migração** — a tabela abaixo continua a ser a fonte para quem
+precisar de traduzir um nome antigo (visto em logs antigos, código de cliente
+desactualizado) para o nome actual.
+
+**Excepção**: as cinco rotas de descarga por tipo (`/chat/download{tipo}`)
+NÃO fazem parte deste corte — HOUSEKEEP F297 já tinha registado, antes desta
+directiva, que elas são mantidas por decisão própria e ficaram fora desta
+sessão. Ver F297 para o estado actual dessa decisão.
+
 ## A regra
 
 1. **Plural para colecção**, singular só para singleton — recurso de que existe
@@ -11,41 +27,42 @@
 3. **Método diz a operação**: `PUT` para ligar, `DELETE` para desligar, `GET`
    para ler — em vez de o verbo ir no substantivo.
 
-## Como isto NÃO parte clientes
+## Como isto funciona desde a reversão de 2026-08-27
 
-Cada caminho antigo continua **registado e a responder**. O que muda:
+Cada caminho antigo listado na tabela **deixou de responder** (404). O que
+mudou face à versão original desta página:
 
 | | canónico | antigo |
 |---|---|---|
-| é servido? | sim | **sim** |
-| está no OpenAPI | sim | **não** |
-| onde se encontra | na página `/docs` | na tabela de equivalência do `docs/ENDPOINTS.md` |
-| tempo de vida | permanente | sem data de remoção |
+| é servido? | sim | **não — 404** |
+| está no OpenAPI | sim | não (nunca esteve) |
+| onde se encontra | na página `/docs` | na tabela de equivalência do `docs/ENDPOINTS.md`, como registo histórico |
+| tempo de vida | permanente | terminou em 2026-08-27 |
 
-### Por que o antigo saiu do contrato, em vez de ficar `deprecated`
+### Por que o antigo saiu do contrato — e agora também do serviço
 
 A primeira versão desta padronização documentava as duas formas, com a antiga
 marcada `deprecated: true`. Ficaram **232 operações para 141 capacidades** — e
 o leitor passava a ter de escolher entre `/chat/list` e `/chats/list` em cada
-grupo que abrisse.
+grupo que abrisse. Documentar as duas contradizia aquilo que a padronização
+existe para resolver: **uma operação, um nome**.
 
-Documentar as duas contradiz aquilo que a padronização existe para resolver:
-**uma operação, um nome**. Um contrato com dois nomes para a mesma coisa não é
-mais informativo — é mais ambíguo, e a ambiguidade é o defeito original.
+A versão seguinte (F269/CAP-10, 2026-08-26/27) resolveu a ambiguidade no
+CONTRATO mas manteve as duas formas no SERVIÇO, com a promessa de vida
+permanente para a antiga. Isso fazia sentido sob a premissa de que havia
+clientes reais a proteger. **Essa premissa não se verificava**: o projecto
+ainda não tinha lançado, e "manter compatibilidade com quem nunca consumiu"
+não protege ninguém — só paga custo. A directiva de 2026-08-27 corrigiu a
+premissa, e a política de manter o serviço mudou com ela.
 
-**A distinção que importa**: o caminho antigo foi removido do **contrato**, não
-do **serviço**. Um cliente existente continua a funcionar exactamente como
-antes; o que deixa de existir é a promessa documentada de que continuará. Quem
-integrar de novo lê um nome só.
+**Onde o antigo vive agora**: só na tabela de equivalência do
+`docs/ENDPOINTS.md` e nesta página, como registo histórico — não no router.
 
-**Onde o antigo vive agora**: na tabela de equivalência do `docs/ENDPOINTS.md`,
-e na nota que abre cada operação canónica — *"Substitui `GET /chat/list`"* —
-para que quem chegue com o nome que conhece encontre onde ele foi parar.
-
-**O que o gate garante**: uma rota antiga conta como coberta **apenas** se a
-gémea canónica estiver documentada. Apagar a canónica acusa as duas, com a
-mensagem a dizê-lo. Nunca há um estado em que uma capacidade servida fique
-sem nome nenhum no contrato.
+**O que o gate garante agora**: `TestRotaLegadaResponde404`
+(`pkg/bootstrap/caminhos_canonicos_test.go`) prova, rota a rota, que o
+caminho antigo não casa mais com nenhuma rota registada.
+`TestTodaRotaCanonicaEstaRegistadaEALegadaNao` prova o par completo: a
+canónica está registada, a antiga não.
 
 ## O que fica singular, e porquê
 

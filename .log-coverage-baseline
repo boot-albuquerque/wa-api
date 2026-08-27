@@ -1542,7 +1542,20 @@ min_errpath_coverage=777
 # handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
 # SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
 # como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
-min_eligible=993
+# F298 (2026-08-27): min_eligible SOBE 993->996 (+3, ratchet-UP honesto).
+# Reversao de F269/CAP-10 (corte limpo das rotas legadas, ver HOUSEKEEP.md):
+# ENTRAM (4): http.HandlerRegistry.CanonicalizeRoutes (renomeou e mudou
+# corpo de RegisterCanonicalAliases), e tres funcoes NOVAS em
+# pkg/infra/stdio/stdio_routes_group.go — groupPhotoPath e
+# groupParticipantsPath (dynamicRoute com log.Debug, mesmo padrao das
+# dynamicRoute ja existentes) e groupJIDParam (extrai o group_jid do pedido
+# JSON-RPC, chamada por ambas). SAI (1): RegisterCanonicalAliases, cujo nome
+# e corpo foram substituidos pela CanonicalizeRoutes acima — nao e' a mesma
+# funcao (a logica de remocao/substituicao e' nova), por isso conta como
+# saida + entrada, nao como renomeacao transparente. func_coverage_tenths e
+# errpath_coverage_tenths NAO mudaram (589 e 777, respectivamente) — a
+# medicao confirma que as 4 funcoes novas nao pioraram a cobertura relativa.
+min_eligible=996
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

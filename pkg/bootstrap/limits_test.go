@@ -16,7 +16,7 @@ func TestBodyLimit_ContentLengthOverCap(t *testing.T) {
 	d := minimalDeps()
 	router := NewRouter(d)
 
-	req := httptest.NewRequest(http.MethodPost, "/chat/send/text", bytes.NewReader([]byte("x")))
+	req := httptest.NewRequest(http.MethodPost, "/chats/send/text", bytes.NewReader([]byte("x")))
 	req.ContentLength = maxRequestBodyBytes + 1
 	rec := httptest.NewRecorder()
 
@@ -35,7 +35,7 @@ func TestBodyLimit_UnderCapPassesThrough(t *testing.T) {
 	d := minimalDeps()
 	router := NewRouter(d)
 
-	req := httptest.NewRequest(http.MethodPost, "/chat/send/text", bytes.NewReader([]byte(`{"text":"hi"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/chats/send/text", bytes.NewReader([]byte(`{"text":"hi"}`)))
 	rec := httptest.NewRecorder()
 
 	router.ServeHTTP(rec, req)

@@ -9,7 +9,7 @@ import (
 )
 
 // F229: /status/set/text was removed — it pointed to the same handler as
-// /user/status (profile "About" text) and did NOT publish a status story.
+// /users/status (profile "About" text) and did NOT publish a status story.
 // Keeping it would perpetuate a misleading contract.
 
 func TestStatusSetTextRouteRemoved(t *testing.T) {
@@ -25,10 +25,10 @@ func TestStatusSetTextRouteRemoved(t *testing.T) {
 func TestUserStatusRouteStillExists(t *testing.T) {
 	router := newRouterForRouteCheck()
 
-	req := httptest.NewRequest(http.MethodPost, "/user/status", nil)
+	req := httptest.NewRequest(http.MethodPost, "/users/status", nil)
 	var match mux.RouteMatch
 	if !router.Match(req, &match) {
-		t.Fatal("/user/status does not match any route — it must remain registered")
+		t.Fatal("/users/status does not match any route — it must remain registered")
 	}
 }
 

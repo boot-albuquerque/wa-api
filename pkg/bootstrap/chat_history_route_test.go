@@ -28,11 +28,11 @@ import (
 	"wa-api/pkg/presentation/http/handlers"
 )
 
-// CAP-09A — GET /chat/history.
+// CAP-09A — GET /chats/history.
 //
 // Estes testes exercitam a ROTA REGISTRADA (registerCustomRoutes + gorilla/mux),
 // e nao o handler cru: a ARMADILHA 2 deste repo e' exatamente isso, e o defeito
-// que eles travam (F124) era de FIACAO — /chat/history apontava para o handler
+// que eles travam (F124) era de FIACAO — /chats/history apontava para o handler
 // de /webhook/history e respondia um literal sem tocar no banco.
 //
 // A persistencia e' SQLite real com o schema de producao. Um fake nao serve
@@ -254,7 +254,7 @@ func TestChatHistoryRoute_GateStateCachedHistoryEnabled(t *testing.T) {
 	f.seedUser(t, "A", 10)
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -274,7 +274,7 @@ func TestChatHistoryRoute_GateStateDisabledEverywhereIs501(t *testing.T) {
 	f.seedUser(t, "A", 0)
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	if rec.Code != http.StatusNotImplemented {
 		t.Fatalf("status = %d, quero 501 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -292,7 +292,7 @@ func TestChatHistoryRoute_GateStateStaleZeroRevalidatesAndProceeds(t *testing.T)
 	f.seedUser(t, "A", 30) // o usuario LIGOU o historico; o cache ainda diz 0
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 — o 0 do cache foi revalidado como 30 (corpo: %s)",
 			rec.Code, rec.Body.String())
@@ -321,7 +321,7 @@ func TestChatHistoryRoute_IndexReturnsOnlyCallerTenant(t *testing.T) {
 	// Ordem de mapa em Go e' aleatoria por desenho: repetir e' o que separa
 	// "isolado" de "deu sorte".
 	for volta := 0; volta < 20; volta++ {
-		rec := f.get(t, "/chat/history?chat_jid=index")
+		rec := f.get(t, "/chats/history?chat_jid=index")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("volta %d: status = %d, quero 200 (corpo: %s)", volta, rec.Code, rec.Body.String())
 		}
@@ -350,7 +350,7 @@ func TestChatHistoryRoute_IndexIsolatesOnUserIDNotChatJID(t *testing.T) {
 	f.seedHistoryRow(t, "A", compartilhado, "A-1", base)
 	f.seedHistoryRow(t, "B", compartilhado, "B-1", base.Add(10*time.Hour))
 
-	rec := f.get(t, "/chat/history?chat_jid=index")
+	rec := f.get(t, "/chats/history?chat_jid=index")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -375,7 +375,7 @@ func TestChatHistoryRoute_IndexEmptyMapWhenCallerHasNoHistory(t *testing.T) {
 	f.seedUser(t, "B", 10)
 	f.seedHistoryRow(t, "B", historyChatB, "B-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid=index")
+	rec := f.get(t, "/chats/history?chat_jid=index")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -395,7 +395,7 @@ func TestChatHistoryRoute_MissingIdentityIsRejected(t *testing.T) {
 	f.seedUser(t, "B", 10)
 	f.seedHistoryRow(t, "B", historyChatB, "B-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid=index")
+	rec := f.get(t, "/chats/history?chat_jid=index")
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, quero 401 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -408,7 +408,7 @@ func TestChatHistoryRoute_MissingIdentityIsRejected(t *testing.T) {
 func TestChatHistoryRoute_MissingSessionIDIsRejected(t *testing.T) {
 	f := newChatHistoryFixture(t, func() *Values { return userValues("", 10) })
 
-	rec := f.get(t, "/chat/history?chat_jid=index")
+	rec := f.get(t, "/chats/history?chat_jid=index")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, quero 400 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -420,7 +420,7 @@ func TestChatHistoryRoute_MissingChatJIDIs400(t *testing.T) {
 	f := newChatHistoryFixture(t, func() *Values { return userValues("A", 10) })
 	f.seedUser(t, "A", 10)
 
-	rec := f.get(t, "/chat/history")
+	rec := f.get(t, "/chats/history")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, quero 400 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -433,7 +433,7 @@ func TestChatHistoryRoute_InvalidLimitIs400(t *testing.T) {
 	f := newChatHistoryFixture(t, func() *Values { return userValues("A", 10) })
 	f.seedUser(t, "A", 10)
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA+"&limit=abc")
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA+"&limit=abc")
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, quero 400 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -453,7 +453,7 @@ func TestChatHistoryRoute_DefaultLimitIs50(t *testing.T) {
 		f.seedHistoryRow(t, "A", historyChatA, fmt.Sprintf("A-%02d", i), base.Add(time.Duration(i)*time.Minute))
 	}
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -481,7 +481,7 @@ func TestChatHistoryRoute_OrderIsTimestampDesc(t *testing.T) {
 	f.seedHistoryRow(t, "A", historyChatA, "NOVA", base.Add(9*time.Hour))
 	f.seedHistoryRow(t, "A", historyChatA, "VELHA", base)
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	var msgs []appport.ChatHistoryMessage
 	if err := json.Unmarshal(decodeEnvelope(t, rec).Data, &msgs); err != nil {
 		t.Fatalf("data nao e' a lista de mensagens: %v (corpo: %s)", err, rec.Body.String())
@@ -503,7 +503,7 @@ func TestChatHistoryRoute_EmptyResultIs200WithEmptyArray(t *testing.T) {
 	f := newChatHistoryFixture(t, func() *Values { return userValues("A", 10) })
 	f.seedUser(t, "A", 10)
 
-	rec := f.get(t, "/chat/history?chat_jid=vazio@s.whatsapp.net")
+	rec := f.get(t, "/chats/history?chat_jid=vazio@s.whatsapp.net")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -521,11 +521,11 @@ func TestChatHistoryRoute_EmptyResultIs200WithEmptyArray(t *testing.T) {
 // MESMO handler (custom_routes.go historico, linhas 118 e 170), e a migracao
 // reproduziu a fiacao fielmente enquanto perdia a implementacao semantica.
 // Nenhuma assercao sobre corpo de resposta o teria pego, porque o corpo que
-// /chat/history devolvia era um corpo VALIDO — o do outro endpoint.
+// /chats/history devolvia era um corpo VALIDO — o do outro endpoint.
 //
-// O que ele impede: religar /chat/history a Storage.GetHistory (ou o inverso).
+// O que ele impede: religar /chats/history a Storage.GetHistory (ou o inverso).
 // A prova e' que cada rota devolve algo que SO' o seu handler sabe produzir —
-// /chat/history, mensagens vindas do banco; /webhook/history, o LIMITE GRAVADO
+// /chats/history, mensagens vindas do banco; /webhook/history, o LIMITE GRAVADO
 // em users.history. Identidade de ponteiro nao serviria: a chain de middleware
 // embrulha os dois, e dois wrappers distintos comparariam diferente mesmo se o
 // handler embrulhado fosse o mesmo.
@@ -555,16 +555,16 @@ func TestChatHistoryAndWebhookHistoryAreDistinctHandlers(t *testing.T) {
 
 	limiteGravado := fmt.Sprintf("%d", historyDoWebhook)
 
-	chatRec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	chatRec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	if chatRec.Code != http.StatusOK {
-		t.Fatalf("/chat/history: status = %d, quero 200 (corpo: %s)", chatRec.Code, chatRec.Body.String())
+		t.Fatalf("/chats/history: status = %d, quero 200 (corpo: %s)", chatRec.Code, chatRec.Body.String())
 	}
 	if strings.Contains(chatRec.Body.String(), limiteGravado) {
-		t.Fatalf("/chat/history respondeu o limite de configuracao de /webhook/history — as duas rotas voltaram a apontar para o mesmo handler: %s",
+		t.Fatalf("/chats/history respondeu o limite de configuracao de /webhook/history — as duas rotas voltaram a apontar para o mesmo handler: %s",
 			chatRec.Body.String())
 	}
 	if !strings.Contains(chatRec.Body.String(), "SO-DO-CHAT") {
-		t.Fatalf("/chat/history nao devolveu a mensagem do banco; corpo: %s", chatRec.Body.String())
+		t.Fatalf("/chats/history nao devolveu a mensagem do banco; corpo: %s", chatRec.Body.String())
 	}
 
 	webhookRec := f.get(t, "/webhook/history")
@@ -598,7 +598,7 @@ func TestChatHistoryRoute_DoesNotLogSecrets(t *testing.T) {
 	f.seedUser(t, "A", 10)
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	if rec := f.get(t, "/chat/history?chat_jid="+historyChatA); rec.Code != http.StatusOK {
+	if rec := f.get(t, "/chats/history?chat_jid="+historyChatA); rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200", rec.Code)
 	}
 	for _, proibido := range []string{"TOKEN-SUPER-SECRETO", "texto A-1"} {
@@ -625,7 +625,7 @@ func TestChatHistoryLID_TraduzEDevolveOQueEstaSobOTelefone(t *testing.T) {
 		&lidResolverStub{mapa: map[string]string{lid: pn}})
 	f.seedHistoryRow(t, "U-LID", pn, "MSG-SOB-PN", time.Now().Add(-time.Minute))
 
-	rec := f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid))
+	rec := f.get(t, "/chats/history?chat_jid="+url.QueryEscape(lid))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200", rec.Code)
 	}
@@ -652,7 +652,7 @@ func TestChatHistoryLID_FundeAsDuasChaves(t *testing.T) {
 	f.seedHistoryRow(t, "U-LID", pn, "MSG-ANTIGA-PN", agora.Add(-2*time.Hour))
 	f.seedHistoryRow(t, "U-LID", lid, "MSG-RECENTE-LID", agora.Add(-time.Minute))
 
-	msgs := chatHistoryMessages(t, f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid)))
+	msgs := chatHistoryMessages(t, f.get(t, "/chats/history?chat_jid="+url.QueryEscape(lid)))
 	if len(msgs) != 2 {
 		t.Fatalf("registos = %d, quero 2 (as duas chaves fundidas)", len(msgs))
 	}
@@ -671,7 +671,7 @@ func TestChatHistoryLID_SemMapeamentoDevolveOQueTem(t *testing.T) {
 		&lidResolverStub{mapa: map[string]string{}})
 	f.seedHistoryRow(t, "U-LID", lid, "MSG-SOB-LID", time.Now())
 
-	msgs := chatHistoryMessages(t, f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid)))
+	msgs := chatHistoryMessages(t, f.get(t, "/chats/history?chat_jid="+url.QueryEscape(lid)))
 	if len(msgs) != 1 || msgs[0].MessageID != "MSG-SOB-LID" {
 		t.Fatalf("registos = %d: LID sem mapeamento nao pode perder o que ja' estava sob ele", len(msgs))
 	}
@@ -689,7 +689,7 @@ func TestChatHistoryLID_ResolvedorEmFalhaNuncaPioraALeitura(t *testing.T) {
 		&lidResolverStub{falha: errors.New("sessao offline")})
 	f.seedHistoryRow(t, "U-LID", lid, "MSG-SOB-LID", time.Now())
 
-	rec := f.get(t, "/chat/history?chat_jid="+url.QueryEscape(lid))
+	rec := f.get(t, "/chats/history?chat_jid="+url.QueryEscape(lid))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200: resolvedor em falha nao pode derrubar uma leitura local", rec.Code)
 	}
@@ -711,7 +711,7 @@ func TestChatHistoryLID_PedidoPorTelefoneNaoChamaOResolvedor(t *testing.T) {
 	f := newChatHistoryFixtureFull(t, func() *Values { return userValues("U-LID", 50) }, nil, stub)
 	f.seedHistoryRow(t, "U-LID", pn, "MSG-PN", time.Now())
 
-	msgs := chatHistoryMessages(t, f.get(t, "/chat/history?chat_jid="+url.QueryEscape(pn)))
+	msgs := chatHistoryMessages(t, f.get(t, "/chats/history?chat_jid="+url.QueryEscape(pn)))
 	if len(msgs) != 1 {
 		t.Fatalf("registos = %d, quero 1", len(msgs))
 	}

@@ -106,7 +106,7 @@ func TestGetHistoryRoute_FalhaDeLeitura_500SemValorInventado(t *testing.T) {
 	// Uma requisicao antes de fechar o banco, para que AuthAlice ja' tenha a
 	// entrada no cache de autenticacao: sem ela a falha viria da AUTENTICACAO,
 	// e o teste mediria outra coisa.
-	f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+	f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 	if err := f.db.Close(); err != nil {
 		t.Fatalf("fechar o banco: %v", err)

@@ -114,11 +114,19 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		"POST /community/unlink":       {reason: "F237: new community route; stdio entry deferred"},
 
 		"POST /chats/download/{kind}":   {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "chat.download.media", httpMethod: "POST"},
-		"GET /user/lid/{jid}":           {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "user.lid", httpMethod: "GET"},
+		"GET /users/lid/{jid}":          {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "user.lid", httpMethod: "GET"},
 		"GET /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.get", httpMethod: "GET"},
 		"PUT /admin/users/{id}":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.edit", httpMethod: "PUT"},
 		"DELETE /admin/users/{id}":      {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.delete", httpMethod: "DELETE"},
 		"DELETE /admin/users/{id}/full": {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "admin.users.delete.full", httpMethod: "DELETE"},
+
+		// F269/CAP-10 reversão (2026-08-27): group.photo, group.photo.remove e
+		// group.updateparticipants deixaram de ser rotas estáticas de stdio
+		// porque o caminho canónico carrega o group_jid na RELAÇÃO — viraram
+		// dynamicRoute (ver pkg/infra/stdio/stdio_routes_group.go).
+		"PUT /groups/{group_jid}/photo":         {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "group.photo", httpMethod: "PUT"},
+		"DELETE /groups/{group_jid}/photo":      {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "group.photo.remove", httpMethod: "DELETE"},
+		"POST /groups/{group_jid}/participants": {reason: "path parameter; dispatched by stdio dynamic route", dynamicRPC: "group.updateparticipants", httpMethod: "POST"},
 	}
 
 	dynamicTargets := stdiopkg.DynamicRouteTargets()
@@ -143,13 +151,13 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 	// Adding a route here means acknowledging a KNOWN omission, not
 	// granting a permanent exemption.
 	knownPending := map[string]bool{
-		"GET /chat/list":             true,
+		"GET /chats/list":            true,
 		"POST /chat/downloadsticker": true,
-		"POST /chat/send/template":   true,
+		"POST /chats/send/template":  true,
 
-		"GET /group/requestparticipants":        true,
-		"POST /group/updaterequestparticipants": true,
-		"POST /group/joinapprovalmode":          true,
+		"GET /groups/{group_jid}/join-requests":          true,
+		"POST /groups/{group_jid}/join-requests":         true,
+		"PUT /groups/{group_jid}/settings/join-approval": true,
 
 		"POST /s3/configure":        true,
 		"GET /s3/config":            true,
@@ -168,15 +176,15 @@ func TestRegisteredHTTPRoutesHaveStdioEntry(t *testing.T) {
 		"POST /webhook/history": true,
 		"GET /webhook/history":  true,
 
-		"GET /user/blocklist":              true,
-		"POST /user/presence/subscribe":    true,
-		"GET /user/contacts/last-activity": true,
-		"GET /user/privacy":                true,
-		"POST /user/privacy":               true,
-		"POST /user/status":                true,
-		"POST /user/history/sync":          true,
-		"POST /user/contacts/sync":         true,
-		"GET /user/profile/{jid}":          true,
+		"GET /users/blocklist":              true,
+		"POST /users/presence/subscribe":    true,
+		"GET /users/contacts/last-activity": true,
+		"GET /users/privacy":                true,
+		"POST /users/privacy":               true,
+		"POST /users/status":                true,
+		"POST /users/history/sync":          true,
+		"POST /users/contacts/sync":         true,
+		"GET /users/profile/{jid}":          true,
 
 		"GET /session/profile":      true,
 		"GET /session/profile/full": true,
