@@ -3915,6 +3915,8 @@ pkg/presentation/http/dto/group.CommunityTargetRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/group.CommunityTargetRequest.ToParticipantsDomain	EXCLUDED	X1
 pkg/presentation/http/dto/group.CommunityTargetRequest.ToSubGroupsDomain	EXCLUDED	X1
 pkg/presentation/http/dto/group.CreateGroupRequest.ToDomainOpts	EXCLUDED	X1
+pkg/presentation/http/dto/group.GetGroupInfoRequest.ResolveChat	EXCLUDED	X1
+pkg/presentation/http/dto/group.GetGroupInfoRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/group.GetGroupInviteInfoRequest.ToDomain	EXCLUDED	X1
 pkg/presentation/http/dto/group.GroupTargetRequest.ResolveChat	EXCLUDED	X1
 pkg/presentation/http/dto/group.GroupTargetRequest.ToInviteLinkDomain	EXCLUDED	X1

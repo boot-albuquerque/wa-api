@@ -31460,3 +31460,133 @@ quatro famílias que ainda vão migrar, e a desvantagem de tirar do denominador
 código que um dia pode ganhar decisão.
 
 <!-- f-status: corrigido -->
+
+## F301 — fecho da migração DTO grupo/comunidade: `/group/info` ainda aceitava `groupJID`, e a OpenAPI da família inteira estava presa antes da migração
+
+**Data**: 2026-08-27. **Contexto**: `worktree/http-dto-groups` chegou a este
+turno com o Go já migrado (`fec8bdb0 feat(http): migra a familia
+grupo/comunidade para DTO na fronteira HTTP`, mais o checkpoint e o fix de
+golden que vieram depois), mas sem o commit de fecho que as famílias irmãs
+(sessão, mensagens, utilizadores, canais, admin) têm — pedido explícito:
+verificar completude e terminar.
+
+### 1. O gap de código: `/group/info` era a única rota da família sem DTO de pedido
+
+**Onde**: `pkg/presentation/http/handlers/handler_group.go:170` (antes da
+correção) decodificava directo em `domain.GetGroupInfoRequest`
+(`pkg/domain/group.go:31`), cujo único `json` é `groupJID` — camelCase. Todas
+as OUTRAS 19 rotas de grupo/comunidade já liam um `dtogroup.*Request` tipado
+com `group_jid`/`community_jid` em snake_case
+(`pkg/presentation/http/dto/group/request.go`).
+
+**Problema**: `/group/info` é citada como "a implementação de REFERÊNCIA" no
+próprio `docs/HTTP-DTO-CONVENTIONS.md` (linha 8), e a tabela de referência do
+documento nunca listou uma linha "DTO de pedido" para ela — só resposta. A
+rota-modelo da migração era, ela própria, a única que não a seguia no pedido:
+`POST /group/info {"groupJID":"…"}` funcionava, `{"group_jid":"…"}` não.
+Violava `docs/HTTP-DTO-CONVENTIONS.md` §8 ("vale para respostas E para corpos
+de pedido") e a paridade com as 19 rotas irmãs.
+
+**Correção aplicada**: `dtogroup.GetGroupInfoRequest` novo
+(`pkg/presentation/http/dto/group/request.go`), com `group_jid` e `chat`
+(`ResolveChat`/`ToDomain`), e o manipulador passou a decodificar nele em vez
+de `domain.GetGroupInfoRequest` directamente
+(`pkg/presentation/http/handlers/handler_group.go`). `domain.GetGroupInfoRequest`
+foi deixado como estava — o seu `json:"groupJID"` é usado também por
+`pkg/domain/chat_target_test.go` (F225, mecanismo genérico do alias `chat`
+partilhado por famílias AINDA não migradas como `message`/`mute`/`archive`) e
+mexer nele estaria fora do escopo de grupo/comunidade.
+
+**Teste do defeito + controlo negativo EXECUTADO**
+(`pkg/presentation/http/handlers/handler_group_info_contract_test.go`):
+
+- `TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase` — `{"group_jid":"…"}` tem
+  de dar `200`.
+- `TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu` — `{"groupJID":"…"}`
+  sozinho tem de deixar de resolver o grupo.
+
+Controlo negativo (reverti a correção com `git stash`, corri os dois testes,
+restaurei com `git stash apply` pela SHA, larguei a entrada):
+
+```
+=== RUN   TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase
+    handler_group_info_contract_test.go:242: status = 400, quero 200 com group_jid; corpo: {"code":400,"error":{"code":"missing_group_jid","message":"missing groupJID parameter"},"success":false}
+--- FAIL: TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase (0.00s)
+=== RUN   TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu
+    handler_group_info_contract_test.go:261: groupJID sozinho ainda resolveu o grupo: status 200, corpo: {...,"success":true}
+--- FAIL: TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu (0.00s)
+```
+
+Os dois morderam. Restaurada a correção, os dois passam, e
+`handler_group_test.go`/`handler_group_info_contract_test.go` tiveram os
+`groupJID` de corpo (não os de chave de RESPOSTA testada por `AssertNoKeys`,
+que continuam a ser afirmação válida) trocados para `group_jid`.
+
+### 2. A OpenAPI da família inteira documentava o formato ANTERIOR à migração
+
+Ao verificar "OpenAPI schema updated to match" (passo pedido), encontrei que
+`api/openapi/schemas/grupo.yaml` e `api/openapi/paths/grupo.yaml` — e a secção
+de comunidades em `api/openapi/{schemas,paths}/canal.yaml` — descreviam o
+comportamento de ANTES da migração de Go, em quase toda rota que não fosse
+`/group/info`:
+
+- pedidos documentados com `groupJID`/`groupjid`/`Phone`/`Action`/`Code`/
+  `communityJID`/`groupJID` PascalCase ou mistos, quando o DTO real usa
+  `group_jid`/`community_jid`/`phone`/`action`/`code` uniformemente;
+- respostas documentadas contra a struct de protocolo servida DIRECTAMENTE —
+  `InfoGrupo` (não `InfoGrupoCanonico`) em `/group/create`, `/group/list` e
+  `/group/inviteinfo`; `ParticipanteGrupo` em vez de `ParticipanteGrupoCanonico`
+  em `/group/updateparticipants`; `SubGrupoComunidade` com seis campos
+  (`JID`,`Name`,`NameSetAt`,`NameSetBy`,`NameSetByPN`,`IsDefaultSubGroup`)
+  quando `dtogroup.CommunitySubGroupResponse` só tem três
+  (`jid`,`name`,`is_default_sub_group`);
+- treze menções a "envelope ANTIGO (F266)" — `error` em texto simples — que
+  `docs/HTTP-DTO-CONVENTIONS.md` §7 e `TestRespondJSON_UntypedError_UsesCanonicalErrorObject`
+  já registam como REMOVIDO do projecto inteiro; toda recusa não tipada sai
+  hoje no objecto canónico `{"code":"invalid_request","message":"…"}`;
+- `data: {Details: "…"}` (maiúscula) nos exemplos de nove rotas de
+  confirmação, quando `AcknowledgementResponse.Details` tem
+  `json:"details"` minúsculo — confirmado contra
+  `handler_group_family_contract_test.go:404` (`data["details"]`).
+
+**Correção aplicada**: `api/openapi/schemas/{grupo,canal}.yaml` e
+`api/openapi/paths/{grupo,canal}.yaml` reescritos rota a rota para citar o
+tipo DTO real (`pkg/presentation/http/dto/group/{request,group,group_info}.go`),
+com nomes de campo, `required`, exemplos e formato de erro batendo com o que
+`pkg/presentation/http/dto/group/presenter*.go` produz. Schema novo
+`ResultadoCriarGrupo` (não existia) para `/group/create`, que devolve
+`{group_info, created}` via `dtogroup.CreateGroupResponse`. Regenerado com
+`go run ./cmd/openapidoc` (118 caminhos) e confirmado com
+`go test ./pkg/presentation/http/apidocs/...` (o gate `TestContratoExemploDeErroBateComOEsquema`
+e o golden do merge, ambos verdes).
+
+**Onde as descrições citam "medido"**: mantive as tabelas de comportamento
+(códigos de status por campo malformado, ordem de validação) que não mudam
+com a fronteira HTTP — a lógica de negócio não mudou, só o (de/en)codificador.
+Só troquei a FORMA do erro e o NOME dos campos, que são verificáveis a partir
+do código sem precisar reproduzir contra sessão real. Onde uma alegação
+antiga dependia de medição ao vivo que não repeti nesta sessão (ex.:
+`ResultadoInfoConvite`, sobre `member_add_mode` vir `""`), marquei
+explicitamente que não foi re-verificada.
+
+### 3. Achado NÃO corrigido, fora do escopo de grupo: `Detalhes.Details` em `base.yaml`
+
+`api/openapi/base.yaml:336` declara o schema partilhado `Detalhes` com a
+propriedade `Details` (maiúscula) — usado por TODAS as famílias já migradas
+(sessão, utilizadores, canais, admin, grupo), não só esta. A chave real no
+fio é `details` minúsculo, confirmado por
+`handler_group_family_contract_test.go:404`. Como é ficheiro partilhado entre
+worktrees concorrentes (`worktree/http-dto-session`,
+`worktree/http-dto-users`, etc.), **não corrigi** — precisa de decisão
+coordenada entre as famílias que o usam. Sinalizado aqui para quem fechar a
+próxima família ou fizer a integração final.
+
+### 4. Gates
+
+`go build ./...`, `go vet`, `gofmt`, `go test -race` (suíte completa) e
+`make check` verdes depois da correção. `curl localhost:8080/docs/openapi.yaml
+| cmp - pkg/presentation/http/apidocs/openapi.yaml` não corrido nesta sessão
+(binário não subido) — confirmar antes de publicar, per
+`api/openapi/CONTRATO-ARQUITETURAL.md`.
+
+<!-- f-status: corrigido -->

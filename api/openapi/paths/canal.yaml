@@ -1299,13 +1299,13 @@
 
       **A lista nunca vem vazia numa comunidade real**: o grupo de avisos é
       criado automaticamente com a comunidade e aparece sempre, marcado com
-      `IsDefaultSubGroup: true`. Medido a 2026-08-26, com a transição
+      `is_default_sub_group: true`. Medido a 2026-08-26, com a transição
       1 → 2 → 1 provocada por `POST /community/link` e
       `POST /community/unlink` (F237).
 
-      **Regras**: `communityJID` é obrigatório e é um JID de GRUPO (`@g.us`),
+      **Regras**: `community_jid` é obrigatório e é um JID de GRUPO (`@g.us`),
       porque a comunidade é um grupo-pai. O alias universal `chat` também é
-      aceite, e só é usado quando `communityJID` vem vazio.
+      aceite, e só é usado quando `community_jid` vem vazio.
 
       **Autenticação**: token de sessão.
     security:
@@ -1317,7 +1317,7 @@
           schema:
             $ref: '#/components/schemas/PedidoComunidade'
           example:
-            communityJID: 120363430034334401@g.us
+            community_jid: 120363430034334401@g.us
     responses:
       '200':
         description: Os grupos ligados à comunidade, dentro da chave `sub_groups`.
@@ -1334,16 +1334,13 @@
               code: 200
               data:
                 sub_groups:
-                  - JID: 120363411669320145@g.us
-                    Name: Avisos
-                    NameSetAt: '2026-08-26T08:08:21-04:00'
-                    NameSetBy: ''
-                    NameSetByPN: ''
-                    IsDefaultSubGroup: true
+                  - jid: 120363411669320145@g.us
+                    name: Avisos
+                    is_default_sub_group: true
               success: true
       '400':
         description: |
-          Falta o `communityJID`, ou ele não é um JID que se consiga
+          Falta o `community_jid`, ou ele não é um JID que se consiga
           interpretar.
         content:
           application/json:
@@ -1372,7 +1369,7 @@
       Quem precisar do telefone tem de resolver o LID por outra rota; esta não
       devolve PN.
 
-      **Regras**: `communityJID` é obrigatório, é um JID `@g.us`, e o alias
+      **Regras**: `community_jid` é obrigatório, é um JID `@g.us`, e o alias
       universal `chat` também é aceite.
 
       **Autenticação**: token de sessão.
@@ -1385,7 +1382,7 @@
           schema:
             $ref: '#/components/schemas/PedidoComunidade'
           example:
-            communityJID: 120363430034334401@g.us
+            community_jid: 120363430034334401@g.us
     responses:
       '200':
         description: Os participantes, em LID, dentro da chave `participants`.
@@ -1407,7 +1404,7 @@
               success: true
       '400':
         description: |
-          Falta o `communityJID`, ou ele não é um JID que se consiga
+          Falta o `community_jid`, ou ele não é um JID que se consiga
           interpretar — neste caso o código é `invalid_community_jid`.
         content:
           application/json:
@@ -1434,7 +1431,7 @@
       `POST /community/subgroups`, e o cliente do WhatsApp mostra a mensagem de
       sistema *"O grupo X foi adicionado"* (F237).
 
-      **Regras**: `communityJID` e `groupJID` são ambos obrigatórios — a
+      **Regras**: `community_jid` e `group_jid` são ambos obrigatórios — a
       ausência de cada um tem o seu próprio código
       (`missing_community_jid`, `missing_group_jid`). Esta rota **não** aceita
       o alias universal `chat`: a struct do pedido não o inclui.
@@ -1454,8 +1451,8 @@
           schema:
             $ref: '#/components/schemas/PedidoLigacaoComunidade'
           example:
-            communityJID: 120363430034334401@g.us
-            groupJID: 120363411669320145@g.us
+            community_jid: 120363430034334401@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: Grupo ligado à comunidade.
@@ -1475,7 +1472,7 @@
               success: true
       '400':
         description: |
-          Falta o `communityJID` ou o `groupJID`, ou um deles não é
+          Falta o `community_jid` ou o `group_jid`, ou um deles não é
           interpretável como JID (`invalid_jid`).
         content:
           application/json:
@@ -1506,7 +1503,7 @@
       (`IsDefaultSubGroup: true`) nasce com a comunidade e permanece — foi ele
       que sobrou quando a contagem voltou a 1.
 
-      **Regras**: `communityJID` e `groupJID` são obrigatórios; o alias `chat`
+      **Regras**: `community_jid` e `group_jid` são obrigatórios; o alias `chat`
       não é aceite aqui.
 
       **Resposta**: `data` traz a confirmação textual
@@ -1523,8 +1520,8 @@
           schema:
             $ref: '#/components/schemas/PedidoLigacaoComunidade'
           example:
-            communityJID: 120363430034334401@g.us
-            groupJID: 120363411669320145@g.us
+            community_jid: 120363430034334401@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: Grupo desligado da comunidade.
@@ -1543,7 +1540,7 @@
                 Details: Group unlinked from community successfully
               success: true
       '400':
-        description: Falta o `communityJID` ou o `groupJID`, ou um deles não é um JID válido.
+        description: Falta o `community_jid` ou o `group_jid`, ou um deles não é um JID válido.
         content:
           application/json:
             schema:

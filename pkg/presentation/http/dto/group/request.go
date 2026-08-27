@@ -43,6 +43,25 @@ func (r GroupTargetRequest) ToRequestParticipantsDomain() domain.GetGroupRequest
 	return domain.GetGroupRequestParticipantsRequest{GroupJID: r.GroupJID}
 }
 
+// GetGroupInfoRequest is the body of the group-info route.
+//
+// H-DTO-GROUP-INFO: /group/info was the reference implementation of this
+// migration and shipped with the response side done but the request side
+// still decoding straight into domain.GetGroupInfoRequest, whose only `json`
+// tag is `groupJID` — the one route in this family accepting a camelCase key.
+// This DTO closes that gap the same way every sibling route already works.
+type GetGroupInfoRequest struct {
+	GroupJID  string `json:"group_jid"`
+	ChatAlias string `json:"chat"`
+}
+
+func (r *GetGroupInfoRequest) ResolveChat() { domain.ResolveChatField(&r.GroupJID, r.ChatAlias) }
+
+// ToDomain produces the use case input.
+func (r GetGroupInfoRequest) ToDomain() domain.GetGroupInfoRequest {
+	return domain.GetGroupInfoRequest{GroupJID: r.GroupJID}
+}
+
 // GetGroupInviteInfoRequest is the body of the invite-info route.
 type GetGroupInviteInfoRequest struct {
 	Code string `json:"code"`

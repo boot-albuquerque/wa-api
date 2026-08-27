@@ -167,7 +167,7 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var req domain.GetGroupInfoRequest
+	var req dtogroup.GetGroupInfoRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -176,7 +176,7 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {

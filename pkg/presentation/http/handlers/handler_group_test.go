@@ -136,7 +136,7 @@ func grpReadCases() []grpReadCase {
 			name:      "GetGroupInfo",
 			method:    http.MethodPost,
 			path:      "/group/info",
-			body:      `{"groupJID":"120363@g.us"}`,
+			body:      `{"group_jid":"120363@g.us"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger))
@@ -216,7 +216,7 @@ func TestGroupReadHandlers_MalformedBody(t *testing.T) {
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGrpFakes()
-			rec, capture := grpServe(tc, f, `{"groupJID": "120363`)
+			rec, capture := grpServe(tc, f, `{"group_jid": "120363`)
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			got := logassert.OutcomeLogged(t, capture.Records(t))
@@ -406,7 +406,7 @@ func TestGetGroupInfo_UpstreamForbiddenReturns403(t *testing.T) {
 		group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger)))
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363@g.us"}`))
 	h.ServeHTTP(rec, withUser(r, "user-1"))
 
 	assertErrorEnvelope(t, rec, http.StatusForbidden)

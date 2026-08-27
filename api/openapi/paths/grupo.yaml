@@ -1,12 +1,20 @@
 # Grupo: Grupos — 18 rotas.
 #
 # É a família com mais armadilhas MEDIDAS do inventário, e elas estão escritas
-# como regra visível em cada rota, não em nota de rodapé:
+# como regra visível em cada rota, não em nota de rodapé.
 #
-#   - sete rotas respondem `400` no formato ANTIGO, com `error` em texto
-#     simples em vez do objecto `{code,message}` (F266);
+# H-DTO-GROUP (feat(http): migra a familia grupo/comunidade para DTO na
+# fronteira HTTP): toda rota lê hoje um `dtogroup.*Request` tipado, com
+# etiquetas `json` em snake_case (docs/HTTP-DTO-CONVENTIONS.md). O formato
+# ANTIGO de erro (F266, `error` em texto simples) foi removido do projecto
+# inteiro; a recusa não tipada de um manipulador sai hoje no objecto canónico
+# `{"code":"invalid_request","message":"Requisição inválida."}`. As notas
+# "envelope ANTIGO (F266)" que ainda aparecem nesta especificação descrevem o
+# comportamento ANTES da migração e foram corrigidas onde encontradas — ver
+# `HOUSEKEEP.md` para a entrada de fecho.
+#
 #   - `/group/join` lê `code`, e a struct de domínio declara `inviteLink`
-#     (F267);
+#     (F267) — o DTO de pedido cobre essa divergência;
 #   - `/group/photo` recusa o prefixo `data:` que `/chat/send/image` aceita;
 #   - `/group/updateparticipants` não sabe promover nem despromover (F263);
 #   - `GET /group/requestparticipants` lê o corpo — e também a query string.
@@ -38,7 +46,7 @@
           schema:
             $ref: '#/components/schemas/PedidoAnuncioGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             announce: true
     responses:
       '200':
@@ -54,7 +62,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group announce set successfully}
+              data: {details: Group announce set successfully}
               success: true
       '400':
         $ref: '#/components/responses/CorpoInvalido'
@@ -90,9 +98,10 @@
       pedido falhar: volta na lista com `Error` diferente de zero.
 
       **Formato do erro `400`**: esta rota usa `rejectMissingField`
-      (`handler_group_mgmt.go:99`) e responde no envelope ANTIGO,
-      `{"code":400,"error":"bad request","success":false}`, com `error` em
-      STRING. Um cliente que leia `error.code` parte aqui. É o achado F266.
+      (`handler_group_mgmt.go:114`) e responde no objecto canónico,
+      `{"code":400,"error":{"code":"invalid_request","message":"Requisição
+      inválida."},"success":false}` — um cliente que leia `error.code` já
+      consegue ramificar.
 
       **Autenticação**: token de sessão.
     security:
@@ -109,8 +118,9 @@
     responses:
       '200':
         description: |
-          Grupo criado. O corpo traz os metadados completos do grupo novo,
-          na mesma forma que `POST /group/info` devolve.
+          Grupo criado. `group_info` traz os metadados completos do grupo
+          novo, na mesma forma canónica que `POST /group/info` devolve;
+          `created` diz se foi mesmo criado ou apenas encontrado.
         content:
           application/json:
             schema:
@@ -119,32 +129,48 @@
                 - type: object
                   properties:
                     data:
-                      $ref: '#/components/schemas/InfoGrupo'
+                      $ref: '#/components/schemas/ResultadoCriarGrupo'
             example:
               code: 200
               data:
-                JID: 120363411669320145@g.us
-                OwnerJID: 90937376170214@lid
-                OwnerPN: 554192421234@s.whatsapp.net
-                Name: Equipa de entregas
-                IsParent: false
-                LinkedParentJID: ''
-                AddressingMode: lid
-                Participants:
-                  - JID: 90937376170214@lid
-                    PhoneNumber: 554192421234@s.whatsapp.net
-                    LID: 90937376170214@lid
-                    IsAdmin: true
-                    IsSuperAdmin: true
-                    Error: 0
-                    AddRequest: null
+                group_info:
+                  jid: 120363411669320145@g.us
+                  owner_jid: 90937376170214@lid
+                  name: Equipa de entregas
+                  name_set_at: null
+                  name_set_by: ''
+                  topic: ''
+                  topic_set_at: null
+                  topic_set_by: ''
+                  is_locked: false
+                  is_announce: false
+                  is_ephemeral: false
+                  disappearing_timer: 0
+                  is_incognito: false
+                  is_suspended: false
+                  is_parent: false
+                  linked_parent_jid: ''
+                  is_default_sub_group: false
+                  is_join_approval_required: false
+                  member_add_mode: ''
+                  created_at: '2026-08-26T08:42:47-04:00'
+                  participant_count: 1
+                  participants:
+                    - jid: 90937376170214@lid
+                      phone_number: 554192421234@s.whatsapp.net
+                      lid: 90937376170214@lid
+                      display_name: ''
+                      is_admin: true
+                      is_super_admin: true
+                created: true
               success: true
       '400':
         description: |
           `name` ausente, `participants` ausente ou vazio num grupo normal,
           ou `is_parent` e `linked_parent_jid` no mesmo pedido.
 
-          **Formato antigo (F266)**: `error` vem em texto simples.
+          **Objecto canónico**: `error.code = invalid_request` em todas as
+          seis causas — o manipulador não distingue qual campo falhou.
         content:
           application/json:
             schema:
@@ -179,7 +205,7 @@
       um erro de escrita como `"24H"` ou `"1d"`. Do lado do cliente não há
       nada que distinga "desligou de propósito" de "escreveu mal".
 
-      **O campo do grupo é `groupjid`**, todo em minúsculas
+      **O campo do grupo é `group_jid`**, todo em minúsculas
       (`pkg/domain/group.go:186`).
 
       **Leitura de volta**: `POST /group/info` devolve `DisappearingTimer` em
@@ -195,7 +221,7 @@
           schema:
             $ref: '#/components/schemas/PedidoTemporizadorGrupo'
           example:
-            groupjid: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             duration: 24h
     responses:
       '200':
@@ -213,7 +239,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Disappearing timer set}
+              data: {details: Disappearing timer set}
               success: true
       '400':
         $ref: '#/components/responses/CorpoInvalido'
@@ -238,7 +264,7 @@
       **devolve `ParticipantCount` a zero** — medido no mesmo minuto, para o
       mesmo grupo, contra o `2` correcto desta rota.
 
-      **Regras**: `groupJID` é obrigatório; a recusa é `400 missing_group_jid`.
+      **Regras**: `group_jid` é obrigatório; a recusa é `400 missing_group_jid`.
       Um JID MAL FORMADO — número nu, só espaços — devolve
       `400 invalid_group_jid`.
 
@@ -274,7 +300,7 @@
           schema:
             $ref: '#/components/schemas/AlvoGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: Metadados do grupo no instante do pedido.
@@ -322,7 +348,7 @@
               success: true
       '400':
         description: |
-          `groupJID` ausente (`missing_group_jid`), impossível de resolver
+          `group_jid` ausente (`missing_group_jid`), impossível de resolver
           (`invalid_group_jid`), corpo que não é JSON
           (`could_not_decode_payload`), ou sessão por emparelhar
           (`no_session`).
@@ -334,7 +360,7 @@
               code: 400
               error:
                 code: missing_group_jid
-                message: missing groupJID parameter
+                message: missing group_jid parameter
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -376,7 +402,7 @@
           schema:
             $ref: '#/components/schemas/PedidoInfoConvite'
           example:
-            Code: IVccRoDVSbpHKNkgNxyZx4
+            code: IVccRoDVSbpHKNkgNxyZx4
     responses:
       '200':
         description: Metadados do grupo por trás do convite.
@@ -393,28 +419,38 @@
               code: 200
               data:
                 invite_info:
-                  JID: 120363411669320145@g.us
-                  OwnerJID: 90937376170214@lid
-                  OwnerPN: 554192421234@s.whatsapp.net
-                  Name: Equipa de entregas
-                  Topic: Combinações de rota do turno da manhã
-                  IsJoinApprovalRequired: false
-                  ParticipantCount: 2
-                  AnnounceVersionID: ''
-                  ParticipantVersionID: ''
-                  MemberAddMode: ''
-                  Participants:
-                    - JID: 90937376170214@lid
-                      PhoneNumber: 554192421234@s.whatsapp.net
-                      LID: 90937376170214@lid
-                      IsAdmin: false
-                      IsSuperAdmin: false
-                      Error: 0
-                      AddRequest: null
+                  jid: 120363411669320145@g.us
+                  owner_jid: 90937376170214@lid
+                  name: Equipa de entregas
+                  name_set_at: null
+                  name_set_by: ''
+                  topic: Combinações de rota do turno da manhã
+                  topic_set_at: null
+                  topic_set_by: ''
+                  is_locked: false
+                  is_announce: false
+                  is_ephemeral: false
+                  disappearing_timer: 0
+                  is_incognito: false
+                  is_suspended: false
+                  is_parent: false
+                  linked_parent_jid: ''
+                  is_default_sub_group: false
+                  is_join_approval_required: false
+                  member_add_mode: ''
+                  created_at: null
+                  participant_count: 2
+                  participants:
+                    - jid: 90937376170214@lid
+                      phone_number: 554192421234@s.whatsapp.net
+                      lid: 90937376170214@lid
+                      display_name: ''
+                      is_admin: false
+                      is_super_admin: false
               success: true
       '400':
         description: |
-          `Code` ausente (`missing_code`), corpo inválido
+          `code` ausente (`missing_code`), corpo inválido
           (`could_not_decode_payload`), ou sessão por emparelhar
           (`no_session`).
         content:
@@ -466,7 +502,7 @@
       **código nu**. Alimentar um no outro só funciona porque a biblioteca
       corta o prefixo, e não porque o contrato o promete.
 
-      **Regras**: `groupJID` é obrigatório (`missing_group_jid`); só um
+      **Regras**: `group_jid` é obrigatório (`missing_group_jid`); só um
       administrador obtém o link — o WhatsApp recusa aos outros, e a recusa
       chega traduzida como `422`.
 
@@ -480,7 +516,7 @@
           schema:
             $ref: '#/components/schemas/AlvoGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: O link actual do grupo.
@@ -499,7 +535,7 @@
               success: true
       '400':
         description: |
-          `groupJID` ausente (`missing_group_jid`), impossível de resolver
+          `group_jid` ausente (`missing_group_jid`), impossível de resolver
           (`invalid_group_jid`), corpo inválido
           (`could_not_decode_payload`), ou sessão por emparelhar
           (`no_session`).
@@ -511,7 +547,7 @@
               code: 400
               error:
                 code: missing_group_jid
-                message: missing groupJID parameter
+                message: missing group_jid parameter
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -529,10 +565,10 @@
 
       **A struct de domínio MENTE aqui, e é a armadilha mais cara desta
       família.** `GroupJoinRequest` (`pkg/domain/group.go:52-54`) declara
-      `inviteLink`, e **não é o que a rota lê**: o manipulador declara a sua
-      própria struct anónima, com o campo `code`
-      (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do
-      domínio recebe `400`. É o achado F267.
+      `inviteLink`, e **não é o que a rota lê**: o corpo é
+      `dtogroup.JoinGroupRequest` (`pkg/presentation/http/dto/group/request.go`),
+      com o campo `code`. Um cliente escrito a partir do domínio recebe
+      `400`. É o achado F267.
 
       O valor é o **código nu** — `IVccRoDVSbpHKNkgNxyZx4` — e não o URL,
       que é o que `POST /group/invitelink` devolve.
@@ -547,8 +583,7 @@
       `POST /group/list`. O comportamento exacto do código de estado nesse
       caso não foi determinado com segurança pela implementação actual.
 
-      **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples
-      (F266).
+      **Formato do erro `400`**: objecto canónico, `error.code = invalid_request`.
 
       **Autenticação**: token de sessão.
     security:
@@ -578,13 +613,12 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group joined successfully}
+              data: {details: Group joined successfully}
               success: true
       '400':
         description: |
-          `code` ausente ou vazio. **Formato antigo (F266)**: `error` vem em
-          texto simples, e não diz qual campo faltou — a causa fica só no
-          log.
+          `code` ausente ou vazio. `error.code = invalid_request` — não diz
+          qual campo faltou; a causa fica só no log.
         content:
           application/json:
             schema:
@@ -614,7 +648,7 @@
       **Quando usar**: em grupos cujo link circula, para filtrar quem entra
       sem revogar o link.
 
-      **Regras**: o campo do grupo é `groupjid`, todo em minúsculas
+      **Regras**: o campo do grupo é `group_jid`, todo em minúsculas
       (`pkg/domain/group_request.go:40`). `mode` ausente vale `false`, logo
       um pedido só com o grupo **DESLIGA** a exigência — não a consulta.
       Para ler o estado actual use `IsJoinApprovalRequired` de
@@ -633,7 +667,7 @@
           schema:
             $ref: '#/components/schemas/PedidoModoAprovacao'
           example:
-            groupjid: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             mode: true
     responses:
       '200':
@@ -649,11 +683,11 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group join approval mode updated successfully}
+              data: {details: Group join approval mode updated successfully}
               success: true
       '400':
         description: |
-          `groupjid` ausente (`missing_group_jid`), impossível de resolver
+          `group_jid` ausente (`missing_group_jid`), impossível de resolver
           (`invalid_group_jid`), corpo inválido
           (`could_not_decode_payload`), ou sessão por emparelhar
           (`no_session`).
@@ -665,7 +699,7 @@
               code: 400
               error:
                 code: missing_group_jid
-                message: missing groupJID parameter
+                message: missing group_jid parameter
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -684,12 +718,11 @@
       **Quando usar**: no encerramento de uma operação. Para deixar de ver o
       grupo sem sair dele, arquive a conversa em vez disto.
 
-      **Regras**: `groupJID` é obrigatório — a recusa vem do manipulador
-      (`handler_group_mgmt.go:176`), no envelope antigo. `chat` é aceite como
-      alternativa; o nome específico ganha quando os dois vierem.
+      **Regras**: `group_jid` é obrigatório — a recusa vem do manipulador
+      (`handler_group_mgmt.go:163`), via `rejectMissingField`. `chat` é
+      aceite como alternativa; o nome específico ganha quando os dois vierem.
 
-      **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples
-      (F266).
+      **Formato do erro `400`**: objecto canónico, `error.code = invalid_request`.
 
       **Autenticação**: token de sessão.
     security:
@@ -701,7 +734,7 @@
           schema:
             $ref: '#/components/schemas/AlvoGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: A saída foi aceite pelo WhatsApp.
@@ -716,12 +749,11 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group left successfully}
+              data: {details: Group left successfully}
               success: true
       '400':
         description: |
-          `groupJID` e `chat` ambos ausentes. **Formato antigo (F266)**:
-          `error` em texto simples.
+          `group_jid` e `chat` ambos ausentes. `error.code = invalid_request`.
         content:
           application/json:
             schema:
@@ -756,10 +788,10 @@
       Para contar membros a partir desta listagem, conte `Participants`, que
       vem correcta.
 
-      **O que a lista inclui**: comunidades (`IsParent: true`) e os
+      **O que a lista inclui**: comunidades (`is_parent: true`) e os
       sub-grupos de avisos que elas criam sozinhas
-      (`IsDefaultSubGroup: true`) aparecem como entradas normais, ao lado dos
-      grupos comuns.
+      (`is_default_sub_group: true`) aparecem como entradas normais, ao lado
+      dos grupos comuns.
 
       **Regras**: o corpo é ignorado — a rota não tem filtro nem paginação
       (`handler_group.go`, `ListGroupsUseCase`). Envie `{}`.
@@ -791,30 +823,34 @@
               code: 200
               data:
                 groups:
-                  - JID: 120363411669320145@g.us
-                    OwnerJID: 90937376170214@lid
-                    OwnerPN: 554192421234@s.whatsapp.net
-                    Name: Equipa de entregas
-                    Topic: Combinações de rota do turno da manhã
-                    IsAnnounce: false
-                    IsLocked: false
-                    IsEphemeral: true
-                    DisappearingTimer: 86400
-                    IsParent: false
-                    LinkedParentJID: ''
-                    IsDefaultSubGroup: false
-                    AddressingMode: lid
-                    ParticipantCount: 0
-                    MemberAddMode: admin_add
-                    Suspended: false
-                    Participants:
-                      - JID: 90937376170214@lid
-                        PhoneNumber: 554192421234@s.whatsapp.net
-                        LID: 90937376170214@lid
-                        IsAdmin: false
-                        IsSuperAdmin: false
-                        Error: 0
-                        AddRequest: null
+                  - jid: 120363411669320145@g.us
+                    owner_jid: 90937376170214@lid
+                    name: Equipa de entregas
+                    name_set_at: null
+                    name_set_by: ''
+                    topic: Combinações de rota do turno da manhã
+                    topic_set_at: null
+                    topic_set_by: ''
+                    is_locked: false
+                    is_announce: false
+                    is_ephemeral: true
+                    disappearing_timer: 86400
+                    is_incognito: false
+                    is_suspended: false
+                    is_parent: false
+                    linked_parent_jid: ''
+                    is_default_sub_group: false
+                    is_join_approval_required: false
+                    member_add_mode: admin_add
+                    created_at: null
+                    participant_count: 0
+                    participants:
+                      - jid: 90937376170214@lid
+                        phone_number: 554192421234@s.whatsapp.net
+                        lid: 90937376170214@lid
+                        display_name: ''
+                        is_admin: false
+                        is_super_admin: false
               success: true
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -851,7 +887,7 @@
           schema:
             $ref: '#/components/schemas/PedidoTrancarGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             locked: true
     responses:
       '200':
@@ -867,7 +903,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group lock updated}
+              data: {details: Group lock updated}
               success: true
       '400':
         $ref: '#/components/responses/CorpoInvalido'
@@ -891,15 +927,15 @@
 
       **Regras**: `name` é obrigatório e vazio é recusado. **É o único campo
       validado pelo manipulador** (`handler_group_mgmt.go:198`): um pedido
-      sem `groupJID` passa esta validação e só falha adiante, na resolução do
+      sem `group_jid` passa esta validação e só falha adiante, na resolução do
       JID, com `invalid_jid` no envelope NOVO. As duas recusas desta rota
       têm portanto formatos diferentes.
 
       Num grupo com `IsLocked` verdadeiro, só administradores conseguem — a
       recusa vem do WhatsApp, como `422`.
 
-      **Formato do erro `400` de campo em falta**: envelope ANTIGO, `error`
-      em texto simples (F266).
+      **Formato do erro `400` de campo em falta**: objecto canónico,
+      `error.code = invalid_request`.
 
       **Autenticação**: token de sessão.
     security:
@@ -911,7 +947,7 @@
           schema:
             $ref: '#/components/schemas/PedidoNomeGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             name: Equipa de entregas — turno da manhã
     responses:
       '200':
@@ -927,15 +963,14 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group name set successfully}
+              data: {details: Group name set successfully}
               success: true
       '400':
         description: |
-          `name` ausente ou vazio. **Formato antigo (F266)**: `error` em
-          texto simples.
+          `name` ausente ou vazio. `error.code = invalid_request`.
 
-          Um `groupJID` ausente ou inválido produz `400` também, mas no
-          envelope NOVO, com `error.code: invalid_jid`.
+          Um `group_jid` ausente ou inválido produz `400` também, mas com
+          `error.code = invalid_jid`.
         content:
           application/json:
             schema:
@@ -979,8 +1014,9 @@
       (`handler_group_mgmt.go:242`). Num grupo com `IsLocked` verdadeiro, só
       administradores conseguem.
 
-      **Formato do erro `400`**: envelope ANTIGO, `error` em texto simples,
-      tanto para `photo` em falta como para base64 inválido (F266).
+      **Formato do erro `400`**: objecto canónico, `error.code = invalid_request`
+      tanto para `photo` em falta como para base64 inválido — o cliente não
+      distingue as duas causas pelo corpo, só pelo log do servidor.
 
       **Autenticação**: token de sessão.
     security:
@@ -992,7 +1028,7 @@
           schema:
             $ref: '#/components/schemas/PedidoFotoGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             photo: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA==
     responses:
       '200':
@@ -1008,14 +1044,13 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group photo set successfully}
+              data: {details: Group photo set successfully}
               success: true
       '400':
         description: |
           `photo` ausente, ou não é base64 válido — é aqui que cai o prefixo
-          `data:image/jpeg;base64,`. **Formato antigo (F266)**: `error` em
-          texto simples, logo o cliente não distingue as duas causas pelo
-          corpo.
+          `data:image/jpeg;base64,`. `error.code = invalid_request` nas duas
+          causas; o cliente não as distingue pelo corpo.
         content:
           application/json:
             schema:
@@ -1057,9 +1092,9 @@
       **Quando usar**: para limpar a identidade visual sem escolher outra
       imagem.
 
-      **Regra que morde**: o campo do grupo é `groupjid`, **todo em
+      **Regra que morde**: o campo do grupo é `group_jid`, **todo em
       minúsculas** (`handler_group_mgmt.go:262`), ao contrário do
-      `groupJID` das rotas vizinhas. Na prática o descodificador do Go casa
+      `group_jid` das rotas vizinhas. Na prática o descodificador do Go casa
       nomes ignorando maiúsculas e as duas grafias funcionam; o exemplo traz
       a que foi medida.
 
@@ -1076,7 +1111,7 @@
           schema:
             $ref: '#/components/schemas/PedidoRemoverFotoGrupo'
           example:
-            groupjid: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: Foto removida.
@@ -1091,7 +1126,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group photo removed successfully}
+              data: {details: Group photo removed successfully}
               success: true
       '400':
         $ref: '#/components/responses/CorpoInvalido'
@@ -1127,7 +1162,7 @@
       |---|---|
       | sem corpo e sem query | `400 could_not_decode_payload` — a causa real é o grupo em falta, não o corpo |
       | corpo `{}` | `400 missing_group_jid` — a mensagem certa |
-      | corpo `{"groupJID":null}` | `400 missing_group_jid` |
+      | corpo `{"group_jid":null}` | `400 missing_group_jid` |
       | corpo que não é JSON, com `?group_jid=` | `200` — o erro de descodificação é PERDOADO quando a query traz o grupo (`handler_group.go:47-63`) |
 
       Ou seja: o `curl` sem `-d` — que é o `GET` normal de qualquer cliente —
@@ -1142,7 +1177,7 @@
         required: false
         description: |
           JID do grupo. É a forma recomendada. Usada só quando o corpo não
-          trouxe `groupJID`.
+          trouxe `group_jid`.
         schema:
           type: string
           example: 120363411669320145@g.us
@@ -1162,7 +1197,7 @@
           schema:
             $ref: '#/components/schemas/PedidoSolicitacoesEntrada'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
     responses:
       '200':
         description: |
@@ -1222,12 +1257,12 @@
 
       **Regras**: `topic` é obrigatório e vazio é recusado — **não há forma
       de APAGAR a descrição por esta rota**. É o único campo validado
-      (`handler_group_mgmt.go:220`): sem `groupJID` a falha vem adiante, como
+      (`handler_group_mgmt.go:220`): sem `group_jid` a falha vem adiante, como
       `invalid_jid`. Num grupo com `IsLocked` verdadeiro, só administradores
       conseguem.
 
-      **Formato do erro `400` de campo em falta**: envelope ANTIGO, `error`
-      em texto simples (F266).
+      **Formato do erro `400` de campo em falta**: objecto canónico,
+      `error.code = invalid_request`.
 
       **Autenticação**: token de sessão.
     security:
@@ -1239,7 +1274,7 @@
           schema:
             $ref: '#/components/schemas/PedidoTopicoGrupo'
           example:
-            groupJID: 120363411669320145@g.us
+            group_jid: 120363411669320145@g.us
             topic: Combinações de rota do turno da manhã
     responses:
       '200':
@@ -1255,12 +1290,11 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group topic set successfully}
+              data: {details: Group topic set successfully}
               success: true
       '400':
         description: |
-          `topic` ausente ou vazio. **Formato antigo (F266)**: `error` em
-          texto simples.
+          `topic` ausente ou vazio. `error.code = invalid_request`.
         content:
           application/json:
             schema:
@@ -1303,19 +1337,20 @@
       (`approve`/`reject`).
 
       **Regras e a ORDEM em que são aplicadas**, que muda a mensagem de erro:
-      primeiro `Phone` não vazio, depois cada entrada de `Phone` não vazia,
-      depois `Action`, e **só então** `groupJID`
-      (`handler_group_mgmt.go:341-356`). Um pedido a que falte tudo queixa-se
+      primeiro `phone` não vazio, depois cada entrada de `phone` não vazia,
+      depois `action`, e **só então** `group_jid`
+      (`handler_group_mgmt.go:289-304`). Um pedido a que falte tudo queixa-se
       dos telefones.
 
-      `Phone` aceita o **número nu** (`554192421234`) — medido a passar da
+      `phone` aceita o **número nu** (`554192421234`) — medido a passar da
       validação. É uma diferença face a
       `POST /group/updaterequestparticipants`, que exige o JID completo.
 
-      **Dois formatos de erro na mesma rota**: as recusas de campo em falta
-      usam `rejectMissingField` e saem no envelope ANTIGO, com `error` em
-      texto simples (F266); `invalid_action` e `invalid_jid` saem no envelope
-      NOVO, com `error` em objecto. Um cliente tem de aguentar os dois.
+      **Dois formatos de erro na mesma rota, e os dois são o objecto
+      canónico**: as recusas de campo em falta usam `rejectMissingField` e
+      saem com `error.code = invalid_request` (nenhuma delas tem código
+      próprio); `invalid_action` e `invalid_jid`, que atravessam o use case,
+      saem com o seu próprio `error.code`.
 
       **Autenticação**: token de sessão.
     security:
@@ -1327,15 +1362,17 @@
           schema:
             $ref: '#/components/schemas/PedidoAtualizarParticipantes'
           example:
-            groupJID: 120363411669320145@g.us
-            Phone: [554192421234@s.whatsapp.net]
-            Action: add
+            group_jid: 120363411669320145@g.us
+            phone: [554192421234@s.whatsapp.net]
+            action: add
     responses:
       '200':
         description: |
           A mudança foi enviada e o WhatsApp devolveu a lista resultante.
-          Participante que tenha falhado individualmente volta em `result`
-          com `Error` diferente de zero — o `200` cobre o sucesso parcial.
+          Participante que tenha falhado individualmente volta em
+          `participants` — ver `ParticipanteGrupoCanonico` sobre o que
+          representa uma falha parcial na forma canónica — e o `200` cobre o
+          sucesso parcial.
         content:
           application/json:
             schema:
@@ -1348,39 +1385,39 @@
             example:
               code: 200
               data:
-                Details: Participants updated
+                details: Participants updated
                 confirmed: true
-                result:
-                  - JID: 90937376170214@lid
-                    PhoneNumber: 554192421234@s.whatsapp.net
-                    LID: 90937376170214@lid
-                    IsAdmin: false
-                    IsSuperAdmin: false
-                    Error: 0
-                    AddRequest: null
+                reason: ''
+                participants:
+                  - jid: 90937376170214@lid
+                    phone_number: 554192421234@s.whatsapp.net
+                    lid: 90937376170214@lid
+                    display_name: ''
+                    is_admin: false
+                    is_super_admin: false
               success: true
       '400':
         description: |
-          **Dois formatos possíveis.**
+          **Dois formatos possíveis, os dois com o objecto canónico.**
 
-          `Phone` vazio, entrada vazia na lista, `Action` ausente ou
-          `groupJID` ausente saem no formato ANTIGO (F266):
-          `{"code":400,"error":"bad request","success":false}`.
+          `phone` vazio, entrada vazia na lista, `action` ausente ou
+          `group_jid` ausente saem de `rejectMissingField`, sem código
+          próprio: `error.code = invalid_request`.
 
-          `Action` desconhecido — incluindo `promote` e `demote` — e JID
-          irresolúvel saem no formato NOVO, como o exemplo abaixo.
+          `action` desconhecido — incluindo `promote` e `demote` — e JID
+          irresolúvel atravessam o use case e saem com o `error.code`
+          específico, como o exemplo abaixo.
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: '#/components/schemas/Erro'
-                - $ref: '#/components/schemas/Erro'
+              $ref: '#/components/schemas/Erro'
             examples:
               acaoDesconhecida:
-                summary: Formato NOVO — Action inválido
+                summary: action inválido, com código próprio
                 description: |
                   `promote` e `demote` caem aqui: a biblioteca sabe fazê-los,
-                  a rota não os expõe (F263).
+                  a rota não os expõe (F263). Recusa do use case, com
+                  `error.code` específico.
                 value:
                   code: 400
                   error:
@@ -1388,11 +1425,11 @@
                     message: unknown participant action "promote" (must be "add" or "remove")
                   success: false
               campoObrigatorioEmFalta:
-                summary: Formato ANTIGO — campo obrigatório ausente
+                summary: campo obrigatório ausente, sem código próprio
                 description: |
-                  `Phone` vazio, `Action` ausente ou `groupJID` ausente passam
-                  por `rejectMissingField`, que não usa a taxonomia de erro —
-                  `error` vem em texto simples (F266). Medido.
+                  `phone` vazio, `action` ausente ou `group_jid` ausente
+                  passam por `rejectMissingField`, que não usa a taxonomia de
+                  erro — `error.code` fica no genérico `invalid_request`.
                 value:
                   code: 400
                   error:
@@ -1424,9 +1461,9 @@
       resolve com `ResolveQualifiedJID` e não com `ResolveJID`
       (`group_request.go:100`). **É uma divergência face a
       `POST /group/updateparticipants`**, que aceita o número nu — as duas
-      rotas recebem uma lista chamada `Phone` e só uma tolera a forma curta.
+      rotas recebem uma lista chamada `phone` e só uma tolera a forma curta.
 
-      **Vocabulário próprio**: `Action` é `approve` ou `reject` — e não
+      **Vocabulário próprio**: `action` é `approve` ou `reject` — e não
       `add`/`remove`, que é o da outra rota. Qualquer outro valor devolve
       `400 invalid_action` (medido).
 
@@ -1459,9 +1496,9 @@
           schema:
             $ref: '#/components/schemas/PedidoDecidirSolicitacoes'
           example:
-            groupJID: 120363411669320145@g.us
-            Phone: [554192421234@s.whatsapp.net]
-            Action: approve
+            group_jid: 120363411669320145@g.us
+            phone: [554192421234@s.whatsapp.net]
+            action: approve
     responses:
       '200':
         description: Os pedidos foram decididos.
@@ -1476,7 +1513,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Group request participants updated successfully}
+              data: {details: Group request participants updated successfully}
               success: true
       '400':
         description: |
