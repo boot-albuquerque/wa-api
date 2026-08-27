@@ -10341,9 +10341,12 @@ components:
         Uma entrada por número que o servidor do WhatsApp reconheceu.
         `is_in_whatsapp: false` NÃO é erro — é a resposta à pergunta.
 
-        **Nenhum dos quatro campos tem `omitempty`** (`check_user.go:23-28`), logo
-        os quatro aparecem SEMPRE que a entrada exista. O que varia é o conteúdo,
-        não a presença.
+        **Nenhum dos quatro campos tem `omitempty`**, logo os quatro aparecem
+        SEMPRE que a entrada exista. O que varia é o conteúdo, não a presença.
+
+        Os nomes não mudaram na migração de DTO de 2026-08-27 — já eram
+        canónicos. O que mudou foi o embrulho: `data` deixou de ser o array e
+        passou a ser `{"users": [...]}`.
 
         Números que não produziram entrada não aparecem de forma nenhuma — ver
         o descarte silencioso descrito em `PedidoVerificacaoNumero.phone`.
