@@ -26,12 +26,16 @@ func (a *GroupAdapter) GetGroupInfo(ctx context.Context, txtID string, group dom
 }
 
 // GetGroupInfoFromLink devolve os metadados a partir de um código de convite.
-func (a *GroupAdapter) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (any, error) {
+func (a *GroupAdapter) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (*domain.GroupInfo, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
 	}
-	return client.GetGroupInfoFromLink(ctx, code)
+	res, err := client.GetGroupInfoFromLink(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	return toDomainGroupInfo(res), nil
 }
 
 // GetGroupInviteLink devolve o link de convite de um grupo.
@@ -49,7 +53,7 @@ func (a *GroupAdapter) GetGroupInviteLink(ctx context.Context, txtID string, gro
 }
 
 // ListJoinedGroups devolve os grupos de que a sessão participa e a contagem.
-func (a *GroupAdapter) ListJoinedGroups(ctx context.Context, txtID string) (any, int, error) {
+func (a *GroupAdapter) ListJoinedGroups(ctx context.Context, txtID string) ([]*domain.GroupInfo, int, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, 0, err
@@ -58,7 +62,16 @@ func (a *GroupAdapter) ListJoinedGroups(ctx context.Context, txtID string) (any,
 	if err != nil {
 		return nil, 0, err
 	}
-	return groups, len(groups), nil
+	// Não-nula mesmo vazia: `[]` e `null` são valores diferentes para todo
+	// cliente, e só um dos dois se percorre sem verificação.
+	out := make([]*domain.GroupInfo, 0, len(groups))
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		out = append(out, toDomainGroupInfo(g))
+	}
+	return out, len(out), nil
 }
 
 // GroupNames devolve o nome de cada grupo da sessão, por JID.

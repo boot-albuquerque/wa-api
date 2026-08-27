@@ -1,15 +1,30 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
-// ListGroupsRequest representa a requisição para listar grupos
-type ListGroupsRequest struct {
-	// No body parameters
-}
+// The types in this file are use-case inputs and results. They are NOT the
+// wire format: the public shape of every group route lives in
+// pkg/presentation/http/dto/group, and the mapping between the two is
+// hand-written. See docs/HTTP-DTO-CONVENTIONS.md.
+//
+// Hence: Go-idiomatic names, and no `json` tags.
 
-// ListGroupsResult representa o resultado da listagem de grupos
+// ListGroupsRequest is the input of the list-groups use case. It carries no
+// parameter today, and exists so the use case signature does not have to change
+// when it does.
+type ListGroupsRequest struct{}
+
+// ListGroupsResult is every group this session belongs to.
+//
+// TYPED, and no longer `any`: with `any` it was the session's ENGINE that
+// decided the JSON a client received — the wa-noise protocol struct on one
+// session, the headless conversation struct on another — and neither shape was
+// declared anywhere. Same reasoning as GetGroupInfoResult (see group_info.go).
 type ListGroupsResult struct {
-	Groups interface{} `json:"groups"`
+	Groups []*GroupInfo
 }
 
 // GetGroupInfoRequest representa a requisição para obter informações de um grupo
@@ -28,57 +43,32 @@ type GetGroupInfoResult struct {
 	GroupInfo *GroupInfo
 }
 
-// GetGroupInviteLinkRequest representa a requisição para obter link de convite do grupo
+// GetGroupInviteLinkRequest is the input of the invite-link use case.
 type GetGroupInviteLinkRequest struct {
 	ChatTarget
-	GroupJID string `json:"groupJID"`
+	GroupJID string
 }
 
 func (r *GetGroupInviteLinkRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
 
-// GetGroupInviteLinkResult representa o resultado da obtenção do link de convite
+// GetGroupInviteLinkResult is the invite link of a group.
 type GetGroupInviteLinkResult struct {
-	InviteLink string `json:"invite_link"`
+	InviteLink string
 }
 
-// GetGroupInviteInfoRequest representa a requisição para obter informações do convite
+// GetGroupInviteInfoRequest is the input of the invite-info use case.
 type GetGroupInviteInfoRequest struct {
-	Code string `json:"Code"`
+	Code string
 }
 
-// GetGroupInviteInfoResult representa o resultado das informações do convite
+// GetGroupInviteInfoResult is what a link says about a group WITHOUT joining it.
+//
+// It reuses GroupInfo instead of declaring a second, narrower type: both
+// engines answer with group metadata (wa-noise with the full protocol struct,
+// headless with jid/subject/size/approval), and what an engine cannot observe
+// stays at its zero value — exactly the rule GroupInfo already documents.
 type GetGroupInviteInfoResult struct {
-	InviteInfo interface{} `json:"invite_info"`
-}
-
-// GroupJoinRequest representa a requisição para entrar em um grupo
-type GroupJoinRequest struct {
-	InviteLink string `json:"inviteLink"`
-}
-
-// GroupJoinResult representa o resultado de entrada no grupo
-type GroupJoinResult struct {
-	GroupJID string `json:"group_jid"`
-	Details  string `json:"details"`
-}
-
-// GroupLeaveRequest representa a requisição para sair de um grupo
-type GroupLeaveRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-}
-
-func (r *GroupLeaveRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// GroupLeaveResult representa o resultado de saída do grupo
-type GroupLeaveResult struct {
-	Details string `json:"details"`
-}
-
-// CreateGroupRequest is the request to create a group (or community).
-type CreateGroupRequest struct {
-	Name         string   `json:"name"`
-	Participants []string `json:"participants"`
+	InviteInfo *GroupInfo
 }
 
 // CreateGroupOpts carries optional flags for group creation that alter the
@@ -92,121 +82,16 @@ type CreateGroupOpts struct {
 	LinkedParentJID JID
 }
 
-// CreateGroupResult wraps the group creation response.
-type CreateGroupResult struct {
-	GroupInfo interface{} `json:"group_info"`
-}
-
-// UpdateGroupParticipantsRequest representa a requisição para atualizar participantes
-type UpdateGroupParticipantsRequest struct {
-	ChatTarget
-	GroupJID string   `json:"groupJID"`
-	Phone    []string `json:"Phone"`
-	Action   string   `json:"Action"` // "add" or "remove"
-}
-
-func (r *UpdateGroupParticipantsRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// UpdateGroupParticipantsResult representa o resultado da atualização de participantes
-type UpdateGroupParticipantsResult struct {
-	Details string `json:"details"`
-}
-
-// SetGroupLockedRequest representa a requisição para bloquear/desbloquear grupo
-type SetGroupLockedRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-	Locked   bool   `json:"locked"`
-}
-
-func (r *SetGroupLockedRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// SetGroupLockedResult representa o resultado do bloqueio/desbloqueio
-type SetGroupLockedResult struct {
-	Details string `json:"details"`
-}
-
-// SetGroupAnnounceRequest representa a requisição para definir modo de anúncio
-type SetGroupAnnounceRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-	Announce bool   `json:"announce"`
-}
-
-func (r *SetGroupAnnounceRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// SetGroupAnnounceResult representa o resultado da definição do modo de anúncio
-type SetGroupAnnounceResult struct {
-	Details string `json:"details"`
-}
-
-// SetGroupNameRequest representa a requisição para renomear grupo
-type SetGroupNameRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-	Name     string `json:"name"`
-}
-
-func (r *SetGroupNameRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// SetGroupNameResult representa o resultado da renomeação
-type SetGroupNameResult struct {
-	Details string `json:"details"`
-}
-
-// SetGroupTopicRequest representa a requisição para definir descrição do grupo
-type SetGroupTopicRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-	Topic    string `json:"topic"`
-}
-
-func (r *SetGroupTopicRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// SetGroupTopicResult representa o resultado da definição de descrição
-type SetGroupTopicResult struct {
-	Details string `json:"details"`
-}
-
-// SetGroupPhotoRequest representa a requisição para definir foto do grupo
-type SetGroupPhotoRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-	Photo    string `json:"photo"`
-}
-
-func (r *SetGroupPhotoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// SetGroupPhotoResult representa o resultado da definição de foto
-type SetGroupPhotoResult struct {
-	Details string `json:"details"`
-}
-
-// RemoveGroupPhotoRequest representa a requisição para remover foto do grupo
-type RemoveGroupPhotoRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupJID"`
-}
-
-func (r *RemoveGroupPhotoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// RemoveGroupPhotoResult representa o resultado da remoção de foto
-type RemoveGroupPhotoResult struct {
-	Details string `json:"details"`
-}
-
-// SetDisappearingTimerRequest representa a requisição para definir timer de desaparecimento
-type SetDisappearingTimerRequest struct {
-	ChatTarget
-	GroupJID string `json:"groupjid"`
-	Duration string `json:"duration"` // "24h", "7d", "90d", "off"
-}
-
-func (r *SetDisappearingTimerRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
-
-// SetDisappearingTimerResult representa o resultado da definição do timer
-type SetDisappearingTimerResult struct {
-	Details string `json:"details"`
+// CreatedGroup is the outcome of asking for a group to exist.
+//
+// Created is carried, and not assumed true, because one of the two engines does
+// not CREATE: the headless capability is `Ensure`, and a group with the same
+// name that already exists is returned instead of duplicated. Flattening that
+// would make two identical calls look like they made two groups when they made
+// one. The wa-noise transport always creates, and reports true.
+type CreatedGroup struct {
+	Group   *GroupInfo
+	Created bool
 }
 
 // ParticipantAction é a mudança pedida sobre a lista de participantes de um
@@ -252,8 +137,13 @@ const (
 // E o campo serve aos dois transportes: dá ao socket um lugar para dizer quando
 // ELE não conseguiu confirmar — o que hoje não tem onde ser dito.
 type ParticipantsUpdate struct {
-	// Result é o que o transporte devolveu, como antes.
-	Result any
+	// Participants is the roster the transport read back, when it can read one.
+	// TYPED, and no longer `any`: the wa-noise transport answers with the
+	// resulting participant list on the same call, and that list used to reach
+	// the wire as the protocol struct's Go field names. The headless transport
+	// observes nothing here and leaves it empty — which is what Confirmed and
+	// Reason are for.
+	Participants []GroupParticipant
 	// Confirmed diz que a sessão que agiu LEU a mudança de volta.
 	Confirmed bool
 	// Reason explica por que não, e é obrigatória quando Confirmed é falso.
@@ -271,4 +161,25 @@ func (u ParticipantsUpdate) Valida() error {
 		return errors.New("domain: participantes atualizados sem confirmação e sem motivo escrito")
 	}
 	return nil
+}
+
+// GroupJoinRequest is one pending request to join a group.
+//
+// The union of what the two engines see: wa-noise reports the requester and
+// when the request was made; the headless page also reports who tried to add
+// them and by which method. What an engine does not observe stays zero.
+type GroupJoinRequest struct {
+	// JID is who asked to join.
+	JID JID
+	// RequestedAt is when the request was made. Zero when the engine does not
+	// report it.
+	RequestedAt time.Time
+	// AddedByJID is who put them there, when there is such a person: a request
+	// made by following an invite link has no adder.
+	AddedByJID JID
+	// Method is HOW the request arrived — measured as "InviteLink" for a
+	// request made by following a link. It distinguishes a stranger with a link
+	// from somebody a member tried to add, which is the difference an admin
+	// actually decides on.
+	Method string
 }

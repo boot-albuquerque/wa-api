@@ -56,13 +56,13 @@ func comReadCases() []comReadCase {
 			name:      "GetCommunitySubGroups",
 			method:    http.MethodPost,
 			path:      "/community/subgroups",
-			body:      `{"communityJID":"120363@g.us"}`,
+			body:      `{"community_jid":"120363@g.us"}`,
 			readsBody: true,
 			build: func(f *comFakes) http.Handler {
 				return NewGetCommunitySubGroupsHandler(group.NewCommunityReadUseCase(f.directory, f.jids, f.logger))
 			},
 			failOp: func(f *comFakes, err error) {
-				f.directory.GetSubGroupsFunc = func(context.Context, string, domain.JID) (any, error) {
+				f.directory.GetSubGroupsFunc = func(context.Context, string, domain.JID) ([]domain.CommunitySubGroup, error) {
 					return nil, err
 				}
 			},
@@ -71,13 +71,13 @@ func comReadCases() []comReadCase {
 			name:      "GetCommunityParticipants",
 			method:    http.MethodPost,
 			path:      "/community/participants",
-			body:      `{"communityJID":"120363@g.us"}`,
+			body:      `{"community_jid":"120363@g.us"}`,
 			readsBody: true,
 			build: func(f *comFakes) http.Handler {
 				return NewGetCommunityParticipantsHandler(group.NewCommunityReadUseCase(f.directory, f.jids, f.logger))
 			},
 			failOp: func(f *comFakes, err error) {
-				f.directory.GetLinkedGroupsParticipantsFunc = func(context.Context, string, domain.JID) (any, error) {
+				f.directory.GetLinkedGroupsParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.JID, error) {
 					return nil, err
 				}
 			},
@@ -86,7 +86,7 @@ func comReadCases() []comReadCase {
 			name:      "CommunityLinkGroup",
 			method:    http.MethodPost,
 			path:      "/community/link",
-			body:      `{"communityJID":"120363@g.us","groupJID":"999888@g.us"}`,
+			body:      `{"community_jid":"120363@g.us","group_jid":"999888@g.us"}`,
 			readsBody: true,
 			build: func(f *comFakes) http.Handler {
 				return NewCommunityLinkGroupHandler(group.NewCommunityWriteUseCase(f.lifecycle, f.jids, f.logger))
@@ -101,7 +101,7 @@ func comReadCases() []comReadCase {
 			name:      "CommunityUnlinkGroup",
 			method:    http.MethodPost,
 			path:      "/community/unlink",
-			body:      `{"communityJID":"120363@g.us","groupJID":"999888@g.us"}`,
+			body:      `{"community_jid":"120363@g.us","group_jid":"999888@g.us"}`,
 			readsBody: true,
 			build: func(f *comFakes) http.Handler {
 				return NewCommunityUnlinkGroupHandler(group.NewCommunityWriteUseCase(f.lifecycle, f.jids, f.logger))
@@ -151,7 +151,7 @@ func TestCommunityHandlers_MalformedBody(t *testing.T) {
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			f := newComFakes()
-			rec, capture := comServe(tc, f, `{"communityJID": "120363`)
+			rec, capture := comServe(tc, f, `{"community_jid": "120363`)
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			got := logassert.OutcomeLogged(t, capture.Records(t))
@@ -271,7 +271,7 @@ func TestCommunityHandlers_NeverLogSecrets(t *testing.T) {
 
 			h, capture := logassert.Wrap(tc.build(f))
 			rec := httptest.NewRecorder()
-			body := `{"communityJID":"120363@g.us","groupJID":"999888@g.us","secret":"` +
+			body := `{"community_jid":"120363@g.us","group_jid":"999888@g.us","secret":"` +
 				logassertGlobalEncryptionKey + `","hmac":"` + logassertGlobalHMACKey + `"}`
 			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(body))
 			r.Header.Set("Authorization", logassertAdminToken)

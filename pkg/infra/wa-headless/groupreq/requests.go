@@ -57,7 +57,7 @@ func (m *Manager) EnsureSession(ctx context.Context, txtID string) error {
 // trouxeram — nunca os valores. A forma não pôde ser medida num grupo sem
 // solicitações pendentes, então a primeira solicitação viva é que diz o que
 // está mesmo lá. Achatar isso custaria a única via de descobrir.
-func (m *Manager) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) (any, error) {
+func (m *Manager) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error) {
 	pageJID, err := adapter.ToPageJID(group)
 	if err != nil {
 		return nil, err
@@ -66,7 +66,23 @@ func (m *Manager) GetRequestParticipants(ctx context.Context, txtID string, grou
 	if err != nil {
 		return nil, err
 	}
-	return r.List(ctx, pageJID, listLabel)
+	lista, err := r.List(ctx, pageJID, listLabel)
+	if err != nil {
+		return nil, err
+	}
+	// Fields fica de fora: são os NOMES dos campos que os registros da página
+	// trouxeram, informação de diagnóstico para quem lê o log, e não parte do
+	// que um cliente pediu. Continua a sair no String() da capability.
+	out := make([]domain.GroupJoinRequest, 0, len(lista.Requests))
+	for _, req := range lista.Requests {
+		out = append(out, domain.GroupJoinRequest{
+			JID:         domain.JID(req.RequesterJID),
+			RequestedAt: req.At,
+			AddedByJID:  domain.JID(req.AddedByJID),
+			Method:      req.Method,
+		})
+	}
+	return out, nil
 }
 
 // UpdateRequestParticipants approves or rejects requesters.

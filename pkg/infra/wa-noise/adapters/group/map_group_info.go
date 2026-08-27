@@ -48,16 +48,22 @@ func toDomainGroupInfo(src *types.GroupInfo) *domain.GroupInfo {
 	// every client add a nil check that buys nothing.
 	out.Participants = make([]domain.GroupParticipant, 0, len(src.Participants))
 	for _, p := range src.Participants {
-		out.Participants = append(out.Participants, domain.GroupParticipant{
-			JID:          jidOrEmpty(p.JID),
-			PhoneNumber:  jidOrEmpty(p.PhoneNumber),
-			LID:          jidOrEmpty(p.LID),
-			DisplayName:  p.DisplayName,
-			IsAdmin:      p.IsAdmin,
-			IsSuperAdmin: p.IsSuperAdmin,
-		})
+		out.Participants = append(out.Participants, toDomainGroupParticipant(p))
 	}
 	return out
+}
+
+// toDomainGroupParticipant maps one member. Shared with the participants
+// adapter, which reads the same protocol struct back from an add/remove call.
+func toDomainGroupParticipant(p types.GroupParticipant) domain.GroupParticipant {
+	return domain.GroupParticipant{
+		JID:          jidOrEmpty(p.JID),
+		PhoneNumber:  jidOrEmpty(p.PhoneNumber),
+		LID:          jidOrEmpty(p.LID),
+		DisplayName:  p.DisplayName,
+		IsAdmin:      p.IsAdmin,
+		IsSuperAdmin: p.IsSuperAdmin,
+	}
 }
 
 // jidOrEmpty renders a JID, mapping the zero JID to "" instead of to the

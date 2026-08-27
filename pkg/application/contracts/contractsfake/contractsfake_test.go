@@ -581,14 +581,17 @@ func TestGroupDirectory(t *testing.T) {
 	if v, err := f.GetGroupInfo(ctx, "u1", "g@g.us"); err != nil || v == nil || v.JID != "g@g.us" {
 		t.Errorf("GetGroupInfo zero-value = %v, %v", v, err)
 	}
-	if v, err := f.GetGroupInfoFromLink(ctx, "u1", "code"); v != nil || err != nil {
+	// Pela mesma razao: um grupo, com a lista de participantes vazia e nao nula.
+	if v, err := f.GetGroupInfoFromLink(ctx, "u1", "code"); err != nil || v == nil || v.Participants == nil {
 		t.Errorf("GetGroupInfoFromLink zero-value = %v, %v", v, err)
 	}
 	if s, err := f.GetGroupInviteLink(ctx, "u1", "g@g.us"); s != "" || err != nil {
 		t.Errorf("GetGroupInviteLink zero-value = %q, %v", s, err)
 	}
-	if v, n, err := f.ListJoinedGroups(ctx, "u1"); v != nil || n != 0 || err != nil {
-		t.Errorf("ListJoinedGroups zero-value = %v, %d, %v", v, n, err)
+	// Lista vazia e NAO-nula: `[]` e `null` sao valores diferentes no fio, e a
+	// producao devolve o primeiro.
+	if v, n, err := f.ListJoinedGroups(ctx, "u1"); v == nil || len(v) != 0 || n != 0 || err != nil {
+		t.Errorf("ListJoinedGroups zero-value = %#v, %d, %v", v, n, err)
 	}
 
 	if f.GetGroupInfoCalls[0].Group != "g@g.us" {
@@ -607,9 +610,11 @@ func TestGroupDirectory(t *testing.T) {
 	f.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
 		return &domain.GroupInfo{Name: "info"}, nil
 	}
-	f.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
+	f.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (*domain.GroupInfo, error) { return nil, errBoom }
 	f.GetGroupInviteLinkFunc = func(context.Context, string, domain.JID) (string, error) { return "https://l", nil }
-	f.ListJoinedGroupsFunc = func(context.Context, string) (any, int, error) { return []int{1, 2}, 2, nil }
+	f.ListJoinedGroupsFunc = func(context.Context, string) ([]*domain.GroupInfo, int, error) {
+		return []*domain.GroupInfo{{Name: "a"}, {Name: "b"}}, 2, nil
+	}
 
 	if v, _ := f.GetGroupInfo(ctx, "u1", ""); v == nil || v.Name != "info" {
 		t.Errorf("GetGroupInfoFunc = %v", v)
@@ -630,8 +635,11 @@ func TestGroupLifecycle(t *testing.T) {
 	ctx := context.Background()
 	parts := []domain.JID{"a@s", "b@s"}
 
-	if v, err := f.CreateGroup(ctx, "u1", "meu grupo", parts, domain.CreateGroupOpts{}); v != nil || err != nil {
-		t.Errorf("CreateGroup zero-value = %v, %v", v, err)
+	// Zero-value devolve o grupo com o nome pedido, e nao nil: e' o que os dois
+	// transportes reais fazem (ARMADILHAS #1).
+	if v, err := f.CreateGroup(ctx, "u1", "meu grupo", parts, domain.CreateGroupOpts{}); err != nil ||
+		v == nil || v.Group == nil || v.Group.Name != "meu grupo" || !v.Created {
+		t.Errorf("CreateGroup zero-value = %+v, %v", v, err)
 	}
 	if v, err := f.JoinGroup(ctx, "u1", "code"); v != nil || err != nil {
 		t.Errorf("JoinGroup zero-value = %v, %v", v, err)
@@ -650,7 +658,7 @@ func TestGroupLifecycle(t *testing.T) {
 		t.Errorf("LeaveGroupCalls = %+v", f.LeaveGroupCalls)
 	}
 
-	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		return nil, errBoom
 	}
 	f.JoinGroupFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
@@ -748,8 +756,9 @@ func TestGroupRequests(t *testing.T) {
 	ctx := context.Background()
 	parts := []domain.JID{"a@s"}
 
-	if v, err := f.GetRequestParticipants(ctx, "u1", "g@g.us"); v != nil || err != nil {
-		t.Errorf("GetRequestParticipants zero-value = %v, %v", v, err)
+	// Fila vazia e NAO-nula no zero-value, como os dois adaptadores reais.
+	if v, err := f.GetRequestParticipants(ctx, "u1", "g@g.us"); v == nil || len(v) != 0 || err != nil {
+		t.Errorf("GetRequestParticipants zero-value = %#v, %v", v, err)
 	}
 	if err := f.UpdateRequestParticipants(ctx, "u1", "g@g.us", parts, domain.RequestApprove); err != nil {
 		t.Errorf("UpdateRequestParticipants = %v", err)
@@ -768,7 +777,9 @@ func TestGroupRequests(t *testing.T) {
 		t.Errorf("SetJoinApprovalModeCalls = %+v", f.SetJoinApprovalModeCalls)
 	}
 
-	f.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) (any, error) { return nil, errBoom }
+	f.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.GroupJoinRequest, error) {
+		return nil, errBoom
+	}
 	f.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) error {
 		return errBoom
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 // CreateGroup creates a group, community, or group-inside-community.
-func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,13 @@ func (a *GroupAdapter) CreateGroup(ctx context.Context, txtID, name string, part
 		}
 		req.LinkedParentJID = parentJID
 	}
-	return client.CreateGroup(ctx, req)
+	res, err := client.CreateGroup(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	// Created é sempre verdadeiro neste transporte: o protocolo CRIA, e não
+	// tem a semântica de "devolver o que já existia" que a página tem.
+	return &domain.CreatedGroup{Group: toDomainGroupInfo(res), Created: true}, nil
 }
 
 // JoinGroup entra num grupo por código de convite.

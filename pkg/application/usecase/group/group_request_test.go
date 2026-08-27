@@ -2,9 +2,7 @@ package group_test
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"math"
 	"testing"
 
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -81,31 +79,24 @@ func TestGroupRequest_ExecuteGetGroupRequestParticipants(t *testing.T) {
 			name: "porta falha",
 			req:  domain.GetGroupRequestParticipantsRequest{GroupJID: "g@g.us"},
 			arrange: func(f *reqFakes) {
-				f.reqs.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) (any, error) {
+				f.reqs.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.GroupJoinRequest, error) {
 					return nil, boom
 				}
 			},
 			wantErr: true,
 			wantLog: wantLog{contractsfake.LevelError, "failed to get group request participants", []string{"user_id", "group_jid", "error"}},
 		},
+		// O caso "resposta não serializável" saiu com a migração para DTO: o use
+		// case já não serializa nada — devolve um tipo de domínio, e quem o
+		// transforma em JSON é o apresentador da fronteira HTTP. O ramo que este
+		// caso cobria (json.Marshal falhar sobre +Inf vindo do motor) deixou de
+		// existir por construção, e não por alguém o ter apagado.
 		{
-			name: "resposta não serializável",
+			name: "sucesso devolve as solicitações da porta",
 			req:  domain.GetGroupRequestParticipantsRequest{GroupJID: "g@g.us"},
 			arrange: func(f *reqFakes) {
-				f.reqs.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) (any, error) {
-					// +Inf não tem representação em JSON.
-					return math.Inf(1), nil
-				}
-			},
-			wantErr: true,
-			wantLog: wantLog{contractsfake.LevelError, "failed to marshal response", []string{"user_id", "error"}},
-		},
-		{
-			name: "sucesso devolve JSON da resposta da porta",
-			req:  domain.GetGroupRequestParticipantsRequest{GroupJID: "g@g.us"},
-			arrange: func(f *reqFakes) {
-				f.reqs.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) (any, error) {
-					return map[string]string{"a": "b"}, nil
+				f.reqs.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.GroupJoinRequest, error) {
+					return []domain.GroupJoinRequest{{JID: "5511@s.whatsapp.net", Method: "InviteLink"}}, nil
 				}
 			},
 		},
@@ -128,18 +119,17 @@ func TestGroupRequest_ExecuteGetGroupRequestParticipants(t *testing.T) {
 					assertCode(t, err, tt.wantCode)
 				}
 				if out != nil {
-					t.Errorf("saída deveria ser nil no erro: %s", out)
+					t.Errorf("saída deveria ser nil no erro: %+v", out)
 				}
 			} else {
 				if err != nil {
 					t.Fatalf("erro inesperado: %v", err)
 				}
-				var got map[string]string
-				if uerr := json.Unmarshal(out, &got); uerr != nil {
-					t.Fatalf("saída não é JSON: %v", uerr)
+				if out == nil || len(out.Requests) != 1 {
+					t.Fatalf("saída = %+v", out)
 				}
-				if got["a"] != "b" {
-					t.Errorf("saída = %s", out)
+				if out.Requests[0].JID != "5511@s.whatsapp.net" || out.Requests[0].Method != "InviteLink" {
+					t.Errorf("solicitação = %#v", out.Requests[0])
 				}
 			}
 			assertLog(t, f.log, tt.wantLog)

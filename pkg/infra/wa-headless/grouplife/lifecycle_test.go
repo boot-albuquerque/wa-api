@@ -82,12 +82,13 @@ func TestCreatedDistingueCriarDeEncontrar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateGroup: %v", err)
 	}
-	g, ok := got.(waheadless.GroupCreated)
-	if !ok {
-		t.Fatalf("tipo inesperado: %T", got)
-	}
-	if g.Created {
+	if got.Created {
 		t.Fatal("um grupo ENCONTRADO foi reportado como criado")
+	}
+	// E o grupo em si atravessou o mapeamento: sem isto, um adaptador que
+	// devolvesse Created certo e grupo nulo passaria.
+	if got.Group == nil || got.Group.JID != "120363@g.us" {
+		t.Fatalf("o grupo nao atravessou o mapeamento: %#v", got.Group)
 	}
 }
 

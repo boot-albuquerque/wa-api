@@ -31335,3 +31335,91 @@ tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
 sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
 
 <!-- f-status: aberto -->
+
+## F297 — a especificação OpenAPI da família de grupo continua a descrever o corpo ANTIGO das 20 rotas migradas
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO
+(worktree `worktree/http-dto-groups`). Achado registado porque a migração muda
+o CONTRATO PÚBLICO de 20 rotas e a documentação gerada não a acompanhou.
+
+**Onde**: `api/openapi/paths/grupo.yaml` (1498 linhas) e
+`api/openapi/schemas/grupo.yaml` (1651 linhas). Exemplos e prosa citam os nomes
+que deixaram de existir — `groupJID`, `communityJID`, `Code`, `Phone`,
+`Action`, `Details`, `PhoneNumber` —, e o mesmo texto está embutido no binário
+via `pkg/presentation/http/apidocs/openapi.yaml`.
+
+**Problema**: `docs/HTTP-DTO-CONVENTIONS.md` §13 exige que a família migrada
+reescreva os exemplos. Não foi feito, então `/docs` descreve para 20 rotas um
+corpo que o servidor já recusa (em modo estrito de campos desconhecidos) ou
+ignora. Medido: um pedido a `/group/name` com `{"GroupJID":…,"Name":…}` já não
+renomeia grupo nenhum — o corpo canónico é `{"group_jid":…,"name":…}`.
+
+**Por que não foi corrigido aqui**: são ~3.100 linhas de prosa curada à mão,
+com códigos de erro medidos, números de F e referências cruzadas a
+`api/openapi/evidencias.tsv`. Um `sed` global sobre elas produziria
+documentação subtilmente errada — e `groupJID` continua CORRECTO em
+`/group/info`, a rota da fundação, que esta tarefa não podia tocar. Reescrever
+com cuidado é uma tarefa própria, não um apêndice desta.
+
+**Correção sugerida**: uma passagem por rota sobre `api/openapi/paths/grupo.yaml`
+e `schemas/grupo.yaml` — renomear campos de pedido e resposta, reescrever cada
+`example`, e correr `go run ./cmd/openapidoc` seguido de `go build` e do `cmp`
+que o `CLAUDE.md` exige. Deixar `/group/info` como está.
+
+**Status**: NÃO corrigido, fora do âmbito declarado da tarefa.
+
+<!-- f-status: aberto -->
+
+## F298 — o `/group/info` ficou a aceitar `groupJID` enquanto as outras 19 rotas da família passaram a `group_jid`
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO.
+
+**Onde**: `pkg/domain/group.go:33` — `GetGroupInfoRequest.GroupJID` mantém
+`json:"groupJID"`, e o teste de referência
+`pkg/presentation/http/handlers/handler_group_info_contract_test.go:123` envia
+esse corpo.
+
+**Problema**: a regra de nomes de `docs/HTTP-DTO-CONVENTIONS.md` §8 vale também
+para corpos de PEDIDO, e `groupJID` reprova-a. A fundação migrou a RESPOSTA de
+`/group/info` e deixou o pedido; esta tarefa migrou os pedidos das outras 19
+rotas. O resultado é uma incoerência visível ao cliente: a mesma família pede o
+mesmo dado com dois nomes conforme a rota.
+
+**Correção sugerida**: mover `GetGroupInfoRequest` para um DTO de pedido em
+`pkg/presentation/http/dto/group/request.go` — `GroupTargetRequest` já existe e
+serve —, e actualizar o teste de contrato da fundação. É uma mudança de
+contrato, portanto deve sair na mesma leva que a nota de F297 no OpenAPI.
+
+**Status**: NÃO corrigido. A tarefa desta sessão diz explicitamente para não
+refazer o trabalho da fundação em `/group/info`.
+
+<!-- f-status: aberto -->
+
+## F299 — tipos de domínio MORTOS da família de grupo carregavam etiquetas `json` erradas há meses
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO.
+
+**Onde**: `pkg/domain/group.go`, `pkg/domain/group_request.go` — 22 tipos
+(`GroupJoinRequest`, `GroupLeaveRequest/Result`, `CreateGroupRequest/Result`,
+`UpdateGroupParticipantsRequest/Result`, `SetGroupLocked*`, `SetGroupAnnounce*`,
+`SetGroupName*`, `SetGroupTopic*`, `SetGroupPhoto*`, `RemoveGroupPhoto*`,
+`SetDisappearingTimer*`, `GetGroupRequestParticipantsResult`).
+
+**Problema**: nenhum era referido em lado nenhum do repositório — medido com
+`grep -rn "domain\.<Tipo>" --include="*.go" .`, zero ocorrências para os 22 —,
+porque os manipuladores de escrita decodificavam para structs anónimas
+declaradas em linha. Ou seja: as etiquetas `json:"groupJID"` e `json:"Phone"`
+que uma revisão veria nestes tipos NÃO eram o contrato servido; o contrato
+estava noutro ficheiro. Um leitor que confiasse no domínio ficava com a
+impressão errada.
+
+**Correção aplicada**: os 22 foram removidos, e as structs anónimas dos
+manipuladores passaram a DTO de pedido nomeados em
+`pkg/presentation/http/dto/group/request.go`. Passa a haver um só lugar onde o
+corpo de cada rota está declarado.
+
+**Status**: corrigido nesta sessão. Travado pelos testes de contrato de
+`pkg/presentation/http/handlers/handler_group_family_contract_test.go`, que
+exercitam as 20 rotas pelo router registado.
+
+<!-- f-status: corrigido -->
