@@ -2,7 +2,6 @@ package group
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"wa-api/pkg/domain/apperr"
 
@@ -27,7 +26,7 @@ func NewGroupRequestUseCase(gr appport.GroupRequests, jr appport.JIDResolver, l 
 }
 
 // ExecuteGetGroupRequestParticipants lista os participantes que solicitaram entrar
-func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Context, userID string, req domain.GetGroupRequestParticipantsRequest) (json.RawMessage, error) {
+func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Context, userID string, req domain.GetGroupRequestParticipantsRequest) (*domain.GetGroupRequestParticipantsResult, error) {
 	if req.GroupJID == "" {
 		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
 		return nil, apperr.New("missing_group_jid", apperr.CategoryValidation, "missing groupJID parameter", false, nil)
@@ -50,13 +49,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 		return nil, fmt.Errorf("failed to get group request participants: %w", err)
 	}
 
-	responseJson, err := json.Marshal(resp)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to marshal response", "error", err, "user_id", userID)
-		return nil, fmt.Errorf("failed to marshal response: %w", err)
-	}
-
-	return responseJson, nil
+	return &domain.GetGroupRequestParticipantsResult{Requests: resp}, nil
 }
 
 // ExecuteUpdateGroupRequestParticipants aprova ou rejeita solicitações de entrada

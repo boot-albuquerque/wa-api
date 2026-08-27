@@ -255,7 +255,7 @@ func TestGroupManagement_FalhaDaPortaLogaEPropaga(t *testing.T) {
 		{
 			name: "CreateGroup",
 			arrange: func(f *mgmtFakes) {
-				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+				f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 					return nil, boom
 				}
 			},
@@ -405,16 +405,16 @@ func TestGroupManagement_CaminhoFeliz(t *testing.T) {
 
 	t.Run("CreateGroup repassa nome e participantes resolvidos", func(t *testing.T) {
 		f := newMgmt()
-		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
-			return "created", nil
+		f.life.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
+			return &domain.CreatedGroup{Group: &domain.GroupInfo{Name: "meu grupo"}, Created: true}, nil
 		}
 
 		res, err := f.uc.CreateGroup(ctx, "u1", "meu grupo", []string{"5511987654321", "5522987654321"}, domain.CreateGroupOpts{})
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
-		if res != "created" {
-			t.Errorf("res = %v", res)
+		if res == nil || res.Group == nil || res.Group.Name != "meu grupo" || !res.Created {
+			t.Errorf("res = %+v", res)
 		}
 		call := f.life.CreateGroupCalls[0]
 		if call.Name != "meu grupo" || len(call.Participants) != 2 ||
@@ -568,15 +568,18 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 		t.Run(tt.action, func(t *testing.T) {
 			f := newMgmt()
 			f.set.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
-				return domain.ParticipantsUpdate{Result: "ok", Confirmed: true}, nil
+				return domain.ParticipantsUpdate{
+					Participants: []domain.GroupParticipant{{JID: "5511987654321@s.whatsapp.net"}},
+					Confirmed:    true,
+				}, nil
 			}
 
 			res, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", tt.action, []string{"5511987654321", "5522987654321"})
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
-			if res.Result != "ok" {
-				t.Errorf("res.Result = %v", res.Result)
+			if len(res.Participants) != 1 || res.Participants[0].JID != "5511987654321@s.whatsapp.net" {
+				t.Errorf("res.Participants = %#v", res.Participants)
 			}
 			if !res.Confirmed {
 				t.Errorf("res.Confirmed = false com Reason %q; este dublê imita o "+
@@ -643,11 +646,11 @@ func TestGroupManagement_UpdateParticipantsListaInvalida(t *testing.T) {
 // aceita — parseJIDs devolve slice vazio, não erro.
 func TestGroupManagement_CreateGroupSemParticipantes(t *testing.T) {
 	f := newMgmt()
-	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, p []domain.JID, _ domain.CreateGroupOpts) (any, error) {
+	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, p []domain.JID, _ domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		if len(p) != 0 {
 			t.Errorf("participantes = %v, quero vazio", p)
 		}
-		return "created", nil
+		return &domain.CreatedGroup{Group: &domain.GroupInfo{}, Created: true}, nil
 	}
 
 	if _, err := f.uc.CreateGroup(context.Background(), "u1", "só eu", nil, domain.CreateGroupOpts{}); err != nil {
@@ -659,11 +662,11 @@ func TestGroupManagement_CreateGroupSemParticipantes(t *testing.T) {
 // F237: CreateGroup passes community opts through to the port.
 func TestGroupManagement_CreateGroupPassesOpts(t *testing.T) {
 	f := newMgmt()
-	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		if !opts.IsParent {
 			t.Error("opts.IsParent not forwarded")
 		}
-		return "community", nil
+		return &domain.CreatedGroup{Group: &domain.GroupInfo{}, Created: true}, nil
 	}
 	opts := domain.CreateGroupOpts{IsParent: true}
 	if _, err := f.uc.CreateGroup(context.Background(), "u1", "community", nil, opts); err != nil {
@@ -678,11 +681,11 @@ func TestGroupManagement_CreateGroupPassesOpts(t *testing.T) {
 // F237: CreateGroup forwards LinkedParentJID through opts.
 func TestGroupManagement_CreateGroupLinkedParent(t *testing.T) {
 	f := newMgmt()
-	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+	f.life.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		if opts.LinkedParentJID != "120363@g.us" {
 			t.Errorf("LinkedParentJID = %q", opts.LinkedParentJID)
 		}
-		return "child", nil
+		return &domain.CreatedGroup{Group: &domain.GroupInfo{}, Created: true}, nil
 	}
 	opts := domain.CreateGroupOpts{LinkedParentJID: "120363@g.us"}
 	if _, err := f.uc.CreateGroup(context.Background(), "u1", "sub", []string{"5511987654321"}, opts); err != nil {

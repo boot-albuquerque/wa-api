@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
@@ -48,8 +50,8 @@ func TestNaoFingeSatisfazerOPortInteiroDeNewsletter(t *testing.T) {
 	}
 	// O que ele SERVE, e é verificável: a metade que existe.
 	type serve interface {
-		ListSubscribed(ctx context.Context, txtID string) (any, error)
-		CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error)
+		ListSubscribed(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error)
+		CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (*domain.NewsletterMetadata, error)
 	}
 	if _, ok := r.(serve); !ok {
 		t.Fatal("deixou de servir ListSubscribed/CreateNewsletter")
@@ -64,15 +66,11 @@ func TestListaVaziaEFatiaVaziaENaoNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSubscribed: %v", err)
 	}
-	entradas, ok := got.([]waheadless.ChannelEntry)
-	if !ok {
-		t.Fatalf("tipo inesperado: %T", got)
-	}
-	if entradas == nil {
+	if got == nil {
 		t.Fatal("lista vazia veio como nil")
 	}
-	if len(entradas) != 0 {
-		t.Fatalf("len=%d", len(entradas))
+	if len(got) != 0 {
+		t.Fatalf("len=%d", len(got))
 	}
 }
 
@@ -98,7 +96,7 @@ func TestOAdaptadorNaoFILTRAOQueNaoSabeJulgar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSubscribed: %v", err)
 	}
-	if n := len(got.([]waheadless.ChannelEntry)); n != len(entradas) {
+	if n := len(got); n != len(entradas) {
 		t.Fatalf("devolveu %d de %d entradas: o adaptador filtrou por um "+
 			"critério que o DirectoryEntry não carrega", n, len(entradas))
 	}
@@ -110,5 +108,87 @@ func TestFalhaDaCapabilityPropaga(t *testing.T) {
 	if err == nil {
 		t.Fatal("a falha virou lista vazia — 'não segue nada' e 'não conseguimos ler' " +
 			"são coisas diferentes")
+	}
+}
+
+// TestNormalizacaoDaEntradaDaPagina trava o mapeamento que a migração para DTO
+// introduziu: até ele existir, este adaptador ENTREGAVA channel.DirectoryEntry
+// ao codificador JSON, e como esse tipo não tem etiqueta `json` nenhuma, uma
+// sessão headless servia `{"JID":…,"Subscribers":…,"Membership":…}` na mesma
+// rota em que uma sessão wa-noise servia `{"id":…,"thread_metadata":{…}}`.
+//
+// O que ele afirma, campo a campo, é que o dado da PÁGINA chega ao domínio; o
+// nome no fio é afirmado pelo teste de contrato da rota.
+func TestNormalizacaoDaEntradaDaPagina(t *testing.T) {
+	criado := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	got, err := comFollower(followerDuplo{entries: []waheadless.ChannelEntry{{
+		JID:         "1@newsletter",
+		Name:        "Avisos",
+		Description: "Horários",
+		Subscribers: 7,
+		Verified:    true,
+		Membership:  "guest",
+		CreatedAt:   criado,
+	}}}).ListSubscribed(context.Background(), "s1")
+	if err != nil {
+		t.Fatalf("ListSubscribed: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len=%d", len(got))
+	}
+	m := got[0]
+	if m.JID != "1@newsletter" || m.Name.Text != "Avisos" || m.Description.Text != "Horários" {
+		t.Errorf("identidade/textos = %+v", m)
+	}
+	if m.SubscriberCount != 7 || !m.CreatedAt.Equal(criado) {
+		t.Errorf("contagem/instante = %d, %v", m.SubscriberCount, m.CreatedAt)
+	}
+	if m.VerificationState != "verified" {
+		t.Errorf("verification_state = %q, quero \"verified\"", m.VerificationState)
+	}
+	// Membership viaja VERBATIM para Role: a palavra é da página, e traduzi-la
+	// para o vocabulário do protocolo reivindicaria um mapeamento que ninguém
+	// mediu.
+	if m.Viewer == nil || m.Viewer.Role != "guest" {
+		t.Errorf("viewer = %+v, quero role=guest", m.Viewer)
+	}
+	// O que a página NÃO diz fica zero em vez de inventado: um canal que ela
+	// nunca descreveu não é "active".
+	if m.State != "" || m.InviteCode != "" || m.Picture != nil || m.Preview != nil {
+		t.Errorf("campos que a página não reporta vieram preenchidos: %+v", m)
+	}
+}
+
+// TestSemMembershipNaoInventaRelacao: a página que não disse nada sobre a
+// relação não faz nascer um `viewer` com papel vazio, que um cliente leria
+// como "há relação, papel desconhecido".
+func TestSemMembershipNaoInventaRelacao(t *testing.T) {
+	got, err := comFollower(followerDuplo{entries: []waheadless.ChannelEntry{
+		{JID: "3@newsletter"},
+	}}).ListSubscribed(context.Background(), "s1")
+	if err != nil {
+		t.Fatalf("ListSubscribed: %v", err)
+	}
+	if got[0].Viewer != nil {
+		t.Errorf("viewer = %+v, quero nil", got[0].Viewer)
+	}
+}
+
+// TestNaoVerificadoNaoEDesconhecido regista a decisão AMBÍGUA desta fatia.
+//
+// A página responde um booleano; o protocolo tem TRÊS estados (`verified`,
+// `unverified`, `""` em canal apagado). O falso da página vira `unverified` e
+// não `""`, porque deixar vazio tornaria "não verificado" impossível de
+// reportar neste motor — mas isso significa que este motor nunca diz
+// "desconhecido".
+func TestNaoVerificadoNaoEDesconhecido(t *testing.T) {
+	got, err := comFollower(followerDuplo{entries: []waheadless.ChannelEntry{
+		{JID: "4@newsletter", Verified: false},
+	}}).ListSubscribed(context.Background(), "s1")
+	if err != nil {
+		t.Fatalf("ListSubscribed: %v", err)
+	}
+	if got[0].VerificationState != "unverified" {
+		t.Errorf("verification_state = %q, quero \"unverified\"", got[0].VerificationState)
 	}
 }

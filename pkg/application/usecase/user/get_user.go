@@ -2,7 +2,6 @@ package user
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
@@ -21,8 +20,12 @@ func NewGetUserUseCase(cd appport.ContactRoster, jr appport.JIDResolver, logger 
 	return &GetUserUseCase{contacts: cd, jids: jr, logger: logger}
 }
 
-// Execute obtém informações de usuários
-func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) (json.RawMessage, error) {
+// Execute obtém informações de usuários.
+//
+// Devolvia json.RawMessage — um caso de uso a MONTAR o corpo HTTP, embrulho
+// `{"users": …}` incluído. O envelope e os nomes das chaves são decisão da
+// fronteira, e é lá que passaram a viver.
+func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) ([]domain.UserInfo, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
 		return nil, err
@@ -45,13 +48,5 @@ func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain
 		uc.logger.Error(ctx, "Failed to get user info", "error", err, "user_id", userID)
 		return nil, fmt.Errorf("failed to get user info: %w", err)
 	}
-
-	// Convert response to JSON
-	data, err := json.Marshal(map[string]interface{}{"users": resp})
-	if err != nil {
-		uc.logger.Error(ctx, "Failed to marshal response", "error", err)
-		return nil, fmt.Errorf("marshal error: %w", err)
-	}
-
-	return data, nil
+	return resp, nil
 }

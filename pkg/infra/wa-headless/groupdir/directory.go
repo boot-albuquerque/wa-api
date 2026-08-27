@@ -60,7 +60,7 @@ func (d *Directory) EnsureSession(ctx context.Context, txtID string) error {
 }
 
 // GetGroupInfo reads one group by JID.
-func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID domain.JID) (any, error) {
+func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID domain.JID) (*domain.GroupInfo, error) {
 	pageJID, err := adapter.ToPageJID(groupJID)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,28 @@ func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID dom
 	if !chat.IsGroup {
 		return nil, fmt.Errorf("waheadless: %q is not a group conversation", pageJID)
 	}
-	return chat, nil
+	return toDomainGroupInfo(chat), nil
+}
+
+// toDomainGroupInfo maps what a CONVERSA gives us onto the group metadata the
+// port promises.
+//
+// A conversa é tudo o que este motor tem: a página não expõe uma colecção de
+// grupos, então três campos é o que existe, e o resto do domain.GroupInfo fica
+// no zero. Preencher o zero com um palpite seria pior que devolvê-lo — o
+// chamador não teria como distinguir "este motor não vê" de "o grupo é assim".
+func toDomainGroupInfo(chat waheadless.Chat) *domain.GroupInfo {
+	return &domain.GroupInfo{
+		JID:  domain.JID(chat.JID),
+		Name: chat.Title,
+		// ReadOnly é, na documentação da própria capability, o grupo de
+		// anúncio — a conversa em que só administradores escrevem. É a mesma
+		// propriedade que o wa-noise chama IsAnnounce.
+		IsAnnounce: chat.ReadOnly,
+		// Não-nulo mesmo vazio, pela mesma razão do adaptador wa-noise: o
+		// cliente lê `participants` como lista, e este motor nunca a tem.
+		Participants: []domain.GroupParticipant{},
+	}
 }
 
 // ListJoinedGroups returns the groups this account is in, and how many.
@@ -88,12 +109,16 @@ func (d *Directory) GetGroupInfo(ctx context.Context, txtID string, groupJID dom
 // não separa grupos numa coleção própria, então a lista vem filtrada daqui — e
 // devolver o total de conversas faria o chamador acreditar que está em centenas
 // de grupos.
-func (d *Directory) ListJoinedGroups(ctx context.Context, txtID string) (any, int, error) {
+func (d *Directory) ListJoinedGroups(ctx context.Context, txtID string) ([]*domain.GroupInfo, int, error) {
 	grupos, err := d.grupos(ctx, txtID)
 	if err != nil {
 		return nil, 0, err
 	}
-	return grupos, len(grupos), nil
+	out := make([]*domain.GroupInfo, 0, len(grupos))
+	for _, g := range grupos {
+		out = append(out, toDomainGroupInfo(g))
+	}
+	return out, len(out), nil
 }
 
 // GroupNames maps each group's JID to the title the app itself renders.
@@ -135,7 +160,7 @@ func (d *Directory) GetGroupInviteLink(ctx context.Context, txtID string, groupJ
 // H89 provou isto ao vivo, reportando `approval=true` no grupo armado — e a
 // distinção importa: seguir o link produziria uma solicitação em vez de uma
 // entrada, e um chamador que não soubesse disso pediria acesso sem querer.
-func (d *Directory) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (any, error) {
+func (d *Directory) GetGroupInfoFromLink(ctx context.Context, txtID, code string) (*domain.GroupInfo, error) {
 	if code == "" {
 		return nil, fmt.Errorf("waheadless: empty invite code")
 	}
@@ -143,7 +168,20 @@ func (d *Directory) GetGroupInfoFromLink(ctx context.Context, txtID, code string
 	if err != nil {
 		return nil, err
 	}
-	return inv.InviteInfo(ctx, code, inviteLabel)
+	convite, err := inv.InviteInfo(ctx, code, inviteLabel)
+	if err != nil {
+		return nil, err
+	}
+	// Quatro campos é o que o convite dá; o resto do domain.GroupInfo fica no
+	// zero, pela mesma razão de toDomainGroupInfo — preencher o zero com um
+	// palpite seria pior que devolvê-lo.
+	return &domain.GroupInfo{
+		JID:                    domain.JID(convite.GroupJID),
+		Name:                   convite.Subject,
+		ParticipantCount:       convite.Size,
+		IsJoinApprovalRequired: convite.ApprovalRequired,
+		Participants:           []domain.GroupParticipant{},
+	}, nil
 }
 
 // grupos filtra a lista de conversas. É onde vive a única regra desta metade.

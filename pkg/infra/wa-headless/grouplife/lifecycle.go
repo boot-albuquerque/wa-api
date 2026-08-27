@@ -46,7 +46,7 @@ func (m *Manager) EnsureSession(ctx context.Context, txtID string) error {
 // campo Created: um grupo com o mesmo nome que já exista é DEVOLVIDO em vez de
 // duplicado. Achatar isso faria duas chamadas iguais parecerem ter criado dois
 // grupos quando criaram um.
-func (m *Manager) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, _ domain.CreateGroupOpts) (any, error) {
+func (m *Manager) CreateGroup(ctx context.Context, txtID, name string, participants []domain.JID, _ domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 	if name == "" {
 		return nil, fmt.Errorf("waheadless: group name is empty")
 	}
@@ -63,7 +63,21 @@ func (m *Manager) CreateGroup(ctx context.Context, txtID, name string, participa
 	if err != nil {
 		return nil, err
 	}
-	return l.Ensure(ctx, name, pageJIDs, createLabel)
+	grupo, err := l.Ensure(ctx, name, pageJIDs, createLabel)
+	if err != nil {
+		return nil, err
+	}
+	// Três campos é o que a página dá sobre o grupo recém-criado, e o resto do
+	// domain.GroupInfo fica no zero — a mesma regra do groupdir.
+	return &domain.CreatedGroup{
+		Group: &domain.GroupInfo{
+			JID:              domain.JID(grupo.JID),
+			Name:             grupo.Subject,
+			ParticipantCount: grupo.Participants,
+			Participants:     []domain.GroupParticipant{},
+		},
+		Created: grupo.Created,
+	}, nil
 }
 
 // JoinGroup follows an invite code.

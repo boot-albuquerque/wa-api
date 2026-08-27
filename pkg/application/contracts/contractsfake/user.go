@@ -58,10 +58,10 @@ type ContactDirectory struct {
 	IsOnWhatsAppFunc  func(ctx context.Context, txtID string, phones []string) ([]domain.WhatsAppCheck, error)
 	IsOnWhatsAppCalls []ContactDirectoryIsOnWhatsAppCall
 
-	GetUserInfoFunc  func(ctx context.Context, txtID string, jids []domain.JID) (any, error)
+	GetUserInfoFunc  func(ctx context.Context, txtID string, jids []domain.JID) ([]domain.UserInfo, error)
 	GetUserInfoCalls []ContactDirectoryGetUserInfoCall
 
-	GetAllContactsFunc  func(ctx context.Context, txtID string) (any, int, error)
+	GetAllContactsFunc  func(ctx context.Context, txtID string) ([]domain.Contact, int, error)
 	GetAllContactsCalls []ContactDirectoryGetAllContactsCall
 
 	GetProfilePictureFunc  func(ctx context.Context, txtID string, target domain.JID, preview bool) (*domain.AvatarInfo, error)
@@ -99,21 +99,23 @@ func (f *ContactDirectory) IsOnWhatsApp(ctx context.Context, txtID string, phone
 }
 
 // GetUserInfo implementa port.ContactDirectory.
-func (f *ContactDirectory) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error) {
+func (f *ContactDirectory) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) ([]domain.UserInfo, error) {
 	f.GetUserInfoCalls = append(f.GetUserInfoCalls, ContactDirectoryGetUserInfoCall{Ctx: ctx, TxtID: txtID, JIDs: jids})
 	if f.GetUserInfoFunc != nil {
 		return f.GetUserInfoFunc(ctx, txtID, jids)
 	}
-	return nil, nil
+	// Empty SLICE, never nil: both real adapters allocate before the loop, so
+	// a nil here would be a shape production never produces (ARMADILHAS #1).
+	return []domain.UserInfo{}, nil
 }
 
 // GetAllContacts implementa port.ContactDirectory.
-func (f *ContactDirectory) GetAllContacts(ctx context.Context, txtID string) (any, int, error) {
+func (f *ContactDirectory) GetAllContacts(ctx context.Context, txtID string) ([]domain.Contact, int, error) {
 	f.GetAllContactsCalls = append(f.GetAllContactsCalls, ContactDirectoryGetAllContactsCall{Ctx: ctx, TxtID: txtID})
 	if f.GetAllContactsFunc != nil {
 		return f.GetAllContactsFunc(ctx, txtID)
 	}
-	return nil, 0, nil
+	return []domain.Contact{}, 0, nil
 }
 
 // GetProfilePicture implementa port.ContactDirectory.
@@ -230,31 +232,31 @@ type PrivacyManagerSetPrivacySettingCall struct {
 type PrivacyManager struct {
 	SessionGuard
 
-	GetPrivacySettingsFunc  func(ctx context.Context, txtID string) (any, error)
+	GetPrivacySettingsFunc  func(ctx context.Context, txtID string) (domain.PrivacySettings, error)
 	GetPrivacySettingsCalls []PrivacyManagerGetPrivacySettingsCall
 
-	SetPrivacySettingFunc  func(ctx context.Context, txtID, name, value string) (any, error)
+	SetPrivacySettingFunc  func(ctx context.Context, txtID, name, value string) (domain.PrivacySettings, error)
 	SetPrivacySettingCalls []PrivacyManagerSetPrivacySettingCall
 }
 
 var _ port.PrivacyManager = (*PrivacyManager)(nil)
 
 // GetPrivacySettings implementa port.PrivacyManager.
-func (f *PrivacyManager) GetPrivacySettings(ctx context.Context, txtID string) (any, error) {
+func (f *PrivacyManager) GetPrivacySettings(ctx context.Context, txtID string) (domain.PrivacySettings, error) {
 	f.GetPrivacySettingsCalls = append(f.GetPrivacySettingsCalls, PrivacyManagerGetPrivacySettingsCall{Ctx: ctx, TxtID: txtID})
 	if f.GetPrivacySettingsFunc != nil {
 		return f.GetPrivacySettingsFunc(ctx, txtID)
 	}
-	return nil, nil
+	return domain.PrivacySettings{}, nil
 }
 
 // SetPrivacySetting implementa port.PrivacyManager.
-func (f *PrivacyManager) SetPrivacySetting(ctx context.Context, txtID, name, value string) (any, error) {
+func (f *PrivacyManager) SetPrivacySetting(ctx context.Context, txtID, name, value string) (domain.PrivacySettings, error) {
 	f.SetPrivacySettingCalls = append(f.SetPrivacySettingCalls, PrivacyManagerSetPrivacySettingCall{Ctx: ctx, TxtID: txtID, Name: name, Value: value})
 	if f.SetPrivacySettingFunc != nil {
 		return f.SetPrivacySettingFunc(ctx, txtID, name, value)
 	}
-	return nil, nil
+	return domain.PrivacySettings{}, nil
 }
 
 // --- UserRepository ----------------------------------------------------

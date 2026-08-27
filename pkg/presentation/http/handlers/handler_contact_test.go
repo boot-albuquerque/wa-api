@@ -65,7 +65,7 @@ func TestContactHandlers_Sucesso(t *testing.T) {
 		body   string
 	}{
 		{"GetAvatar", func(f *chFakes) http.Handler { return f.avatar() },
-			http.MethodPost, "/user/avatar", `{"Phone":"5511999"}`},
+			http.MethodPost, "/user/avatar", `{"phone":"5511999"}`},
 		{"GetContacts", func(f *chFakes) http.Handler { return f.contactsHandler() },
 			http.MethodGet, "/user/contacts", ""},
 		{"GetUserInfo", func(f *chFakes) http.Handler { return f.userInfoHandler() },
@@ -145,7 +145,7 @@ func TestContactHandlers_CorpoMalformado(t *testing.T) {
 			f := chNewFakes()
 
 			rec, capture := uhServe(tc.build(f),
-				withUser(uhRequest(http.MethodPost, tc.path, `{"Phone": "5511`, nil), "u-1"))
+				withUser(uhRequest(http.MethodPost, tc.path, `{"phone": "5511`, nil), "u-1"))
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, capture.Records(t), "unexpected EOF")
@@ -178,7 +178,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 				f.contacts.EnsureSessionFunc = func(context.Context, string) error { return sessionBoom }
 			},
 			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"5511999"}`,
+			method: http.MethodPost, path: "/user/avatar", body: `{"phone":"5511999"}`,
 			wantErrSubstring: sessionBoom.Error(),
 		},
 		{
@@ -186,7 +186,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			build:      func(f *chFakes) http.Handler { return f.avatar() },
 			method:     http.MethodPost, path: "/user/avatar", body: `{}`,
-			wantErrSubstring: "missing Phone in Payload",
+			wantErrSubstring: "missing phone in payload",
 		},
 		{
 			name:       "GetAvatar JID nao parseia",
@@ -197,7 +197,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 				}
 			},
 			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"nao-e-um-numero"}`,
+			method: http.MethodPost, path: "/user/avatar", body: `{"phone":"nao-e-um-numero"}`,
 			wantErrSubstring: "could not parse Phone",
 		},
 		{
@@ -208,7 +208,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 				}
 			},
 			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"5511999"}`,
+			method: http.MethodPost, path: "/user/avatar", body: `{"phone":"5511999"}`,
 			wantErrSubstring: portBoom.Error(),
 		},
 		{
@@ -219,7 +219,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 				}
 			},
 			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"5511999"}`,
+			method: http.MethodPost, path: "/user/avatar", body: `{"phone":"5511999"}`,
 			wantErrSubstring: "no avatar found",
 			// Contato sem foto pública é o caso comum, não uma falha de servidor —
 			// distinto dos demais casos desta tabela (sessão/porta/JID reais falhando).
@@ -233,7 +233,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 				}
 			},
 			build:  func(f *chFakes) http.Handler { return f.avatar() },
-			method: http.MethodPost, path: "/user/avatar", body: `{"Phone":"5511999"}`,
+			method: http.MethodPost, path: "/user/avatar", body: `{"phone":"5511999"}`,
 			wantErrSubstring: domain.ErrAvatarUnauthorized.Error(),
 			// Distinto de "sem foto" (404): o contato TEM foto, só está oculta
 			// pela privacidade dele — 403, não 404.
@@ -251,7 +251,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 		{
 			name: "GetContacts porta falha",
 			arrange: func(f *chFakes) {
-				f.contacts.GetAllContactsFunc = func(context.Context, string) (any, int, error) {
+				f.contacts.GetAllContactsFunc = func(context.Context, string) ([]domain.Contact, int, error) {
 					return nil, 0, portBoom
 				}
 			},
@@ -271,7 +271,7 @@ func TestContactHandlers_UseCaseFalha(t *testing.T) {
 		{
 			name: "GetUserInfo porta falha",
 			arrange: func(f *chFakes) {
-				f.contacts.GetUserInfoFunc = func(context.Context, string, []domain.JID) (any, error) {
+				f.contacts.GetUserInfoFunc = func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) {
 					return nil, portBoom
 				}
 			},

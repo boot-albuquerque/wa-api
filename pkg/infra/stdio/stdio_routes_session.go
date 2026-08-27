@@ -4,12 +4,12 @@ package stdio
 
 var sessionStaticRoutes = map[string]staticRoute{
 	"session.connect":            {httpMethod: "GET", httpPath: "/session/connect"},
-	"session.qr":                 {httpMethod: "GET", httpPath: "/session/qr"},
+	"session.qr":                 {httpMethod: "GET", httpPath: "/session/pair/qr"},
 	"session.status":             {httpMethod: "GET", httpPath: "/session/status"},
 	"session.disconnect":         {httpMethod: "GET", httpPath: "/session/disconnect"},
 	"session.logout":             {httpMethod: "POST", httpPath: "/session/logout"},
-	"session.pairphone":          {httpMethod: "POST", httpPath: "/session/pairphone"},
-	"session.history":            {httpMethod: "GET", httpPath: "/chat/history"},
+	"session.pairphone":          {httpMethod: "POST", httpPath: "/session/pair/phone"},
+	"session.history":            {httpMethod: "GET", httpPath: "/chats/history"},
 	"session.history.set":        {httpMethod: "POST", httpPath: "/session/history"},
 	"session.proxy":              {httpMethod: "POST", httpPath: "/session/proxy"},
 	"session.hmac.config":        {httpMethod: "POST", httpPath: "/session/hmac/config"},

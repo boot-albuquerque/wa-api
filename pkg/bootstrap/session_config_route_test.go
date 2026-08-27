@@ -53,7 +53,7 @@ type sessionCfgFixture struct {
 	db     *sqlx.DB
 	router *mux.Router
 
-	// revalidacoes conta quantas vezes o gate de /chat/history foi ao banco
+	// revalidacoes conta quantas vezes o gate de /chats/history foi ao banco
 	// revalidar `users.history`. E' a metrica da F128: com o cache publicado
 	// na escrita, a primeira leitura seguinte NAO revalida.
 	revalidacoes *int
@@ -231,7 +231,7 @@ func (f *sessionCfgFixture) cachedByUserID(t *testing.T, field string) string {
 }
 
 // cachedByToken le o campo na entrada do cache de AUTENTICACAO (chaveada por
-// token) — o cache de onde o gate de /chat/history tira a semente.
+// token) — o cache de onde o gate de /chats/history tira a semente.
 func (f *sessionCfgFixture) cachedByToken(t *testing.T, field string) (string, time.Time) {
 	t.Helper()
 	cached, expiracao, found := userinfocache.GetWithExpiration(sessionCfgToken)
@@ -262,7 +262,7 @@ var (
 // Os dois, e nao um: appCtx.UserInfoCache (por usuario, NoExpiration) e' o que
 // saveMessageHistory le' para decidir se uma mensagem recebida chega a ser
 // persistida; o cache de autenticacao (por token, com TTL) e' o que semeia o
-// gate de /chat/history. Publicar so' num deles deixaria metade do defeito de
+// gate de /chats/history. Publicar so' num deles deixaria metade do defeito de
 // pe', e qual metade dependeria de qual cache a pessoa lembrou.
 func TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches(t *testing.T) {
 	for _, rp := range historyRoutePaths {
@@ -273,7 +273,7 @@ func TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches(t *testing.T) {
 			// Uma requisicao antes da escrita, so' para que AuthAlice crie a
 			// entrada do token no cache de autenticacao — e' o estado real de
 			// quem ja' fez ao menos uma chamada autenticada.
-			f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+			f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 			rec := f.do(t, http.MethodPost, rp.path, `{"history":50}`)
 			if rec.Code != http.StatusOK {
@@ -288,7 +288,7 @@ func TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches(t *testing.T) {
 			}
 			valor, expiracao := f.cachedByToken(t, userInfoHistoryField)
 			if valor != "50" {
-				t.Fatalf("cache de autenticacao[History] = %q, quero \"50\": o gate de /chat/history vai continuar "+
+				t.Fatalf("cache de autenticacao[History] = %q, quero \"50\": o gate de /chats/history vai continuar "+
 					"revalidando no banco uma vez por requisicao ate' o TTL expirar (F128)", valor)
 			}
 			if expiracao.IsZero() {
@@ -300,7 +300,7 @@ func TestSessionConfigRoute_SetHistoryGravaEPublicaNosDoisCaches(t *testing.T) {
 }
 
 // TESTE 1b (rota) — a CONSEQUENCIA, que e' o que a F128 mede: depois da
-// escrita, a primeira leitura de /chat/history NAO revalida no banco.
+// escrita, a primeira leitura de /chats/history NAO revalida no banco.
 //
 // Este e' o teste que morde se a publicacao no cache de autenticacao sumir.
 // Nao assere o cache: assere o comportamento que a F128 descreve.
@@ -309,7 +309,7 @@ func TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida(t *testing.T) 
 	f.seedCacheEntry()
 
 	// Antes: com history=0 no banco e no cache, o gate revalida e recusa.
-	if rec := f.do(t, http.MethodGet, "/chat/history?chat_jid=index", ""); rec.Code == http.StatusOK {
+	if rec := f.do(t, http.MethodGet, "/chats/history?chat_jid=index", ""); rec.Code == http.StatusOK {
 		t.Fatalf("com history=0 a leitura devia ser recusada, veio %d (%s)", rec.Code, rec.Body.String())
 	}
 	if *f.revalidacoes != 1 {
@@ -321,7 +321,7 @@ func TestSessionConfigRoute_SetHistoryFechaAF128_OGateNaoRevalida(t *testing.T) 
 	}
 
 	antes := *f.revalidacoes
-	rec := f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+	rec := f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("depois de ligar o historico a leitura devia passar, veio %d (%s)", rec.Code, rec.Body.String())
 	}
@@ -353,7 +353,7 @@ func TestSessionConfigRoute_SetHistoryNegativo_400SemGravar(t *testing.T) {
 func TestSessionConfigRoute_SetHistoryFalhaDeBanco_500SemTocarOCache(t *testing.T) {
 	f := newSessionCfgFixture(t)
 	f.seedCacheEntry()
-	f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+	f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 	if err := f.db.Close(); err != nil {
 		t.Fatalf("fechar o banco: %v", err)
@@ -413,7 +413,7 @@ func TestSessionConfigRoute_SetProxyEsquemas(t *testing.T) {
 			t.Run(rp.name+"/"+tc.name, func(t *testing.T) {
 				f := newSessionCfgFixture(t)
 				f.seedCacheEntry()
-				f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+				f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 				rec := f.do(t, http.MethodPost, rp.path, `{"enable":true,"proxy_url":"`+tc.url+`"}`)
 
@@ -447,7 +447,7 @@ func TestSessionConfigRoute_SetProxyEsquemas(t *testing.T) {
 				// "gravei o que voce pediu" de "respondi 200".
 				var envelope struct {
 					Data struct {
-						ProxyURL string `json:"ProxyURL"`
+						ProxyURL string `json:"proxy_url"`
 					} `json:"data"`
 				}
 				if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
@@ -502,7 +502,7 @@ func TestSessionConfigRoute_SetProxyDesabilita_ZeraBancoECaches(t *testing.T) {
 		t.Run(rp.name, func(t *testing.T) {
 			f := newSessionCfgFixture(t)
 			f.seedCacheEntry()
-			f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+			f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 			const url = "socks5://203.0.113.10:1080"
 			if rec := f.do(t, http.MethodPost, rp.path, `{"enable":true,"proxy_url":"`+url+`"}`); rec.Code != http.StatusOK {
@@ -533,7 +533,7 @@ func TestSessionConfigRoute_SetProxyDesabilita_ZeraBancoECaches(t *testing.T) {
 func TestSessionConfigRoute_SetProxyFalhaDeBanco_500SemTocarOCache(t *testing.T) {
 	f := newSessionCfgFixture(t)
 	f.seedCacheEntry()
-	f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+	f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 	if err := f.db.Close(); err != nil {
 		t.Fatalf("fechar o banco: %v", err)
@@ -595,7 +595,7 @@ func TestSessionConfigRoute_SetProxyEnderecoReservado(t *testing.T) {
 			t.Run(rp.name+"/"+tc.name, func(t *testing.T) {
 				f := newSessionCfgFixture(t)
 				f.seedCacheEntry()
-				f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+				f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 				rec := f.do(t, http.MethodPost, rp.path, tc.corpo)
 

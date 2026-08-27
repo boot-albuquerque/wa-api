@@ -78,13 +78,13 @@ func grpReadCases() []grpReadCase {
 			name:      "GetGroupRequestParticipants",
 			method:    http.MethodPost,
 			path:      "/group/requests",
-			body:      `{"groupJID":"120363@g.us"}`,
+			body:      `{"group_jid":"120363@g.us"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewGetGroupRequestParticipantsHandler(group.NewGroupRequestUseCase(f.requests, f.jids, f.logger))
 			},
 			failOp: func(f *grpFakes, err error) {
-				f.requests.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) (any, error) {
+				f.requests.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.GroupJoinRequest, error) {
 					return nil, err
 				}
 			},
@@ -93,7 +93,7 @@ func grpReadCases() []grpReadCase {
 			name:      "UpdateGroupRequestParticipants",
 			method:    http.MethodPost,
 			path:      "/group/requests/update",
-			body:      `{"groupJID":"120363@g.us","Phone":["5511999999999@s.whatsapp.net"],"Action":"approve"}`,
+			body:      `{"group_jid":"120363@g.us","phone":["5511999999999@s.whatsapp.net"],"action":"approve"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewUpdateGroupRequestParticipantsHandler(group.NewGroupRequestUseCase(f.requests, f.jids, f.logger))
@@ -108,7 +108,7 @@ func grpReadCases() []grpReadCase {
 			name:      "SetGroupJoinApprovalMode",
 			method:    http.MethodPost,
 			path:      "/group/join/approval",
-			body:      `{"groupjid":"120363@g.us","mode":true}`,
+			body:      `{"group_jid":"120363@g.us","mode":true}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewSetGroupJoinApprovalModeHandler(group.NewGroupRequestUseCase(f.requests, f.jids, f.logger))
@@ -127,27 +127,31 @@ func grpReadCases() []grpReadCase {
 				return NewListGroupsHandler(group.NewListGroupsUseCase(f.directory, f.logger))
 			},
 			failOp: func(f *grpFakes, err error) {
-				f.directory.ListJoinedGroupsFunc = func(context.Context, string) (any, int, error) { return nil, 0, err }
+				f.directory.ListJoinedGroupsFunc = func(context.Context, string) ([]*domain.GroupInfo, int, error) {
+					return nil, 0, err
+				}
 			},
 		},
 		{
 			name:      "GetGroupInfo",
 			method:    http.MethodPost,
 			path:      "/group/info",
-			body:      `{"groupJID":"120363@g.us"}`,
+			body:      `{"group_jid":"120363@g.us"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewGetGroupInfoHandler(group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger))
 			},
 			failOp: func(f *grpFakes, err error) {
-				f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return nil, err }
+				f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+					return nil, err
+				}
 			},
 		},
 		{
 			name:      "GetGroupInviteLink",
 			method:    http.MethodPost,
 			path:      "/group/invitelink",
-			body:      `{"groupJID":"120363@g.us"}`,
+			body:      `{"group_jid":"120363@g.us"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewGetGroupInviteLinkHandler(group.NewGetGroupInviteLinkUseCase(f.directory, f.jids, f.logger))
@@ -160,13 +164,15 @@ func grpReadCases() []grpReadCase {
 			name:      "GetGroupInviteInfo",
 			method:    http.MethodPost,
 			path:      "/group/inviteinfo",
-			body:      `{"Code":"AbCdEf"}`,
+			body:      `{"code":"AbCdEf"}`,
 			readsBody: true,
 			build: func(f *grpFakes) http.Handler {
 				return NewGetGroupInviteInfoHandler(group.NewGetGroupInviteInfoUseCase(f.directory, f.logger))
 			},
 			failOp: func(f *grpFakes, err error) {
-				f.directory.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (any, error) { return nil, err }
+				f.directory.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (*domain.GroupInfo, error) {
+					return nil, err
+				}
 			},
 		},
 	}
@@ -210,7 +216,7 @@ func TestGroupReadHandlers_MalformedBody(t *testing.T) {
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGrpFakes()
-			rec, capture := grpServe(tc, f, `{"groupJID": "120363`)
+			rec, capture := grpServe(tc, f, `{"group_jid": "120363`)
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			got := logassert.OutcomeLogged(t, capture.Records(t))
@@ -292,7 +298,7 @@ func TestGroupReadHandlers_NeverLogSecrets(t *testing.T) {
 			rec := httptest.NewRecorder()
 			body := tc.body
 			if tc.readsBody {
-				body = `{"groupJID":"120363@g.us","Code":"AbCdEf","secret":"` +
+				body = `{"group_jid":"120363@g.us","code":"AbCdEf","secret":"` +
 					logassertGlobalEncryptionKey + `","hmac":"` + logassertGlobalHMACKey + `"}`
 			}
 			r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(body))
@@ -375,7 +381,7 @@ func TestGetGroupRequestParticipants_BodyWinsOverQuery(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/group/requestparticipants?group_jid=query@g.us",
-		strings.NewReader(`{"groupJID":"body@g.us"}`))
+		strings.NewReader(`{"group_jid":"body@g.us"}`))
 	h.ServeHTTP(rec, withUser(r, "user-1"))
 
 	if rec.Code != http.StatusOK {
@@ -392,7 +398,7 @@ func TestGetGroupInfo_UpstreamForbiddenReturns403(t *testing.T) {
 	f := newGrpFakes()
 	portErr := apperr.New("upstream_forbidden", apperr.CategoryForbidden,
 		"WhatsApp does not permit this operation on that target", false, nil)
-	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) {
+	f.directory.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
 		return nil, portErr
 	}
 
@@ -400,7 +406,7 @@ func TestGetGroupInfo_UpstreamForbiddenReturns403(t *testing.T) {
 		group.NewGetGroupInfoUseCase(f.directory, f.jids, f.logger)))
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/group/info",
-		strings.NewReader(`{"groupJID":"120363@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363@g.us"}`))
 	h.ServeHTTP(rec, withUser(r, "user-1"))
 
 	assertErrorEnvelope(t, rec, http.StatusForbidden)
@@ -424,7 +430,7 @@ func TestGetGroupInviteLink_UpstreamForbiddenReturns403(t *testing.T) {
 		group.NewGetGroupInviteLinkUseCase(f.directory, f.jids, f.logger)))
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/group/invitelink",
-		strings.NewReader(`{"groupJID":"120363@g.us"}`))
+		strings.NewReader(`{"group_jid":"120363@g.us"}`))
 	h.ServeHTTP(rec, withUser(r, "user-1"))
 
 	assertErrorEnvelope(t, rec, http.StatusForbidden)

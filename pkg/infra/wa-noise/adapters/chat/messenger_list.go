@@ -54,7 +54,7 @@ func listRows(rows []domain.ListRow) []*waE2E.ListMessage_Row {
 	out := make([]*waE2E.ListMessage_Row, 0, len(rows))
 	for _, row := range rows {
 		wireRow := &waE2E.ListMessage_Row{
-			RowID: proto.String(row.RowId),
+			RowID: proto.String(row.RowID),
 			Title: proto.String(row.Title),
 		}
 		if row.Description != "" {

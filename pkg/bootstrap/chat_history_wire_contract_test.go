@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// CAP-09A — TRAVA DOS NOMES DO WIRE de GET /chat/history.
+// CAP-09A — TRAVA DOS NOMES DO WIRE de GET /chats/history.
 //
 // Por que este arquivo existe, separado dos outros testes da rota: toda a
 // suite de chat_history_route_test.go decodifica a resposta EM
@@ -132,7 +132,7 @@ func TestChatHistoryWireContract_MessageFieldNames(t *testing.T) {
 	f.seedHistoryRowAllColumns(t, "A", historyChatA, "A-1",
 		time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -147,7 +147,7 @@ func TestChatHistoryWireContract_MessageFieldNames(t *testing.T) {
 		t.Fatalf("len = %d, quero 1 (corpo: %s)", len(msgs), rec.Body.String())
 	}
 
-	assertWireKeys(t, "GET /chat/history (mensagens)", msgs[0], chatHistoryWireKeys)
+	assertWireKeys(t, "GET /chats/history (mensagens)", msgs[0], chatHistoryWireKeys)
 }
 
 // TestChatHistoryWireContract_IndexFieldNames trava o ramo `chat_jid=index`:
@@ -159,7 +159,7 @@ func TestChatHistoryWireContract_IndexFieldNames(t *testing.T) {
 	f.seedHistoryRowAllColumns(t, "A", historyChatA, "A-1",
 		time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid=index")
+	rec := f.get(t, "/chats/history?chat_jid=index")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -179,7 +179,7 @@ func TestChatHistoryWireContract_IndexFieldNames(t *testing.T) {
 		t.Fatalf("index[\"A\"] tem %d entradas, quero 1 (corpo: %s)", len(entradas), rec.Body.String())
 	}
 
-	assertWireKeys(t, "GET /chat/history?chat_jid=index (ChatInfo)", entradas[0], chatIndexWireKeys)
+	assertWireKeys(t, "GET /chats/history?chat_jid=index (ChatInfo)", entradas[0], chatIndexWireKeys)
 }
 
 func chavesDoIndex(index map[string][]map[string]any) []string {

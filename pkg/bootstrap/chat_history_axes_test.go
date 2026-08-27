@@ -23,7 +23,7 @@ import (
 	"wa-api/pkg/presentation/http/handlers"
 )
 
-// CAP-19 — os eixos de fronteira de GET /chat/history.
+// CAP-19 — os eixos de fronteira de GET /chats/history.
 //
 // A capability e' de LEITURA, entao a matriz difere da das capabilities de
 // acao:
@@ -210,7 +210,7 @@ func TestChatHistoryAxis_MissingSessionID(t *testing.T) {
 	f.seedUser(t, "A", 10)
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, quero 400 (corpo: %s)", rec.Code, rec.Body.String())
@@ -231,7 +231,7 @@ func TestChatHistoryAxis_WrongTypeInContext(t *testing.T) {
 	f.seedUser(t, "A", 10)
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
-	rec := f.get(t, "/chat/history?chat_jid="+historyChatA)
+	rec := f.get(t, "/chats/history?chat_jid="+historyChatA)
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, quero 401 (corpo: %s)", rec.Code, rec.Body.String())
@@ -261,9 +261,9 @@ func TestChatHistoryAxis_SuccessEmitsNoOutcomeLog(t *testing.T) {
 		alvo  string
 		reads func(*countingChatHistoryReader) int
 	}{
-		{"mensagens", "/chat/history?chat_jid=" + historyChatA,
+		{"mensagens", "/chats/history?chat_jid=" + historyChatA,
 			func(r *countingChatHistoryReader) int { return len(r.listCalls) }},
-		{"index", "/chat/history?chat_jid=index",
+		{"index", "/chats/history?chat_jid=index",
 			func(r *countingChatHistoryReader) int { return len(r.indexCalls) }},
 	} {
 		t.Run(caso.nome, func(t *testing.T) {
@@ -302,7 +302,7 @@ func TestChatHistoryAxis_ReadsUseContextTxtID(t *testing.T) {
 		f.seedUser(t, "A", 10)
 		f.seedHistoryRow(t, "A", historyChatA, "A-1", base)
 
-		if rec := f.get(t, "/chat/history?chat_jid="+historyChatA+"&user=B"); rec.Code != http.StatusOK {
+		if rec := f.get(t, "/chats/history?chat_jid="+historyChatA+"&user=B"); rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 		}
 		if got := f.reader.listCalls; len(got) != 1 || got[0] != "A" {
@@ -315,7 +315,7 @@ func TestChatHistoryAxis_ReadsUseContextTxtID(t *testing.T) {
 		f.seedUser(t, "A", 10)
 		f.seedHistoryRow(t, "A", historyChatA, "A-1", base)
 
-		if rec := f.get(t, "/chat/history?chat_jid=index&user=B"); rec.Code != http.StatusOK {
+		if rec := f.get(t, "/chats/history?chat_jid=index&user=B"); rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 		}
 		if got := f.reader.indexCalls; len(got) != 1 || got[0] != "A" {
@@ -331,7 +331,7 @@ func TestChatHistoryAxis_ReadsUseContextTxtID(t *testing.T) {
 		f.seedUser(t, "A", 10)
 		f.seedHistoryRow(t, "A", historyChatA, "A-1", base)
 
-		if rec := f.get(t, "/chat/history?chat_jid="+historyChatA); rec.Code != http.StatusOK {
+		if rec := f.get(t, "/chats/history?chat_jid="+historyChatA); rec.Code != http.StatusOK {
 			t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 		}
 		if got := f.reader.limitCalls; len(got) != 1 || got[0] != "A" {
@@ -359,7 +359,7 @@ func TestChatHistoryAxis_MessagesIsolateOnUserID(t *testing.T) {
 	f.seedHistoryRow(t, "B", compartilhado, "B-1", base.Add(time.Hour))
 	f.seedHistoryRow(t, "B", compartilhado, "B-2", base.Add(2*time.Hour))
 
-	rec := f.get(t, "/chat/history?chat_jid="+compartilhado)
+	rec := f.get(t, "/chats/history?chat_jid="+compartilhado)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -399,12 +399,12 @@ func TestChatHistoryAxis_MalformedBodyIsIgnoredBecauseRouteIsGET(t *testing.T) {
 	f.seedHistoryRow(t, "A", historyChatA, "A-1", time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/chat/history?chat_jid="+historyChatA,
+	req := httptest.NewRequest(http.MethodGet, "/chats/history?chat_jid="+historyChatA,
 		strings.NewReader(`{"Phone":"5511`))
 	f.router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, quero 200: o handler de /chat/history nao le' corpo, "+
+		t.Fatalf("status = %d, quero 200: o handler de /chats/history nao le' corpo, "+
 			"entao um corpo truncado nao pode mudar o desfecho (corpo: %s)", rec.Code, rec.Body.String())
 	}
 	if n := len(f.reader.listCalls); n != 1 {

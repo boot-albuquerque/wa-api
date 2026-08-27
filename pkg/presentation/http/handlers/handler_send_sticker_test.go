@@ -105,7 +105,7 @@ func TestSendSticker_Success_ViaRegisteredRoute(t *testing.T) {
 	mf := defaultSendStickerFetcher()
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -149,7 +149,7 @@ func TestSendSticker_RejectUnauthenticated(t *testing.T) {
 	mf := defaultSendStickerFetcher()
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -163,8 +163,8 @@ func TestSendSticker_RejectUnauthenticated(t *testing.T) {
 
 func TestSendSticker_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"Phone":   `{"Sticker":"` + sendStickerTestURL + `"}`,
-		"Sticker": `{"Phone":"5511999999999"}`,
+		"phone":   `{"sticker":"` + sendStickerTestURL + `"}`,
+		"sticker": `{"phone":"5511999999999"}`,
 	}
 	for field, body := range bodies {
 		t.Run(field, func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestSendSticker_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 
 	encoded := base64.StdEncoding.EncodeToString(sendStickerWebPBytes)
 	rawDataURI := "data:image/webp;base64," + encoded
-	body := `{"Phone":"5511999999999","Sticker":"` + rawDataURI + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + rawDataURI + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -257,7 +257,7 @@ func TestSendSticker_UnsupportedSource_Rejected(t *testing.T) {
 				},
 			}
 
-			body := `{"Phone":"5511999999999","Sticker":"` + sticker + `"}`
+			body := `{"phone":"5511999999999","sticker":"` + sticker + `"}`
 			rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 			if rec.Code == http.StatusOK {
@@ -283,7 +283,7 @@ func TestSendSticker_SessionFailure(t *testing.T) {
 	mf := defaultSendStickerFetcher()
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -305,7 +305,7 @@ func TestSendSticker_InvalidPhoneNeverFetchesOrSends(t *testing.T) {
 	mf := defaultSendStickerFetcher()
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"lixo","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"lixo","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -329,7 +329,7 @@ func TestSendSticker_FetchFailure_NeverReturns200(t *testing.T) {
 	}
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -354,7 +354,7 @@ func TestSendSticker_ConversionFailure_Returns500_NeverSent(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code != http.StatusInternalServerError {
@@ -382,7 +382,7 @@ func TestSendSticker_DownstreamFailureNeverReturns200(t *testing.T) {
 	mf := defaultSendStickerFetcher()
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -407,7 +407,7 @@ func TestSendSticker_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	mf := defaultSendStickerFetcher()
 	sp := defaultSendStickerProcessor()
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `","id":"id-do-cliente"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -438,7 +438,7 @@ func TestSendSticker_MimeOverride_ForwardedFromRequest(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Sticker":"` + sendStickerTestURL + `","MimeType":"image/png"}`
+	body := `{"phone":"5511999999999","sticker":"` + sendStickerTestURL + `","mime_type":"image/png"}`
 	rec := sendStickerServe(t, mm, jr, mf, sp, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -465,7 +465,7 @@ func TestSendSticker_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendStickerRouter(mm, jr, mf, sp))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Sticker":"` + logassertGlobalEncryptionKey + `"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","sticker":"` + logassertGlobalEncryptionKey + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/sticker", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)

@@ -8,6 +8,10 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtoadmin "wa-api/pkg/presentation/http/dto/admin"
+	dtohealth "wa-api/pkg/presentation/http/dto/health"
+	dtonewsletter "wa-api/pkg/presentation/http/dto/newsletter"
+	dtouser "wa-api/pkg/presentation/http/dto/user"
 
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
@@ -46,7 +50,7 @@ func (h *GetHealthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtohealth.PresentHealth(rsp), nil)
 }
 
 // ListNewsletterHandler handles GET /newsletter/list
@@ -68,7 +72,7 @@ func (h *ListNewsletterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtonewsletter.PresentListNewsletters(rsp), nil)
 }
 
 // DeleteUserCompleteHandler handles DELETE /admin/users/{id}/full
@@ -95,7 +99,10 @@ func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, rsp.Code, rsp.Data, nil)
+	// 200 written here, and no longer read from `rsp.Code`: the status line
+	// is the boundary's decision, and the domain result carried a copy of the
+	// envelope only because it used to BE the payload.
+	customhttp.RespondJSON(w, 200, dtoadmin.PresentDeleteUserComplete(rsp), nil)
 }
 
 // RejectCallHandler handles POST /call/reject
@@ -148,7 +155,7 @@ func (h *GetPrivacySettingsHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtouser.PresentPrivacySettings(rsp), nil)
 }
 
 // SetPrivacySettingHandler handles POST /user/privacy
@@ -166,7 +173,7 @@ func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	var req domain.SetPrivacySettingRequest
+	var req dtouser.SetPrivacySettingRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -175,13 +182,21 @@ func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	// Validated at the BOUNDARY now, not inside the use case: the answer to a
+	// misspelled setting is a 400 with a stable error.code, and it does not
+	// need a session to be produced.
+	if err := req.Validate(); err != nil {
+		hlog.FromRequest(r).Warn().Err(err).Str("route", route).Msg("request rejected")
+		customhttp.RespondJSON(w, 400, nil, err)
+		return
+	}
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtouser.PresentPrivacySettings(rsp), nil)
 }
 
 // RequestUnavailableMessageHandler handles POST /chat/request-unavailable-message

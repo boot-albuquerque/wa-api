@@ -85,7 +85,7 @@ func messageOpWireCases() []messageOpWireCase {
 					},
 				}
 				return sendWirePost(t, mutationRouter(cm, &contractsfake.JIDResolver{}),
-					"/chat/send/edit", `{"Phone":"5511999999999","Id":"MSG1","Body":"novo texto"}`)
+					"/chat/send/edit", `{"phone":"5511999999999","id":"MSG1","body":"novo texto"}`)
 			},
 		},
 		{
@@ -100,13 +100,13 @@ func messageOpWireCases() []messageOpWireCase {
 					},
 				}
 				return sendWirePost(t, mutationRouter(cm, &contractsfake.JIDResolver{}),
-					"/chat/delete/message", `{"Phone":"5511999999999","Id":"MSG1"}`)
+					"/chat/delete/message", `{"phone":"5511999999999","id":"MSG1"}`)
 			},
 		},
 		{
 			// A react ESTEVE travada na forma histórica, porque era essa que
 			// ela devolvia — medido contra o servidor real em 2026-08-20:
-			//   {"Details":"Sent","Id":"3EB0D89C...","Timestamp":1787255613}
+			//   {"Details":"Sent","id":"3EB0D89C...","Timestamp":1787255613}
 			//
 			// Alinhada na F190 depois de autorização explícita do humano: o
 			// use case passou a devolver um domain.SendReactionResult tipado
@@ -128,7 +128,7 @@ func messageOpWireCases() []messageOpWireCase {
 					NewReactHandler(message.NewReactUseCase(sm, &contractsfake.JIDResolver{}, silentLogger{}))).
 					Methods(http.MethodPost)
 				return sendWirePost(t, r, "/chat/react",
-					`{"Phone":"5511999999999","Id":"MSG1","Body":"👍"}`)
+					`{"phone":"5511999999999","id":"MSG1","body":"👍"}`)
 			},
 		},
 	}

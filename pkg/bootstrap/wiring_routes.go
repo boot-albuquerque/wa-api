@@ -75,7 +75,7 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/chat/send/carousel", customChain.Then(ch.Message.SendCarousel), "POST")
 	registry.Register("/chat/send/list", customChain.Then(ch.Message.SendList), "POST")
 	registry.Register("/chat/send/poll", customChain.Then(ch.Message.SendPoll), "POST")
-	registry.Register("/chat/send/pollvote", customChain.Then(ch.Message.SendPollVote), "POST")
+	registry.Register("/polls/{poll_message_id}/votes", customhttp.InjectPathParams(customChain.Then(ch.Message.SendPollVote)), "POST")
 	registry.Register("/chat/send/forward", customChain.Then(ch.Message.SendForward), "POST")
 	registry.Register("/chat/delete/message", customChain.Then(ch.Message.DeleteMessage), "POST")
 	registry.Register("/chat/send/edit", customChain.Then(ch.Message.SendEditMessage), "POST")
@@ -100,21 +100,25 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	// Group routes (migrated from internal/)
 	registry.Register("/group/requestparticipants", customChain.Then(ch.Group.GetGroupRequestParticipants), "GET")
 	registry.Register("/group/list", customChain.Then(ch.Group.ListGroups), "POST")
-	registry.Register("/group/info", customChain.Then(ch.Group.GetGroupInfo), "POST")
-	registry.Register("/group/invitelink", customChain.Then(ch.Group.GetGroupInviteLink), "POST")
-	registry.Register("/group/inviteinfo", customChain.Then(ch.Group.GetGroupInviteInfo), "POST")
+	// {group_jid}/{invite_code} routes: cut over directly to the canonical
+	// form (no legacy alias kept — hard cutover, no consumers yet). The
+	// group_jid/invite_code path param is injected into the JSON body via
+	// InjectPathParams, same mechanism RegisterCanonicalAliases uses below.
+	registry.Register("/groups/{group_jid}", customhttp.InjectPathParams(customChain.Then(ch.Group.GetGroupInfo)), "GET")
+	registry.Register("/groups/{group_jid}/invite-link", customhttp.InjectPathParams(customChain.Then(ch.Group.GetGroupInviteLink)), "GET")
+	registry.Register("/groups/invite-links/{invite_code}", customhttp.InjectPathParams(customChain.Then(ch.Group.GetGroupInviteInfo)), "GET")
 
 	// Group management routes (still using server methods as migration in-progress)
 	registry.Register("/group/create", customChain.Then(ch.GroupMgmt.CreateGroup), "POST")
 	registry.Register("/group/join", customChain.Then(ch.GroupMgmt.GroupJoin), "POST")
 	registry.Register("/group/leave", customChain.Then(ch.GroupMgmt.GroupLeave), "POST")
-	registry.Register("/group/name", customChain.Then(ch.GroupMgmt.SetGroupName), "POST")
-	registry.Register("/group/topic", customChain.Then(ch.GroupMgmt.SetGroupTopic), "POST")
+	registry.Register("/groups/{group_jid}/name", customhttp.InjectPathParams(customChain.Then(ch.GroupMgmt.SetGroupName)), "PUT")
+	registry.Register("/groups/{group_jid}/topic", customhttp.InjectPathParams(customChain.Then(ch.GroupMgmt.SetGroupTopic)), "PUT")
 	registry.Register("/group/photo", customChain.Then(ch.GroupMgmt.SetGroupPhoto), "POST")
 	registry.Register("/group/photo/remove", customChain.Then(ch.GroupMgmt.RemoveGroupPhoto), "POST")
-	registry.Register("/group/announce", customChain.Then(ch.GroupMgmt.SetGroupAnnounce), "POST")
-	registry.Register("/group/locked", customChain.Then(ch.GroupMgmt.SetGroupLocked), "POST")
-	registry.Register("/group/ephemeral", customChain.Then(ch.GroupMgmt.SetDisappearingTimer), "POST")
+	registry.Register("/groups/{group_jid}/announce-only", customhttp.InjectPathParams(customChain.Then(ch.GroupMgmt.SetGroupAnnounce)), "PUT")
+	registry.Register("/groups/{group_jid}/locked", customhttp.InjectPathParams(customChain.Then(ch.GroupMgmt.SetGroupLocked)), "PUT")
+	registry.Register("/groups/{group_jid}/ephemeral", customhttp.InjectPathParams(customChain.Then(ch.GroupMgmt.SetDisappearingTimer)), "PUT")
 	registry.Register("/group/updateparticipants", customChain.Then(ch.GroupMgmt.UpdateGroupParticipants), "POST")
 	registry.Register("/group/updaterequestparticipants", customChain.Then(ch.Group.UpdateGroupRequestParticipants), "POST")
 	registry.Register("/group/joinapprovalmode", customChain.Then(ch.Group.SetGroupJoinApprovalMode), "POST")
@@ -147,19 +151,17 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	// Blocklist route
 	registry.Register("/user/blocklist", customChain.Then(ch.Blocklist.GetBlocklist), "GET")
 
-	// Download routes
+	// Download routes. The five legacy per-kind routes (/chat/downloadimage
+	// etc.) were removed 2026-08-27 — see HOUSEKEEP.md F297: hard-cutover
+	// directive reverses the CAP-10/F269 "permanent coexistence" policy for
+	// this family, since no real consumers depend on them pre-launch.
 	registry.Register("/chats/download/{kind}", customChain.Then(ch.Download.Media), "POST")
-	registry.Register("/chat/downloadimage", customChain.Then(ch.Download.Image), "POST")
-	registry.Register("/chat/downloadvideo", customChain.Then(ch.Download.Video), "POST")
-	registry.Register("/chat/downloadaudio", customChain.Then(ch.Download.Audio), "POST")
-	registry.Register("/chat/downloaddocument", customChain.Then(ch.Download.Document), "POST")
-	registry.Register("/chat/downloadsticker", customChain.Then(ch.Download.Sticker), "POST")
 
 	// Presence & Chat routes
 	registry.Register("/user/presence", customChain.Then(ch.Presence.Send), "POST")
 	registry.Register("/user/presence/subscribe", customChain.Then(ch.Presence.Subscribe), "POST")
 	registry.Register("/chat/presence", customChain.Then(ch.Presence.Chat), "POST")
-	registry.Register("/chat/markread", customChain.Then(ch.Presence.MarkRead), "POST")
+	registry.Register("/chats/{chat_jid}/read", customhttp.InjectPathParams(customChain.Then(ch.Presence.MarkRead)), "POST")
 
 	// React route
 	registry.Register("/chat/react", customChain.Then(ch.Reaction.React), "POST")
@@ -258,24 +260,17 @@ func registerCustomRoutes(router *mux.Router, c alice.Chain, ch *customHandlers)
 	registry.Register("/status/set/audio", customChain.Then(ch.Session.PublishStatusAudio), "POST")
 	// Static files — keep in routes.go only, not reregistered here
 
-	// A padronização de caminhos (F269). Corre DEPOIS de todas as rotas antigas
-
-	// estarem registadas, porque lê o que foi registado para lhe acrescentar a
-
-	// forma canónica. Ver api/openapi/CAMINHOS-CANONICOS.md.
-
+	// A padronização de caminhos (F269), com corte limpo (reversão de
+	// 2026-08-27, ver HOUSEKEEP.md): corre DEPOIS de todas as rotas antigas
+	// estarem registadas, porque lê o que foi registado para o SUBSTITUIR pela
+	// forma canónica — o caminho antigo deixa de responder. Ver
+	// api/openapi/CAMINHOS-CANONICOS.md.
 	//
-
 	// Uma entrada da tabela sem rota correspondente é ERRO de configuração e
-
 	// aborta o arranque: uma tabela que aponta para rotas inexistentes já não
-
 	// descreve o serviço, e descobrir isso quando um cliente chama é tarde.
-
-	if orfas := registry.RegisterCanonicalAliases(CaminhosCanonicos()); len(orfas) > 0 {
-
+	if orfas := registry.CanonicalizeRoutes(CaminhosCanonicos()); len(orfas) > 0 {
 		panic("bootstrap: tabela de caminhos canónicos aponta para rotas inexistentes: " + strings.Join(orfas, ", "))
-
 	}
 
 	registry.Apply(router)

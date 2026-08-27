@@ -9,31 +9,31 @@ var miscStaticRoutes = map[string]staticRoute{
 	"status.set.video": {httpMethod: "POST", httpPath: "/status/set/video"},
 	"status.set.audio": {httpMethod: "POST", httpPath: "/status/set/audio"},
 	"call.reject":      {httpMethod: "POST", httpPath: "/call/reject"},
-	"newsletter.list":  {httpMethod: "GET", httpPath: "/newsletter/list"},
+	"newsletter.list":  {httpMethod: "GET", httpPath: "/newsletters/list"},
 
 	// As onze operações de newsletter acrescentadas em 2026-08-20. Ficam aqui,
 	// e não num ficheiro próprio, porque partilham o use case e a forma do
 	// pedido: separá-las daria a impressão de domínios distintos.
-	"newsletter.create":       {httpMethod: "POST", httpPath: "/newsletter/create"},
-	"newsletter.info":         {httpMethod: "POST", httpPath: "/newsletter/info"},
-	"newsletter.info.invite":  {httpMethod: "POST", httpPath: "/newsletter/info-invite"},
-	"newsletter.follow":       {httpMethod: "POST", httpPath: "/newsletter/follow"},
-	"newsletter.unfollow":     {httpMethod: "POST", httpPath: "/newsletter/unfollow"},
-	"newsletter.mute":         {httpMethod: "POST", httpPath: "/newsletter/mute"},
-	"newsletter.messages":     {httpMethod: "POST", httpPath: "/newsletter/messages"},
-	"newsletter.updates":      {httpMethod: "POST", httpPath: "/newsletter/updates"},
-	"newsletter.mark.viewed":  {httpMethod: "POST", httpPath: "/newsletter/mark-viewed"},
-	"newsletter.react":        {httpMethod: "POST", httpPath: "/newsletter/react"},
-	"newsletter.subscribe":    {httpMethod: "POST", httpPath: "/newsletter/subscribe"},
-	"newsletter.demote":       {httpMethod: "POST", httpPath: "/newsletter/demote"},
-	"newsletter.change.owner": {httpMethod: "POST", httpPath: "/newsletter/change-owner"},
-	"newsletter.delete":       {httpMethod: "DELETE", httpPath: "/newsletter/delete"},
+	"newsletter.create":       {httpMethod: "POST", httpPath: "/newsletters/create"},
+	"newsletter.info":         {httpMethod: "POST", httpPath: "/newsletters/info"},
+	"newsletter.info.invite":  {httpMethod: "POST", httpPath: "/newsletters/info-invite"},
+	"newsletter.follow":       {httpMethod: "POST", httpPath: "/newsletters/follow"},
+	"newsletter.unfollow":     {httpMethod: "POST", httpPath: "/newsletters/unfollow"},
+	"newsletter.mute":         {httpMethod: "POST", httpPath: "/newsletters/mute"},
+	"newsletter.messages":     {httpMethod: "POST", httpPath: "/newsletters/messages"},
+	"newsletter.updates":      {httpMethod: "POST", httpPath: "/newsletters/updates"},
+	"newsletter.mark.viewed":  {httpMethod: "POST", httpPath: "/newsletters/mark-viewed"},
+	"newsletter.react":        {httpMethod: "POST", httpPath: "/newsletters/react"},
+	"newsletter.subscribe":    {httpMethod: "POST", httpPath: "/newsletters/subscribe"},
+	"newsletter.demote":       {httpMethod: "POST", httpPath: "/newsletters/demote"},
+	"newsletter.change.owner": {httpMethod: "POST", httpPath: "/newsletters/change-owner"},
+	"newsletter.delete":       {httpMethod: "DELETE", httpPath: "/newsletters/delete"},
 
 	// F233(b): convite de administrador de canal. Mesma forma de pedido das
 	// restantes operações de newsletter, logo o mesmo lugar.
-	"newsletter.admin.invite":        {httpMethod: "POST", httpPath: "/newsletter/admin-invite"},
-	"newsletter.admin.invite.accept": {httpMethod: "POST", httpPath: "/newsletter/admin-invite/accept"},
-	"newsletter.admin.invite.revoke": {httpMethod: "POST", httpPath: "/newsletter/admin-invite/revoke"},
+	"newsletter.admin.invite":        {httpMethod: "POST", httpPath: "/newsletters/admin-invite"},
+	"newsletter.admin.invite.accept": {httpMethod: "POST", httpPath: "/newsletters/admin-invite/accept"},
+	"newsletter.admin.invite.revoke": {httpMethod: "POST", httpPath: "/newsletters/admin-invite/revoke"},
 
 	// F191: leitura de etiquetas. Não há método de escrita porque a
 	// biblioteca não sabe criá-las (LIB-01).

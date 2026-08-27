@@ -18,71 +18,60 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// CAP-09B: as cinco capabilities de download baixam de verdade. Este arquivo
-// as exercita pela ROTA gorilla/mux REGISTRADA (ARMADILHA 2 do repo — defeito
-// de rota só aparece pela rota, nunca por handler.ServeHTTP cru), com a mesma
-// cadeia hlog que router.go instala.
+// CAP-09B/CAP-10/F297: as cinco capabilities de download baixam de verdade.
+// Este arquivo as exercita pela ROTA gorilla/mux REGISTRADA (ARMADILHA 2 do
+// repo — defeito de rota só aparece pela rota, nunca por handler.ServeHTTP
+// cru), com a mesma cadeia hlog que router.go instala.
+//
+// As cinco rotas legadas por-kind (/chat/downloadimage etc.) foram removidas
+// em 2026-08-27 (HOUSEKEEP.md F297, corte-limpo explícito). Este arquivo
+// exercita agora os mesmos oito eixos pela rota consolidada única,
+// /chats/download/{kind}, variando o segmento {kind} — o handler e o use
+// case por trás são os mesmos que os handlers removidos usavam
+// (DownloadMediaUseCase apenas despacha para eles, ver
+// download_media_unified.go).
 //
 // A tabela é ENUMERADA e cada coluna é verificável POR NOME: capability,
-// rota exata, media kind, MIME esperado e prefixo esperado de Data. Não há
+// media kind, MIME esperado e prefixo esperado de Data. Não há
 // `for _, route := range downloadRoutes` anônimo — a duplicação entre as
 // cinco cópias foi o defeito original.
 
 // downloadRouteCase é uma das cinco capabilities na fronteira HTTP.
 type downloadRouteCase struct {
 	capability string           // nome da capability
-	route      string           // rota registrada, exata
-	kind       domain.MediaKind // media kind que a porta tem de receber
+	kind       domain.MediaKind // media kind que a porta tem de receber, e o segmento {kind} da rota
 	mime       string           // MIME do payload e da resposta
 	wantPrefix string           // prefixo esperado de Data
-	newHandler func(md appport.MediaDownloader, l appport.Logger) http.Handler
 }
 
 func downloadRouteCases() []downloadRouteCase {
 	return []downloadRouteCase{
-		{
-			capability: "Download Image", route: "/chat/downloadimage",
-			kind: domain.MediaKindImage, mime: "image/jpeg", wantPrefix: "data:image/jpeg;base64,",
-			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadImageHandler(message.NewDownloadImageUseCase(md, l))
-			},
-		},
-		{
-			capability: "Download Video", route: "/chat/downloadvideo",
-			kind: domain.MediaKindVideo, mime: "video/mp4", wantPrefix: "data:video/mp4;base64,",
-			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadVideoHandler(message.NewDownloadVideoUseCase(md, l))
-			},
-		},
-		{
-			capability: "Download Audio", route: "/chat/downloadaudio",
-			kind: domain.MediaKindAudio, mime: "audio/ogg", wantPrefix: "data:audio/ogg;base64,",
-			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadAudioHandler(message.NewDownloadAudioUseCase(md, l))
-			},
-		},
-		{
-			capability: "Download Document", route: "/chat/downloaddocument",
-			kind: domain.MediaKindDocument, mime: "application/pdf", wantPrefix: "data:application/pdf;base64,",
-			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(md, l))
-			},
-		},
-		{
-			capability: "Download Sticker", route: "/chat/downloadsticker",
-			kind: domain.MediaKindSticker, mime: "image/webp", wantPrefix: "data:image/webp;base64,",
-			newHandler: func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadStickerHandler(message.NewDownloadStickerUseCase(md, l))
-			},
-		},
+		{capability: "Download Image", kind: domain.MediaKindImage, mime: "image/jpeg", wantPrefix: "data:image/jpeg;base64,"},
+		{capability: "Download Video", kind: domain.MediaKindVideo, mime: "video/mp4", wantPrefix: "data:video/mp4;base64,"},
+		{capability: "Download Audio", kind: domain.MediaKindAudio, mime: "audio/ogg", wantPrefix: "data:audio/ogg;base64,"},
+		{capability: "Download Document", kind: domain.MediaKindDocument, mime: "application/pdf", wantPrefix: "data:application/pdf;base64,"},
+		{capability: "Download Sticker", kind: domain.MediaKindSticker, mime: "image/webp", wantPrefix: "data:image/webp;base64,"},
 	}
 }
 
-// downloadRouter registra o handler pela rota real, como wiring_routes.go:135-139
-// faz.
+// route é a rota consolidada real, com o {kind} desta capability já
+// preenchido — exatamente o que um cliente chamaria.
+func (c downloadRouteCase) route() string {
+	return "/chats/download/" + string(c.kind)
+}
+
+// downloadRouter registra o DownloadMediaHandler na rota consolidada com
+// padrão {kind}, como wiring_routes.go faz.
 func (c downloadRouteCase) router(md appport.MediaDownloader) http.Handler {
+	uc := message.NewDownloadMediaUseCase(
+		message.NewDownloadImageUseCase(md, silentLogger{}),
+		message.NewDownloadVideoUseCase(md, silentLogger{}),
+		message.NewDownloadAudioUseCase(md, silentLogger{}),
+		message.NewDownloadDocumentUseCase(md, silentLogger{}),
+		message.NewDownloadStickerUseCase(md, silentLogger{}),
+	)
 	r := mux.NewRouter()
-	r.Handle(c.route, c.newHandler(md, silentLogger{})).Methods(http.MethodPost)
+	r.Handle("/chats/download/{kind}", NewDownloadMediaHandler(uc)).Methods(http.MethodPost)
 	return r
 }
 
@@ -101,7 +90,7 @@ func (c downloadRouteCase) body() string {
 // downloadServe executa a requisição pela rota registrada.
 func (c downloadRouteCase) serve(md appport.MediaDownloader, body string, mut func(*http.Request) *http.Request) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, c.route, strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, c.route(), strings.NewReader(body))
 	c.router(md).ServeHTTP(rec, mut(req))
 	return rec
 }
@@ -112,14 +101,14 @@ func (c downloadRouteCase) serveCapturingLog(t *testing.T, md appport.MediaDownl
 	t.Helper()
 	wrapped, capture := logassert.Wrap(c.router(md))
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, c.route, strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, c.route(), strings.NewReader(body))
 	wrapped.ServeHTTP(rec, mut(req))
 	return rec, capture.Records(t)
 }
 
 type downloadResultBody struct {
-	Mimetype string `json:"Mimetype"`
-	Data     string `json:"Data"`
+	Mimetype string `json:"mimetype"`
+	Data     string `json:"data"`
 }
 
 // TestDownload_Success_ViaRegisteredRoute prova o caminho HTTP -> handler ->
@@ -167,7 +156,7 @@ func TestDownload_Success_ViaRegisteredRoute(t *testing.T) {
 			rec := c.serve(md, c.body(), msgAuthed)
 
 			if rec.Code != http.StatusOK {
-				t.Fatalf("%s: status %d (corpo: %s)", c.route, rec.Code, rec.Body.String())
+				t.Fatalf("%s: status %d (corpo: %s)", c.route(), rec.Code, rec.Body.String())
 			}
 			env := decodeEnvelope(t, rec)
 			if !env.Success {
@@ -305,7 +294,7 @@ func TestDownload_DirectPathOnly_Accepted(t *testing.T) {
 			rec := c.serve(md, body, msgAuthed)
 
 			if rec.Code != http.StatusOK {
-				t.Fatalf("%s: status %d (corpo: %s)", c.route, rec.Code, rec.Body.String())
+				t.Fatalf("%s: status %d (corpo: %s)", c.route(), rec.Code, rec.Body.String())
 			}
 			if n := len(md.DownloadCalls); n != 1 {
 				t.Fatalf("Download chamado %d vez(es) pela rota registrada, quero 1", n)

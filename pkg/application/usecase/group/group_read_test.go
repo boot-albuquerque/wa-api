@@ -109,7 +109,7 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 			name: "falha da porta vira erro logado",
 			req:  domain.GetGroupInfoRequest{GroupJID: "123@g.us"},
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return nil, boom }
+				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) { return nil, boom }
 			},
 			wantErr: true,
 			wantLog: wantLog{contractsfake.LevelError, "failed to get group info", []string{"txtID", "groupJID", "error"}},
@@ -118,7 +118,9 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 			name: "sucesso devolve o info e loga em info",
 			req:  domain.GetGroupInfoRequest{GroupJID: "123@g.us"},
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return "info", nil }
+				d.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+					return &domain.GroupInfo{JID: "123@g.us"}, nil
+				}
 			},
 			wantLog:    wantLog{contractsfake.LevelInfo, "group info retrieved", []string{"txtID", "groupJID"}},
 			wantCalled: true,
@@ -150,7 +152,7 @@ func TestGetGroupInfoUseCase_Execute(t *testing.T) {
 				assertCode(t, err, tt.wantCode)
 			}
 			if !tt.wantErr {
-				if res == nil || res.GroupInfo != "info" {
+				if res == nil || res.GroupInfo == nil || res.GroupInfo.JID != "123@g.us" {
 					t.Errorf("resultado = %+v", res)
 				}
 			}
@@ -288,7 +290,9 @@ func TestGetGroupInviteInfoUseCase_Execute(t *testing.T) {
 			name: "porta falha",
 			req:  domain.GetGroupInviteInfoRequest{Code: "abc"},
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (any, error) { return nil, boom }
+				d.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (*domain.GroupInfo, error) {
+					return nil, boom
+				}
 			},
 			wantErr: true,
 			wantLog: wantLog{contractsfake.LevelError, "failed to get group invite info", []string{"txtID", "error"}},
@@ -297,7 +301,9 @@ func TestGetGroupInviteInfoUseCase_Execute(t *testing.T) {
 			name: "sucesso",
 			req:  domain.GetGroupInviteInfoRequest{Code: "abc"},
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (any, error) { return "invite", nil }
+				d.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (*domain.GroupInfo, error) {
+					return &domain.GroupInfo{JID: "120363@g.us", Name: "Convite"}, nil
+				}
 			},
 			wantLog: wantLog{contractsfake.LevelInfo, "group invite info retrieved", []string{"txtID"}},
 		},
@@ -325,8 +331,8 @@ func TestGetGroupInviteInfoUseCase_Execute(t *testing.T) {
 				if err != nil {
 					t.Fatalf("erro inesperado: %v", err)
 				}
-				if res.InviteInfo != "invite" {
-					t.Errorf("InviteInfo = %v", res.InviteInfo)
+				if res.InviteInfo == nil || res.InviteInfo.JID != "120363@g.us" || res.InviteInfo.Name != "Convite" {
+					t.Errorf("InviteInfo = %#v", res.InviteInfo)
 				}
 				// O code chega verbatim à porta.
 				if got := dir.GetGroupInfoFromLinkCalls[0].Code; got != "abc" {
@@ -360,7 +366,9 @@ func TestListGroupsUseCase_Execute(t *testing.T) {
 		{
 			name: "porta falha",
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.ListJoinedGroupsFunc = func(context.Context, string) (any, int, error) { return nil, 0, boom }
+				d.ListJoinedGroupsFunc = func(context.Context, string) ([]*domain.GroupInfo, int, error) {
+					return nil, 0, boom
+				}
 			},
 			wantErr: true,
 			wantLog: wantLog{contractsfake.LevelError, "failed to get groups", []string{"txtID", "error"}},
@@ -368,8 +376,8 @@ func TestListGroupsUseCase_Execute(t *testing.T) {
 		{
 			name: "sucesso carrega a contagem no log",
 			dir: func(d *contractsfake.GroupDirectory) {
-				d.ListJoinedGroupsFunc = func(context.Context, string) (any, int, error) {
-					return []string{"a", "b"}, 2, nil
+				d.ListJoinedGroupsFunc = func(context.Context, string) ([]*domain.GroupInfo, int, error) {
+					return []*domain.GroupInfo{{JID: "1@g.us"}, {JID: "2@g.us"}}, 2, nil
 				}
 			},
 			wantLog: wantLog{contractsfake.LevelInfo, "groups listed successfully", []string{"txtID", "count"}},
@@ -409,8 +417,8 @@ func TestListGroupsUseCase_Execute(t *testing.T) {
 // chega ao log, e não ao resultado — o resultado carrega só os grupos.
 func TestListGroupsUseCase_CountVaiParaOLogNaoParaOResultado(t *testing.T) {
 	dir := &contractsfake.GroupDirectory{
-		ListJoinedGroupsFunc: func(context.Context, string) (any, int, error) {
-			return []string{"a"}, 7, nil
+		ListJoinedGroupsFunc: func(context.Context, string) ([]*domain.GroupInfo, int, error) {
+			return []*domain.GroupInfo{{JID: "1@g.us"}}, 7, nil
 		},
 	}
 	log := &contractsfake.Logger{}
@@ -427,8 +435,8 @@ func TestListGroupsUseCase_CountVaiParaOLogNaoParaOResultado(t *testing.T) {
 	if v, _ := rec.Keyval("count"); v != 7 {
 		t.Errorf("count no log = %v, quero 7", v)
 	}
-	if got, ok := res.Groups.([]string); !ok || len(got) != 1 {
-		t.Errorf("Groups = %v", res.Groups)
+	if len(res.Groups) != 1 || res.Groups[0].JID != "1@g.us" {
+		t.Errorf("Groups = %#v", res.Groups)
 	}
 	assertNoLevel(t, log, contractsfake.LevelError)
 }

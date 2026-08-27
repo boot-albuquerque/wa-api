@@ -194,9 +194,16 @@ func TestUserAdapter_GetAllContacts_OK(t *testing.T) {
 	if count != 1 {
 		t.Errorf("GetAllContacts count = %d, want 1", count)
 	}
-	m, ok := got.(map[types.JID]types.ContactInfo)
-	if !ok || len(m) != 1 {
-		t.Errorf("GetAllContacts returned %+v", got)
+	if len(got) != 1 {
+		t.Fatalf("GetAllContacts returned %+v", got)
+	}
+	// The store keys the address book by ONE identity; a phone-server jid has
+	// to land in PhoneNumber and leave LID empty, and the DTO serves both.
+	if got[0].JID != "5511@s.whatsapp.net" || got[0].PN != "5511@s.whatsapp.net" || got[0].LID != "" {
+		t.Errorf("identities = %+v", got[0])
+	}
+	if !got[0].Found || got[0].PushName != "Alice" {
+		t.Errorf("GetAllContacts returned %+v", got[0])
 	}
 }
 

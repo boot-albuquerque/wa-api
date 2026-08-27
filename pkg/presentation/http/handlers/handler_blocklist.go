@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/rs/zerolog/hlog"
@@ -9,6 +8,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtouser "wa-api/pkg/presentation/http/dto/user"
 
 	"wa-api/pkg/application/usecase/user"
 )
@@ -57,18 +57,10 @@ func (h *GetBlocklistHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Serialize as JSON string to match the legacy s.Respond format
-	responseJSON, err := json.Marshal(result)
-	if err != nil {
-		hlog.FromRequest(r).Error().Err(err).
-			Str("user_id", txtID).
-			Msg("could not marshal blocklist response")
-		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(responseJSON)
-	_, _ = w.Write([]byte("\n"))
+	// Through RespondJSON, like every other route. This handler used to
+	// marshal the result itself and write it raw "to match the legacy
+	// s.Respond format", which meant GET /user/blocklist was the ONE route
+	// that answered without the {success, code, data} envelope — a client
+	// could not read it the way it reads the other 140.
+	customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentGetBlocklist(result), nil)
 }

@@ -24,11 +24,11 @@ func NewUnblockUserUseCase(bm appport.BlocklistManager, jr appport.JIDResolver, 
 
 // UnblockResult representa o resultado da operação de desbloqueio
 type UnblockResult struct {
-	Details      string   `json:"Details"`
-	JID          string   `json:"JID"`
-	Blocklist    []string `json:"Blocklist"`
-	DHash        string   `json:"DHash"`
-	RequestedJID string   `json:"RequestedJID,omitempty"`
+	Details      string
+	JID          string
+	Blocklist    []string
+	DHash        string
+	RequestedJID string
 }
 
 // Execute desbloqueia um usuário

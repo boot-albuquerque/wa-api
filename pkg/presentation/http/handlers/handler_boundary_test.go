@@ -182,12 +182,12 @@ func (s *spyPort) IsOnWhatsApp(context.Context, string, []string) ([]domain.What
 	return nil, s.err
 }
 
-func (s *spyPort) GetUserInfo(context.Context, string, []domain.JID) (any, error) {
+func (s *spyPort) GetUserInfo(context.Context, string, []domain.JID) ([]domain.UserInfo, error) {
 	s.calls++
 	return nil, s.err
 }
 
-func (s *spyPort) GetAllContacts(context.Context, string) (any, int, error) {
+func (s *spyPort) GetAllContacts(context.Context, string) ([]domain.Contact, int, error) {
 	s.calls++
 	return nil, 0, s.err
 }
@@ -737,28 +737,28 @@ func TestHandlers_AppErrFromPortReachesTheClient(t *testing.T) {
 // armadilha que o comentário do teste acima descreve — o caso passaria verde
 // sem exercitar o caminho do erro interno que ele existe para vigiar.
 const corpoValidoParaFronteira = `{
-  "Phone": "5511999999999",
+  "phone": "5511999999999",
   "ChatPhone": "5511999999999",
   "SenderPhone": "5511999999999",
-  "Id": "3EB0C767D26B8A3F1B0F",
-  "Url": "https://example.invalid/a.bin",
-  "Body": "texto",
-  "Content": "texto",
-  "Desc": "descricao",
-  "Name": "nome",
+  "id": "3EB0C767D26B8A3F1B0F",
+  "url": "https://example.invalid/a.bin",
+  "body": "texto",
+  "content": "texto",
+  "desc": "descricao",
+  "name": "nome",
   "State": "available",
-  "Latitude": -23.5,
-  "Longitude": -46.6,
-  "Image": "data:image/png;base64,AAAA",
-  "Video": "data:video/mp4;base64,AAAA",
-  "Audio": "data:audio/ogg;base64,AAAA",
-  "Document": "data:application/pdf;base64,AAAA",
-  "Sticker": "data:image/webp;base64,AAAA",
-  "Vcard": "BEGIN:VCARD\nEND:VCARD",
-  "Group": "120363000000000000",
-  "Header": "cabecalho",
-  "Footer": "rodape",
-  "FileName": "a.pdf",
-  "Options": ["um", "dois"],
-  "Buttons": [{"DisplayText": "Sim", "Type": "quickreply"}]
+  "latitude": -23.5,
+  "longitude": -46.6,
+  "image": "data:image/png;base64,AAAA",
+  "video": "data:video/mp4;base64,AAAA",
+  "audio": "data:audio/ogg;base64,AAAA",
+  "document": "data:application/pdf;base64,AAAA",
+  "sticker": "data:image/webp;base64,AAAA",
+  "vcard": "BEGIN:VCARD\nEND:VCARD",
+  "group": "120363000000000000",
+  "header": "cabecalho",
+  "footer": "rodape",
+  "file_name": "a.pdf",
+  "options": ["um", "dois"],
+  "buttons": [{"display_text": "Sim", "type": "quickreply"}]
 }`

@@ -492,7 +492,7 @@
       **Como se prova, sem olhar para o ecrã**: o autocolante enviado é gravado
       em `message_history` (`adapters/chat/messenger.go:570`), logo
       `GET /chats/history` devolve o descritor em `data_json`, e
-      `POST /chats/downloadsticker` traz os bytes de volta — que se verificam
+      `POST /chats/download/sticker` traz os bytes de volta — que se verificam
       como `RIFF`…`WEBP` de 512×512. Procedimento em `HUMAN-LAST.md` B.1.
 
       **Autenticação**: token de sessão.
@@ -787,7 +787,7 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/chat/send/pollvote:
+/polls/{poll_message_id}/votes:
   post:
     tags: [Envio de mensagens]
     summary: Votar numa enquete
@@ -816,6 +816,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: poll_message_id
+        in: path
+        required: true
+        description: |
+          ID da mensagem de enquete original. Substitui o campo
+          `PollMessageId` do corpo — se ambos vierem, o **corpo ganha**.
+        schema: {type: string, example: 3EB0A4B2AFD45E625C0917}
     requestBody:
       required: true
       content:

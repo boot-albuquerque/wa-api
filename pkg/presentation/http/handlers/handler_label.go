@@ -64,7 +64,7 @@ func (h *listLabelChatsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 	labelID := mux.Vars(r)["id"]
 	if labelID == "" {
-		rejectMissingField(w, r, "id", "list label chats request rejected")
+		rejectMissingField(w, r, CodeMissingID, "id", "list label chats request rejected")
 		return
 	}
 	conversas, err := h.repo.ListChatsForLabel(r.Context(), id, labelID)

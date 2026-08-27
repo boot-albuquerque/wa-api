@@ -229,6 +229,17 @@ func TestReadExcludeFile(t *testing.T) {
 		// em client/ e a exclusao da fachada sair, o testkit tem de continuar
 		// fora — e uma linha redundante e' mais barata que redescobrir isso.
 		"pkg/infra/wa-noise/client/",
+		// FUNDACAO DTO (2026-08-27): pkg/presentation/http/contracttest/ e' o
+		// pacote de assercoes de contrato partilhado pelos testes das seis
+		// familias de rota. E' apoio a teste, como contractsfake e testkit, e
+		// nao codigo de producao a instrumentar. Entra aqui pela mesma razao
+		// que as linhas acima: tornar a exclusao VISIVEL.
+		"pkg/presentation/http/contracttest/",
+		// F305 (2026-08-27, familia de canais): pkg/presentation/http/dto/ sao
+		// os apresentadores da fronteira HTTP, sem modo de falha, que nao pode
+		// logar (regra de importacao de sentido unico de
+		// docs/HTTP-DTO-CONVENTIONS.md paragrafo 3). Ver .logcov-exclude para a medicao.
+		"pkg/presentation/http/dto/",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("excludes = %v, quero %v", got, want)

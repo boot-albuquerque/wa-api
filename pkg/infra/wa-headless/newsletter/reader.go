@@ -27,12 +27,18 @@ import (
 	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
+	"wa-api/pkg/domain"
 	adapter "wa-api/pkg/infra/wa-headless"
 )
 
 const (
 	listLabel   = "adapter/list-subscribed"
 	createLabel = "adapter/create-newsletter"
+
+	// The protocol's two verification words. Constants and not literals because
+	// they cross the HTTP boundary and a client branches on them (ADR-0004).
+	verificationVerified   = "verified"
+	verificationUnverified = "unverified"
 )
 
 // follower is the slice of the page capability this adapter uses.
@@ -62,7 +68,7 @@ func (r *Reader) EnsureSession(ctx context.Context, txtID string) error {
 
 // ListSubscribed returns the channels this account follows, AS THE CLIENT HOLDS
 // THEM. See the package doc: entries can outlive the channel on the server.
-func (r *Reader) ListSubscribed(ctx context.Context, txtID string) (any, error) {
+func (r *Reader) ListSubscribed(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error) {
 	f, err := r.follower(ctx, txtID)
 	if err != nil {
 		return nil, err
@@ -74,10 +80,60 @@ func (r *Reader) ListSubscribed(ctx context.Context, txtID string) (any, error) 
 	// An empty listing is a legitimate answer — this account follows nothing —
 	// and it is returned as an empty slice rather than nil so a caller that
 	// ranges over it does not have to distinguish the two.
-	if entries == nil {
-		entries = []waheadless.ChannelEntry{}
+	out := make([]domain.NewsletterMetadata, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, mapChannelEntry(e))
 	}
-	return entries, nil
+	return out, nil
+}
+
+// mapChannelEntry normalizes one page listing entry onto the domain type.
+//
+// UNTIL THIS EXISTED, this adapter's answer WAS the wire: the route served
+// `channel.DirectoryEntry`, which carries no `json` tags, so a headless session
+// answered `{"JID":…,"Subscribers":…,"Membership":…}` where a wa-noise session
+// answered `{"id":…,"thread_metadata":{…}}` for the SAME route. Neither shape
+// was declared anywhere.
+//
+// The page reports FEWER fields than the protocol does, and the difference is
+// left visible rather than filled in: State, InviteCode, the text version ids,
+// the pictures and the mute state stay zero, because this transport did not say
+// anything about them. Inventing "active" for a channel the page never
+// described would be the divergence this package's doc comment warns about.
+func mapChannelEntry(e waheadless.ChannelEntry) domain.NewsletterMetadata {
+	m := domain.NewsletterMetadata{
+		JID:               domain.JID(e.JID),
+		CreatedAt:         e.CreatedAt,
+		Name:              domain.NewsletterText{Text: e.Name},
+		Description:       domain.NewsletterText{Text: e.Description},
+		SubscriberCount:   e.Subscribers,
+		VerificationState: verificationFromBool(e.Verified),
+	}
+	// Membership is the page's own word for the relationship ("guest" was the
+	// measured value), and it lands on Role VERBATIM. It is not translated into
+	// the protocol's vocabulary because the page's set has not been shown to be
+	// the protocol's set — carrying the word is honest, renaming it would claim
+	// a mapping nobody measured.
+	if e.Membership != "" {
+		m.Viewer = &domain.NewsletterViewer{Role: e.Membership}
+	}
+	return m
+}
+
+// verificationFromBool turns the page's boolean into the protocol's word.
+//
+// AMBIGUOUS BY CONSTRUCTION, and flagged rather than hidden: the protocol has a
+// third state — `""`, seen on deleted channels — that a bool cannot express, so
+// `false` here means "the page said not verified", not "unknown". The channel
+// capability's own comment refuses this mapping on the grounds that a value it
+// has not seen must not become one it has; the difference is that the wire needs
+// ONE vocabulary for both engines, and leaving the field empty for every
+// headless channel would make "unverified" unreportable on that engine.
+func verificationFromBool(verified bool) string {
+	if verified {
+		return verificationVerified
+	}
+	return verificationUnverified
 }
 
 func (r *Reader) follower(ctx context.Context, txtID string) (follower, error) {
@@ -104,7 +160,7 @@ func (r *Reader) follower(ctx context.Context, txtID string) (follower, error) {
 //
 // Sem foto, cria — e devolve o que a página devolveu, incluindo o código de
 // convite, que é o dado pelo qual alguém entra no canal.
-func (r *Reader) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error) {
+func (r *Reader) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (*domain.NewsletterMetadata, error) {
 	if name == "" {
 		return nil, errNoName
 	}
@@ -116,7 +172,22 @@ func (r *Reader) CreateNewsletter(ctx context.Context, txtID, name, description 
 	if err != nil {
 		return nil, err
 	}
-	return c.Create(ctx, name, description, createLabel)
+	created, err := c.Create(ctx, name, description, createLabel)
+	if err != nil {
+		return nil, err
+	}
+	// The page answers with three facts — jid, invite code, creation instant —
+	// and the name and description are echoed from what was just asked for
+	// rather than read back. They are what the caller sent, so echoing them is
+	// not a claim about the server; every other field stays zero because the
+	// page reported nothing about it.
+	return &domain.NewsletterMetadata{
+		JID:         domain.JID(created.JID),
+		CreatedAt:   created.CreatedAt,
+		InviteCode:  created.InviteCode,
+		Name:        domain.NewsletterText{Text: name},
+		Description: domain.NewsletterText{Text: description},
+	}, nil
 }
 
 func (r *Reader) creator(ctx context.Context, txtID string) (creator, error) {

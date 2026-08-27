@@ -10,9 +10,18 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Este ficheiro implementa a padronização de caminhos (F269) SEM partir
-// clientes: cada rota antiga continua registada, e ao lado dela passa a existir
-// a forma canónica.
+// Este ficheiro implementava a padronização de caminhos (F269) SEM partir
+// clientes: cada rota antiga continuava registada, e ao lado dela passava a
+// existir a forma canónica, para sempre.
+//
+// REVERSÃO (2026-08-27, ver HOUSEKEEP.md): decisão explícita do utilizador —
+// o projeto não tem consumidores reais antes do lançamento, então não há
+// cliente a proteger, e manter as duas formas registadas era pagar o custo de
+// compatibilidade sem ter quem a use. CanonicalizeRoutes agora RENOMEIA a
+// rota em vez de lhe acrescentar um alias: o caminho antigo deixa de responder
+// (404), só o canónico fica registado. A tabela e o mecanismo de
+// correspondência sobrevivem porque continuam a ser a única forma de aplicar
+// a mudança a noventa e uma rotas sem editar cada `Register` à mão.
 //
 // POR QUE A TABELA E NÃO 91 EDIÇÕES À MÃO. São noventa e uma rotas. Editar cada
 // chamada a Register seria noventa e uma oportunidades de trocar um caractere,
@@ -28,14 +37,16 @@ type CanonicalRoute struct {
 	CanonicalPath   string
 }
 
-// RegisterCanonicalAliases acrescenta, para cada entrada registada que tenha
-// forma canónica na tabela, uma segunda rota com essa forma.
+// CanonicalizeRoutes substitui, para cada entrada registada que tenha forma
+// canónica na tabela, o registo antigo pelo canónico — mesmo manipulador,
+// caminho novo. A rota antiga deixa de estar no registry e, portanto, deixa
+// de responder.
 //
 // A ORDEM IMPORTA: chame isto DEPOIS de todas as rotas antigas estarem
 // registadas. Uma entrada da tabela sem rota antiga correspondente é erro do
 // chamador — e é devolvida, não engolida, porque uma tabela que aponta para
 // rotas inexistentes é uma tabela que já não descreve o serviço.
-func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []string {
+func (r *HandlerRegistry) CanonicalizeRoutes(tabela []CanonicalRoute) []string {
 	porChave := map[string]routeEntry{}
 	for _, entrada := range r.routes {
 		for _, metodo := range entrada.methods {
@@ -43,6 +54,8 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 		}
 	}
 
+	consumidas := map[string]bool{}
+	var canonicas []routeEntry
 	var orfas []string
 	for _, linha := range tabela {
 		chave := strings.ToUpper(linha.LegacyMethod) + " " + linha.LegacyPath
@@ -51,15 +64,44 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 			orfas = append(orfas, chave)
 			continue
 		}
+		consumidas[chave] = true
 		manipulador := entrada.handler
 		// Quando o caminho canónico traz parâmetros, o identificador deixa de
 		// vir no corpo. O manipulador continua a lê-lo do corpo — logo o
 		// adaptador injecta-o antes de lhe passar o pedido.
 		if strings.Contains(linha.CanonicalPath, "{") {
-			manipulador = injectPathParams(manipulador)
+			manipulador = InjectPathParams(manipulador)
 		}
-		r.Register(linha.CanonicalPath, manipulador, linha.CanonicalMethod)
+		canonicas = append(canonicas, routeEntry{
+			path:    linha.CanonicalPath,
+			handler: manipulador,
+			methods: []string{linha.CanonicalMethod},
+		})
 	}
+
+	// Remove do registry os métodos que a tabela consumiu, um a um — uma
+	// entrada pode combinar vários métodos no mesmo Register (ex.:
+	// "/user/privacy" com GET e POST), e só alguns podem ter linha na
+	// tabela. Uma entrada com TODOS os métodos consumidos desaparece;
+	// com só ALGUNS, fica registada com os que sobraram.
+	var restantes []routeEntry
+	for _, entrada := range r.routes {
+		var mantidos []string
+		for _, metodo := range entrada.methods {
+			chave := strings.ToUpper(metodo) + " " + entrada.path
+			if !consumidas[chave] {
+				mantidos = append(mantidos, metodo)
+			}
+		}
+		if len(mantidos) == 0 {
+			continue
+		}
+		if len(mantidos) != len(entrada.methods) {
+			entrada.methods = mantidos
+		}
+		restantes = append(restantes, entrada)
+	}
+	r.routes = append(restantes, canonicas...)
 	return orfas
 }
 
@@ -70,19 +112,35 @@ func (r *HandlerRegistry) RegisterCanonicalAliases(tabela []CanonicalRoute) []st
 // normalização nova. Mudar o nome do campo aqui mudaria o contrato do corpo, e
 // o objectivo desta camada é exactamente o contrário: caminho novo, corpo
 // igual.
+//
+// INTEGRAÇÃO (2026-08-27): esta tabela apontava para os nomes ANTIGOS
+// (`groupJID`, `ChatPhone`, `PollMessageId`, `Code`) porque foi escrita antes
+// das migrações DTO das famílias grupo e mensagens serem integradas nesta
+// árvore. Depois delas, os manipuladores passaram a ler exclusivamente os
+// nomes canónicos — a tabela ficou a apontar para campos que já não existem,
+// e as rotas cortadas (worktree http-dto-paths) que dependem desta injecção
+// para preencher group_jid/chat_phone/poll_message_id a partir do caminho
+// paravam de resolver (404→400 missing_*). Corrigido para os nomes actuais.
 var bodyFieldForPathParam = map[string]string{
-	"group_jid":     "groupJID",
-	"community_jid": "communityJID",
+	"group_jid":       "group_jid",
+	"community_jid":   "community_jid",
+	"chat_jid":        "chat_phone",
+	"poll_message_id": "poll_message_id",
+	"invite_code":     "code",
 }
 
-// injectPathParams copia os parâmetros do caminho para o corpo JSON, e só
+// InjectPathParams copia os parâmetros do caminho para o corpo JSON, e só
 // então chama o manipulador original.
 //
 // NÃO SOBRESCREVE. Se o corpo já trouxer o campo, o corpo ganha — o caminho é
 // a forma nova de dizer a mesma coisa, e não uma autoridade sobre quem já a
 // dizia. Isso mantém a rota canónica utilizável por um cliente que ainda
 // envie o identificador no corpo, durante a migração.
-func injectPathParams(next http.Handler) http.Handler {
+//
+// Exportada porque também é usada por rotas cortadas directamente para a
+// forma canónica (sem passar por RegisterCanonicalAliases) — ver
+// pkg/bootstrap/wiring_routes.go.
+func InjectPathParams(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		if len(vars) == 0 {

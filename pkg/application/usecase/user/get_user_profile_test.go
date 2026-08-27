@@ -41,8 +41,8 @@ func portaDePerfil() (*contractsfake.ContactDirectory, *contractsfake.JIDResolve
 		GetProfilePictureFunc: func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 			return &domain.AvatarInfo{URL: "https://exemplo/foto.jpg", ID: "pic-1"}, nil
 		},
-		GetUserInfoFunc: func(context.Context, string, []domain.JID) (any, error) {
-			return map[string]string{"status": "disponivel"}, nil
+		GetUserInfoFunc: func(_ context.Context, _ string, jids []domain.JID) ([]domain.UserInfo, error) {
+			return []domain.UserInfo{{JID: jids[0], Status: "disponivel"}}, nil
 		},
 	}
 	// O dublê espelha a regra REAL de mapping/jid/parse.go: sem "@", aplica o

@@ -31,8 +31,8 @@ const sendListPhone = "5511999999999@s.whatsapp.net"
 
 // sendListBody é o menor corpo VÁLIDO da rota: uma seção com uma linha já
 // basta.
-const sendListBody = `{"Phone":"` + sendListPhone + `","Desc":"Escolha",` +
-	`"Sections":[{"title":"Cardapio","rows":[{"title":"Item 1"}]}]}`
+const sendListBody = `{"phone":"` + sendListPhone + `","desc":"Escolha",` +
+	`"sections":[{"title":"Cardapio","rows":[{"title":"Item 1"}]}]}`
 
 var errSendListSentinel = errors.New(sendListSentinelToken)
 
@@ -79,9 +79,9 @@ type sendListResultBody struct {
 // do envio real.
 func TestSendList_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500141)
-	body := `{"Phone":"` + sendListPhone + `","Desc":"Escolha um prato","ButtonText":"Ver cardapio",` +
-		`"TopText":"Cabecalho","FooterText":"Equipe wa-api","Sections":[` +
-		`{"title":"Pratos","rows":[{"title":"Feijoada","desc":"com torresmo","RowId":"feijoada"}]}]}`
+	body := `{"phone":"` + sendListPhone + `","desc":"Escolha um prato","button_text":"Ver cardapio",` +
+		`"top_text":"Cabecalho","footer_text":"Equipe wa-api","sections":[` +
+		`{"title":"Pratos","rows":[{"title":"Feijoada","desc":"com torresmo","row_id":"feijoada"}]}]}`
 
 	sm := &contractsfake.SimpleMessenger{
 		SendListFunc: func(_ context.Context, _ string, target domain.JID, payload domain.ListPayload, _ *domain.ReplyContext, _ []string, _ string) (domain.MessageSendResult, error) {
@@ -101,7 +101,7 @@ func TestSendList_Success_ViaRegisteredRoute(t *testing.T) {
 				t.Errorf("Footer: got %q, want o FooterText do corpo", payload.Footer)
 			}
 			want := []domain.ListSection{
-				{Title: "Pratos", Rows: []domain.ListRow{{Title: "Feijoada", Description: "com torresmo", RowId: "feijoada"}}},
+				{Title: "Pratos", Rows: []domain.ListRow{{Title: "Feijoada", Description: "com torresmo", RowID: "feijoada"}}},
 			}
 			if len(payload.Sections) != len(want) {
 				t.Fatalf("Sections: got %d, want %d", len(payload.Sections), len(want))
@@ -152,7 +152,7 @@ func TestSendList_Success_ViaRegisteredRoute(t *testing.T) {
 // HTTP: o cliente manda TRÊS linhas, uma sem título, recebe 200 — e saem
 // DUAS. Nada avisa.
 func TestSendList_RowWithoutTitleIsSilentlyDiscarded_ViaRegisteredRoute(t *testing.T) {
-	body := `{"Phone":"` + sendListPhone + `","Desc":"Escolha","Sections":[{"title":"Sec","rows":[` +
+	body := `{"phone":"` + sendListPhone + `","desc":"Escolha","sections":[{"title":"Sec","rows":[` +
 		`{"title":"Sobrevive 1"},{"title":"   "},{"title":"Sobrevive 2"}]}]}`
 
 	sm := &contractsfake.SimpleMessenger{}
@@ -193,15 +193,15 @@ func TestSendList_RejectUnauthenticated(t *testing.T) {
 // causas distintas para Phone/Desc, mais a rede do terceiro descarte
 // silencioso.
 func TestSendList_RejectMissingRequiredField(t *testing.T) {
-	const sections = `,"Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]`
+	const sections = `,"sections":[{"title":"Sec","rows":[{"title":"Item"}]}]`
 
 	cases := map[string]struct{ body, cause string }{
-		"Phone":                    {`{"Desc":"Escolha"` + sections + `}`, "missing Phone in payload"},
-		"Desc":                     {`{"Phone":"` + sendListPhone + `"` + sections + `}`, "missing Desc/Body in payload"},
-		"Sections_e_List_ausentes": {`{"Phone":"` + sendListPhone + `","Desc":"Escolha"}`, "missing Sections (or List) in payload"},
-		"Sections_e_List_vazios":   {`{"Phone":"` + sendListPhone + `","Desc":"Escolha","Sections":[],"List":[]}`, "missing Sections (or List) in payload"},
+		"phone":                    {`{"desc":"Escolha"` + sections + `}`, "missing Phone in payload"},
+		"desc":                     {`{"phone":"` + sendListPhone + `"` + sections + `}`, "missing Desc/Body in payload"},
+		"Sections_e_List_ausentes": {`{"phone":"` + sendListPhone + `","desc":"Escolha"}`, "missing Sections (or List) in payload"},
+		"Sections_e_List_vazios":   {`{"phone":"` + sendListPhone + `","desc":"Escolha","sections":[],"list":[]}`, "missing Sections (or List) in payload"},
 		"Sections_todas_descartadas": {
-			`{"Phone":"` + sendListPhone + `","Desc":"Escolha","Sections":[{"title":"Vazia","rows":[{"title":"  "}]}]}`,
+			`{"phone":"` + sendListPhone + `","desc":"Escolha","sections":[{"title":"Vazia","rows":[{"title":"  "}]}]}`,
 			"no valid sections/rows found in payload"},
 	}
 	for field, tc := range cases {
@@ -243,7 +243,7 @@ func TestSendList_InvalidPhoneNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	body := `{"Phone":"lixo","Desc":"Escolha","Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`
+	body := `{"phone":"lixo","desc":"Escolha","sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`
 	rec := sendListServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -287,8 +287,8 @@ func TestSendList_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"` + sendListPhone + `","Desc":"Escolha","Id":"id-do-cliente",` +
-		`"Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`
+	body := `{"phone":"` + sendListPhone + `","desc":"Escolha","id":"id-do-cliente",` +
+		`"sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`
 	rec := sendListServe(t, sm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -313,9 +313,9 @@ func TestSendList_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendListRouter(sm, jr))
 
-	body := `{"Phone":"` + sendListPhone + `","Desc":"` + logassertGlobalHMACKey + `","TopText":"` +
-		logassertGlobalHMACKey + `","FooterText":"` + logassertGlobalHMACKey +
-		`","Sections":[{"title":"` + logassertGlobalHMACKey + `","rows":[{"title":"` + logassertGlobalHMACKey + `"}]}]}`
+	body := `{"phone":"` + sendListPhone + `","desc":"` + logassertGlobalHMACKey + `","top_text":"` +
+		logassertGlobalHMACKey + `","footer_text":"` + logassertGlobalHMACKey +
+		`","sections":[{"title":"` + logassertGlobalHMACKey + `","rows":[{"title":"` + logassertGlobalHMACKey + `"}]}]}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/list", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -337,7 +337,7 @@ func TestSendList_NoSecretLeak(t *testing.T) {
 // handler fecha HOUSEKEEP F141 para a última rota que ainda logava o
 // sentinela genérico.
 func TestSendList_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Phone":"55119`
+	const malformed = `{"phone":"55119`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -364,7 +364,7 @@ func TestSendList_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 // bloco: `Sections` com o tipo errado no JSON (objeto onde o schema pede
 // lista) é 400 do cliente, não pânico e não 200.
 func TestSendList_MalformedSections_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"` + sendListPhone + `","Desc":"Escolha","Sections":{"title":"Sec"}}`
+	const body = `{"phone":"` + sendListPhone + `","desc":"Escolha","sections":{"title":"Sec"}}`
 
 	sm := &contractsfake.SimpleMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -372,7 +372,7 @@ func TestSendList_MalformedSections_ViaRegisteredRoute(t *testing.T) {
 	rec, recs := sendListServeCapturingLog(t, sm, jr, body, msgAuthed)
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
-	logassert.OutcomeLogged(t, recs, "cannot unmarshal object", "SendListRequest.Sections")
+	logassert.OutcomeLogged(t, recs, "cannot unmarshal object", "SendListRequest.sections")
 	if n := len(sm.SendListCalls); n != 0 {
 		t.Fatalf("Sections malformado alcancou SendList %d vez(es)", n)
 	}

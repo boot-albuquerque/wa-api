@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtogroup "wa-api/pkg/presentation/http/dto/group"
 
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
@@ -43,38 +44,38 @@ func (h *GetGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter, r 
 	if !ok {
 		return
 	}
-	var req domain.GetGroupRequestParticipantsRequest
+	var body dtogroup.GroupTargetRequest
 
-	decodeErr := decodeRequest(w, r, &req)
+	decodeErr := decodeRequest(w, r, &body)
 	if requestAnswered(decodeErr) {
 		return
 	}
 	if decodeErr != nil {
-		req = domain.GetGroupRequestParticipantsRequest{}
+		body = dtogroup.GroupTargetRequest{}
 	}
-	if req.GroupJID == "" {
+	if body.GroupJID == "" {
 		if v := r.URL.Query().Get("group_jid"); v != "" {
-			req.GroupJID = v
+			body.GroupJID = v
 		}
 	}
-	if req.GroupJID == "" && req.ChatAlias == "" {
+	if body.GroupJID == "" && body.ChatAlias == "" {
 		if v := r.URL.Query().Get("chat"); v != "" {
-			req.ChatAlias = v
-			req.ResolveChat()
+			body.ChatAlias = v
+			body.ResolveChat()
 		}
 	}
-	if decodeErr != nil && req.GroupJID == "" {
+	if decodeErr != nil && body.GroupJID == "" {
 		hlog.FromRequest(r).Warn().Err(decodeErr).Str("route", r.URL.Path).Msg("could not decode group request participants payload")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.ExecuteGetGroupRequestParticipants(r.Context(), id, req)
+	rsp, err := h.usecase.ExecuteGetGroupRequestParticipants(r.Context(), id, body.ToRequestParticipantsDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group request participants failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetGroupRequestParticipants(rsp), nil)
 }
 
 // UpdateGroupRequestParticipantsHandler approves/rejects join requests
@@ -88,8 +89,8 @@ func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter,
 	if !ok {
 		return
 	}
-	var req domain.UpdateGroupRequestParticipantsRequest
-	if err := decodeRequest(w, r, &req); err != nil {
+	var body dtogroup.UpdateGroupRequestParticipantsRequest
+	if err := decodeRequest(w, r, &body); err != nil {
 		if requestAnswered(err) {
 			return
 		}
@@ -97,13 +98,13 @@ func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter,
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.ExecuteUpdateGroupRequestParticipants(r.Context(), id, req)
+	rsp, err := h.usecase.ExecuteUpdateGroupRequestParticipants(r.Context(), id, body.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("update group request participants failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement(rsp.Details), nil)
 }
 
 // SetGroupJoinApprovalModeHandler toggles join approval requirement
@@ -117,8 +118,8 @@ func (h *SetGroupJoinApprovalModeHandler) ServeHTTP(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	var req domain.SetGroupJoinApprovalModeRequest
-	if err := decodeRequest(w, r, &req); err != nil {
+	var body dtogroup.SetGroupJoinApprovalModeRequest
+	if err := decodeRequest(w, r, &body); err != nil {
 		if requestAnswered(err) {
 			return
 		}
@@ -126,13 +127,13 @@ func (h *SetGroupJoinApprovalModeHandler) ServeHTTP(w http.ResponseWriter, r *ht
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.ExecuteSetGroupJoinApprovalMode(r.Context(), id, req)
+	rsp, err := h.usecase.ExecuteSetGroupJoinApprovalMode(r.Context(), id, body.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("set group join approval mode failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement(rsp.Details), nil)
 }
 
 // ListGroupsHandler lists groups
@@ -152,7 +153,7 @@ func (h *ListGroupsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentListGroups(rsp), nil)
 }
 
 // GetGroupInfoHandler gets group info
@@ -166,7 +167,7 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	var req domain.GetGroupInfoRequest
+	var req dtogroup.GetGroupInfoRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -175,7 +176,7 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
@@ -186,7 +187,7 @@ func (h *GetGroupInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetGroupInfo(rsp), nil)
 }
 
 // GetGroupInviteLinkHandler gets invite link
@@ -202,8 +203,8 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	var req domain.GetGroupInviteLinkRequest
-	if err := decodeRequest(w, r, &req); err != nil {
+	var body dtogroup.GroupTargetRequest
+	if err := decodeRequest(w, r, &body); err != nil {
 		if requestAnswered(err) {
 			return
 		}
@@ -211,7 +212,7 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, body.ToInviteLinkDomain())
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
@@ -222,7 +223,7 @@ func (h *GetGroupInviteLinkHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetGroupInviteLink(rsp), nil)
 }
 
 // GetGroupInviteInfoHandler gets invite info
@@ -238,8 +239,8 @@ func (h *GetGroupInviteInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	if !ok {
 		return
 	}
-	var req domain.GetGroupInviteInfoRequest
-	if err := decodeRequest(w, r, &req); err != nil {
+	var body dtogroup.GetGroupInviteInfoRequest
+	if err := decodeRequest(w, r, &body); err != nil {
 		if requestAnswered(err) {
 			return
 		}
@@ -247,11 +248,11 @@ func (h *GetGroupInviteInfoHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, body.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("get group invite info failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentGetGroupInviteInfo(rsp), nil)
 }

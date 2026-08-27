@@ -31,13 +31,13 @@ func portasDoFull() (*contractsfake.ProfileAccessProvider, *contractsfake.Contac
 		ProfileAccessFunc: func(context.Context, string) (port.ProfileDataAccess, error) { return da, nil },
 	}
 	cd := &contractsfake.ContactDirectory{
-		GetUserInfoFunc: func(context.Context, string, []domain.JID) (any, error) {
-			return map[string]string{"status": "disponivel"}, nil
+		GetUserInfoFunc: func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) {
+			return []domain.UserInfo{{JID: "5511999@s.whatsapp.net", Status: "disponivel"}}, nil
 		},
 	}
 	pm := &contractsfake.PrivacyManager{
-		GetPrivacySettingsFunc: func(context.Context, string) (any, error) {
-			return map[string]string{"last_seen": "contacts"}, nil
+		GetPrivacySettingsFunc: func(context.Context, string) (domain.PrivacySettings, error) {
+			return domain.PrivacySettings{LastSeen: "contacts"}, nil
 		},
 	}
 	return pp, cd, pm
@@ -63,7 +63,7 @@ func TestFull_AgregaBaseLocalERede(t *testing.T) {
 	if res.UserInfo == nil {
 		t.Error("user_info ausente no caminho feliz")
 	}
-	if res.Privacy == nil {
+	if res.Privacy == (domain.PrivacySettings{}) {
 		t.Error("privacy ausente no caminho feliz")
 	}
 	if res.Unavailable != nil {
@@ -77,11 +77,11 @@ func TestFull_AgregaBaseLocalERede(t *testing.T) {
 // justamente quando a rede está ruim — que é quando se quer olhar a sessão.
 func TestFull_RedeIndisponivelNaoDerrubaOLocal(t *testing.T) {
 	pp, cd, pm := portasDoFull()
-	cd.GetUserInfoFunc = func(context.Context, string, []domain.JID) (any, error) {
+	cd.GetUserInfoFunc = func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) {
 		return nil, errors.New("usync fora do ar")
 	}
-	pm.GetPrivacySettingsFunc = func(context.Context, string) (any, error) {
-		return nil, errors.New("privacidade fora do ar")
+	pm.GetPrivacySettingsFunc = func(context.Context, string) (domain.PrivacySettings, error) {
+		return domain.PrivacySettings{}, errors.New("privacidade fora do ar")
 	}
 
 	res := executarFull(t, pp, cd, pm)

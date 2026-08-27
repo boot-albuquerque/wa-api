@@ -32,38 +32,43 @@ func NewGetUserProfileUseCase(cd appport.ContactDirectory, jr appport.JIDResolve
 }
 
 // UserProfileResult é o perfil consolidado de um contato.
+//
+// Sem etiquetas `json`: deixou de ser o formato de fio na migração da família
+// de utilizadores. Quem serializa é pkg/presentation/http/dto/user.
 type UserProfileResult struct {
 	// JID é a identidade de TELEFONE (`@s.whatsapp.net`), e LID a de
 	// privacidade (`@lid`). Os dois saem sempre que houver mapeamento,
 	// independentemente de qual foi consultado — é o que dispensa o cliente
 	// de uma segunda chamada.
-	JID string `json:"jid"`
-	LID string `json:"lid"`
+	JID string
+	LID string
 
 	// Query é o que o cliente pediu, ecoado. Numa resposta que resolve
 	// identidades, saber por onde se entrou evita ambiguidade.
-	Query string `json:"query"`
+	Query string
 
 	// OnWhatsApp responde à pergunta "esse número tem conta?". Falso NÃO é
 	// erro: é resposta, e por isso a rota devolve 200 (decisão de contrato).
 	// Fica nulo quando a pergunta não pôde ser feita — ver Unavailable.
-	OnWhatsApp *bool `json:"on_whatsapp"`
+	OnWhatsApp *bool
 
-	VerifiedName string `json:"verified_name"`
+	VerifiedName string
 
-	AvatarURL string `json:"avatar_url"`
-	AvatarID  string `json:"avatar_id"`
+	AvatarURL string
+	AvatarID  string
 
-	// UserInfo é o bloco cru do SDK (status, devices, picture id). Segue como
-	// `any` pelo mesmo motivo de GetUserUseCase: decompor o tipo do SDK aqui
-	// arrastaria o vendor para dentro da camada de aplicação.
-	UserInfo any `json:"user_info,omitempty"`
+	// UserInfo são os metadados que a porta devolve para o alvo — status,
+	// dispositivos, id da foto. Era `any` com o tipo do SDK dentro, o que
+	// punha o VENDOR na resposta pública; hoje é o tipo de domínio, e o
+	// adaptador é que normaliza.
+
+	UserInfo []domain.UserInfo
 
 	// Unavailable lista o que NÃO pôde ser obtido, com o motivo. O perfil
 	// degrada em vez de falhar — uma foto indisponível não deve custar o
 	// resto —, mas degradar em silêncio é pior que falhar: o cliente veria
 	// campos vazios sem saber se é ausência de dado ou falha de rede.
-	Unavailable map[string]string `json:"unavailable,omitempty"`
+	Unavailable map[string]string
 }
 
 // Execute resolve o identificador e monta o perfil.

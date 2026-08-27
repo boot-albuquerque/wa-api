@@ -437,21 +437,16 @@ func initCustomHandlers(s *server) {
 		UnlinkGroup:     handlers.NewCommunityUnlinkGroupHandler(communityWriteUC),
 	}
 
-	// Download Handlers (/chat/download*, e a forma consolidada /chats/download)
-	downloadImageUC := message.NewDownloadImageUseCase(mediaDownloader, logger)
-	downloadVideoUC := message.NewDownloadVideoUseCase(mediaDownloader, logger)
-	downloadAudioUC := message.NewDownloadAudioUseCase(mediaDownloader, logger)
-	downloadDocumentUC := message.NewDownloadDocumentUseCase(mediaDownloader, logger)
-	downloadStickerUC := message.NewDownloadStickerUseCase(mediaDownloader, logger)
+	// Download Handlers (/chats/download/{kind} — the five legacy per-kind
+	// handlers were removed 2026-08-27, HOUSEKEEP.md F297)
 	downloadHandlers := &handlers.DownloadHandlers{
 		Media: handlers.NewDownloadMediaHandler(message.NewDownloadMediaUseCase(
-			downloadImageUC, downloadVideoUC, downloadAudioUC, downloadDocumentUC, downloadStickerUC,
+			message.NewDownloadImageUseCase(mediaDownloader, logger),
+			message.NewDownloadVideoUseCase(mediaDownloader, logger),
+			message.NewDownloadAudioUseCase(mediaDownloader, logger),
+			message.NewDownloadDocumentUseCase(mediaDownloader, logger),
+			message.NewDownloadStickerUseCase(mediaDownloader, logger),
 		)),
-		Image:    handlers.NewDownloadImageHandler(downloadImageUC),
-		Video:    handlers.NewDownloadVideoHandler(downloadVideoUC),
-		Audio:    handlers.NewDownloadAudioHandler(downloadAudioUC),
-		Document: handlers.NewDownloadDocumentHandler(downloadDocumentUC),
-		Sticker:  handlers.NewDownloadStickerHandler(downloadStickerUC),
 	}
 
 	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)

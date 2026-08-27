@@ -79,7 +79,7 @@ func (uc *GroupManagementUseCase) parseJIDs(ctx context.Context, in []string) ([
 }
 
 // CreateGroup creates a new WhatsApp group, community, or group-inside-community.
-func (uc *GroupManagementUseCase) CreateGroup(ctx context.Context, txtID string, name string, phones []string, opts domain.CreateGroupOpts) (interface{}, error) {
+func (uc *GroupManagementUseCase) CreateGroup(ctx context.Context, txtID string, name string, phones []string, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 	if err := uc.ensure(ctx, txtID); err != nil {
 		return nil, err
 	}

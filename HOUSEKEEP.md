@@ -29121,9 +29121,65 @@ os três avulsos idem. E um teste que percorra as rotas registadas e afirme que
 todo corpo de erro tem `error.code` — sem ele, o próximo `fmt.Errorf` volta a
 entrar sem ninguém dar por isso.
 
-**Status**: não corrigido.
+**Correção APLICADA (2026-08-27, fundação DTO da fronteira HTTP)** — e por outro
+caminho, mais forte que o sugerido. Converter os catorze pontos deixaria a
+FORMA dependente de cada call site lembrar-se de usar a taxonomia; o próximo
+`fmt.Errorf` reabriria a entrada. Em vez disso, o ramo genérico do próprio
+`RespondJSON` (`pkg/presentation/http/response.go`) passou a emitir um OBJECTO:
 
-<!-- f-status: aberto -->
+```go
+func genericError(statusCode int) ErrorBody   // {code, message} por estado
+envelope["error"] = genericError(statusCode)  // era: o texto do estado
+```
+
+Com isto, `error` é objecto em TODO ramo — tipado, não tipado, e qualquer
+estado — e nenhum call site pode voltar a produzir a forma antiga sem editar
+`RespondJSON`. Os catorze pontos continuam a merecer código próprio em vez do
+genérico `invalid_request` (isso é melhoria de MENSAGEM, e fica para a migração
+da família de grupos), mas a FORMA já não depende deles.
+
+**Testes que travam** (`pkg/presentation/http/`):
+
+- `TestRespondJSON_ErrorIsNeverAString` — erro tipado, tipado embrulhado, nu e
+  nu embrulhado: nenhum produz `error` em texto;
+- `TestRespondJSON_UntypedError_UsesCanonicalErrorObject` — os doze estados da
+  tabela genérica, com `error.code` esperado por estado, e o corpo verificado
+  contra fuga do texto do erro;
+- `TestRespondJSONNaoVazaDetalheDeErroInterno` (já existia) — actualizado para
+  afirmar o objecto em vez do texto;
+- `pkg/bootstrap/openapi_contrato_test.go: envelopeDeErroValido` — a tolerância
+  à forma antiga (`case string: return ""`) SAIU. Um corpo com `error` em texto
+  passa a ser divergência, em vez de ser registado como estado normal.
+
+**CONTROLO NEGATIVO EXECUTADO.** Reintroduzido `envelope["error"] = err.Error()`
+no ramo não tipado; `go test ./pkg/presentation/http/` falhou com, entre outras:
+
+```
+--- FAIL: TestRespondJSONNaoVazaDetalheDeErroInterno/panic_de_runtime
+    response_leak_test.go:83: o corpo da resposta contém "panic", que é detalhe interno:
+        {"code":500,"error":"panic: runtime error: invalid memory address or nil pointer dereference","success":false}
+    response_leak_test.go:99: error = "panic: runtime error: …", esperado um objecto {code, message}
+--- FAIL: TestRespondJSON_UntypedError_UsesCanonicalErrorObject/Bad_Request
+    response_test.go:144: envelope["error"] = "connection string: postgres://user:hunter2@internal-host/db",
+        want an object {code, message} for EVERY status
+--- FAIL: TestProfileHandler_UseCaseError_500_GenericMessage
+    profile_handler_test.go:87: response body contains PII (JID):
+        {"code":500,"error":"failed: JID 5511987654321@s.whatsapp.net timeout","success":false}
+```
+
+Revertido a seguir.
+
+**Especificação actualizada na mesma sessão**: o esquema `ErroTextoSimples`
+saiu de `api/openapi/base.yaml`, os 17 `$ref` que apontavam para ele passaram a
+apontar para `Erro`, e os 19 exemplos com `error` em texto foram reescritos
+para a forma objecto. `api/openapi/CONTRATO.md`,
+`api/openapi/CONTRATO-ARQUITETURAL.md` §14 e `api/openapi/schemas/canal.yaml`
+deixaram de instruir a documentar a forma antiga.
+
+**Status**: corrigido — a FORMA está travada. Fica em aberto, e é outra
+entrada, dar código PRÓPRIO (em vez de `invalid_request`) aos catorze pontos.
+
+<!-- f-status: corrigido -->
 
 ## F267 — a struct de domínio não é o contrato da rota, e documentar a partir dela erra em dez sítios
 
@@ -31204,3 +31260,2298 @@ gerado/escrito noutro eixo e mexer nele estava fora do âmbito. Fica registado
 para a sessão que o tocar.
 
 <!-- f-status: aberto -->
+
+## F295 — o golden de elegibilidade do `cmd/logcov` ficou por regenerar no CAP-10, e o `make check` já entrava vermelho na fundação DTO
+
+**Data/contexto**: 2026-08-27, fundação da migração para DTO da fronteira HTTP
+(`worktree/http-dto-foundation`). Apanhado porque a mesma sessão acrescentou
+funções elegíveis e teve de tocar no mesmo golden — sem isso, o achado ficava
+invisível a quem não mexesse em `cmd/logcov`.
+
+**Onde**: `cmd/logcov/testdata/eligible.golden` e `.log-coverage-baseline`,
+face ao commit `1636d228` (CAP-10, "consolida descarga de mídia por kind").
+
+**Problema**: o commit acrescentou três funções elegíveis e não regenerou o
+golden nem o baseline. Medido em `HEAD` (`1636d228`), com a árvore limpa e SEM
+nenhuma alteração desta sessão:
+
+```
+$ git stash -u && go test ./cmd/logcov/ -run 'TestGoldenBate|TestBaselineBateComAMedicao'
+--- FAIL: TestGoldenBate (1.66s)
+    golden diverged: the eligible SET changed
+    ADDED:
+      + pkg/application/usecase/message.DownloadMediaUseCase.Execute (ELIGIBLE)
+      + pkg/application/usecase/message.NewDownloadMediaUseCase (EXCLUDED)
+      + pkg/infra/stdio.chatDownloadMediaPath (ELIGIBLE)
+      + pkg/presentation/http/handlers.DownloadMediaHandler.ServeHTTP (ELIGIBLE)
+      + pkg/presentation/http/handlers.NewDownloadMediaHandler (EXCLUDED)
+--- FAIL: TestBaselineBateComAMedicao (1.96s)
+    min_eligible = 988 no baseline, medido 991
+```
+
+**Correção aplicada nesta sessão**: golden regenerado com
+`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`, e
+`min_eligible` subido `988 -> 993`. O `+5` é `+3` desta dívida do CAP-10 mais
+`+2` desta sessão (`dto/group.PresentGroupInfo` e `dto/group.presentTime`); a
+decomposição está escrita ao lado do valor no próprio `.log-coverage-baseline`,
+para que a próxima sessão não tenha de a redescobrir.
+
+Não foi "correcção de graça": o golden é um ficheiro só, e esta sessão TINHA de
+o tocar. Deixá-lo com metade da verdade é que seria a escolha errada.
+
+**Correção sugerida (processo, não código)**: o `make check` já falharia no
+CAP-10 se tivesse sido corrido até ao fim — o alvo `test` corre `./cmd/logcov`.
+O que faltou foi correr o gate, não um gate novo.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F296 — `make check` já entrava vermelho neste ramo por dois gates alheios à fundação DTO
+
+**Data/contexto**: 2026-08-27, fundação da migração para DTO. Registado porque
+o relatório da sessão afirma "os gates estão como estavam", e essa afirmação só
+vale com os números medidos dos dois lados.
+
+**Onde e o quê**, ambos medidos em `HEAD` (`1636d228`) com a árvore limpa
+(`git stash -u`) e reproduzidos idênticos depois das alterações:
+
+1. `internal/wa-headless/gate_test.go:635`,
+   `TestHousekeepEntriesAreMachineReadable` — a entrada **H144** de
+   `internal/wa-headless/HOUSEKEEP.md:11038` começa o `**Status**` por `"H75"`,
+   palavra fora do vocabulário que o gate reconhece. **Já está registado** em
+   `HOUSEKEEP.md:30787`; esta linha é só o cruzamento.
+2. `make coverage-gate` — cobertura total **85,0 %** contra
+   `min_coverage=870` em `.coverage-baseline`. Medido `85.0%` ANTES e `85.0%`
+   DEPOIS das alterações desta sessão: o número não se mexeu, o que descarta
+   esta fundação como causa.
+
+**Correção sugerida**: (1) é uma palavra num `**Status**`; (2) exige ou subir a
+cobertura ou baixar o piso com justificativa — e baixar um piso é decisão de
+quem manda no gate, não de quem passa por ele.
+
+**Status**: NÃO corrigido, e de propósito. Nenhum dos dois é do âmbito desta
+tarefa, e o `CLAUDE.md` proíbe corrigir defeito pré-existente fora de âmbito
+sem perguntar. Fica a pergunta em aberto: corrigir agora ou deixar pendente?
+
+<!-- f-status: aberto -->
+
+## F328 — as cinco rotas `/chat/download{tipo}` NÃO são um gap esquecido: CAP-10 já decidiu, por escrito, mantê-las vivas para sempre
+
+**Data/contexto**: 2026-08-27, `worktree/http-dto-download-paths`. A tarefa
+pedida partia da premissa de que `registry.Register("/chat/downloadimage", …)`
+e as quatro irmãs (`downloadvideo`, `downloadaudio`, `downloaddocument`,
+`downloadsticker`) em `pkg/bootstrap/wiring_routes.go:152-156` eram um "gap
+que ninguém apanhou" — sobreviventes acidentais da consolidação em
+`POST /chats/download/{kind}` (commit `1636d228`, CAP-10) — e pedia para as
+apagar sob a política de corte-limpo do resto da migração DTO ("hard
+cutover — sem aliases, apaga rota má de vez").
+
+**Onde**: `api/openapi/CAMINHOS-CANONICOS.md:70-115`, secção "CAP-10 (2026-08-27)
+— a segunda ronda, dois casos que a tabela não cobre", e o texto geral do
+mesmo ficheiro (linhas 15-46, "Como isto NÃO parte clientes").
+
+**Verificação de equivalência funcional (feita, e confere)**: li
+`pkg/presentation/http/handlers/handler_download.go` e
+`pkg/application/usecase/message/download_media_unified.go` por inteiro.
+`DownloadMediaUseCase.Execute` NÃO reimplementa nada — despacha por
+`req.Kind` para as MESMAS cinco instâncias (`DownloadImageUseCase`,
+`DownloadVideoUseCase`, `DownloadAudioUseCase`, `DownloadDocumentUseCase`,
+`DownloadStickerUseCase`) que os cinco handlers legados chamam directamente
+(`download_media_unified.go:36-50`). Comportamento idêntico byte a byte —
+confirmado também em campo, medição já registada em `HOUSEKEEP.md` (linhas
+20828-20848, SHA-256 idêntico para os cinco tipos via as rotas legadas).
+
+**O que a premissa da tarefa não tinha**: isto não é sobrevivência
+acidental. `CAMINHOS-CANONICOS.md` regista, na MESMA sessão que criou
+`/chats/download/{kind}` (CAP-10, 2026-08-27, o commit citado como ponto de
+partida desta própria tarefa), a decisão explícita de as manter:
+
+> "As cinco formas ORIGINAIS (singulares, `/chat/downloadimage` etc.)
+> continuam a responder — essas sim têm histórico e coexistência garantida,
+> mesmo padrão desta página."
+
+E essa "mesma página" descreve uma política de projecto que se aplica a
+TODAS as renomeações desta iniciativa de padronização, não só ao download,
+decidida em 2026-08-26 (F269):
+
+> "Cada caminho antigo continua registado e a responder. […] tempo de vida:
+> permanente, sem data de remoção. […] A distinção que importa: o caminho
+> antigo foi removido do CONTRATO, não do SERVIÇO."
+
+Ou seja: o padrão real do repositório para esta migração inteira é manter o
+serviço das rotas antigas para sempre e só as remover da documentação
+OpenAPI — o oposto do "apaga a rota má de vez" que orientou o pedido. Há
+inclusivamente um gate nomeado para isto,
+`TestOpenAPICobreTodasAsRotasRegistadas`
+(`pkg/bootstrap/openapi_coverage_test.go:100-149`), com uma excepção
+`consolidadaEm` escrita a dedo exactamente para as cinco rotas de download,
+e `docs/ENDPOINTS.md` que documenta a equivalência para quem chegar pelo
+nome antigo.
+
+**Por que não apaguei**: apagar as cinco rotas long-lived contradiria uma
+decisão arquitectural registada há um dia, na mesma área do código, pelo
+mesmo esforço — e o `CLAUDE.md` deste repositório proíbe "corrigir de graça"
+o que sai do âmbito sem perguntar primeiro. Aqui o âmbito nem é claro: a
+"correcção" pedida colide de frente com uma decisão já tomada e documentada,
+não com um esquecimento.
+
+**Correcção sugerida — duas saídas, e nenhuma é "apagar sem mais"**:
+1. **Manter a política CAP-10 como está**: as cinco rotas ficam a servir
+   para sempre (é o padrão de TODO o resto da padronização, não uma
+   excepção). Fechar esta tarefa sem alteração de código.
+2. **Reverter a política CAP-10 só para download**, alinhando com "hard
+   cutover" — mas isso é decisão de quem manda na iniciativa, porque muda
+   uma garantia já escrita em `CAMINHOS-CANONICOS.md` e comunicada como
+   "tempo de vida: permanente" em toda a família de renomeações, não seria
+   coerente mudar só uma família.
+
+**Status**: NÃO corrigido, de propósito — decisão levada ao canal
+apropriado antes de tocar em código de produção. Nenhuma rota, handler,
+use case ou ficheiro OpenAPI foi alterado nesta sessão.
+
+---
+
+**Decisão (2026-08-27, mesma sessão, após consulta)**: opção **2** — reverter
+a política CAP-10/F269 para esta família de download, por instrução
+explícita do utilizador: o corte-limpo ("hard cutover", sem aliases, sem
+rotas antigas a responder) é o comportamento pedido para a iniciativa como
+um todo, e a garantia de "tempo de vida permanente" documentada em
+`CAMINHOS-CANONICOS.md` não protege ninguém, porque **não existe consumidor
+real antes do lançamento**. O risco de quebra é zero — é exactamente o caso
+em que a garantia de coexistência foi desenhada para NÃO se aplicar.
+
+Esta reversão é **específica da família download**, não da política geral:
+as ~90 renomeações de `caminhos.tsv` continuam sob a política de
+coexistência permanente descrita em `CAMINHOS-CANONICOS.md`, §"Como isto NÃO
+parte clientes". Um esforço irmão (`worktree/http-dto-legacy-alias-removal`)
+está a remover o mecanismo `RegisterCanonicalAliases`/`caminhos.tsv` em
+paralelo — as cinco rotas de download nunca estiveram nessa tabela (eram
+registadas directamente em `wiring_routes.go`, ver nota no topo desta
+entrada), então não há sobreposição de ficheiros, mas as duas sessões
+revertem a MESMA política, em famílias diferentes.
+
+**O que foi feito**:
+
+1. `pkg/bootstrap/wiring_routes.go`: removidas as cinco linhas
+   `registry.Register("/chat/download{tipo}", …)`. Só
+   `/chats/download/{kind}` fica registada.
+2. `pkg/bootstrap/wiring_handlers.go`: removida a construção dos cinco use
+   cases/handlers por-kind como campos separados — `DownloadHandlers` passa
+   a ter só o campo `Media`, construído directamente a partir dos cinco use
+   cases (que continuam a existir, porque `DownloadMediaUseCase` delega
+   para eles).
+3. `pkg/presentation/http/handlers/handler_download.go`: removidos
+   `DownloadImageHandler`, `DownloadVideoHandler`, `DownloadAudioHandler`,
+   `DownloadDocumentHandler`, `DownloadStickerHandler` e os cinco
+   construtores — código morto após (1). `DownloadMediaHandler` e o use
+   case `DownloadImageUseCase`/`DownloadVideoUseCase`/etc. NÃO foram
+   tocados: continuam vivos, agora com um único chamador
+   (`DownloadMediaUseCase`).
+4. `pkg/infra/stdio/stdio_routes_chat.go`: removidas as quatro entradas
+   estáticas `chat.download.image/video/audio/document` (não havia entrada
+   para `sticker` — já fora `knownPending` antes desta sessão).
+5. Gates que tinham excepção nomeada para as cinco rotas — já não precisam
+   dela, porque as rotas deixaram de existir em `Routes(Deps{})`:
+   - `pkg/bootstrap/openapi_coverage_test.go` (`TestOpenAPICobreTodasAsRotasRegistadas`):
+     removido o mapa `consolidadaEm`.
+   - `pkg/bootstrap/caminhos_canonicos_test.go` (`TestNenhumaFamiliaDeColeccaoFicouNoSingular`):
+     removido o mapa `consolidadasCAP10`.
+   - `pkg/bootstrap/stdio_route_consistency_test.go`: removida a entrada
+     `"POST /chat/downloadsticker": true` de `knownPending` (o teste já
+     falharia sozinho se ela ficasse — linhas 255-261 verificam que toda
+     entrada de `knownPending` ainda existe no router).
+6. Testes de handler reescritos para exercitar os mesmos oito eixos
+   (sucesso, 401, 400 sem `Id`, corpo malformado, campo obrigatório em
+   falta, `DirectPath` sozinho, falha de sessão, falha do downloader, bytes
+   vazios, ausência de segredo no log) pela rota consolidada
+   `/chats/download/{kind}` em vez das cinco antigas:
+   `pkg/presentation/http/handlers/handler_download_test.go` e
+   `pkg/presentation/http/handlers/handler_nonsend_axes_test.go`
+   (`nonSendAxisDownloadCase`, os cinco casos `DownloadImage/Video/Audio/
+   Document/Sticker`).
+7. **Teste novo, o controlo negativo exigido pela política anti-regressão
+   do `CLAUDE.md`**: `TestF297_LegacyDownloadRoutesAreGone`
+   (`pkg/bootstrap/caminhos_canonicos_test.go`) prova, pela ROTA REGISTADA
+   de produção (`Routes(Deps{})` + o roteador real via
+   `newRouterForRouteCheck()`), que as cinco rotas antigas devolvem `404` e
+   que `/chats/download/{kind}` continua casada para os cinco kinds.
+   **Controlo negativo EXECUTADO**: reintroduzi
+   `registry.Register("/chat/downloadimage", …)` em `wiring_routes.go` e o
+   subteste `//chat/downloadimage` falhou com
+   `got 200, want 404 (rota removida pela F297)` — o teste morde. Revertida
+   a reintrodução logo a seguir (`git diff` limpo confirmado antes de
+   prosseguir).
+8. Documentação actualizada para reflectir a reversão (não apagada — a
+   medição histórica de 2026-08-26 fica registada como evidência de que a
+   lógica funcionava, herdada por `/chats/download/{kind}`):
+   `api/openapi/CAMINHOS-CANONICOS.md`, `docs/ENDPOINTS.md`,
+   `docs/OPENAPI-EVIDENCIAS.md`, `api/openapi/MATRIZ.md`,
+   `api/openapi/paths/conversa.yaml`, `api/openapi/paths/envio.yaml`.
+   `pkg/presentation/http/apidocs/openapi.yaml` regenerado via
+   `go run ./cmd/openapidoc` (118 caminhos).
+9. Gates derivados que mudaram por consequência, não por escolha:
+   - `pkg/presentation/http/handlers/testdata/respondjson_ledger.tsv`:
+     regenerado (`-update-ledger`) — as 10 entradas das cinco
+     `DownloadXHandler.ServeHTTP` (nil + rsp) saem.
+   - `cmd/logcov/testdata/eligible.golden`: regenerado — as cinco
+     `DownloadXHandler.ServeHTTP` (ELIGIBLE) e os cinco construtores
+     (EXCLUDED) saem do conjunto elegível.
+   - `.log-coverage-baseline`: `min_func_coverage` 589→587,
+     `min_errpath_coverage` 777→776, `min_eligible` 993→988 — as três
+     quedas são ratchet-DOWN honesto (funções que deixaram de existir, não
+     logging retirado de código vivo), com justificativa escrita ao lado
+     de cada linha.
+
+**Verificação**: `go build ./...`, `go vet ./...` limpos.
+`go test ./pkg/presentation/http/handlers/... ./pkg/bootstrap/...
+./pkg/application/usecase/message/... ./pkg/infra/stdio/...
+./cmd/logcov/...` verde, incluindo `TestF297_LegacyDownloadRoutesAreGone`
+com o controlo negativo descrito no ponto 7.
+
+**Status**: CORRIGIDO nesta sessão — reversão deliberada e completa da
+F269/CAP-10 para a família de download, com controlo negativo travado em
+teste.
+
+<!-- f-status: corrigido -->
+
+## F297 — a família sessão migrou para DTO; três achados incidentais ficaram fora do âmbito
+
+**Data/contexto**: 2026-08-27, migração para DTO da família **sessão +
+configuração de webhook + configuração de armazenamento**
+(`/session/*`, `/status/set/*`, `/health`, `/webhook`, `/webhook/history`,
+`/s3/*`, `/hmac/*`, `/proxy/set`), sobre a fundação de `83a6d3ac`.
+
+Os três achados abaixo apareceram DE LADO enquanto se media o que cada rota
+serve. Nenhum é do âmbito da migração, e nenhum foi corrigido.
+
+### (a) `bootstrap.ProxyConfig` é código morto com etiquetas camelCase
+
+**Onde**: `pkg/bootstrap/dispatch_webhook.go:13-18`.
+
+```go
+type ProxyConfig struct {
+	Enabled         bool   `json:"enabled"`
+	ProxyURL        string `json:"proxyURL"`
+	WebhookUseProxy *bool  `json:"webhookUseProxy,omitempty"`
+}
+```
+
+**Problema**: a tarefa pedia para decidir se este struct é o payload PÚBLICO
+entregue ao webhook do utilizador ou plumbing interno de fila. **Não é nem
+um nem outro**: `grep -rn '\bProxyConfig\b' pkg/bootstrap` devolve só a
+declaração, e `grep -rn 'bootstrap.ProxyConfig' .` devolve zero. Nada no
+módulo o constrói, serializa ou lê — apagar as etiquetas não partiu a
+compilação nem um único teste, o que é a prova.
+
+As etiquetas `proxyURL`/`webhookUseProxy` liam-se como contrato público e não
+descreviam nada. As formas vivas do mesmo conceito são outras duas:
+`domain.ProxySummary`, servida por `GET /session/status` através de
+`pkg/presentation/http/dto/session`, e
+`messaging.ProxyConfigResponse` (`pkg/infra/messaging/webhook_utils.go:13`),
+que já emitia `proxy_url`/`webhook_use_proxy`.
+
+**Correção aplicada nesta sessão**: as etiquetas foram REMOVIDAS e o comentário
+do tipo diz porquê. **Correção sugerida em aberto**: apagar o tipo. Não foi
+apagado aqui porque remover código é decisão de quem manda no módulo, não
+efeito colateral de uma migração de nomes.
+
+**Status**: **parcialmente corrigido** — etiquetas removidas; a deleção do tipo
+morto fica pendente.
+
+### (b) o payload de webhook e de WebSocket que SAI daqui continua camelCase
+
+**Onde**: `pkg/bootstrap/eventhandler.go:29` e os `eventhandler_*.go` que o
+alimentam; `pkg/bootstrap/dispatch_callhook.go:56-58`.
+
+**Problema**: o `postmap` é o corpo que `sendEventWithWebHook` entrega ao
+webhook configurado pelo utilizador E que `BroadcastToUser` empurra pelo
+`GET /session/ws`. Ele é um `map[string]interface{}` montado a chave por
+chave em ~20 ficheiros, e pelo menos duas dessas chaves são camelCase:
+
+```go
+postmap["instanceName"] = instanceName   // dispatch_callhook.go:56
+postmap["userID"] = userID               // dispatch_callhook.go:58
+```
+
+Isto é contrato PÚBLICO pelos itens #52 (WebSocket) e #53 (webhooks que
+produzimos) da especificação de nomes, e **não** foi corrigido aqui: o
+`WSHandler` (`pkg/presentation/http/handlers/handler_session_ws.go`) não
+serializa nada por si — ele aceita o upgrade, regista a ligação e lê até
+fechar —, portanto o defeito não vive em nenhum ficheiro desta família. Ele
+vive na fan-out de eventos, que é uma superfície inteira à parte, com o seu
+próprio inventário de tipos de evento.
+
+**Correção sugerida**: uma família `pkg/presentation/http/dto/event` com um
+apresentador por tipo de evento, alimentada pelos `eventhandler_*`, em vez de
+um mapa partilhado — é a única forma de o gate de nomes chegar lá, porque um
+mapa não tem etiqueta que se audite.
+
+**Status**: **não corrigido** — fora do âmbito desta família; carece de tarefa
+própria.
+
+### (c) três tipos de domínio desta família nunca são construídos
+
+**Onde**: `pkg/domain/webhook.go` — `WebhookConfigResult`, `ChatMapping`,
+`ChatInfo`.
+
+**Problema**: `grep -rn 'domain.WebhookConfigResult\|domain.ChatMapping\|domain.ChatInfo' pkg cmd`
+devolve zero fora da própria declaração. Os quatro handlers de `/webhook`
+montavam `map[string]interface{}` à mão e nunca tocaram no
+`WebhookConfigResult`, que por isso carregava etiquetas (`Details`,
+`events,omitempty`) que ninguém alguma vez serviu.
+
+**Correção aplicada nesta sessão**: as etiquetas `json` saíram, como em todo o
+resto do ficheiro (`ChatMapping` mantém as suas `db:`, que são reais).
+**Correção sugerida em aberto**: apagar os três tipos.
+
+**Status**: **parcialmente corrigido** — etiquetas removidas; a deleção fica
+pendente, pelo mesmo motivo de (a).
+
+<!-- f-status: aberto -->
+
+## F298 — a especificação OpenAPI ficou a descrever a forma ANTIGA da família sessão
+
+**Data/contexto**: 2026-08-27, migração para DTO da família sessão.
+
+**Onde**: `api/openapi/paths/sessao.yaml` e `api/openapi/schemas/infra.yaml`,
+nos exemplos e esquemas de `/session/qr`, `/session/pairphone`,
+`/session/status`, `/webhook/history`, `/session/proxy`, `/s3/config`,
+`/hmac/config`.
+
+**Problema**: a especificação continua a documentar `QRCode`, `LinkingCode`,
+`loggedIn`, `qrcode`, `proxyUrl`, `Details`, `Enabled`, `Set`, `ProxyURL` e
+`History` — que são exactamente as grafias que esta migração fez DESAPARECER
+do fio. Medido: `GET /session/qr` serve hoje `{"qr_code": "..."}` e o exemplo
+em `paths/sessao.yaml:246` diz `QRCode: ''`.
+
+O documento é gerado (`go run ./cmd/openapidoc`) e EMBUTIDO no binário, então
+uma especificação errada não é só prosa: é o que `/docs` serve.
+
+**Correção sugerida**: reescrever os esquemas e os exemplos das rotas acima com
+as chaves canónicas, correr `go run ./cmd/openapidoc`, e confirmar com o `cmp`
+de `CLAUDE.md`.
+
+**Status**: **não corrigido** nesta entrega — é um corpo de trabalho próprio,
+em prosa portuguesa que descreve o comportamento a par das chaves, e misturá-lo
+com o diff de código tornaria a revisão de ambos pior.
+
+<!-- f-status: aberto -->
+
+## F299 — uma migração que só ACRESCENTA funções de mapeamento baixou um gate de rácio, sem defeito nenhum
+
+**Data/contexto**: 2026-08-27, migração para DTO da família sessão.
+
+**Onde**: `cmd/logcov/rules.go:173` (`ruleX1Trivial`), contra os apresentadores
+novos de `pkg/presentation/http/dto/{storage,webhook}`.
+
+**Problema**, medido dos dois lados:
+
+| | `func_coverage` | `eligible` | veredicto |
+|---|---|---|---|
+| `1e7db641` (antes) | 589 (piso 589) | 993 | verde |
+| depois da migração | **587** | **996** | **vermelho** |
+
+Nenhuma linha de log foi removida. O que aconteceu é que a regra **X1** deixa
+fora do DENOMINADOR toda função com **até dois** statements e sem caminho de
+saída, e três dos trinta e dois apresentadores novos tinham mais:
+
+```
+dto/storage.PresentProxyConfig    4 statements
+dto/webhook.PresentGetWebhook     3
+dto/webhook.PresentUpdateWebhook  3
+```
+
+Os três são mapeamento campo a campo, sem E/S e sem erro: **não há nada que
+registar neles**. Acrescentar um log satisfaria a métrica sem satisfazer o que
+ela mede — que é exactamente o modo de falha que um gate de rácio convida.
+
+**Correção aplicada**: o corpo dos três encolheu para dois statements, com a
+regra partilhada extraída (`webhook.nonNilStrings`, `storage.copyBool` +
+`storage.boolPtr`). O conjunto de `ELIGIBLE` do golden voltou a ser IDÊNTICO
+ao de `1e7db641` — `diff` das duas listas devolve vazio — e o gate voltou a
+589/993.
+
+**O que isto ensina, e que vale para as outras cinco famílias que vão migrar**:
+um gate de RÁCIO pode ficar vermelho por crescimento do denominador, sem que
+nada tenha piorado. Quem migrar uma família a seguir vai acrescentar dezenas de
+apresentadores; se algum passar de dois statements, o gate cai pelo mesmo
+motivo. **Escreva o apresentador como uma expressão só**, e ponha a regra
+partilhada numa função à parte.
+
+E o método que separou "eu parti isto" de "já estava partido" foi **medir o
+gate no commit ANTERIOR**, com a árvore limpa. Sem essa medição, este achado
+teria ido para o relatório como "gate pré-existente vermelho", que é o que a
+F296 legitimamente diz de outros dois — e teria ficado escondido debaixo dela.
+
+**Status**: **corrigido** em `abe3e88d`, com a medição dos dois lados colada
+acima. O teste que o trava é o próprio `make log-coverage-gate`, que falha
+fechado no estágio *ratchet*.
+
+<!-- f-status: corrigido -->
+
+## F300 — `TestTodoMetodoComErroTemWrapper` já falhava neste ramo, e é de grupos/canais
+
+**Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores,
+contactos e blocklist. Achado de lado, ao correr a suíte inteira.
+
+**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers_test.go:56`.
+
+**Problema**: sete métodos da interface `Client` devolvem erro e não têm
+wrapper que o traduza no `RealClient` — `LinkGroup`, `UnlinkGroup`,
+`NewsletterAcceptAdminInvite`, `NewsletterCreateAdminInvite`, `GetSubGroups`,
+`NewsletterRevokeAdminInvite`, `GetLinkedGroupsParticipants`. Sem wrapper, o
+método é PROMOVIDO do cliente do SDK e devolve o erro cru, e uma recusa do
+servidor do WhatsApp volta ao cliente como 500 nessa rota (é o mecanismo da
+F204).
+
+**Medição de que é pré-existente**, e é o ponto desta entrada:
+
+```
+$ git stash -q && go test ./pkg/infra/wa-noise/client/ 2>&1 | tail -3
+        Sem wrapper, o método é PROMOVIDO de *wanoise.Client e devolve o erro cru do SDK; …
+FAIL
+FAIL	wa-api/pkg/infra/wa-noise/client	0.276s
+$ git stash pop -q
+```
+
+Falha idêntica com a árvore limpa em `1e7db641` e depois das alterações desta
+sessão. Os sete métodos são de grupos e de canais — nenhum toca a família de
+utilizadores.
+
+**Nota sobre o `make check`**: este pacote NÃO está na lista de pacotes que o
+alvo `test` corre, e por isso o gate fica verde com o defeito no lugar. Isso é
+um segundo achado dentro do primeiro: o `go test ./...` vê-o e o `make check`
+não.
+
+**Correção sugerida**: escrever os sete wrappers a chamar
+`errmap.ClassifyIQ`, como os restantes; e, separadamente, perceber por que
+`pkg/infra/wa-noise/client` está fora da lista do alvo `test`.
+
+**Status**: NÃO corrigido. Fora do âmbito desta tarefa, e o `CLAUDE.md` proíbe
+corrigir defeito pré-existente fora de âmbito sem perguntar. Pergunta em
+aberto: corrigir agora ou deixar pendente?
+
+<!-- f-status: aberto -->
+
+## F301 — o corte a seco não alcança o nome de PEDIDO quando ele só difere na caixa
+
+**Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores.
+Achado por um teste que escrevi para provar o corte a seco e que FALHOU.
+
+**Onde**: `pkg/presentation/http/dto/user/request.go` (e todo DTO de pedido que
+venha a renomear um campo mudando só a caixa).
+
+**Problema**: a norma diz que a migração é a seco — "a etiqueta `json` antiga é
+removida ou alterada, e pronto". Para as respostas isso é verdade. Para os
+PEDIDOS não é, e a razão é do `encoding/json`: ele casa nomes de campo **sem
+distinguir maiúsculas**. Renomear `Phone` para `phone` não remove nada — o
+corpo antigo continua a ser aceite.
+
+Medido, e o teste que o mede está em
+`pkg/presentation/http/dto/user/request_test.go`
+(`TestNomesDePedidoAceitamCaixaDiferente`):
+
+```
+$ # com json:"phone" na struct
+$ echo '{"Phone":"5511","JID":"5511@lid"}' | decodePorRota -> Phone=5511 JID=5511@lid
+```
+
+A primeira versão desse teste afirmava o contrário — "as chaves antigas
+deixaram de ser lidas" — e falhou com
+`as chaves antigas ainda são lidas: {ChatTarget:{ChatAlias:} Phone:antigo JID:antigo@lid}`.
+
+**Por que importa**: `docs/HTTP-DTO-CONVENTIONS.md` §11 promete corte a seco sem
+distinguir pedido de resposta, e uma revisão que leia só a norma conclui que o
+nome antigo desapareceu. Ele não desapareceu; deixou de ser documentado.
+
+**Correção sugerida**: acrescentar a ressalva à §11 da norma — o corte a seco
+vale para as RESPOSTAS, e nos pedidos um nome que difira só na caixa continua
+aceite pelo descodificador. Quem quiser recusá-lo de facto precisa de casamento
+estrito (`UnmarshalJSON` próprio, ou um descodificador que compare a chave crua
+antes de a passar ao `encoding/json`) — não de uma mudança de etiqueta.
+
+**Status**: NÃO corrigido no código, e é decisão deliberada: recusar o nome
+antigo seria mudança de comportamento fora do âmbito, e a norma é que está
+imprecisa, não o código. Documentado em três sítios — o teste, o comentário do
+`request.go` e o esquema `PedidoBloqueio` do OpenAPI.
+
+<!-- f-status: aberto -->
+
+## F302 — `/session/profile/full` serve PascalCase em `user_info` e `privacy`
+
+**Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores.
+Atravessa a fronteira entre duas famílias, e por isso fica registado aqui em
+vez de ser corrigido de passagem.
+
+**Onde**: `pkg/application/usecase/profile/get_profile_full.go:41-48`.
+
+**Problema**: `ProfileFullResult` ainda É o formato de fio de
+`GET /session/profile/full` — tem etiquetas `json` e vai directo ao
+`RespondJSON`. Os campos `UserInfo` e `Privacy` deixaram de ser `any` nesta
+sessão (passaram a `[]domain.UserInfo` e `domain.PrivacySettings`), mas os
+tipos de domínio não têm etiquetas `json`, de propósito — logo o codificador
+emite os nomes de campo Go: `JID`, `Status`, `PictureID`, `GroupAdd`,
+`LastSeen`.
+
+**Não é regressão**: antes serviam os tipos do SDK, que também não têm
+etiquetas, e emitiam exactamente as mesmas chaves em PascalCase. O corpo é o
+mesmo; o que mudou foi de onde ele vem.
+
+**Correção sugerida**: é escopo da família SESSÃO. Quando essa migração
+acontecer, os dois campos apresentam-se com
+`dtouser.PresentUserInfo`/`PresentPrivacySettings`, que já existem e já servem
+`jid`, `picture_id`, `group_add`, `last_seen`. Não é preciso escrever
+apresentador novo — só chamá-los.
+
+**Status**: NÃO corrigido, deliberadamente: a rota é de outra família e de
+outro worker, e tocar-lhe agora criaria conflito de merge sem ganho.
+
+<!-- f-status: aberto -->
+## F303 — três achados de contrato que a migração DTO da família de canais destapou, e um que ela criou
+
+**Data/contexto**: 2026-08-27, migração da família de canais (dezoito rotas)
+para a camada de DTO. Registados aqui porque nenhum deles é a tarefa —
+a tarefa era a forma do JSON — e os três primeiros foram corrigidos de
+passagem porque o mesmo ficheiro tinha de ser tocado.
+
+### (a) `/newsletter/subscribe` deitava fora a única coisa que devolve
+
+**Onde**: `pkg/presentation/http/handlers/handler_newsletter.go:128` (antes da
+migração):
+
+```go
+customhttp.RespondJSON(w, http.StatusOK, rsp.Data, nil)
+```
+
+**Problema**: `NewsletterResult` tinha três campos — `Data`, `DurationSeconds`
+e `Status` — e o manipulador serializava só o primeiro. A subscrição de
+actualizações ao vivo deixa `Data` a nil e enche `DurationSeconds`, logo a
+rota respondia `data: null`. O arrendamento que o WhatsApp concede, e que diz
+ao chamador quando repetir a chamada, era calculado no use case e nunca saía
+do processo. O mesmo apagava o `status` das outras onze operações.
+
+Estava DOCUMENTADO como ressalva em `api/openapi/paths/canal.yaml`
+("a duração não é devolvida"), o que o torna um defeito conhecido e não
+descoberto — e o `TestNewsletterResult_DurationSeconds_SerializesAsSeconds`
+provava a conversão de nanossegundos para segundos num campo que nenhum
+cliente via.
+
+**Correção aplicada**: `dtonewsletter.PresentNewsletterSubscribe` e
+`PresentNewsletterAck`. Travado por
+`TestCanal_ContratoPublico_SubscribeEntregaADuracao` e
+`TestCanal_ContratoPublico_OperacaoSemCargaDizStatus`.
+
+**Status**: corrigido nesta sessão.
+
+### (b) cinco chaves de PEDIDO em camelCase, nas únicas structs anónimas da família
+
+**Onde**: `handler_newsletter.go:60-66` (antes):
+
+```go
+ServerIDs []int  `json:"serverIDs"`
+ServerID  int    `json:"serverID"`
+MessageID string `json:"messageID"`
+UserJID    string `json:"userJID"`
+ConfirmJID string `json:"confirmJID"`
+```
+
+**Problema**: nenhuma passa `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, a regra do
+contrato público. Repare que as OUTRAS onze chaves do mesmo struct já estavam
+correctas (`jid`, `invite`, `name`, `count`, `before`) — o que mostra que a
+divergência não foi uma convenção antiga, foi cinco linhas escritas noutro dia.
+
+**Correção aplicada**: renomeadas em corte a seco, sem alias.
+`TestCanal_ContratoPublico_PedidoUsaSnakeCase` afirma que a grafia nova CHEGA
+à porta, e `..._GrafiaAntigaDoPedidoNaoEAceite` afirma que a antiga já não
+funciona — a segunda é a que impede o "aceitar as duas para sempre".
+
+**Status**: corrigido nesta sessão.
+
+### (c) a recusa de `since` respondia o código genérico do estado
+
+**Onde**: `handler_newsletter.go:115` (antes) — `time.Parse` falhava e o erro
+cru ia para `RespondJSON` com `400`, que o traduzia no par genérico
+`invalid_request` / "Requisição inválida.".
+
+**Problema**: `invalid_request` diz "algo estava mal" e nada mais, num pedido
+em que se sabe exactamente qual campo estava mal. É o caso que
+`docs/HTTP-DTO-CONVENTIONS.md` §7 nomeia ("prefira um código PRÓPRIO ao
+genérico") e era a única validação das dezoito rotas fora da taxonomia
+`apperr`.
+
+**Correção aplicada**: `NewsletterRequest.Validate` devolve
+`apperr.New("invalid_since", CategoryValidation, …)`.
+
+**Status**: corrigido nesta sessão.
+
+### (d) o que a migração DESTRUIU: a árvore da mensagem em `/newsletter/messages`
+
+**Onde**: `pkg/domain/newsletter.go`, `NewsletterMessage` — o campo `Message
+*waE2E.Message` não existe.
+
+**Problema**: a rota servia a mensagem do protocolo inteira, e as chaves dela
+são o camelCase gerado pelo protoc (`extendedTextMessage`, `fileLength`,
+`directPath`). Nenhuma passa a regra de nomes, e nenhuma é nossa para
+renomear. As três saídas eram: renomear a árvore (impossível de manter contra
+um `.proto` do vendor), isentar a rota da regra (que enfraquece a asserção
+partilhada pelas seis famílias), ou deixá-la cair.
+
+**Decisão**: deixar cair, extraindo o texto legível para `text`. É uma PERDA
+real de dado no fio: uma publicação com imagem deixa de dizer o `mimetype`, as
+dimensões ou o `directPath` da média. O que se preservou é o que a medição de
+2026-08-26 diz que um cliente podia usar — e essa mesma medição escreve que a
+forma de dentro daquelas chaves "muda com o cliente que publicou".
+
+**Correção sugerida, se a perda incomodar**: um `media` tipado no DTO, com os
+cinco ou seis campos que valem para todos os tipos de média
+(`mimetype`, `file_length`, `width`, `height`, `direct_path`, `seconds`),
+alimentado por um mapeador no adaptador. Não foi feito porque exigiria decidir
+o subconjunto sem medição de campo a suportá-lo, e este projecto tem regra
+contra isso.
+
+**Status**: NÃO corrigido, e é decisão registada, não omissão.
+
+### (e) e o que ela mudou de FORMA: `reaction_counts` -> `reactions[]`
+
+**Problema**: o objecto de contagens era indexado por EMOJI. Nenhum emoji pode
+satisfazer `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, logo o helper partilhado
+`AssertPublicJSONUsesCanonicalNaming` recusa a rota inteira — e recusa com
+razão, porque a regra diz "toda chave de objecto, recursivamente".
+
+Medido, e foi assim que apareceu:
+
+```
+--- FAIL: TestCanal_ContratoPublico_NomesCanonicos/messages
+    2 chave(s) fora do snake_case minúsculo exigido pelo contrato público:
+      ❤  em  $.data.messages[0].reaction_counts.❤
+      ❤️  em  $.data.messages[0].reaction_counts.❤️
+```
+
+**Decisão**: array de `{emoji, count}`, ordenado por contagem decrescente. A
+alternativa — abrir uma excepção no helper — enfraqueceria a asserção para as
+seis famílias por causa de um campo.
+
+**A ordenação não é estética**: sem ela a mesma publicação serializa diferente
+a cada pedido, porque a ordem de iteração de mapa em Go é aleatória por
+desenho. Travado por `TestCanal_ContratoPublico_ReacoesSaoDeterministas`, que
+faz vinte pedidos e compara os corpos — uma passagem só passaria por sorte.
+
+**Status**: corrigido nesta sessão.
+
+### Controlos negativos EXECUTADOS
+
+1. `json:"subscriber_count"` -> `json:"subscriberCount"`:
+   `TestCanal_ContratoPublico_NomesCanonicos` falha em `info`, `create` e
+   `list`, nomeando o caminho `$.data.newsletter.subscriberCount`.
+2. `sort.Slice` removido do apresentador de reacções:
+   `..._PublicacaoMapeada` falha na ordem esperada e
+   `..._ReacoesSaoDeterministas` falha colando os dois corpos divergentes.
+3. `PresentNewsletterInfo(rsp.Metadata)` trocado por `rsp.Metadata`:
+   `..._NomesCanonicos` falha com VINTE chaves PascalCase, `$.data.JID` a
+   `$.data.Viewer.Role` — que é exactamente a forma que a rota servia antes.
+
+<!-- f-status: corrigido -->
+
+## F304 — condensar `return X{}, n.Chamada(...)` custou onze caminhos de saída na cobertura de log, sem mudar comportamento nenhum
+
+**Data/contexto**: 2026-08-27, migração DTO da família de canais. É o caso que
+a regra "medir onde deveria PIORAR" do `CLAUDE.md` existe para apanhar: passou
+em `go build`, `go vet`, na suíte inteira e nos três controlos negativos, e só
+apareceu no gate de cobertura de log.
+
+**Onde**: `pkg/application/usecase/notification/newsletter_ops.go`, no `switch`
+de `dispatch`. A primeira versão da reescrita condensou os onze ramos sem
+carga:
+
+```go
+case NewsletterOpFollow:
+    return NewsletterResult{}, n.FollowNewsletter(ctx, userID, req.JID)
+```
+
+em vez da forma que lá estava:
+
+```go
+case NewsletterOpFollow:
+    err := n.FollowNewsletter(ctx, userID, req.JID)
+    return NewsletterResult{}, err
+```
+
+**Problema**, medido com `go run ./cmd/logcov -by-package ./pkg` antes e
+depois:
+
+```
+pkg/application/usecase/notification   errpath  88.9%  ->  48.1%   (27 caminhos)
+total do repositório                   errpath  77.7%  ->  77.3%
+```
+
+Onze caminhos de saída deixaram de contar como cobertos. O analisador
+reconhece a propagação da causa quando o erro passa por uma variável e não
+quando a chamada está na posição de retorno — e o comportamento em execução é
+byte a byte o mesmo.
+
+**A medição que o revelou não foi de propósito**: o alvo era o `min_eligible`,
+que TINHA de subir por causa das funções novas. Os números de `errpath` vieram
+no mesmo relatório e não batiam. Sem `-by-package` teriam ficado por
+explicar — a linha total caiu 0,4 ponto, que parece ruído até se ver que um
+pacote caiu 40.
+
+**Correção aplicada**: forma longa restaurada nos onze ramos, com o motivo
+escrito por cima do `switch` — "não volte a encurtar" e o número ao lado, para
+que a próxima pessoa que ache o `switch` verboso saiba o que custa.
+
+**Anti-regressão**: `min_errpath_coverage` fica em 777 em
+`.log-coverage-baseline`, e a nota lá escrita nomeia este caso. Reintroduzir a
+forma curta faz `TestBaselineBateComAMedicao` falhar com
+`min_errpath_coverage = 777 no baseline, medido 773` — que foi exactamente a
+saída medida.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F317 — quatro campos para o mesmo identificador de linha em `domain.ListRow`
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO. Achado
+levantado no enunciado da tarefa e resolvido nela, porque a regra de nome
+canónico do contrato público **forçou** a resposta em vez de a deixar à
+escolha.
+
+**Onde**: `pkg/domain/message.go:483-490` (antes desta sessão):
+
+```go
+type ListRow struct {
+	Title       string `json:"title"`
+	Description string `json:"desc"`
+	RowId       string `json:"RowId"`
+	RowID       string `json:"RowID"`
+	Rowid       string `json:"rowId"`
+	Rowid2      string `json:"rowID"`
+}
+```
+
+**Problema**: quatro campos Go, quatro grafias do MESMO conceito, aceites como
+cadeia de fallback (`RowId <- RowID <- rowId <- rowID <- título`). Sob a regra
+`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$` as quatro colapsam na MESMA chave, `row_id` —
+não há como manter as quatro e ser canónico.
+
+**Evidência de qual é a canónica**, medida por sítio de uso e não por gosto:
+
+```
+$ grep -rn "RowId\|RowID\|Rowid\|Rowid2" --include='*.go' pkg/ | grep -v _test
+pkg/application/usecase/message/send_list.go:155:  for _, candidate := range []string{row.RowId, row.RowID, row.Rowid, row.Rowid2}
+pkg/application/usecase/message/send_list.go:188:  RowId:       resolveRowID(row, title),
+pkg/infra/wa-noise/adapters/chat/messenger_list.go:57:  RowID: proto.String(row.RowId),
+```
+
+Só `RowId` é **escrito** pelo use case depois de normalizar, e só `RowId` é
+**lido** pelo adaptador. Os outros três nunca levaram valor para lá da
+fronteira: são exclusivamente pontos de entrada do wire.
+
+**Correção aplicada**: um campo, `RowID string`, com a etiqueta pública
+`row_id` no DTO de pedido (`dto/message.ListRowRequest`). A cadeia passa de
+cinco níveis a dois: `row_id <- (o título já resolvido e já trimado)`.
+
+**Testes que a travam**:
+- `pkg/application/usecase/message/send_list_test.go`,
+  `TestSendList_RowIDFallbackChain` — reescrito para os dois níveis, incluindo
+  o caso do espaço em branco, que continua a não contar como preenchido;
+- `pkg/presentation/http/dto/message/request_naming_test.go`,
+  `TestRequestDTOs_ChavesDuplicadasNaoExistem` — impede que dois campos voltem
+  a declarar a mesma chave. **Controlo negativo executado**: acrescentado um
+  segundo campo com `json:"row_id"`, o teste falha com
+  `a chave "row_id" é declarada por DOIS campos, RowID e RowIDAlias`.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F309 — `GET /user/blocklist` escreve o corpo à mão e é a única rota que NÃO tem envelope
+
+**Data/contexto**: 2026-08-27, auditoria de fugas ao envelope canónico
+(`RespondJSON`) em toda a superfície HTTP. Achado incidental: a auditoria
+procurava fugas no ramo de ERRO e encontrou uma no ramo de SUCESSO.
+
+**Onde**: `pkg/presentation/http/handlers/handler_blocklist.go:60-73`
+
+```go
+// Serialize as JSON string to match the legacy s.Respond format
+responseJSON, err := json.Marshal(result)
+...
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusOK)
+_, _ = w.Write(responseJSON)
+_, _ = w.Write([]byte("\n"))
+```
+
+**Problema**: as outras 140 rotas respondem
+`{"success":true,"code":200,"data":{...}}`. Esta responde o objecto do caso de
+uso **nu**, sem `success`, sem `code` e sem `data`. Um cliente que leia
+`resp.data` em todas as rotas lê `undefined` nesta, e um que ramifique por
+`resp.success` vê `undefined` — que é *falsy*, ou seja, uma resposta de
+**sucesso** que se lê como falha.
+
+Os três ramos de ERRO deste mesmo ficheiro (linhas 38, 47, 56, 66) já passam
+por `RespondJSON` e estão correctos: a divergência é só o 200.
+
+O comentário diz "to match the legacy s.Respond format", e o formato legado
+já não existe em lado nenhum — é a última referência a ele no repositório.
+
+**Correção sugerida**: trocar as quatro linhas por
+`customhttp.RespondJSON(w, http.StatusOK, result, nil)`, e actualizar em
+conjunto (a) `pkg/presentation/http/handlers/handler_blocklist_test.go`, que
+hoje afirma a forma nua, e (b) o exemplo de `/user/blocklist` em
+`api/openapi/paths/`, regenerando com `go run ./cmd/openapidoc`.
+
+**Status**: **corrigido** — pela migração de DTO da família `user`, como esta
+entrada já previa. `GetBlocklistHandler.ServeHTTP` (verificado nesta
+integração, 2026-08-27) já passa por
+`customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentGetBlocklist(result), nil)`,
+com o próprio comentário do handler a citar este achado. Testado:
+`TestGetBlocklistHandler_Sucesso`, `TestGetBlocklistHandler_CaminhosDeRecusa`,
+`TestGetBlocklistHandler_NaoAlcancaAPortaSemSessao`, todos verdes.
+
+<!-- f-status: corrigido -->
+
+## F310 — três escritas directas na `ResponseWriter` que são legítimas, e por quê
+
+**Data/contexto**: 2026-08-27, mesma auditoria da F309. Registado não porque
+haja defeito, mas porque a **próxima** auditoria vai reencontrá-las e gastar
+tempo a decidir de novo. O veredito fica escrito.
+
+**Onde, e o veredito de cada uma**:
+
+1. `pkg/bootstrap/health.go:157-158` (`/health/live`, `/livez`) e
+   `pkg/bootstrap/health.go:177-178` (`/health/ready`). **Isentas**: o
+   consumidor é o `HEALTHCHECK` do contentor e o kubelet, não um cliente da
+   API. `{"status":"ok"}` e o `ReadinessReport` são contrato com a
+   infraestrutura; embrulhá-los em `{"success":...,"data":...}` obrigaria a
+   reescrever as sondas, e o 503 do readiness já diz o que precisa de dizer
+   pela linha de estado.
+2. `pkg/presentation/http/apidocs/apidocs.go:72,76` e o `http.NotFound` do
+   ramo `default`. **Isentas**: servem `text/html` (o Swagger UI),
+   `application/yaml` (a especificação) e ficheiros estáticos. Não são
+   superfície JSON; um envelope aqui partiria o próprio Swagger UI.
+3. `pkg/presentation/http/devui/devui.go:154`. **Isenta**: o painel de
+   desenvolvimento, que só existe com `WA_API_DEV_UI` ligada, e cujo
+   `{"adminToken": ...}` é lido pelo JavaScript da própria página — um
+   consumidor que se muda no mesmo commit que o produtor.
+
+O que NÃO ficou isento, e foi corrigido nesta sessão: o 404 e o 405 do router
+(`pkg/bootstrap/router.go`), que respondiam `text/plain` por
+`http.NotFoundHandler` e `http.Error`. Esses SÃO superfície da API — um cliente
+que erra o caminho recebia uma frase em vez de `error.code`. Travado por
+`pkg/bootstrap/router_error_envelope_test.go`, com controlo negativo executado.
+
+**Status**: nao-se-faz (as três primeiras); a quarta foi corrigida nesta
+sessão.
+
+<!-- f-status: nao-se-faz -->
+
+## F311 — a doc do pacote `apperr` afirmava que ninguém o usava, e isso já era falso
+
+**Data/contexto**: 2026-08-27, granularidade de códigos de erro. Achado ao
+verificar a premissa da tarefa, que vinha da própria doc.
+
+**Onde**: `pkg/domain/apperr/apperr.go:1-5` (antes desta sessão)
+
+> "This package is additive: nothing in the repository constructs or consumes
+> AppError yet. Migrating the ~366 existing fmt.Errorf call sites happens
+> incrementally, in later phases".
+
+**Problema**: medido no mesmo dia, `apperr.New` tinha **~285 sítios de
+construção** em `pkg/`, com **123 códigos distintos**, e `RespondJSON`
+**consome-o** desde a fundação do envelope. O número "~366" também já não
+descrevia nada: restavam ~305 `fmt.Errorf`/`errors.New` em `pkg/`, e a maioria
+deles em `pkg/infra/db` e `pkg/bootstrap`, que **não são erros de fronteira
+HTTP** e não precisam de tipagem.
+
+É a mesma armadilha que o comentário de `Category.HTTPStatus` já tinha
+apanhado, e que está escrita lá: *comentário desactualizado vira plano errado*.
+Aqui custou uma tarefa inteira desenhada sobre a premissa de que a taxonomia
+não estava ligada.
+
+**Correção aplicada nesta sessão**: doc do pacote reescrita com os números
+medidos e a data, e a distinção entre "o que falta tipar" e "o que não precisa
+de tipo". Travado indirectamente por
+`TestErrorCodesAreCanonicalSnakeCase`, que falha se o conjunto de códigos
+desaparecer (a asserção `len(seen) == 0`).
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F318 — a cadeia de corpo de `/chat/send/list` tinha dois pares de chaves que só diferiam na caixa
+
+**Data/contexto**: 2026-08-27, mesma migração. Irmão da F317, e do mesmo tipo:
+a regra de nome canónico não permite a escolha.
+
+**Onde**: `pkg/domain/message.go:518-521` (antes desta sessão) —
+`Desc`/`Body`/`Body2`/`Text` com etiquetas `"Desc"`, `"Body"`, `"body"`,
+`"text"`. `Body` e `body` são a MESMA chave em snake_case minúsculo, e `Text`
+e `text` também.
+
+**Problema, e por que não é só estética**: um cliente não podia mandar `Body` e
+`body` com significados diferentes e esperar resultado definido — o
+`encoding/json` do Go casa chaves **sem distinguir maiúsculas** na
+descodificação, então `{"Body":"A","body":"B"}` já era ambíguo ANTES desta
+sessão. A cadeia de quatro níveis documentava uma distinção que o
+descodificador nunca fez.
+
+**Correção aplicada**: a cadeia passa de quatro níveis a três,
+`desc <- body <- text`, e `SendListRequest.Body2` saiu do domínio junto com o
+ramo que o lia em `send_list.go`.
+
+**Teste que a trava**: `TestSendList_BodyFallbackChain`, reescrito para os três
+níveis, com o caso do espaço em branco preservado.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F305 — os apresentadores de DTO diluem `func_coverage` e não podem ser instrumentados: `pkg/presentation/http/dto/` entrou em `.logcov-exclude`
+
+**Data/contexto**: 2026-08-27, mesma sessão. Registado porque a decisão MEXEU
+NUM GATE, e um gate mexido sem registo é um gate afrouxado em silêncio.
+
+**Problema**: a família de canais acrescentou sete funções elegíveis em
+`pkg/presentation/http/dto/newsletter` (a fundação já tinha acrescentado duas
+em `dto/group`). Nenhuma loga, e o denominador cresceu sem o numerador:
+
+```
+ANTES  (1e7db641)          eligible=993   585 covered   func 58.9%
+DEPOIS (sem exclusão)      eligible=1000  585 covered   func 58.5%   <- abaixo do piso
+DEPOIS (com dto/ excluído) eligible=991   585 covered   func 59.0%
+```
+
+O numerador é 585 nos três estados. Nada que registava deixou de registar; é
+diluição. Com as seis famílias migradas seriam ~40 funções, e o gate estaria a
+punir cada migração correcta — a dinâmica que a F204 já tinha medido nos
+wrappers da fachada.
+
+**Por que a exclusão é mais forte aqui que nos adaptadores (F193) e na fachada
+(F204)**: aqueles são "código nosso que ESCOLHEMOS não instrumentar". Este
+**não pode** ser instrumentado: a porta `Logger` vive em
+`pkg/application/contracts`, e `docs/HTTP-DTO-CONVENTIONS.md` §3 declara a
+regra de importação de sentido único — o pacote `dto` importa `pkg/domain` e
+nada acima. Um apresentador que quisesse logar teria de importar a camada de
+aplicação, que é o acoplamento que esta camada existe para quebrar.
+
+E não haveria o que dizer: um apresentador é projecção campo a campo, sem modo
+de falha, no caminho de TODA resposta. É a mesma justificação da isenção de
+`classifyMessage`, mas por pacote em vez de por anotação — o orçamento de
+`//log:exempt` está esgotado (2 de 2) e não seria o instrumento certo para
+nove funções que vão ser quarenta.
+
+**O que NÃO foi excluído**: `pkg/presentation/http/handlers/`, a 93,5%. É lá
+que a recusa de um pedido e a falha de uma operação são registadas.
+
+**Efeito no baseline**: `min_func_coverage` 589 -> 590 (sobe),
+`min_errpath_coverage` fica em 777, `min_eligible` 993 -> 991 (**desce**, e a
+descida é o alarme do ficheiro a disparar como devia — está anotada lá com os
+três estados medidos).
+
+**Status**: corrigido nesta sessão. Se um dia entrar decisão dentro de um
+apresentador, a linha sai de `.logcov-exclude` e o piso é recalculado — está
+escrito no próprio ficheiro.
+
+<!-- f-status: corrigido -->
+## F306 — a família `/admin/users` deixou de aceitar o camelCase nos corpos de pedido
+
+**Data/contexto**: 2026-08-27, migração da família `/admin` para a camada de
+DTO (`docs/HTTP-DTO-CONVENTIONS.md`). Não é um defeito encontrado: é uma
+**mudança de comportamento** feita de propósito, registada aqui porque §6 das
+convenções exige que qualquer mudança de leitura de pedido tenha entrada
+própria, com o antes e o depois.
+
+**Onde**: `pkg/presentation/http/dto/admin/request.go`, todo o ficheiro;
+`pkg/domain/user.go` (as etiquetas `json` e o `UnmarshalJSON` de alias
+saíram); `pkg/presentation/http/handlers/handler_user.go:88,136`.
+
+**O que muda**. `POST /admin/users` e `PUT /admin/users/{id}` liam:
+
+| antes | agora |
+|---|---|
+| `proxyConfig` **ou** `proxy_config` | `proxy_config` |
+| `s3Config` **ou** `s3_config` | `s3_config` |
+| `hmacKey` | `hmac_key` |
+| `proxyUrl`, `webhookUseProxy` | `proxy_url`, `webhook_use_proxy` |
+| `accessKey`, `secretKey`, `pathStyle`, `publicUrl`, `mediaDelivery`, `retentionDays` | `access_key`, `secret_key`, `path_style`, `public_url`, `media_delivery`, `retention_days` |
+
+**Por quê**. A grafia dupla era a correção da F210, e ela existia por UMA
+razão: a resposta era `snake_case` e o pedido `camelCase`, então o ciclo
+natural — ler o utilizador, mudar um campo, reenviar — chegava com o nome da
+resposta e era ignorado em silêncio com `200`. Alinhar os dois lados resolve a
+mesma falha e dispensa o alias. Manter as duas grafias seria exactamente a
+serialização dupla que o corte a seco proíbe (§11), e §8 diz que a regra de
+nomes canónicos vale para corpos de PEDIDO, não só para respostas.
+
+**O que acontece a quem ainda mandar o nome antigo**: perde esses campos. Não
+em silêncio — `decodeRequest` reporta campo desconhecido, o que é log de
+`warn` por omissão e `400 unknown_field` com
+`WA_API_STRICT_UNKNOWN_FIELDS=true`.
+
+**Testes que o travam**:
+
+- `pkg/presentation/http/dto/admin/request_test.go`:
+  `TestEditUserRequest_LeOsNomesCanonicos`,
+  `TestAddUserRequest_LeOsNomesCanonicos` (o caminho de SUCESSO) e
+  `TestEditUserRequest_NomeAntigoNaoEhLido` (a metade que impede um alias de
+  voltar a entrar sem ninguém dar por isso);
+- `pkg/bootstrap/admin_users_contract_test.go`:
+  `TestAdminUsers_ContratoPublico_EdicaoLeOsNomesCanonicos` prova pela ROTA
+  REGISTADA que o corpo com os nomes novos CHEGA ao banco — afirmar `200`
+  mediria a guarda, e o PUT que ignorava o corpo devolvia `200` na mesma.
+
+Os testes da F210 e da F218 que viviam em `pkg/domain/user_config_alias_test.go`
+foram portados para o pacote de DTO; o ficheiro foi apagado com o alias que ele
+protegia.
+
+**Documentação actualizada**: `api/openapi/{paths,schemas}/infra.yaml`,
+`README.md`.
+
+**Status**: **corrigido** — mudança deliberada, aplicada, documentada e travada
+pelos testes acima.
+
+<!-- f-status: corrigido -->
+
+## F307 — `s3_config.access_key: "***"` não dizia nada, e passaria a corromper a credencial depois do alinhamento de nomes
+
+**Data/contexto**: 2026-08-27, migração da família `/admin` para DTO. Achado
+DURANTE a migração, e é o caso da Regra 4 do `CLAUDE.md`: a própria correção
+(alinhar os nomes de pedido e de resposta, F306) tornava um cenário
+estritamente PIOR.
+
+**Onde**: `pkg/application/usecase/list_users.go` e `add_user.go`, que
+escreviam `"access_key": "***"` no `map[string]interface{}` da resposta;
+`pkg/infra/db/user_repository.go:277`, cujo `SELECT` de configuração de S3
+**não lê a coluna `s3_access_key`**.
+
+**Problema**, em duas metades:
+
+1. **A máscara não carregava informação.** O servidor escrevia `"***"`
+   incondicionalmente, com chave configurada ou sem ela. Na listagem, ainda
+   por cima, a coluna nem é lida — não havia como o valor ser outra coisa.
+2. **Depois da F306 ela ficaria perigosa.** Com o pedido a ler `access_key` e
+   a resposta a devolver `access_key`, o ciclo que a F210 tinha acabado de
+   tornar natural — ler o utilizador, mudar um campo, reenviar — gravaria a
+   string `***` por cima da chave de acesso verdadeira. Antes isso não podia
+   acontecer, porque o pedido lia `accessKey` e a resposta escrevia
+   `access_key`: a assimetria protegia por acidente.
+
+**Correção aplicada**: a chave saiu da resposta. Não há substituto — ver
+F308 para o que seria preciso para haver um.
+
+**Teste que o trava**:
+`pkg/bootstrap/admin_users_contract_test.go`:`TestAdminUsers_ContratoPublico_NenhumSegredoNoCorpo`,
+que recusa `AKIA`, `segredo` e `"***"` no corpo e afirma a ausência das chaves
+`access_key` e `secret_key`.
+
+**Controlo negativo EXECUTADO** — reintroduzido o campo mascarado no DTO e no
+apresentador:
+
+```
+--- FAIL: TestAdminUsers_ContratoPublico_NenhumSegredoNoCorpo (0.07s)
+    admin_users_contract_test.go:277: o corpo contém "\"***\"": {"code":200,"data":[{...,"s3_config":{...,"access_key":"***"}}],"success":true}
+    admin_users_contract_test.go:280: chave(s) que deviam ter desaparecido na migração ainda presentes:
+          access_key em $.data[0].s3_config.access_key
+FAIL
+```
+
+**Status**: **corrigido**.
+
+<!-- f-status: corrigido -->
+
+## F308 — `GET /admin/users` não consegue dizer se uma sessão tem chave de acesso S3 configurada
+
+**Data/contexto**: 2026-08-27, consequência aberta da F307. Registado porque a
+informação que a máscara `***` FINGIA dar continua a não existir, e a ausência
+agora é visível.
+
+**Onde**: `pkg/infra/db/user_repository.go:275-288`, `userS3Config` — o
+`SELECT` traz `s3_enabled`, `s3_endpoint`, `s3_region`, `s3_bucket`,
+`s3_path_style`, `s3_public_url`, `media_delivery` e `s3_retention_days`, e
+**não** `s3_access_key`. `domain.UserS3Settings` também não tem onde a guardar.
+
+**Problema**: quem opera não tem como saber, pela API, se a credencial de S3
+de uma sessão está preenchida — só se o bloco está `enabled`. Uma sessão com
+`enabled: true` e chave vazia é indistinguível de uma configurada.
+
+**Correção sugerida**: acrescentar ao `SELECT` um
+`COALESCE(s3_access_key,'') <> '' AS s3_access_key_configured`, levá-lo a
+`domain.UserS3Settings` como booleano e apresentá-lo como
+`s3_config.access_key_configured`. É a única forma que não faz a chave sair do
+banco. Custa uma coluna derivada no `SELECT` e um campo em três camadas.
+
+**Por que não foi feito nesta sessão**: é acréscimo de capacidade, não parte
+da migração de nomes, e toca `pkg/infra/db`, fora do âmbito da tarefa. O
+`CLAUDE.md` proíbe corrigir de graça fora do âmbito sem perguntar. Um campo
+que existisse sem esta mudança de `SELECT` viria SEMPRE `false` na listagem —
+uma mentira, pior que a ausência, e foi por isso que ele foi retirado antes de
+entrar.
+
+**Status**: **não corrigido** — fica a pergunta: acrescentar
+`access_key_configured` agora, ou deixar a informação fora da API?
+
+<!-- f-status: aberto -->
+## F312 — a especificação OpenAPI da família de grupo continua a descrever o corpo ANTIGO das 20 rotas migradas
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO
+(worktree `worktree/http-dto-groups`). Achado registado porque a migração muda
+o CONTRATO PÚBLICO de 20 rotas e a documentação gerada não a acompanhou.
+
+**Onde**: `api/openapi/paths/grupo.yaml` (1498 linhas) e
+`api/openapi/schemas/grupo.yaml` (1651 linhas). Exemplos e prosa citam os nomes
+que deixaram de existir — `groupJID`, `communityJID`, `Code`, `Phone`,
+`Action`, `Details`, `PhoneNumber` —, e o mesmo texto está embutido no binário
+via `pkg/presentation/http/apidocs/openapi.yaml`.
+
+**Problema**: `docs/HTTP-DTO-CONVENTIONS.md` §13 exige que a família migrada
+reescreva os exemplos. Não foi feito, então `/docs` descreve para 20 rotas um
+corpo que o servidor já recusa (em modo estrito de campos desconhecidos) ou
+ignora. Medido: um pedido a `/group/name` com `{"GroupJID":…,"Name":…}` já não
+renomeia grupo nenhum — o corpo canónico é `{"group_jid":…,"name":…}`.
+
+**Por que não foi corrigido aqui**: são ~3.100 linhas de prosa curada à mão,
+com códigos de erro medidos, números de F e referências cruzadas a
+`api/openapi/evidencias.tsv`. Um `sed` global sobre elas produziria
+documentação subtilmente errada — e `groupJID` continua CORRECTO em
+`/group/info`, a rota da fundação, que esta tarefa não podia tocar. Reescrever
+com cuidado é uma tarefa própria, não um apêndice desta.
+
+**Correção sugerida**: uma passagem por rota sobre `api/openapi/paths/grupo.yaml`
+e `schemas/grupo.yaml` — renomear campos de pedido e resposta, reescrever cada
+`example`, e correr `go run ./cmd/openapidoc` seguido de `go build` e do `cmp`
+que o `CLAUDE.md` exige. Deixar `/group/info` como está.
+
+**Status**: NÃO corrigido, fora do âmbito declarado da tarefa.
+
+<!-- f-status: aberto -->
+
+## F313 — o `/group/info` ficou a aceitar `groupJID` enquanto as outras 19 rotas da família passaram a `group_jid`
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO.
+
+**Onde**: `pkg/domain/group.go:33` — `GetGroupInfoRequest.GroupJID` mantém
+`json:"groupJID"`, e o teste de referência
+`pkg/presentation/http/handlers/handler_group_info_contract_test.go:123` envia
+esse corpo.
+
+**Problema**: a regra de nomes de `docs/HTTP-DTO-CONVENTIONS.md` §8 vale também
+para corpos de PEDIDO, e `groupJID` reprova-a. A fundação migrou a RESPOSTA de
+`/group/info` e deixou o pedido; esta tarefa migrou os pedidos das outras 19
+rotas. O resultado é uma incoerência visível ao cliente: a mesma família pede o
+mesmo dado com dois nomes conforme a rota.
+
+**Correção sugerida**: mover `GetGroupInfoRequest` para um DTO de pedido em
+`pkg/presentation/http/dto/group/request.go` — `GroupTargetRequest` já existe e
+serve —, e actualizar o teste de contrato da fundação. É uma mudança de
+contrato, portanto deve sair na mesma leva que a nota de F312 no OpenAPI.
+
+**Status**: NÃO corrigido. A tarefa desta sessão diz explicitamente para não
+refazer o trabalho da fundação em `/group/info`.
+
+<!-- f-status: aberto -->
+
+## F314 — tipos de domínio MORTOS da família de grupo carregavam etiquetas `json` erradas há meses
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO.
+
+**Onde**: `pkg/domain/group.go`, `pkg/domain/group_request.go` — 22 tipos
+(`GroupJoinRequest`, `GroupLeaveRequest/Result`, `CreateGroupRequest/Result`,
+`UpdateGroupParticipantsRequest/Result`, `SetGroupLocked*`, `SetGroupAnnounce*`,
+`SetGroupName*`, `SetGroupTopic*`, `SetGroupPhoto*`, `RemoveGroupPhoto*`,
+`SetDisappearingTimer*`, `GetGroupRequestParticipantsResult`).
+
+**Problema**: nenhum era referido em lado nenhum do repositório — medido com
+`grep -rn "domain\.<Tipo>" --include="*.go" .`, zero ocorrências para os 22 —,
+porque os manipuladores de escrita decodificavam para structs anónimas
+declaradas em linha. Ou seja: as etiquetas `json:"groupJID"` e `json:"Phone"`
+que uma revisão veria nestes tipos NÃO eram o contrato servido; o contrato
+estava noutro ficheiro. Um leitor que confiasse no domínio ficava com a
+impressão errada.
+
+**Correção aplicada**: os 22 foram removidos, e as structs anónimas dos
+manipuladores passaram a DTO de pedido nomeados em
+`pkg/presentation/http/dto/group/request.go`. Passa a haver um só lugar onde o
+corpo de cada rota está declarado.
+
+**Status**: corrigido nesta sessão. Travado pelos testes de contrato de
+`pkg/presentation/http/handlers/handler_group_family_contract_test.go`, que
+exercitam as 20 rotas pelo router registado.
+
+<!-- f-status: corrigido -->
+
+## F315 — a migração da família de grupo BAIXOU `min_func_coverage` de 589 para 586, e isso é uma decisão de gate
+
+**Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO.
+
+**Onde**: `.log-coverage-baseline:1279` (`min_func_coverage=586`, era 589) e
+`.log-coverage-baseline:1564` (`min_eligible=998`, era 993).
+
+**Problema**: `min_func_coverage` é uma trava **ratchet-UP** — falha se cair —, e
+esta sessão fê-la cair. A causa é o DENOMINADOR: entram 5 apresentadores novos
+em `pkg/presentation/http/dto/group/presenter_group.go` que são elegíveis por
+terem laço (>2 statements) e não por terem decisão. Nenhum faz E/S, nenhum
+devolve erro, e nenhum pode ter logger — a camada `dto` importa `pkg/domain` e
+mais nada, por regra de sentido único (`docs/HTTP-DTO-CONVENTIONS.md` §3).
+`covered` não muda; a razão cai porque o divisor cresce.
+
+**Medido**: `go test ./cmd/logcov/ -run TestBaselineBateComAMedicao` reportava
+`min_func_coverage = 589 no baseline, medido 586` e
+`min_eligible = 993 no baseline, medido 998`.
+
+**Por que não foi usado `//log:exempt`**: é a válvula desenhada para isto, e
+está SEM FOLGA — `max_exempt_annotations` é 2 e as duas estão gastas. Subir esse
+orçamento seria outro ratchet-DOWN, no mesmo ficheiro, com o mesmo dono.
+
+**Precedente**: a própria fundação DTO fez o mesmo movimento uma semana atrás,
+590→589, pelos mesmos dois apresentadores (`PresentGroupInfo`, `presentTime`),
+e a justificativa está escrita ao lado do valor. Esta sessão seguiu-a e
+escreveu a decomposição ao lado da linha, para a próxima não a redescobrir.
+
+**Status**: aplicado nesta sessão, e sinalizado. Se o dono do gate preferir
+manter 589, as saídas são: subir `max_exempt_annotations` e anotar os 5
+apresentadores, ou excluir `pkg/presentation/http/dto/` inteiro em
+`.logcov-exclude` — a segunda tem a vantagem de não voltar a acontecer nas
+quatro famílias que ainda vão migrar, e a desvantagem de tirar do denominador
+código que um dia pode ganhar decisão.
+
+<!-- f-status: corrigido -->
+
+## F316 — fecho da migração DTO grupo/comunidade: `/group/info` ainda aceitava `groupJID`, e a OpenAPI da família inteira estava presa antes da migração
+
+**Data**: 2026-08-27. **Contexto**: `worktree/http-dto-groups` chegou a este
+turno com o Go já migrado (`fec8bdb0 feat(http): migra a familia
+grupo/comunidade para DTO na fronteira HTTP`, mais o checkpoint e o fix de
+golden que vieram depois), mas sem o commit de fecho que as famílias irmãs
+(sessão, mensagens, utilizadores, canais, admin) têm — pedido explícito:
+verificar completude e terminar.
+
+### 1. O gap de código: `/group/info` era a única rota da família sem DTO de pedido
+
+**Onde**: `pkg/presentation/http/handlers/handler_group.go:170` (antes da
+correção) decodificava directo em `domain.GetGroupInfoRequest`
+(`pkg/domain/group.go:31`), cujo único `json` é `groupJID` — camelCase. Todas
+as OUTRAS 19 rotas de grupo/comunidade já liam um `dtogroup.*Request` tipado
+com `group_jid`/`community_jid` em snake_case
+(`pkg/presentation/http/dto/group/request.go`).
+
+**Problema**: `/group/info` é citada como "a implementação de REFERÊNCIA" no
+próprio `docs/HTTP-DTO-CONVENTIONS.md` (linha 8), e a tabela de referência do
+documento nunca listou uma linha "DTO de pedido" para ela — só resposta. A
+rota-modelo da migração era, ela própria, a única que não a seguia no pedido:
+`POST /group/info {"groupJID":"…"}` funcionava, `{"group_jid":"…"}` não.
+Violava `docs/HTTP-DTO-CONVENTIONS.md` §8 ("vale para respostas E para corpos
+de pedido") e a paridade com as 19 rotas irmãs.
+
+**Correção aplicada**: `dtogroup.GetGroupInfoRequest` novo
+(`pkg/presentation/http/dto/group/request.go`), com `group_jid` e `chat`
+(`ResolveChat`/`ToDomain`), e o manipulador passou a decodificar nele em vez
+de `domain.GetGroupInfoRequest` directamente
+(`pkg/presentation/http/handlers/handler_group.go`). `domain.GetGroupInfoRequest`
+foi deixado como estava — o seu `json:"groupJID"` é usado também por
+`pkg/domain/chat_target_test.go` (F225, mecanismo genérico do alias `chat`
+partilhado por famílias AINDA não migradas como `message`/`mute`/`archive`) e
+mexer nele estaria fora do escopo de grupo/comunidade.
+
+**Teste do defeito + controlo negativo EXECUTADO**
+(`pkg/presentation/http/handlers/handler_group_info_contract_test.go`):
+
+- `TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase` — `{"group_jid":"…"}` tem
+  de dar `200`.
+- `TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu` — `{"groupJID":"…"}`
+  sozinho tem de deixar de resolver o grupo.
+
+Controlo negativo (reverti a correção com `git stash`, corri os dois testes,
+restaurei com `git stash apply` pela SHA, larguei a entrada):
+
+```
+=== RUN   TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase
+    handler_group_info_contract_test.go:242: status = 400, quero 200 com group_jid; corpo: {"code":400,"error":{"code":"missing_group_jid","message":"missing groupJID parameter"},"success":false}
+--- FAIL: TestGetGroupInfo_PedidoAceitaGroupJIDSnakeCase (0.00s)
+=== RUN   TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu
+    handler_group_info_contract_test.go:261: groupJID sozinho ainda resolveu o grupo: status 200, corpo: {...,"success":true}
+--- FAIL: TestGetGroupInfo_ChaveAntigaGroupJIDCamelSumiu (0.00s)
+```
+
+Os dois morderam. Restaurada a correção, os dois passam, e
+`handler_group_test.go`/`handler_group_info_contract_test.go` tiveram os
+`groupJID` de corpo (não os de chave de RESPOSTA testada por `AssertNoKeys`,
+que continuam a ser afirmação válida) trocados para `group_jid`.
+
+### 2. A OpenAPI da família inteira documentava o formato ANTERIOR à migração
+
+Ao verificar "OpenAPI schema updated to match" (passo pedido), encontrei que
+`api/openapi/schemas/grupo.yaml` e `api/openapi/paths/grupo.yaml` — e a secção
+de comunidades em `api/openapi/{schemas,paths}/canal.yaml` — descreviam o
+comportamento de ANTES da migração de Go, em quase toda rota que não fosse
+`/group/info`:
+
+- pedidos documentados com `groupJID`/`groupjid`/`Phone`/`Action`/`Code`/
+  `communityJID`/`groupJID` PascalCase ou mistos, quando o DTO real usa
+  `group_jid`/`community_jid`/`phone`/`action`/`code` uniformemente;
+- respostas documentadas contra a struct de protocolo servida DIRECTAMENTE —
+  `InfoGrupo` (não `InfoGrupoCanonico`) em `/group/create`, `/group/list` e
+  `/group/inviteinfo`; `ParticipanteGrupo` em vez de `ParticipanteGrupoCanonico`
+  em `/group/updateparticipants`; `SubGrupoComunidade` com seis campos
+  (`JID`,`Name`,`NameSetAt`,`NameSetBy`,`NameSetByPN`,`IsDefaultSubGroup`)
+  quando `dtogroup.CommunitySubGroupResponse` só tem três
+  (`jid`,`name`,`is_default_sub_group`);
+- treze menções a "envelope ANTIGO (F266)" — `error` em texto simples — que
+  `docs/HTTP-DTO-CONVENTIONS.md` §7 e `TestRespondJSON_UntypedError_UsesCanonicalErrorObject`
+  já registam como REMOVIDO do projecto inteiro; toda recusa não tipada sai
+  hoje no objecto canónico `{"code":"invalid_request","message":"…"}`;
+- `data: {Details: "…"}` (maiúscula) nos exemplos de nove rotas de
+  confirmação, quando `AcknowledgementResponse.Details` tem
+  `json:"details"` minúsculo — confirmado contra
+  `handler_group_family_contract_test.go:404` (`data["details"]`).
+
+**Correção aplicada**: `api/openapi/schemas/{grupo,canal}.yaml` e
+`api/openapi/paths/{grupo,canal}.yaml` reescritos rota a rota para citar o
+tipo DTO real (`pkg/presentation/http/dto/group/{request,group,group_info}.go`),
+com nomes de campo, `required`, exemplos e formato de erro batendo com o que
+`pkg/presentation/http/dto/group/presenter*.go` produz. Schema novo
+`ResultadoCriarGrupo` (não existia) para `/group/create`, que devolve
+`{group_info, created}` via `dtogroup.CreateGroupResponse`. Regenerado com
+`go run ./cmd/openapidoc` (118 caminhos) e confirmado com
+`go test ./pkg/presentation/http/apidocs/...` (o gate `TestContratoExemploDeErroBateComOEsquema`
+e o golden do merge, ambos verdes).
+
+**Onde as descrições citam "medido"**: mantive as tabelas de comportamento
+(códigos de status por campo malformado, ordem de validação) que não mudam
+com a fronteira HTTP — a lógica de negócio não mudou, só o (de/en)codificador.
+Só troquei a FORMA do erro e o NOME dos campos, que são verificáveis a partir
+do código sem precisar reproduzir contra sessão real. Onde uma alegação
+antiga dependia de medição ao vivo que não repeti nesta sessão (ex.:
+`ResultadoInfoConvite`, sobre `member_add_mode` vir `""`), marquei
+explicitamente que não foi re-verificada.
+
+### 3. Achado NÃO corrigido, fora do escopo de grupo: `Detalhes.Details` em `base.yaml`
+
+`api/openapi/base.yaml:336` declara o schema partilhado `Detalhes` com a
+propriedade `Details` (maiúscula) — usado por TODAS as famílias já migradas
+(sessão, utilizadores, canais, admin, grupo), não só esta. A chave real no
+fio é `details` minúsculo, confirmado por
+`handler_group_family_contract_test.go:404`. Como é ficheiro partilhado entre
+worktrees concorrentes (`worktree/http-dto-session`,
+`worktree/http-dto-users`, etc.), **não corrigi** — precisa de decisão
+coordenada entre as famílias que o usam. Sinalizado aqui para quem fechar a
+próxima família ou fizer a integração final.
+
+### 4. Gates
+
+`go build ./...`, `go vet`, `gofmt`, `go test -race` (suíte completa) e
+`make check` verdes depois da correção. `curl localhost:8080/docs/openapi.yaml
+| cmp - pkg/presentation/http/apidocs/openapi.yaml` não corrido nesta sessão
+(binário não subido) — confirmar antes de publicar, per
+`api/openapi/CONTRATO-ARQUITETURAL.md`.
+
+<!-- f-status: corrigido -->
+## F319 — `/chat/send/forward` tinha duas chaves distintas que colapsavam em `chat`
+
+**Data/contexto**: 2026-08-27, mesma migração. O terceiro colapso, e o único em
+que a colisão obrigou a **inventar** um nome em vez de escolher entre os que
+havia.
+
+**Onde**: `pkg/domain/message.go`, `SendForwardRequest` — o tipo embutia
+`ChatTarget` (`json:"chat"`, o alias universal de destino) **e** declarava
+`Chat string json:"Chat"`, que na forma por chave (CAP-55) é a conversa de
+ONDE a mensagem original veio. São dois conceitos diferentes com a mesma
+palavra, e em snake_case minúsculo ficariam a mesma chave.
+
+**Correção aplicada**: o alias universal fica `chat` (é o que as outras
+dezasseis rotas usam, e mudá-lo aqui partiria a uniformidade); a conversa de
+origem passa a `chat_jid` em `dto/message.SendForwardRequest`.
+
+**Isto É uma mudança de contrato**, não uma renomeação de caixa: quem enviava
+`{"MessageID":"…","Chat":"…"}` passa a enviar
+`{"message_id":"…","chat_jid":"…"}`. Registado aqui porque é a única das três
+colisões em que o nome novo não estava já no código.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F320 — a especificação OpenAPI da família mensagens ficou a descrever os nomes ANTIGOS do pedido
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO.
+Dívida deixada de propósito e por isso registada, não esquecida.
+
+**Onde**: `api/openapi/schemas/envio.yaml` (133 propriedades) e
+`api/openapi/paths/envio.yaml`, que continuam a declarar `Phone`, `Body`,
+`MimeType`, `FileName`, `MentionedJid`, `PollMessageId`, `ButtonText`,
+`TopText`, `FooterText`, `StanzaId`, `QuotedText`, `LinkPreview`,
+`JPEGThumbnail`, `PngThumbnail`, `PackId`/`PackName`/`PackPublisher`,
+`ForwardingScore`, `DisplayText`, `PhoneNumber`, `CopyCode`, `buttonText`,
+`buttonId` e as QUATRO grafias de `RowId`.
+
+**Problema**: a especificação é o contrato publicado, e neste momento descreve
+um pedido que o servidor já não fala do mesmo modo. A parte que NÃO quebrou é
+grande — o `encoding/json` do Go casa chaves sem distinguir maiúsculas, logo
+`{"Phone":…}` continua a preencher `phone` — mas tudo o que difere por mais que
+a caixa (`MimeType` vs `mime_type`, `RowId` vs `row_id`, `Chat` vs `chat_jid`)
+está **errado** no documento.
+
+**Correção sugerida**: renomear as propriedades e reescrever as descrições das
+três cadeias de fallback, que hoje explicam distinções que deixaram de existir
+(F317, F318, F319). Não é rename mecânico: `RowId`/`RowID`/`rowId`/`rowID` são
+quatro blocos de propriedade que têm de virar UM, e as prosas de
+`BotaoInterativo` e de `/chat/send/list` descrevem os níveis pelo nome. Depois,
+`go run ./cmd/openapidoc` e `go build` — a especificação é EMBUTIDA no binário
+(ARMADILHAS #27).
+
+**Status**: NÃO corrigido. Não é omissão: é uma unidade de trabalho separável e
+sobretudo de PROSA, e fazê-la mecanicamente produziria um documento com quatro
+chaves `row_id` iguais e três descrições a contradizerem-se. Deixá-la para uma
+sessão que a faça inteira é melhor que meia.
+
+<!-- f-status: aberto -->
+
+## F321 — a validação da família mensagens continua no use case, e não no DTO de pedido
+
+**Data/contexto**: 2026-08-27, migração da família MENSAGENS para DTO.
+
+**Onde**: `pkg/presentation/http/dto/message/request.go` — os vinte e cinco
+tipos de pedido têm `ToDomain()` e **não** têm `Validate()`.
+
+**Problema**: `docs/HTTP-DTO-CONVENTIONS.md` §6 põe `Validate()` no DTO de
+pedido, e aqui ela vive nos use cases (`missing_phone`, `missing_body`,
+`missing_filename`, `invalid_phone`, …).
+
+**Por que não foi movida agora**: os códigos de erro são estáveis e uma suíte
+grande afirma-os por código; mover a validação no MESMO commit que renomeia
+todas as chaves do fio juntaria uma renomeação e uma mudança de comportamento
+no mesmo diff, que é exactamente a mistura que o `CLAUDE.md` diz que uma
+revisão não consegue separar.
+
+**Correção sugerida**: mover rota a rota, cada uma com o seu código de erro
+ANTES e DEPOIS escrito na entrada, e com o teste de código de erro a passar
+sem alteração — se ele tiver de mudar, a validação mudou de comportamento e
+isso é outra decisão.
+
+**Status**: NÃO corrigido, deliberadamente. Seguimento nomeado.
+
+<!-- f-status: aberto -->
+
+## F322 — quatro rotas de presença/leitura decodificavam direto para `domain.*Request`, com etiquetas PascalCase no fio
+
+**Data/contexto**: 2026-08-27, mesma migração (retomada do checkpoint
+`wip(dto): checkpoint antes de pausar o worker mensagens`). O enunciado da
+tarefa pedia para enumerar TODA rota da família mensagens — o levantamento
+inicial (commits `85c18841`, `e3e6d178`, `74939df7`) tinha coberto as
+dezasseis rotas de `/chat/send/*` e afins, mas não `/user/presence`,
+`/user/presence/subscribe`, `/chat/presence` e `/chat/markread`, que também
+vivem em `pkg/presentation/http/handlers/handler_presence.go` e importam
+`dtomessage` só para a RESPOSTA (`PresentAction`).
+
+**Onde**: `pkg/presentation/http/handlers/handler_presence.go`, as quatro
+`ServeHTTP` decodificavam `domain.SendPresenceRequest`,
+`domain.SubscribePresenceRequest`, `domain.ChatPresenceRequest` e
+`domain.MarkReadRequest` diretamente do corpo HTTP. Três desses tipos tinham
+etiqueta PascalCase (`json:"Phone"`, `json:"State"`, `json:"Media"`,
+`json:"Id"`, `json:"ChatPhone"`, `json:"SenderPhone"`) — exatamente o
+problema que `docs/HTTP-DTO-CONVENTIONS.md` §1 descreve, só que sobrevivera
+fora do escopo do levantamento inicial.
+
+**Correção aplicada**: quatro tipos novos em
+`pkg/presentation/http/dto/message/request.go` —
+`SendPresenceRequest`, `SubscribePresenceRequest`, `ChatPresenceRequest`,
+`MarkReadRequest` — com etiquetas `type`/`phone`/`state`/`media`/`chat`/
+`id`/`chat_phone`/`sender_phone` e `ToDomain()`. Os quatro handlers passam a
+decodificar o tipo do pacote `dto/message` e chamar `.ToDomain()` antes do
+caso de uso; as etiquetas PascalCase saíram de `pkg/domain/presence.go`
+(que já não é o fio, como o resto do domínio desta família).
+
+**`Chat`/`Sender` NÃO ganharam nome canónico — ficaram fora do DTO**. Esses
+dois campos de `domain.MarkReadRequest` nunca resolveram nada
+(`mark_read.go` deixa `jidChat`/`jidSender` vazios nesse ramo) e
+`TestMarkRead_LegacyFieldsResolveToEmptyJID` trava isso como comportamento
+HERDADO do upstream, não acidental — apagar os campos do domínio teria
+quebrado esse teste e mudado o comportamento que ele existe para preservar.
+A correção certa foi mais estreita: os campos continuam no domínio, só que
+sem forma de chegar lá pelo fio, porque o DTO só expõe `chat_phone` e
+`sender_phone`. Só um cliente que chame o caso de uso diretamente (nenhum
+chama) ainda os alcança.
+
+**Testes que travam**:
+- `pkg/presentation/http/dto/message/request_naming_test.go`,
+  `TestRequestDTOs_EtiquetasCanonicas` — os quatro tipos novos entraram em
+  `requestTypes()`. **Controlo negativo executado**: etiqueta de
+  `MarkReadRequest.ChatPhone` trocada de volta para `"ChatPhone"`, o teste
+  falhou com `MarkReadRequest.ChatPhone tem etiqueta "ChatPhone", fora de
+  ^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`; revertido.
+- `pkg/presentation/http/handlers/handler_presence_reaction_test.go`,
+  `handler_chat_mgmt_contract_test.go` (`TestChatMgmt_ContratoPublico_*`) e
+  `handler_nonsend_axes_test.go` — corpos de teste das quatro rotas passaram
+  de `{"Phone":…,"State":…}`/`{"Id":[…],"ChatPhone":…}` para
+  `{"phone":…,"state":…}`/`{"id":[…],"chat_phone":…}`; o teste de
+  `TestChatMgmt_ContratoPublico_NomesCanonicos` já afirma
+  `AssertPublicJSONUsesCanonicalNaming` pela rota REGISTRADA.
+
+**Nota sobre a especificação OpenAPI**: `api/openapi/paths/conversa.yaml` e
+`api/openapi/paths/contacto.yaml` continuam a documentar `Phone`, `State`,
+`Media`, `ChatPhone`, `SenderPhone` — a mesma classe de dívida que a F320 já
+registou para `envio.yaml`, só que num par de ficheiros diferente. Não
+corrigido pelo mesmo motivo da F320 (prosa, não rename mecânico); ver essa
+entrada para o raciocínio completo.
+
+**Gate do golden de logging**: `go run ./cmd/logcov -golden` regenerado —
+`ChatPresenceRequest.ResolveChat/ToDomain`, `MarkReadRequest.ToDomain`,
+`SendPresenceRequest.ToDomain`, `SubscribePresenceRequest.ResolveChat/ToDomain`
+entraram como `EXCLUDED` (funções de DTO sem chamada a logger, como as demais
+desta família).
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F323 — `/chat/mute`, `/chat/archive`, `/chat/pin` e `/chat/request-unavailable-message` decodificam `domain.*Request` diretamente; sem camada de DTO
+
+**Data/contexto**: 2026-08-27, mesma migração. Achado ao terminar a
+enumeração completa das rotas de `/chat/*` desta família — `handler_misc.go`
+tem quatro handlers de gestão de conversa que nunca passaram pela migração.
+
+**Onde**: `pkg/presentation/http/handlers/handler_misc.go` —
+`MuteChatHandler`, `ArchiveChatHandler`, `PinChatHandler`,
+`RequestUnavailableMessageHandler` decodificam `domain.MuteChatRequest`,
+`domain.ArchiveChatRequest`, `domain.PinChatRequest`,
+`domain.RequestUnavailableMessageRequest` directamente, e devolvem o
+`*domain.…Result` do caso de uso directamente a `RespondJSON`, sem
+apresentador.
+
+**Por que NÃO é a mesma classe de defeito da F322**: as etiquetas destes
+quatro pares pedido/resposta JÁ são `snake_case` minúsculo
+(`jid`, `mute`, `mute_duration`, `archive`, `pin`, `chat`, `sender`, `id`,
+`success`, `message`, `request_id`) — confirmado por
+`TestChatMgmt_ContratoPublico_NomesCanonicos` (subteste `ephemeral`, que
+partilha `handler_misc.go`) e por leitura directa de
+`pkg/domain/{mute,archive,pin,unavailable_message}.go`. O fio já está
+correcto; o que falta é só a camada — `docs/HTTP-DTO-CONVENTIONS.md` §1
+exige DTO próprio mesmo quando os nomes batem, porque sem ele um rename
+futuro em `pkg/domain` muda o contrato publicado sem erro de compilação
+nenhum a avisar (a garantia central da §5: "renomeie um campo em
+`domain.X` e `presenter.go` deixa de compilar" não existe aqui, já que não
+há `presenter.go` nenhum entre o domínio e `RespondJSON`).
+
+**Por que não foi corrigido nesta sessão**: é trabalho NOVO (quatro tipos de
+pedido, quatro apresentadores, testes de contrato para as quatro rotas) e
+não uma correcção de nome — misturá-lo com a F322 (que É correcção de nome)
+juntaria as duas classes de mudança no mesmo commit. Ver `CLAUDE.md`
+"idioma do código" e a política deste ficheiro sobre separar renomeação de
+mudança de comportamento — o mesmo princípio vale para separar renomeação de
+introdução de camada nova.
+
+**Correção sugerida**: seguir exactamente o padrão de `ReactRequest`
+(`dto/message/request.go`) — struct com as mesmas etiquetas já existentes,
+`ToDomain()`, e um `Present…` em `presenter.go` para cada `…Result`. Como os
+nomes não mudam, os testes de contrato existentes continuam a passar sem
+alteração; só ganham `AssertPublicJSONUsesCanonicalNaming` explícito em vez
+de depender de as etiquetas do domínio já estarem certas.
+
+**Nota lateral, fora do âmbito da família mensagens**: `RejectCallHandler`
+(mesmo ficheiro, rota `/call/reject`) devolve `domain.RejectCallResult` com
+`json:"Details"` e `json:"CallID"` — PascalCase real, não só falta de
+camada. Não é rota de mensagem (é de chamada) e por isso não foi tocada
+aqui; registada para quem tiver essa família.
+
+**Status**: NÃO corrigido. Seguimento nomeado.
+
+<!-- f-status: aberto -->
+
+## F324 — fecho da migração DTO da família MENSAGENS (2026-08-27)
+
+Encerra o trabalho retomado do checkpoint `wip(dto): checkpoint antes de
+pausar o worker mensagens`, sobre os três commits anteriores
+(`85c18841` respostas de envio, `e3e6d178` gestão, `74939df7` pedidos).
+
+**O que estava feito ao retomar**: as dezasseis rotas `/chat/send/*` mais
+`/chat/delete/message` e `/chat/send/edit` com DTO de pedido e resposta nos
+dois lados, incluindo o colapso das três colisões de nome (F317 `RowId`
+quádruplo, F318 `Body`/`body`/`Text`/`text`, F319 `Chat` duplo em
+`/chat/send/forward`) e `/message/star`, `/chat/react` já com DTO completo.
+
+**O que faltava e foi enumerado nesta sessão** — as quatro rotas de
+`/user/presence`, `/user/presence/subscribe`, `/chat/presence` e
+`/chat/markread`, que partilham `handler_presence.go` com `/chat/react` mas
+tinham ficado fora do levantamento inicial: decodificavam
+`domain.*Request` diretamente, três delas com etiqueta PascalCase no fio
+(F322, corrigido nesta sessão).
+
+**O que foi enumerado e fica registado, não corrigido**:
+- F320 — `api/openapi/schemas/envio.yaml` e `paths/envio.yaml` (mais,
+  identificado nesta sessão, `paths/conversa.yaml` e `paths/contacto.yaml`
+  para presença/leitura) continuam a descrever os nomes ANTIGOS do pedido;
+- F321 — a validação desta família continua nos casos de uso, não em
+  `Validate()` no DTO de pedido, por decisão deliberada de não misturar
+  rename com mudança de comportamento;
+- F323 — `/chat/mute`, `/chat/archive`, `/chat/pin` e
+  `/chat/request-unavailable-message` (`handler_misc.go`) decodificam
+  `domain.*Request` diretamente e devolvem `*domain.…Result` sem
+  apresentador. As etiquetas JÁ são `snake_case` (não é a classe de defeito
+  da F322), mas falta a camada de DTO que a `docs/HTTP-DTO-CONVENTIONS.md`
+  exige — sem ela, um rename futuro em `pkg/domain` muda o contrato
+  publicado sem erro de compilação a avisar. Nota lateral fora do âmbito
+  desta família: `RejectCallResult` (`/call/reject`, mesmo ficheiro) tinha
+  `json:"Details"`/`json:"CallID"` em PascalCase real — corrigido na
+  auditoria final da integração, ver F333.
+
+**Verificação de completude, rota a rota** (`pkg/bootstrap/wiring_routes.go`,
+prefixos `/chat/send`, `/chat`, `/message`, `/user/presence`): as dezasseis
+de envio + delete/edit/template — DTO nos dois lados; `/chat/react`,
+`/message/star` — DTO nos dois lados; `/chat/markread`,
+`/user/presence(/subscribe)`, `/chat/presence` — DTO nos dois lados
+(corrigido agora); `/chat/history` — presenter só, sem corpo de pedido
+(`GET`); `/chat/ephemeral(/default)`, `/chats/download/{kind}` e as cinco
+`/chat/download*` — já tinham DTO (fora do escopo desta sessão, confirmado
+por `TestChatMgmt_ContratoPublico_NomesCanonicos`); `/chat/mute`,
+`/chat/archive`, `/chat/pin`, `/chat/request-unavailable-message` — nomes
+corretos, camada ausente (F323, não corrigido). `/chat/send/pollvote` e
+`/chat/markread` mantiveram o CAMINHO intocado — só o corpo mudou — porque a
+renomeação de caminho é do worktree irmão `http-dto-paths`.
+
+**Gate arquitectural** (`respondjson_ledger_test.go`): sem mudança de
+classificação nesta sessão — os sítios tocados já chamavam `RespondJSON` com
+`dtomessage.Present…`; o `-update-ledger` não era necessário. As quatro rotas
+da F323 continuam classificadas como estavam antes (não afetadas por esta
+sessão).
+
+**Testes**: `go build ./...` limpo; `go test ./pkg/presentation/http/...
+./pkg/application/usecase/message/...` verde; `make check` completo
+(build + vet + fmt + `-race` + lint + cobertura + cobertura de log + carimbo
+de rota + fachada/tamanho/testes de `internal/wa-noise`) verde após
+regenerar `cmd/logcov/testdata/eligible.golden` (seis funções de DTO novas
+entraram como `EXCLUDED`, mesma classificação das demais desta família).
+
+**Status**: família MENSAGENS completa quanto a NOMES no fio (nenhuma rota
+serve etiqueta PascalCase/camelCase). Duas lacunas arquitecturais
+conscientes ficam abertas (F321 validação, F323 camada ausente em quatro
+rotas de gestão) e uma de documentação (F320, OpenAPI desatualizado) —
+nenhuma delas é uma rota servindo nome errado.
+
+<!-- f-status: corrigido -->
+
+## F325 — `make coverage-gate` falha nesta máquina por `covdata` ausente do toolchain baixado, alheio ao código
+
+**Data/contexto**: 2026-08-27, ao correr `make check` para fechar a migração
+da família mensagens.
+
+**Onde**: passo `coverage-gate` do `Makefile` (`go test … -coverpkg=<todos os
+pacotes>`), reproduzido de forma determinística DUAS vezes, sempre nos
+mesmos dois pacotes — nenhum deles tocado nesta sessão:
+
+```
+# wa-api/cmd/openapidoc
+go: no such tool "covdata"
+# wa-api/pkg/presentation/http/dto/group
+go: no such tool "covdata"
+```
+
+**Causa, medida e não suposta**: os dois pacotes NÃO têm ficheiros de teste
+(`?   wa-api/cmd/openapidoc  [no test files]`); com `-coverpkg` a incluir
+toda a árvore, o `go test` tenta construir o binário auxiliar `covdata` do
+toolchain para os agregar. `go env GOROOT` nesta máquina aponta para
+`.../go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64/` — um
+toolchain baixado que vive dentro do cache de módulos, **somente leitura**.
+Confirmado directamente: `go build -o $GOROOT/pkg/tool/darwin_arm64/covdata
+cmd/covdata` devolve `permission denied` a escrever nesse caminho. `go tool
+covdata` isolado (sem `-coverpkg` largo) funciona, porque nesse caminho o Go
+usa uma cópia em `$GOCACHE`, não o `pkg/tool` do GOROOT somente leitura.
+
+**Por que não é desta família nem desta sessão**: nenhum dos dois pacotes
+foi tocado pela migração de mensagens — `cmd/openapidoc` não tem testes
+nenhuns e nunca teve; `pkg/presentation/http/dto/group` é da família GRUPOS,
+worktree diferente. É uma propriedade da MÁQUINA (toolchain gerido por
+`GOTOOLCHAIN=auto`, instalado somente leitura), não do código nem do commit.
+
+**Impacto no resto do gate**: `build`, `vet`, `fmt-gate`, `go test -race`
+(TODOS os pacotes, incluindo os dois acima — que passam nesse passo, porque
+`-race` sozinho não passa `-coverpkg` largo), `TestGoldenBate` (após
+regenerar), `TestHousekeepTemUmaMarcaPorAchado`/`MarcaFechaOBloco` — todos
+verdes. Só `coverage-gate` (que depende de `covdata` para o `-coverpkg`
+largo) fica vermelho nesta máquina.
+
+**Correção sugerida**: não é código do repositório — é ambiente. Ou instalar
+um Go a partir de `go.dev`/Homebrew num GOROOT com permissão de escrita (em
+vez de deixar `GOTOOLCHAIN=auto` baixar para o cache de módulos), ou pré-
+construir `covdata` num `GOROOT` gravável e apontar `$PATH`/`go env -w
+GOROOT=…` para lá antes do `make check`.
+
+**Status**: NÃO corrigido — fora do âmbito desta tarefa (é ambiente da
+máquina, não da família mensagens) e envolveria mexer em configuração de
+toolchain fora deste repositório sem autorização. Registado para quem tiver
+acesso à máquina/CI para decidir.
+
+<!-- f-status: aberto -->
+## F326 — corte a hard das 10 rotas ainda concatenadas/sem `group_jid` no caminho (worktree `http-dto-paths`)
+
+**Data/contexto**: 2026-08-27, continuação da normalização do contrato HTTP
+para `snake_case` + `kebab-case` + `/` para hierarquia de recurso
+(`docs/HTTP-DTO-CONVENTIONS.md`, `api/openapi/CONTRATO-ARQUITETURAL.md`).
+Onda anterior (`pkg/bootstrap/canonico.go` + `caminhos.tsv`) já tinha
+pluralizado o prefixo de 91 rotas, mas deixou 4 delas com a palavra composta
+colada (`inviteinfo`, `invitelink`, `markread`, `pollvote`) e outras 6 sem
+`group_jid` no caminho apesar de operarem sobre um grupo específico. Diretiva
+do utilizador: **corte a hard**, sem clientes reais ainda — apagar o caminho
+antigo, não o manter registado, não o marcar depreciado.
+
+**Antes → depois** (todas migraram de corpo-só para path-param; onde o
+método mudou, é porque a operação passou a ser modelada como GET/PUT
+semântico em vez de POST genérico):
+
+| Antes | Depois |
+|---|---|
+| `POST /group/inviteinfo` (alias prévio: `POST /groups/inviteinfo`) | `GET /groups/invite-links/{invite_code}` |
+| `POST /group/invitelink` (alias prévio: `POST /groups/invitelink`) | `GET /groups/{group_jid}/invite-link` |
+| `POST /chat/markread` (alias prévio: `POST /chats/markread`) | `POST /chats/{chat_jid}/read` |
+| `POST /chat/send/pollvote` (alias prévio: `POST /chats/send/pollvote`) | `POST /polls/{poll_message_id}/votes` |
+| `POST /group/info` (alias prévio: `POST /groups/info`) | `GET /groups/{group_jid}` |
+| `POST /group/name` (alias prévio: `POST /groups/name`) | `PUT /groups/{group_jid}/name` |
+| `POST /group/topic` (alias prévio: `POST /groups/topic`) | `PUT /groups/{group_jid}/topic` |
+| `POST /group/announce` (alias prévio: `POST /groups/announce`) | `PUT /groups/{group_jid}/announce-only` |
+| `POST /group/locked` (alias prévio: `POST /groups/locked`) | `PUT /groups/{group_jid}/locked` |
+| `POST /group/ephemeral` (alias prévio: `POST /groups/ephemeral`) | `PUT /groups/{group_jid}/ephemeral` |
+
+**Decisões de modelagem que valem registo**:
+
+- **`inviteinfo` NÃO ficou sob `/groups/{group_jid}/...`.** O handler
+  (`get_group_invite_info.go`) recebe um `Code` de convite, não um
+  `group_jid` — o JID do grupo só se descobre LENDO esta resposta. Modelá-la
+  sob `group_jid` exigiria o chamador já saber o que está a perguntar. Ficou
+  como colecção irmã de `invite-link`: `/groups/invite-links/{invite_code}`.
+- **`invitelink` e `inviteinfo` viraram GET.** Já eram leituras idempotentes;
+  só estavam em POST porque toda a família tinha nascido em POST. `info`,
+  `name`, `topic`, `announce`, `locked`, `ephemeral` também mudaram de método
+  onde fazia sentido: leitura pura (`info`) foi para GET, escrita de campo
+  único foi para PUT — o padrão que `/groups/{group_jid}/photo` e
+  `/groups/{group_jid}/settings/join-approval` já estabeleciam na onda
+  anterior.
+- **`announce` ficou `announce-only`, não `settings/announce`.** As seis
+  rotas de configuração de grupo não são todas do mesmo tipo: `photo` e
+  `settings/join-approval` já estabeleciam DOIS padrões diferentes
+  (propriedade direta vs. sub-recurso `settings/`). Optei por manter
+  `announce-only` e `locked` como propriedades diretas (`/groups/{jid}/X`),
+  não sub-recursos de `settings/`, para não introduzir um TERCEIRO padrão
+  a meio da família — mas é uma escolha, não a única defensável, e vale
+  segunda opinião.
+- **`/groups/create`, `/groups/join`, `/groups/leave`, `/groups/list` NÃO
+  mudaram** — são genuinamente operações de colecção sem `group_jid`
+  conhecido, conforme instrução explícita.
+
+**Mecanismo**: `pkg/presentation/http/canonico.go` já tinha
+`injectPathParams` (copia o valor do path param para o corpo JSON antes de
+chamar o handler, sem sobrescrever um campo já presente no corpo) — só era
+usado internamente por `RegisterCanonicalAliases`. Exportei-o como
+`InjectPathParams` para que `wiring_routes.go` o use directamente nas 10
+rotas cortadas, que registam SÓ a forma canónica (sem passar pela tabela de
+alias, que exige a rota legada continuar registada — incompatível com corte
+a hard). Acrescentei ao mapa `bodyFieldForPathParam`: `chat_jid`→`ChatPhone`,
+`poll_message_id`→`PollMessageId`, `invite_code`→`Code`.
+
+**stdio**: as 10 rotas tinham entrada estática em `pkg/infra/stdio/`
+apontando para o caminho antigo. Viraram `dynamicRoute` com `buildPath` que
+lê o mesmo campo do corpo RPC (`groupJID`/`ChatPhone`/`PollMessageId`/`Code`)
+e monta o caminho novo — o stdio continua a enviar TODOS os params como
+corpo, então nada mudou do lado do chamador RPC, só o caminho HTTP
+sintetizado internamente.
+
+**Ficheiros tocados**: `pkg/presentation/http/canonico.go` (export +
+3 entradas no mapa), `pkg/bootstrap/wiring_routes.go` (10 registos
+directos), `pkg/bootstrap/caminhos.tsv` + `api/openapi/caminhos.tsv` (10
+linhas removidas — já não são alias, são rota própria),
+`pkg/infra/stdio/stdio_routes_group.go` + `stdio_routes_chat.go` (8 + 2
+`dynamicRoute`), `pkg/bootstrap/stdio_route_consistency_test.go` (10
+`structuralExceptions` citando as `dynamicRoute` novas),
+`api/openapi/paths/grupo.yaml` + `conversa.yaml` + `envio.yaml` (chave do
+caminho + `parameters:` do path param, escritos à mão porque
+`cmd/openapidoc`'s `applyCanonicalPaths` só move operações que ainda estão
+na tabela de alias), `api/openapi/evidencias.tsv` (10 linhas com o caminho
+novo), `pkg/presentation/http/handlers/handler_presence.go` +
+`handler_interactive.go` (constantes de log `route` actualizadas),
+`pkg/presentation/http/handlers/handler_group_info_contract_test.go`
+(teste de contrato pré-existente para `GetGroupInfo` migrado para a rota
+real GET com path param), `pkg/bootstrap/golden_test.go`
+(`pathParamValues` com os 4 novos nomes de param) + 10 fixtures novas em
+`pkg/bootstrap/testdata/golden/`.
+
+**Testes novos**: `pkg/presentation/http/handlers/route_cutover_contract_test.go`
+— as 4 rotas do item 1 da tarefa (`inviteinfo`, `invitelink`, `markread`,
+`pollvote`), cada uma montada EXACTAMENTE como `wiring_routes.go` monta
+(registry real + `InjectPathParams` + mux), com corpo que OMITE o campo que
+agora vem do caminho, provando que o path param é o que chega ao use case.
+Controlo negativo: a MESMA requisição contra uma rota que NÃO envolve o
+handler em `InjectPathParams` — falha com a recusa de campo em falta
+(`missing_group_jid`/`missing_code`/`missing_chatphone`/`missing_poll_message_id`),
+confirmado na saída (nível `debug`, campo `code`) de cada teste ao correr
+`go test ./pkg/presentation/http/handlers/... -run TestSendPollVote_CaminhoDoPollMessageIDChegaAoUseCase|TestMarkRead_...|TestGetGroupInviteLink_...|TestGetGroupInviteInfo_... -v`.
+`pkg/infra/stdio/stdio_test.go`: 10 casos novos em
+`TestRouteRequest_RotasDinamicas` (caminho HTTP sintetizado correcto) e 4 em
+`TestRouteRequest_ParamObrigatorioAusente` (RPC sem o campo falha com o
+parâmetro certo).
+
+**Gates de cobertura afectados** (não é regressão, é o corte a mudar o
+denominador — ver `.log-coverage-baseline`, entradas datadas 2026-08-27):
+`min_eligible` 993→1003 (+10: as `buildPath` novas do stdio), `min_func_coverage`
+589→593 (as 10 entram JÁ cobertas, com `log.Debug()` igual às irmãs
+`chatDownloadMediaPath`/`userLidPath`, exercitadas pelo teste da tabela
+acima). `cmd/logcov/testdata/eligible.golden` regenerado.
+
+**Status**: **corrigido** nesta sessão. `go build ./...` verde. `go test ./...`
+verde, com a única excepção pré-existente e sem relação
+(`TestTodoMetodoComErroTemWrapper`, `pkg/infra/wa-noise/client` — 7 métodos
+de newsletter/community sem wrapper de `errmap`, confirmado sem diff nesse
+ficheiro nesta sessão; fora do âmbito desta tarefa).
+
+`make check` corrido por completo: `build`, `vet`, `fmt-gate`, `test`, `lint`
+(informativo — complexidade máxima ficou em 50, igual ao piso; a contagem de
+issues subiu 575→608, mas quase todas em ficheiros que esta sessão não tocou
+— `pkg/bootstrap/main.go`, `eventhandler.go` etc. — não actualizei
+`.golangci-baseline` porque não é gate bloqueante e a atribuição exigiria
+medição própria, fora do âmbito), `log-coverage-gate` (verde, `func_coverage`
+593/593, `errpath_coverage` 777/777, `eligible` 1003/1003 — os quatro exactos,
+ver acima), `handler-route`, `waclient-facade`, `waclient-filesize` e
+`waclient-test` (os quatro últimos corridos individualmente porque
+`coverage-gate` interrompeu a cadeia do `make check` antes deles). Único alvo
+vermelho: `coverage-gate`, com `go: no such tool "covdata"` — **F305**
+(achado de sessão irmã nesta mesma máquina, referenciado aqui e não
+re-diagnosticado): ferramenta ausente do toolchain desta máquina, determinístico,
+sem relação com código. Não bloqueia o commit desta tarefa.
+
+<!-- f-status: corrigido -->
+
+## F327 — a injecção de path params apontava para nomes de campo que a migração DTO já tinha apagado
+
+**Data/contexto**: 2026-08-27, integração das branches `http-dto-groups`,
+`http-dto-messages` e `http-dto-paths` na árvore consolidada. Achado durante a
+resolução do merge — não durante desenvolvimento isolado, porque nenhuma
+branch isolada tinha as três coisas ao mesmo tempo: os DTOs canónicos
+(grupo/mensagens) E as rotas cortadas que dependem da injecção de path params
+(paths).
+
+**Onde**: `pkg/presentation/http/canonico.go:73-79`, `bodyFieldForPathParam`.
+
+**Problema**: o mapa dizia `"group_jid": "groupJID"`, `"chat_jid": "ChatPhone"`,
+`"poll_message_id": "PollMessageId"`, `"invite_code": "Code"` — os nomes de
+campo PRÉ-migração, que os manipuladores liam quando este mapa foi escrito
+(worktree `http-dto-foundation`, antes de qualquer família migrar). As
+migrações de grupo e mensagens renomearam os DTOs de pedido para snake_case
+canónico (`group_jid`, `chat_phone`, `poll_message_id`), mas nada actualizou
+este mapa — cada branch, isolada, não tinha motivo para saber que o outro
+lado do handshake tinha mudado de nome.
+
+**Sintoma medido**: `TestGetGroupInviteLink_CaminhoDoGroupJIDChegaAoUseCase`,
+`TestMarkRead_CaminhoDoChatJIDChegaAoUseCase` e
+`TestSendPollVote_CaminhoDoPollMessageIDChegaAoUseCase` (as rotas cortadas de
+`http-dto-paths`) falhavam com `400 missing_group_jid` /
+`400 missing_chatphone` mesmo com `InjectPathParams` aplicado — o parâmetro do
+caminho estava a ser escrito em `groupJID`, e o DTO de pedido só lê
+`group_jid`.
+
+**Correção aplicada**: os quatro valores do mapa passaram para os nomes
+canónicos actuais (`group_jid`, `community_jid`, `chat_phone`,
+`poll_message_id`, `code`), com uma nota no comentário explicando por que
+ficaram desactualizados e o que quebrava.
+
+**Por que isto não apareceu em nenhuma branch isolada**: é uma dependência
+INVISÍVEL entre três migrações — o mapa vive na fundação, é consumido pelas
+rotas cortadas, e o nome que ele produz só é validado pelos DTOs de
+grupo/mensagens. Nenhuma combinação de duas dessas três branches expõe o
+defeito; só a integração das três expõe.
+
+**Status**: corrigido. Travado pelos três testes de contrato acima, que já
+existiam e já exercitavam a rota real — não precisaram de teste novo, só
+pararam de mentir "passa" por acidente de branch isolada.
+
+<!-- f-status: corrigido -->
+
+## F329 — reversão de F269/CAP-10: as 88 rotas legadas deixam de responder — corte limpo por directiva do utilizador
+
+**Data/contexto**: 2026-08-27, `worktree/http-dto-legacy-alias-removal`,
+ramificado de `worktree/http-dto-foundation`. Tarefa explícita: reverter a
+política do F269/CAP-10 ("cada caminho antigo continua registado e a
+responder [...] tempo de vida: permanente") para toda a iniciativa de
+padronização de nomes do contrato HTTP.
+
+**O que o F269/CAP-10 tinha decidido** (2026-08-26/27,
+`api/openapi/CAMINHOS-CANONICOS.md`, commit que introduziu
+`pkg/presentation/http/canonico.go`): a tabela `caminhos.tsv` (91 linhas)
+gerava, para cada rota antiga já registada em `wiring_routes.go`, uma SEGUNDA
+rota com a forma canónica, apontando para o MESMO manipulador — via
+`RegisterCanonicalAliases`. As duas ficavam registadas no `mux.Router` para
+sempre; só a antiga saía do OpenAPI.
+
+**Por que a reversão**: o utilizador deu directiva explícita e directa, para
+toda a iniciativa de normalização de nomes (não só uma família), dizendo,
+em síntese: *"como o sistema ainda não tem consumidores, a compatibilidade
+futura não deve ser sacrificada por compatibilidade com um passado que
+ninguém consumiu [...] deprecated existe para consumidores reais migrando,
+não para preservar histórico de desenvolvimento"*. Perguntado se isto
+deveria aplicar-se a todo o projecto e não só a uma família, confirmou que
+sim. Isto substitui, para este projecto e nesta fase (pré-lançamento), a
+premissa que sustentava o F269/CAP-10 — a promessa de vida permanente
+assumia clientes reais a proteger, e não há nenhum.
+
+**Mecanismo, tal como encontrado** (`pkg/presentation/http/canonico.go`,
+`pkg/bootstrap/wiring_routes.go:275` antes desta sessão): `registry.routes`
+é um slice interno de `HandlerRegistry` (`pkg/presentation/http/registry.go`);
+`wiring_routes.go` acumula ~130 chamadas a `registry.Register(caminhoAntigo,
+handler, metodo)`; SÓ DEPOIS `RegisterCanonicalAliases(CaminhosCanonicos())`
+percorria a tabela embutida (`pkg/bootstrap/caminhos.tsv`, cópia de
+`api/openapi/caminhos.tsv`, comparadas por `TestAsDuasTabelasDeCaminhosSaoIguais`)
+e ACRESCENTAVA, para cada linha, uma nova entrada com o caminho canónico e o
+MESMO handler (injectando `{group_jid}`/`{community_jid}` no corpo quando o
+canónico ganhava parâmetro de caminho). `registry.Apply(router)` registava as
+duas.
+
+**Correção**: `RegisterCanonicalAliases` virou `CanonicalizeRoutes` — em vez
+de ACRESCENTAR, agora SUBSTITUI: remove do `registry.routes` cada (método,
+caminho) que a tabela consumiu e regista só o canónico no lugar. Trata
+correctamente entradas de método múltiplo (`registry.Register("/user/privacy",
+handler, "GET", "POST")` — descoberto só ao correr o gate: minha primeira
+versão assumia, incorrectamente, que nenhum `Register` combinava métodos).
+`wiring_routes.go` continua a registar os caminhos ANTIGOS tal como sempre
+registou — a mudança vive inteiramente no mecanismo de canonicalização, não
+nas ~130 chamadas a `Register`.
+
+**Onde a mudança foi ALÉM de `pkg/bootstrap`**: o stdio JSON-RPC
+(`pkg/infra/stdio/stdio_routes_*.go`) monta pedidos HTTP internos via
+`httptest.NewRequest` contra o MESMO router — 69 dos seus métodos estáticos
+apontavam para caminhos antigos que iam deixar de responder, o que teria
+partido a interface stdio em produção, não só os testes. Actualizados os
+`httpPath` de `chat.*`, `group.*`, `newsletter.*`, `user.*`,
+`session.qr`/`session.pairphone`/`session.history` para a forma canónica.
+Três (`group.photo`, `group.photo.remove`, `group.updateparticipants`)
+mudaram de `staticRoute` para `dynamicRoute`, porque o canónico ganhou
+`{group_jid}` na RELAÇÃO do caminho — `groupJIDParam` tenta várias grafias
+(`GroupJID`, `groupJID`, `groupjid`, `group_jid`) nos parâmetros do pedido
+JSON-RPC, preservando o que um cliente já enviasse antes desta mudança
+(nenhuma grafia nova é exigida).
+
+**As cinco rotas de descarga (`/chat/download{tipo}`) foram DELIBERADAMENTE
+excluídas** desta reversão — não fazem parte de `caminhos.tsv` (são a
+consolidação CAP-10 separada, `/chats/download/{kind}`), e o worktree
+`http-dto-download-paths` já tinha registado (F297 nesse ramo) que mantê-las
+é decisão própria e explícita, anterior a esta directiva. Não as toquei.
+
+**Erro cometido e corrigido durante esta sessão** — registo porque a política
+anti-regressão deste projecto pede honestidade sobre o processo, não só o
+resultado: a primeira tentativa de propagar o rename usou um script Python
+com substituição literal de string em TODO o repositório (120 ficheiros),
+incluindo `wiring_routes.go` — que NÃO deveria ter sido tocado, porque o
+mecanismo de canonicalização já cuida da troca em tempo de execução. Editar
+o texto das chamadas a `Register` ali directamente duplicou registos
+conflitantes (`SetGroupPhoto` e `RemoveGroupPhoto` ficaram os DOIS registados
+como `POST /groups/{group_jid}/photo`, quando deviam ser `PUT` e `DELETE`
+respectivamente) e corrompeu comentários que citavam CAMINHOS DE FICHEIRO
+não relacionados com rotas HTTP (`internal/wa-noise/capabilities/user/info.go`
+virou `.../users/info.go`, um caminho que não existe, só porque a substring
+`/user/info` bateu). Revertido por completo (`git checkout --` nos 120
+ficheiros) e refeito por ficheiro, só onde uma string literal era de facto
+um alvo de `httptest.NewRequest`/`f.get`/`f.do` contra o router real.
+
+**Verificação de medição — contagem de rotas** (`go run ./cmd/listroutes`,
+antes via `git stash` para a árvore do commit anterior a esta sessão, depois
+com as alterações aplicadas de volta, mesma máquina, mesma árvore): **235 →
+147** rotas registadas (**-88**). Não é exactamente -91 porque quatro das 91
+linhas da tabela mapeiam PARES de linhas para o MESMO par (método, caminho)
+canónico final combinado com métodos múltiplos numa única entrada de
+registry (`/user/privacy` GET+POST era uma só chamada a `Register`).
+
+**Testes**: `TestTodaRotaCanonicaEstaRegistadaEALegadaNao` (antiga
+`TestTodaRotaLegadaTemCanonicaRegistada`, invertida) prova que a canónica
+está registada E que a antiga NÃO está — antes o teste dela provava o
+oposto, que as duas coexistiam, e passava porque coexistiam mesmo.
+`TestRotaLegadaResponde404` (nova) é table-driven sobre `CaminhosCanonicos()`
+— 88 subtestes (algumas das 91 linhas partilham a mesma dupla método+caminho
+antigo, ex.: `GET`/`POST /user/privacy` cada uma sua linha mas o mesmo
+`routeEntry`), um por linha, cada um afirmando `router.Match` falso para o
+caminho antigo. **Controlo negativo EXECUTADO**: troquei temporariamente o
+corpo de `CanonicalizeRoutes` por `r.routes = append(r.routes, canonicas...)`
+— o comportamento antigo de F269, que ACRESCENTA em vez de SUBSTITUIR — e
+corri `go test ./pkg/bootstrap/... -run TestRotaLegadaResponde404 -v`:
+falharam **88 de 88** subtestes, todos com a mensagem esperada ("ainda casa
+com uma rota registada — devia ter sido removida no corte limpo"). Restaurada
+a implementação correcta a seguir (ficheiro guardado antes da mutação) e
+reconfirmado `go test ./pkg/bootstrap/... ./pkg/infra/stdio/...` verde.
+`go test ./pkg/bootstrap/... ./pkg/infra/stdio/...`: PASS
+completo depois da correcção. `go test ./...`: as únicas falhas restantes
+são as duas já registadas como pré-existentes e alheias a esta fundação
+(`cmd/logcov` — F295/F296 — e `TestTodoMetodoComErroTemWrapper` em
+`pkg/infra/wa-noise/client`, ficheiro que esta sessão não tocou, confirmado
+por `git diff --stat` vazio nesse caminho).
+
+**Documentação actualizada**: `api/openapi/CAMINHOS-CANONICOS.md` e
+`docs/ENDPOINTS.md` — a secção de política deixa de afirmar "as antigas
+continuam a responder" e passa a registar a reversão (data, motivo,
+directiva do utilizador), mantendo a tabela de equivalência nome-antigo →
+nome-canónico como registo histórico para quem chegar com o nome antigo (em
+logs, exemplos velhos). `pkg/bootstrap/stdio_route_consistency_test.go`:
+`knownPending` e `structuralExceptions` actualizados para os nomes
+canónicos; três novas excepções estruturais para os `dynamicRoute` de
+`group.photo`/`group.photo.remove`/`group.updateparticipants`.
+
+**Status**: corrigido nesta sessão. Testado por
+`TestTodaRotaCanonicaEstaRegistadaEALegadaNao` e `TestRotaLegadaResponde404`
+(`pkg/bootstrap/caminhos_canonicos_test.go`), com controlo negativo
+executado e descrito acima.
+
+<!-- f-status: corrigido -->
+## F330 — o gate permanente de nomenclatura (caminhos, esquema OpenAPI, JSON ao vivo), e cinco compostos concatenados que nenhuma das outras sessões tinha registado
+
+**Data/contexto**: 2026-08-27, construção do gate de regressão permanente para
+a nomenclatura da fronteira HTTP (`worktree/http-dto-openapi-gate`), a
+correr em paralelo às seis migrações por família (sessão, mensagens, grupos,
+utilizadores, canais, admin) documentadas em
+`docs/HTTP-DTO-CONVENTIONS.md`. Esta entrada não é sobre um defeito único: é
+sobre o mecanismo de deteção que fica no repositório depois de todas as
+migrações fundirem, e sobre um achado incidental feito ao construí-lo.
+
+**O que foi construído** — três ficheiros, três superfícies:
+
+| ficheiro | superfície | mecanismo |
+|---|---|---|
+| `pkg/bootstrap/naming_paths_gate_test.go` | caminhos de URL registados | `bootstrap.Routes(Deps{})` (a mesma enumeração de `cmd/listroutes`) + regex kebab-case + par de listas curadas (compostos concatenados conhecidos / palavras de uma só peça confirmadas) |
+| `pkg/bootstrap/naming_openapi_gate_test.go` | especificação OpenAPI GERADA e embutida | percorre `especificacao(t)` (o mesmo parser YAML de `openapi_contrato_test.go`) recursivamente por `properties`, `enum`, `example`/`examples` e `name` de parâmetro, contra `contracttest.IsCanonicalKey` |
+| `pkg/presentation/http/handlers/naming_gate_live_test.go` | corpo JSON servido de verdade | uma rota por família (sessão, grupos, mensagens, utilizadores, admin, canais), montada no `*mux.Router` real, autenticada, contra `contracttest.AssertPublicJSONUsesCanonicalNaming` — o helper partilhado que já existia em `pkg/presentation/http/contracttest/naming.go` desde a fundação DTO (não foi recriado) |
+
+Os três correm dentro de `go test ./...`, que é o que `make test`/`make
+check` já executam — nenhuma alteração ao `Makefile` foi necessária.
+
+**Onde**: os ficheiros acima. `go build ./...`, `go vet ./...` e `gofmt -l`
+saem limpos nos três. `golangci-lint` não acrescenta issue acima do teto real
+do repositório (`max_complexity` continua em 50; a função mais complexa dos
+três ficheiros é `walkOpenAPIDoc` com 15). A CONTAGEM informativa de
+`.golangci-baseline` não foi tocada: medida ANTES dos três ficheiros (sem
+eles, `git mv` temporário) em **608** issues, e DEPOIS em **610** — os dois
+que os ficheiros acrescentam são ambos `gocyclo` informativo, não a trava. O
+608 em si já diverge do `count=575` declarado no ficheiro, e essa divergência
+é anterior a esta sessão (drift de trabalho ainda não fundido nas outras
+worktrees) — não é desta entrada para corrigir.
+
+**Resultado medido ao correr contra o estado ATUAL desta worktree** (antes de
+as worktrees-irmãs fundirem as seis migrações):
+
+- `TestPathsAreLowercaseKebabCase` — passa.
+- `TestPathParamsAreSnakeCase` — passa.
+- `TestPathSegmentsAreNotConcatenatedCompounds` — **falha**, 18 ocorrências de
+  13 palavras: `inviteinfo`, `invitelink`, `joinapprovalmode`,
+  `requestparticipants`, `updaterequestparticipants`, `updateparticipants`,
+  `pollvote`, `markread`, `pairphone` (as legadas dos 4 caminhos concatenados
+  que `pkg/bootstrap/caminhos.tsv` ainda não resolve — `inviteinfo`,
+  `invitelink`, `markread`, `pollvote` continuam nas duas formas, antiga E
+  canónica) e **cinco achados NOVOS, não registados em nenhuma sessão
+  anterior**: `downloadimage`, `downloadvideo`, `downloadaudio`,
+  `downloaddocument`, `downloadsticker` — `/chat/download{kind}` e as
+  `/chats/...` irmãs colam "download" direto ao tipo de mídia, sem hífen nem
+  segmento próprio (ao contrário de `/chats/download/{kind}`, que já existe
+  registado e usa exatamente o padrão certo).
+- `TestOpenAPISchemaPropertyNamesAreCanonical` — **falha**: dezenas de
+  propriedades PascalCase em `components.schemas` das famílias ainda não
+  migradas (sessão, utilizadores, mensagens, canais, admin).
+- `TestOpenAPIEnumValuesAreCanonical` — passa, depois de excluir quatro
+  formas que NÃO são códigos (texto livre com espaço, `***` de mascaramento,
+  literais de duração `0`/`24h`/`7d`/`90d`, e a cadeia vazia `''` como membro
+  documentado de `media_delivery`/`MemberAddMode` — ver comentário
+  `nonCodeEnumValue` no ficheiro para a evidência de cada uma).
+- `TestOpenAPIExampleKeysAreCanonical` — **falha**: ~150 chaves PascalCase ou
+  camelCase nos `example`/`examples` das rotas ainda não migradas.
+- `TestOpenAPIParameterNamesAreCanonical` — passa.
+- `TestLiveNaming_Session` — **falha**: `loggedIn`, `proxy_config.proxyUrl`.
+- `TestLiveNaming_Groups` — passa (`/group/info`, a implementação de
+  referência).
+- `TestLiveNaming_Messages` — passa (`/chat/send/contact`, já migrada no
+  CAP-08B).
+- `TestLiveNaming_Users` — passa (`/users/lid/{jid}`).
+- `TestLiveNaming_Admin` — **falha**: `proxy_config.proxyUrl`,
+  `proxy_config.webhookUseProxy`.
+- `TestLiveNaming_Newsletters` — passa (`types.JID` do wa-noise vendorizado
+  tem `MarshalText`, e `types.NewsletterMetadata`/`NewsletterThreadMetadata`
+  já trazem etiquetas `json:"..."` em snake_case de fábrica).
+
+Nenhuma destas falhas foi corrigida nesta sessão — não é o âmbito desta
+tarefa (que é o mecanismo de deteção, não a correção por família), e o
+`CLAUDE.md` pede para perguntar antes de corrigir achado fora de âmbito.
+
+**Achado incidental que atravessa a fronteira para `internal/wa-headless`
+não se aplica aqui** — as três superfícies medidas (caminhos registados,
+OpenAPI embutido, corpo HTTP ao vivo) são todas código nosso
+(`pkg/bootstrap`, `pkg/presentation`), não a biblioteca vendorizada.
+
+**Achado incidental adicional, fora do âmbito do gate**: ao construir
+`TestOpenAPIExampleKeysAreCanonical`, o walker encontrou chaves de objeto que
+são dados dinâmicos, não nomes de propriedade — números de telefone/JID como
+chave de dicionário (`components.schemas.Roster.example` e
+`InfoUtilizadores.properties.users.example`, ambos com JID literal como
+chave) e emoji como chave de dicionário
+(`components.schemas.MensagemCanal.properties.ReactionCounts.example`, com
+`👍`/`😂`). A regra §8 de `docs/HTTP-DTO-CONVENTIONS.md` não abre exceção
+para dicionário de chave dinâmica — "toda chave de objeto JSON público,
+recursivamente... casa com [regex]" —, então o gate reporta-os como
+violação, tal como reportaria em produção se
+`AssertPublicJSONUsesCanonicalNaming` corresse sobre a mesma resposta. Não
+foi tratado como falso positivo porque a regra escrita não abre essa exceção;
+fica registado para quem decidir se esses dois esquemas devem migrar de
+dicionário-por-chave-dinâmica para array de objetos com o identificador como
+campo (`[{"jid": "...", "count": N}]` em vez de `{"<jid>": N}`).
+
+**Correção sugerida**: nenhuma nesta sessão — é trabalho das worktrees-irmãs
+(`worker-groups`, `worker-messages`, `worker-paths`, sessão/utilizadores/
+canais/admin) migrar cada família para o padrão de
+`docs/HTTP-DTO-CONVENTIONS.md`, e dos quatro caminhos concatenados legados
+(`inviteinfo`, `invitelink`, `markread`, `pollvote`) e dos cinco `download*`
+novos serem corrigidos em `pkg/bootstrap/wiring_routes.go` +
+`pkg/bootstrap/caminhos.tsv`, com uma entrada própria quando isso acontecer.
+O dicionário-por-JID/emoji fica como pergunta em aberto para quem for dono
+dos esquemas `Roster`, `InfoUtilizadores` e `MensagemCanal`.
+
+**Status**: o MECANISMO está corrigido/construído nesta sessão (compila,
+corre, não foi enfraquecido para passar). Os ACHADOS que ele reporta
+continuam abertos, de propósito — ver tabela acima.
+
+<!-- f-status: aberto -->
+
+## F331 — dois fixtures do gate ao vivo apontavam para formas de pedido/porta que a integração já tinha substituído
+
+**Data/contexto**: 2026-08-27, integração de `worktree/http-dto-openapi-gate`
+na árvore consolidada. Achado durante a resolução do merge — o gate foi
+construído numa branch isolada (ramificada de `http-dto-foundation`, antes
+das famílias grupo/canais serem integradas), e dois dos seus fixtures
+assumiam formas que as migrações reais já tinham mudado.
+
+**Onde e o quê**:
+
+1. `TestLiveNaming_Newsletters` (`naming_gate_live_test.go`): a fixture
+   chamava `ListSubscribedFunc: func(...) (any, error)` e devolvia
+   `[]types.NewsletterMetadata` (o tipo vendorizado do SDK, sem
+   transformação) — correcto na branch isolada, onde a porta ainda não
+   tinha sido migrada. Depois da integração com `http-dto-newsletters`, a
+   porta passou a devolver `[]domain.NewsletterMetadata` (já convertido pelo
+   adaptador). Erro de compilação: `cannot use ... as func(...)
+   ([]domain.NewsletterMetadata, error) value`. Corrigido para o tipo actual;
+   o import não usado de `types` saiu.
+
+2. `TestLiveNaming_Groups`: montava o SEU PRÓPRIO router isolado com
+   `POST /group/info` (válido — não depende do router global), mas o corpo
+   do pedido ainda usava `{"GroupJID": ...}`. O corte a hard das rotas
+   concatenadas (`http-dto-paths`, F326) migrou `GetGroupInfoHandler` para
+   `dtogroup.GetGroupInfoRequest`, que só lê `group_jid`. Resultado: `400
+   missing_group_jid` em vez de `200` — o teste falhava a testar o que
+   devia provar. Corrigido o corpo do pedido; comentário actualizado a
+   registar que a rota REAL mudou para `GET /groups/{group_jid}`.
+
+**Por que isto não apareceu em nenhuma branch isolada**: a mesma classe de
+defeito da F327 — uma dependência invisível entre a branch que constrói o
+gate e as branches que migram as famílias que ele mede. Nenhuma combinação
+de duas branches expõe; só a integração de todas expõe.
+
+**Verificação**: com as duas correcções, as seis famílias
+(`TestLiveNaming_{Session,Groups,Messages,Users,Admin,Newsletters}`) passam
+— prova, ponta a ponta, através da rota real e do envelope real, que cada
+família migrada serve JSON canónico de facto, não só no schema OpenAPI.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->
+
+## F332 — o gate de esquema OpenAPI e de exemplos, corridos pela primeira vez contra a árvore integrada, confirmam gaps já registados noutras entradas
+
+**Data/contexto**: 2026-08-27, primeira corrida de
+`TestOpenAPISchemaPropertyNamesAreCanonical` e
+`TestOpenAPIExampleKeysAreCanonical` contra a árvore com TODAS as famílias
+integradas — nenhuma branch isolada tinha o gate e as migrações completas ao
+mesmo tempo.
+
+**Problema**: dezenas de propriedades de esquema (`RowId`, `StanzaId`,
+`Sender`, `Suspended`, `Topic*`, `loggedIn`, `proxyUrl`, etc. — lista
+completa na saída do teste) continuam em PascalCase/camelCase em
+`api/openapi/schemas/*.yaml`. Isto NÃO é um achado novo: F298 (sessão),
+F300 (mensagens), F313 (grupo) já registam, cada uma para a sua família,
+que a especificação OpenAPI ficou por actualizar depois da migração do
+código — deliberadamente, para não misturar o diff de rename de campo com o
+diff de prosa da documentação.
+
+**O que esta entrada acrescenta**: a MEDIÇÃO agregada, pela primeira vez,
+de quantas propriedades ainda faltam em TODAS as famílias juntas — antes só
+existia por família, em prosa. Confirma que o gate (F330) funciona: falha
+exactamente onde as entradas anteriores já diziam que falharia, e passa
+(`TestOpenAPIEnumValuesAreCanonical`, `TestOpenAPIParameterNamesAreCanonical`)
+onde já não há gap conhecido.
+
+**Correcção sugerida**: reescrever `api/openapi/schemas/*.yaml` família a
+família, cada uma o seu próprio commit, seguindo os apontadores já deixados
+em F298/F300/F313. É trabalho de prosa, não de código — não é âmbito desta
+integração.
+
+**Status**: NÃO corrigido, de propósito — é o mesmo gap já registado em três
+entradas anteriores, agora com o gate permanente (F330) a impedi-lo de
+regredir mais e a torná-lo visível a quem rodar `go test ./...` sem ler o
+HOUSEKEEP inteiro primeiro.
+
+<!-- f-status: aberto -->
+
+## F333 — `POST /call/reject` servia `Details`/`CallID` em PascalCase real, vivo, sem gate nenhum a apanhar
+
+**Data/contexto**: 2026-08-27, auditoria final independente da árvore
+integrada (worker sem participação nas correcções, per protocolo). A F323 já
+tinha deixado uma nota lateral sobre isto ("fora do âmbito desta família"),
+mas nenhuma família chegou a reclamá-lo, e nenhum dos três gates permanentes
+(F330) o cobria: `naming_paths_gate_test.go` e `naming_openapi_gate_test.go`
+não inspeccionam corpo de resposta; `naming_gate_live_test.go` cobre seis
+famílias (sessão, grupo, mensagens, utilizadores, admin, canais) e nunca
+tocou `/call/reject`, que não pertence a nenhuma delas.
+
+**Onde**: `pkg/domain/call.go:10-13`, `RejectCallResult`:
+
+```go
+type RejectCallResult struct {
+	Details string `json:"Details"`
+	CallID  string `json:"CallID"`
+}
+```
+
+`RejectCallHandler.ServeHTTP` (`pkg/presentation/http/handlers/handler_misc.go:136`)
+devolve este struct directo por `RespondJSON`, sem apresentador — a mesma
+classe de defeito que a F323 já apanhou nos vizinhos (`mute`/`archive`/`pin`/
+`request-unavailable-message`), só que aqui a etiqueta em si já estava
+errada, não só a camada em falta.
+
+**Como escapou**: nenhuma branch isolada desta iniciativa tocou
+`pkg/domain/call.go` nem `/call/reject` — não é parte de nenhuma das seis
+famílias migradas. A F323 mediu-o de passagem e registou-o como nota, mas
+"registado" não é "coberto por gate", e foi preciso um auditor sem tarefa
+própria, a percorrer TODOS os pontos de chamada de `RespondJSON` (incluindo
+os classificados "pendente" no livro-razão, que um grep por padrão textual
+não alcança), para o encontrar.
+
+**Correcção aplicada**: as duas etiquetas passaram a `json:"details"` e
+`json:"call_id"` — correcção mínima, directo no struct de domínio, sem DTO
+novo, seguindo o mesmo precedente da F317/F318 (achado do mesmo porte,
+mesma correcção).
+
+**Anti-regressão**: `TestMiscBodyHandlers_Success`
+(`handler_misc_test.go`) ganhou uma chamada a
+`contracttest.AssertPublicJSONUsesCanonicalNaming` sobre o corpo de sucesso
+— recursiva e aplicada aos OITO handlers da tabela `miscBodyCases()`, não só
+ao `RejectCall`, para que o PRÓXIMO domain struct servido sem apresentador
+seja apanhado aqui, não descoberto por auditoria de novo. Controlo negativo
+EXECUTADO: as etiquetas voltaram a `"Details"`/`"CallID"`, o subteste
+`RejectCall` falhou com
+
+```
+handler_misc_test.go:348: 2 chave(s) fora do snake_case minúsculo exigido pelo contrato público (docs/HTTP-DTO-CONVENTIONS.md):
+      CallID  em  $.data.CallID
+      Details  em  $.data.Details
+```
+
+— os outros quatro subtestes continuaram verdes (prova de que a asserção
+mede o handler certo, não o conjunto todo) —, e a correcção foi restaurada.
+
+**O que isto ensina**: um achado registado numa nota lateral, sem dono nem
+gate, é indistinguível de um achado nunca encontrado — a distinção só
+existe para quem já leu aquela entrada específica do HOUSEKEEP. A auditoria
+final não é burocracia: é o único ponto desta iniciativa em que alguém
+percorreu a superfície INTEIRA sem estar preso ao âmbito de uma família.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->

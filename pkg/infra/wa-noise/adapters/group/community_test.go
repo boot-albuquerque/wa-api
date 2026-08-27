@@ -24,6 +24,8 @@ func TestGroupAdapter_GetSubGroups_OK(t *testing.T) {
 	targets := []*types.GroupLinkTarget{
 		{JID: types.JID{User: "sub1", Server: "g.us"}},
 	}
+	targets[0].Name = "Sub um"
+	targets[0].IsDefaultSubGroup = true
 	fake := &testkit.Fake{GetSubGroupsFn: func(ctx context.Context, community types.JID) ([]*types.GroupLinkTarget, error) {
 		if community.User != "community" {
 			t.Errorf("community.User = %q, want community", community.User)
@@ -35,12 +37,14 @@ func TestGroupAdapter_GetSubGroups_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetSubGroups = %v", err)
 	}
-	res, ok := got.([]*types.GroupLinkTarget)
-	if !ok {
-		t.Fatalf("GetSubGroups type = %T", got)
+	// O adaptador normaliza para o tipo de dominio: o teste afirma os TRES
+	// campos, porque uma troca entre dois deles passaria numa verificacao de
+	// comprimento.
+	if len(got) != 1 {
+		t.Fatalf("GetSubGroups devolveu %d itens, quero 1", len(got))
 	}
-	if len(res) != 1 || res[0].JID.User != "sub1" {
-		t.Errorf("GetSubGroups returned unexpected result")
+	if got[0].JID != "sub1@g.us" || got[0].Name != "Sub um" || !got[0].IsDefaultSubGroup {
+		t.Errorf("GetSubGroups[0] = %#v", got[0])
 	}
 }
 
@@ -76,12 +80,8 @@ func TestGroupAdapter_GetLinkedGroupsParticipants_OK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLinkedGroupsParticipants = %v", err)
 	}
-	res, ok := got.([]types.JID)
-	if !ok {
-		t.Fatalf("GetLinkedGroupsParticipants type = %T", got)
-	}
-	if len(res) != 1 {
-		t.Errorf("GetLinkedGroupsParticipants returned %d items, want 1", len(res))
+	if len(got) != 1 || got[0] != "user1@s.whatsapp.net" {
+		t.Errorf("GetLinkedGroupsParticipants = %#v, quero [user1@s.whatsapp.net]", got)
 	}
 }
 

@@ -40,14 +40,14 @@ type ProfileFullResult struct {
 	// segunda forma para os dados que não mudaram.
 	ProfileResult
 
-	// UserInfo é o bloco cru do SDK para o próprio JID — carrega o recado
-	// ("about"/status) e a lista de dispositivos que o servidor conhece.
-	// Segue como `any` pelo mesmo motivo de GetUserUseCase: decompor o tipo
-	// do SDK aqui arrastaria o vendor para dentro da camada de aplicação.
-	UserInfo any `json:"user_info,omitempty"`
+	// UserInfo são os metadados do PRÓPRIO JID — o recado ("about"/status) e
+	// a lista de dispositivos que o servidor conhece. Era `any` com o tipo do
+	// SDK dentro; a porta passou a ser tipada na migração da família de
+	// utilizadores, e o adaptador é que normaliza.
+	UserInfo []domain.UserInfo `json:"user_info,omitempty"`
 
 	// Privacy são as configurações de privacidade da conta.
-	Privacy any `json:"privacy,omitempty"`
+	Privacy domain.PrivacySettings `json:"privacy,omitempty"`
 
 	// Unavailable diz o que NÃO pôde ser obtido, com o motivo. O perfil
 	// degrada em vez de falhar — mas degradar em silêncio é pior que

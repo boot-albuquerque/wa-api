@@ -8,6 +8,7 @@ import (
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 )
 
 // StarMessageHandler handles POST /message/star.
@@ -39,5 +40,5 @@ func (h *StarMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentStarMessage(rsp), nil)
 }

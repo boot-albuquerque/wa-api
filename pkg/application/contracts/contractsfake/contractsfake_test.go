@@ -533,15 +533,20 @@ func TestChatPinner(t *testing.T) {
 func TestNewsletterReader(t *testing.T) {
 	f := &contractsfake.NewsletterReader{}
 	got, err := f.ListSubscribed(context.Background(), "u1")
-	if err != nil || got != nil {
-		t.Errorf("zero-value = %v, %v", got, err)
+	// O zero-value devolve fatia VAZIA e não nil: é o que os dois adaptadores
+	// reais devolvem (ambos constroem com make), e um dublê que devolvesse nil
+	// abençoaria um ramo que a produção não alcança (ARMADILHAS #1).
+	if err != nil || got == nil || len(got) != 0 {
+		t.Errorf("zero-value = %#v, %v; quero fatia vazia não-nil", got, err)
 	}
-	f.ListSubscribedFunc = func(context.Context, string) (any, error) { return []string{"n1"}, nil }
+	f.ListSubscribedFunc = func(context.Context, string) ([]domain.NewsletterMetadata, error) {
+		return []domain.NewsletterMetadata{{JID: "n1@newsletter"}}, nil
+	}
 	got, err = f.ListSubscribed(context.Background(), "u2")
 	if err != nil {
 		t.Fatalf("Func = %v", err)
 	}
-	if list, ok := got.([]string); !ok || len(list) != 1 {
+	if len(got) != 1 || got[0].JID != "n1@newsletter" {
 		t.Errorf("Func devolveu %#v", got)
 	}
 	if len(f.ListSubscribedCalls) != 2 || f.ListSubscribedCalls[1].TxtID != "u2" {
@@ -575,17 +580,23 @@ func TestGroupDirectory(t *testing.T) {
 	f := &contractsfake.GroupDirectory{}
 	ctx := context.Background()
 
-	if v, err := f.GetGroupInfo(ctx, "u1", "g@g.us"); v != nil || err != nil {
+	// O zero-value devolve um grupo COM o jid pedido, e nao (nil, nil): os
+	// dois adaptadores reais nunca devolvem nil sem erro, e um duble que o
+	// fizesse abencoaria no chamador um caminho que a producao nao produz.
+	if v, err := f.GetGroupInfo(ctx, "u1", "g@g.us"); err != nil || v == nil || v.JID != "g@g.us" {
 		t.Errorf("GetGroupInfo zero-value = %v, %v", v, err)
 	}
-	if v, err := f.GetGroupInfoFromLink(ctx, "u1", "code"); v != nil || err != nil {
+	// Pela mesma razao: um grupo, com a lista de participantes vazia e nao nula.
+	if v, err := f.GetGroupInfoFromLink(ctx, "u1", "code"); err != nil || v == nil || v.Participants == nil {
 		t.Errorf("GetGroupInfoFromLink zero-value = %v, %v", v, err)
 	}
 	if s, err := f.GetGroupInviteLink(ctx, "u1", "g@g.us"); s != "" || err != nil {
 		t.Errorf("GetGroupInviteLink zero-value = %q, %v", s, err)
 	}
-	if v, n, err := f.ListJoinedGroups(ctx, "u1"); v != nil || n != 0 || err != nil {
-		t.Errorf("ListJoinedGroups zero-value = %v, %d, %v", v, n, err)
+	// Lista vazia e NAO-nula: `[]` e `null` sao valores diferentes no fio, e a
+	// producao devolve o primeiro.
+	if v, n, err := f.ListJoinedGroups(ctx, "u1"); v == nil || len(v) != 0 || n != 0 || err != nil {
+		t.Errorf("ListJoinedGroups zero-value = %#v, %d, %v", v, n, err)
 	}
 
 	if f.GetGroupInfoCalls[0].Group != "g@g.us" {
@@ -601,12 +612,16 @@ func TestGroupDirectory(t *testing.T) {
 		t.Errorf("ListJoinedGroupsCalls = %+v", f.ListJoinedGroupsCalls)
 	}
 
-	f.GetGroupInfoFunc = func(context.Context, string, domain.JID) (any, error) { return "info", nil }
-	f.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
+	f.GetGroupInfoFunc = func(context.Context, string, domain.JID) (*domain.GroupInfo, error) {
+		return &domain.GroupInfo{Name: "info"}, nil
+	}
+	f.GetGroupInfoFromLinkFunc = func(context.Context, string, string) (*domain.GroupInfo, error) { return nil, errBoom }
 	f.GetGroupInviteLinkFunc = func(context.Context, string, domain.JID) (string, error) { return "https://l", nil }
-	f.ListJoinedGroupsFunc = func(context.Context, string) (any, int, error) { return []int{1, 2}, 2, nil }
+	f.ListJoinedGroupsFunc = func(context.Context, string) ([]*domain.GroupInfo, int, error) {
+		return []*domain.GroupInfo{{Name: "a"}, {Name: "b"}}, 2, nil
+	}
 
-	if v, _ := f.GetGroupInfo(ctx, "u1", ""); v != "info" {
+	if v, _ := f.GetGroupInfo(ctx, "u1", ""); v == nil || v.Name != "info" {
 		t.Errorf("GetGroupInfoFunc = %v", v)
 	}
 	if _, err := f.GetGroupInfoFromLink(ctx, "u1", ""); !errors.Is(err, errBoom) {
@@ -625,8 +640,11 @@ func TestGroupLifecycle(t *testing.T) {
 	ctx := context.Background()
 	parts := []domain.JID{"a@s", "b@s"}
 
-	if v, err := f.CreateGroup(ctx, "u1", "meu grupo", parts, domain.CreateGroupOpts{}); v != nil || err != nil {
-		t.Errorf("CreateGroup zero-value = %v, %v", v, err)
+	// Zero-value devolve o grupo com o nome pedido, e nao nil: e' o que os dois
+	// transportes reais fazem (ARMADILHAS #1).
+	if v, err := f.CreateGroup(ctx, "u1", "meu grupo", parts, domain.CreateGroupOpts{}); err != nil ||
+		v == nil || v.Group == nil || v.Group.Name != "meu grupo" || !v.Created {
+		t.Errorf("CreateGroup zero-value = %+v, %v", v, err)
 	}
 	if v, err := f.JoinGroup(ctx, "u1", "code"); v != nil || err != nil {
 		t.Errorf("JoinGroup zero-value = %v, %v", v, err)
@@ -645,7 +663,7 @@ func TestGroupLifecycle(t *testing.T) {
 		t.Errorf("LeaveGroupCalls = %+v", f.LeaveGroupCalls)
 	}
 
-	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+	f.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		return nil, errBoom
 	}
 	f.JoinGroupFunc = func(context.Context, string, string) (any, error) { return nil, errBoom }
@@ -743,8 +761,9 @@ func TestGroupRequests(t *testing.T) {
 	ctx := context.Background()
 	parts := []domain.JID{"a@s"}
 
-	if v, err := f.GetRequestParticipants(ctx, "u1", "g@g.us"); v != nil || err != nil {
-		t.Errorf("GetRequestParticipants zero-value = %v, %v", v, err)
+	// Fila vazia e NAO-nula no zero-value, como os dois adaptadores reais.
+	if v, err := f.GetRequestParticipants(ctx, "u1", "g@g.us"); v == nil || len(v) != 0 || err != nil {
+		t.Errorf("GetRequestParticipants zero-value = %#v, %v", v, err)
 	}
 	if err := f.UpdateRequestParticipants(ctx, "u1", "g@g.us", parts, domain.RequestApprove); err != nil {
 		t.Errorf("UpdateRequestParticipants = %v", err)
@@ -763,7 +782,9 @@ func TestGroupRequests(t *testing.T) {
 		t.Errorf("SetJoinApprovalModeCalls = %+v", f.SetJoinApprovalModeCalls)
 	}
 
-	f.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) (any, error) { return nil, errBoom }
+	f.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.GroupJoinRequest, error) {
+		return nil, errBoom
+	}
 	f.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) error {
 		return errBoom
 	}
@@ -788,10 +809,13 @@ func TestContactDirectory(t *testing.T) {
 	if v, err := f.IsOnWhatsApp(ctx, "u1", []string{"5511"}); v != nil || err != nil {
 		t.Errorf("IsOnWhatsApp zero-value = %v, %v", v, err)
 	}
-	if v, err := f.GetUserInfo(ctx, "u1", []domain.JID{"a@s"}); v != nil || err != nil {
+	// Slice VAZIA e não nil: os dois adaptadores reais alocam antes do laço,
+	// e um dublê que devolvesse nil seria mais simples que a produção — que é
+	// como se abençoa código morto (ARMADILHAS #1).
+	if v, err := f.GetUserInfo(ctx, "u1", []domain.JID{"a@s"}); v == nil || len(v) != 0 || err != nil {
 		t.Errorf("GetUserInfo zero-value = %v, %v", v, err)
 	}
-	if v, n, err := f.GetAllContacts(ctx, "u1"); v != nil || n != 0 || err != nil {
+	if v, n, err := f.GetAllContacts(ctx, "u1"); v == nil || len(v) != 0 || n != 0 || err != nil {
 		t.Errorf("GetAllContacts zero-value = %v, %d, %v", v, n, err)
 	}
 	if v, err := f.GetProfilePicture(ctx, "u1", "a@s", true); v != nil || err != nil {
@@ -820,8 +844,8 @@ func TestContactDirectory(t *testing.T) {
 	f.IsOnWhatsAppFunc = func(context.Context, string, []string) ([]domain.WhatsAppCheck, error) {
 		return []domain.WhatsAppCheck{{}}, nil
 	}
-	f.GetUserInfoFunc = func(context.Context, string, []domain.JID) (any, error) { return nil, errBoom }
-	f.GetAllContactsFunc = func(context.Context, string) (any, int, error) { return nil, 7, nil }
+	f.GetUserInfoFunc = func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) { return nil, errBoom }
+	f.GetAllContactsFunc = func(context.Context, string) ([]domain.Contact, int, error) { return nil, 7, nil }
 	f.GetProfilePictureFunc = func(context.Context, string, domain.JID, bool) (*domain.AvatarInfo, error) {
 		return &domain.AvatarInfo{}, nil
 	}
@@ -879,10 +903,10 @@ func TestPrivacyManager(t *testing.T) {
 	f := &contractsfake.PrivacyManager{}
 	ctx := context.Background()
 
-	if v, err := f.GetPrivacySettings(ctx, "u1"); v != nil || err != nil {
+	if v, err := f.GetPrivacySettings(ctx, "u1"); v != (domain.PrivacySettings{}) || err != nil {
 		t.Errorf("GetPrivacySettings zero-value = %v, %v", v, err)
 	}
-	if v, err := f.SetPrivacySetting(ctx, "u1", "last", "contacts"); v != nil || err != nil {
+	if v, err := f.SetPrivacySetting(ctx, "u1", "last", "contacts"); v != (domain.PrivacySettings{}) || err != nil {
 		t.Errorf("SetPrivacySetting zero-value = %v, %v", v, err)
 	}
 	if c := f.SetPrivacySettingCalls[0]; c.Name != "last" || c.Value != "contacts" {
@@ -892,9 +916,13 @@ func TestPrivacyManager(t *testing.T) {
 		t.Errorf("GetPrivacySettingsCalls = %+v", f.GetPrivacySettingsCalls)
 	}
 
-	f.GetPrivacySettingsFunc = func(context.Context, string) (any, error) { return "cfg", nil }
-	f.SetPrivacySettingFunc = func(context.Context, string, string, string) (any, error) { return nil, errBoom }
-	if v, _ := f.GetPrivacySettings(ctx, "u1"); v != "cfg" {
+	f.GetPrivacySettingsFunc = func(context.Context, string) (domain.PrivacySettings, error) {
+		return domain.PrivacySettings{LastSeen: "cfg"}, nil
+	}
+	f.SetPrivacySettingFunc = func(context.Context, string, string, string) (domain.PrivacySettings, error) {
+		return domain.PrivacySettings{}, errBoom
+	}
+	if v, _ := f.GetPrivacySettings(ctx, "u1"); v.LastSeen != "cfg" {
 		t.Errorf("GetPrivacySettingsFunc = %v", v)
 	}
 	if _, err := f.SetPrivacySetting(ctx, "u1", "", ""); !errors.Is(err, errBoom) {

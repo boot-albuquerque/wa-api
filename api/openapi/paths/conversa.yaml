@@ -753,7 +753,7 @@
       '500':
         $ref: '#/components/responses/ErroInterno'
 
-/chat/markread:
+/chats/{chat_jid}/read:
   post:
     tags: [Conversas]
     summary: Marcar mensagens como lidas
@@ -769,7 +769,7 @@
       - O campo que a implementação RESOLVE é `ChatPhone`. O nome antigo
         `Chat` é aceite pelo desserializador, mas o ramo que o converteria em
         JID está por implementar (`mark_read.go:41`), e a conversa segue
-        VAZIA para o WhatsApp. Use `ChatPhone`.
+        VAZIA para o WhatsApp. Use `ChatPhone`, ou o `chat_jid` do caminho.
       - Sem nenhum dos dois, é `400 missing_chatphone`, medido.
       - `Id` é uma LISTA. Vazia é `400 missing_id`.
       - `SenderPhone` só faz sentido em grupo, e é opcional.
@@ -779,6 +779,14 @@
       **Autenticação**: token de sessão.
     security:
       - TokenSessao: []
+    parameters:
+      - name: chat_jid
+        in: path
+        required: true
+        description: |
+          JID da conversa. Substitui o campo `ChatPhone` do corpo — se ambos
+          vierem, o **corpo ganha**.
+        schema: {type: string, example: 554192421234@s.whatsapp.net}
     requestBody:
       required: true
       content:
@@ -1143,12 +1151,11 @@
     tags: [Descarga de mídia]
     summary: Descarregar a mídia de uma mensagem recebida, pelo kind no caminho
     description: |
-      A forma consolidada das cinco rotas de descarga (CAP-10): baixa da CDN
-      do WhatsApp o conteúdo indicado por `{kind}`, decifra-o e devolve-o
-      como Data URL — exactamente o que `POST /chats/downloadimage`,
-      `downloadvideo`, `downloadaudio`, `downloaddocument` e
-      `downloadsticker` já faziam, com o kind agora na RELAÇÃO do caminho em
-      vez de colado ao NOME da rota.
+      A forma consolidada das cinco rotas de descarga que existiam antes do
+      CAP-10 (`downloadimage`, `downloadvideo`, `downloadaudio`,
+      `downloaddocument`, `downloadsticker`): baixa da CDN do WhatsApp o
+      conteúdo indicado por `{kind}`, decifra-o e devolve-o como Data URL,
+      com o kind na RELAÇÃO do caminho em vez de colado ao NOME da rota.
 
       **Por que consolidar**: as cinco rotas eram idênticas em lógica,
       diferindo só no kind — que o cliente já sabe antes de chamar, porque
@@ -1159,9 +1166,12 @@
       (F269, regra 2) reserva para relação: `/chats/download/{kind}`, não
       `/chats/download{kind}`.
 
-      **As cinco formas anteriores continuam a funcionar** — mesmo padrão de
-      coexistência da padronização de caminhos: nenhum cliente existente
-      quebra, e quem integrar de novo lê um nome só.
+      **As cinco formas anteriores foram REMOVIDAS em 2026-08-27**
+      (HOUSEKEEP.md F297): a política de coexistência permanente do CAP-10
+      foi revertida por decisão explícita de corte-limpo, já que nenhum
+      cliente real dependia delas antes do lançamento. `/chat/downloadimage`
+      e as quatro irmãs devolvem `404` agora — não redirecionam nem
+      respondem mais.
 
       **Corpo**: os sete campos de `PedidoDescargaDeMidia`, sem `Kind` — o
       kind vem do caminho. Um corpo que ainda traga `Kind` não é rejeitado,

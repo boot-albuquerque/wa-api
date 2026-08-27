@@ -20,22 +20,22 @@ func NewGetBlocklistUseCase(bm appport.BlocklistManager, logger appport.Logger) 
 }
 
 // Execute retrieves the blocklist
-func (uc *GetBlocklistUseCase) Execute(ctx context.Context, userID string, _ domain.GetBlocklistRequest) (map[string]interface{}, error) {
+func (uc *GetBlocklistUseCase) Execute(ctx context.Context, userID string, _ domain.GetBlocklistRequest) (domain.Blocklist, error) {
 	if err := uc.blocklist.EnsureSession(ctx, userID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
-		return nil, err
+		return domain.Blocklist{}, err
 	}
 
 	blocklist, err := uc.blocklist.GetBlocklist(ctx, userID)
 	if err != nil {
 		uc.logger.Error(ctx, "Failed to get blocklist", "error", err, "user_id", userID)
-		return nil, fmt.Errorf("failed to get blocklist: %w", err)
+		return domain.Blocklist{}, fmt.Errorf("failed to get blocklist: %w", err)
 	}
 
 	uc.logger.Info(ctx, "Retrieved blocklist", "user_id", userID, "count", len(blocklist.JIDs))
 
-	return map[string]interface{}{
-		"Blocklist": blocklist.JIDs,
-		"DHash":     blocklist.DHash,
-	}, nil
+	// The domain value goes back untouched. The map that used to be built
+	// here carried the response's KEY NAMES ("Blocklist", "DHash") inside a
+	// use case, which is where a rename broke clients in silence.
+	return blocklist, nil
 }

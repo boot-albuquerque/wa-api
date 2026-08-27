@@ -80,19 +80,19 @@ func (uc *GetStatusUseCase) Execute(ctx context.Context, txtID string) (*domain.
 		ProxyURL:  entry.ProxyURL,
 		Qrcode:    entry.QRCode,
 		History:   strconv.Itoa(entry.History),
-		ProxyConfig: map[string]interface{}{
-			"enabled":  entry.HasProxyURL,
-			"proxyUrl": entry.ProxyURL,
+		ProxyConfig: domain.ProxySummary{
+			Enabled:  entry.HasProxyURL,
+			ProxyURL: entry.ProxyURL,
 		},
-		S3Config: map[string]interface{}{
-			"enabled":        entry.S3.Enabled,
-			"endpoint":       entry.S3.Endpoint,
-			"region":         entry.S3.Region,
-			"bucket":         entry.S3.Bucket,
-			"path_style":     entry.S3.PathStyle,
-			"public_url":     entry.S3.PublicURL,
-			"media_delivery": entry.S3.MediaDelivery,
-			"retention_days": entry.S3.RetentionDays,
+		S3Config: domain.S3Summary{
+			Enabled:       entry.S3.Enabled,
+			Endpoint:      entry.S3.Endpoint,
+			Region:        entry.S3.Region,
+			Bucket:        entry.S3.Bucket,
+			PathStyle:     entry.S3.PathStyle,
+			PublicURL:     entry.S3.PublicURL,
+			MediaDelivery: entry.S3.MediaDelivery,
+			RetentionDays: entry.S3.RetentionDays,
 		},
 	}, nil
 }

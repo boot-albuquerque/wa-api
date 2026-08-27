@@ -88,7 +88,12 @@ func sendWireResult(id string) domain.MessageSendResult {
 // assertSendWireKeys confere, chave por chave, a PRESENCA das esperadas, a
 // AUSENCIA das de vocabulario alheio, e denuncia qualquer chave inesperada
 // nomeando-a.
-func assertSendWireKeys(t *testing.T, rota string, obj map[string]any) {
+// chavesExtra sao as chaves que UMA capability serve alem das tres comuns. So
+// o audio tem: a legenda vai como mensagem SEPARADA (F116), e sem
+// caption_status o cliente veria 200 sem saber se ela chegou. Elas entram aqui,
+// uma a uma e por capability, e NAO na lista comum — se entrassem na comum, a
+// assercao de presenca deixaria de morder nas outras catorze.
+func assertSendWireKeys(t *testing.T, rota string, obj map[string]any, chavesExtra ...string) {
 	t.Helper()
 
 	for _, chave := range sendResultWireKeys {
@@ -112,10 +117,17 @@ func assertSendWireKeys(t *testing.T, rota string, obj map[string]any) {
 	for _, chave := range sendResultWireKeys {
 		permitidas[chave] = true
 	}
+	for _, chave := range chavesExtra {
+		if _, ok := obj[chave]; !ok {
+			t.Errorf("%s: a chave extra %q desta capability SUMIU do wire. Presentes: %v",
+				rota, chave, sendWireChavesOrdenadas(obj))
+		}
+		permitidas[chave] = true
+	}
 	for chave := range obj {
 		if !permitidas[chave] {
-			t.Errorf("%s: chave INESPERADA %q no wire. O contrato e' exatamente %v.",
-				rota, chave, sendResultWireKeys)
+			t.Errorf("%s: chave INESPERADA %q no wire. O contrato e' exatamente %v mais %v.",
+				rota, chave, sendResultWireKeys, chavesExtra)
 		}
 	}
 }
@@ -139,6 +151,8 @@ type sendWireCase struct {
 	nome  string
 	rota  string
 	serve func(t *testing.T) *httptest.ResponseRecorder
+	// extra sao as chaves proprias desta capability, alem das tres comuns.
+	extra []string
 }
 
 // sendWireCases enumera as QUINZE capabilities de envio, uma por entrada. Cada
@@ -156,7 +170,7 @@ func sendWireCases() []sendWireCase {
 					},
 				}
 				return sendWirePost(t, sendTextRouter(tm, &contractsfake.JIDResolver{}),
-					"/chat/send/text", `{"Phone":"5511999999999","Body":"ola"}`)
+					"/chat/send/text", `{"phone":"5511999999999","body":"ola"}`)
 			},
 		},
 		{
@@ -169,7 +183,7 @@ func sendWireCases() []sendWireCase {
 					},
 				}
 				return sendWirePost(t, sendImageRouter(mm, &contractsfake.JIDResolver{}, defaultSendImageFetcher()),
-					"/chat/send/image", `{"Phone":"5511999999999","Image":"`+sendImageTestURL+`","Caption":"legenda"}`)
+					"/chat/send/image", `{"phone":"5511999999999","image":"`+sendImageTestURL+`","caption":"legenda"}`)
 			},
 		},
 		{
@@ -182,8 +196,9 @@ func sendWireCases() []sendWireCase {
 					},
 				}
 				return sendWirePost(t, sendAudioRouter(mm, &contractsfake.JIDResolver{}, defaultSendAudioFetcher()),
-					"/chat/send/audio", `{"Phone":"5511999999999","Audio":"`+sendAudioTestURL+`"}`)
+					"/chat/send/audio", `{"phone":"5511999999999","audio":"`+sendAudioTestURL+`"}`)
 			},
+			extra: []string{"caption_message_id", "caption_status"},
 		},
 		{
 			nome: "video",
@@ -195,7 +210,7 @@ func sendWireCases() []sendWireCase {
 					},
 				}
 				return sendWirePost(t, sendVideoRouter(mm, &contractsfake.JIDResolver{}, defaultSendVideoFetcher()),
-					"/chat/send/video", `{"Phone":"5511999999999","Video":"`+sendVideoTestURL+`"}`)
+					"/chat/send/video", `{"phone":"5511999999999","video":"`+sendVideoTestURL+`"}`)
 			},
 		},
 		{
@@ -209,7 +224,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendDocumentRouter(mm, &contractsfake.JIDResolver{}, defaultSendDocumentFetcher()),
 					"/chat/send/document",
-					`{"Phone":"5511999999999","Document":"`+sendDocumentTestURL+`","FileName":"relatorio.pdf"}`)
+					`{"phone":"5511999999999","document":"`+sendDocumentTestURL+`","file_name":"relatorio.pdf"}`)
 			},
 		},
 		{
@@ -223,7 +238,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendStickerRouter(mm, &contractsfake.JIDResolver{},
 					defaultSendStickerFetcher(), defaultSendStickerProcessor()),
-					"/chat/send/sticker", `{"Phone":"5511999999999","Sticker":"`+sendStickerTestURL+`"}`)
+					"/chat/send/sticker", `{"phone":"5511999999999","sticker":"`+sendStickerTestURL+`"}`)
 			},
 		},
 		{
@@ -237,7 +252,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendLocationRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/location",
-					`{"Phone":"5511999999999","Name":"Praca da Se","Latitude":-23.5505,"Longitude":-46.6333}`)
+					`{"phone":"5511999999999","name":"Praca da Se","latitude":-23.5505,"longitude":-46.6333}`)
 			},
 		},
 		{
@@ -251,7 +266,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendContactRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/contact",
-					`{"Phone":"5511999999999","Name":"Alice","Vcard":"BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nEND:VCARD"}`)
+					`{"phone":"5511999999999","name":"Alice","vcard":"BEGIN:VCARD\nVERSION:3.0\nFN:Alice\nEND:VCARD"}`)
 			},
 		},
 		{
@@ -265,7 +280,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendPollRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/poll",
-					`{"Group":"120363313346913103@g.us","Header":"Que horas almocamos?","Options":["12h","13h"]}`)
+					`{"group":"120363313346913103@g.us","header":"Que horas almocamos?","options":["12h","13h"]}`)
 			},
 		},
 		{
@@ -279,7 +294,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendPollVoteRouter(cm, &contractsfake.JIDResolver{}),
 					"/chat/send/pollvote",
-					`{"Phone":"120363313346913103@g.us","Sender":"5511999999999@s.whatsapp.net","PollMessageId":"3EB0POLL1","PollMessageTimestamp":1755500100,"Options":["12h"]}`)
+					`{"phone":"120363313346913103@g.us","sender":"5511999999999@s.whatsapp.net","poll_message_id":"3EB0POLL1","poll_message_timestamp":1755500100,"options":["12h"]}`)
 			},
 		},
 		{
@@ -293,8 +308,8 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendTemplateRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/template",
-					`{"Phone":"5511999999999","Content":"Escolha","Footer":"Equipe",`+
-						`"Buttons":[{"DisplayText":"Sim","Type":"quickreply"}]}`)
+					`{"phone":"5511999999999","content":"Escolha","footer":"Equipe",`+
+						`"buttons":[{"display_text":"Sim","type":"quickreply"}]}`)
 			},
 		},
 		{
@@ -308,8 +323,8 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendButtonsRouter(im, &contractsfake.JIDResolver{}, &contractsfake.MediaFetcher{}),
 					"/chat/send/buttons",
-					`{"Phone":"5511999999999","Body":"Escolha",`+
-						`"Buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`)
+					`{"phone":"5511999999999","body":"Escolha",`+
+						`"buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`)
 			},
 		},
 		{
@@ -323,8 +338,8 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendCarouselRouter(im, &contractsfake.JIDResolver{}, &contractsfake.MediaFetcher{}),
 					"/chat/send/carousel",
-					`{"Phone":"5511999999999","Body":"Escolha",`+
-						`"Cards":[{"Body":"Cartao","Buttons":[{"type":"reply","title":"Sim"}]}]}`)
+					`{"phone":"5511999999999","body":"Escolha",`+
+						`"cards":[{"body":"Cartao","buttons":[{"type":"reply","title":"Sim"}]}]}`)
 			},
 		},
 		{
@@ -338,8 +353,8 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendListRouter(sm, &contractsfake.JIDResolver{}),
 					"/chat/send/list",
-					`{"Phone":"5511999999999","Desc":"Escolha",`+
-						`"Sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`)
+					`{"phone":"5511999999999","desc":"Escolha",`+
+						`"sections":[{"title":"Sec","rows":[{"title":"Item"}]}]}`)
 			},
 		},
 		{
@@ -353,7 +368,7 @@ func sendWireCases() []sendWireCase {
 				}
 				return sendWirePost(t, sendForwardRouter(tm, &contractsfake.JIDResolver{}),
 					"/chat/send/forward",
-					`{"Phone":"5511999999999","Body":"forwarded text"}`)
+					`{"phone":"5511999999999","body":"forwarded text"}`)
 			},
 		},
 	}
@@ -389,7 +404,7 @@ func TestSendWireContract_FieldNames(t *testing.T) {
 			if err := json.Unmarshal(env.Data, &obj); err != nil {
 				t.Fatalf("%s: data nao e' um objeto: %v (corpo: %s)", caso.rota, err, rec.Body.String())
 			}
-			assertSendWireKeys(t, caso.rota, obj)
+			assertSendWireKeys(t, caso.rota, obj, caso.extra...)
 		})
 	}
 }

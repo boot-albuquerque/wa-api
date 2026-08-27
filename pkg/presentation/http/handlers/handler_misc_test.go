@@ -19,6 +19,7 @@ import (
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/presentation/http/contracttest"
 )
 
 // Fase 12 — os oito handlers de miscelanea: /health, /newsletter/list,
@@ -116,7 +117,9 @@ func TestListNewsletterHandler_SessionFailure(t *testing.T) {
 
 func TestListNewsletterHandler_ListFailure(t *testing.T) {
 	nr := &contractsfake.NewsletterReader{
-		ListSubscribedFunc: func(context.Context, string) (any, error) { return nil, ipmErrBoom },
+		ListSubscribedFunc: func(context.Context, string) ([]domain.NewsletterMetadata, error) {
+			return nil, ipmErrBoom
+		},
 	}
 
 	rec, recs := ipmServe(t, newsletterHandler(nr), http.MethodGet, "/newsletter/list", "",
@@ -269,7 +272,9 @@ func miscBodyCases() []miscBodyCase {
 			// (missing_privacy_setting vs invalid_privacy_setting).
 			emptyBodyErr: "missing privacy setting name in payload",
 			failOp: func(_ *contractsfake.ChatOperations, pm *contractsfake.PrivacyManager, err error) {
-				pm.SetPrivacySettingFunc = func(context.Context, string, string, string) (any, error) { return nil, err }
+				pm.SetPrivacySettingFunc = func(context.Context, string, string, string) (domain.PrivacySettings, error) {
+					return domain.PrivacySettings{}, err
+				}
 			},
 			opErr: "failed to set privacy setting",
 		},
@@ -335,6 +340,12 @@ func TestMiscBodyHandlers_Success(t *testing.T) {
 			if env := decodeEnvelope(t, rec); !env.Success {
 				t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 			}
+			// F333: nenhum destes oito handlers tinha o corpo do 200
+			// verificado por nomenclatura — foi assim que RejectCallResult
+			// (json:"Details"/json:"CallID", pkg/domain/call.go) escapou a
+			// todos os gates. Recursivo: apanha um struct de domínio servido
+			// directo em QUALQUER um dos oito, não só o que já foi achado.
+			contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())
 			assertNoOutcomeLog(t, recs)
 		})
 	}
@@ -482,7 +493,9 @@ func TestGetPrivacySettingsHandler_SessionFailure(t *testing.T) {
 
 func TestGetPrivacySettingsHandler_ReadFailure(t *testing.T) {
 	pm := &contractsfake.PrivacyManager{
-		GetPrivacySettingsFunc: func(context.Context, string) (any, error) { return nil, ipmErrBoom },
+		GetPrivacySettingsFunc: func(context.Context, string) (domain.PrivacySettings, error) {
+			return domain.PrivacySettings{}, ipmErrBoom
+		},
 	}
 
 	rec, recs := ipmServe(t, getPrivacyHandler(pm), http.MethodGet, "/user/privacy", "",

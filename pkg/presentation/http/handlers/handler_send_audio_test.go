@@ -101,7 +101,7 @@ func TestSendAudio_Success_ViaRegisteredRoute(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -141,7 +141,7 @@ func TestSendAudio_RejectUnauthenticated(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
@@ -155,8 +155,8 @@ func TestSendAudio_RejectUnauthenticated(t *testing.T) {
 
 func TestSendAudio_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"Phone": `{"Audio":"` + sendAudioTestURL + `"}`,
-		"Audio": `{"Phone":"5511999999999"}`,
+		"phone": `{"audio":"` + sendAudioTestURL + `"}`,
+		"audio": `{"phone":"5511999999999"}`,
 	}
 	for field, body := range bodies {
 		t.Run(field, func(t *testing.T) {
@@ -205,7 +205,7 @@ func TestSendAudio_DataURI_Success_ViaRegisteredRoute(t *testing.T) {
 	mf := defaultSendAudioFetcher()
 
 	encoded := base64.StdEncoding.EncodeToString(sendAudioOggBytes)
-	body := `{"Phone":"5511999999999","Audio":"data:audio/ogg;base64,` + encoded + `","ptt":false}`
+	body := `{"phone":"5511999999999","audio":"data:audio/ogg;base64,` + encoded + `","ptt":false}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -253,7 +253,7 @@ func TestSendAudio_UnsupportedSource_Rejected(t *testing.T) {
 			jr := &contractsfake.JIDResolver{}
 			mf := defaultSendAudioFetcher()
 
-			body := `{"Phone":"5511999999999","Audio":"` + doc + `"}`
+			body := `{"phone":"5511999999999","audio":"` + doc + `"}`
 			rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 			if rec.Code == http.StatusOK {
@@ -278,7 +278,7 @@ func TestSendAudio_SessionFailure(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code < 400 {
@@ -299,7 +299,7 @@ func TestSendAudio_InvalidPhoneNeverFetchesOrSends(t *testing.T) {
 	}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"lixo","Audio":"` + sendAudioTestURL + `"}`
+	body := `{"phone":"lixo","audio":"` + sendAudioTestURL + `"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -322,7 +322,7 @@ func TestSendAudio_FetchFailure_NeverReturns200(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -345,7 +345,7 @@ func TestSendAudio_DownstreamFailureNeverReturns200(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -369,7 +369,7 @@ func TestSendAudio_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `","Id":"id-do-cliente"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `","id":"id-do-cliente"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -404,7 +404,7 @@ func TestSendAudio_MimeType_FallbackByPTT_ViaRegisteredRoute(t *testing.T) {
 		},
 	}
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `","ptt":false}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `","ptt":false}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -429,7 +429,7 @@ func TestSendAudio_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendAudioRouter(mm, jr, mf))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Audio":"` + logassertGlobalEncryptionKey + `"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","audio":"` + logassertGlobalEncryptionKey + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/audio", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -462,7 +462,7 @@ func TestSendAudio_CaptionAcceptedButInert_ViaRegisteredRoute(t *testing.T) {
 	jr := &contractsfake.JIDResolver{}
 	mf := defaultSendAudioFetcher()
 
-	body := `{"Phone":"5511999999999","Audio":"` + sendAudioTestURL + `","Caption":"legenda que morre aqui (F116)"}`
+	body := `{"phone":"5511999999999","audio":"` + sendAudioTestURL + `","caption":"legenda que morre aqui (F116)"}`
 	rec := sendAudioServe(t, mm, jr, mf, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
