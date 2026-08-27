@@ -32103,13 +32103,15 @@ conjunto (a) `pkg/presentation/http/handlers/handler_blocklist_test.go`, que
 hoje afirma a forma nua, e (b) o exemplo de `/user/blocklist` em
 `api/openapi/paths/`, regenerando com `go run ./cmd/openapidoc`.
 
-**Status**: NÃO corrigido, e de propósito. É rota da família `user`, que tem
-migração de DTO própria a decorrer em paralelo — mexer no mesmo ficheiro daqui
-punha renomeação de etiqueta e mudança de envelope no mesmo diff, que é
-exactamente o que o `CLAUDE.md` manda separar. Fica para essa migração, com o
-diagnóstico já feito.
+**Status**: **corrigido** — pela migração de DTO da família `user`, como esta
+entrada já previa. `GetBlocklistHandler.ServeHTTP` (verificado nesta
+integração, 2026-08-27) já passa por
+`customhttp.RespondJSON(w, http.StatusOK, dtouser.PresentGetBlocklist(result), nil)`,
+com o próprio comentário do handler a citar este achado. Testado:
+`TestGetBlocklistHandler_Sucesso`, `TestGetBlocklistHandler_CaminhosDeRecusa`,
+`TestGetBlocklistHandler_NaoAlcancaAPortaSemSessao`, todos verdes.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F310 — três escritas directas na `ResponseWriter` que são legítimas, e por quê
 
