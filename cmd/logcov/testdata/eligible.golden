@@ -2794,7 +2794,7 @@ pkg/bootstrap.NewSessionEventDispatcher	EXCLUDED	X1
 pkg/bootstrap.NewStdioServer	EXCLUDED	X1
 pkg/bootstrap.ProcessOutgoingMedia	ELIGIBLE	covered
 pkg/bootstrap.ReadinessReport.Ready	EXCLUDED	X1
-pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:111)
+pkg/bootstrap.Routes	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,router.go:112)
 pkg/bootstrap.Routes.func1	EXCLUDED	X6
 pkg/bootstrap.Routes.func2	EXCLUDED	X6
 pkg/bootstrap.UserEventHandler.GetUserID	EXCLUDED	X1
@@ -2876,8 +2876,9 @@ pkg/bootstrap.buildOwnerID	ELIGIBLE	covered
 pkg/bootstrap.buildReadinessProbe	EXCLUDED	X1
 pkg/bootstrap.buildReadinessProbe.func1	EXCLUDED	X6
 pkg/bootstrap.buildRouter	ELIGIBLE	covered
-pkg/bootstrap.buildRouter.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:271)
-pkg/bootstrap.buildRouter.func2	EXCLUDED	X6
+pkg/bootstrap.buildRouter.func1	ELIGIBLE	covered
+pkg/bootstrap.buildRouter.func2	ELIGIBLE	covered
+pkg/bootstrap.buildRouter.func3	EXCLUDED	X6
 pkg/bootstrap.callHookFileWithHmac	ELIGIBLE	covered
 pkg/bootstrap.callHookWithHmac	EXCLUDED	X1
 pkg/bootstrap.chaveDedup	EXCLUDED	X1
@@ -2994,7 +2995,7 @@ pkg/bootstrap.registerCustomRoutes.func3	EXCLUDED	X1
 pkg/bootstrap.releaseLeasesOnShutdown	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionLocally	ELIGIBLE	covered
 pkg/bootstrap.releaseSessionOwnership	ELIGIBLE	covered
-pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:218)
+pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:228)
 pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
 pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	uncovered:L2(S-ret,global_hmac_key.go:131)
@@ -3148,7 +3149,7 @@ pkg/domain/apperr.AppError.Is	ELIGIBLE	uncovered:L1
 pkg/domain/apperr.AppError.Unwrap	EXCLUDED	X2
 pkg/domain/apperr.Category.HTTPStatus	EXCLUDED	X1
 pkg/domain/apperr.IsClientGaveUp	EXCLUDED	X1
-pkg/domain/apperr.New	ELIGIBLE	uncovered:L2(S-ret,apperr.go:53)
+pkg/domain/apperr.New	ELIGIBLE	uncovered:L2(S-ret,apperr.go:73)
 pkg/infra/auth.AdminValidator.Validate	EXCLUDED	X1
 pkg/infra/auth.DecryptHMACKey	ELIGIBLE	covered
 pkg/infra/auth.DecryptS3Secret	ELIGIBLE	covered
@@ -3911,7 +3912,7 @@ pkg/presentation/http.NewProfileFullHandler	EXCLUDED	X1
 pkg/presentation/http.NewProfileHandler	EXCLUDED	X1
 pkg/presentation/http.ProfileFullHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:142)
 pkg/presentation/http.ProfileHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,profile_handler.go:74)
-pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:103)
+pkg/presentation/http.RespondJSON	ELIGIBLE	uncovered:L2(S-consume,response.go:110)
 pkg/presentation/http.genericError	EXCLUDED	X1
 pkg/presentation/http.injectPathParams	EXCLUDED	X1
 pkg/presentation/http.injectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:94);uncovered:L2(S-consume,canonico.go:105);uncovered:L2(S-consume,canonico.go:126)
@@ -4256,7 +4257,7 @@ pkg/presentation/http/handlers.handleSetGroupLocked	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupName	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupPhoto	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupTopic	ELIGIBLE	covered
-pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	uncovered:L2(S-consume,handler_group_mgmt.go:361)
+pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	uncovered:L2(S-consume,handler_group_mgmt.go:382)
 pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:469)
 pkg/presentation/http/handlers.isClientCausedSessionError	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.isPlausibleJIDOrPhone	ELIGIBLE	uncovered:L1

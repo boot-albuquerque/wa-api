@@ -19,6 +19,7 @@ const (
 	codeUnauthorized        = "unauthorized"
 	codeForbidden           = "forbidden"
 	codeNotFound            = "not_found"
+	codeMethodNotAllowed    = "method_not_allowed"
 	codeConflict            = "conflict"
 	codeUnprocessableEntity = "unprocessable_entity"
 	codeRateLimited         = "rate_limited"
@@ -54,6 +55,12 @@ func genericError(statusCode int) ErrorBody {
 		return ErrorBody{codeForbidden, "Operação não permitida."}
 	case http.StatusNotFound:
 		return ErrorBody{codeNotFound, "Recurso não encontrado."}
+	case http.StatusMethodNotAllowed:
+		// Added when the router's own 405 branch stopped answering in plain
+		// text. Without this case the branch below would answer 405 with
+		// {"code":"internal_error"}, which reads as "we broke" for a request
+		// whose only fault is the verb.
+		return ErrorBody{codeMethodNotAllowed, "Método HTTP não permitido para este recurso."}
 	case http.StatusConflict:
 		return ErrorBody{codeConflict, "A requisição não pode ser atendida no estado atual."}
 	case http.StatusUnprocessableEntity:
