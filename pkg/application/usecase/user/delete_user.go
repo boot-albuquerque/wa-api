@@ -21,7 +21,7 @@ func NewDeleteUserUseCase(users appport.UserRepository, logger appport.Logger) *
 }
 
 // Execute deleta um usuário
-func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserRequest) error {
+func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserInput) error {
 	if req.UserID == "" {
 		return apperr.New("missing_user_id", apperr.CategoryValidation, "user ID is required", false, nil)
 	}

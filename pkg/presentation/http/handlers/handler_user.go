@@ -13,6 +13,7 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
+	dtoadmin "wa-api/pkg/presentation/http/dto/admin"
 
 	"wa-api/pkg/application/usecase/user"
 )
@@ -64,9 +65,12 @@ func NewUserHandlers(
 // ListUsers retorna o handler para GET /admin/users.
 func (h *UserHandlers) ListUsers() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// mux.Vars, and not r.PathValue: the router is gorilla/mux. The `id`
+		// is the user id of GET /admin/users/{id}; on GET /admin/users it is
+		// empty, which the use case reads as "every user".
 		vars := mux.Vars(r)
 		userID := vars["id"]
-		result, err := h.listUsers.Execute(r.Context(), domain.ListUsersRequest{UserID: userID})
+		result, err := h.listUsers.Execute(r.Context(), domain.ListUsersInput{UserID: userID})
 		if err != nil {
 			hlog.FromRequest(r).Error().Err(err).
 				Str("path", r.URL.Path).
@@ -74,14 +78,14 @@ func (h *UserHandlers) ListUsers() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtoadmin.PresentListUsers(result), nil)
 	})
 }
 
 // AddUser retorna o handler para POST /admin/users.
 func (h *UserHandlers) AddUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req domain.AddUserRequest
+		var req dtoadmin.AddUserRequest
 		if err := decodeRequest(w, r, &req); err != nil {
 			if requestAnswered(err) {
 				return
@@ -92,7 +96,14 @@ func (h *UserHandlers) AddUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
-		result, err := h.addUser.Execute(r.Context(), req)
+		if err := req.Validate(); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("path", r.URL.Path).
+				Msg("add user rejected: invalid payload")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
+		result, err := h.addUser.Execute(r.Context(), req.ToDomain())
 		if err != nil {
 			// ErrDuplicateToken era sempre reportado como 500 — o caller não
 			// tinha como distinguir "token já existe" (chamada idempotente,
@@ -112,16 +123,17 @@ func (h *UserHandlers) AddUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, result, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtoadmin.PresentUserPointer(result), nil)
 	})
 }
 
 // EditUser retorna o handler para PUT /admin/users/{id}.
 func (h *UserHandlers) EditUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		var req domain.EditUserRequest
-		req.UserID = vars["id"]
+		// The id comes from the PATH and never from the body: two sources for
+		// the same identity is one source too many.
+		userID := mux.Vars(r)["id"]
+		var req dtoadmin.EditUserRequest
 		if err := decodeRequest(w, r, &req); err != nil {
 			if requestAnswered(err) {
 				return
@@ -132,14 +144,21 @@ func (h *UserHandlers) EditUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusBadRequest, nil, errDecodePayload)
 			return
 		}
-		if err := h.editUser.Execute(r.Context(), req); err != nil {
+		if err := req.Validate(); err != nil {
+			hlog.FromRequest(r).Warn().Err(err).
+				Str("user_id", userID).
+				Msg("edit user rejected: invalid payload")
+			customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
+			return
+		}
+		if err := h.editUser.Execute(r.Context(), req.ToDomain(userID)); err != nil {
 			hlog.FromRequest(r).Error().Err(err).
-				Str("user_id", req.UserID).
+				Str("user_id", userID).
 				Msg("edit user use case failed")
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, map[string]string{"status": "ok"}, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtoadmin.PresentEditUser(), nil)
 	})
 }
 
@@ -147,7 +166,7 @@ func (h *UserHandlers) EditUser() http.Handler {
 func (h *UserHandlers) DeleteUser() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
-		req := domain.DeleteUserRequest{UserID: vars["id"]}
+		req := domain.DeleteUserInput{UserID: vars["id"]}
 		if err := h.deleteUser.Execute(r.Context(), req); err != nil {
 			hlog.FromRequest(r).Error().Err(err).
 				Str("user_id", req.UserID).
@@ -155,7 +174,7 @@ func (h *UserHandlers) DeleteUser() http.Handler {
 			customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 			return
 		}
-		customhttp.RespondJSON(w, http.StatusOK, map[string]string{"status": "deleted"}, nil)
+		customhttp.RespondJSON(w, http.StatusOK, dtoadmin.PresentDeleteUser(), nil)
 	})
 }
 

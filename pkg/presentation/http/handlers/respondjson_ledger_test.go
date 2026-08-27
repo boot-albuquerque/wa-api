@@ -49,8 +49,10 @@ import (
 // nenhum tipo errado sobrevive a ele.
 
 // maxPendingRespondJSONSites é a CATRACA. Baixe-o quando uma família migrar;
-// nunca o suba. Medido em 2026-08-27, na fundação da migração DTO.
-const maxPendingRespondJSONSites = 108
+// nunca o suba. Medido em 2026-08-27, na fundação da migração DTO (108) e
+// baixado para 103 pela migração da família /admin, que apresentou os cinco
+// sítios de ListUsers, AddUser, EditUser, DeleteUser e DeleteUserComplete.
+const maxPendingRespondJSONSites = 103
 
 // updateLedger reescreve o livro-razão em vez de o comparar.
 var updateLedger = flag.Bool("update-ledger", false,

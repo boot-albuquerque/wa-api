@@ -16,7 +16,7 @@ func TestDeleteUserUseCase_Execute(t *testing.T) {
 	boom := errors.New("boom")
 	tests := []struct {
 		name       string
-		req        domain.DeleteUserRequest
+		req        domain.DeleteUserInput
 		deleteFunc func(ctx context.Context, id string) (bool, error)
 		wantErr    bool
 		wantIs     error
@@ -25,12 +25,12 @@ func TestDeleteUserUseCase_Execute(t *testing.T) {
 	}{
 		{
 			name:    "id vazio nem chega ao repositório",
-			req:     domain.DeleteUserRequest{},
+			req:     domain.DeleteUserInput{},
 			wantErr: true,
 		},
 		{
 			name:       "erro do repositório é embrulhado e logado",
-			req:        domain.DeleteUserRequest{UserID: "u1"},
+			req:        domain.DeleteUserInput{UserID: "u1"},
 			deleteFunc: func(context.Context, string) (bool, error) { return false, boom },
 			wantErr:    true,
 			wantIs:     boom,
@@ -39,14 +39,14 @@ func TestDeleteUserUseCase_Execute(t *testing.T) {
 		},
 		{
 			name:       "nenhuma linha removida vira not found",
-			req:        domain.DeleteUserRequest{UserID: "u1"},
+			req:        domain.DeleteUserInput{UserID: "u1"},
 			deleteFunc: func(context.Context, string) (bool, error) { return false, nil },
 			wantErr:    true,
 			wantCalls:  1,
 		},
 		{
 			name:      "remoção bem-sucedida",
-			req:       domain.DeleteUserRequest{UserID: "u1"},
+			req:       domain.DeleteUserInput{UserID: "u1"},
 			wantCalls: 1,
 			wantLog:   "User deleted successfully",
 		},

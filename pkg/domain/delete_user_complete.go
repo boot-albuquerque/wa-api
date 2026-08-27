@@ -1,21 +1,25 @@
 package domain
 
-// DeleteUserCompleteRequest represents a request to completely delete a user
-type DeleteUserCompleteRequest struct {
-	ID string `param:"id"`
-}
-
-// DeleteUserCompleteResult represents the result of completely deleting a user
+// DeleteUserCompleteResult is what the "delete everything about this user"
+// use case reports back: which user was removed, and what was done.
+//
+// It used to carry Code, Success and Data as well, with `json` tags — a
+// SECOND copy of the HTTP envelope, living in the domain. The handler then
+// answered with `rsp.Code` as the HTTP status, which meant the domain layer
+// was choosing the status line. Both are gone: the envelope is produced by
+// RespondJSON and by nothing else (docs/HTTP-DTO-CONVENTIONS.md §7).
 type DeleteUserCompleteResult struct {
-	Code    int            `json:"code"`
-	Data    UserDeleteData `json:"data"`
-	Success bool           `json:"success"`
-	Details string         `json:"details"`
+	User UserDeleteData
+
+	// Details is the human-readable summary of what the removal did. It was
+	// computed and then dropped on the floor: the handler served only Data.
+	Details string
 }
 
-// UserDeleteData represents the user data returned after deletion
+// UserDeleteData identifies the user that was removed. Read BEFORE the
+// deletion, because afterwards there is no row left to read it from.
 type UserDeleteData struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	JID  string `json:"jid"`
+	ID   string
+	Name string
+	JID  string
 }

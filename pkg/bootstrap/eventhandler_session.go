@@ -120,7 +120,7 @@ func (evh *UserEventHandler) handlePairSuccess(evt *events.PairSuccess, st *even
 	// Check if automatic history sync is enabled and trigger it after QR code is scanned.
 	//
 	// A coluna e' `history` (migrations.go:254; o campo da API tambem, ver
-	// domain.AddUserRequest.History). Ate' a F71 esta query pedia
+	// domain.AddUserInput.History). Ate' a F71 esta query pedia
 	// `days_to_sync_history`, que nunca existiu: ela falhava em TODO banco e
 	// para TODO usuario, o `else if` abaixo jamais era alcancado, e o sync
 	// automatico apos pareamento era codigo morto. Como a falha era so' um

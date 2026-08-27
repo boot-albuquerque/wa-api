@@ -113,7 +113,7 @@ export async function listarSessoes() {
     nome: u.name,
     jid: u.jid || "",
     conectado: !!u.connected,
-    autenticado: !!u.loggedIn,
+    autenticado: !!u.logged_in,
     token: Tokens.de(u.id),
     temToken: !!Tokens.de(u.id),
   }));

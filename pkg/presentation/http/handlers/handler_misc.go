@@ -8,6 +8,7 @@ import (
 
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtoadmin "wa-api/pkg/presentation/http/dto/admin"
 
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/notification"
@@ -95,7 +96,10 @@ func (h *DeleteUserCompleteHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, rsp.Code, rsp.Data, nil)
+	// 200 written here, and no longer read from `rsp.Code`: the status line
+	// is the boundary's decision, and the domain result carried a copy of the
+	// envelope only because it used to BE the payload.
+	customhttp.RespondJSON(w, 200, dtoadmin.PresentDeleteUserComplete(rsp), nil)
 }
 
 // RejectCallHandler handles POST /call/reject
