@@ -1560,7 +1560,10 @@ min_errpath_coverage=777
 # PresentParticipantsUpdate, PresentGetGroupRequestParticipants,
 # PresentGetCommunitySubGroups e PresentGetCommunityParticipants. Os outros 20
 # simbolos novos da migracao (ToDomain, ResolveChat, presenters de um so'
-# return) sao EXCLUDED por X1/X2. SAI (0).
+# return) sao EXCLUDED por X1/X2. SAI (0) do denominador; saem do GOLDEN 6
+# entradas EXCLUDED — os ResolveChat de 6 tipos de pedido de dominio que
+# perderam o ChatTarget, porque o alias `chat` passou a ser resolvido no DTO de
+# pedido. Nao mexem em min_eligible: ja' eram EXCLUDED.
 min_eligible=998
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho

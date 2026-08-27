@@ -3088,11 +3088,7 @@ pkg/domain.DeleteMessageRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
 pkg/domain.EditUserRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.GetAvatarRequest.ResolveChat	EXCLUDED	X1
-pkg/domain.GetCommunityParticipantsRequest.ResolveChat	EXCLUDED	X1
-pkg/domain.GetCommunitySubGroupsRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.GetGroupInfoRequest.ResolveChat	EXCLUDED	X1
-pkg/domain.GetGroupInviteLinkRequest.ResolveChat	EXCLUDED	X1
-pkg/domain.GetGroupRequestParticipantsRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.HashToken	EXCLUDED	X1
 pkg/domain.IsSupportedProxyScheme	EXCLUDED	X1
 pkg/domain.IsValidEventType	EXCLUDED	X1
@@ -3129,10 +3125,8 @@ pkg/domain.SendPollVoteRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.SendStickerRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.SendTemplateRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.SendVideoRequest.ResolveChat	EXCLUDED	X1
-pkg/domain.SetGroupJoinApprovalModeRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.SubscribePresenceRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.UnblockUserRequest.ResolveChat	EXCLUDED	X1
-pkg/domain.UpdateGroupRequestParticipantsRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ValidatePrivacySetting	ELIGIBLE	covered
 pkg/domain.WebhookConfigRequest.ResolveURL	EXCLUDED	X1
 pkg/domain.hasSuffix	EXCLUDED	X1
