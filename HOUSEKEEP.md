@@ -31878,3 +31878,141 @@ apresentador, a linha sai de `.logcov-exclude` e o piso é recalculado — está
 escrito no próprio ficheiro.
 
 <!-- f-status: corrigido -->
+## F306 — a família `/admin/users` deixou de aceitar o camelCase nos corpos de pedido
+
+**Data/contexto**: 2026-08-27, migração da família `/admin` para a camada de
+DTO (`docs/HTTP-DTO-CONVENTIONS.md`). Não é um defeito encontrado: é uma
+**mudança de comportamento** feita de propósito, registada aqui porque §6 das
+convenções exige que qualquer mudança de leitura de pedido tenha entrada
+própria, com o antes e o depois.
+
+**Onde**: `pkg/presentation/http/dto/admin/request.go`, todo o ficheiro;
+`pkg/domain/user.go` (as etiquetas `json` e o `UnmarshalJSON` de alias
+saíram); `pkg/presentation/http/handlers/handler_user.go:88,136`.
+
+**O que muda**. `POST /admin/users` e `PUT /admin/users/{id}` liam:
+
+| antes | agora |
+|---|---|
+| `proxyConfig` **ou** `proxy_config` | `proxy_config` |
+| `s3Config` **ou** `s3_config` | `s3_config` |
+| `hmacKey` | `hmac_key` |
+| `proxyUrl`, `webhookUseProxy` | `proxy_url`, `webhook_use_proxy` |
+| `accessKey`, `secretKey`, `pathStyle`, `publicUrl`, `mediaDelivery`, `retentionDays` | `access_key`, `secret_key`, `path_style`, `public_url`, `media_delivery`, `retention_days` |
+
+**Por quê**. A grafia dupla era a correção da F210, e ela existia por UMA
+razão: a resposta era `snake_case` e o pedido `camelCase`, então o ciclo
+natural — ler o utilizador, mudar um campo, reenviar — chegava com o nome da
+resposta e era ignorado em silêncio com `200`. Alinhar os dois lados resolve a
+mesma falha e dispensa o alias. Manter as duas grafias seria exactamente a
+serialização dupla que o corte a seco proíbe (§11), e §8 diz que a regra de
+nomes canónicos vale para corpos de PEDIDO, não só para respostas.
+
+**O que acontece a quem ainda mandar o nome antigo**: perde esses campos. Não
+em silêncio — `decodeRequest` reporta campo desconhecido, o que é log de
+`warn` por omissão e `400 unknown_field` com
+`WA_API_STRICT_UNKNOWN_FIELDS=true`.
+
+**Testes que o travam**:
+
+- `pkg/presentation/http/dto/admin/request_test.go`:
+  `TestEditUserRequest_LeOsNomesCanonicos`,
+  `TestAddUserRequest_LeOsNomesCanonicos` (o caminho de SUCESSO) e
+  `TestEditUserRequest_NomeAntigoNaoEhLido` (a metade que impede um alias de
+  voltar a entrar sem ninguém dar por isso);
+- `pkg/bootstrap/admin_users_contract_test.go`:
+  `TestAdminUsers_ContratoPublico_EdicaoLeOsNomesCanonicos` prova pela ROTA
+  REGISTADA que o corpo com os nomes novos CHEGA ao banco — afirmar `200`
+  mediria a guarda, e o PUT que ignorava o corpo devolvia `200` na mesma.
+
+Os testes da F210 e da F218 que viviam em `pkg/domain/user_config_alias_test.go`
+foram portados para o pacote de DTO; o ficheiro foi apagado com o alias que ele
+protegia.
+
+**Documentação actualizada**: `api/openapi/{paths,schemas}/infra.yaml`,
+`README.md`.
+
+**Status**: **corrigido** — mudança deliberada, aplicada, documentada e travada
+pelos testes acima.
+
+<!-- f-status: corrigido -->
+
+## F307 — `s3_config.access_key: "***"` não dizia nada, e passaria a corromper a credencial depois do alinhamento de nomes
+
+**Data/contexto**: 2026-08-27, migração da família `/admin` para DTO. Achado
+DURANTE a migração, e é o caso da Regra 4 do `CLAUDE.md`: a própria correção
+(alinhar os nomes de pedido e de resposta, F306) tornava um cenário
+estritamente PIOR.
+
+**Onde**: `pkg/application/usecase/list_users.go` e `add_user.go`, que
+escreviam `"access_key": "***"` no `map[string]interface{}` da resposta;
+`pkg/infra/db/user_repository.go:277`, cujo `SELECT` de configuração de S3
+**não lê a coluna `s3_access_key`**.
+
+**Problema**, em duas metades:
+
+1. **A máscara não carregava informação.** O servidor escrevia `"***"`
+   incondicionalmente, com chave configurada ou sem ela. Na listagem, ainda
+   por cima, a coluna nem é lida — não havia como o valor ser outra coisa.
+2. **Depois da F306 ela ficaria perigosa.** Com o pedido a ler `access_key` e
+   a resposta a devolver `access_key`, o ciclo que a F210 tinha acabado de
+   tornar natural — ler o utilizador, mudar um campo, reenviar — gravaria a
+   string `***` por cima da chave de acesso verdadeira. Antes isso não podia
+   acontecer, porque o pedido lia `accessKey` e a resposta escrevia
+   `access_key`: a assimetria protegia por acidente.
+
+**Correção aplicada**: a chave saiu da resposta. Não há substituto — ver
+F308 para o que seria preciso para haver um.
+
+**Teste que o trava**:
+`pkg/bootstrap/admin_users_contract_test.go`:`TestAdminUsers_ContratoPublico_NenhumSegredoNoCorpo`,
+que recusa `AKIA`, `segredo` e `"***"` no corpo e afirma a ausência das chaves
+`access_key` e `secret_key`.
+
+**Controlo negativo EXECUTADO** — reintroduzido o campo mascarado no DTO e no
+apresentador:
+
+```
+--- FAIL: TestAdminUsers_ContratoPublico_NenhumSegredoNoCorpo (0.07s)
+    admin_users_contract_test.go:277: o corpo contém "\"***\"": {"code":200,"data":[{...,"s3_config":{...,"access_key":"***"}}],"success":true}
+    admin_users_contract_test.go:280: chave(s) que deviam ter desaparecido na migração ainda presentes:
+          access_key em $.data[0].s3_config.access_key
+FAIL
+```
+
+**Status**: **corrigido**.
+
+<!-- f-status: corrigido -->
+
+## F308 — `GET /admin/users` não consegue dizer se uma sessão tem chave de acesso S3 configurada
+
+**Data/contexto**: 2026-08-27, consequência aberta da F307. Registado porque a
+informação que a máscara `***` FINGIA dar continua a não existir, e a ausência
+agora é visível.
+
+**Onde**: `pkg/infra/db/user_repository.go:275-288`, `userS3Config` — o
+`SELECT` traz `s3_enabled`, `s3_endpoint`, `s3_region`, `s3_bucket`,
+`s3_path_style`, `s3_public_url`, `media_delivery` e `s3_retention_days`, e
+**não** `s3_access_key`. `domain.UserS3Settings` também não tem onde a guardar.
+
+**Problema**: quem opera não tem como saber, pela API, se a credencial de S3
+de uma sessão está preenchida — só se o bloco está `enabled`. Uma sessão com
+`enabled: true` e chave vazia é indistinguível de uma configurada.
+
+**Correção sugerida**: acrescentar ao `SELECT` um
+`COALESCE(s3_access_key,'') <> '' AS s3_access_key_configured`, levá-lo a
+`domain.UserS3Settings` como booleano e apresentá-lo como
+`s3_config.access_key_configured`. É a única forma que não faz a chave sair do
+banco. Custa uma coluna derivada no `SELECT` e um campo em três camadas.
+
+**Por que não foi feito nesta sessão**: é acréscimo de capacidade, não parte
+da migração de nomes, e toca `pkg/infra/db`, fora do âmbito da tarefa. O
+`CLAUDE.md` proíbe corrigir de graça fora do âmbito sem perguntar. Um campo
+que existisse sem esta mudança de `SELECT` viria SEMPRE `false` na listagem —
+uma mentira, pior que a ausência, e foi por isso que ele foi retirado antes de
+entrar.
+
+**Status**: **não corrigido** — fica a pergunta: acrescentar
+`access_key_configured` agora, ou deixar a informação fora da API?
+
+<!-- f-status: aberto -->

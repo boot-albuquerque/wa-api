@@ -105,7 +105,10 @@ func TestDeleteUserCompleteUseCase_Execute_PartialSchemaKeepsGoing(t *testing.T)
 	if err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
-	if !res.Success || res.Code != 200 {
+	// Success/Code saíram do resultado: eram uma segunda cópia do envelope
+	// HTTP dentro do domínio. O sucesso é `err == nil`, e o corpo devolvido
+	// é o utilizador removido.
+	if res.User.ID != "u1" {
 		t.Errorf("resultado = %+v", res)
 	}
 	for _, msg := range []string{"problem retrieving user information", "problem retrieving user s3 configuration"} {
@@ -216,11 +219,14 @@ func TestDeleteUserCompleteUseCase_Execute_Success(t *testing.T) {
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
-			if !res.Success || res.Code != 200 || res.Data.ID != "u1" || res.Data.Name != "alice" {
+			if res.User.ID != "u1" || res.User.Name != "alice" {
 				t.Errorf("resultado = %+v", res)
 			}
-			if res.Data.JID != "5511@s.whatsapp.net" {
-				t.Errorf("JID = %q", res.Data.JID)
+			if res.User.JID != "5511@s.whatsapp.net" {
+				t.Errorf("JID = %q", res.User.JID)
+			}
+			if res.Details == "" {
+				t.Error("Details vazio: era calculado e descartado pelo handler, e agora é servido")
 			}
 			for _, msg := range tt.wantLogs {
 				if !logger.Logged(msg) {

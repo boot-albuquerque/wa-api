@@ -2,115 +2,60 @@
 package domain
 
 import (
-	"encoding/json"
 	"time"
 )
 
-// ListUsersRequest é o request para listar usuários
-type ListUsersRequest struct {
-	UserID string // Optional: if provided, lists a single user
-}
-
-// AddUserRequest é o request para adicionar um novo usuário
-type AddUserRequest struct {
-	Name        string       `json:"name"`
-	Token       string       `json:"token"`
-	Webhook     string       `json:"webhook,omitempty"`
-	Expiration  int          `json:"expiration,omitempty"`
-	Events      string       `json:"events,omitempty"`
-	ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`
-	S3Config    *S3Config    `json:"s3Config,omitempty"`
-	HmacKey     string       `json:"hmacKey,omitempty"`
-	History     int          `json:"history,omitempty"`
-}
-
-// EditUserRequest é o request para editar um usuário existente
-type EditUserRequest struct {
-	UserID      string       `json:"-"` // from URL
-	Name        string       `json:"name,omitempty"`
-	Token       string       `json:"token,omitempty"`
-	Webhook     string       `json:"webhook,omitempty"`
-	Expiration  int          `json:"expiration,omitempty"`
-	Events      string       `json:"events,omitempty"`
-	ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`
-	S3Config    *S3Config    `json:"s3Config,omitempty"`
-	// POINTER, not int, to separate "not mentioned" from "explicitly zero" (F218).
-	//
-	// With plain int + omitempty, zero was the zero value — indistinguishable
-	// from absent. The API accepted setting history to 3, 30, or 1000, but
-	// could NEVER set it back to 0 (disable). Same pattern as
-	// SendLocationRequest.Latitude (F121): nil = not mentioned, 0 = valid value.
-	History *int `json:"history,omitempty"`
-}
-
-// --- Aliases snake_case na LEITURA (F210, decisão 49=a do canal) ------------
+// ListUsersInput is the use case input for listing users. Empty UserID means
+// "every user"; a non-empty one narrows the listing to a single user.
 //
-// A API lia estes dois campos em camelCase (`s3Config`, `proxyConfig`) e
-// devolvia-os em snake_case (`s3_config`, `proxy_config`, ver
-// session.go:66-67). O ciclo mais natural que existe — ler o utilizador, mudar
-// um campo, reenviar — chegava com o nome da RESPOSTA, o binding não o
-// reconhecia, e o pedido era ignorado em SILÊNCIO com 200.
+// Input and not Request throughout this family: `…Request` is the name the
+// convention reserves for the WIRE type, and two types with the same name —
+// one of them carrying `json` tags — is the collision a review does not catch
+// (docs/HTTP-DTO-CONVENTIONS.md §4).
 //
-// Medido em campo a 2026-08-22:
-//
-//	PUT {"name":"lucas","s3_config":{"bucket":"snake-case"}} -> 200, bucket=""
-//	PUT {"name":"lucas","s3Config":{"bucket":"camel-case"}}  -> 200, bucket="camel-case"
-//
-// A escolha foi aceitar OS DOIS na leitura e manter snake_case na resposta.
-// Alinhar tudo em snake_case seria mais limpo, mas o README documenta
-// camelCase como formato de pedido (README.md:289-311) e não documenta a forma
-// da resposta — alinhar em snake partiria o contrato escrito.
-//
-// O camelCase VENCE quando ambos vêm no mesmo corpo: é o documentado, e quem
-// envia os dois de propósito está a pedir ambiguidade, não a exprimir intenção.
-
-// aliasesDeConfig são os nomes alternativos aceites na desserialização.
-type aliasesDeConfig struct {
-	ProxyConfigSnake *ProxyConfig `json:"proxy_config,omitempty"`
-	S3ConfigSnake    *S3Config    `json:"s3_config,omitempty"`
+// This one has no wire type at all: the id it carries comes from the PATH of
+// GET /admin/users/{id}, and there is no body to decode.
+type ListUsersInput struct {
+	UserID string
 }
 
-// UnmarshalJSON aceita `s3_config`/`proxy_config` além de `s3Config`/`proxyConfig`.
-func (r *EditUserRequest) UnmarshalJSON(data []byte) error {
-	type semMetodo EditUserRequest // evita recursão infinita
-	aux := struct {
-		*semMetodo
-		aliasesDeConfig
-	}{semMetodo: (*semMetodo)(r)}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	if r.ProxyConfig == nil {
-		r.ProxyConfig = aux.ProxyConfigSnake
-	}
-	if r.S3Config == nil {
-		r.S3Config = aux.S3ConfigSnake
-	}
-	return nil
+// AddUserInput is the use case input for provisioning a new user.
+//
+// No `json` tags: this is no longer the wire format. The body of
+// POST /admin/users is dtoadmin.AddUserRequest, and it is the DTO that
+// validates, normalizes and builds this value.
+type AddUserInput struct {
+	Name        string
+	Token       string
+	Webhook     string
+	Expiration  int
+	Events      string
+	ProxyConfig *ProxyConfig
+	S3Config    *S3Config
+	HmacKey     string
+	History     int
 }
 
-// UnmarshalJSON: o mesmo para a criação. Aplicar só à edição criaria uma
-// assimetria nova — PUT a aceitar dois nomes e POST a aceitar um.
-func (r *AddUserRequest) UnmarshalJSON(data []byte) error {
-	type semMetodo AddUserRequest
-	aux := struct {
-		*semMetodo
-		aliasesDeConfig
-	}{semMetodo: (*semMetodo)(r)}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	if r.ProxyConfig == nil {
-		r.ProxyConfig = aux.ProxyConfigSnake
-	}
-	if r.S3Config == nil {
-		r.S3Config = aux.S3ConfigSnake
-	}
-	return nil
+// EditUserInput is the use case input for a partial user update.
+//
+// An empty string means "field not informed" for every string field — the
+// semantics the use case already had. History is the exception and stays a
+// POINTER (F218): nil is "not mentioned", and a pointer to 0 is "disable the
+// limit", two states a plain int cannot tell apart.
+type EditUserInput struct {
+	UserID      string
+	Name        string
+	Token       string
+	Webhook     string
+	Expiration  int
+	Events      string
+	ProxyConfig *ProxyConfig
+	S3Config    *S3Config
+	History     *int
 }
 
-// DeleteUserRequest é o request para deletar um usuário
-type DeleteUserRequest struct {
+// DeleteUserInput is the use case input for removing a user.
+type DeleteUserInput struct {
 	UserID string
 }
 
@@ -165,21 +110,64 @@ type S3Config struct {
 	RetentionDays int    `json:"retentionDays"`
 }
 
-// UserResponse representa um usuário na resposta
-type UserResponse struct {
-	ID             string                 `json:"id"`
-	Name           string                 `json:"name"`
-	Token          string                 `json:"token"`
-	Webhook        string                 `json:"webhook"`
-	JID            string                 `json:"jid,omitempty"`
-	QRCode         string                 `json:"qrcode,omitempty"`
-	Connected      bool                   `json:"connected"`
-	LoggedIn       bool                   `json:"loggedIn,omitempty"`
-	Expiration     int64                  `json:"expiration,omitempty"`
-	ProxyConfig    map[string]interface{} `json:"proxy_config,omitempty"`
-	S3Config       map[string]interface{} `json:"s3_config,omitempty"`
-	Events         string                 `json:"events,omitempty"`
-	HmacConfigured bool                   `json:"hmac_configured,omitempty"`
+// UserAccount is the use case RESULT describing one provisioned API user:
+// who it is, how it is configured and whether its WhatsApp session is up.
+//
+// It carries no `json` tags and no map[string]any. The wire shape is
+// dtoadmin.UserResponse, built by a hand-written presenter — before this,
+// the two configuration blocks were maps assembled inside the use case, so
+// the KEY NAMES of a public payload were decided by the application layer
+// and no type in the program declared them.
+//
+// The S3 access key is deliberately absent: the listing used to serve a
+// hardcoded "***" for it, which is the same three characters whether a key
+// was configured or not — and the repository does not even read the column
+// (pkg/infra/db/user_repository.go:277). It carried no information.
+type UserAccount struct {
+	ID      string
+	Name    string
+	Token   string
+	Webhook string
+	JID     string
+	QRCode  string
+
+	// Connected and LoggedIn are distinct states: there can be a valid
+	// credential with the transport down.
+	Connected bool
+	LoggedIn  bool
+
+	Expiration int64
+	Events     string
+
+	// HmacConfigured reports that a per-user webhook signing key exists. The
+	// key itself never leaves the database in cleartext (F158).
+	HmacConfigured bool
+
+	Proxy UserProxySettings
+	S3    UserS3Settings
+}
+
+// UserProxySettings is the outbound proxy configuration of one user.
+type UserProxySettings struct {
+	Enabled bool
+	URL     string
+
+	// WebhookUseProxy reports whether webhook deliveries also go through the
+	// proxy, as opposed to only the WhatsApp transport.
+	WebhookUseProxy bool
+}
+
+// UserS3Settings is the media-storage configuration of one user, minus every
+// secret: neither the access key nor the secret key belongs in a response.
+type UserS3Settings struct {
+	Enabled       bool
+	Endpoint      string
+	Region        string
+	Bucket        string
+	PathStyle     bool
+	PublicURL     string
+	MediaDelivery string
+	RetentionDays int
 }
 
 // SessionDeviceInfo carrega os dados de identidade e estado do aparelho

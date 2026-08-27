@@ -2716,7 +2716,7 @@ pkg/application/usecase/storage.TestS3ConnectionUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.AddUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,add_user.go:59);uncovered:L2(S-ret,add_user.go:85);uncovered:L2(S-ret,add_user.go:122)
 pkg/application/usecase/user.BlockUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,block_user.go:47)
 pkg/application/usecase/user.CheckUserUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/user.DeleteUserCompleteUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_user_complete.go:36);uncovered:L2(S-ret,delete_user_complete.go:47)
+pkg/application/usecase/user.DeleteUserCompleteUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_user_complete.go:41);uncovered:L2(S-ret,delete_user_complete.go:52)
 pkg/application/usecase/user.DeleteUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_user.go:26);uncovered:L2(S-ret,delete_user.go:35)
 pkg/application/usecase/user.EditUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,edit_user.go:39);uncovered:L2(S-ret,edit_user.go:48);uncovered:L2(S-ret,edit_user.go:60)
 pkg/application/usecase/user.GetAvatarUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,get_avatar.go:33);uncovered:L2(S-consume,get_avatar.go:37);uncovered:L2(S-ret,get_avatar.go:38)
@@ -3077,7 +3077,6 @@ pkg/bootstrap.validateStackForMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,clus
 pkg/bootstrap.withField	ELIGIBLE	uncovered:L1
 pkg/bootstrap.writeAdminTokenFile	ELIGIBLE	covered
 pkg/bootstrap.writeBoundaryRecord	EXCLUDED	X1
-pkg/domain.AddUserRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.ArchiveChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ChatPresenceRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ContactName.Melhor	EXCLUDED	X1
@@ -3085,7 +3084,6 @@ pkg/domain.DecodeRequest	ELIGIBLE	uncovered:L1
 pkg/domain.DecodeRequestWithUnknownFields	ELIGIBLE	uncovered:L1
 pkg/domain.DeleteMessageRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
-pkg/domain.EditUserRequest.UnmarshalJSON	EXCLUDED	X4
 pkg/domain.GetCommunityParticipantsRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.GetCommunitySubGroupsRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.GetGroupInfoRequest.ResolveChat	EXCLUDED	X1
@@ -3931,6 +3929,18 @@ pkg/presentation/http/devui.Handler	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume
 pkg/presentation/http/devui.Handler.func1	ELIGIBLE	covered
 pkg/presentation/http/devui.deLoopback	EXCLUDED	X1
 pkg/presentation/http/devui.ehLoopback	EXCLUDED	X1
+pkg/presentation/http/dto/admin.AddUserRequest.ToDomain	EXCLUDED	X5
+pkg/presentation/http/dto/admin.AddUserRequest.Validate	EXCLUDED	X5
+pkg/presentation/http/dto/admin.EditUserRequest.ToDomain	EXCLUDED	X5
+pkg/presentation/http/dto/admin.EditUserRequest.Validate	EXCLUDED	X5
+pkg/presentation/http/dto/admin.PresentDeleteUser	EXCLUDED	X5
+pkg/presentation/http/dto/admin.PresentDeleteUserComplete	EXCLUDED	X5
+pkg/presentation/http/dto/admin.PresentEditUser	EXCLUDED	X5
+pkg/presentation/http/dto/admin.PresentListUsers	EXCLUDED	X5
+pkg/presentation/http/dto/admin.PresentUser	EXCLUDED	X5
+pkg/presentation/http/dto/admin.PresentUserPointer	EXCLUDED	X5
+pkg/presentation/http/dto/admin.ProxyConfigRequest.ToDomain	EXCLUDED	X5
+pkg/presentation/http/dto/admin.S3ConfigRequest.ToDomain	EXCLUDED	X5
 pkg/presentation/http/dto/group.PresentGetGroupInfo	EXCLUDED	X5
 pkg/presentation/http/dto/group.PresentGroupInfo	EXCLUDED	X5
 pkg/presentation/http/dto/group.PresentGroupParticipant	EXCLUDED	X5
@@ -4247,7 +4257,7 @@ pkg/presentation/http/handlers.handleSetGroupName	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupPhoto	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleSetGroupTopic	ELIGIBLE	covered
 pkg/presentation/http/handlers.handleUpdateGroupParticipants	ELIGIBLE	uncovered:L2(S-consume,handler_group_mgmt.go:361)
-pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:450)
+pkg/presentation/http/handlers.inteiroDaQuery	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,handler_user.go:469)
 pkg/presentation/http/handlers.isClientCausedSessionError	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.isPlausibleJIDOrPhone	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.listLabelChatsHandler.ServeHTTP	ELIGIBLE	covered

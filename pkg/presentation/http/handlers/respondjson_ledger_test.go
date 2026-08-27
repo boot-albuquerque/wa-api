@@ -55,7 +55,9 @@ import (
 //	 81 — família sessão + configuração de webhook + configuração de armazenamento
 //	 69 — integração com a família de utilizadores, contactos e blocklist
 //	 67 — integração com a família de canais/newsletters
-const maxPendingRespondJSONSites = 67
+//	 62 — integração com a família /admin (ListUsers, AddUser, EditUser,
+//	      DeleteUser, DeleteUserComplete)
+const maxPendingRespondJSONSites = 62
 
 // updateLedger reescreve o livro-razão em vez de o comparar.
 var updateLedger = flag.Bool("update-ledger", false,

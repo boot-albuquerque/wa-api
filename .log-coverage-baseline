@@ -1545,7 +1545,9 @@ min_func_coverage=590
 #
 # INTEGRACAO (2026-08-27): apos mesclar fundacao + sessao + utilizadores +
 # canais/newsletters, re-medido: errpath_coverage SOBE 777->778. Ratchet-UP.
-min_errpath_coverage=778
+#
+# INTEGRACAO com /admin (2026-08-27): errpath_coverage SOBE 778->779. Ratchet-UP.
+min_errpath_coverage=779
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.

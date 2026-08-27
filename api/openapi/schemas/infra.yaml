@@ -9,8 +9,17 @@
 # com o valor zero, exactamente como se não tivesse vindo. Logo, para quase
 # todos os campos de pedido daqui, **ausente ≡ `null` ≡ `""` ≡ `0` ≡ `false`**,
 # e o que muda é apenas o que o use case faz com esse valor zero. Onde a
-# implementação usa `*T` — `webhookUseProxy`, `webhook_use_proxy` e `history`
-# na edição — a distinção existe de verdade, e está dita campo a campo.
+# implementação usa `*T` — `webhook_use_proxy` e `history` na edição — a
+# distinção existe de verdade, e está dita campo a campo.
+#
+# NOMES: as rotas /admin/users migraram para a camada de DTO
+# (docs/HTTP-DTO-CONVENTIONS.md). Toda chave, de PEDIDO e de resposta, é
+# snake_case minúsculo. O camelCase de antes (`proxyConfig`, `s3Config`,
+# `hmacKey`, `proxyUrl`, `accessKey`, `pathStyle`, …) deixou de ser lido, e
+# não há grafia dupla: o corte foi a seco.
+#
+# E nenhuma resposta destas rotas tem `omitempty`. Um campo vazio vem `""`,
+# `false` ou `0`; ele não desaparece.
 UtilizadorAdmin:
   type: object
   description: |
@@ -21,10 +30,10 @@ UtilizadorAdmin:
     o token de todas as sessões transformava uma leitura na fuga de todas as
     credenciais da instalação.
 
-    Campo nenhum desta resposta vem `null`: os que existem são tipos simples
-    de Go, e os que não têm valor são **omitidos** (`omitempty`) ou vêm no
-    valor zero. Quando uma propriedade abaixo diz "ausente", é ausência da
-    chave — nunca `null`.
+    Campo nenhum desta resposta vem `null` e campo nenhum é omitido: o
+    `omitempty` saiu de todos na migração para DTO, porque um cliente tem de
+    conseguir distinguir "esta sessão não tem JID" de "esta versão deixou de
+    mandar a chave". O que não tem valor vem `""`, `false` ou `0`.
   properties:
     id:
       type: string
@@ -37,8 +46,7 @@ UtilizadorAdmin:
         Identificador da sessão, hexadecimal de 32 caracteres. É o `{id}` das
         rotas `/admin/users/{id}`.
 
-        **Sempre presente**, e nunca `null`: é gerado pelo servidor e não tem
-        `omitempty`.
+        **Sempre presente**, e nunca `null`: é gerado pelo servidor.
       example: 918e37366f27e1125ee0482a793267e1
     name:
       type: string
@@ -47,16 +55,15 @@ UtilizadorAdmin:
       description: |
         Nome dado à sessão na criação. Não é o nome da conta de WhatsApp.
 
-        **Sempre presente** (sem `omitempty`); vem `""` se a linha do banco
-        estiver com o nome vazio. Nunca `null`.
+        **Sempre presente**; vem `""` se a linha do banco estiver com o nome
+        vazio. Nunca `null`.
       example: filarapida
     token:
       type: string
       nullable: false
       readOnly: true
       description: |
-        Token de sessão. **Sempre presente** (sem `omitempty`), mas o valor
-        depende da rota:
+        Token de sessão. **Sempre presente**, mas o valor depende da rota:
 
         | rota | valor |
         |---|---|
@@ -72,8 +79,8 @@ UtilizadorAdmin:
       nullable: false
       readOnly: true
       description: |
-        URL do webhook desta sessão. **Sempre presente** (sem `omitempty`);
-        vem `""` quando não há nenhum configurado. Nunca `null`.
+        URL do webhook desta sessão. **Sempre presente**; vem `""` quando não
+        há nenhum configurado. Nunca `null`.
       example: ''
     jid:
       type: string
@@ -81,9 +88,11 @@ UtilizadorAdmin:
       readOnly: true
       description: |
         JID da conta de WhatsApp emparelhada, com o sufixo do aparelho
-        (`:25`). **Ausente** — a chave não aparece — enquanto a sessão não
-        estiver emparelhada, porque o campo tem `omitempty`. Nunca `null`, e
-        nunca `""`: ou vem preenchido, ou não vem.
+        (`:25`). **Sempre presente**; vem `""` enquanto a sessão não estiver
+        emparelhada. Nunca `null`.
+
+        Até à migração para DTO a chave DESAPARECIA nesse caso (`omitempty`),
+        e a ausência era indistinguível de a versão do servidor não a mandar.
       example: 5516981818244:25@s.whatsapp.net
     qrcode:
       type: string
@@ -91,10 +100,10 @@ UtilizadorAdmin:
       readOnly: true
       description: |
         QR code pendente de leitura, quando o emparelhamento está a decorrer.
-        **Ausente** fora disso (`omitempty`). Nunca `null`.
+        **Sempre presente**; vem `""` fora disso. Nunca `null`.
 
-        Na resposta de `POST /admin/users` está sempre ausente: criar a sessão
-        não inicia o emparelhamento.
+        Na resposta de `POST /admin/users` vem sempre `""`: criar a sessão não
+        inicia o emparelhamento.
       example: 2@Wt3F0k...
     connected:
       type: boolean
@@ -103,11 +112,10 @@ UtilizadorAdmin:
       description: |
         Se o transporte para o WhatsApp está de pé neste instante.
 
-        **Sempre presente**, incluindo quando `false` — é o único booleano
-        desta resposta sem `omitempty`. Nunca `null`. Na resposta de criação
-        vem `false`, porque criar não liga.
+        **Sempre presente**, incluindo quando `false`. Nunca `null`. Na
+        resposta de criação vem `false`, porque criar não liga.
       example: true
-    loggedIn:
+    logged_in:
       type: boolean
       nullable: false
       readOnly: true
@@ -115,9 +123,10 @@ UtilizadorAdmin:
         Se a sessão está autenticada. Distinto de `connected`: pode haver
         credencial válida com o transporte caído.
 
-        **Ausente quando `false`** (`omitempty`) — a ausência da chave e o
-        valor `false` são a mesma informação, e `null` não ocorre.
-      example: true
+        **Sempre presente**, incluindo quando `false`. Nunca `null`.
+
+        Chamava-se `loggedIn`, em camelCase — o único nome desta resposta que
+        a regra de nomes canónicos recusava de todo.
     expiration:
       type: integer
       format: int64
@@ -127,21 +136,20 @@ UtilizadorAdmin:
       description: |
         Instante de expiração da sessão, em segundos desde a época Unix.
 
-        **Ausente quando `0`** (`omitempty`), e `0` significa *não expira* —
-        logo a ausência da chave é a resposta normal. Nunca `null`.
+        **Sempre presente**, e `0` significa *não expira* — logo `0` é a
+        resposta normal. Nunca `null`.
       example: 1790000000
     proxy_config:
       type: object
       nullable: false
       readOnly: true
       description: |
-        Proxy de saída desta sessão. **Ausente** quando o mapa é vazio
-        (`omitempty`); na prática vem sempre, porque o servidor o constrói
-        com as três chaves. Nunca `null`.
+        Proxy de saída desta sessão. **Sempre presente**, com as três chaves.
+        Nunca `null`.
 
-        **Repare na assimetria de nomes**: aqui a chave é `proxy_config` em
-        snake_case, mas o corpo de escrita usa `proxyConfig` em camelCase —
-        os dois são aceites na escrita.
+        O corpo de escrita usa exactamente os mesmos nomes: a assimetria
+        `proxy_config` na leitura contra `proxyConfig` na escrita acabou com
+        a migração para DTO.
       properties:
         enabled:
           type: boolean
@@ -153,15 +161,15 @@ UtilizadorAdmin:
             enviou em `proxyConfig` **não é ecoado** — o que decide é ter ou
             não URL. Sempre presente, nunca `null`.
           example: false
-        proxyUrl:
+        proxy_url:
           type: string
           nullable: false
           readOnly: true
           description: |
             URL do proxy gravado. `""` quando não há nenhum. Sempre presente,
-            nunca `null`.
+            nunca `null`. Chamava-se `proxyUrl`.
           example: ''
-        webhookUseProxy:
+        webhook_use_proxy:
           type: boolean
           nullable: false
           readOnly: true
@@ -169,18 +177,21 @@ UtilizadorAdmin:
             Se a entrega dos webhooks também sai por este proxy. Sempre
             presente, nunca `null` — a resolução acontece no servidor, que
             escolhe entre o valor pedido, o gravado e o padrão da instalação.
+            Chamava-se `webhookUseProxy`.
           example: true
     s3_config:
       type: object
       nullable: false
       readOnly: true
       description: |
-        Armazenamento em S3 desta sessão. **Ausente** quando o mapa é vazio
-        (`omitempty`); na prática vem sempre. Nunca `null`.
+        Armazenamento em S3 desta sessão. **Sempre presente**. Nunca `null`.
 
-        `access_key` vem **sempre** como `***`, mesmo quando não há chave, e
-        `secret_key` não aparece de todo. Mesma assimetria de nomes do proxy:
-        `s3_config` na resposta, `s3Config` no corpo de escrita.
+        **`access_key` já não existe nesta resposta.** Vinha sempre como
+        `***`, com chave configurada ou sem ela — a listagem nem sequer lê a
+        coluna —, portanto não dizia nada; e depois de os nomes de pedido e
+        de resposta passarem a coincidir, reenviar esta resposta num
+        `PUT /admin/users/{id}` gravaria `***` por cima da credencial real.
+        `secret_key` continua a não aparecer.
       properties:
         enabled:
           type: boolean
@@ -206,18 +217,6 @@ UtilizadorAdmin:
           readOnly: true
           description: Bucket de destino. `""` quando não configurado. Sempre presente, nunca `null`.
           example: ''
-        access_key:
-          type: string
-          nullable: false
-          readOnly: true
-          enum: ['***']
-          description: |
-            **Sempre a constante `***`**, e nunca o valor real — mesmo quando
-            não há chave nenhuma configurada, porque mascarar só quando
-            existe revelaria a existência. Não há valor desconhecido possível
-            aqui: o servidor escreve esta constante incondicionalmente.
-            Sempre presente, nunca `null`.
-          example: '***'
         path_style:
           type: boolean
           nullable: false
@@ -273,31 +272,36 @@ UtilizadorAdmin:
       description: |
         Eventos subscritos, separados por vírgulas. `All` recebe todos.
 
-        **Ausente quando a sessão não tem nenhum** (`omitempty`) — medido a
-        2026-08-26, em que uma das duas sessões traz `"All"` e a outra não
-        traz a chave. Nunca `null`, e nunca `""`.
+        **Sempre presente**; vem `""` quando a sessão não subscreve nenhum.
+        Nunca `null`. Antes da migração a chave desaparecia nesse caso.
       example: Message,Receipt,Connected
     hmac_configured:
       type: boolean
       nullable: false
       readOnly: true
       description: |
-        Se a sessão nasceu com chave HMAC. **Ausente quando `false`**
-        (`omitempty`), logo só aparece na resposta de `POST /admin/users` e
-        só quando uma `hmacKey` foi enviada. Nunca `null`.
+        Se a sessão nasceu com chave HMAC. **Sempre presente**; só vem `true`
+        na resposta de `POST /admin/users`, e só quando uma `hmac_key` foi
+        enviada. Nunca `null`.
 
-        Nas leituras está sempre ausente: elas não consultam a coluna.
+        Nas leituras vem sempre `false`: elas não consultam a coluna.
       example: true
 
 PedidoCriarUtilizador:
   type: object
   description: |
-    Corpo de `POST /admin/users`. `s3Config` e `proxyConfig` são aceites também
-    como `s3_config` e `proxy_config`; o camelCase vence quando ambos vierem.
+    Corpo de `POST /admin/users`. **Todas as chaves em snake_case**, incluindo
+    as dos blocos aninhados — `s3_config`, `proxy_config`, `hmac_key`.
 
-    **Campos desconhecidos são ignorados** — toda a API usa
-    `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
-    não dá erro: dá o valor zero.
+    O camelCase de antes (`s3Config`, `proxyConfig`, `hmacKey`, e dentro
+    deles `proxyUrl`, `accessKey`, `pathStyle`, `publicUrl`, `mediaDelivery`,
+    `retentionDays`) **já não é lido**. Não há grafia dupla: a leitura dos
+    dois nomes existia para compensar uma resposta em snake_case, e alinhar
+    os dois lados removeu a razão de ela existir.
+
+    Um corpo com os nomes antigos perde esses campos. Não passa despercebido:
+    o servidor regista `unknown field "<nome>"`, e com
+    `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-o com `400 unknown_field`.
   required: [name, token]
   properties:
     name:
@@ -385,7 +389,7 @@ PedidoCriarUtilizador:
         **Não é validado na criação**: um negativo é gravado como veio. Só
         `POST /session/history` recusa negativo (`400 invalid_history`).
       example: 100
-    hmacKey:
+    hmac_key:
       type: string
       nullable: false
       writeOnly: true
@@ -402,20 +406,19 @@ PedidoCriarUtilizador:
         Guardada cifrada; **nunca é devolvida** por rota nenhuma. A criação
         confirma apenas a presença, em `hmac_configured: true`.
       example: chave-de-assinatura-com-32-carac
-    proxyConfig:
+    proxy_config:
       allOf: [$ref: '#/components/schemas/ConfiguracaoProxyUtilizador']
       nullable: true
       description: |
         Proxy de saída. **Ausente e `null` são o mesmo** (o campo é ponteiro
         em Go) e ambos significam *sem proxy*: o servidor substitui por uma
-        configuração vazia. Aceite também como `proxy_config`.
-    s3Config:
+        configuração vazia.
+    s3_config:
       allOf: [$ref: '#/components/schemas/ConfiguracaoS3Utilizador']
       nullable: true
       description: |
         Armazenamento em S3. **Ausente e `null` são o mesmo** e ambos
         significam *sem S3*: o servidor substitui por uma configuração vazia.
-        Aceite também como `s3_config`.
 
 PedidoEditarUtilizador:
   type: object
@@ -436,17 +439,21 @@ PedidoEditarUtilizador:
 
     - `history` é `*int`: ausente/`null` é *não mexer*, e `0` **desactiva** a
       gravação (F218);
-    - `s3Config`/`proxyConfig` são ponteiros: ausente/`null` é *não mexer*,
+    - `s3_config`/`proxy_config` são ponteiros: ausente/`null` é *não mexer*,
       mas quando presentes **substituem o bloco inteiro**, e cada subcampo
       omitido dentro deles é gravado no valor zero.
 
     Um corpo sem nenhum campo útil responde `400 no_fields_to_update` — e
     `{}` e `{"token": ""}` dão o mesmo, medido a 2026-08-26.
 
-    `s3Config`/`proxyConfig` são aceites também em `snake_case`; o camelCase
-    vence quando ambos vierem. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
-    regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
-    recusa-os com `400 unknown_field`.
+    **Todas as chaves em snake_case.** O camelCase de antes (`s3Config`,
+    `proxyConfig`, e dentro deles `proxyUrl`, `accessKey`, `pathStyle`, …)
+    já não é lido: o corte foi a seco, e a resposta desta família passou a
+    usar exactamente os mesmos nomes. Campos desconhecidos são ignorados, mas
+    **não em silêncio**: o servidor regista `unknown field "<nome>"`, e
+    `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com `400 unknown_field`.
+
+    O identificador da sessão vem do CAMINHO e nunca do corpo.
   properties:
     name:
       type: string
@@ -522,14 +529,14 @@ PedidoEditarUtilizador:
         É o que permite voltar a desligar a gravação depois de a ter ligado.
         Negativo não é recusado aqui.
       example: 0
-    proxyConfig:
+    proxy_config:
       allOf: [$ref: '#/components/schemas/ConfiguracaoProxyUtilizador']
       nullable: true
       description: |
         Proxy de saída. Ausente e `null` são indistinguíveis e significam
         *não mexer*. Quando presente, **substitui**: com `enabled: false` (ou
         `enabled` omitido, que dá o mesmo) o `proxy_url` gravado é apagado.
-    s3Config:
+    s3_config:
       allOf: [$ref: '#/components/schemas/ConfiguracaoS3Utilizador']
       nullable: true
       description: |
@@ -541,8 +548,9 @@ PedidoEditarUtilizador:
 ConfiguracaoProxyUtilizador:
   type: object
   description: |
-    Proxy de saída, no formato de ESCRITA das rotas `/admin/users` — camelCase,
-    diferente do snake_case da resposta e do corpo de `POST /proxy/set`.
+    Proxy de saída, no formato de ESCRITA das rotas `/admin/users`. Os nomes
+    são os MESMOS da resposta desde a migração para DTO; antes eram camelCase
+    aqui e snake_case lá.
 
     **Este bloco não valida nada**: ao contrário de `POST /proxy/set`, o
     `proxyUrl` daqui não passa por verificação de esquema nem de endereço
@@ -559,12 +567,12 @@ ConfiguracaoProxyUtilizador:
         | rota | `enabled: true` | ausente / `null` / `false` |
         |---|---|---|
         | `POST /admin/users` | **ignorado** — o campo não é lido de todo | idem |
-        | `PUT /admin/users/{id}` | grava `proxyUrl` | **apaga** o `proxy_url` gravado |
+        | `PUT /admin/users/{id}` | grava `proxy_url` | **apaga** o `proxy_url` gravado |
 
         Na criação, o `enabled` da resposta é recalculado como
-        `proxyUrl != ""`, e não ecoa o que você enviou.
+        `proxy_url != ""`, e não ecoa o que você enviou.
       example: false
-    proxyUrl:
+    proxy_url:
       type: string
       nullable: false
       writeOnly: true
@@ -576,7 +584,7 @@ ConfiguracaoProxyUtilizador:
         em claro nem registado em log** por esta API. Na edição, só é gravado
         quando `enabled` for `true`.
       example: socks5://utilizador:senha@proxy.exemplo.com.br:1080
-    webhookUseProxy:
+    webhook_use_proxy:
       type: boolean
       nullable: true
       description: |
@@ -594,13 +602,13 @@ ConfiguracaoProxyUtilizador:
 ConfiguracaoS3Utilizador:
   type: object
   description: |
-    Armazenamento S3, no formato de ESCRITA das rotas `/admin/users` —
-    camelCase, diferente do snake_case de `POST /s3/config` e da resposta de
-    leitura.
+    Armazenamento S3, no formato de ESCRITA das rotas `/admin/users`. Os
+    nomes são os MESMOS da resposta desde a migração para DTO; antes eram
+    camelCase aqui e snake_case lá.
 
     **Nada aqui é validado**: ao contrário de `POST /s3/config`, nem
-    `mediaDelivery` nem `endpoint` passam por verificação — um
-    `mediaDelivery` inválido é gravado tal e qual, e um `endpoint` que não é
+    `media_delivery` nem `endpoint` passam por verificação — um
+    `media_delivery` inválido é gravado tal e qual, e um `endpoint` que não é
     URL também. Em qualquer subcampo, ausente, `null` e o valor zero são
     indistinguíveis.
   properties:
@@ -630,17 +638,17 @@ ConfiguracaoS3Utilizador:
       nullable: false
       description: Bucket de destino. Ausente, `null` e `""` são indistinguíveis e gravam a coluna vazia.
       example: wa-api-midia
-    accessKey:
+    access_key:
       type: string
       nullable: false
       writeOnly: true
       description: |
         Chave de acesso. Ausente, `null` e `""` são indistinguíveis.
 
-        **Nunca é devolvida**: nas leituras aparece sempre a constante `***`,
-        e o valor real não sai da API. Não use o valor de exemplo.
+        **Nunca é devolvida**: a resposta desta família já não traz sequer a
+        chave `access_key`, mascarada ou não. Não use o valor de exemplo.
       example: AKIA_EXEMPLO_NAO_USE
-    secretKey:
+    secret_key:
       type: string
       nullable: false
       writeOnly: true
@@ -651,7 +659,7 @@ ConfiguracaoS3Utilizador:
         rota** — nem sequer mascarada, porque a leitura não consulta a
         coluna. Não use o valor de exemplo.
       example: EXEMPLO_NAO_USE_gere_a_sua_secret_key
-    pathStyle:
+    path_style:
       type: boolean
       nullable: false
       default: false
@@ -659,14 +667,14 @@ ConfiguracaoS3Utilizador:
         Endereçamento por caminho em vez de subdomínio (necessário em MinIO e
         afins). Ausente, `null` e `false` são indistinguíveis.
       example: false
-    publicUrl:
+    public_url:
       type: string
       nullable: false
       description: |
         Base pública por onde a mídia guardada é servida. Ausente, `null` e
         `""` são indistinguíveis.
       example: 'https://midia.exemplo.com.br'
-    mediaDelivery:
+    media_delivery:
       type: string
       nullable: false
       enum: [base64, s3, both]
@@ -680,7 +688,7 @@ ConfiguracaoS3Utilizador:
         nenhum. E o vazio **não** é substituído por `base64` aqui: a coluna
         fica `""`, que é o que `GET /s3/config` e `GET /admin/users` devolvem.
       example: both
-    retentionDays:
+    retention_days:
       type: integer
       nullable: false
       minimum: 0
@@ -696,10 +704,13 @@ DadosUtilizadorApagado:
     Identificação da sessão removida por `DELETE /admin/users/{id}/full`, para
     o registo de quem chamou.
 
-    **As três propriedades vêm sempre**, sem `omitempty` e nunca `null`:
+    **As quatro propriedades vêm sempre**, sem `omitempty` e nunca `null`:
     `name` e `jid` são lidos ANTES da remoção e, se essa leitura falhar, a
     remoção prossegue e os dois chegam `""`.
-  required: [id, name, jid]
+
+    `details` é acréscimo da migração para DTO: o use case sempre o calculou
+    e o manipulador sempre o deitou fora.
+  required: [id, name, jid, details]
   properties:
     id:
       type: string
@@ -728,6 +739,19 @@ DadosUtilizadorApagado:
         não estava emparelhada ou quando a leitura anterior falhou — os dois
         casos são indistinguíveis. Nunca `null`.
       example: 5516981818244:25@s.whatsapp.net
+    details:
+      type: string
+      nullable: false
+      readOnly: true
+      description: |
+        Resumo do que a remoção fez, em texto fixo. Sempre presente e nunca
+        `null`.
+
+        É acréscimo da migração para DTO: o use case sempre o produziu, e o
+        manipulador servia só o bloco de identificação, portanto quem chamava
+        não conseguia distinguir esta rota da remoção simples pelo corpo da
+        resposta.
+      example: user instance removed completely
 
 ConfiguracaoWebhook:
   type: object

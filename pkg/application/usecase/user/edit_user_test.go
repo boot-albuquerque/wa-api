@@ -20,24 +20,24 @@ func TestEditUserUseCase_Execute_Rejections(t *testing.T) {
 	boom := errors.New("boom")
 	tests := []struct {
 		name       string
-		req        domain.EditUserRequest
+		req        domain.EditUserInput
 		existsFunc func(ctx context.Context, id string) (bool, error)
 		wantIs     error
 		wantUpdate bool
 	}{
 		{
 			name: "id vazio",
-			req:  domain.EditUserRequest{},
+			req:  domain.EditUserInput{},
 		},
 		{
 			name:       "erro ao consultar existência",
-			req:        domain.EditUserRequest{UserID: "u1"},
+			req:        domain.EditUserInput{UserID: "u1"},
 			existsFunc: func(context.Context, string) (bool, error) { return false, boom },
 			wantIs:     boom,
 		},
 		{
 			name:       "usuário inexistente",
-			req:        domain.EditUserRequest{UserID: "u1"},
+			req:        domain.EditUserInput{UserID: "u1"},
 			existsFunc: func(context.Context, string) (bool, error) { return false, nil },
 		},
 	}
@@ -103,7 +103,7 @@ func TestEditUserUseCase_Execute_UpdateErrors(t *testing.T) {
 			logger := &contractsfake.Logger{}
 			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, logger)
 
-			err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", Name: "novo"})
+			err := uc.Execute(context.Background(), domain.EditUserInput{UserID: "u1", Name: "novo"})
 			if !errors.Is(err, tt.wantIs) {
 				t.Fatalf("err = %v, queria %v", err, tt.wantIs)
 			}
@@ -122,7 +122,7 @@ func TestEditUserUseCase_Execute_InvalidEventEntriesAreSkipped(t *testing.T) {
 	}
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", Events: "Message,, ,ReadReceipt"}); err != nil {
+	if err := uc.Execute(context.Background(), domain.EditUserInput{UserID: "u1", Events: "Message,, ,ReadReceipt"}); err != nil {
 		t.Fatalf("erro inesperado: %v", err)
 	}
 	if len(repo.UpdateUserCalls) != 1 {
@@ -136,12 +136,12 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 	useProxy := true
 	tests := []struct {
 		name   string
-		req    domain.EditUserRequest
+		req    domain.EditUserInput
 		assert func(t *testing.T, upd domain.UserUpdate)
 	}{
 		{
 			name: "todos os campos escalares",
-			req: domain.EditUserRequest{
+			req: domain.EditUserInput{
 				UserID: "u1", Name: "n", Token: "t", Webhook: "http://w",
 				Expiration: 10, Events: "Message", History: intPtr(5),
 			},
@@ -163,7 +163,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 		},
 		{
 			name: "proxy habilitado propaga a URL",
-			req: domain.EditUserRequest{
+			req: domain.EditUserInput{
 				UserID:      "u1",
 				ProxyConfig: &domain.ProxyConfig{Enabled: true, ProxyURL: "http://proxy:8080", WebhookUseProxy: &useProxy},
 			},
@@ -179,7 +179,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 		},
 		{
 			name: "proxy desabilitado zera a URL",
-			req: domain.EditUserRequest{
+			req: domain.EditUserInput{
 				UserID:      "u1",
 				ProxyConfig: &domain.ProxyConfig{Enabled: false, ProxyURL: "http://proxy:8080"},
 			},
@@ -192,7 +192,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 		},
 		{
 			name: "s3 habilitado with secret enveloped (F163)",
-			req: domain.EditUserRequest{
+			req: domain.EditUserInput{
 				UserID:   "u1",
 				S3Config: &domain.S3Config{Enabled: true, Bucket: "b", Region: "r", SecretKey: "my-s3-secret"},
 			},
@@ -212,7 +212,7 @@ func TestEditUserUseCase_Execute_BuildsPartialUpdate(t *testing.T) {
 		},
 		{
 			name: "s3 desabilitado remove o cliente",
-			req: domain.EditUserRequest{
+			req: domain.EditUserInput{
 				UserID:   "u1",
 				S3Config: &domain.S3Config{Enabled: false},
 			},
@@ -274,7 +274,7 @@ func TestEditUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.
 			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 			err := uc.Execute(context.Background(),
-				domain.EditUserRequest{UserID: "u1", Events: tt.events})
+				domain.EditUserInput{UserID: "u1", Events: tt.events})
 			if err == nil {
 				t.Fatal("esperava recusa por tipo de evento desconhecido")
 			}
@@ -301,7 +301,7 @@ func TestEditUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 			uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
 			if err := uc.Execute(context.Background(),
-				domain.EditUserRequest{UserID: "u1", Events: events}); err != nil {
+				domain.EditUserInput{UserID: "u1", Events: events}); err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
 			if len(repo.UpdateUserCalls) != 1 {
@@ -334,7 +334,7 @@ func TestEditUserUseCase_Execute_S3CifraFalhaNaoGravaUsuario(t *testing.T) {
 	logger := &contractsfake.Logger{}
 	uc := user.NewEditUserUseCase(repo, s3Cipher, &contractsfake.UserInfoRepublisher{}, logger)
 
-	err := uc.Execute(context.Background(), domain.EditUserRequest{
+	err := uc.Execute(context.Background(), domain.EditUserInput{
 		UserID:   "u1",
 		S3Config: &domain.S3Config{Enabled: true, SecretKey: "my-s3-secret"},
 	})
@@ -360,7 +360,7 @@ func TestEditUser_RepublicaAposEscritaBemSucedida(t *testing.T) {
 	rep := &contractsfake.UserInfoRepublisher{}
 
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+	if err := uc.Execute(context.Background(), domain.EditUserInput{
 		UserID: "u1", History: intPtr(30),
 	}); err != nil {
 		t.Fatalf("Execute = %v", err)
@@ -387,7 +387,7 @@ func TestEditUser_NaoRepublicaQuandoAEscritaFalha(t *testing.T) {
 	rep := &contractsfake.UserInfoRepublisher{}
 
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: intPtr(30)}); err == nil {
+	if err := uc.Execute(context.Background(), domain.EditUserInput{UserID: "u1", History: intPtr(30)}); err == nil {
 		t.Fatal("Execute devolveu nil apesar de a escrita ter falhado")
 	}
 
@@ -410,7 +410,7 @@ func TestEditUser_RepublicaDEPOISDaEscritaENaoAntes(t *testing.T) {
 	}
 
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, rep, &contractsfake.Logger{})
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{UserID: "u1", History: intPtr(30)}); err != nil {
+	if err := uc.Execute(context.Background(), domain.EditUserInput{UserID: "u1", History: intPtr(30)}); err != nil {
 		t.Fatalf("Execute = %v", err)
 	}
 
@@ -437,7 +437,7 @@ func TestEditUser_RepublicaDEPOISDaEscritaENaoAntes(t *testing.T) {
 func TestEditUser_SemCamposEhErroDoCliente(t *testing.T) {
 	t.Parallel()
 
-	for _, req := range []domain.EditUserRequest{
+	for _, req := range []domain.EditUserInput{
 		{UserID: "u1"},            // corpo vazio
 		{UserID: "u1", Token: ""}, // o caso da entrada
 		{UserID: "u1", Name: "", Webhook: ""},
@@ -503,7 +503,7 @@ func TestEditUser_S3ConfigEhPersistido(t *testing.T) {
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
 		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
-	err := uc.Execute(context.Background(), domain.EditUserRequest{
+	err := uc.Execute(context.Background(), domain.EditUserInput{
 		UserID: "u1",
 		S3Config: &domain.S3Config{
 			Enabled: true, Bucket: "meu-balde", Endpoint: "http://minio:9000",
@@ -547,7 +547,7 @@ func TestEditUser_HistoryZeroChegaAoRepositorio(t *testing.T) {
 	}
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+	if err := uc.Execute(context.Background(), domain.EditUserInput{
 		UserID: "u1", History: intPtr(0),
 	}); err != nil {
 		t.Fatalf("Execute = %v — history=0 was refused; the old int+omitempty bug is back", err)
@@ -575,7 +575,7 @@ func TestEditUser_HistoryOmitidoNaoToca(t *testing.T) {
 	}
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+	if err := uc.Execute(context.Background(), domain.EditUserInput{
 		UserID: "u1", Name: "only-name",
 	}); err != nil {
 		t.Fatalf("Execute = %v", err)
@@ -606,7 +606,7 @@ func TestEditUser_SemS3ConfigNaoTocaNoS3(t *testing.T) {
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
 		&contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{})
 
-	if err := uc.Execute(context.Background(), domain.EditUserRequest{
+	if err := uc.Execute(context.Background(), domain.EditUserInput{
 		UserID: "u1", Name: "so-o-nome",
 	}); err != nil {
 		t.Fatalf("erro inesperado: %v", err)

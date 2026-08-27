@@ -285,7 +285,16 @@ O corpo JSON para criar um novo usuário deve conter:
 
 ## Criação de Usuário com Proxy e S3
 
-Você pode criar um usuário com configuração opcional de proxy e armazenamento S3. Todos os campos são opcionais e backward-compatible. Se não fornecidos, o usuário será criado com configurações padrão.
+Você pode criar um usuário com configuração opcional de proxy e armazenamento S3. Todos os campos são opcionais. Se não fornecidos, o usuário será criado com configurações padrão.
+
+> **Mudança de nomes (migração da camada de DTO).** As rotas `/admin/users`
+> passaram a ler e a devolver **exclusivamente `snake_case`**: `proxy_config`,
+> `s3_config`, `hmac_key`, `proxy_url`, `access_key`, `secret_key`,
+> `path_style`, `public_url`, `media_delivery`, `retention_days`,
+> `webhook_use_proxy`. O camelCase que este README documentava
+> (`proxyConfig`, `s3Config`, `accessKey`, …) **não é mais lido**, e um corpo
+> que o use perde esses campos. A resposta já era `snake_case`; o corte
+> alinhou os dois lados.
 
 ### Exemplo de Payload
 
@@ -293,41 +302,44 @@ Você pode criar um usuário com configuração opcional de proxy e armazenament
 {
   "name": "test_user",
   "token": "user_token",
-  "proxyConfig": {
+  "proxy_config": {
     "enabled": true,
-    "proxyURL": "socks5://user:pass@host:port"
+    "proxy_url": "socks5://user:pass@host:port"
   },
-  "s3Config": {
+  "s3_config": {
     "enabled": true,
     "endpoint": "https://s3.amazonaws.com",
     "region": "us-east-1",
     "bucket": "my-bucket",
-    "accessKey": "AKIAIOSFODNN7EXAMPLE",
-    "secretKey": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-    "pathStyle": false,
-    "publicURL": "https://cdn.yoursite.com",
-    "mediaDelivery": "both",
-    "retentionDays": 30
+    "access_key": "AKIAIOSFODNN7EXAMPLE",
+    "secret_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    "path_style": false,
+    "public_url": "https://cdn.yoursite.com",
+    "media_delivery": "both",
+    "retention_days": 30
   }
 }
 ```
 
-- `proxyConfig` (object, opcional):
+- `proxy_config` (object, opcional):
   - `enabled` (boolean): Habilita proxy para este usuário.
-  - `proxyURL` (string): URL do proxy (ex.: `socks5://user:pass@host:port`).
-- `s3Config` (object, opcional):
+  - `proxy_url` (string): URL do proxy (ex.: `socks5://user:pass@host:port`).
+  - `webhook_use_proxy` (boolean, opcional): Se a entrega dos webhooks também sai pelo proxy. Ausente assume `true` na criação.
+- `s3_config` (object, opcional):
   - `enabled` (boolean): Habilita armazenamento S3 para este usuário.
   - `endpoint` (string): URL do endpoint S3.
   - `region` (string): Região S3.
   - `bucket` (string): Nome do bucket S3.
-  - `accessKey` (string): Chave de acesso S3.
-  - `secretKey` (string): Chave secreta S3.
-  - `pathStyle` (boolean): Usar endereçamento path-style.
-  - `publicURL` (string): URL pública para acesso aos arquivos.
-  - `mediaDelivery` (string): Tipo de entrega de mídia (`base64`, `s3`, ou `both`).
-  - `retentionDays` (integer): Dias para retenção dos arquivos.
+  - `access_key` (string): Chave de acesso S3.
+  - `secret_key` (string): Chave secreta S3.
+  - `path_style` (boolean): Usar endereçamento path-style.
+  - `public_url` (string): URL pública para acesso aos arquivos.
+  - `media_delivery` (string): Tipo de entrega de mídia (`base64`, `s3`, ou `both`).
+  - `retention_days` (integer): Dias para retenção dos arquivos.
 
-Se você omitir `proxyConfig` ou `s3Config`, o usuário será criado sem integração de proxy ou S3, mantendo total backward compatibility.
+Se você omitir `proxy_config` ou `s3_config`, o usuário será criado sem integração de proxy ou S3.
+
+A resposta **não devolve** `access_key`: ela vinha como `"***"` com ou sem chave configurada, portanto não carregava informação, e reenviá-la num `PUT` gravaria `***` por cima da credencial real.
 
 ## Referência da API
 

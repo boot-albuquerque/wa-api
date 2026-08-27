@@ -56,11 +56,11 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 	ctx := context.Background()
 
-	if _, err := uc.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "shared"}); err != nil {
+	if _, err := uc.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "shared"}); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
 
-	_, err := uc.Execute(ctx, domain.AddUserRequest{Name: "mallory", Token: "shared"})
+	_, err := uc.Execute(ctx, domain.AddUserInput{Name: "mallory", Token: "shared"})
 	if !errors.Is(err, user.ErrDuplicateToken) {
 		t.Fatalf("second add error = %v, want user.ErrDuplicateToken", err)
 	}
@@ -89,7 +89,7 @@ func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			_, err := uc.Execute(context.Background(),
-				domain.AddUserRequest{Name: "racer", Token: "contended"})
+				domain.AddUserInput{Name: "racer", Token: "contended"})
 			successes[idx] = err == nil
 		}(i)
 	}
@@ -118,7 +118,7 @@ func TestAddUserPersistsTokenHash(t *testing.T) {
 	db := newUserTestDB(t)
 	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
-	resp, err := uc.Execute(context.Background(), domain.AddUserRequest{Name: "alice", Token: "tok"})
+	resp, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -137,16 +137,16 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 	ctx := context.Background()
 	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
 
-	if _, err := add.Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "alice-token"}); err != nil {
+	if _, err := add.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "alice-token"}); err != nil {
 		t.Fatalf("add alice: %v", err)
 	}
-	bob, err := add.Execute(ctx, domain.AddUserRequest{Name: "bob", Token: "bob-token"})
+	bob, err := add.Execute(ctx, domain.AddUserInput{Name: "bob", Token: "bob-token"})
 	if err != nil {
 		t.Fatalf("add bob: %v", err)
 	}
 
 	edit := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, discardLogger{})
-	err = edit.Execute(ctx, domain.EditUserRequest{UserID: bob.ID, Token: "alice-token"})
+	err = edit.Execute(ctx, domain.EditUserInput{UserID: bob.ID, Token: "alice-token"})
 	if !errors.Is(err, user.ErrDuplicateToken) {
 		t.Fatalf("edit error = %v, want user.ErrDuplicateToken", err)
 	}
@@ -168,13 +168,13 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
-		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "old-token"})
+		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "old-token"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
 	if err := user.NewEditUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, discardLogger{}).
-		Execute(ctx, domain.EditUserRequest{UserID: created.ID, Token: "new-token"}); err != nil {
+		Execute(ctx, domain.EditUserInput{UserID: created.ID, Token: "new-token"}); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 
@@ -192,12 +192,12 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
-		Execute(ctx, domain.AddUserRequest{Name: "alice", Token: "secret-token"}); err != nil {
+		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "secret-token"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
 	users, err := user.NewListUsersUseCase(dbpkg.NewUserRepository(db), discardLogger{}, stubSessionStatus{}).
-		Execute(ctx, domain.ListUsersRequest{})
+		Execute(ctx, domain.ListUsersInput{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

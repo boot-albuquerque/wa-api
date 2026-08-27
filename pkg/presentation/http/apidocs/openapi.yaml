@@ -547,8 +547,9 @@ components:
       type: object
     ConfiguracaoProxyUtilizador:
       description: |
-        Proxy de saída, no formato de ESCRITA das rotas `/admin/users` — camelCase,
-        diferente do snake_case da resposta e do corpo de `POST /proxy/set`.
+        Proxy de saída, no formato de ESCRITA das rotas `/admin/users`. Os nomes
+        são os MESMOS da resposta desde a migração para DTO; antes eram camelCase
+        aqui e snake_case lá.
 
         **Este bloco não valida nada**: ao contrário de `POST /proxy/set`, o
         `proxyUrl` daqui não passa por verificação de esquema nem de endereço
@@ -563,14 +564,14 @@ components:
             | rota | `enabled: true` | ausente / `null` / `false` |
             |---|---|---|
             | `POST /admin/users` | **ignorado** — o campo não é lido de todo | idem |
-            | `PUT /admin/users/{id}` | grava `proxyUrl` | **apaga** o `proxy_url` gravado |
+            | `PUT /admin/users/{id}` | grava `proxy_url` | **apaga** o `proxy_url` gravado |
 
             Na criação, o `enabled` da resposta é recalculado como
-            `proxyUrl != ""`, e não ecoa o que você enviou.
+            `proxy_url != ""`, e não ecoa o que você enviou.
           example: false
           nullable: false
           type: boolean
-        proxyUrl:
+        proxy_url:
           description: |
             URL do proxy. Ausente, `null` e `""` são indistinguíveis.
 
@@ -582,7 +583,7 @@ components:
           nullable: false
           type: string
           writeOnly: true
-        webhookUseProxy:
+        webhook_use_proxy:
           description: |
             Se a entrega dos webhooks também sai por este proxy. **É `*bool`**,
             logo os três estados distinguem-se:
@@ -706,22 +707,22 @@ components:
       type: object
     ConfiguracaoS3Utilizador:
       description: |
-        Armazenamento S3, no formato de ESCRITA das rotas `/admin/users` —
-        camelCase, diferente do snake_case de `POST /s3/config` e da resposta de
-        leitura.
+        Armazenamento S3, no formato de ESCRITA das rotas `/admin/users`. Os
+        nomes são os MESMOS da resposta desde a migração para DTO; antes eram
+        camelCase aqui e snake_case lá.
 
         **Nada aqui é validado**: ao contrário de `POST /s3/config`, nem
-        `mediaDelivery` nem `endpoint` passam por verificação — um
-        `mediaDelivery` inválido é gravado tal e qual, e um `endpoint` que não é
+        `media_delivery` nem `endpoint` passam por verificação — um
+        `media_delivery` inválido é gravado tal e qual, e um `endpoint` que não é
         URL também. Em qualquer subcampo, ausente, `null` e o valor zero são
         indistinguíveis.
       properties:
-        accessKey:
+        access_key:
           description: |
             Chave de acesso. Ausente, `null` e `""` são indistinguíveis.
 
-            **Nunca é devolvida**: nas leituras aparece sempre a constante `***`,
-            e o valor real não sai da API. Não use o valor de exemplo.
+            **Nunca é devolvida**: a resposta desta família já não traz sequer a
+            chave `access_key`, mascarada ou não. Não use o valor de exemplo.
           example: AKIA_EXEMPLO_NAO_USE
           nullable: false
           type: string
@@ -747,7 +748,7 @@ components:
           example: https://s3.sa-east-1.amazonaws.com
           nullable: false
           type: string
-        mediaDelivery:
+        media_delivery:
           description: |
             Como a mídia recebida é entregue. Ausente, `null` e `""` são
             indistinguíveis.
@@ -764,7 +765,7 @@ components:
           example: both
           nullable: false
           type: string
-        pathStyle:
+        path_style:
           default: false
           description: |
             Endereçamento por caminho em vez de subdomínio (necessário em MinIO e
@@ -772,7 +773,7 @@ components:
           example: false
           nullable: false
           type: boolean
-        publicUrl:
+        public_url:
           description: |
             Base pública por onde a mídia guardada é servida. Ausente, `null` e
             `""` são indistinguíveis.
@@ -784,7 +785,7 @@ components:
           example: sa-east-1
           nullable: false
           type: string
-        retentionDays:
+        retention_days:
           default: 0
           description: |
             Dias de retenção dos objectos. Ausente, `null` e `0` são
@@ -793,7 +794,7 @@ components:
           minimum: 0
           nullable: false
           type: integer
-        secretKey:
+        secret_key:
           description: |
             Segredo de acesso. Ausente, `null` e `""` são indistinguíveis.
 
@@ -1006,10 +1007,26 @@ components:
         Identificação da sessão removida por `DELETE /admin/users/{id}/full`, para
         o registo de quem chamou.
 
-        **As três propriedades vêm sempre**, sem `omitempty` e nunca `null`:
+        **As quatro propriedades vêm sempre**, sem `omitempty` e nunca `null`:
         `name` e `jid` são lidos ANTES da remoção e, se essa leitura falhar, a
         remoção prossegue e os dois chegam `""`.
+
+        `details` é acréscimo da migração para DTO: o use case sempre o calculou
+        e o manipulador sempre o deitou fora.
       properties:
+        details:
+          description: |
+            Resumo do que a remoção fez, em texto fixo. Sempre presente e nunca
+            `null`.
+
+            É acréscimo da migração para DTO: o use case sempre o produziu, e o
+            manipulador servia só o bloco de identificação, portanto quem chamava
+            não conseguia distinguir esta rota da remoção simples pelo corpo da
+            resposta.
+          example: user instance removed completely
+          nullable: false
+          readOnly: true
+          type: string
         id:
           description: |
             Identificador da sessão removida — é o `{id}` do caminho, ecoado.
@@ -1041,6 +1058,7 @@ components:
         - id
         - name
         - jid
+        - details
       type: object
     DefinicoesPrivacidade:
       description: |
@@ -4778,12 +4796,18 @@ components:
       type: object
     PedidoCriarUtilizador:
       description: |
-        Corpo de `POST /admin/users`. `s3Config` e `proxyConfig` são aceites também
-        como `s3_config` e `proxy_config`; o camelCase vence quando ambos vierem.
+        Corpo de `POST /admin/users`. **Todas as chaves em snake_case**, incluindo
+        as dos blocos aninhados — `s3_config`, `proxy_config`, `hmac_key`.
 
-        **Campos desconhecidos são ignorados** — toda a API usa
-        `encoding/json` sem `DisallowUnknownFields`, portanto um nome mal escrito
-        não dá erro: dá o valor zero.
+        O camelCase de antes (`s3Config`, `proxyConfig`, `hmacKey`, e dentro
+        deles `proxyUrl`, `accessKey`, `pathStyle`, `publicUrl`, `mediaDelivery`,
+        `retentionDays`) **já não é lido**. Não há grafia dupla: a leitura dos
+        dois nomes existia para compensar uma resposta em snake_case, e alinhar
+        os dois lados removeu a razão de ela existir.
+
+        Um corpo com os nomes antigos perde esses campos. Não passa despercebido:
+        o servidor regista `unknown field "<nome>"`, e com
+        `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-o com `400 unknown_field`.
       properties:
         events:
           description: |
@@ -4824,7 +4848,7 @@ components:
           minimum: 0
           nullable: false
           type: integer
-        hmacKey:
+        hmac_key:
           description: |
             Chave de assinatura dos webhooks. Ausente, `null` e `""` são
             indistinguíveis e criam a sessão **sem** chave, sem erro.
@@ -4856,21 +4880,20 @@ components:
           minLength: 1
           nullable: false
           type: string
-        proxyConfig:
+        proxy_config:
           allOf:
             - $ref: '#/components/schemas/ConfiguracaoProxyUtilizador'
           description: |
             Proxy de saída. **Ausente e `null` são o mesmo** (o campo é ponteiro
             em Go) e ambos significam *sem proxy*: o servidor substitui por uma
-            configuração vazia. Aceite também como `proxy_config`.
+            configuração vazia.
           nullable: true
-        s3Config:
+        s3_config:
           allOf:
             - $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
           description: |
             Armazenamento em S3. **Ausente e `null` são o mesmo** e ambos
             significam *sem S3*: o servidor substitui por uma configuração vazia.
-            Aceite também como `s3_config`.
           nullable: true
         token:
           description: |
@@ -5322,17 +5345,21 @@ components:
 
         - `history` é `*int`: ausente/`null` é *não mexer*, e `0` **desactiva** a
           gravação (F218);
-        - `s3Config`/`proxyConfig` são ponteiros: ausente/`null` é *não mexer*,
+        - `s3_config`/`proxy_config` são ponteiros: ausente/`null` é *não mexer*,
           mas quando presentes **substituem o bloco inteiro**, e cada subcampo
           omitido dentro deles é gravado no valor zero.
 
         Um corpo sem nenhum campo útil responde `400 no_fields_to_update` — e
         `{}` e `{"token": ""}` dão o mesmo, medido a 2026-08-26.
 
-        `s3Config`/`proxyConfig` são aceites também em `snake_case`; o camelCase
-        vence quando ambos vierem. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
-        regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
-        recusa-os com `400 unknown_field`.
+        **Todas as chaves em snake_case.** O camelCase de antes (`s3Config`,
+        `proxyConfig`, e dentro deles `proxyUrl`, `accessKey`, `pathStyle`, …)
+        já não é lido: o corte foi a seco, e a resposta desta família passou a
+        usar exactamente os mesmos nomes. Campos desconhecidos são ignorados, mas
+        **não em silêncio**: o servidor regista `unknown field "<nome>"`, e
+        `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-os com `400 unknown_field`.
+
+        O identificador da sessão vem do CAMINHO e nunca do corpo.
       properties:
         events:
           description: |
@@ -5385,7 +5412,7 @@ components:
           example: filarapida
           nullable: false
           type: string
-        proxyConfig:
+        proxy_config:
           allOf:
             - $ref: '#/components/schemas/ConfiguracaoProxyUtilizador'
           description: |
@@ -5393,7 +5420,7 @@ components:
             *não mexer*. Quando presente, **substitui**: com `enabled: false` (ou
             `enabled` omitido, que dá o mesmo) o `proxy_url` gravado é apagado.
           nullable: true
-        s3Config:
+        s3_config:
           allOf:
             - $ref: '#/components/schemas/ConfiguracaoS3Utilizador'
           description: |
@@ -11015,18 +11042,17 @@ components:
         o token de todas as sessões transformava uma leitura na fuga de todas as
         credenciais da instalação.
 
-        Campo nenhum desta resposta vem `null`: os que existem são tipos simples
-        de Go, e os que não têm valor são **omitidos** (`omitempty`) ou vêm no
-        valor zero. Quando uma propriedade abaixo diz "ausente", é ausência da
-        chave — nunca `null`.
+        Campo nenhum desta resposta vem `null` e campo nenhum é omitido: o
+        `omitempty` saiu de todos na migração para DTO, porque um cliente tem de
+        conseguir distinguir "esta sessão não tem JID" de "esta versão deixou de
+        mandar a chave". O que não tem valor vem `""`, `false` ou `0`.
       properties:
         connected:
           description: |
             Se o transporte para o WhatsApp está de pé neste instante.
 
-            **Sempre presente**, incluindo quando `false` — é o único booleano
-            desta resposta sem `omitempty`. Nunca `null`. Na resposta de criação
-            vem `false`, porque criar não liga.
+            **Sempre presente**, incluindo quando `false`. Nunca `null`. Na
+            resposta de criação vem `false`, porque criar não liga.
           example: true
           nullable: false
           readOnly: true
@@ -11035,9 +11061,8 @@ components:
           description: |
             Eventos subscritos, separados por vírgulas. `All` recebe todos.
 
-            **Ausente quando a sessão não tem nenhum** (`omitempty`) — medido a
-            2026-08-26, em que uma das duas sessões traz `"All"` e a outra não
-            traz a chave. Nunca `null`, e nunca `""`.
+            **Sempre presente**; vem `""` quando a sessão não subscreve nenhum.
+            Nunca `null`. Antes da migração a chave desaparecia nesse caso.
           example: Message,Receipt,Connected
           nullable: false
           readOnly: true
@@ -11046,8 +11071,8 @@ components:
           description: |
             Instante de expiração da sessão, em segundos desde a época Unix.
 
-            **Ausente quando `0`** (`omitempty`), e `0` significa *não expira* —
-            logo a ausência da chave é a resposta normal. Nunca `null`.
+            **Sempre presente**, e `0` significa *não expira* — logo `0` é a
+            resposta normal. Nunca `null`.
           example: 1790000000
           format: int64
           minimum: 0
@@ -11056,11 +11081,11 @@ components:
           type: integer
         hmac_configured:
           description: |
-            Se a sessão nasceu com chave HMAC. **Ausente quando `false`**
-            (`omitempty`), logo só aparece na resposta de `POST /admin/users` e
-            só quando uma `hmacKey` foi enviada. Nunca `null`.
+            Se a sessão nasceu com chave HMAC. **Sempre presente**; só vem `true`
+            na resposta de `POST /admin/users`, e só quando uma `hmac_key` foi
+            enviada. Nunca `null`.
 
-            Nas leituras está sempre ausente: elas não consultam a coluna.
+            Nas leituras vem sempre `false`: elas não consultam a coluna.
           example: true
           nullable: false
           readOnly: true
@@ -11070,8 +11095,7 @@ components:
             Identificador da sessão, hexadecimal de 32 caracteres. É o `{id}` das
             rotas `/admin/users/{id}`.
 
-            **Sempre presente**, e nunca `null`: é gerado pelo servidor e não tem
-            `omitempty`.
+            **Sempre presente**, e nunca `null`: é gerado pelo servidor.
           example: 918e37366f27e1125ee0482a793267e1
           maxLength: 32
           minLength: 32
@@ -11082,21 +11106,24 @@ components:
         jid:
           description: |
             JID da conta de WhatsApp emparelhada, com o sufixo do aparelho
-            (`:25`). **Ausente** — a chave não aparece — enquanto a sessão não
-            estiver emparelhada, porque o campo tem `omitempty`. Nunca `null`, e
-            nunca `""`: ou vem preenchido, ou não vem.
+            (`:25`). **Sempre presente**; vem `""` enquanto a sessão não estiver
+            emparelhada. Nunca `null`.
+
+            Até à migração para DTO a chave DESAPARECIA nesse caso (`omitempty`),
+            e a ausência era indistinguível de a versão do servidor não a mandar.
           example: 5516981818244:25@s.whatsapp.net
           nullable: false
           readOnly: true
           type: string
-        loggedIn:
+        logged_in:
           description: |
             Se a sessão está autenticada. Distinto de `connected`: pode haver
             credencial válida com o transporte caído.
 
-            **Ausente quando `false`** (`omitempty`) — a ausência da chave e o
-            valor `false` são a mesma informação, e `null` não ocorre.
-          example: true
+            **Sempre presente**, incluindo quando `false`. Nunca `null`.
+
+            Chamava-se `loggedIn`, em camelCase — o único nome desta resposta que
+            a regra de nomes canónicos recusava de todo.
           nullable: false
           readOnly: true
           type: boolean
@@ -11104,21 +11131,20 @@ components:
           description: |
             Nome dado à sessão na criação. Não é o nome da conta de WhatsApp.
 
-            **Sempre presente** (sem `omitempty`); vem `""` se a linha do banco
-            estiver com o nome vazio. Nunca `null`.
+            **Sempre presente**; vem `""` se a linha do banco estiver com o nome
+            vazio. Nunca `null`.
           example: filarapida
           nullable: false
           readOnly: true
           type: string
         proxy_config:
           description: |
-            Proxy de saída desta sessão. **Ausente** quando o mapa é vazio
-            (`omitempty`); na prática vem sempre, porque o servidor o constrói
-            com as três chaves. Nunca `null`.
+            Proxy de saída desta sessão. **Sempre presente**, com as três chaves.
+            Nunca `null`.
 
-            **Repare na assimetria de nomes**: aqui a chave é `proxy_config` em
-            snake_case, mas o corpo de escrita usa `proxyConfig` em camelCase —
-            os dois são aceites na escrita.
+            O corpo de escrita usa exactamente os mesmos nomes: a assimetria
+            `proxy_config` na leitura contra `proxyConfig` na escrita acabou com
+            a migração para DTO.
           nullable: false
           properties:
             enabled:
@@ -11131,19 +11157,20 @@ components:
               nullable: false
               readOnly: true
               type: boolean
-            proxyUrl:
+            proxy_url:
               description: |
                 URL do proxy gravado. `""` quando não há nenhum. Sempre presente,
-                nunca `null`.
+                nunca `null`. Chamava-se `proxyUrl`.
               example: ""
               nullable: false
               readOnly: true
               type: string
-            webhookUseProxy:
+            webhook_use_proxy:
               description: |
                 Se a entrega dos webhooks também sai por este proxy. Sempre
                 presente, nunca `null` — a resolução acontece no servidor, que
                 escolhe entre o valor pedido, o gravado e o padrão da instalação.
+                Chamava-se `webhookUseProxy`.
               example: true
               nullable: false
               readOnly: true
@@ -11153,37 +11180,26 @@ components:
         qrcode:
           description: |
             QR code pendente de leitura, quando o emparelhamento está a decorrer.
-            **Ausente** fora disso (`omitempty`). Nunca `null`.
+            **Sempre presente**; vem `""` fora disso. Nunca `null`.
 
-            Na resposta de `POST /admin/users` está sempre ausente: criar a sessão
-            não inicia o emparelhamento.
+            Na resposta de `POST /admin/users` vem sempre `""`: criar a sessão não
+            inicia o emparelhamento.
           example: 2@Wt3F0k...
           nullable: false
           readOnly: true
           type: string
         s3_config:
           description: |
-            Armazenamento em S3 desta sessão. **Ausente** quando o mapa é vazio
-            (`omitempty`); na prática vem sempre. Nunca `null`.
+            Armazenamento em S3 desta sessão. **Sempre presente**. Nunca `null`.
 
-            `access_key` vem **sempre** como `***`, mesmo quando não há chave, e
-            `secret_key` não aparece de todo. Mesma assimetria de nomes do proxy:
-            `s3_config` na resposta, `s3Config` no corpo de escrita.
+            **`access_key` já não existe nesta resposta.** Vinha sempre como
+            `***`, com chave configurada ou sem ela — a listagem nem sequer lê a
+            coluna —, portanto não dizia nada; e depois de os nomes de pedido e
+            de resposta passarem a coincidir, reenviar esta resposta num
+            `PUT /admin/users/{id}` gravaria `***` por cima da credencial real.
+            `secret_key` continua a não aparecer.
           nullable: false
           properties:
-            access_key:
-              description: |
-                **Sempre a constante `***`**, e nunca o valor real — mesmo quando
-                não há chave nenhuma configurada, porque mascarar só quando
-                existe revelaria a existência. Não há valor desconhecido possível
-                aqui: o servidor escreve esta constante incondicionalmente.
-                Sempre presente, nunca `null`.
-              enum:
-                - '***'
-              example: '***'
-              nullable: false
-              readOnly: true
-              type: string
             bucket:
               description: Bucket de destino. `""` quando não configurado. Sempre presente, nunca `null`.
               example: ""
@@ -11264,8 +11280,7 @@ components:
           type: object
         token:
           description: |
-            Token de sessão. **Sempre presente** (sem `omitempty`), mas o valor
-            depende da rota:
+            Token de sessão. **Sempre presente**, mas o valor depende da rota:
 
             | rota | valor |
             |---|---|
@@ -11281,8 +11296,8 @@ components:
           type: string
         webhook:
           description: |
-            URL do webhook desta sessão. **Sempre presente** (sem `omitempty`);
-            vem `""` quando não há nenhum configurado. Nunca `null`.
+            URL do webhook desta sessão. **Sempre presente**; vem `""` quando não
+            há nenhum configurado. Nunca `null`.
           example: ""
           nullable: false
           readOnly: true
@@ -11448,6 +11463,14 @@ paths:
         na resposta de `POST /admin/users`, e não é recuperável depois. Perdido o
         token, cria-se outra sessão.
 
+        **Instalação sem sessões devolve `data: []`**, e nunca `null`: só uma
+        das duas formas se percorre sem verificação.
+
+        **Nomes**: esta família migrou para a camada de DTO. `loggedIn` passou a
+        `logged_in`, `proxyUrl` a `proxy_url`, `webhookUseProxy` a
+        `webhook_use_proxy`, e nenhum campo é omitido quando está vazio.
+        `s3_config.access_key`, que vinha sempre como `***`, **desapareceu**.
+
         **Quando usar**: em painéis de operação, para saber que sessões existem e
         quais estão ligadas e autenticadas.
 
@@ -11463,16 +11486,19 @@ paths:
                 code: 200
                 data:
                   - connected: true
+                    events: All
+                    expiration: 0
+                    hmac_configured: false
                     id: 918e37366f27e1125ee0482a793267e1
                     jid: 5516981818244:25@s.whatsapp.net
-                    loggedIn: true
+                    logged_in: true
                     name: filarapida
                     proxy_config:
                       enabled: false
-                      proxyUrl: ""
-                      webhookUseProxy: true
+                      proxy_url: ""
+                      webhook_use_proxy: true
+                    qrcode: ""
                     s3_config:
-                      access_key: '***'
                       bucket: ""
                       enabled: false
                       endpoint: ""
@@ -11493,7 +11519,8 @@ paths:
                           $ref: '#/components/schemas/UtilizadorAdmin'
                         type: array
                     type: object
-          description: Lista de sessões. Vazia se não houver nenhuma.
+          description: |
+            Lista de sessões. `[]` se não houver nenhuma — nunca `null`.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
@@ -11525,10 +11552,16 @@ paths:
         - `events` é uma lista separada por vírgulas, e cada nome é validado:
           um nome desconhecido dá `400 invalid_event_type`, indicando qual.
           `All` recebe todos os eventos.
-        - `hmacKey`, quando presente, tem de ter pelo menos **32 caracteres**
+        - `hmac_key`, quando presente, tem de ter pelo menos **32 caracteres**
           (`400 hmac_key_too_short`). É guardada cifrada e nunca mais sai.
-        - `s3Config`/`proxyConfig` são aceites também em `snake_case`
-          (`s3_config`, `proxy_config`); o camelCase vence quando ambos vierem.
+
+        **Nomes**: o corpo é todo em `snake_case` — `hmac_key`, `proxy_config`,
+        `s3_config`, e dentro deles `proxy_url`, `access_key`, `path_style`,
+        `public_url`, `media_delivery`, `retention_days`, `webhook_use_proxy`.
+        O camelCase de antes deixou de ser lido na migração para DTO: ele
+        existia porque a RESPOSTA era snake_case, e alinhar os dois lados
+        dispensou a grafia dupla. Um corpo com os nomes antigos perde esses
+        campos, e o servidor regista `unknown field`.
 
         **Autenticação**: token de administração, no cabeçalho `Authorization`,
         sem prefixo `Bearer`. É regerado a cada arranque e fica em
@@ -11540,13 +11573,13 @@ paths:
               events: Message,Receipt,Connected
               history: 100
               name: filarapida
-              proxyConfig:
+              proxy_config:
                 enabled: false
-                proxyUrl: ""
-              s3Config:
+                proxy_url: ""
+              s3_config:
                 enabled: false
-                mediaDelivery: base64
-                retentionDays: 30
+                media_delivery: base64
+                retention_days: 30
               token: tk_EXEMPLO_NAO_USE_gere_o_seu
             schema:
               $ref: '#/components/schemas/PedidoCriarUtilizador'
@@ -11560,14 +11593,18 @@ paths:
                 data:
                   connected: false
                   events: Message,Receipt,Connected
+                  expiration: 0
+                  hmac_configured: false
                   id: 918e37366f27e1125ee0482a793267e1
+                  jid: ""
+                  logged_in: false
                   name: filarapida
                   proxy_config:
                     enabled: false
-                    proxyUrl: ""
-                    webhookUseProxy: true
+                    proxy_url: ""
+                    webhook_use_proxy: true
+                  qrcode: ""
                   s3_config:
-                    access_key: '***'
                     bucket: ""
                     enabled: false
                     endpoint: ""
@@ -11641,7 +11678,7 @@ paths:
         | termina a ligação ao WhatsApp | **não** | faz `logout` e `disconnect` antes |
         | ficheiros em `<datadir>/files/<id>` | **deixa** | apaga a pasta inteira |
         | objectos no S3 | não apaga | **também não apaga** — ver abaixo |
-        | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid}` |
+        | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid, details}` |
 
         Ou seja: esta rota deixa para trás a sessão viva na memória do processo e
         a mídia em disco. Use `/full` quando a intenção for remover o
@@ -11712,10 +11749,13 @@ paths:
         O mesmo manipulador da listagem, filtrado por `id`. Por isso **devolve um
         ARRAY**, e não um objecto — com um elemento quando a sessão existe.
 
-        **Sessão inexistente responde `200` com `data: null`, e não `404`.**
-        Medido a 2026-08-26 contra
-        `/admin/users/00000000000000000000000000000000`. Um cliente que espere
-        `404` para "não existe" não o vai receber aqui; teste `data`.
+        **Sessão inexistente responde `200` com `data: []`, e não `404`.** Um
+        cliente que espere `404` para "não existe" não o vai receber aqui; teste
+        o comprimento de `data`.
+
+        Até à migração para DTO este caso devolvia `data: null`, porque o use
+        case fazia `append` sobre uma fatia nil; hoje a colecção vazia é sempre
+        `[]`.
 
         Tal como na listagem, `token` vem sempre vazio.
 
@@ -11731,16 +11771,19 @@ paths:
                 code: 200
                 data:
                   - connected: true
+                    events: All
+                    expiration: 0
+                    hmac_configured: false
                     id: 918e37366f27e1125ee0482a793267e1
                     jid: 5516981818244:25@s.whatsapp.net
-                    loggedIn: true
+                    logged_in: true
                     name: filarapida
                     proxy_config:
                       enabled: false
-                      proxyUrl: ""
-                      webhookUseProxy: true
+                      proxy_url: ""
+                      webhook_use_proxy: true
+                    qrcode: ""
                     s3_config:
-                      access_key: '***'
                       bucket: ""
                       enabled: false
                       endpoint: ""
@@ -11759,11 +11802,11 @@ paths:
                       data:
                         items:
                           $ref: '#/components/schemas/UtilizadorAdmin'
-                        nullable: true
+                        nullable: false
                         type: array
                     type: object
           description: |
-            Array com a sessão pedida, ou `null` quando o identificador não
+            Array com a sessão pedida, ou `[]` quando o identificador não
             corresponde a nenhuma.
         "401":
           $ref: '#/components/responses/NaoAutorizado'
@@ -11788,13 +11831,18 @@ paths:
         **Um pedido sem nenhum campo útil** (`{}` ou só campos vazios) responde
         `400 no_fields_to_update`, e não `500`.
 
-        **`s3Config` e `proxyConfig` são aceites também em `snake_case`**
-        (`s3_config`, `proxy_config`) porque a resposta de leitura usa
-        snake_case, e o ciclo natural — ler, alterar um campo, reenviar — chegava
-        com o nome da resposta e era **ignorado em silêncio com `200`**. O
-        camelCase vence quando os dois nomes vierem no mesmo corpo.
+        **O corpo é todo em `snake_case`** — `s3_config`, `proxy_config`, e
+        dentro deles `proxy_url`, `access_key`, `path_style`, `public_url`,
+        `media_delivery`, `retention_days`, `webhook_use_proxy`. É o mesmo nome
+        que a leitura devolve, o que torna o ciclo natural — ler, alterar um
+        campo, reenviar — simétrico por construção. O camelCase de antes deixou
+        de ser lido.
 
-        Uma alteração de `proxyConfig` com `enabled: false` limpa o `proxy_url`
+        **Não reenvie a resposta inteira como corpo**: ela não traz `access_key`
+        nem `secret_key`, e um bloco `s3_config` presente **substitui o bloco
+        todo**, gravando no valor zero o que não vier nele.
+
+        Uma alteração de `proxy_config` com `enabled: false` limpa o `proxy_url`
         gravado.
 
         **Autenticação**: token de administração, no cabeçalho `Authorization`,
@@ -11922,6 +11970,7 @@ paths:
               example:
                 code: 200
                 data:
+                  details: user instance removed completely
                   id: 918e37366f27e1125ee0482a793267e1
                   jid: 5516981818244:25@s.whatsapp.net
                   name: filarapida
@@ -11935,11 +11984,13 @@ paths:
                     type: object
           description: |
             Sessão removida. O corpo traz a identificação de quem foi apagado,
-            para o registo de auditoria de quem chamou.
+            para o registo de auditoria de quem chamou, mais o `details`.
 
-            Repare que o use case constrói também um `details` e um `success`
-            próprios que **não chegam ao fio**: o manipulador entrega apenas o
-            `data` ao envelope comum.
+            O `details` é acréscimo da migração para DTO: o use case sempre o
+            calculou e o manipulador deitava-o fora. O `code` e o `success` que
+            o mesmo resultado carregava eram uma segunda cópia do envelope
+            dentro do domínio, e saíram — o estado HTTP passou a ser escrito na
+            fronteira.
         "400":
           content:
             application/json:

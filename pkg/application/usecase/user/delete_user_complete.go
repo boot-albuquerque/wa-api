@@ -12,6 +12,11 @@ import (
 	"wa-api/pkg/domain"
 )
 
+// userRemovedCompletelyDetails is the summary this use case reports on
+// success. A named constant and not a literal: the contract test asserts the
+// SAME string production returns (ADR-0004).
+const userRemovedCompletelyDetails = "user instance removed completely"
+
 // DeleteUserCompleteUseCase completely deletes a user
 type DeleteUserCompleteUseCase struct {
 	db       *sql.DB
@@ -103,13 +108,11 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 	uc.logger.Info(ctx, "user deleted successfully", "user_id", userID, "name", uname, "jid", jid)
 
 	return &domain.DeleteUserCompleteResult{
-		Code: 200,
-		Data: domain.UserDeleteData{
+		User: domain.UserDeleteData{
 			ID:   userID,
 			Name: uname,
 			JID:  jid,
 		},
-		Success: true,
-		Details: "user instance removed completely",
+		Details: userRemovedCompletelyDetails,
 	}, nil
 }
