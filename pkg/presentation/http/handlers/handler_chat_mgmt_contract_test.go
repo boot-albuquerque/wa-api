@@ -109,6 +109,63 @@ func mgmtContractCases() []mgmtContractCase {
 			},
 		},
 		{
+			// HOUSEKEEP F323: /chat/mute decoded domain.MuteChatRequest
+			// directly and returned *domain.MuteChatResult with no DTO
+			// indirection. The wire keys already matched — this case proves
+			// the DTO layer (dtomessage.MuteChatRequest/PresentMuteChat) is
+			// now what the real registered route exercises.
+			nome:      "mute",
+			rota:      "/chat/mute",
+			proibidas: []string{"Success", "Message", "Jid", "Mute", "MuteDuration"},
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				ops := &contractsfake.ChatOperations{}
+				jids := &contractsfake.JIDResolver{}
+				h := NewMuteChatHandler(chat.NewMuteChatUseCase(ops, jids, log))
+				return mgmtPost(t, mgmtRouter("/chat/mute", h), "/chat/mute",
+					`{"jid":"5511999999999@s.whatsapp.net","mute":true}`)
+			},
+		},
+		{
+			// HOUSEKEEP F323, same class of defect as "mute".
+			nome:      "archive",
+			rota:      "/chat/archive",
+			proibidas: []string{"Success", "Message", "Jid", "Archive"},
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				ops := &contractsfake.ChatOperations{}
+				jids := &contractsfake.JIDResolver{}
+				h := NewArchiveChatHandler(chat.NewArchiveChatUseCase(ops, jids, log))
+				return mgmtPost(t, mgmtRouter("/chat/archive", h), "/chat/archive",
+					`{"jid":"5511999999999@s.whatsapp.net","archive":true}`)
+			},
+		},
+		{
+			// HOUSEKEEP F323, same class of defect as "mute".
+			nome:      "pin",
+			rota:      "/chat/pin",
+			proibidas: []string{"Success", "Message", "Jid", "Pin"},
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				pinner := &contractsfake.ChatPinner{}
+				jids := &contractsfake.JIDResolver{}
+				h := NewPinChatHandler(chat.NewPinChatUseCase(pinner, jids, log))
+				return mgmtPost(t, mgmtRouter("/chat/pin", h), "/chat/pin",
+					`{"jid":"5511999999999@s.whatsapp.net","pin":true}`)
+			},
+		},
+		{
+			// HOUSEKEEP F323, same class of defect as "mute".
+			nome:      "requestunavailablemessage",
+			rota:      "/chat/request-unavailable-message",
+			proibidas: []string{"Success", "Message", "RequestID", "Chat", "Sender", "MessageID", "Timestamp"},
+			serve: func(t *testing.T) *httptest.ResponseRecorder {
+				ops := &contractsfake.ChatOperations{}
+				jids := &contractsfake.JIDResolver{}
+				h := NewRequestUnavailableMessageHandler(chat.NewRequestUnavailableMessageUseCase(ops, jids, log))
+				return mgmtPost(t, mgmtRouter("/chat/request-unavailable-message", h),
+					"/chat/request-unavailable-message",
+					`{"chat":"5511999999999@s.whatsapp.net","sender":"5511888888888@s.whatsapp.net","id":"MSG1"}`)
+			},
+		},
+		{
 			nome:      "downloadimage",
 			rota:      "/chats/download/image",
 			proibidas: []string{"Mimetype", "Data"},

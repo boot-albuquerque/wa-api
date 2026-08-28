@@ -103,8 +103,8 @@ handler_message_send.go	*SendMessageHandler.ServeHTTP	dtomessage.PresentSendMess
 handler_message_send.go	*SendMessageHandler.ServeHTTP	nil	nil	4
 handler_message_template.go	*SendTemplateHandler.ServeHTTP	dtomessage.PresentSendTemplate(…)	dto	1
 handler_message_template.go	*SendTemplateHandler.ServeHTTP	nil	nil	4
+handler_misc.go	*ArchiveChatHandler.ServeHTTP	dtomessage.PresentArchiveChat(…)	dto	1
 handler_misc.go	*ArchiveChatHandler.ServeHTTP	nil	nil	2
-handler_misc.go	*ArchiveChatHandler.ServeHTTP	rsp	pendente	1
 handler_misc.go	*DeleteUserCompleteHandler.ServeHTTP	dtoadmin.PresentDeleteUserComplete(…)	dto	1
 handler_misc.go	*DeleteUserCompleteHandler.ServeHTTP	nil	nil	2
 handler_misc.go	*GetHealthHandler.ServeHTTP	dtohealth.PresentHealth(…)	dto	1
@@ -113,14 +113,14 @@ handler_misc.go	*GetPrivacySettingsHandler.ServeHTTP	dtouser.PresentPrivacySetti
 handler_misc.go	*GetPrivacySettingsHandler.ServeHTTP	nil	nil	1
 handler_misc.go	*ListNewsletterHandler.ServeHTTP	dtonewsletter.PresentListNewsletters(…)	dto	1
 handler_misc.go	*ListNewsletterHandler.ServeHTTP	nil	nil	1
+handler_misc.go	*MuteChatHandler.ServeHTTP	dtomessage.PresentMuteChat(…)	dto	1
 handler_misc.go	*MuteChatHandler.ServeHTTP	nil	nil	2
-handler_misc.go	*MuteChatHandler.ServeHTTP	rsp	pendente	1
+handler_misc.go	*PinChatHandler.ServeHTTP	dtomessage.PresentPinChat(…)	dto	1
 handler_misc.go	*PinChatHandler.ServeHTTP	nil	nil	2
-handler_misc.go	*PinChatHandler.ServeHTTP	rsp	pendente	1
 handler_misc.go	*RejectCallHandler.ServeHTTP	nil	nil	2
 handler_misc.go	*RejectCallHandler.ServeHTTP	rsp	pendente	1
+handler_misc.go	*RequestUnavailableMessageHandler.ServeHTTP	dtomessage.PresentRequestUnavailableMessage(…)	dto	1
 handler_misc.go	*RequestUnavailableMessageHandler.ServeHTTP	nil	nil	2
-handler_misc.go	*RequestUnavailableMessageHandler.ServeHTTP	rsp	pendente	1
 handler_misc.go	*SetPrivacySettingHandler.ServeHTTP	dtouser.PresentPrivacySettings(…)	dto	1
 handler_misc.go	*SetPrivacySettingHandler.ServeHTTP	nil	nil	3
 handler_newsletter.go	*newsletterOpHandler.ServeHTTP	nil	nil	2

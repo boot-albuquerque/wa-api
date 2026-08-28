@@ -1,6 +1,10 @@
 package message
 
-import "wa-api/pkg/domain"
+import (
+	"time"
+
+	"wa-api/pkg/domain"
+)
 
 // The REQUEST side of the message family: the types the client's JSON is
 // decoded into, and the ToDomain conversions that build the use-case input.
@@ -831,5 +835,83 @@ func (r MarkReadRequest) ToDomain() domain.MarkReadRequest {
 		Id:          r.ID,
 		ChatPhone:   r.ChatPhone,
 		SenderPhone: r.SenderPhone,
+	}
+}
+
+// MuteChatRequest is the body of POST /chat/mute (HOUSEKEEP F323).
+//
+// The wire keys already matched domain.MuteChatRequest's Go names lowercased
+// — this DTO buys nothing new on the wire. What it buys is a COMPILE ERROR:
+// rename a field in domain.MuteChatRequest and this file's ToDomain stops
+// building, instead of silently changing the published contract.
+type MuteChatRequest struct {
+	ChatTarget
+	Jid          string         `json:"jid"`
+	Mute         bool           `json:"mute"`
+	MuteDuration *time.Duration `json:"mute_duration,omitempty"`
+}
+
+func (r *MuteChatRequest) ResolveChat() { resolveChatField(&r.Jid, r.ChatAlias) }
+
+// ToDomain produces the use-case input.
+func (r MuteChatRequest) ToDomain() domain.MuteChatRequest {
+	return domain.MuteChatRequest{
+		Jid:          r.Jid,
+		Mute:         r.Mute,
+		MuteDuration: r.MuteDuration,
+	}
+}
+
+// ArchiveChatRequest is the body of POST /chat/archive (HOUSEKEEP F323). See
+// MuteChatRequest's doc comment for why this DTO exists despite the wire
+// keys already matching.
+type ArchiveChatRequest struct {
+	ChatTarget
+	Jid     string `json:"jid"`
+	Archive bool   `json:"archive"`
+}
+
+func (r *ArchiveChatRequest) ResolveChat() { resolveChatField(&r.Jid, r.ChatAlias) }
+
+// ToDomain produces the use-case input.
+func (r ArchiveChatRequest) ToDomain() domain.ArchiveChatRequest {
+	return domain.ArchiveChatRequest{Jid: r.Jid, Archive: r.Archive}
+}
+
+// PinChatRequest is the body of POST /chat/pin (HOUSEKEEP F323). See
+// MuteChatRequest's doc comment for why this DTO exists despite the wire
+// keys already matching.
+type PinChatRequest struct {
+	ChatTarget
+	Jid string `json:"jid"`
+	Pin bool   `json:"pin"`
+}
+
+func (r *PinChatRequest) ResolveChat() { resolveChatField(&r.Jid, r.ChatAlias) }
+
+// ToDomain produces the use-case input.
+func (r PinChatRequest) ToDomain() domain.PinChatRequest {
+	return domain.PinChatRequest{Jid: r.Jid, Pin: r.Pin}
+}
+
+// RequestUnavailableMessageRequest is the body of POST
+// /chat/request-unavailable-message (HOUSEKEEP F323). See MuteChatRequest's
+// doc comment for why this DTO exists despite the wire keys already
+// matching.
+//
+// No ChatTarget/`chat` alias here: unlike Mute/Archive/Pin, the domain type
+// has no ResolveChat and the route never accepted the alias.
+type RequestUnavailableMessageRequest struct {
+	Chat   string `json:"chat"`
+	Sender string `json:"sender"`
+	ID     string `json:"id"`
+}
+
+// ToDomain produces the use-case input.
+func (r RequestUnavailableMessageRequest) ToDomain() domain.RequestUnavailableMessageRequest {
+	return domain.RequestUnavailableMessageRequest{
+		Chat:   r.Chat,
+		Sender: r.Sender,
+		ID:     r.ID,
 	}
 }

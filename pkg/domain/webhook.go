@@ -27,15 +27,6 @@ func (r WebhookConfigRequest) ResolveURL() string {
 	return r.WebhookURL
 }
 
-// WebhookConfigResult representa o resultado de operação de webhook.
-type WebhookConfigResult struct {
-	Webhook   string
-	Events    []string
-	Active    bool
-	Details   string
-	Subscribe []string
-}
-
 // WebhookHistoryRequest representa a requisição para configuração de histórico.
 type WebhookHistoryRequest struct {
 	History int
@@ -54,17 +45,4 @@ type WebhookHistoryRequest struct {
 type WebhookHistoryResult struct {
 	Details string
 	History int
-}
-
-// ChatMapping representa um mapeamento de chat para histórico.
-type ChatMapping struct {
-	UserID          string `db:"user_id"`
-	ChatJID         string `db:"chat_jid"`
-	LastMessageTime string `db:"last_message_time"`
-}
-
-// ChatInfo representa informações de um chat no índice.
-type ChatInfo struct {
-	ChatJID     string
-	LastUpdated string
 }

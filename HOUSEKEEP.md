@@ -31913,8 +31913,15 @@ do tipo diz porquê. **Correção sugerida em aberto**: apagar o tipo. Não foi
 apagado aqui porque remover código é decisão de quem manda no módulo, não
 efeito colateral de uma migração de nomes.
 
-**Status**: **parcialmente corrigido** — etiquetas removidas; a deleção do tipo
-morto fica pendente.
+**Correção aplicada** (2026-08-27, sessão separada, worktree
+`housekeep-messages2`): RE-MEDIDO com `grep -rn '\bProxyConfig\b'
+pkg/bootstrap` (só a declaração) e `grep -rn 'bootstrap\.ProxyConfig' .`
+(zero) — continuava genuinamente morto. `type ProxyConfig struct` e o seu
+comentário foram APAGADOS de `pkg/bootstrap/dispatch_webhook.go` (não só as
+etiquetas). `go build ./...` continuou verde, confirmando que nada
+referenciava o tipo fora da própria declaração.
+
+**Status**: corrigido nesta sessão — tipo apagado por inteiro.
 
 ### (b) o payload de webhook e de WebSocket que SAI daqui continua camelCase
 
@@ -31962,8 +31969,25 @@ montavam `map[string]interface{}` à mão e nunca tocaram no
 resto do ficheiro (`ChatMapping` mantém as suas `db:`, que são reais).
 **Correção sugerida em aberto**: apagar os três tipos.
 
-**Status**: **parcialmente corrigido** — etiquetas removidas; a deleção fica
-pendente, pelo mesmo motivo de (a).
+**Correção aplicada** (2026-08-27, sessão separada, worktree
+`housekeep-messages2`): RE-MEDIDO com
+`grep -rn 'WebhookConfigResult\|ChatMapping\|ChatInfo' pkg cmd` — as únicas
+ocorrências fora da declaração eram comentários em
+`pkg/bootstrap/chat_history_wire_contract_test.go` que citam "ChatInfo" como
+CONCEITO histórico (não `domain.ChatInfo`); confirmado lendo o ficheiro, não
+é uma referência ao tipo. Os três continuavam genuinamente mortos.
+`WebhookConfigResult`, `ChatMapping` e `ChatInfo` foram APAGADOS de
+`pkg/domain/webhook.go` (não só as etiquetas); `WebhookConfigRequest`,
+`WebhookHistoryRequest` e `WebhookHistoryResult` — que TÊM uso — ficaram
+intactos. `go build ./...` e `go vet ./...` continuaram verdes.
+
+**Status**: corrigido nesta sessão — os três tipos apagados por inteiro.
+
+**Status geral do F297** (2026-08-27, sessão `housekeep-messages2`): (a) e (c)
+corrigidos — os quatro tipos mortos apagados por inteiro, não só destagged.
+(b) continua ABERTO — fora do escopo desta sessão (não era HOUSEKEEP F302,
+F297(a) ou F297(c)); precisa da família `pkg/presentation/http/dto/event`
+sugerida no próprio achado.
 
 <!-- f-status: aberto -->
 
@@ -32166,10 +32190,72 @@ acontecer, os dois campos apresentam-se com
 `jid`, `picture_id`, `group_add`, `last_seen`. Não é preciso escrever
 apresentador novo — só chamá-los.
 
-**Status**: NÃO corrigido, deliberadamente: a rota é de outra família e de
-outro worker, e tocar-lhe agora criaria conflito de merge sem ganho.
+**Correção aplicada** (2026-08-27, sessão separada, worktree
+`housekeep-messages2`): `pkg/presentation/http/profile_handler.go` ganhou
+`presentProfileFull` e o tipo `profileFullResponse`, que embutem
+`profile.ProfileResult` verbatim (já é o fio de `GET /session/profile`) e
+substituem `UserInfo`/`Privacy` pelas chamadas já existentes
+`dtouser.PresentUserInfo`/`dtouser.PresentPrivacySettings`. `ServeHTTP` passou
+a chamar `presentProfileFull(result)` em vez de servir `result` cru. Nenhum
+apresentador novo foi escrito — exactamente como a correcção sugerida previa.
 
-<!-- f-status: aberto -->
+`api/openapi/schemas/sessao.yaml` (`PerfilSessaoCompleto`) foi reescrito para
+descrever a forma NOVA: `user_info` passou de objecto indexado por JID (a
+forma antiga do SDK) para `array` de `InfoUtilizador` (o mesmo schema já
+usado por `POST /user/info`), e `privacy` passou a referenciar
+`DefinicoesPrivacidade` (o mesmo schema de `GET /user/privacy`) em vez de um
+objecto livre com chaves PascalCase no exemplo. `go run ./cmd/openapidoc`
+confirmou que só essas duas secções mudaram no YAML embutido.
+
+**Testes**: `pkg/presentation/http/profile_full_contract_test.go` (novo),
+seguindo o padrão de `handler_group_info_contract_test.go` — pedido pela
+ROTA REGISTADA (`NewHandlerRegistry` + `mux.Router`, não o handler cru):
+- `TestProfileFull_ContratoPublico_NomesCanonicos` — toda chave do corpo,
+  recursivamente, é snake_case minúsculo
+  (`contracttest.AssertPublicJSONUsesCanonicalNaming`).
+- `TestProfileFull_ContratoPublico_ChavesAntigasSumiram` — as chaves antigas
+  (`JID`, `PictureID`, `GroupAdd`, `LastSeen`, …) desapareceram
+  (`contracttest.AssertNoKeys`).
+- `TestProfileFull_ContratoPublico_ValoresMapeados` — os VALORES certos estão
+  nas chaves certas, não só os nomes.
+
+**Controlo negativo EXECUTADO**: revertendo temporariamente
+`RespondJSON(w, http.StatusOK, presentProfileFull(result), nil)` para
+`RespondJSON(w, http.StatusOK, result, nil)` (o código pré-correcção) e
+correndo os três testes acima, os três FALHARAM, mordendo exactamente as
+chaves PascalCase que a correcção elimina:
+
+```
+--- FAIL: TestProfileFull_ContratoPublico_NomesCanonicos (0.00s)
+    ... LID em $.data.user_info[0].LID
+    ... LastSeen em $.data.privacy.LastSeen
+    ... PictureID em $.data.user_info[0].PictureID
+    (11 chaves no total, entre user_info[] e privacy)
+--- FAIL: TestProfileFull_ContratoPublico_ChavesAntigasSumiram (0.00s)
+    chave(s) que deviam ter desaparecido na migração ainda presentes:
+      BusinessName, CallAdd, Defense, Devices, GroupAdd, JID, LID,
+      LastSeen, Messages, Online, PictureID, Profile, PushName,
+      ReadReceipts, Status (x2), Stickers, VerifiedName
+--- FAIL: TestProfileFull_ContratoPublico_ValoresMapeados (0.00s)
+    user_info[0] = {... PictureID:} (campo vazio: leu de "picture_id"
+    que nao existia na resposta PascalCase)
+    privacy = {GroupAdd: LastSeen:} (idem)
+```
+
+Revertido de volta ao fix depois do controlo; os três testes voltaram a
+passar. `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd` e
+`go test ./pkg/... ./cmd/...` verdes.
+
+**Gate de cobertura de log**: `presentProfileFull` é função nova elegível
+(não está em `pkg/presentation/http/dto/`, que é excluído em bloco) —
+`.log-coverage-baseline` `min_eligible` subiu 1001→1002, com entrada própria
+datada 2026-08-27 explicando a alta; `cmd/logcov/testdata/eligible.golden`
+regenerado com `go run ./cmd/logcov -golden`; `go test ./cmd/logcov/...`
+verde.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
 ## F303 — três achados de contrato que a migração DTO da família de canais destapou, e um que ela criou
 
 **Data/contexto**: 2026-08-27, migração da família de canais (dezoito rotas)
@@ -33284,7 +33370,69 @@ aqui; registada para quem tiver essa família.
 
 **Status**: NÃO corrigido. Seguimento nomeado.
 
-<!-- f-status: aberto -->
+**Correção aplicada** (2026-08-27, sessão separada, worktree
+`housekeep-messages2`): seguido exactamente o padrão de `ReactRequest` que a
+correcção sugerida indicava.
+
+- `pkg/presentation/http/dto/message/request.go` ganhou `MuteChatRequest`,
+  `ArchiveChatRequest`, `PinChatRequest` e `RequestUnavailableMessageRequest`
+  — mesmo `ChatTarget`/`resolveChatField` já usados por `ReactRequest`, mesmas
+  etiquetas já existentes no domínio, e um `ToDomain()` por struct.
+- `pkg/presentation/http/dto/message/chat.go` ganhou `MuteChatResponse`,
+  `ArchiveChatResponse`, `PinChatResponse` e
+  `RequestUnavailableMessageResponse`.
+- `pkg/presentation/http/dto/message/presenter_chat.go` ganhou
+  `PresentMuteChat`, `PresentArchiveChat`, `PresentPinChat` e
+  `PresentRequestUnavailableMessage`.
+- `pkg/presentation/http/handlers/handler_misc.go` — os quatro handlers
+  passaram a decodificar `dtomessage.*Request` (via `decodeRequest`), chamar
+  o caso de uso com `req.ToDomain()`, e servir `dtomessage.Present…(rsp)` em
+  vez do `*domain.…Result` cru.
+- `pkg/presentation/http/handlers/testdata/respondjson_ledger.tsv`
+  actualizado (`-update-ledger`) para as quatro novas entradas de
+  `RespondJSON`.
+
+**Testes**: `pkg/presentation/http/handlers/handler_chat_mgmt_contract_test.go`
+ganhou quatro novos `mgmtContractCase` (`mute`, `archive`, `pin`,
+`requestunavailablemessage`), seguindo o padrão já estabelecido nesse
+ficheiro para `star`/`ephemeral` — pedido pela ROTA REGISTADA
+(`mgmtRouter`/`mux.Router`), exercitados por
+`TestChatMgmt_ContratoPublico_NomesCanonicos` (asserção de nomenclatura
+canónica em toda a árvore) e `TestChatMgmt_ContratoPublico_ChavesAntigasSumiram`.
+
+**Controlo negativo executado — mas do tipo COMPILAÇÃO, não nomenclatura**:
+como o próprio achado explica, as chaves de fio JÁ eram `snake_case` antes da
+correcção, então reverter para o código antigo não faria
+`AssertPublicJSONUsesCanonicalNaming` falhar — a protecção que a camada de
+DTO compra aqui é a garantia da §5 de
+`docs/HTTP-DTO-CONVENTIONS.md`: "renomeie um campo em `domain.X` e o `ToDomain`
+do DTO deixa de compilar". Medido directamente: renomeando temporariamente
+`domain.MuteChatRequest.Jid` para `JidRenamed` (e o `ResolveChatField` que o
+lê, em `pkg/domain/mute.go`) e correndo `go build ./...`:
+
+```
+# wa-api/pkg/presentation/http/dto/message
+pkg/presentation/http/dto/message/request.go:859:3: unknown field Jid in struct literal of type domain.MuteChatRequest
+```
+
+— o `ToDomain()` de `MuteChatRequest` deixou de compilar, exactamente a
+garantia que o achado pedia. Revertido de volta (`git diff` limpo em
+`pkg/domain/mute.go`) e `go build ./...` voltou a ficar verde.
+
+**Nota lateral, fora do âmbito da família mensagens**: `RejectCallHandler`
+continua com `json:"Details"`/`json:"CallID"` em PascalCase — não tocado
+aqui (rota de chamada, não de mensagem); ver F333, que HOUSEKEEP.md F324
+já registava como o lugar que a corrigiu.
+
+**Gates**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd`,
+`go test ./pkg/... ./cmd/...` verdes. Nenhuma mudança em
+`api/openapi/{paths,schemas}/conversa.yaml` foi necessária: as quatro rotas
+já não mudaram de nome de campo nenhum, só de camada — `go run
+./cmd/openapidoc` não produziu diff nessas secções.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
 
 ## F324 — fecho da migração DTO da família MENSAGENS (2026-08-27)
 

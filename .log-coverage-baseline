@@ -1616,7 +1616,17 @@ min_errpath_coverage=777
 # a funcao nova que despeja entradas do mapa por-IP nunca purgado antes desta
 # correcao (mapa sem teto, cresce com IP de origem nao confiavel). covered
 # nao muda: a funcao nasce sem log proprio, so' o Warn ja existente reusado.
-min_eligible=1001
+# HOUSEKEEP F302 (2026-08-27): min_eligible SOBE 1001->1002 (+1, ratchet-UP
+# honesto): pkg/presentation/http.presentProfileFull entra no universo
+# elegivel — e' a funcao nova que mapeia ProfileFullResult para o DTO de
+# GET /session/profile/full (antes servia domain.UserInfo/PrivacySettings
+# sem tag `json`, emitindo PascalCase). As quatro DTOs novas de HOUSEKEEP
+# F323 (mute/archive/pin/request-unavailable-message em
+# pkg/presentation/http/dto/message) NAO entram no universo elegivel: o
+# pacote inteiro pkg/presentation/http/dto/ ja' esta' excluido em
+# .logcov-exclude, pela mesma razao de todo o resto da camada de
+# apresentadores (ver comentario ali).
+min_eligible=1002
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

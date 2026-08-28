@@ -57,6 +57,39 @@ type ChatHistoryMessageResponse struct {
 	DataJSON        string  `json:"data_json"`
 }
 
+// MuteChatResponse is the body of the `data` key for POST /chat/mute
+// (HOUSEKEEP F323).
+type MuteChatResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// ArchiveChatResponse is the body of the `data` key for POST /chat/archive
+// (HOUSEKEEP F323).
+type ArchiveChatResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// PinChatResponse is the body of the `data` key for POST /chat/pin
+// (HOUSEKEEP F323).
+type PinChatResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message"`
+}
+
+// RequestUnavailableMessageResponse is the body of the `data` key for POST
+// /chat/request-unavailable-message (HOUSEKEEP F323).
+type RequestUnavailableMessageResponse struct {
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id"`
+	Chat      string `json:"chat"`
+	Sender    string `json:"sender"`
+	MessageID string `json:"message_id"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 // ChatIndexEntryResponse is one chat of the `chat_jid=index` listing.
 //
 // LastUpdated is already a preformatted RFC3339Nano string upstream — the

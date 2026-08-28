@@ -10,6 +10,7 @@ import (
 	customhttp "wa-api/pkg/presentation/http"
 	dtoadmin "wa-api/pkg/presentation/http/dto/admin"
 	dtohealth "wa-api/pkg/presentation/http/dto/health"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 	dtonewsletter "wa-api/pkg/presentation/http/dto/newsletter"
 	dtouser "wa-api/pkg/presentation/http/dto/user"
 
@@ -214,7 +215,7 @@ func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *h
 	if !ok {
 		return
 	}
-	var req domain.RequestUnavailableMessageRequest
+	var req dtomessage.RequestUnavailableMessageRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -223,13 +224,13 @@ func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *h
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentRequestUnavailableMessage(rsp), nil)
 }
 
 // MuteChatHandler handles POST /chat/mute
@@ -245,7 +246,7 @@ func (h *MuteChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.MuteChatRequest
+	var req dtomessage.MuteChatRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -254,13 +255,13 @@ func (h *MuteChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentMuteChat(rsp), nil)
 }
 
 // ArchiveChatHandler handles POST /chat/archive
@@ -276,7 +277,7 @@ func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.ArchiveChatRequest
+	var req dtomessage.ArchiveChatRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -285,13 +286,13 @@ func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentArchiveChat(rsp), nil)
 }
 
 // PinChatHandler handles POST /chat/pin
@@ -307,7 +308,7 @@ func (h *PinChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var req domain.PinChatRequest
+	var req dtomessage.PinChatRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -316,11 +317,11 @@ func (h *PinChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtomessage.PresentPinChat(rsp), nil)
 }
