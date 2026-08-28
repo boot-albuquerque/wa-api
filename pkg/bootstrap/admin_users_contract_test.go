@@ -75,14 +75,14 @@ func newAdminFixture(t *testing.T) *adminFixture {
 		user.NewListUsersUseCase(repo, logger, sessions),
 		user.NewAddUserUseCase(repo, hmacKeyEncryptor{}, s3SecretCipher{}, logger),
 		user.NewEditUserUseCase(repo, s3SecretCipher{}, userInfoRepublisher{db: database}, logger),
-		user.NewDeleteUserUseCase(repo, logger),
+		user.NewDeleteUserUseCase(repo, userInfoRepublisher{db: database}, logger),
 		nil, nil, nil, nil, nil, nil, nil,
 	)
 	ch := &customHandlers{
 		User: userHandlers,
 		Misc: &handlers.MiscHandlers{
 			DeleteUserComplete: handlers.NewDeleteUserCompleteHandler(
-				user.NewDeleteUserCompleteUseCase(database.DB, &contractsfake.SessionController{}, logger, t.TempDir()),
+				user.NewDeleteUserCompleteUseCase(database.DB, &contractsfake.SessionController{}, userInfoRepublisher{db: database}, logger, t.TempDir()),
 			),
 		},
 	}

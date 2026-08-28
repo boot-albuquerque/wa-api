@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	wanoise "wa-api/internal/wa-noise"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	"wa-api/pkg/infra/wa-noise/client/testkit"
 
@@ -239,5 +240,71 @@ func TestSessionGuardAdapter_Logout_SemTransporteRecusa(t *testing.T) {
 		if !strings.Contains(appErr.Message, "/session/connect") {
 			t.Errorf("mensagem nao diz como sair do estado: %q", appErr.Message)
 		}
+	}
+}
+
+// TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa cobre a F275:
+// transporte VIVO mas nunca emparelhado — o SDK devolve a sentinela crua
+// wanoise.ErrNotLoggedIn ("the store doesn't contain a device JID"), e antes
+// da correção esse erro cru subia até a fronteira HTTP como 500 opaco com
+// envelope de texto simples.
+//
+// A checagem é por ESTADO (errors.Is contra a sentinela reexportada), pela
+// MESMA razão que TestSessionGuardAdapter_Logout_SemTransporteRecusa já
+// enuncia para o caso irmão — não por texto de erro.
+func TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa(t *testing.T) {
+	fake := &testkit.Fake{
+		IsConnectedFn: func() bool { return true },
+		LogoutFn: func(ctx context.Context) error {
+			return wanoise.ErrNotLoggedIn
+		},
+	}
+	a := NewSessionGuardAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	err := a.Logout(context.Background(), "u1")
+	if err == nil {
+		t.Fatal("Logout aceitou sessao conectada mas nunca emparelhada")
+	}
+	if got := appErrCode(err); got != apperr.CodeSessionNotPaired {
+		t.Errorf("code = %q, quero %q", got, apperr.CodeSessionNotPaired)
+	}
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("erro nao e' *apperr.AppError: %v (%T)", err, err)
+	}
+	// 409, nao 500: a sessao esta' correta (existe, tem transporte), so' nao
+	// ha' o que desemparelhar NESTE estado.
+	if status := appErr.Category.HTTPStatus(); status != http.StatusConflict {
+		t.Errorf("status = %d, quero %d", status, http.StatusConflict)
+	}
+	if !errors.Is(err, wanoise.ErrNotLoggedIn) {
+		t.Error("a cadeia de causa perdeu a sentinela original — errors.Is(err, wanoise.ErrNotLoggedIn) falhou")
+	}
+	// Distinto de CodeSessionNotConnected: sao dois estados diferentes e a
+	// mensagem tem de dizer QUAL.
+	if got := appErrCode(err); got == apperr.CodeSessionNotConnected {
+		t.Error("F275 foi classificado como F93 (session_not_connected) — sao estados diferentes")
+	}
+}
+
+// TestSessionGuardAdapter_Logout_OutroErroDeSDKContinuaCru: qualquer OUTRO
+// erro do SDK (não a sentinela de "nunca emparelhado") continua a subir cru,
+// exatamente como TestSessionGuardAdapter_Logout_PropagatesError já fixa —
+// esta correção não pode virar um catch-all silencioso.
+func TestSessionGuardAdapter_Logout_OutroErroDeSDKContinuaCru(t *testing.T) {
+	sdkErr := errors.New("some other SDK failure")
+	fake := &testkit.Fake{
+		IsConnectedFn: func() bool { return true },
+		LogoutFn:      func(ctx context.Context) error { return sdkErr },
+	}
+	a := NewSessionGuardAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+
+	err := a.Logout(context.Background(), "u1")
+	if !errors.Is(err, sdkErr) {
+		t.Fatalf("Logout = %v, queria embrulhar %v sem traduzir", err, sdkErr)
+	}
+	var appErr *apperr.AppError
+	if errors.As(err, &appErr) {
+		t.Fatalf("erro genérico do SDK foi tipado como %q — só ErrNotLoggedIn deve ser traduzido", appErr.Code)
 	}
 }

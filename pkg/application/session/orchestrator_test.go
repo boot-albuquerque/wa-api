@@ -1004,6 +1004,92 @@ func TestStartCedeChaveEstagnada(t *testing.T) {
 	}
 }
 
+// --- F274: pré-check síncrono e libertação pelo Disconnect -----------------
+//
+// GET /session/connect depois de POST /session/disconnect devolvia 200 e não
+// religava: a guarda de startInFlight recusava o Start de dentro da
+// goroutine, mas o handler já tinha respondido sucesso. CheckStartAvailable é
+// o pré-check síncrono (mesmo desenho de CheckOwnership/F108); ReleaseStart é
+// o que o Disconnect chama para não deixar a chave presa até o TTL.
+
+// TestCheckStartAvailable_RecusaEnquantoHaFluxoEmCurso é o teste do defeito:
+// com um Start preso a parear, o pré-check TEM de ver a mesma recusa que o
+// próprio Start veria — é o que falta para o handler responder 409 em vez de
+// 200 antes de sequer disparar a goroutine.
+func TestCheckStartAvailable_RecusaEnquantoHaFluxoEmCurso(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	err := h.orch.CheckStartAvailable("u1")
+	if err == nil {
+		t.Fatal("CheckStartAvailable devolveu nil com um Start em curso para o mesmo utilizador")
+	}
+	if got := appErrCodeDe(err); got != codeSessionStartAlreadyInFlight {
+		t.Fatalf("código = %q, quero %q (erro: %v)", got, codeSessionStartAlreadyInFlight, err)
+	}
+}
+
+// TestCheckStartAvailable_NaoReivindicaAChave prova que o pré-check é um
+// PEEK e não um acquire: chamá-lo não pode fazer o Start seguinte encontrar a
+// chave ocupada por si mesmo. Sem isto, o pré-check "que passa" bloquearia
+// sempre o Start real que vem a seguir, na mesma requisição.
+func TestCheckStartAvailable_NaoReivindicaAChave(t *testing.T) {
+	h := newHarness(t)
+
+	if err := h.orch.CheckStartAvailable("u1"); err != nil {
+		t.Fatalf("CheckStartAvailable = %v, queria nil (nenhum Start em curso)", err)
+	}
+
+	h.session.PairFunc = nil
+	vazio := make(chan port.PairingEvent)
+	close(vazio)
+	h.session.PairingEvents = vazio
+
+	if err := h.orch.Start(context.Background(), "u1", "tok"); err != nil {
+		t.Fatalf("Start depois de CheckStartAvailable foi recusado: %v — o pré-check reivindicou a chave", err)
+	}
+}
+
+// TestCheckStartAvailable_LivreQuandoNaoHaFluxo é o controlo positivo: sem
+// nenhum Start em curso, nil.
+func TestCheckStartAvailable_LivreQuandoNaoHaFluxo(t *testing.T) {
+	h := newHarness(t)
+	if err := h.orch.CheckStartAvailable("u1"); err != nil {
+		t.Fatalf("CheckStartAvailable = %v, queria nil", err)
+	}
+}
+
+// TestReleaseStart_LibertaAChaveAntesDoTTL é o teste do defeito da outra
+// metade da F274: sem ReleaseStart, um Start preso em pareamento (ou cuja
+// meta nunca foi limpa por algum motivo) só cede a chave depois de
+// startInFlightTTL. Disconnect precisa poder libertar de imediato.
+func TestReleaseStart_LibertaAChaveAntesDoTTL(t *testing.T) {
+	h := newHarness(t)
+	liberta := startEmCurso(t, h, "u1")
+	defer liberta()
+
+	if err := h.orch.CheckStartAvailable("u1"); err == nil {
+		t.Fatal("esperava chave ocupada antes de ReleaseStart")
+	}
+
+	h.orch.ReleaseStart("u1")
+
+	if err := h.orch.CheckStartAvailable("u1"); err != nil {
+		t.Fatalf("CheckStartAvailable depois de ReleaseStart = %v, queria nil", err)
+	}
+}
+
+// TestReleaseStart_DeUtilizadorSemChaveENoop: liberar uma chave que não
+// existe não deve entrar em pânico nem afetar outros utilizadores.
+func TestReleaseStart_DeUtilizadorSemChaveENoop(t *testing.T) {
+	h := newHarness(t)
+	h.orch.ReleaseStart("ninguem-comecou")
+	if err := h.orch.CheckStartAvailable("ninguem-comecou"); err != nil {
+		t.Fatalf("CheckStartAvailable = %v, queria nil", err)
+	}
+}
+
 // --- F78: Start numa sessão já conectada é no-op --------------------------
 
 func TestStart_AlreadyConnected_IsNoop(t *testing.T) {

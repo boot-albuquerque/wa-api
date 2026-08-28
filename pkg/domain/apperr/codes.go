@@ -157,6 +157,16 @@ func (c Category) HTTPStatus() int {
 // diverges the first time someone edits one of them.
 const CodeSessionNotConnected = "session_not_connected"
 
+// CodeSessionNotPaired marks a request that needs a PAIRED device on a
+// session that has a live transport but was never paired — today, logout on
+// a session that connected without ever scanning a QR (F275).
+//
+// Distinct from CodeSessionNotConnected: that one means "no transport at
+// all"; this one means "transport is up, but the store has no device JID".
+// Conflating them would make a client that retries after `/session/connect`
+// get the wrong advice — reconnecting does not fix "never paired".
+const CodeSessionNotPaired = "session_not_paired"
+
 // IsClientGaveUp reports whether err is the CLIENT abandoning the request —
 // a closed browser tab, a navigation, a cancelled fetch.
 //

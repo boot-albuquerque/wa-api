@@ -17,6 +17,16 @@ const (
 	s3DecryptFailedMsg    = "failed to decrypt the stored S3 secret"
 	s3TestFailedFmt       = "S3 connection test failed: %v"
 	s3TestConnectionLabel = "S3 connection test"
+
+	// s3UpstreamRejectedCode is the SAME string value as
+	// errmap.CodeUpstreamRejected ("upstream_rejected", pkg/infra/wa-noise/
+	// errmap/iqerror.go) — it names the same concept, "a well formed,
+	// authorized request that the upstream refused" (apperr.
+	// CategoryUpstreamRejected), just for a different upstream (S3, not
+	// WhatsApp). It is declared separately, not imported: an application
+	// use case importing pkg/infra/wa-noise would invert the Clean
+	// Architecture dependency direction (ADR-001).
+	s3UpstreamRejectedCode = "upstream_rejected"
 )
 
 // s3TestTimeout is the ceiling of the single network round trip this use case
@@ -91,7 +101,27 @@ func (uc *TestS3ConnectionUseCase) Execute(ctx context.Context, txtID string) (*
 
 	if err := uc.clients.TestConnection(testCtx, txtID); err != nil {
 		uc.logger.Error(ctx, s3TestConnectionLabel+" failed", "txtID", txtID, "error", err)
-		return nil, fmt.Errorf(s3TestFailedFmt, err)
+
+		// F276: a refusal from the S3 endpoint (bad credentials, wrong
+		// bucket, network reachable but access denied) is a CLIENT-side
+		// problem with the stored configuration, not a server failure —
+		// the same class the F204/errmap precedent already covers for
+		// WhatsApp IQ refusals. Untyped, this fell through RespondJSON's
+		// generic 500 branch: the one response this diagnostic ROUTE exists
+		// to give ("is my configuration good?") was the least useful one
+		// possible.
+		//
+		// The message carries the upstream's own text — that IS the
+		// answer the caller asked for — but never the stored secret: only
+		// the AWS SDK's own error text (status, access key ID, request ID)
+		// reaches here, never cfg.SecretKey/plainSecret.
+		return nil, apperr.New(
+			s3UpstreamRejectedCode,
+			apperr.CategoryUpstreamRejected,
+			fmt.Sprintf(s3TestFailedFmt, err),
+			false,
+			err,
+		)
 	}
 
 	uc.logger.Info(ctx, s3TestSuccessDetails, "txtID", txtID, "bucket", cfg.Bucket, "region", cfg.Region)

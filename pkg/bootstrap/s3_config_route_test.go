@@ -614,23 +614,55 @@ func TestS3Route_TestComFakeOK_200ComBucketERegion(t *testing.T) {
 	}
 }
 
-// TESTE 10 (rota) — o fake responde erro: 500, e nada de 200 nem de fallback
-// silencioso.
-func TestS3Route_TestComFakeErro_500(t *testing.T) {
+// TESTE 10 (rota) — o fake responde erro: 422 com o envelope canônico
+// {code,error:{code,message}}, e nada de 200 nem de fallback silencioso.
+//
+// F276: até esta correção, a recusa do upstream subia CRUA e a rota
+// respondia 500 com `error` como texto solto — o único jeito de saber SE a
+// configuração estava boa era ler o log do servidor, não a resposta HTTP.
+// Este teste ficava VERDE nesse estado (era, literalmente, o comportamento
+// que ele afirmava); a mudança correta é a de baixo, e não reverter esta
+// asserção.
+func TestS3Route_TestComFakeErro_422ComEnvelopeCanonico(t *testing.T) {
 	f := newS3RouteFixture(t)
 	fake := newFakeS3Endpoint(t, true)
 	f.enableS3Row(t, fake.URL)
 
 	rec := f.do(t, http.MethodPost, "/s3/test", "")
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, quero 500 (corpo: %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, quero 422 (corpo: %s)", rec.Code, rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), "successful") {
 		t.Fatalf("a falha de conexao foi reportada como sucesso: %s", rec.Body.String())
 	}
 	if fake.calls() == 0 {
-		t.Fatal("o 500 saiu sem tocar o endpoint: a falha veio de outro lugar que nao a conexao")
+		t.Fatal("o 422 saiu sem tocar o endpoint: a falha veio de outro lugar que nao a conexao")
 	}
+
+	var env struct {
+		Success bool `json:"success"`
+		Code    int  `json:"code"`
+		Error   struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("corpo nao e' JSON: %v (%s)", err, rec.Body.String())
+	}
+	if env.Success {
+		t.Fatal("success=true numa resposta de erro")
+	}
+	if env.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("envelope.code = %d, quero 422", env.Code)
+	}
+	if env.Error.Code != "upstream_rejected" {
+		t.Fatalf("error.code = %q, quero upstream_rejected", env.Error.Code)
+	}
+	if env.Error.Message == "" {
+		t.Fatal("error.message vazio: a resposta deixou de dizer o diagnostico do upstream")
+	}
+	assertNoSecretIn(t, "a resposta do teste de conexao com falha", rec.Body.String(), f.storedSecret(t))
 }
 
 // TESTE 11 (rota) — LEGADO: linha com s3_secret_key SEM o envelope e' INVALIDA

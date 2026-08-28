@@ -141,7 +141,7 @@ handler_reaction.go	*ReactHandler.ServeHTTP	nil	nil	2
 handler_send_forward.go	*SendForwardHandler.ServeHTTP	dtomessage.PresentSendForward(…)	dto	1
 handler_send_forward.go	*SendForwardHandler.ServeHTTP	nil	nil	4
 handler_session.go	*ConnectHandler.ServeHTTP	dtosession.PresentConnect(…)	dto	1
-handler_session.go	*ConnectHandler.ServeHTTP	nil	nil	2
+handler_session.go	*ConnectHandler.ServeHTTP	nil	nil	3
 handler_session.go	*DisconnectHandler.ServeHTTP	dtosession.PresentDisconnect(…)	dto	1
 handler_session.go	*DisconnectHandler.ServeHTTP	nil	nil	2
 handler_session.go	*GetQRHandler.ServeHTTP	dtosession.PresentGetQR(…)	dto	1

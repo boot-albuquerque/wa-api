@@ -18,12 +18,15 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"strings"
 	"testing"
 
 	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // errNoSession é a sentinela que a porta devolve quando não há cliente. É o
@@ -395,6 +398,57 @@ func TestTestS3Connection_SemConfiguracaoHabilitada(t *testing.T) {
 				t.Error("recusa nao devia logar sucesso")
 			}
 		})
+	}
+}
+
+// TestTestS3Connection_RecusaDoUpstreamVira422TipadoENaoTextoSolto é o teste
+// do defeito da F276: uma recusa da AWS (credenciais inválidas, bucket
+// errado — qualquer coisa que TestConnection devolva) subia crua até a
+// fronteira HTTP, que a servia como 500 com `error` em string solta, em vez
+// do envelope canônico {code,error:{code,message}} com o 422 que a categoria
+// de recusa upstream já define para casos irmãos (/users/block).
+func TestTestS3Connection_RecusaDoUpstreamVira422TipadoENaoTextoSolto(t *testing.T) {
+	upstreamErr := errors.New("operation error S3: ListObjectsV2, https response error StatusCode: 403, " +
+		"api error InvalidAccessKeyId: The AWS Access Key Id you provided does not exist in our records.")
+	clients := &contractsfake.S3ClientManager{
+		TestConnectionFunc: func(context.Context, string) error { return upstreamErr },
+	}
+	log := &contractsfake.Logger{}
+	uc := storage.NewTestS3ConnectionUseCase(&contractsfake.SessionGuard{}, enabledS3Store(txtID),
+		&contractsfake.S3SecretCipher{}, clients, log)
+
+	r, err := uc.Execute(context.Background(), txtID)
+
+	if err == nil {
+		t.Fatal("recusa do upstream devia ser recusada, não sucesso")
+	}
+	if r != nil {
+		t.Error("resultado devia ser nil na recusa")
+	}
+
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("erro não é *apperr.AppError (ficaria 500 opaco na fronteira HTTP): %v (%T)", err, err)
+	}
+	if appErr.Code != "upstream_rejected" {
+		t.Errorf("code = %q, quero upstream_rejected", appErr.Code)
+	}
+	if appErr.Category != apperr.CategoryUpstreamRejected {
+		t.Errorf("category = %q, quero %q", appErr.Category, apperr.CategoryUpstreamRejected)
+	}
+	if status := appErr.Category.HTTPStatus(); status != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, quero 422", status)
+	}
+	// A mensagem tem de trazer o diagnóstico do upstream — é a própria
+	// razão de existir da rota — mas nunca o segredo armazenado.
+	if !strings.Contains(appErr.Message, "InvalidAccessKeyId") {
+		t.Errorf("mensagem não traz o diagnóstico do upstream: %q", appErr.Message)
+	}
+	if strings.Contains(appErr.Message, "sk") {
+		t.Errorf("mensagem vazou o segredo armazenado: %q", appErr.Message)
+	}
+	if !errors.Is(err, upstreamErr) {
+		t.Error("a cadeia de causa perdeu o erro original do SDK")
 	}
 }
 

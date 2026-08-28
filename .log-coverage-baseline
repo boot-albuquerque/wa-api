@@ -1296,7 +1296,12 @@ rules_frozen=true
 # INTEGRACAO com errors-envelope (2026-08-27): func_coverage SOBE 590->592. Ratchet-UP.
 # INTEGRACAO com http-dto-paths (2026-08-27): func_coverage SOBE 592->596 (novos handlers de rota). Ratchet-UP.
 # INTEGRACAO com http-dto-download-paths (2026-08-27): func_coverage CAI 596->594 (5 handlers/rotas legadas de download removidas, F328). Ratchet-DOWN justificado: deletar codigo nao e regressao.
-min_func_coverage=594
+# F273-F277 (2026-08-27, sessao housekeep-session): func_coverage CAI 594->591.
+# Ver a nota completa perto de min_eligible, no fim do ficheiro — as cinco
+# funcoes ELIGIBLE novas nascem UNCOVERED por desenho (peek/closures/wrapper
+# de uma linha), a mesma classe de connectOwnershipCheck (F108) documentada
+# logo abaixo em min_errpath_coverage. Ratchet-DOWN justificado, nao regressao.
+min_func_coverage=591
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1551,7 +1556,9 @@ min_func_coverage=594
 #
 # INTEGRACAO com /admin (2026-08-27): errpath_coverage SOBE 778->779. Ratchet-UP.
 # INTEGRACAO com http-dto-download-paths (2026-08-27): errpath_coverage CAI 779->777 (mesma remocao). Ratchet-DOWN justificado.
-min_errpath_coverage=777
+# F273-F277 (2026-08-27, sessao housekeep-session): errpath_coverage CAI 777->776.
+# Ver a nota completa perto de min_eligible. Ratchet-DOWN justificado.
+min_errpath_coverage=776
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1611,7 +1618,49 @@ min_errpath_coverage=777
 # INTEGRACAO com http-dto-paths (2026-08-27): min_eligible SOBE 992->1002 (+10, ratchet-UP honesto: 10 rotas cortadas ganharam handler/DTO proprio).
 # INTEGRACAO com http-dto-download-paths (2026-08-27): min_eligible CAI 1002->997 (-5, as cinco funcoes de handler dos downloads legados saem do universo elegivel ao serem apagadas, F328). Ratchet-DOWN justificado, nao regressao — covered nao muda.
 # INTEGRACAO com http-dto-legacy-alias-removal (2026-08-27): min_eligible SOBE 997->1000 (+3, ratchet-UP honesto: reversao de F269/CAP-10 para os ~88 aliases legados trouxe rotas dinamicas novas de stdio para group.photo/group.photo.remove/group.updateparticipants, F329).
-min_eligible=1000
+#
+# F273-F277 (2026-08-27, sessao housekeep-session): min_eligible SOBE
+# 1000->1005 (+5, ratchet-UP honesto). Correcao dos cinco achados do HOUSEKEEP
+# fechados nesta sessao (token de sessao apagada continuava a autenticar;
+# GET /session/connect apos /session/disconnect mentia 200; POST
+# /session/logout e POST /s3/test respondiam 500 com envelope de texto simples
+# em vez do 409/422 tipado). ENTRAM (5), todas em pkg/application/session
+# e pkg/bootstrap:
+#   session.Orchestrator.CheckStartAvailable    (ELIGIBLE, uncovered:L1;L2)
+#   session.errSessionStartAlreadyInFlight       (ELIGIBLE, uncovered:L1;L2)
+#   session.startInFlight.busy                   (ELIGIBLE, uncovered:L1)
+#   bootstrap.connectStartInFlightCheck           (ELIGIBLE, uncovered:L1;L2)
+#   bootstrap.disconnectInFlightReleaser.Disconnect (ELIGIBLE, uncovered:L1)
+#
+# Nenhuma delas loga por desenho, e nao por descuido — a mesma classe que
+# connectOwnershipCheck (F108) ja documenta acima, em min_errpath_coverage:
+#
+#   - CheckStartAvailable e startInFlight.busy sao um PEEK — leem o estado do
+#     guarda sem mutar, e devolvem o erro tipado para o CHAMADOR decidir o
+#     nivel de log. Logar aqui E no handler duplicaria a mesma linha por
+#     recusa.
+#   - errSessionStartAlreadyInFlight e' um construtor de erro puro (mesmo
+#     padrao de apperr.New inline que os outros codigos deste ficheiro ja
+#     usam sem log).
+#   - connectStartInFlightCheck e' a MESMA forma de connectOwnershipCheck:
+#     uma closure que devolve o erro ao ConnectHandler.ServeHTTP, que e' quem
+#     ja loga e decide Warn/Error via isClientCausedSessionError.
+#   - disconnectInFlightReleaser.Disconnect delega ao SessionDisconnector real
+#     (que ja loga a falha de disconnect) e so' chama ReleaseStart quando o
+#     delegate teve SUCESSO — nao ha' caminho de erro seu para logar.
+#
+# ReleaseStart nao entra no universo elegivel (EXCLUDED, X1: <=2 statements,
+# sem branch de erro — so' um repasse a startInFlight.release).
+#
+# Numeros MEDIDOS: `go run ./cmd/logcov -json ./pkg`
+#   ANTES:  eligible=1000, func_coverage=59.4% (594), errpath=77.7% (777)
+#   DEPOIS: eligible=1005, func_coverage=59.1% (591), errpath=77.6% (776)
+#
+# func_coverage e errpath_coverage CAEM porque as cinco funcoes elegiveis
+# novas nascem UNCOVERED (por desenho, ver acima) e engrossam so' o
+# denominador — o mesmo padrao ja registado no "BURACO CONHECIDO" do topo
+# deste ficheiro. covered NAO muda. max_exempt_annotations NAO muda.
+min_eligible=1005
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

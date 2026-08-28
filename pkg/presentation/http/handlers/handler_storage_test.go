@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -473,6 +474,42 @@ func TestStorageHandlers_PayloadSecretsNeverReachTheLog(t *testing.T) {
 			logassert.NoSecrets(t, recs)
 		})
 	}
+}
+
+// F276 — POST /storage/s3/test turned an upstream refusal into a 500 with a
+// plain-text envelope. This test exercises the REGISTERED handler (not just
+// the use case, covered separately in storage_test.go) to prove both the
+// STATUS and the envelope SHAPE at the HTTP boundary.
+func TestTestS3ConnectionHandler_RecusaDoUpstream_422ComEnvelopeCanonico(t *testing.T) {
+	upstreamErr := errors.New("operation error S3: ListObjectsV2, https response error StatusCode: 403, " +
+		"api error InvalidAccessKeyId: The AWS Access Key Id you provided does not exist in our records.")
+	clients := &contractsfake.S3ClientManager{
+		TestConnectionFunc: func(context.Context, string) error { return upstreamErr },
+	}
+	uc := storage.NewTestS3ConnectionUseCase(storageSession(nil), enabledS3Store(),
+		&contractsfake.S3SecretCipher{}, clients, silentLogger{})
+	h := NewTestS3ConnectionHandler(uc)
+
+	req := withUser(httptest.NewRequest(http.MethodPost, "/storage/s3/test", nil), "42")
+	rec, recs := serveStorage(t, h, req)
+
+	assertErrorEnvelope(t, rec, http.StatusUnprocessableEntity)
+
+	var errBody struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	env := decodeEnvelope(t, rec)
+	if err := json.Unmarshal(env.Error, &errBody); err != nil {
+		t.Fatalf("error nao e' o objeto {code,message}: %s (%v)", env.Error, err)
+	}
+	if errBody.Code != "upstream_rejected" {
+		t.Errorf("error.code = %q, quero upstream_rejected", errBody.Code)
+	}
+	if !strings.Contains(errBody.Message, "InvalidAccessKeyId") {
+		t.Errorf("error.message nao traz o diagnostico do upstream: %q", errBody.Message)
+	}
+	logassert.NoSecrets(t, recs)
 }
 
 // --- SetProxy: os mesmos eixos, com a guarda que ele de fato tem -----------

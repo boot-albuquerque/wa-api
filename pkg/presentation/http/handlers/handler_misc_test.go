@@ -133,7 +133,7 @@ func TestListNewsletterHandler_ListFailure(t *testing.T) {
 
 func deleteUserCompleteHandler(t *testing.T, db *sql.DB) http.Handler {
 	t.Helper()
-	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, &contractsfake.Logger{}, t.TempDir())
+	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{}, t.TempDir())
 	return NewDeleteUserCompleteHandler(uc)
 }
 

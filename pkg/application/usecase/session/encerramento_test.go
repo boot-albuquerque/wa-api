@@ -276,6 +276,42 @@ func TestLogoutUseCase_OutraFalhaNaoDerrubaOEstado(t *testing.T) {
 	}
 }
 
+// TestLogoutUseCase_ConectadaSemParNaoEstendeODetach é o companheiro de
+// F275 para a regra de cerca da F93: o Detach do ramo
+// CodeSessionNotConnected é DELIBERADO (a entrada da F275 avisa
+// explicitamente para não o estender cegamente) porque uma sessão viva sem
+// par não está a mentir sobre `users.connected` — só não tem o que
+// desemparelhar. Chamar Detach aqui derrubaria o estado local de uma sessão
+// que continua conectada.
+func TestLogoutUseCase_ConectadaSemParNaoEstendeODetach(t *testing.T) {
+	semPar := apperr.New(
+		apperr.CodeSessionNotPaired, apperr.CategoryConflict,
+		"session has a live connection but was never paired; there is no device to log out", false, nil,
+	)
+	sc := &contractsfake.SessionController{
+		LogoutFunc: func(context.Context, string) error { return semPar },
+	}
+	det := &contractsfake.SessionDetacher{}
+	log := &contractsfake.Logger{}
+
+	_, err := session.NewLogoutUseCase(sc, det, log).
+		Execute(context.Background(), txtID, domain.LogoutRequest{})
+
+	if err == nil {
+		t.Fatal("Execute devolveu sucesso para logout numa sessão conectada mas nunca emparelhada")
+	}
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("erro não é *apperr.AppError: %v (%T)", err, err)
+	}
+	if appErr.Code != apperr.CodeSessionNotPaired {
+		t.Fatalf("código = %q, quero %q — o erro perdeu o tipo ao atravessar o use case", appErr.Code, apperr.CodeSessionNotPaired)
+	}
+	if len(det.DetachCalls) != 0 {
+		t.Errorf("Detach chamado %d vezes para session_not_paired: a sessão continua conectada, e users.connected não está a mentir", len(det.DetachCalls))
+	}
+}
+
 // TestLogoutUseCase_SucessoAindaDesanexa trava a F80, que é o risco desta
 // correção: acrescentei uma chamada no ramo de FALHA, e mover a do ramo de
 // sucesso reabriria aquele defeito — o logout pela API não emite evento, então
