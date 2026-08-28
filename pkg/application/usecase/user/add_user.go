@@ -193,14 +193,15 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserInput) 
 			WebhookUseProxy: webhookUseProxy,
 		},
 		S3: domain.UserS3Settings{
-			Enabled:       req.S3Config.Enabled,
-			Endpoint:      req.S3Config.Endpoint,
-			Region:        req.S3Config.Region,
-			Bucket:        req.S3Config.Bucket,
-			PathStyle:     req.S3Config.PathStyle,
-			PublicURL:     req.S3Config.PublicURL,
-			MediaDelivery: req.S3Config.MediaDelivery,
-			RetentionDays: req.S3Config.RetentionDays,
+			Enabled:             req.S3Config.Enabled,
+			Endpoint:            req.S3Config.Endpoint,
+			Region:              req.S3Config.Region,
+			Bucket:              req.S3Config.Bucket,
+			PathStyle:           req.S3Config.PathStyle,
+			PublicURL:           req.S3Config.PublicURL,
+			MediaDelivery:       req.S3Config.MediaDelivery,
+			RetentionDays:       req.S3Config.RetentionDays,
+			AccessKeyConfigured: req.S3Config.AccessKey != "",
 		},
 	}, nil
 }

@@ -27,23 +27,26 @@ type UserProxyConfigResponse struct {
 //
 // There is no `access_key`, and its absence is deliberate. The listing used
 // to serve the literal "***" for it — the same three characters whether a key
-// was configured or not, and the repository does not read the column at all
-// (pkg/infra/db/user_repository.go:277), so the value carried no information.
-// It also became actively dangerous once this migration aligned request and
-// response names: echoing the response back into a PUT would have written
-// "***" over the real credential.
+// was configured or not, and the repository did not read the column at all,
+// so the value carried no information. It also became actively dangerous
+// once this migration aligned request and response names: echoing the
+// response back into a PUT would have written "***" over the real
+// credential.
 //
-// Reporting WHETHER a key is configured would be worth having, and is not
-// possible without teaching ListUsers to select it — see HOUSEKEEP.
+// `access_key_configured` (F308) reports WHETHER a key is present, as a
+// derived boolean from `COALESCE(s3_access_key,”) <> ”`
+// (pkg/infra/db/user_repository.go, userS3Config) — the key itself never
+// reaches this struct.
 type UserS3ConfigResponse struct {
-	Enabled       bool   `json:"enabled"`
-	Endpoint      string `json:"endpoint"`
-	Region        string `json:"region"`
-	Bucket        string `json:"bucket"`
-	PathStyle     bool   `json:"path_style"`
-	PublicURL     string `json:"public_url"`
-	MediaDelivery string `json:"media_delivery"`
-	RetentionDays int    `json:"retention_days"`
+	Enabled             bool   `json:"enabled"`
+	Endpoint            string `json:"endpoint"`
+	Region              string `json:"region"`
+	Bucket              string `json:"bucket"`
+	PathStyle           bool   `json:"path_style"`
+	PublicURL           string `json:"public_url"`
+	MediaDelivery       string `json:"media_delivery"`
+	RetentionDays       int    `json:"retention_days"`
+	AccessKeyConfigured bool   `json:"access_key_configured"`
 }
 
 // UserResponse is one provisioned API user, as served by the /admin/users

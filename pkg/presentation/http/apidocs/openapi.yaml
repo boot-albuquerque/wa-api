@@ -10801,8 +10801,26 @@ components:
             de resposta passarem a coincidir, reenviar esta resposta num
             `PUT /admin/users/{id}` gravaria `***` por cima da credencial real.
             `secret_key` continua a não aparecer.
+
+            Em vez disso, `access_key_configured` diz SE há uma chave gravada,
+            sem devolver a chave (F308).
           nullable: false
           properties:
+            access_key_configured:
+              description: |
+                Se há uma chave de acesso S3 gravada para esta sessão — **não é
+                a chave em si**, que nunca sai por esta resposta (F308). Coluna
+                derivada: `COALESCE(s3_access_key,'') <> ''`.
+
+                Antes deste campo, `enabled: true` com a chave vazia era
+                indistinguível de uma configuração completa: o operador só via
+                `enabled`, nunca se havia credencial.
+
+                Sempre presente, nunca `null`.
+              example: true
+              nullable: false
+              readOnly: true
+              type: boolean
             bucket:
               description: Bucket de destino. `""` quando não configurado. Sempre presente, nunca `null`.
               example: ""

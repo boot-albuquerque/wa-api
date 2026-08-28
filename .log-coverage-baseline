@@ -1611,7 +1611,12 @@ min_errpath_coverage=777
 # INTEGRACAO com http-dto-paths (2026-08-27): min_eligible SOBE 992->1002 (+10, ratchet-UP honesto: 10 rotas cortadas ganharam handler/DTO proprio).
 # INTEGRACAO com http-dto-download-paths (2026-08-27): min_eligible CAI 1002->997 (-5, as cinco funcoes de handler dos downloads legados saem do universo elegivel ao serem apagadas, F328). Ratchet-DOWN justificado, nao regressao — covered nao muda.
 # INTEGRACAO com http-dto-legacy-alias-removal (2026-08-27): min_eligible SOBE 997->1000 (+3, ratchet-UP honesto: reversao de F269/CAP-10 para os ~88 aliases legados trouxe rotas dinamicas novas de stdio para group.photo/group.photo.remove/group.updateparticipants, F329).
-min_eligible=1000
+# F290 (2026-08-27): min_eligible SOBE 1000->1001 (+1, ratchet-UP honesto):
+# pkg/bootstrap.rateLimitObserver.evictLocked entra no universo elegivel — e'
+# a funcao nova que despeja entradas do mapa por-IP nunca purgado antes desta
+# correcao (mapa sem teto, cresce com IP de origem nao confiavel). covered
+# nao muda: a funcao nasce sem log proprio, so' o Warn ja existente reusado.
+min_eligible=1001
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
