@@ -288,7 +288,7 @@ func buildTabelaCompleta(rows []evidenceRow, ops map[string]reportOperation, leg
 		}
 		evidencia := strings.TrimSpace(r.evidencia)
 		if evidencia == "" {
-			evidencia = "ainda não remedida por esta campanha (F239/F282) — ver RFC-cobertura-evidencia-rotas.md."
+			evidencia = "ainda não remedida — sem observador registado em evidencias.tsv."
 		}
 		lines = append(lines, line{
 			grupo:     op.grupo,
@@ -318,8 +318,7 @@ func buildTabelaCompleta(rows []evidenceRow, ops map[string]reportOperation, leg
 	var sb strings.Builder
 	sb.WriteString("## Tabela completa\n\n")
 	sb.WriteString("A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, " +
-		"lido de `api/openapi/evidencias.tsv`. Linhas ainda por remedir dizem-no explicitamente " +
-		"— ver `RFC-cobertura-evidencia-rotas.md`.\n\n")
+		"lido de `api/openapi/evidencias.tsv`. Linhas ainda por remedir dizem-no explicitamente.\n\n")
 	sb.WriteString("| Grupo | Método | Caminho | Substitui | Teste | Título | Evidência |\n")
 	sb.WriteString("|---|---|---|---|---|---|---|\n")
 	for _, l := range lines {

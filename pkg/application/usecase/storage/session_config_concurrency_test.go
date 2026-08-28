@@ -240,7 +240,7 @@ func TestSetProxy_ConcorrenciaPerdeOFlagDeclarado(t *testing.T) {
 	if !flag {
 		t.Fatalf("MUDANÇA DE COMPORTAMENTO: webhook_use_proxy=false sobreviveu à escrita concorrente de B.\n" +
 			"Este teste travava a PERDA medida em 2026-08-26 (F292). Se a perda foi corrigida, inverta a\n" +
-			"asserção e actualize docs/PRODUCTION-READINESS.md e MEDICAO-PRODUCAO.md.")
+			"asserção e actualize docs/PRODUCTION-READINESS.md.")
 	}
 
 	// The loss, stated as the two facts that make it silent: A was told its

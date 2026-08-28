@@ -1,9 +1,11 @@
 # Production Readiness Scorecard — wa-api
 
-**Data**: 2026-08-26, revisto depois da padronização de caminhos e da **medição
-das quatro lacunas de produção** (`MEDICAO-PRODUCAO.md`). **Medido**, não
-estimado: cada número desta página vem de um comando cuja saída está registada
-nos commits desta série.
+**Data**: 2026-08-26, revisto depois da padronização de caminhos e da medição
+das quatro lacunas de produção então detectadas (achado incorporado ao
+`HOUSEKEEP.md`; o documento de medição isolado foi removido depois de zerar
+as lacunas ❌, ver "Duas coisas que este scorecard NÃO afirma" abaixo).
+**Medido**, não estimado: cada número desta página vem de um comando cuja
+saída está registada nos commits desta série.
 
 A revisão de 26/08 mexeu na secção 6 porque **três das quatro linhas ❌ diziam
 coisas que a medição contradisse**. Uma linha de scorecard que descreve o
@@ -124,7 +126,7 @@ resolve.
 | Sondas separadas | 🟡 | `/livez` e `/health/ready` distinguem vivacidade de prontidão. Mas `/health` — a funcional — está **atrás de token**, o que a torna inútil para um balanceador |
 | **Paginação** | 🟡 | **duas colecções paginam, uma delas sem tecto, e o resto não pagina**. `GET /chats/list` tem `limit` (padrão 50, **máx. 500**), `offset` e `total` — medido com 2 000 conversas, e está assim desde `9d9dd7ec`, 2026-08-08. `GET /chats/history` tem `limit` **sem tecto**: `limit=999999` e `limit=-1` devolveram as 5 001 mensagens (1,5 MB), e 100 pedidos concorrentes levaram o processo de 16 MB a 264 MB de RSS (F291). `GET /users/contacts` continua sem limite nenhum — **61 459 bytes** com 1266 contactos. A afirmação anterior, "nenhuma colecção é paginada", **nunca foi verdade** (F294) |
 | **Versionamento** | 🟡 | continua sem `/v1`. Mas a padronização de 26/08 mostrou que **alias lado a lado** resolve tudo o que é ADITIVO — um caminho novo coexiste com o antigo, sem versão. `/v1` continua pré-requisito para o que **não pode coexistir**: mudar o status code de uma rota, ou unificar o envelope de erro |
-| **Idempotência** | ❌ | não há `Idempotency-Key` em rota nenhuma. **A lacuna é só no envio**: as rotas de configuração são naturalmente idempotentes (medido: `POST /webhook`, `PUT /webhook`, `POST /session/proxy` repetidos deixam o mesmo estado), e `POST /admin/users` deduplica pelo índice único de `token_hash` — a repetição devolve `409`, não um segundo inquilino. No envio existe já `Id`, escolhido pelo cliente, que vira o stanza ID do WhatsApp, e a nossa escrita local deduplica por ele (`UNIQUE(user_id, message_id)` com `ON CONFLICT`). **Não medido**: se o WhatsApp deduplica na recepção, e se um `500` chegou a enviar — as duas exigem conta emparelhada (`HUMAN-LAST.md`) |
+| **Idempotência** | ❌ | não há `Idempotency-Key` em rota nenhuma. **A lacuna é só no envio**: as rotas de configuração são naturalmente idempotentes (medido: `POST /webhook`, `PUT /webhook`, `POST /session/proxy` repetidos deixam o mesmo estado), e `POST /admin/users` deduplica pelo índice único de `token_hash` — a repetição devolve `409`, não um segundo inquilino. No envio existe já `Id`, escolhido pelo cliente, que vira o stanza ID do WhatsApp, e a nossa escrita local deduplica por ele (`UNIQUE(user_id, message_id)` com `ON CONFLICT`). **Não medido**: se o WhatsApp deduplica na recepção, e se um `500` chegou a enviar — as duas exigem conta emparelhada |
 | **Limitação de ritmo** | ❌ | **nenhuma rota recusa por ritmo**, e nenhum `429` vem de protecção nossa. O `x/time/rate` que existe protege o **SERVIDOR, por IP**, e não a conta no envio: 10 req/s, rajada 20, ligado em `router.go:257` em modo **observe-only** — mede e regista, nunca recusa. Medido com 4 rajadas de 60 pedidos concorrentes: **60× `200`, 0× `429`, ~40 avisos** "would have been rejected" por rajada. Um `429` é alcançável, mas só como **relais** do estrangulamento do WhatsApp (F293) |
 | **Concorrência** | ❌ | sem `ETag`, `If-Match` ou versão, e há perda silenciosa de escrita — **mas não pelo mecanismo que esta linha dizia**. Não há read-modify-write da linha: `UpdateUser` escreve só os campos informados e `SaveProxyConfig` escreve as duas colunas num único `UPDATE`. A janela é o par leitura→escrita de `resolveWebhookUseProxy`: um `POST /session/proxy` que OMITE `webhook_use_proxy` lê a coluna e reescreve-a, apagando o valor que um pedido concorrente acabou de declarar e foi respondido `200` a confirmar. Travado em `session_config_concurrency_test.go` sob `-race`, com dois controlos negativos executados (F292). **0 perdas em 200 rodadas** sem controlo de escalonamento — o defeito é real e raro |
 
@@ -151,10 +153,9 @@ duplica trabalho:
    existe para o produzir. Ao ligá-lo, o balde vira **recurso limitado**, e a
    invariante do projecto passa a aplicar-se: *nada que espere por relógio ou
    por par morto pode ocupar slot limitado*. Os detentores longos que passariam
-   a disputá-lo estão enumerados em `MEDICAO-PRODUCAO.md` §4 — rotas com timeout
-   de 30 s contra o WhatsApp, pareamento, e sobretudo o WebSocket, que detém
-   pela ligação inteira. As sondas têm de ficar de fora, e o `429` tem de trazer
-   `Retry-After`.
+   a disputá-lo: rotas com timeout de 30 s contra o WhatsApp, pareamento, e
+   sobretudo o WebSocket, que detém pela ligação inteira. As sondas têm de
+   ficar de fora, e o `429` tem de trazer `Retry-After`.
 4. **Idempotência nas rotas de envio**, com `Idempotency-Key`. As de
    configuração já são idempotentes e não precisam. O `Id` do cliente é o
    candidato natural a chave: já é o stanza ID do WhatsApp e a escrita local já
@@ -208,19 +209,25 @@ uma integração coexistiria com elas em vez de as substituir.
   As 24 promoções desta ronda vieram de **sessões descartáveis** — criadas por
   `POST /admin/users`, nunca emparelhadas, medidas num servidor isolado e
   apagadas no fim —, cada uma confirmada por observador independente (SQLite,
-  rota irmã de leitura, ou quadro de WebSocket). O registo rota a rota está em
-  `CAMPANHA-DESCARTAVEL.md`. A quarta ❌ é `POST /session/logout` (F275).
-
-  **Três das quatro ❌ têm hoje causa determinada**, e é `PROTOCOL_CHANGED` nas
-  três: `INVESTIGATION-block-unblock.md` e
-  `INVESTIGATION-newsletter-updates.md`. Continuam ❌ — a marca só se move
-  quando a rota responder.
+  rota irmã de leitura, ou quadro de WebSocket). O registo rota a rota está no
+  `HOUSEKEEP.md` (achados F350-F353). A quarta ❌ desta ronda era
+  `POST /session/logout` (F275).
 
   Estes números subiram para 178/13/6/35 durante algumas horas, quando as
   formas antigas e canónicas estavam ambas documentadas. Voltaram ao que eram
   quando as antigas saíram do contrato — e o episódio vale como aviso: **um
   total que cresce sem mais verificação não é progresso**. Era a mesma prova,
   contada duas vezes.
+
+  **Actualização de 2026-08-28**: as quatro ❌ catalogadas pela campanha de
+  evidência (F275, `POST /users/block`, `POST /users/unblock`,
+  `POST /newsletters/updates`) foram todas corrigidas — as duas últimas
+  precisaram de código novo (`pn_jid` portado de whatsmeow/Baileys, F264; e a
+  forma de IQ de `/newsletters/messages` reaproveitada, F265). Um quinto
+  achado, `POST /status/set/video`/`POST /status/set/audio` (F358), saiu de
+  🟡 pelo mesmo caminho (dedup F103 corrigida, F367). Contagem actual:
+  **135 ✅, 2 🟡, 0 ❌, 0 ⬜** — detalhe completo em `HOUSEKEEP.md` e
+  `docs/OPENAPI-EVIDENCIAS.md`.
 - **Que os gates cobrem tudo.** Eles leem estrutura, não prosa
   (ARMADILHAS #29), e verificam o repositório, não o binário em execução
   (ARMADILHAS #27). As duas limitações estão escritas nos próprios gates.

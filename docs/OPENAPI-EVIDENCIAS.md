@@ -183,7 +183,7 @@ desta rota. Ver HOUSEKEEP F366.
 
 ## As quatro 🟡, e o que realmente as bloqueia
 
-O inventário completo está em `OBSERVADORES-AMBAR.md`. **Seis saíram
+**Seis saíram
 desta lista em 2026-08-28**: `POST /groups/{group_jid}/join-requests`,
 `POST /newsletters/react`, `POST /chats/send/sticker`,
 `POST /status/set/image` (movidas para ✅ — ver "Destrave de 2026-08-28"
@@ -193,8 +193,8 @@ duas, e nenhuma tem conserto possível nesta base.
 
 | Endpoint | Motivo preciso |
 |---|---|
-| `POST /chats/request-unavailable-message` | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1. |
-| `POST /newsletters/mark-viewed` | 200 com data:null. **INVESTIGADO A FUNDO em 2026-08-28, com um listener que PROVOU funcionar**: o mesmo WebSocket que recebeu, em segundos, o evento `NewsletterLiveUpdate` de uma reação de `recebe`, esperou 45s por um evento depois de `mark-viewed` — zero. Mais forte: `POST /newsletters/messages` (sem WebSocket nenhum) confirmou `view_count:0` antes e depois, enquanto `reactions` no MESMO objeto mostrava a contagem real. Não é bug de entrega — a entrega funciona, provado. É o `view_count` nunca incrementar do lado do WhatsApp para uma marcação feita por API, possivelmente por exigir renderização por cliente real (hipótese, não confirmável sem o código deles). **Não há ação humana nem de código nesta base que destrave isto.** Ver `OBSERVADORES-AMBAR.md` §4. |
+| `POST /chats/request-unavailable-message` | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. |
+| `POST /newsletters/mark-viewed` | 200 com data:null. **INVESTIGADO A FUNDO em 2026-08-28, com um listener que PROVOU funcionar**: o mesmo WebSocket que recebeu, em segundos, o evento `NewsletterLiveUpdate` de uma reação de `recebe`, esperou 45s por um evento depois de `mark-viewed` — zero. Mais forte: `POST /newsletters/messages` (sem WebSocket nenhum) confirmou `view_count:0` antes e depois, enquanto `reactions` no MESMO objeto mostrava a contagem real. Não é bug de entrega — a entrega funciona, provado. É o `view_count` nunca incrementar do lado do WhatsApp para uma marcação feita por API, possivelmente por exigir renderização por cliente real (hipótese, não confirmável sem o código deles). **Não há ação humana nem de código nesta base que destrave isto.** |
 
 ## Nenhuma rota fica por testar
 
@@ -306,7 +306,7 @@ para ✅ — fechando as 137 rotas do contrato:
 
 ## Tabela completa
 
-A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido de `api/openapi/evidencias.tsv`. Linhas ainda por remedir dizem-no explicitamente — ver `RFC-cobertura-evidencia-rotas.md`.
+A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido de `api/openapi/evidencias.tsv`. Linhas ainda por remedir dizem-no explicitamente.
 
 | Grupo | Método | Caminho | Substitui | Teste | Título | Evidência |
 |---|---|---|---|---|---|---|
