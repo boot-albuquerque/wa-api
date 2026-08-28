@@ -227,6 +227,34 @@ components:
         type: string
         pattern: '^[0-9a-f]{32}$'
         example: 918e37366f27e1125ee0482a793267e1
+    EngineDePareamento:
+      name: engine
+      in: query
+      required: true
+      description: |
+        Transporte que executa este emparelhamento.
+
+        **O engine é escolhido pelo pedido de emparelhamento e determina qual
+        transporte executa a ligação; não é inferido da sessão do chamador.**
+
+        Obrigatório, não-nulo e não-vazio, e tem de ser IGUAL ao engine com que
+        a sessão alvo foi criada em `POST /admin/users`. Divergir dá
+        `409 engine_mismatch`; o engine é imutável depois da criação, portanto
+        o que muda é o pedido. A redundância é deliberada: é a confirmação
+        explícita no ponto em que uma operação sensível começa.
+
+        Qualquer valor fora de `noise`/`headless` — incluindo os nomes
+        `wa_noise`/`wa_headless` de outras integrações — dá `400
+        invalid_engine`. O valor não é aparado nem normalizado: `noise ` com
+        espaço, ou `NOISE`, também dão `400 invalid_engine`.
+
+        **Vai na query e não no corpo** porque as duas rotas que o pedem assim
+        são GET, e um GET com corpo não é contrato que este projecto vá
+        começar. `POST /session/pairphone` recebe-o no corpo JSON.
+      schema:
+        type: string
+        enum: [noise, headless]
+        example: noise
 
   schemas:
     Envelope:
@@ -435,6 +463,54 @@ components:
             error:
               code: missing_session_id
               message: missing session id
+            success: false
+
+    EngineDivergente:
+      description: |
+        O `engine` do pedido é um engine real, mas não é o da sessão ALVO.
+
+        Nenhum transporte foi tocado. O engine é imutável depois da criação,
+        portanto o que muda é o pedido — não a sessão. Para saber com que
+        engine a sessão foi criada, veja `engine` em `GET /admin/users`.
+
+        O mesmo status cobre `engine_unavailable`: o engine seria suportado,
+        e não está disponível neste processo (headless sem Chrome
+        configurado, por exemplo). Esse é facto de instalação, e o `code`
+        separa-os.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            code: 409
+            error:
+              code: engine_mismatch
+              message: request names engine "headless", but this session was created with engine "noise"; engine is immutable after creation
+            success: false
+
+    EngineNaoSuporta:
+      description: |
+        O pedido está correcto e o engine que ele nomeia **não serve esta
+        operação** nesta versão.
+
+        Nenhum transporte foi tocado, e não há recurso ao outro engine: servir
+        pelo transporte que ninguém pediu emparelharia a sessão contra o que o
+        próprio registo dela diz.
+
+        Medido em 2026-08-28: `headless` não serve `get_pairing_qr` nem
+        `connect_session` (não existe adaptador, e nada de wa-headless é
+        construído no arranque), e `request_pairing_code` está por medir. A
+        matriz completa vive em `pkg/capabilityregistry/matrix.go` — não há
+        rota HTTP própria para ela nesta versão.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            code: 422
+            error:
+              code: capability_not_supported
+              message: capability "get_pairing_qr" is "not_implemented" on engine "headless"
             success: false
 
     CorpoInvalido:

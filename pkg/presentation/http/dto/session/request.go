@@ -18,18 +18,24 @@ import "wa-api/pkg/domain"
 
 // PairPhoneRequest is the body of POST /session/pairphone.
 //
-// The key was `Phone` — PascalCase on the wire.
+// The key was `Phone` — PascalCase on the wire. `engine` is mandatory since
+// 2026-08-28 — see pkg/pairing for the order it is validated in
+// (invalid_engine -> engine_mismatch -> capability_not_supported ->
+// engine_unavailable) and HOUSEKEEP F273 for the defect this closes.
 type PairPhoneRequest struct {
-	Phone string `json:"phone"`
+	Phone  string `json:"phone"`
+	Engine string `json:"engine"`
 }
 
 // Validate: the empty phone is refused by PairPhoneUseCase with the
-// `missing_phone` code, and that code is public contract.
+// `missing_phone` code, and that code is public contract. The empty/invalid
+// engine is refused by pkg/pairing before the use case is even built —
+// keeping this Validate() thin, per the file's own doc comment above.
 func (r PairPhoneRequest) Validate() error { return nil }
 
 // ToDomain produces the use case input.
 func (r PairPhoneRequest) ToDomain() domain.PairPhoneRequest {
-	return domain.PairPhoneRequest{Phone: r.Phone}
+	return domain.PairPhoneRequest{Phone: r.Phone, Engine: r.Engine}
 }
 
 // SetStatusMessageRequest is the body of POST /session/statusmessage.

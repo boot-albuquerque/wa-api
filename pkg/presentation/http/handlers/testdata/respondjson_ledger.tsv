@@ -129,6 +129,7 @@ handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewslett
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterInfo(…)	dto	1
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterMessages(…)	dto	1
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterSubscribe(…)	dto	1
+handler_pairing_common.go	respondPairingRefusal	nil	nil	2
 handler_presence.go	*ChatPresenceHandler.ServeHTTP	dtomessage.PresentAction(…)	dto	1
 handler_presence.go	*ChatPresenceHandler.ServeHTTP	nil	nil	2
 handler_presence.go	*MarkReadHandler.ServeHTTP	dtomessage.PresentAction(…)	dto	1

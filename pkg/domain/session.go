@@ -46,8 +46,17 @@ type LogoutResult struct {
 }
 
 // PairPhoneRequest representa o payload de pareamento por telefone.
+//
+// `Engine` é obrigatório desde 2026-08-28 — ver pkg/pairing para a ordem em
+// que é validado (invalid_engine -> engine_mismatch -> capability_not_supported
+// -> engine_unavailable). Sem etiquetas `json`: o formato de fio é
+// `pkg/presentation/http/dto/session.PairPhoneRequest`, que já usa `phone`
+// minúsculo — não há alias `phone_number` nem `Phone` maiúsculo neste
+// contrato, ao contrário de outra worktree que resolveu este mesmo problema
+// de forma diferente.
 type PairPhoneRequest struct {
-	Phone string
+	Phone  string
+	Engine string
 }
 
 // PairPhoneResult representa o resultado do pareamento por telefone.

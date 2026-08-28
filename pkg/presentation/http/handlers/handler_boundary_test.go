@@ -10,11 +10,14 @@ import (
 	"time"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/application/usecase/user"
+	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
+	"wa-api/pkg/pairing"
 )
 
 // Este arquivo cobre a FRONTEIRA compartilhada por praticamente todos os
@@ -79,6 +82,40 @@ func (s *spyPort) IsPaired(context.Context, string) (bool, error) {
 func (s *spyPort) RequestPairingCode(context.Context, string, string) (string, error) {
 	s.calls++
 	return "SPY-CODE", s.err
+}
+
+// PairingQR, CheckOwnership e StartSession entraram com a F281: GetQR, Connect
+// e PairPhone deixaram de receber um use case pronto e passam a resolver a
+// porta por engine (pkg/pairing). O spy satisfaz as tres portas para que
+// "a porta foi tocada?" continue a ser UMA contagem.
+func (s *spyPort) PairingQR(context.Context, string) (string, error) {
+	s.calls++
+	return "2@spy", s.err
+}
+
+func (s *spyPort) CheckOwnership(context.Context, string) error {
+	s.calls++
+	return s.err
+}
+
+func (s *spyPort) StartSession(context.Context, string, string) { s.calls++ }
+
+// boundaryPairingRegistry liga o spy como provider do wa_noise, com uma sessao
+// "user-1" gravada nesse engine. A matriz consultada e' a REAL
+// (capabilityregistry.NewCapabilityRegistry): um duble permissivo abencoaria
+// caminhos que nao existem — ARMADILHAS.md #1.
+func boundaryPairingRegistry(s *spyPort) *pairing.Registry {
+	users := &contractsfake.UserRepository{
+		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
+			if id == "" {
+				return nil, nil
+			}
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineNoise}}, nil
+		},
+	}
+	return pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
+		&pairing.Provider{Engine: domain.EngineNoise, QRReader: s, PhonePairer: s, Starter: s},
+		&pairing.Provider{Engine: domain.EngineWaHeadless})
 }
 
 // Detach entrou com a F80: o logout pela API agora solta a sessao depois de
@@ -451,9 +488,9 @@ func boundaryCases() []boundaryCase {
 		},
 		{
 			name:      "GetQR",
-			build:     func(s *spyPort) http.Handler { return NewGetQRHandler(session.NewGetQRUseCase(s, s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewGetQRHandler(log, boundaryPairingRegistry(s)) },
 			method:    http.MethodGet,
-			path:      "/session/qr",
+			path:      "/session/qr?engine=noise",
 			readsBody: false,
 		},
 		{
@@ -472,7 +509,7 @@ func boundaryCases() []boundaryCase {
 		},
 		{
 			name:      "PairPhone",
-			build:     func(s *spyPort) http.Handler { return NewPairPhoneHandler(session.NewPairPhoneUseCase(s, log)) },
+			build:     func(s *spyPort) http.Handler { return NewPairPhoneHandler(log, boundaryPairingRegistry(s)) },
 			method:    http.MethodPost,
 			path:      "/session/pairphone",
 			readsBody: true,

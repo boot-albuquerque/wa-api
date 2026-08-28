@@ -12,8 +12,10 @@ import (
 	"github.com/gorilla/mux"
 
 	"wa-api/pkg/application/contracts/contractsfake"
-	"wa-api/pkg/application/usecase/session"
+	"wa-api/pkg/capabilityregistry"
+	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/pairing"
 	dtosession "wa-api/pkg/presentation/http/dto/session"
 )
 
@@ -43,7 +45,10 @@ const (
 	// Note que trocar de volta NAO faria este teste falhar — o
 	// encoding/json casa a etiqueta sem distinguir caixa —, e por isso o
 	// que trava a grafia e' o teste de contrato da rota, nao este corpo.
-	pairPhoneBody = `{"phone":"` + pairPhoneNumber + `"}`
+	// `engine` passou a ser OBRIGATORIO com o registry de pareamento: sem
+	// ele a rota devolve 400 invalid_engine antes de tocar em provider
+	// nenhum (F273).
+	pairPhoneBody = `{"engine":"noise","phone":"` + pairPhoneNumber + `"}`
 	// pairPhoneWireCode e' o codigo que a porta devolve nos casos felizes.
 	// Formato de 8 caracteres em dois grupos, como
 	// internal/wa-noise/capabilities/pairing/paircode.go:100 monta.
@@ -61,7 +66,17 @@ const (
 
 // pairPhoneRouter registra o handler pela rota real (gorilla/mux).
 func pairPhoneRouter(pp *contractsfake.PhonePairer) http.Handler {
-	h := NewPairPhoneHandler(session.NewPairPhoneUseCase(pp, silentLogger{}))
+	// A sessao "user-1" (msgAuthed) esta' gravada em wa_noise, e o pairer
+	// fake e' o provider desse engine. A matriz consultada e' a REAL.
+	users := &contractsfake.UserRepository{
+		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineNoise}}, nil
+		},
+	}
+	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
+		&pairing.Provider{Engine: domain.EngineNoise, PhonePairer: pp},
+		&pairing.Provider{Engine: domain.EngineWaHeadless})
+	h := NewPairPhoneHandler(silentLogger{}, reg)
 
 	r := mux.NewRouter()
 	r.Handle(pairPhoneRoute, h).Methods(http.MethodPost)
@@ -141,10 +156,14 @@ func TestPairPhone_Success_ViaRegisteredRoute(t *testing.T) {
 // TestPairPhone_MissingPhone_400_LogsCause: sem Phone e' 400 E o registro que
 // diz por que. A validacao de payload precede a guarda de sessao, entao
 // EnsureSession nao pode nem ter sido chamada.
+//
+// O corpo traz `engine` porque desde a F281 a resolucao do engine corre ANTES
+// do use case: um `{}` seco daria 400 invalid_engine e este teste passaria sem
+// nunca chegar a' guarda que ele existe para medir.
 func TestPairPhone_MissingPhone_400_LogsCause(t *testing.T) {
 	pp := pairPhoneIssuing()
 
-	rec, recs := pairPhoneServeCapturingLog(t, pp, `{}`)
+	rec, recs := pairPhoneServeCapturingLog(t, pp, `{"engine":"noise"}`)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d, want 400 (corpo: %s)", rec.Code, rec.Body.String())

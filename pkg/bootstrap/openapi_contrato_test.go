@@ -311,7 +311,20 @@ func TestContrato422Implica429(t *testing.T) {
 			if respostas == nil {
 				continue
 			}
-			if _, tem422 := respostas["422"]; !tem422 {
+			resp422, tem422 := respostas["422"]
+			if !tem422 {
+				continue
+			}
+			// EngineNaoSuporta (2026-08-28, registry de pareamento por
+			// engine, F273) é um 422 que NUNCA passa por
+			// errmap.ClassifyIQ — capability_not_supported é uma decisão
+			// local do pkg/pairing, resolvida ANTES de qualquer chamada ao
+			// WhatsApp. Documentar 429 ao lado seria afirmar um caminho de
+			// estrangulamento que não existe para essas três rotas.
+			// Excluído por $ref, não por caminho: se um dia estas rotas
+			// ganharem TAMBÉM um 422 de errmap.ClassifyIQ (ex.: oneOf), a
+			// checagem por $ref deixa de casar e a regra volta a valer.
+			if m, ok := resp422.(map[string]any); ok && m["$ref"] == "#/components/responses/EngineNaoSuporta" {
 				continue
 			}
 			com422++

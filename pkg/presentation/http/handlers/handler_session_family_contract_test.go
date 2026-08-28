@@ -15,7 +15,9 @@ import (
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/application/usecase/storage"
+	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/pairing"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/contracttest"
 
@@ -204,13 +206,20 @@ func TestSessionStatus_ContratoPublico_ValoresMapeados(t *testing.T) {
 func TestSessionQR_ContratoPublico(t *testing.T) {
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: "u1", QRCode: "2@codigo-de-pareamento"}}, nil
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineNoise}}, nil
 		},
 	}
-	uc := session.NewGetQRUseCase(&contractsfake.SessionGuard{}, users, &contractsfake.Logger{})
-	router := familyRouter(t, "/session/qr", NewGetQRHandler(uc), http.MethodGet)
+	qr := &contractsfake.PairingQRReader{
+		PairingQRFunc: func(context.Context, string) (string, error) {
+			return "2@codigo-de-pareamento", nil
+		},
+	}
+	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
+		&pairing.Provider{Engine: domain.EngineNoise, QRReader: qr},
+		&pairing.Provider{Engine: domain.EngineWaHeadless})
+	router := familyRouter(t, "/session/qr", NewGetQRHandler(&contractsfake.Logger{}, reg), http.MethodGet)
 
-	rec := serveFamily(t, router, http.MethodGet, "/session/qr", "")
+	rec := serveFamily(t, router, http.MethodGet, "/session/qr?engine=noise", "")
 	data := familyData(t, rec)
 
 	contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())
@@ -228,10 +237,17 @@ func TestSessionPairPhone_ContratoPublico(t *testing.T) {
 			return "WXYZ-2468", nil
 		},
 	}
-	uc := session.NewPairPhoneUseCase(pp, &contractsfake.Logger{})
-	router := familyRouter(t, "/session/pairphone", NewPairPhoneHandler(uc), http.MethodPost)
+	users := &contractsfake.UserRepository{
+		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineNoise}}, nil
+		},
+	}
+	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
+		&pairing.Provider{Engine: domain.EngineNoise, PhonePairer: pp},
+		&pairing.Provider{Engine: domain.EngineWaHeadless})
+	router := familyRouter(t, "/session/pairphone", NewPairPhoneHandler(&contractsfake.Logger{}, reg), http.MethodPost)
 
-	rec := serveFamily(t, router, http.MethodPost, "/session/pairphone", `{"phone":"5511999999999"}`)
+	rec := serveFamily(t, router, http.MethodPost, "/session/pairphone", `{"engine":"noise","phone":"5511999999999"}`)
 	data := familyData(t, rec)
 
 	contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())

@@ -284,6 +284,32 @@ func NewDefaultMatrix() *matrix {
 		{domain.CapCheckPairingStatus, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/pairing/adapter.go. wa_headless: " + absentAdapter + " — plausible this is engine_unsupported (headless auth is QR/cookie-based, not a pairing code), but that has not been confirmed by reading the auth flow, so it stays unknown rather than asserted"},
 		{domain.CapRequestPairingCode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/pairing/adapter.go. wa_headless: " + absentAdapter + " (same caveat as check_pairing_status)"},
 		{domain.CapDisconnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/session)"},
+
+		// The two rows below were measured on 2026-08-27 for the
+		// engine-explicit pairing work, and they are the only rows in this
+		// table whose wa_headless side is not_implemented rather than unknown.
+		// The difference is evidence, not opinion: absentAdapter says "nobody
+		// checked whether the transport itself could serve it", and for these
+		// two somebody did.
+		//
+		//   - The SPA demonstrably shows a pairing QR: the headless session
+		//     pool has a whole quota class for it
+		//     (pkg/infra/wa-headless/registry/registry.go, KindPairing —
+		//     "a session showing a QR code, waiting for a human"), with its
+		//     own deadline and its own test (registry/pairing_test.go).
+		//   - The SPA demonstrably starts sessions: internal/wa-headless/
+		//     runtime plus pkg/infra/wa-headless/sessions.go (Sessions.Acquire).
+		//
+		// So the transport CAN do both, and the ambiguity absentAdapter exists
+		// to preserve is resolved. What is missing is the adapter that exposes
+		// either one through pkg/application/contracts, and beyond that nothing
+		// in pkg/bootstrap constructs ANY wa-headless object at all: grep for
+		// NewDisconnector across pkg/bootstrap returns zero non-test hits.
+		// That is why the evidence is confirmed — an absence in our own tree is
+		// something grep can settle — while the status is not_implemented, the
+		// honest name for "we could, and we have not".
+		{domain.CapGetPairingQR, domain.StatusSupported, domain.EvidenceProbable, domain.StatusNotImplemented, domain.EvidenceConfirmed, "wa_noise: pkg/infra/wa-noise/adapters/pairing/qr.go, reading users.qrcode as written by the QR listener in pkg/bootstrap/lifecycle.go. wa_headless: no PairingQRReader adapter exists, and no wa-headless object is constructed in pkg/bootstrap at all — the SPA shows a QR (registry.KindPairing) but nothing extracts it"},
+		{domain.CapConnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusNotImplemented, domain.EvidenceConfirmed, "wa_noise: pkg/bootstrap/pairing_providers.go (waNoiseSessionStarter over the SessionOrchestrator). wa_headless: no SessionStarter adapter exists, and no wa-headless object is constructed in pkg/bootstrap at all — Sessions.Acquire in pkg/infra/wa-headless/sessions.go is never reached from an HTTP path"},
 		{domain.CapLogoutSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/user/adapter.go (or session teardown path). wa_headless: " + absentAdapter},
 
 		// wa_noise: DetectOwnAccountKind (internal/wa-noise/capabilities/user/

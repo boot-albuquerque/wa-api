@@ -105,8 +105,30 @@ PedidoPareamentoTelefone:
   description: |
     Corpo de `POST /session/pairphone`. Campos desconhecidos são IGNORADOS em
     silêncio — o decodificador não usa `DisallowUnknownFields`.
-  required: [phone]
+
+    **`engine` é obrigatório desde 2026-08-28.** O engine é ESCOLHIDO pelo
+    pedido de emparelhamento e determina qual transporte executa a ligação;
+    não é inferido da sessão do chamador. Ver a descrição da rota.
+  required: [engine, phone]
   properties:
+    engine:
+      type: string
+      nullable: false
+      enum: [noise, headless]
+      description: |
+        Transporte que executa este emparelhamento. Obrigatório, não-nulo e
+        não-vazio.
+
+        Tem de ser IGUAL ao engine com que a sessão alvo foi criada
+        (`POST /admin/users`): divergir dá `409 engine_mismatch`, e o engine
+        é imutável depois da criação, portanto o que muda é o pedido. A
+        redundância é deliberada — é a confirmação explícita no ponto em que
+        uma operação sensível começa.
+
+        Qualquer valor fora desta lista — incluindo os nomes de configuração
+        `wa_noise`/`wa_headless` de outras integrações, e variações de caixa
+        ou com espaços — é inválido e dá `400 invalid_engine`. O valor não é
+        aparado nem normalizado antes de ser comparado.
     phone:
       type: string
       nullable: false

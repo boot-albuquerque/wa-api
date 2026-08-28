@@ -12,8 +12,11 @@ import (
 	"github.com/justinas/alice"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/application/contracts/contractsfake"
 	appsession "wa-api/pkg/application/session"
+	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/presentation/http/handlers"
 )
 
 // blockingProvider is the minimal appport.SessionProvider double
@@ -68,7 +71,26 @@ func TestConnectStartInFlightCheckIsWired(t *testing.T) {
 			"flight for this user: the response lies (F274).")
 	}
 
-	customHandlerSet.Session.Connect.CheckStartInFlight = func(string) error {
+	// A checagem de wiring acima (linha 63) já provou que a produção liga
+	// CheckStartInFlight. A partir daqui o teste troca o Connect por um
+	// construído sobre um registry de teste — o mesmo padrão de
+	// connect_ownership_wiring_test.go's starterRegistry — porque
+	// `.StartSession` deixou de existir no ConnectHandler (F273/F281): quem
+	// arranca a sessão agora é o Starter que o registry resolve, e
+	// CheckStartInFlight roda ANTES dele ser sequer tocado — a ordem já
+	// garante que um StartSession real nunca é alcançado quando o
+	// in-flight check rejeita, sem precisar de um duble para provar isso
+	// aqui de novo (isso já está travado em
+	// TestConnectHandler_StartInFlight_409, pkg/presentation/http/handlers).
+	starter := &contractsfake.SessionStarter{
+		StartSessionFunc: func(context.Context, string, string) {
+			t.Fatal("StartSession must not be called when a start is already in flight")
+		},
+	}
+	customHandlerSet.Session.Connect = handlers.NewConnectHandler(
+		session.NewConnectUseCase(&contractsfake.Logger{}),
+		starterRegistry(starter),
+	).WithCheckStartInFlight(func(string) error {
 		return apperr.New(
 			"session_start_already_in_flight",
 			apperr.CategoryConflict,
@@ -76,10 +98,7 @@ func TestConnectStartInFlightCheckIsWired(t *testing.T) {
 			false,
 			nil,
 		)
-	}
-	customHandlerSet.Session.Connect.StartSession = func(string, string) {
-		t.Fatal("StartSession must not be called when a start is already in flight")
-	}
+	})
 
 	inject := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +111,7 @@ func TestConnectStartInFlightCheckIsWired(t *testing.T) {
 	registerCustomRoutes(router, alice.New(inject), customHandlerSet)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect", nil))
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect?engine=noise", nil))
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 — a start already in flight must reach the HTTP "+

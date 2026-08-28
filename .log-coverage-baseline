@@ -1647,7 +1647,17 @@ min_errpath_coverage=777
 # novas de deteccao de account_type (SetUserAccountType, GetUserAccountType
 # em pkg/infra/db, e as dos adapters accounttype), medido com
 # `go run ./cmd/logcov -json ./pkg` apos o porte de f66a9c0e.
-min_eligible=1013
+# PORTE 8069997f/pairing-registry (2026-08-28): min_eligible SOBE 1013->1026
+# (+13, ratchet-UP honesto). ENTRAM: pkg/pairing.{NewRegistry,
+# Registry.Resolve, Registry.ResolveQRReader, Registry.ResolvePhonePairer,
+# Registry.ResolveStarter, Registry.TargetEngine, errCapabilityNotSupported,
+# errEngineMismatch, errEngineUnavailable, errInvalidEngine, errNoSession},
+# pkg/bootstrap.buildPairingRegistry, pkg/bootstrap.waNoiseSessionStarter.
+# CheckOwnership, pkg/presentation/http/handlers.respondPairingRefusal —
+# menos as que saem com a remocao de WithStartSession/WithCheckOwnership do
+# ConnectHandler (initConnectHandler, connectOwnershipCheck). Medido com
+# `go run ./cmd/logcov -json ./pkg` apos o porte completo de 8069997f.
+min_eligible=1026
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
