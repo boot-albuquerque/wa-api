@@ -31074,10 +31074,51 @@ Por ser ficheiro novo, não se aplica a atenuante do "converta só o que tocou".
 que só faça isso — misturar renomeação com mudança de comportamento é
 exactamente o que o `CLAUDE.md` proíbe.
 
-**Status**: **não corrigido** — renomeação em massa fora do âmbito da auditoria;
-seria ruído no diff que a revisão desta auditoria tem de ler.
+**Status**: **corrigido** (2026-08-27). Só nomes e texto — API exportada
+(`CanonicalRoute`, `CanonicalizeRoutes`, `InjectPathParams`,
+`bodyFieldForPathParam`) já estava em inglês e ficou intacta; nenhum call
+site em `pkg/bootstrap/wiring_routes.go` nem nos testes de contrato precisou
+mudar, porque nada do que mudou era exportado. Amostra do que foi traduzido:
 
-<!-- f-status: aberto -->
+| antes | depois |
+|---|---|
+| `porChave` | `byKey` |
+| `entrada` / `entradas` | `entry` / `entries` |
+| `manipulador` | `handler` |
+| `orfas` | `orphans` |
+| `tabela` (parâmetro) | `table` |
+| `bruto` | `raw` |
+| `corpo` | `body` |
+| `novo` | `updated` |
+| `parametro` / `valor` / `campo` | `param` / `value` / `field` |
+| `conhecido` / `jaVeio` | `known` / `alreadyPresent` |
+
+Todos os comentários (incluindo o histórico da reversão de 2026-08-27 e as
+notas "A ORDEM IMPORTA" / "NÃO SOBRESCREVE" / "POR QUE A TABELA") foram
+traduzidos preservando o conteúdo técnico — nenhuma delas foi cortada.
+Aproveitado para corrigir uma referência já desatualizada dentro do próprio
+comentário de `InjectPathParams`, que ainda citava o nome antigo
+`RegisterCanonicalAliases` (renomeado para `CanonicalizeRoutes` na reversão
+do mesmo dia) — texto, não código, então não é mudança de comportamento.
+
+Zero mudança de comportamento: `go build ./...`, `go vet ./...` e
+`go test ./pkg/... ./cmd/...` ficam verdes antes e depois da tradução. A
+única diferença observada foi `cmd/logcov/testdata/eligible.golden` — o
+próprio `TestGoldenBate` já avisa que é regeneração segura de posição de
+linha (mesmas 4405 entradas, mesmo status, só a linha de
+`InjectPathParams.func1` em `canonico.go` mudou porque os comentários agora
+ocupam menos linhas); regenerado com
+`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`.
+`gofmt -l pkg cmd` ficou limpo.
+
+Achado incidental, fora do âmbito desta correcção (não corrigido aqui):
+`pkg/bootstrap/caminhos_canonicos.go` tem nome de ficheiro e identificadores
+em português (`CaminhosCanonicos`, `analisarCaminhos`, `conteudo`), e
+`pkg/bootstrap/wiring_routes.go:272` usa a variável local `orfas`. Mesma
+classe de violação do `CLAUDE.md` que esta entrada corrigiu, noutro
+ficheiro — candidato a um F novo se alguém quiser assumir esse escopo.
+
+<!-- f-status: corrigido -->
 
 
 ## F288 — `make check` ja' falha no HEAD por causa do HOUSEKEEP do wa-headless, ha' 466 commits

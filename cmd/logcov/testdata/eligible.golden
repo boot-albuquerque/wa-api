@@ -3917,7 +3917,7 @@ pkg/presentation/http.HandlerRegistry.Apply	EXCLUDED	X1
 pkg/presentation/http.HandlerRegistry.CanonicalizeRoutes	ELIGIBLE	uncovered:L1
 pkg/presentation/http.HandlerRegistry.Register	EXCLUDED	X1
 pkg/presentation/http.InjectPathParams	EXCLUDED	X1
-pkg/presentation/http.InjectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:152);uncovered:L2(S-consume,canonico.go:163);uncovered:L2(S-consume,canonico.go:184)
+pkg/presentation/http.InjectPathParams.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,canonico.go:155);uncovered:L2(S-consume,canonico.go:167);uncovered:L2(S-consume,canonico.go:189)
 pkg/presentation/http.NewHandlerRegistry	EXCLUDED	X1
 pkg/presentation/http.NewProfileFullHandler	EXCLUDED	X1
 pkg/presentation/http.NewProfileHandler	EXCLUDED	X1
