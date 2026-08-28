@@ -392,19 +392,19 @@ components:
     ContextoResposta:
       type: object
       description: Citação — faz a mensagem enviada aparecer como resposta a outra.
-      required: [StanzaId, Participant]
+      required: [stanza_id, participant]
       properties:
-        StanzaId:
+        stanza_id:
           nullable: false
           type: string
           description: "`message_id` da mensagem citada."
           example: 3EB0A4B2AFD45E625C0917
-        Participant:
+        participant:
           nullable: false
           type: string
           description: JID de quem escreveu a mensagem citada.
           example: 554192421234@s.whatsapp.net
-        QuotedText:
+        quoted_text:
           nullable: false
           type: string
           description: Texto da mensagem citada, para o cliente desenhar a pré-visualização.

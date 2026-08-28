@@ -1299,11 +1299,12 @@
       `POST /status/set/image`, `/video` e `/audio`; status de TEXTO não é uma
       capacidade que exista.
 
-      **Regras**: `Body` é obrigatório — vazio é `400 missing_body`. Exige um
+      **Regras**: `body` é obrigatório — vazio é `400 missing_body`. Exige um
       cliente vivo.
 
       **Onde confirmar**: o recado aparece em `GET /session/profile/full`, no
-      campo `Status` dentro de `user_info`.
+      campo `Status` dentro de `user_info` (essa parte continua PascalCase —
+      ver F302, correcção deferida para a família utilizadores).
 
       **Autenticação**: token de sessão.
     security:
@@ -1315,7 +1316,7 @@
           schema:
             $ref: '#/components/schemas/PedidoRecado'
           example:
-            Body: Atendimento das 9h às 18h
+            body: Atendimento das 9h às 18h
     responses:
       '200':
         description: Recado alterado. `details` vem vazio.

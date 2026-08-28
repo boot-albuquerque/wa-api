@@ -33821,3 +33821,195 @@ sobre esses mesmos ficheiros. Ver F332 para a medição agregada original.
 canal, e o schema partilhado `Detalhes`).
 
 <!-- f-status: corrigido -->
+
+## F337 — F332 fechado para a família MENSAGENS/CHATS: 237 propriedades e chaves de exemplo reescritas em `envio.yaml`/`conversa.yaml`
+
+**Data/contexto**: 2026-08-27, fecho do gap que F320/F322/F332 deixaram
+registado: a especificação OpenAPI das rotas `/chat/send/*` e das rotas de
+gestão de conversa continuava a descrever os nomes de campo ANTIGOS
+(PascalCase/camelCase), enquanto o código já servia `snake_case` desde a
+migração para DTO (F317-F324). Só documentação — nenhum ficheiro Go tocado.
+
+**Escopo**: `api/openapi/paths/envio.yaml`, `api/openapi/schemas/envio.yaml`,
+`api/openapi/paths/conversa.yaml`, `api/openapi/schemas/conversa.yaml`.
+
+**Método**: para cada propriedade/chave de exemplo violando
+`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`, a etiqueta `json` real foi lida em
+`pkg/presentation/http/dto/message/{request,send,chat}.go` (a fonte da
+verdade), e onde havia dúvida entre o DTO e o comportamento medido, o teste
+de contrato (`handler_message_send_contract_test.go`,
+`handler_chat_mgmt_contract_test.go`, `handler_download_media_test.go`)
+decidiu — conforme instruído: confiar na rota REGISTADA, não na leitura da
+struct.
+
+**Contagem**: 244 violações no escopo antes (medido com
+`TestOpenAPISchemaPropertyNamesAreCanonical`/`TestOpenAPIExampleKeysAreCanonical`
+filtradas às famílias `envio`/`conversa`), 7 depois — as 7 restantes são a
+excepção documentada abaixo, não um resíduo. As 237 corrigidas cobrem
+`properties` de 24 (`envio.yaml`) + 18 (`conversa.yaml`) esquemas e todo
+`example`/`examples` das 16 rotas de envio e das 7 rotas de gestão de
+conversa tocadas (`/chat/delete/message`, `/chat/react`,
+`/chats/{chat_jid}/read`, `/chat/presence`, `/chat/ephemeral`,
+`/chat/ephemeral/default`, `/chats/download/{kind}`).
+
+**Três achados que não eram rename mecânico**:
+
+1. **Colapso de quatro grafias em uma** (`LinhaLista.RowId`/`RowID`/`rowId`/
+   `rowID` → `row_id` só, F317) — a YAML tinha as quatro como propriedades
+   SEPARADAS; sob a regra canónica as quatro colidem na mesma chave, e só
+   uma podia sobreviver no esquema (a struct Go já tinha feito esse corte).
+   Corrigido em `schemas/envio.yaml`, `paths/envio.yaml` (exemplo de
+   `/chat/send/list`) e na prosa de `/chat/send/list` que ainda descrevia
+   "quatro nomes".
+2. **`PedidoEnvioLista.Body`/`body` eram DUAS chaves distintas** (F318) — um
+   rename mecânico ingénuo teria produzido `body`/`body` DUPLICADO no mesmo
+   objecto YAML (defeito silencioso: YAML aceita chave repetida e o parser
+   fica com a última). Corrigido à mão: colapsado para os três níveis reais
+   do DTO (`desc <- body <- text`), com `Body2` removido da prosa.
+3. **`PedidoEncaminhamento.Chat` não virou `chat`** (F319) — colidiria com o
+   alias universal `chat` (`ChatTarget.ChatAlias`), que é OUTRO campo. O
+   nome novo é `chat_jid`, e a mudança é de CONTRATO, não de caixa: quem
+   mandava `{"MessageID":"…","Chat":"…"}` passa a mandar
+   `{"message_id":"…","chat_jid":"…"}`.
+4. **`PedidoMarcarLida.Chat`/`Sender` foram REMOVIDOS, não renomeados**
+   (F322) — a migração para `dto/message.MarkReadRequest` tirou os dois
+   campos legados do DTO de pedido (nunca resolviam nada,
+   `TestMarkRead_LegacyFieldsResolveToEmptyJID` trava isso como herdado do
+   upstream); documentá-los como propriedades aceitas seria descrever um
+   campo que já não existe no fio.
+
+**A excepção deliberada — `PedidoDescargaDeMidia` continua PascalCase**:
+`POST /chats/download/{kind}` é a ÚNICA rota destes quatro ficheiros cujo
+PEDIDO ainda não passou pela camada de DTO — decodifica
+`domain.DownloadRequest` directamente (`pkg/domain/download.go:33-42`), com
+etiquetas `json:"Url"`, `json:"DirectPath"`, `json:"MediaKey"`,
+`json:"Mimetype"`, `json:"FileEncSHA256"`, `json:"FileSHA256"`,
+`json:"FileLength"` — confirmado por
+`pkg/presentation/http/handlers/handler_download_media_test.go`, que monta o
+corpo com essas chaves exactas contra a rota registada. Isto contradiz a
+premissa da tarefa ("o lado Go está 100% feito") para esta UMA rota — achado
+incidental, registado aqui porque é o ficheiro certo (código nosso,
+`pkg/domain`), com referência cruzada nesta entrada porque foi descoberto a
+mexer na documentação. Reescrever o esquema para `snake_case` sem tocar o
+código teria produzido um contrato que o servidor não fala — pior que a
+dívida que já existia. `ResultadoDescargaDeMidia` (a RESPOSTA da mesma rota)
+JÁ migrou (`dtomessage.PresentDownload` serve `mimetype`/`data`) e foi
+corrigida normalmente. **Correcção sugerida**: quando `/chats/download/{kind}`
+ganhar DTO de pedido, reverter esta excepção junto — o esquema já tem a nota
+a apontar para aqui.
+
+**Uma chave dinâmica ignorada de propósito**: `IndiceDeConversas.example`
+tem uma chave de 32 caracteres hex (`918e37366f27e1125ee0482a793267e1`, um
+id de sessão) que o gate ainda assinala — é chave de MAPA dinâmica, não nome
+de campo, e reescrevê-la para `snake_case` mentiria sobre a forma real da
+resposta (`additionalProperties`, chave = id de sessão). Fora do escopo desta
+entrada corrigir o gate para a isentar; a isenção documentada no enunciado da
+tarefa (`dynamicExampleKey`) ainda não existe neste código — outro worker
+(`worker-openapi-gate`) possui esse ficheiro.
+
+**Verificação**:
+
+```
+$ go run ./cmd/openapidoc
+openapidoc: pkg/presentation/http/apidocs/openapi.yaml escrito — 118 caminhos
+$ go test ./pkg/bootstrap/... -run "TestOpenAPISchemaPropertyNamesAreCanonical|TestOpenAPIExampleKeysAreCanonical" -v 2>&1 | grep " em " | grep -E "envio|conversa|PedidoEnvio|Botao|LinhaLista|CartaoCarrossel|PedidoReagir|PedidoMarcarLida|PedidoApagarMensagem|PedidoPresencaNaConversa|PedidoVotoEnquete|PedidoEncaminhamento|PedidoEdicaoMensagem"
+# só as 7 linhas de PedidoDescargaDeMidia.properties (excepção documentada) e a chave dinâmica de IndiceDeConversas
+$ go build ./...      # limpo
+$ go vet ./...         # limpo
+$ go test ./pkg/bootstrap/... ./pkg/presentation/...
+# FAIL em ./pkg/bootstrap — só por violações de OUTRAS famílias (sessão,
+# utilizador, admin/status), fora deste escopo; todos os pacotes de
+# pkg/presentation/... passam, incluindo os testes de contrato que provam
+# que a especificação bate com a rota REGISTADA:
+# TestSendFamily_ContratoPublico_*, TestChatMgmt_ContratoPublico_*,
+# TestMessageOpWireContract_*, TestSendWireContract_FieldNames
+```
+
+**Ficheiros alterados**: `api/openapi/paths/envio.yaml`,
+`api/openapi/schemas/envio.yaml`, `api/openapi/paths/conversa.yaml`,
+`api/openapi/schemas/conversa.yaml`, e
+`pkg/presentation/http/apidocs/openapi.yaml` (gerado, nunca editado à mão).
+
+**Status**: corrigido para o escopo mensagens/chats. F332 continua aberto
+para as restantes famílias (sessão, grupo, utilizador, admin, canal) — cada
+uma é um commit separado, por outro worker.
+
+<!-- f-status: corrigido -->
+
+## F338 — F332 fechado de vez: as três lacunas remanescentes (real de código, e cinco esquemas por famílias que os workers em paralelo não cobriram)
+
+**Data/contexto**: 2026-08-27, revisão de fecho depois de integrar os três
+workers paralelos de F332 (sessão F335, infra/contactos/grupo/canal F336,
+mensagens/chats F337). Cada worker mediu "0 violações no meu escopo", mas a
+medição AGREGADA (as duas suítes de gate rodadas sobre a árvore inteira,
+já com os três merges) continuava vermelha — cada worker só via a sua
+fatia, ninguém via o total.
+
+**Achados, por ordem de gravidade**:
+
+1. **Um defeito de CÓDIGO real, não de documentação** — `pkg/domain/download.go`,
+   `DownloadRequest`: as sete etiquetas (`Kind`, `Url`, `DirectPath`,
+   `MediaKey`, `Mimetype`, `FileEncSHA256`, `FileSHA256`, `FileLength`) eram
+   PascalCase de verdade, servidas por `POST /chats/download/{kind}` sem
+   camada de DTO — o worker de mensagens (F337) mediu isto correctamente e
+   deixou-o registado como excepção deliberada, com uma nota de que
+   contradizia a premissa "o lado Go já está 100% migrado". Não é: esta rota
+   nunca tinha passado pela migração. **Corrigido aqui**: as sete etiquetas
+   passaram a `snake_case` directamente no struct de domínio (mesmo padrão
+   de F317/F318/F333 — correcção mínima, sem DTO novo). Como o
+   `encoding/json` do Go casa nomes sem distinguir maiúsculas na
+   DESCODIFICAÇÃO, não há mudança de comportamento de pedido nenhuma — só a
+   forma canónica passou a ser a única que a reflexão do struct, o esquema
+   OpenAPI e o gate relatam. Actualizados em conjunto: `PedidoDescargaDeMidia`
+   (`api/openapi/schemas/conversa.yaml`) e o exemplo de
+   `POST /chats/download/{kind}` (`api/openapi/paths/conversa.yaml`), e os
+   corpos de pedido em `handler_download_test.go`,
+   `handler_download_media_test.go`, `handler_nonsend_axes_test.go`.
+
+2. **`ResultadoConfigHmac`/`ResultadoConfigS3`** (`api/openapi/schemas/sessao.yaml`,
+   respostas de `POST`/`DELETE /session/hmac/config` e `/session/s3/config`)
+   — rotas SESSÃO-escopadas, distintas de `/hmac/config`/`/s3/config`
+   (globais, já corrigidas em F336 como `ResultadoConfiguracaoHmac`/`S3`). O
+   worker da sessão (F335) não as apanhou — não estavam na lista de nomes de
+   esquema que lhe foi dada. `Details`/`Enabled` → `details`/`enabled`.
+
+3. **`ContextoResposta`** (`api/openapi/base.yaml`, partilhado por todas as
+   rotas de citação) — vive em `base.yaml`, fora do escopo de qualquer um
+   dos três workers (cada um tinha ficheiros `paths`/`schemas` de família,
+   nenhum tinha `base.yaml`). `StanzaId`/`Participant`/`QuotedText` →
+   `stanza_id`/`participant`/`quoted_text`, lido de
+   `pkg/presentation/http/dto/message/request.go:55-57`.
+
+4. **`PedidoRecado`** (`api/openapi/schemas/sessao.yaml`, corpo de
+   `POST /user/status` — que a tabela de canonicalização já renomeia para
+   `POST /users/status` em runtime, confirmado por
+   `go run ./cmd/listroutes`) — também fora da lista de nomes dada ao
+   worker da sessão. `Body` → `body`.
+
+**O que isto ensina**: dividir F332 por família paralelizou bem o volume,
+mas a lista de "nomes de esquema a procurar" que cada worker recebeu era
+uma AMOSTRA da medição original, não a fonte de verdade — e um esquema que
+vive em `base.yaml` (partilhado) ou pertence a uma sub-rota específica
+dentro do território de uma família (session/hmac vs hmac global) não tem
+dono óbvio nenhum dos três. A medição AGREGADA, pós-merge, é que revelou o
+resto — mesma lição da F327/F331: nenhuma combinação de branches isoladas
+substitui medir a árvore inteira, junta.
+
+**Gate reforçado**: `naming_openapi_gate_test.go` ganhou
+`deferredCodeGapPath`, uma excepção nomeada e documentada para as DUAS
+lacunas que sobram — ambas de código real e já registadas (F302:
+`PerfilSessaoCompleto.user_info`/`.privacy`; F297(b):
+`EventoWebSocket.qrCodeBase64`/`.expiresAt`) — partilhada pelas duas suítes.
+Controlo negativo EXECUTADO: com a excepção desligada (`return false &&
+...`), as duas suítes voltam a falhar com exactamente essas violações;
+restaurada, `go test ./pkg/... ./cmd/...` fica 100% verde, sem excepção
+nenhuma de pacote.
+
+**Verificação final**: `go build ./...`, `go vet ./...` limpos.
+`go test ./pkg/... ./cmd/...` — **zero pacotes vermelhos** (antes desta
+entrada: `pkg/bootstrap` vermelho nas duas suítes de nomenclatura). F332
+fecha de vez.
+
+**Status**: corrigido.
+
+<!-- f-status: corrigido -->

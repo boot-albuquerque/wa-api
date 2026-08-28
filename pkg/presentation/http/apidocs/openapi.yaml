@@ -213,10 +213,10 @@ components:
         de `/chat/send/carousel`.
 
         **O título é obrigatório na prática, e o nome do campo é `title`** — com
-        `text` e `buttonText` como sinónimos, nesta ordem de precedência. Um botão
+        `text` e `button_text` como sinónimos, nesta ordem de precedência. Um botão
         sem nenhum dos três é DESCARTADO EM SILÊNCIO, e o pedido continua com os
         restantes; se todos caírem, a rota responde `400 no_valid_buttons`. Medido
-        em 2026-08-26: um botão com `displayText` (o nome que `/chat/send/template`
+        em 2026-08-26: um botão com `display_text` (o nome que `/chat/send/template`
         usa) cai aqui.
 
         O título é truncado em **20 runas** (`buttonTitleMaxRunes`,
@@ -229,13 +229,13 @@ components:
         um botão com todos os campos vazios — mesmo efeito. Nenhum destes casos
         produz erro por si só.
       properties:
-        buttonId:
+        button_id:
           description: |
             Sinónimo de `id`, usado quando `id` está ausente, `null`, `""` ou só
             espaços.
           nullable: false
           type: string
-        buttonText:
+        button_text:
           description: |
             Segundo sinónimo de `title`, usado quando `title` e `text` estão ambos
             ausentes, `null`, `""` ou só espaços. Mesmo `trim` e mesmo truncamento.
@@ -251,10 +251,10 @@ components:
           type: string
         id:
           description: |
-            Identificador devolvido no clique. Sinónimo `buttonId`. Passa por
+            Identificador devolvido no clique. Sinónimo `button_id`. Passa por
             `TrimSpace`; ausente, `null`, `""` e `"   "` são indistinguíveis.
 
-            Quando `id` e `buttonId` estão ambos vazios, **o próprio título JÁ
+            Quando `id` e `button_id` estão ambos vazios, **o próprio título JÁ
             TRUNCADO vira o identificador** — nunca fica vazio no fio.
           example: confirmar
           nullable: false
@@ -274,7 +274,7 @@ components:
           type: string
         title:
           description: |
-            Rótulo do botão. Sinónimos, nesta ordem, `text` e `buttonText`.
+            Rótulo do botão. Sinónimos, nesta ordem, `text` e `button_text`.
 
             Passa por `TrimSpace` antes de ser avaliado, logo `"   "` conta como
             vazio e faz o botão cair para o sinónimo seguinte. Ausente, `null` e
@@ -324,17 +324,17 @@ components:
     BotaoModelo:
       description: |
         Um botão de modelo hidratado, usado só por `/chat/send/template`. Vocabulário
-        DIFERENTE do `BotaoInterativo`: aqui o rótulo é `DisplayText` e os tipos são
+        DIFERENTE do `BotaoInterativo`: aqui o rótulo é `display_text` e os tipos são
         outros três.
 
         **Nenhum campo deste objecto é validado, e nenhum botão é descartado.** Ao
         contrário de `/chat/send/buttons`, o use case entrega a lista ao adaptador
         tal e qual (`send_template.go`, `Execute` — só `len(Buttons) < 1` é
         verificado). Um `{}` vira um botão de resposta rápida com rótulo vazio, e
-        um botão `url` sem `Url` produz um botão com destino vazio. `null` dentro
+        um botão `url` sem `url` produz um botão com destino vazio. `null` dentro
         da lista tem o mesmo efeito de `{}`.
       properties:
-        DisplayText:
+        display_text:
           description: |
             Rótulo do botão. **Obrigatório na prática, e NÃO validado**: ausente,
             `null` e `""` são indistinguíveis e produzem um botão sem rótulo, com
@@ -343,7 +343,7 @@ components:
           example: Abrir pedido
           nullable: false
           type: string
-        Id:
+        id:
           description: |
             Identificador de um botão `quickreply`. Ausente, `null` e `""` são
             indistinguíveis e significam "numere automaticamente".
@@ -354,14 +354,14 @@ components:
           example: "1"
           nullable: false
           type: string
-        PhoneNumber:
+        phone_number:
           description: |
             Número de um botão `call`. Ignorado nos outros tipos. Não é validado:
             ausente, `null` e `""` dão um botão de chamada sem número.
           example: "+554192421234"
           nullable: false
           type: string
-        Type:
+        type:
           description: |
             Tipo do botão. **Sensível a maiúsculas e a espaços**: a comparação é
             literal, sem `TrimSpace` e sem `ToLower`
@@ -373,7 +373,7 @@ components:
             | `url` | botão de URL |
             | `call` | botão de chamada |
             | `quickreply` | botão de resposta rápida |
-            | `URL`, `Url`, `" url"` | **`quickreply`** — a caixa não bate |
+            | `URL`, `url`, `" url"` | **`quickreply`** — a caixa não bate |
             | qualquer outro valor desconhecido | **`quickreply`**, sem erro |
 
             Valor fora da lista NÃO é recusado nem descartado: cai no ramo
@@ -386,7 +386,7 @@ components:
           example: url
           nullable: false
           type: string
-        Url:
+        url:
           description: |
             Destino de um botão `url`. Ignorado nos outros tipos. Não é validado:
             ausente, `null` e `""` são indistinguíveis e dão um botão sem destino.
@@ -419,12 +419,12 @@ components:
       description: |
         Um cartão de `/chat/send/carousel`.
 
-        **Cada cartão exige `Body` e pelo menos um botão válido** — cartão sem um
+        **Cada cartão exige `body` e pelo menos um botão válido** — cartão sem um
         dos dois é descartado em silêncio, e se nenhum sobreviver a rota responde
         `400 no_valid_cards` (medido em 2026-08-26). `{}` e `null` dentro de
-        `Cards` são ambos cartões sem corpo, logo ambos descartados.
+        `cards` são ambos cartões sem corpo, logo ambos descartados.
       properties:
-        Body:
+        body:
           description: |
             Corpo do cartão. Passa por `TrimSpace` antes de ser avaliado.
 
@@ -442,7 +442,7 @@ components:
           minLength: 1
           nullable: false
           type: string
-        Buttons:
+        buttons:
           description: |
             Botões do cartão, com o mesmo vocabulário e as mesmas regras de
             descarte de `/chat/send/buttons`.
@@ -454,14 +454,14 @@ components:
             $ref: '#/components/schemas/BotaoInterativo'
           nullable: true
           type: array
-        Footer:
+        footer:
           description: |
             Rodapé do cartão. Sempre opcional: ausente, `null`, `""` e `"   "` são
             indistinguíveis e dão cartão sem rodapé (passa por `TrimSpace`).
           example: Entrega em 40 minutos
           nullable: false
           type: string
-        Image:
+        image:
           description: |
             Imagem do cartão, como URI de dados (`data:image/...;base64,...`) ou
             URL http(s). Teto de 10 MB.
@@ -477,10 +477,10 @@ components:
           example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
           nullable: false
           type: string
-        Title:
+        title:
           description: |
             Título do cartão. **É decorativo**: o iOS não o desenha, só o Android
-            (HOUSEKEEP F217). Informação obrigatória vai em `Body`, não aqui.
+            (HOUSEKEEP F217). Informação obrigatória vai em `body`, não aqui.
 
             Sempre opcional: ausente, `null`, `""` e `"   "` são indistinguíveis e
             dão cartão sem título (passa por `TrimSpace`).
@@ -488,8 +488,8 @@ components:
           nullable: false
           type: string
       required:
-        - Body
-        - Buttons
+        - body
+        - buttons
       type: object
     CodigoQR:
       description: |
@@ -982,24 +982,24 @@ components:
     ContextoResposta:
       description: Citação — faz a mensagem enviada aparecer como resposta a outra.
       properties:
-        Participant:
+        participant:
           description: JID de quem escreveu a mensagem citada.
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        QuotedText:
+        quoted_text:
           description: Texto da mensagem citada, para o cliente desenhar a pré-visualização.
           example: Bom dia, tudo certo com o pedido?
           nullable: false
           type: string
-        StanzaId:
+        stanza_id:
           description: '`message_id` da mensagem citada.'
           example: 3EB0A4B2AFD45E625C0917
           nullable: false
           type: string
       required:
-        - StanzaId
-        - Participant
+        - stanza_id
+        - participant
       type: object
     DadosUtilizadorApagado:
       description: |
@@ -1905,13 +1905,13 @@ components:
         validação: o valor é passado ao wa-noise tal e qual.
 
         **NÃO é chave de idempotência.** Não foi medido que o servidor ou o
-        WhatsApp deduplique por este campo; enviar o mesmo `Id` duas vezes envia
+        WhatsApp deduplique por este campo; enviar o mesmo `id` duas vezes envia
         duas mensagens. Ver a secção 18 do contrato arquitectural.
 
         Não confundir com o `message_id` da resposta — em todas as rotas de envio
-        salvo `/chat/send/edit`, os dois coincidem quando o cliente fornece `Id`.
+        salvo `/chat/send/edit`, os dois coincidem quando o cliente fornece `id`.
         Em `/chat/send/edit` o `message_id` devolvido é o da mensagem EDITADA, que
-        é o próprio campo `Id` do pedido, com outro significado.
+        é o próprio campo `id` do pedido, com outro significado.
       example: 3EB0A4B2AFD45E625C0917
       nullable: false
       type: string
@@ -2361,24 +2361,6 @@ components:
         `normalizeListSections`). `{}` e `null` dentro da lista são ambos linhas
         sem título, logo ambos descartados.
       properties:
-        RowID:
-          description: |
-            Primeiro sinónimo de `RowId`, usado quando `RowId` está ausente,
-            `null`, `""` ou só espaços.
-          nullable: false
-          type: string
-        RowId:
-          description: |
-            Identificador devolvido na escolha. Sinónimos, nesta ordem de
-            precedência, `RowID`, `rowId` e `rowID`. Cada candidato passa por
-            `TrimSpace`, logo `"   "` conta como vazio e cai para o seguinte.
-
-            Quando os quatro estão ausentes, `null`, `""` ou só espaços, **o
-            próprio título (já sem espaços nas pontas) vira o identificador** —
-            nunca fica vazio no fio.
-          example: margherita
-          nullable: false
-          type: string
         desc:
           description: |
             Descrição secundária, mostrada abaixo do título. Sempre opcional:
@@ -2387,15 +2369,20 @@ components:
           example: Molho de tomate, mozzarella e manjericão
           nullable: false
           type: string
-        rowID:
+        row_id:
           description: |
-            Terceiro sinónimo de `RowId`, o último antes de o título ser usado.
-          nullable: false
-          type: string
-        rowId:
-          description: |
-            Segundo sinónimo de `RowId`, usado quando `RowId` e `RowID` estão ambos
-            vazios pelo mesmo critério.
+            Identificador devolvido na escolha.
+
+            **Um único campo.** Antes da migração para DTO, `domain.ListRow`
+            aceitava QUATRO grafias (`RowId`, `RowID`, `rowId`, `rowID`) como
+            cadeia de fallback; sob a regra de nome canónico
+            (`^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$`) as quatro colapsam na MESMA chave,
+            `row_id` — só uma podia sobreviver (HOUSEKEEP F317). Passa por
+            `TrimSpace`, logo `"   "` conta como vazio.
+
+            Ausente, `null`, `""` ou só espaços: **o próprio título (já sem
+            espaços nas pontas) vira o identificador** — nunca fica vazio no fio.
+          example: margherita
           nullable: false
           type: string
         title:
@@ -3289,8 +3276,8 @@ components:
       type: object
     PedidoApagarMensagem:
       description: |
-        Revoga ("apagar para todos") uma mensagem própria. `Phone` é o destino da
-        conversa; `chat` é aceite como alias e só vale quando `Phone` faltar.
+        Revoga ("apagar para todos") uma mensagem própria. `phone` é o destino da
+        conversa; `chat` é aceite como alias e só vale quando `phone` faltar.
 
         **Ordem das recusas, medida**: `missing_phone` → `missing_id` →
         `invalid_phone`.
@@ -3299,7 +3286,14 @@ components:
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
-        Id:
+        chat:
+          description: |
+            Nome universal do destino. Só vale quando `phone` estiver ausente,
+            `null` ou `""`; caso contrário é ignorado sem aviso.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        id:
           description: |
             `message_id` da mensagem a revogar. Ausente, `null` e `""` dão todos
             `400 missing_id` (medido). Um id INEXISTENTE não é recusado: o
@@ -3307,7 +3301,7 @@ components:
           example: 3EB0A4B2AFD45E625C0917
           nullable: false
           type: string
-        Phone:
+        phone:
           description: |
             JID ou número da conversa onde a mensagem foi enviada. Ausente,
             `null` e `""` são o mesmo estado e fazem cair para `chat`; sem os
@@ -3316,15 +3310,8 @@ components:
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        chat:
-          description: |
-            Nome universal do destino. Só vale quando `Phone` estiver ausente,
-            `null` ou `""`; caso contrário é ignorado sem aviso.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
       required:
-        - Id
+        - id
       type: object
     PedidoArquivarConversa:
       description: |
@@ -4678,18 +4665,32 @@ components:
         de `Message.imageMessage` / `videoMessage` / `audioMessage` /
         `documentMessage` / `stickerMessage`, com estes nomes de origem:
 
+        **Este esquema descrevia as etiquetas PascalCase do domínio até
+        2026-08-27**: esta rota (`POST /chats/download/{kind}`) decodifica
+        `domain.DownloadRequest` directamente — `pkg/domain/download.go` — sem
+        passar por uma camada de DTO como as outras famílias
+        (`docs/HTTP-DTO-CONVENTIONS.md`). A divergência entre este esquema e o
+        contrato canónico foi achada na auditoria final da normalização (worker
+        de mensagens, F337) e corrigida directamente nas etiquetas do struct de
+        domínio (F338) — o `encoding/json` do Go casa nomes sem distinguir
+        maiúsculas na DESCODIFICAÇÃO, então a mudança de etiqueta não altera
+        comportamento de pedido nenhum; só corrige o que este esquema, uma
+        reflexão sobre o struct, e o gate de nomenclatura relatam. Ver
+        `ResultadoDescargaDeMidia` para o lado que já migrou (a resposta), e
+        `HOUSEKEEP.md` F338 para o registo.
+
         | campo daqui | campo no `data_json` | obrigatório de verdade? |
         |---|---|---|
-        | `Url` | `URL` | um dos dois |
-        | `DirectPath` | `directPath` | um dos dois |
-        | `MediaKey` | `mediaKey` | sim, para mídia cifrada |
-        | `Mimetype` | `mimetype` | **sim** — vazio ou mal formado derruba a resposta |
-        | `FileEncSHA256` | `fileEncSha256` | sim, para mídia cifrada |
-        | `FileSHA256` | `fileSha256` | não |
-        | `FileLength` | `fileLength` | **sim** — tem de ser EXACTO |
+        | `url` | `URL` | um dos dois |
+        | `direct_path` | `directPath` | um dos dois |
+        | `media_key` | `mediaKey` | sim, para mídia cifrada |
+        | `mimetype` | `mimetype` | **sim** — vazio ou mal formado derruba a resposta |
+        | `file_enc_sha256` | `fileEncSha256` | sim, para mídia cifrada |
+        | `file_sha256` | `fileSha256` | não |
+        | `file_length` | `fileLength` | **sim** — tem de ser EXACTO |
 
-        **Só uma coisa é validada na fronteira HTTP**: pelo menos um entre `Url`
-        e `DirectPath`. Faltarem os dois — ausentes, `null` ou `""`, que são o
+        **Só uma coisa é validada na fronteira HTTP**: pelo menos um entre `url`
+        e `direct_path`. Faltarem os dois — ausentes, `null` ou `""`, que são o
         mesmo estado — é `400 missing_url_or_direct_path`, medido nas cinco
         rotas. Todos os outros campos passam sem verificação e falham depois com
         `500 media_download_failed`, que não distingue a causa.
@@ -4704,7 +4705,7 @@ components:
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
-        DirectPath:
+        direct_path:
           description: |
             Caminho directo na CDN, resolvido contra os hosts de mídia da
             sessão. Ausente, `null` e `""` são o mesmo estado.
@@ -4712,25 +4713,25 @@ components:
             **Tem de começar por `/`.** Um valor sem barra inicial não é
             recusado na fronteira: devolve `500 media_download_failed` (medido
             com `"sem-barra"`). É a forma em que os metadados chegam em vários
-            eventos, e é a única alternativa a `Url`.
+            eventos, e é a única alternativa a `url`.
           example: /o1/v/t24/f2/m234/exemplo
           nullable: false
           type: string
-        FileEncSHA256:
+        file_enc_sha256:
           description: |
             SHA-256 do ficheiro CIFRADO, em base64 (`[]byte` em Go). Ausente,
             `null` e `""` são o mesmo estado (`nil`); base64 inválido é
             `400 could_not_decode_payload`.
 
             Não é opcional na prática: é o que faz a biblioteca separar o MAC do
-            fim do corpo descarregado. Sem ele, e com `MediaKey` presente, a
+            fim do corpo descarregado. Sem ele, e com `media_key` presente, a
             verificação de HMAC falha e a resposta é `500 media_download_failed`.
-            Sem ele E sem `MediaKey`, ver o aviso em `MediaKey`.
+            Sem ele E sem `media_key`, ver o aviso em `media_key`.
           example: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
           format: byte
           nullable: true
           type: string
-        FileLength:
+        file_length:
           description: |
             Tamanho do ficheiro decifrado, em bytes.
 
@@ -4754,7 +4755,7 @@ components:
           minimum: 0
           nullable: false
           type: integer
-        FileSHA256:
+        file_sha256:
           description: |
             SHA-256 do ficheiro decifrado, em base64 (`[]byte` em Go). Ausente,
             `null` e `""` são o mesmo estado (`nil`); base64 inválido é
@@ -4768,7 +4769,7 @@ components:
           format: byte
           nullable: true
           type: string
-        MediaKey:
+        media_key:
           description: |
             Chave de decifragem, em **base64** — o campo é `[]byte` em Go, logo
             o JSON tem de trazer uma string base64 válida.
@@ -4782,7 +4783,7 @@ components:
             | número | não | `400 could_not_decode_payload` (medido) |
             | base64 válido | sim | — |
 
-            **Perigo medido no código**: se `MediaKey` E `FileEncSHA256` vierem
+            **Perigo medido no código**: se `media_key` E `file_enc_sha256` vierem
             ambos ausentes, a biblioteca toma a mídia por NÃO CIFRADA e devolve
             `200` com os bytes tal e qual vieram da CDN — que, para mídia real
             do WhatsApp, é conteúdo cifrado inútil disfarçado de sucesso
@@ -4793,7 +4794,7 @@ components:
           format: byte
           nullable: true
           type: string
-        Mimetype:
+        mimetype:
           description: |
             Tipo da mídia. É devolvido TAL E QUAL na resposta e é também o
             prefixo da Data URL de `Data` — os dois não podem divergir, por
@@ -4809,14 +4810,14 @@ components:
           example: image/png
           nullable: false
           type: string
-        Url:
+        url:
           description: |
             URL da mídia na CDN do WhatsApp. Ausente, `null` e `""` são o mesmo
             estado.
 
-            Quando preenchida, é usada em vez de `DirectPath` — **excepto** se
+            Quando preenchida, é usada em vez de `direct_path` — **excepto** se
             começar por `https://web.whatsapp.net/`, caso em que é descartada e
-            a descarga cai para `DirectPath`. Com os dois vazios é
+            a descarga cai para `direct_path`. Com os dois vazios é
             `400 missing_url_or_direct_path`.
           example: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
           nullable: false
@@ -4826,7 +4827,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Body:
+            body:
               description: |
                 O novo texto da mensagem. Ausente, `null` e `""` são
                 indistinguíveis e dão `400 missing_body`; `"   "` **passa** — não há
@@ -4835,14 +4836,14 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Id:
+            id:
               description: |
                 `message_id` da mensagem a editar. Ausente, `null` e `""` são
                 indistinguíveis e dão `400 missing_id`.
 
-                **A ordem de validação é observável**: `Phone` e `Body` são
-                verificados primeiro, e o `Phone` chega a ser PARSEADO antes de este
-                campo ser olhado. Logo um pedido com `Phone` inválido E `Id` ausente
+                **A ordem de validação é observável**: `phone` e `body` são
+                verificados primeiro, e o `phone` chega a ser PARSEADO antes de este
+                campo ser olhado. Logo um pedido com `phone` inválido E `id` ausente
                 responde `invalid_phone`, e não `missing_id`.
 
                 Não é confrontado com o histórico: um id que não existe é aceite
@@ -4851,18 +4852,18 @@ components:
               minLength: 1
               nullable: false
               type: string
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            Participant:
+            participant:
               description: |
-                JID de quem escreveu a mensagem citada. Par de `StanzaId`, e com a
+                JID de quem escreveu a mensagem citada. Par de `stanza_id`, e com a
                 mesma semântica de ponteiro: ausente e `null` não contribuem;
                 **`""` cria o bloco de contexto** com participante vazio. Não é
                 validado como JID.
               example: 554192421234@s.whatsapp.net
               nullable: true
               type: string
-            Phone:
+            phone:
               description: |
                 A conversa onde está a mensagem a editar. Sinónimo universal `chat`.
                 Ausente, `null` e `""` são indistinguíveis e dão
@@ -4872,7 +4873,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            StanzaId:
+            stanza_id:
               description: |
                 `message_id` da mensagem citada pela mensagem que está a ser
                 editada, para preservar a citação.
@@ -4893,12 +4894,12 @@ components:
               nullable: true
               type: string
           required:
-            - Body
-            - Id
+            - body
+            - id
           type: object
       description: |
         Corpo de `POST /chat/send/edit`. Substitui o texto de uma mensagem já
-        enviada, identificada por `Id`. Campos desconhecidos são ignorados em
+        enviada, identificada por `id`. Campos desconhecidos são ignorados em
         silêncio.
     PedidoEditarUtilizador:
       description: |
@@ -5030,7 +5031,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Body:
+            body:
               description: |
                 Texto a enviar marcado como encaminhado.
 
@@ -5042,19 +5043,29 @@ components:
               example: Bom dia! O seu pedido saiu para entrega.
               nullable: false
               type: string
-            Chat:
+            chat_jid:
               description: |
                 Conversa de ONDE a mensagem original veio.
 
+                **Não é o mesmo campo que o sinónimo universal `chat`** — os dois
+                eram a MESMA chave Go (`Chat`) antes da migração para DTO, e sob a
+                regra de nome canónico colidiriam se ficassem com o mesmo nome; o
+                alias universal manteve `chat` (é o que as outras dezasseis rotas
+                de envio usam) e este campo, que identifica a conversa de ORIGEM
+                na forma POR CHAVE, ganhou o nome novo `chat_jid`
+                (HOUSEKEEP F319). Quem mandava `{"MessageID":"…","Chat":"…"}` passa
+                a mandar `{"message_id":"…","chat_jid":"…"}` — é mudança de
+                contrato, não rename de caixa.
+
                 **Não é usado por caminho nenhum da implementação actual**
                 (`send_forward.go`, `forwardByKey`): a mensagem é procurada só por
-                sessão e `MessageID`. Ausente, `null`, `""` e preenchido com
+                sessão e `message_id`. Ausente, `null`, `""` e preenchido com
                 qualquer valor produzem exactamente o mesmo resultado. Está
                 reservado para desambiguação futura.
               example: 554192421234@s.whatsapp.net
               nullable: false
               type: string
-            ForwardingScore:
+            forwarding_score:
               default: 1
               description: |
                 Quantas vezes a mensagem já foi encaminhada. É `*uint32`, logo
@@ -5079,17 +5090,17 @@ components:
               minimum: 0
               nullable: true
               type: integer
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            MessageID:
+            message_id:
               description: |
                 `message_id` da mensagem guardada a reenviar.
 
                 | estado | forma escolhida |
                 |---|---|
-                | ausente / `null` / `""` | **POR CONTEÚDO** — os três são indistinguíveis, e `Body` passa a ser obrigatório |
+                | ausente / `null` / `""` | **POR CONTEÚDO** — os três são indistinguíveis, e `body` passa a ser obrigatório |
                 | preenchido | **POR CHAVE** — a mensagem é procurada no histórico |
 
                 Na forma por chave, um id que o histórico não tem faz a busca
@@ -5097,7 +5108,7 @@ components:
               example: 3EB0A4B2AFD45E625C0917
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino do encaminhamento — para onde a mensagem VAI.
                 Sinónimo universal `chat`. Obrigatório nas DUAS formas: ausente,
@@ -5108,12 +5119,12 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           type: object
       description: |
-        Corpo de `POST /chat/send/forward`. Duas formas — POR CHAVE (`MessageID`) ou
-        POR CONTEÚDO (`Body`). **A presença de `MessageID` é o que escolhe a
+        Corpo de `POST /chat/send/forward`. Duas formas — POR CHAVE (`message_id`) ou
+        POR CONTEÚDO (`body`). **A presença de `message_id` é o que escolhe a
         forma**, e os campos que não pertencem à forma escolhida são ignorados em
         silêncio. Campos desconhecidos também.
     PedidoEntrarGrupo:
@@ -5161,7 +5172,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Audio:
+            audio:
               description: |
                 O áudio, num de DOIS transportes:
 
@@ -5186,7 +5197,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Caption:
+            caption:
               description: |
                 Legenda. **Vai como mensagem de texto SEPARADA**, enviada DEPOIS do
                 áudio — o protocolo não tem campo de legenda em áudio (F116).
@@ -5201,40 +5212,8 @@ components:
               example: O áudio que combinámos.
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Phone:
-              description: |
-                JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
-                são indistinguíveis e dão `400 missing_phone`; preenchido mas
-                impossível de parsear dá `400 invalid_phone`.
-              example: 554192421234@s.whatsapp.net
-              minLength: 1
-              nullable: false
-              type: string
-            ReplyTo:
-              $ref: '#/components/schemas/ContextoResposta'
-            Seconds:
-              description: |
-                Duração declarada, em segundos. É `uint32`, logo negativo é
-                `400 could_not_decode_payload`.
-
-                **Só metadata — não é verificada contra os bytes.** Ausente, `null`
-                e `0` são indistinguíveis e significam "duração não declarada": o
-                cliente de quem recebe mostra o que conseguir deduzir.
-              example: 12
-              format: int32
-              minimum: 0
-              nullable: false
-              type: integer
-            Waveform:
-              description: |
-                Onda desenhada na bolha de voz, em base64 cru. Sempre opcional:
-                ausente, `null` e `""` são indistinguíveis e significam "sem onda".
-                Não é validada nem gerada pelo servidor.
-              format: byte
-              nullable: true
-              type: string
             mimetype:
               description: |
                 Força o MIME. Ausente, `null` e `""` são indistinguíveis e
@@ -5251,6 +5230,15 @@ components:
                 O valor dado não é validado: ao contrário de imagem e vídeo, esta
                 rota não tem `invalid_audio_mime_type`.
               example: audio/ogg; codecs=opus
+              nullable: false
+              type: string
+            phone:
+              description: |
+                JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
+                são indistinguíveis e dão `400 missing_phone`; preenchido mas
+                impossível de parsear dá `400 invalid_phone`.
+              example: 554192421234@s.whatsapp.net
+              minLength: 1
               nullable: false
               type: string
             ptt:
@@ -5272,8 +5260,31 @@ components:
               example: true
               nullable: true
               type: boolean
+            reply_to:
+              $ref: '#/components/schemas/ContextoResposta'
+            seconds:
+              description: |
+                Duração declarada, em segundos. É `uint32`, logo negativo é
+                `400 could_not_decode_payload`.
+
+                **Só metadata — não é verificada contra os bytes.** Ausente, `null`
+                e `0` são indistinguíveis e significam "duração não declarada": o
+                cliente de quem recebe mostra o que conseguir deduzir.
+              example: 12
+              format: int32
+              minimum: 0
+              nullable: false
+              type: integer
+            waveform:
+              description: |
+                Onda desenhada na bolha de voz, em base64 cru. Sempre opcional:
+                ausente, `null` e `""` são indistinguíveis e significam "sem onda".
+                Não é validada nem gerada pelo servidor.
+              format: byte
+              nullable: true
+              type: string
           required:
-            - Audio
+            - audio
           type: object
       description: |
         Corpo de `POST /chat/send/audio`. Áudio ou nota de voz; mínimo de 128 bytes.
@@ -5283,7 +5294,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Emojis:
+            emojis:
               description: |
                 Emojis associados ao autocolante, para busca no cliente. Gravados no
                 EXIF. Ausente, `null` e `[]` são indistinguíveis e significam "sem
@@ -5296,9 +5307,9 @@ components:
                 type: string
               nullable: true
               type: array
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            MimeType:
+            mime_type:
               description: |
                 MIME declarado da entrada. **Não é só declaração: é o que ESCOLHE o
                 caminho de conversão** (`sticker/exif.go`, `ConvertToWebPSticker`).
@@ -5310,7 +5321,7 @@ components:
                 termina em `sticker_conversion_failed`. A saída é sempre WebP.
               nullable: false
               type: string
-            PackId:
+            pack_id:
               description: |
                 Identificador do pacote de autocolantes a que este pertence.
                 Gravado no EXIF do WebP resultante. Ausente, `null` e `""` são
@@ -5318,19 +5329,19 @@ components:
                 verificado contra pacote nenhum.
               nullable: false
               type: string
-            PackName:
+            pack_name:
               description: |
                 Nome do pacote, gravado no EXIF. Ausente, `null` e `""` são
                 indistinguíveis e gravam campo vazio.
               nullable: false
               type: string
-            PackPublisher:
+            pack_publisher:
               description: |
                 Editor do pacote, gravado no EXIF. Ausente, `null` e `""` são
                 indistinguíveis e gravam campo vazio.
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -5339,7 +5350,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            PngThumbnail:
+            png_thumbnail:
               description: |
                 Miniatura PNG, em base64 cru. Sempre opcional: ausente, `null` e
                 `""` são indistinguíveis e significam "sem miniatura". Não é
@@ -5347,9 +5358,9 @@ components:
               format: byte
               nullable: true
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
-            Sticker:
+            sticker:
               description: |
                 O autocolante, como URI de dados (prefixo `data`, a discriminação
                 frouxa do vídeo) ou URL http(s). Teto de **16 MB**.
@@ -5368,7 +5379,7 @@ components:
               nullable: false
               type: string
           required:
-            - Sticker
+            - sticker
           type: object
       description: |
         Corpo de `POST /chat/send/sticker`. Autocolante em WebP. Campos
@@ -5377,10 +5388,10 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Body:
+            body:
               description: |
                 Corpo da mensagem, acima dos botões. Sinónimo `text`, usado quando
-                `Body` fica vazio depois do `trim`.
+                `body` fica vazio depois do `trim`.
 
                 | estado (nos DOIS nomes) | aceite? | efeito |
                 |---|---|---|
@@ -5393,7 +5404,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Buttons:
+            buttons:
               description: |
                 Os botões.
 
@@ -5410,16 +5421,16 @@ components:
               minItems: 1
               nullable: true
               type: array
-            Footer:
+            footer:
               description: |
                 Rodapé, abaixo dos botões. Sempre opcional: ausente, `null` e `""`
                 são indistinguíveis e dão mensagem sem rodapé. Sem `trim`.
               example: DisparaZap
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Image:
+            image:
               description: |
                 Imagem de cabeçalho, como URI de dados (`data:image…`) ou URL
                 http(s). Teto de **10 MB**.
@@ -5434,9 +5445,9 @@ components:
               example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
               nullable: false
               type: string
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`.
 
@@ -5450,23 +5461,23 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
-            Title:
+            text:
+              description: |
+                Sinónimo de `body`, usado quando `body` está ausente, `null`, `""`
+                ou só espaços. Mesmo `trim`.
+              nullable: false
+              type: string
+            title:
               description: |
                 Cabeçalho da mensagem. Sempre opcional: ausente, `null` e `""` são
                 indistinguíveis e dão mensagem sem cabeçalho de texto. Não passa
                 por `trim`, ao contrário do corpo.
 
-                Quando há `Image`, é a imagem que ocupa o cabeçalho e este campo
+                Quando há `image`, é a imagem que ocupa o cabeçalho e este campo
                 deixa de ser desenhado.
               example: Confirmação de entrega
-              nullable: false
-              type: string
-            text:
-              description: |
-                Sinónimo de `Body`, usado quando `Body` está ausente, `null`, `""`
-                ou só espaços. Mesmo `trim`.
               nullable: false
               type: string
           type: object
@@ -5480,7 +5491,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Body:
+            body:
               description: |
                 Corpo da mensagem, acima dos cartões.
 
@@ -5496,7 +5507,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Cards:
+            cards:
               description: |
                 Os cartões, que deslizam na horizontal.
 
@@ -5513,7 +5524,7 @@ components:
               minItems: 1
               nullable: true
               type: array
-            Footer:
+            footer:
               description: |
                 Rodapé do carrossel, abaixo de todos os cartões. Sempre opcional:
                 ausente, `null`, `""` e `"   "` são indistinguíveis e dão carrossel
@@ -5521,11 +5532,11 @@ components:
               example: Entregas até às 22h
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`.
 
@@ -5537,20 +5548,20 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           type: object
       description: |
         Corpo de `POST /chat/send/carousel`. Cartões deslizáveis na horizontal;
-        cada cartão exige `Buttons`. Campos desconhecidos são ignorados em
+        cada cartão exige `buttons`. Campos desconhecidos são ignorados em
         silêncio.
     PedidoEnvioContacto:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Name:
+            name:
               description: |
                 Nome mostrado no cartão. Ausente, `null` e `""` são indistinguíveis
                 e dão `400 missing_name`; `"   "` **passa** — não há `trim`. Não é
@@ -5559,7 +5570,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -5568,9 +5579,9 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
-            Vcard:
+            vcard:
               description: |
                 O cartão em vCard, tal e qual — o servidor **não o valida nem o
                 reescreve**, apenas o transporta.
@@ -5593,8 +5604,8 @@ components:
               nullable: false
               type: string
           required:
-            - Name
-            - Vcard
+            - name
+            - vcard
           type: object
       description: |
         Corpo de `POST /chat/send/contact`. Cartão de contacto em vCard, que o
@@ -5605,7 +5616,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Caption:
+            caption:
               description: |
                 Legenda, desenhada com o documento. Sempre opcional: ausente,
                 `null` e `""` são indistinguíveis e dão documento sem legenda. Não
@@ -5613,7 +5624,7 @@ components:
               example: A nota fiscal do pedido.
               nullable: false
               type: string
-            Document:
+            document:
               description: |
                 O documento, num de DOIS transportes:
 
@@ -5636,7 +5647,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            FileName:
+            file_name:
               description: |
                 Nome com que o documento aparece no cliente.
 
@@ -5653,11 +5664,11 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            MimeType:
+            mime_type:
               description: |
                 Força o MIME. Ausente, `null` e `""` são indistinguíveis e
                 significam "deduz tu": o tipo é farejado dos bytes decodificados —
@@ -5666,7 +5677,7 @@ components:
               example: application/pdf
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -5675,11 +5686,11 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           required:
-            - Document
-            - FileName
+            - document
+            - file_name
           type: object
       description: |
         Corpo de `POST /chat/send/document`. Ficheiro com nome próprio, mostrado
@@ -5690,13 +5701,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Group:
+            group:
               description: |
-                JID de destino. **O nome do campo é `Group`, e não `Phone`, mesmo
+                JID de destino. **O nome do campo é `group`, e não `phone`, mesmo
                 para uma enquete enviada a um contacto individual.**
 
-                Medido em 2026-08-26: um pedido completo com `Phone` responde
-                `400 missing_group` — `Phone` não existe nesta struct, logo cai na
+                Medido em 2026-08-26: um pedido completo com `phone` responde
+                `400 missing_group` — `phone` não existe nesta struct, logo cai na
                 regra do campo desconhecido: é ignorado, e registado no log. O sinónimo
                 universal `chat` funciona e é a saída recomendada.
 
@@ -5707,7 +5718,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Header:
+            header:
               description: |
                 A pergunta da enquete. Ausente, `null` e `""` são indistinguíveis e
                 dão `400 missing_header`; `"   "` **passa** — não há `trim`.
@@ -5715,9 +5726,9 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Options:
+            options:
               description: |
                 As opções, em texto claro.
 
@@ -5744,21 +5755,21 @@ components:
               minItems: 2
               nullable: true
               type: array
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           required:
-            - Header
-            - Options
+            - header
+            - options
           type: object
       description: |
         Corpo de `POST /chat/send/poll`. Enquete com opções. O destino vai em
-        `Group`, e não em `Phone`, mesmo para contacto individual. Campos
-        desconhecidos são ignorados, e **registados no log** — e `Phone` é um deles.
+        `group`, e não em `phone`, mesmo para contacto individual. Campos
+        desconhecidos são ignorados, e **registados no log** — e `phone` é um deles.
     PedidoEnvioImagem:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Caption:
+            caption:
               description: |
                 Legenda, desenhada com a imagem. Sempre opcional: ausente, `null` e
                 `""` são indistinguíveis e dão imagem sem legenda. Não há `trim` —
@@ -5766,9 +5777,9 @@ components:
               example: A etiqueta do seu pedido.
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Image:
+            image:
               description: |
                 A imagem, num de DOIS transportes:
 
@@ -5791,7 +5802,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            JPEGThumbnail:
+            jpeg_thumbnail:
               description: |
                 Miniatura JPEG, em base64 cru (sem prefixo `data:`). Sempre
                 opcional: ausente, `null` e `""` são indistinguíveis e significam
@@ -5800,9 +5811,9 @@ components:
               format: byte
               nullable: true
               type: string
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            MimeType:
+            mime_type:
               description: |
                 Força o MIME em vez de o deduzir dos bytes. Ausente, `null` e `""`
                 são indistinguíveis e significam "deduz tu".
@@ -5815,7 +5826,7 @@ components:
               example: image/png
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -5824,10 +5835,10 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           required:
-            - Image
+            - image
           type: object
       description: |
         Corpo de `POST /chat/send/image`. Imagem com legenda opcional; aceita URI de
@@ -5838,13 +5849,13 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Body:
+            body:
               description: |
-                Primeiro sinónimo de `Desc`, usado quando `Desc` está ausente,
-                `null`, `""` ou só espaços.
+                Sinónimo de `desc`, usado quando `desc` está ausente, `null`, `""`
+                ou só espaços.
               nullable: false
               type: string
-            ButtonText:
+            button_text:
               default: Select
               description: |
                 Rótulo do botão que abre a lista. Passa por `TrimSpace`: ausente,
@@ -5853,28 +5864,31 @@ components:
               example: Ver cardápio
               nullable: false
               type: string
-            Desc:
+            desc:
               description: |
                 Corpo principal da mensagem. Sinónimos, nesta ordem de precedência,
-                `Body`, `body` e `text`.
+                `body` e `text`.
 
-                | estado (nos QUATRO nomes) | aceite? | efeito |
+                **Três níveis, não quatro.** Antes da migração para DTO,
+                `domain.SendListRequest` tinha `Desc`/`Body`/`Body2`/`Text` com
+                etiquetas `"Desc"`, `"Body"`, `"body"`, `"text"` — e `Body`/`body`
+                já eram a MESMA chave para o `encoding/json` do Go, que casa nomes
+                ignorando maiúsculas, logo mandar as duas no mesmo pedido já era
+                ambíguo antes desta secção existir. A cadeia colapsou para
+                `desc <- body <- text`, e `Body2` saiu do domínio (HOUSEKEEP F318).
+
+                | estado (nos TRÊS nomes) | aceite? | efeito |
                 |---|---|---|
                 | ausente | não | `400 missing_desc` |
                 | `null` | não | idem — indistinguível de ausente |
                 | `""` | não | idem |
                 | **`"   "`** | **não** | idem — **esta rota FAZ `trim`** |
                 | preenchido | sim | vai no fio já sem espaços nas pontas |
-
-                Atenção ao par `Body`/`body`: são DUAS chaves distintas na struct, e
-                o `encoding/json` casa nomes ignorando maiúsculas — mandar as duas
-                no mesmo objecto JSON é ambíguo e o resultado depende da ordem em
-                que aparecem no corpo.
               example: Escolha um item do cardápio.
               minLength: 1
               nullable: false
               type: string
-            FooterText:
+            footer_text:
               description: |
                 Rodapé, abaixo do botão. Sempre opcional: ausente, `null`, `""` e
                 `"   "` são indistinguíveis e dão mensagem sem rodapé (passa por
@@ -5882,23 +5896,23 @@ components:
               example: Entregas até às 22h
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            List:
+            list:
               description: |
                 Forma LEGADA: lista plana, embrulhada numa secção única cujo título
-                vem de `TopText`, ou de `Menu` quando `TopText` está vazio.
+                vem de `top_text`, ou de `Menu` quando `top_text` está vazio.
 
-                Só é lida quando `Sections` está ausente, `null` ou `[]`. Ausente,
+                Só é lida quando `sections` está ausente, `null` ou `[]`. Ausente,
                 `null` e `[]` são indistinguíveis. As linhas passam pelo mesmo
-                descarte silencioso de `Sections`.
+                descarte silencioso de `sections`.
               items:
                 $ref: '#/components/schemas/LinhaLista'
               nullable: true
               type: array
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -5909,43 +5923,38 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
-            Sections:
+            sections:
               description: |
                 Forma PREFERIDA: lista com várias secções.
 
-                | estado de `Sections` e `List` | aceite? | efeito |
+                | estado de `sections` e `list` | aceite? | efeito |
                 |---|---|---|
                 | ambas ausentes / `null` / `[]` | não | `400 missing_sections` — os três estados são indistinguíveis |
-                | `Sections` preenchida | sim | **`List` é ignorada em silêncio** |
+                | `sections` preenchida | sim | **`list` é ignorada em silêncio** |
                 | todas as secções descartadas | não | `400 no_valid_sections` |
                 | algumas descartadas | **sim** | `200`, sem aviso do que sumiu |
               items:
                 $ref: '#/components/schemas/SecaoLista'
               nullable: true
               type: array
-            TopText:
+            text:
+              description: |
+                Segundo sinónimo de `desc`, usado quando `desc` e `body` estão
+                ambos ausentes, `null`, `""` ou só espaços — o último da cadeia.
+              nullable: false
+              type: string
+            top_text:
               description: |
                 Cabeçalho, acima do corpo. Sempre opcional: ausente, `null`, `""` e
                 `"   "` são indistinguíveis e dão mensagem sem cabeçalho (passa por
                 `TrimSpace`).
 
-                **Tem um segundo papel**: na forma legada `List`, é o título da
+                **Tem um segundo papel**: na forma legada `list`, é o título da
                 secção única, e quando está vazio esse título passa a ser `Menu`
-                (`defaultLegacySectionTitle`). Não afecta os títulos de `Sections`.
+                (`defaultLegacySectionTitle`). Não afecta os títulos de `sections`.
               example: Cardápio de hoje
-              nullable: false
-              type: string
-            body:
-              description: |
-                Segundo sinónimo de `Desc`, usado quando `Desc` e `Body` estão ambos
-                vazios pelo mesmo critério.
-              nullable: false
-              type: string
-            text:
-              description: |
-                Terceiro sinónimo de `Desc`, o último da cadeia.
               nullable: false
               type: string
           type: object
@@ -5958,9 +5967,9 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Latitude:
+            latitude:
               description: |
                 Latitude. É `*float64` de propósito (HOUSEKEEP F121), logo **zero é
                 valor VÁLIDO e distingue-se de ausente**:
@@ -5978,7 +5987,7 @@ components:
               format: double
               nullable: true
               type: number
-            Longitude:
+            longitude:
               description: |
                 Longitude. Mesma regra da latitude: `*float64`, `0` é aceite,
                 ausente e `null` dão `400 missing_longitude` (medido, e a latitude é
@@ -5988,7 +5997,7 @@ components:
               format: double
               nullable: true
               type: number
-            Name:
+            name:
               description: |
                 Rótulo do lugar, mostrado sobre o mapa. Sempre opcional: ausente,
                 `null` e `""` são indistinguíveis e dão ponto sem rótulo. Não há
@@ -5996,7 +6005,7 @@ components:
               example: Curitiba
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -6005,15 +6014,15 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           required:
-            - Latitude
-            - Longitude
+            - latitude
+            - longitude
           type: object
       description: |
         Corpo de `POST /chat/send/location`. Ponto no mapa, com nome opcional. Não
-        há campo de morada — só `Latitude`, `Longitude` e `Name` chegam ao
+        há campo de morada — só `latitude`, `longitude` e `name` chegam ao
         protocolo. Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
@@ -6021,9 +6030,9 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Buttons:
+            buttons:
               description: |
-                Os botões do modelo, com vocabulário PRÓPRIO (`DisplayText`, e os
+                Os botões do modelo, com vocabulário PRÓPRIO (`display_text`, e os
                 tipos `quickreply`/`url`/`call`) — diferente do de
                 `/chat/send/buttons`.
 
@@ -6037,7 +6046,7 @@ components:
               minItems: 1
               nullable: true
               type: array
-            Content:
+            content:
               description: |
                 Corpo do modelo. Ausente, `null` e `""` são indistinguíveis e dão
                 `400 missing_content`; `"   "` **passa** — esta rota não faz `trim`,
@@ -6046,7 +6055,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Footer:
+            footer:
               description: |
                 Rodapé. **Obrigatório nesta rota** — é a única rota de envio em que
                 o rodapé não é opcional.
@@ -6057,11 +6066,11 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -6070,12 +6079,12 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           required:
-            - Content
-            - Footer
-            - Buttons
+            - content
+            - footer
+            - buttons
           type: object
       description: |
         Corpo de `POST /chat/send/template`. Mensagem de modelo com botões de URL,
@@ -6085,7 +6094,7 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Body:
+            body:
               description: |
                 Texto da mensagem.
 
@@ -6104,9 +6113,9 @@ components:
               minLength: 1
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            LinkPreview:
+            link_preview:
               default: false
               description: |
                 Quando `true`, o serviço procura a primeira URL do corpo e busca a
@@ -6122,12 +6131,12 @@ components:
               example: true
               nullable: false
               type: boolean
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            Phone:
+            phone:
               description: |
                 JID de destino — contacto, grupo ou canal. Sinónimo universal
-                `chat`; `Phone` ganha quando os dois vierem preenchidos.
+                `chat`; `phone` ganha quando os dois vierem preenchidos.
 
                 | estado (nos DOIS nomes) | aceite? | efeito |
                 |---|---|---|
@@ -6140,10 +6149,10 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
           required:
-            - Body
+            - body
           type: object
       description: |
         Corpo de `POST /chat/send/text`. Mensagem de texto, com pré-visualização de
@@ -6154,16 +6163,16 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Caption:
+            caption:
               description: |
                 Legenda, desenhada com o vídeo. Sempre opcional: ausente, `null` e
                 `""` são indistinguíveis e dão vídeo sem legenda. Não há `trim`.
               example: O vídeo da montagem.
               nullable: false
               type: string
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            JPEGThumbnail:
+            jpeg_thumbnail:
               description: |
                 Miniatura JPEG, em base64 cru. Sempre opcional: ausente, `null` e
                 `""` são indistinguíveis e significam "sem miniatura". Não é
@@ -6171,9 +6180,9 @@ components:
               format: byte
               nullable: true
               type: string
-            MentionedJid:
+            mentioned_jid:
               $ref: '#/components/schemas/MencoesEnvio'
-            MimeType:
+            mime_type:
               description: |
                 Força o MIME em vez de o deduzir dos bytes. Ausente, `null` e `""`
                 são indistinguíveis e significam "deduz tu". Se o tipo resolvido não
@@ -6182,7 +6191,7 @@ components:
               example: video/mp4
               nullable: false
               type: string
-            Phone:
+            phone:
               description: |
                 JID de destino. Sinónimo universal `chat`. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_phone`; preenchido mas
@@ -6191,9 +6200,9 @@ components:
               minLength: 1
               nullable: false
               type: string
-            ReplyTo:
+            reply_to:
               $ref: '#/components/schemas/ContextoResposta'
-            Video:
+            video:
               description: |
                 O vídeo, num de DOIS transportes:
 
@@ -6221,7 +6230,7 @@ components:
               nullable: false
               type: string
           required:
-            - Video
+            - video
           type: object
       description: |
         Corpo de `POST /chat/send/video`. Vídeo com legenda; mínimo de 256 bytes,
@@ -6603,39 +6612,34 @@ components:
       description: |
         Marca uma ou mais mensagens como lidas.
 
-        **Use `ChatPhone`, não `Chat`.** Os dois nomes são aceites pelo
-        desserializador, mas só `ChatPhone` é RESOLVIDO: o ramo de `Chat` está
-        por implementar (`mark_read.go:41`, `jidChat = ""`) e faz a conversa
-        seguir vazia para o WhatsApp. Sem nenhum dos dois é
-        `400 missing_chatphone`, medido.
+        **`chat_phone` e `sender_phone` são as ÚNICAS grafias aceites.** Antes da
+        migração para DTO, o manipulador decodificava `domain.MarkReadRequest`
+        directamente, que também aceitava os nomes antigos `Chat`/`Sender` — mas
+        nenhum dos dois alguma vez foi RESOLVIDO (`mark_read.go:41`,
+        `jidChat = ""`; comportamento herdado do upstream, travado por
+        `TestMarkRead_LegacyFieldsResolveToEmptyJID`). A migração para
+        `dto/message.MarkReadRequest` (HOUSEKEEP F322) tirou os dois campos do
+        DTO de pedido: continuam a existir no domínio, mas **sem forma de lá
+        chegar pelo fio** — mandar `"Chat"` ou `"Sender"` hoje é campo
+        desconhecido, ignorado como qualquer outro. Sem `chat_phone` nem `chat`
+        (nome antigo, já não aceite) é `400 missing_chatphone`, medido.
 
         **Ordem das recusas, medida**: `missing_chatphone` →
-        `invalid_chatphone` → `invalid_senderphone` → `missing_id`. Um pedido só
-        com `Chat` (o campo antigo) passa a guarda do destino e cai em
-        `missing_id`, o que confirma que `Chat` é aceite sem ser usado.
+        `invalid_chatphone` → `invalid_senderphone` → `missing_id`.
 
         Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
-        Chat:
+        chat_phone:
           description: |
-            Nome antigo de `ChatPhone`. **Aceite, mas NÃO resolvido**: quando é
-            o único destino, o pedido passa a validação e a conversa segue VAZIA
-            para o WhatsApp. Ausente, `null` e `""` são o mesmo estado. Não use.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
-        ChatPhone:
-          description: |
-            JID ou número da conversa. É o campo que a implementação resolve.
-            Ausente, `null` e `""` são o mesmo estado e fazem cair para `Chat`;
-            sem os dois é `400 missing_chatphone` (medido), e mal formado é
+            JID ou número da conversa. Ausente, `null` e `""` são o mesmo estado
+            e dão `400 missing_chatphone` (medido); mal formado é
             `400 invalid_chatphone` (medido).
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        Id:
+        id:
           description: |
             Lista de `message_id` a marcar como lidos.
 
@@ -6659,14 +6663,7 @@ components:
           minItems: 1
           nullable: false
           type: array
-        Sender:
-          description: |
-            Nome antigo de `SenderPhone`. Aceite, mas não resolvido — mesmo
-            buraco de `Chat`. Ausente, `null` e `""` são o mesmo estado.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
-        SenderPhone:
+        sender_phone:
           description: |
             JID de quem escreveu as mensagens, em conversa de grupo. Opcional:
             ausente, `null` e `""` são o mesmo estado e a marcação segue sem
@@ -6675,7 +6672,7 @@ components:
           nullable: false
           type: string
       required:
-        - Id
+        - id
       type: object
     PedidoMarcarVistoCanal:
       description: Pedido de marcação de mensagens do canal como vistas.
@@ -7020,7 +7017,14 @@ components:
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
-        Media:
+        chat:
+          description: |
+            Nome universal do destino. Só vale quando `phone` estiver ausente,
+            `null` ou `""`; caso contrário é ignorado sem aviso.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        media:
           description: |
             Qualificador do estado.
 
@@ -7029,17 +7033,17 @@ components:
             | ausente | sim | igual a `""` — mensagem de texto |
             | `null` | sim | igual a `""` |
             | `""` | sim | mensagem de texto |
-            | `audio` | sim | com `State: composing`, anuncia "a gravar" |
+            | `audio` | sim | com `state: composing`, anuncia "a gravar" |
             | qualquer outro texto | sim | não é validado; segue para o protocolo |
 
-            **Só tem efeito quando `State` é `composing`**: em qualquer outro
+            **Só tem efeito quando `state` é `composing`**: em qualquer outro
             estado o valor é descartado sem aviso
             (`internal/wa-noise/core/presence.go:142`). As duas constantes
             conhecidas são `""` (texto) e `audio`.
           example: ""
           nullable: false
           type: string
-        Phone:
+        phone:
           description: |
             JID ou número da conversa onde o estado é anunciado. Ausente, `null`
             e `""` são o mesmo estado e fazem cair para `chat`; sem os dois é
@@ -7048,7 +7052,7 @@ components:
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        State:
+        state:
           description: |
             O estado a anunciar.
 
@@ -7070,19 +7074,12 @@ components:
             As duas constantes que a biblioteca define são `composing` e
             `paused` (`internal/wa-noise/protocol/types/presence.go:17-18`).
             **Não existe um estado `recording`**: "a gravar" exprime-se como
-            `State: composing` com `Media: audio`.
+            `state: composing` com `media: audio`.
           example: composing
           nullable: false
           type: string
-        chat:
-          description: |
-            Nome universal do destino. Só vale quando `Phone` estiver ausente,
-            `null` ou `""`; caso contrário é ignorado sem aviso.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
       required:
-        - State
+        - state
       type: object
     PedidoProxy:
       description: |
@@ -7192,7 +7189,7 @@ components:
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
-        Body:
+        body:
           description: |
             O emoji da reação.
 
@@ -7209,7 +7206,14 @@ components:
           example: "\U0001F44D"
           nullable: false
           type: string
-        Id:
+        chat:
+          description: |
+            Nome universal do destino. Só vale quando `phone` estiver ausente,
+            `null` ou `""`; caso contrário é ignorado sem aviso.
+          example: 554192421234@s.whatsapp.net
+          nullable: false
+          type: string
+        id:
           description: |
             `message_id` da mensagem reagida. Ausente, `null` e `""` dão todos
             `400 missing_id` (medido).
@@ -7221,7 +7225,7 @@ components:
           example: 3EB0A4B2AFD45E625C0917
           nullable: false
           type: string
-        Participant:
+        participant:
           description: |
             JID de quem escreveu a mensagem reagida, em conversa de grupo.
 
@@ -7231,15 +7235,15 @@ components:
             | `null` | sim | idêntico a ausente |
             | `""` | sim | idêntico a ausente |
             | mal formado | sim | **DESCARTADO EM SILÊNCIO** — não é `400` |
-            | válido | sim | usado, salvo se o `Id` trouxer o prefixo `me:` |
+            | válido | sim | usado, salvo se o `id` trouxer o prefixo `me:` |
 
             Duas formas de ser ignorado sem aviso: um JID que não resolve é
             descartado (comportamento preservado do upstream), e o campo inteiro
-            é ignorado quando `Id` começa por `me:`.
+            é ignorado quando `id` começa por `me:`.
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        Phone:
+        phone:
           description: |
             JID ou número da conversa onde a mensagem está. Ausente, `null` e
             `""` são o mesmo estado e fazem cair para `chat`; sem os dois é
@@ -7248,16 +7252,9 @@ components:
           example: 554192421234@s.whatsapp.net
           nullable: false
           type: string
-        chat:
-          description: |
-            Nome universal do destino. Só vale quando `Phone` estiver ausente,
-            `null` ou `""`; caso contrário é ignorado sem aviso.
-          example: 554192421234@s.whatsapp.net
-          nullable: false
-          type: string
       required:
-        - Body
-        - Id
+        - body
+        - id
       type: object
     PedidoReagirCanal:
       description: |
@@ -7338,7 +7335,7 @@ components:
         regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
         recusa-os com `400 unknown_field`.
       properties:
-        Body:
+        body:
           description: |
             Texto do recado.
 
@@ -7375,7 +7372,7 @@ components:
           nullable: false
           type: string
       required:
-        - Body
+        - body
       type: object
     PedidoRecusarChamada:
       description: |
@@ -8362,9 +8359,9 @@ components:
       allOf:
         - $ref: '#/components/schemas/AlvoConversa'
         - properties:
-            Id:
+            id:
               $ref: '#/components/schemas/IdCliente'
-            Options:
+            options:
               description: |
                 O texto EXACTO das opções votadas, tal como foram criadas — a
                 correspondência é por texto, não por índice.
@@ -8384,7 +8381,7 @@ components:
               minItems: 1
               nullable: true
               type: array
-            Phone:
+            phone:
               description: |
                 A conversa onde a enquete está. Sinónimo universal `chat`. Ausente,
                 `null` e `""` são indistinguíveis e dão `400 missing_phone`;
@@ -8393,7 +8390,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            PollMessageId:
+            poll_message_id:
               description: |
                 `message_id` da mensagem de enquete original. Ausente, `null` e `""`
                 são indistinguíveis e dão `400 missing_poll_message_id`. Não é
@@ -8403,7 +8400,7 @@ components:
               minLength: 1
               nullable: false
               type: string
-            PollMessageTimestamp:
+            poll_message_timestamp:
               description: |
                 Instante da enquete original, em segundos desde a época Unix.
 
@@ -8423,7 +8420,7 @@ components:
               minimum: 1
               nullable: false
               type: integer
-            Sender:
+            sender:
               description: |
                 JID de quem CRIOU a enquete. Ausente, `null` e `""` são
                 indistinguíveis e dão `400 missing_sender`; um JID que não parseia
@@ -8438,14 +8435,14 @@ components:
               nullable: false
               type: string
           required:
-            - Sender
-            - PollMessageId
-            - PollMessageTimestamp
-            - Options
+            - sender
+            - poll_message_id
+            - poll_message_timestamp
+            - options
           type: object
       description: |
         Corpo de `POST /chat/send/pollvote`. Voto numa enquete existente,
-        identificada pelo par `PollMessageId` mais `PollMessageTimestamp`. Campos
+        identificada pelo par `poll_message_id` mais `poll_message_timestamp`. Campos
         desconhecidos são ignorados, e **registados no log**.
     PedidoWebhook:
       description: |
@@ -9103,7 +9100,7 @@ components:
       properties:
         message_id:
           description: |
-            `message_id` da mensagem revogada — o mesmo `Id` que entrou, ecoado.
+            `message_id` da mensagem revogada — o mesmo `id` que entrou, ecoado.
             **Sempre presente**: não tem `omitempty`
             (`pkg/domain/message.go:723`). Nunca `null`.
           example: 3EB0A4B2AFD45E625C0917
@@ -9274,9 +9271,9 @@ components:
         Resposta de `POST /session/hmac/config` e de `DELETE /session/hmac/config`.
 
         Como em S3, os dois campos têm `omitempty` — a resposta do DELETE sai só
-        com `Details`, porque `Enabled` fica `false` e `false` é o valor zero.
+        com `details`, porque `enabled` fica `false` e `false` é o valor zero.
       properties:
-        Details:
+        details:
           description: |
             Confirmação em texto: `HMAC configuration saved successfully` no POST,
             `HMAC configuration deleted successfully` no DELETE. Tem `omitempty`,
@@ -9285,7 +9282,7 @@ components:
           example: HMAC configuration saved successfully
           nullable: false
           type: string
-        Enabled:
+        enabled:
           description: |
             Estado DEPOIS da operação — `true` quando a chave ficou gravada.
 
@@ -9302,10 +9299,10 @@ components:
 
         **Ambos os campos têm `omitempty`** (`domain/storage.go`), e isso muda a
         forma da resposta conforme o resultado: a do DELETE — e a de um POST com
-        `enabled: false` — sai só com `Details`, porque `Enabled` fica `false` e
+        `enabled: false` — sai só com `details`, porque `enabled` fica `false` e
         `false` é o valor zero de um booleano.
       properties:
-        Details:
+        details:
           description: |
             Confirmação em texto: `S3 configuration saved successfully` no POST,
             `S3 configuration deleted successfully` no DELETE. Tem `omitempty`,
@@ -9314,12 +9311,12 @@ components:
           example: S3 configuration saved successfully
           nullable: false
           type: string
-        Enabled:
+        enabled:
           description: |
             Estado DEPOIS da operação, não eco do pedido.
 
             **Ausente significa `false`.** Com `omitempty`, o valor `false` faz o
-            campo desaparecer do corpo — logo `{"Details":"…"}` sem `Enabled` é a
+            campo desaparecer do corpo — logo `{"details":"…"}` sem `enabled` é a
             resposta de uma revogação bem sucedida, não uma resposta incompleta.
             Nunca vem `null`.
           example: true
@@ -9402,10 +9399,17 @@ components:
     ResultadoDescargaDeMidia:
       description: |
         O conteúdo binário, já decifrado e codificado como Data URL. Os dois
-        campos não têm `omitempty` (`pkg/domain/download.go:76-79`), logo
-        aparecem **sempre**, e nenhum vem `null`.
+        campos não têm `omitempty` (`pkg/presentation/http/dto/message/chat.go`,
+        `DownloadResponse`), logo aparecem **sempre**, e nenhum vem `null`.
+
+        **Só a RESPOSTA passou pela migração para DTO** — `dtomessage.
+        PresentDownload` serve `mimetype`/`data` em minúsculas. O PEDIDO
+        (`PedidoDescargaDeMidia`) continua a decodificar `domain.DownloadRequest`
+        directamente, com as etiquetas antigas — os dois lados desta rota estão
+        em estados diferentes de propósito, não por descuido; ver a nota nesse
+        esquema.
       properties:
-        Data:
+        data:
           description: |
             Data URL completa — `data:<mimetype>;base64,<conteúdo>`. **Não é
             base64 nu**: o prefixo faz parte do valor e tem de ser removido
@@ -9417,7 +9421,7 @@ components:
           example: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
           nullable: false
           type: string
-        Mimetype:
+        mimetype:
           description: |
             O mesmo `Mimetype` que veio no pedido, ecoado sem alteração — não é
             o tipo que a CDN declarou. Sempre presente, nunca `null`; não pode
@@ -9427,8 +9431,8 @@ components:
           nullable: false
           type: string
       required:
-        - Mimetype
-        - Data
+        - mimetype
+        - data
       type: object
     ResultadoDesconexao:
       description: |
@@ -9508,7 +9512,7 @@ components:
 
             | estado | significado |
             |---|---|
-            | **ausente** | não havia legenda a enviar (`Caption` vazio no pedido) |
+            | **ausente** | não havia legenda a enviar (`caption` vazio no pedido) |
             | `sent` | a legenda saiu como mensagem própria; o id dela vem em `caption_message_id` |
             | `failed` | o ÁUDIO saiu, a legenda não — e não há como desfazer o áudio |
 
@@ -10317,7 +10321,7 @@ components:
 
         Secção que fique sem nenhuma linha válida é descartada em silêncio —
         incluindo a secção que já chegou com `rows` ausente, `null` ou `[]`.
-        `{}` e `null` dentro de `Sections` são ambos secções sem linhas, logo
+        `{}` e `null` dentro de `sections` são ambos secções sem linhas, logo
         ambos descartados.
       properties:
         rows:
@@ -10334,8 +10338,8 @@ components:
             Título da secção. Sempre opcional: ausente, `null`, `""` e `"   "` são
             indistinguíveis e dão secção sem título (passa por `TrimSpace`).
 
-            **Não** herda `TopText`: esse padrão só vale para a forma legada
-            `List`.
+            **Não** herda `top_text`: esse padrão só vale para a forma legada
+            `list`.
           example: Pizzas
           nullable: false
           type: string
@@ -11712,20 +11716,22 @@ paths:
 
         **Regras, e uma ressalva medida**:
 
-        - O campo que a implementação RESOLVE é `ChatPhone`. O nome antigo
-          `Chat` é aceite pelo desserializador, mas o ramo que o converteria em
-          JID está por implementar (`mark_read.go:41`), e a conversa segue
-          VAZIA para o WhatsApp. Use `ChatPhone`, ou o `chat_jid` do caminho.
+        - O campo do corpo é `chat_phone`. Antes da migração para DTO
+          (HOUSEKEEP F322), o manipulador aceitava também o nome antigo `Chat`
+          — mas o ramo que o converteria em JID nunca foi implementado
+          (`mark_read.go:41`), e a conversa seguia VAZIA para o WhatsApp. O
+          campo antigo saiu do DTO de pedido: hoje é apenas `chat_phone`, ou o
+          `chat_jid` do caminho.
         - Sem nenhum dos dois, é `400 missing_chatphone`, medido.
-        - `Id` é uma LISTA. Vazia é `400 missing_id`.
-        - `SenderPhone` só faz sentido em grupo, e é opcional.
+        - `id` é uma LISTA. Vazia é `400 missing_id`.
+        - `sender_phone` só faz sentido em grupo, e é opcional.
         - Esta rota NÃO aceita o alias universal `chat` — o tipo de pedido não
           o declara.
 
         **Autenticação**: token de sessão.
       parameters:
         - description: |
-            JID da conversa. Substitui o campo `ChatPhone` do corpo — se ambos
+            JID da conversa. Substitui o campo `chat_phone` do corpo — se ambos
             vierem, o **corpo ganha**.
           in: path
           name: chat_jid
@@ -11737,8 +11743,8 @@ paths:
         content:
           application/json:
             example:
-              ChatPhone: 554192421234@s.whatsapp.net
-              Id:
+              chat_phone: 554192421234@s.whatsapp.net
+              id:
                 - 3EB0A4B2AFD45E625C0917
             schema:
               $ref: '#/components/schemas/PedidoMarcarLida'
@@ -11750,7 +11756,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Message marked as read
+                  details: Message marked as read
                 success: true
               schema:
                 allOf:
@@ -11772,9 +11778,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Corpo ilegível (`could_not_decode_payload`), `ChatPhone` ausente
+            Corpo ilegível (`could_not_decode_payload`), `chat_phone` ausente
             (`missing_chatphone`), destino mal formado (`invalid_chatphone`,
-            `invalid_senderphone`), lista `Id` vazia (`missing_id`) ou sessão
+            `invalid_senderphone`), lista `id` vazia (`missing_id`) ou sessão
             inexistente (`no_session`).
         "401":
           $ref: '#/components/responses/NaoAutorizado'
@@ -11886,12 +11892,12 @@ paths:
 
         **Regras**:
 
-        - `Phone` (ou o alias `chat`) e `Id` são obrigatórios; faltar `Id` é
+        - `phone` (ou o alias `chat`) e `id` são obrigatórios; faltar `id` é
           `400 missing_id`, medido.
         - `message_id` na resposta é o da mensagem APAGADA, e não o da mensagem
           de revogação que o envio criou — é o que responde à pergunta do
           cliente.
-        - Um `Id` inexistente NÃO é recusado: o WhatsApp aceita a revogação de
+        - Um `id` inexistente NÃO é recusado: o WhatsApp aceita a revogação de
           um id que não conhece e nada acontece do outro lado.
 
         **Nota de nomes**: esta rota é a canónica. `POST /chat/delete` existiu
@@ -11903,8 +11909,8 @@ paths:
         content:
           application/json:
             example:
-              Id: 3EB0A4B2AFD45E625C0917
-              Phone: 554192421234@s.whatsapp.net
+              id: 3EB0A4B2AFD45E625C0917
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoApagarMensagem'
         required: true
@@ -11939,8 +11945,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
-            ausentes (`missing_phone`), `Id` ausente (`missing_id`), destino
+            Corpo ilegível (`could_not_decode_payload`), `phone` e `chat`
+            ausentes (`missing_phone`), `id` ausente (`missing_id`), destino
             mal formado (`invalid_phone`) ou sessão inexistente
             (`no_session`).
         "401":
@@ -11983,6 +11989,12 @@ paths:
         `pkg/presentation/http/canonico.go`: o novo lugar não sobrescreve
         quem já dizia a mesma coisa).
 
+        O pedido ainda decodifica `domain.DownloadRequest` directamente sem
+        camada de DTO (`pkg/domain/download.go`) — mas as etiquetas já são
+        `snake_case` desde 2026-08-27 (F338); ver `PedidoDescargaDeMidia` para
+        o mapeamento contra os nomes de origem do `data_json`. A RESPOSTA já
+        migrou e serve `mimetype`/`data` em minúsculas.
+
         **Autenticação**: token de sessão.
       parameters:
         - description: |
@@ -12004,13 +12016,13 @@ paths:
         content:
           application/json:
             example:
-              DirectPath: /o1/v/t24/f2/m234/exemplo
-              FileEncSHA256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-              FileLength: 74
-              FileSHA256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-              MediaKey: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-              Mimetype: image/png
-              Url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
+              direct_path: /o1/v/t24/f2/m234/exemplo
+              file_enc_sha256: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
+              file_length: 74
+              file_sha256: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
+              media_key: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
+              mimetype: image/png
+              url: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
             schema:
               $ref: '#/components/schemas/PedidoDescargaDeMidia'
         required: true
@@ -12021,8 +12033,8 @@ paths:
               example:
                 code: 200
                 data:
-                  Data: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-                  Mimetype: image/png
+                  data: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+                  mimetype: image/png
                 success: true
               schema:
                 allOf:
@@ -12045,7 +12057,7 @@ paths:
                 $ref: '#/components/schemas/Erro'
           description: |
             Corpo ilegível (`could_not_decode_payload`), `{kind}` fora do enum
-            (`unknown_media_kind`), `Url` e `DirectPath` ambos ausentes
+            (`unknown_media_kind`), `url` e `direct_path` ambos ausentes
             (`missing_url_or_direct_path`) ou sessão inexistente
             (`no_session`).
         "401":
@@ -12123,7 +12135,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Disappearing timer set
+                  details: Disappearing timer set
                 success: true
               schema:
                 allOf:
@@ -12194,7 +12206,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Default disappearing timer set
+                  details: Default disappearing timer set
                 success: true
               schema:
                 allOf:
@@ -12663,23 +12675,23 @@ paths:
         > **Substitui `POST /chat/presence`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Mostra ao outro lado que se está a escrever ou a gravar áudio
-        (`State: composing` com `Media: audio`).
+        (`state: composing` com `media: audio`).
 
         **Quando usar**: antes de enviar uma mensagem que demore a ser
         composta, para que a conversa não pareça parada.
 
         **Regras**:
 
-        - `State` é obrigatório; ausente, `null` e `""` dão todos
+        - `state` é obrigatório; ausente, `null` e `""` dão todos
           `400 missing_state`, medido.
-        - **Não há enum no servidor.** `State` vai como está para o protocolo,
+        - **Não há enum no servidor.** `state` vai como está para o protocolo,
           logo um valor desconhecido não é recusado com `400` — o que o
           WhatsApp faz com ele não foi medido aqui. As duas constantes que a
           biblioteca define são `composing` e `paused`
           (`internal/wa-noise/protocol/types/presence.go:17-18`).
         - **Não existe um estado `recording`.** "A gravar" exprime-se como
-          `State: composing` com `Media: audio`.
-        - `Media` só tem efeito quando `State` é `composing`; em qualquer
+          `state: composing` com `media: audio`.
+        - `media` só tem efeito quando `state` é `composing`; em qualquer
           outro estado é descartado sem aviso
           (`internal/wa-noise/core/presence.go:142`). Os dois valores
           conhecidos são `""` (texto) e `audio`.
@@ -12693,9 +12705,9 @@ paths:
         content:
           application/json:
             example:
-              Media: ""
-              Phone: 554192421234@s.whatsapp.net
-              State: composing
+              media: ""
+              phone: 554192421234@s.whatsapp.net
+              state: composing
             schema:
               $ref: '#/components/schemas/PedidoPresencaNaConversa'
         required: true
@@ -12706,7 +12718,7 @@ paths:
               example:
                 code: 200
                 data:
-                  Details: Chat presence sent
+                  details: Chat presence sent
                 success: true
               schema:
                 allOf:
@@ -12728,8 +12740,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
-            ausentes (`missing_phone`), `State` ausente (`missing_state`),
+            Corpo ilegível (`could_not_decode_payload`), `phone` e `chat`
+            ausentes (`missing_phone`), `state` ausente (`missing_state`),
             destino mal formado (`invalid_phone`) ou sessão inexistente
             (`no_session`).
         "401":
@@ -12753,13 +12765,13 @@ paths:
 
         **Regras**:
 
-        - Para RETIRAR a reação, envie `Body: "remove"`. String vazia não
+        - Para RETIRAR a reação, envie `body: "remove"`. String vazia não
           serve: é `400 missing_body`, medido.
-        - O `Id` aceita o prefixo `me:` para marcar a mensagem como própria
+        - O `id` aceita o prefixo `me:` para marcar a mensagem como própria
           (`me:3EB0A4B2AFD45E625C0917`); o prefixo é retirado antes de seguir
           para o WhatsApp.
-        - Em grupo, `Participant` diz quem escreveu a mensagem reagida. Um
-          `Participant` que não resolve é IGNORADO em silêncio, e não recusado.
+        - Em grupo, `participant` diz quem escreveu a mensagem reagida. Um
+          `participant` que não resolve é IGNORADO em silêncio, e não recusado.
         - A resposta tem a mesma forma das rotas de envio, porque reagir é
           enviar uma mensagem: `message_id` é o da mensagem REAGIDA.
 
@@ -12768,9 +12780,9 @@ paths:
         content:
           application/json:
             example:
-              Body: "\U0001F44D"
-              Id: 3EB0A4B2AFD45E625C0917
-              Phone: 554192421234@s.whatsapp.net
+              body: "\U0001F44D"
+              id: 3EB0A4B2AFD45E625C0917
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoReagir'
         required: true
@@ -12805,8 +12817,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Corpo ilegível (`could_not_decode_payload`), `Phone` e `chat`
-            ausentes (`missing_phone`), `Body` vazio (`missing_body`), `Id`
+            Corpo ilegível (`could_not_decode_payload`), `phone` e `chat`
+            ausentes (`missing_phone`), `body` vazio (`missing_body`), `id`
             ausente (`missing_id`), destino mal formado (`invalid_phone`) ou
             sessão inexistente (`no_session`).
         "401":
@@ -12943,9 +12955,9 @@ paths:
         content:
           application/json:
             example:
-              Audio: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
-              Caption: O áudio que combinámos.
-              Phone: 554192421234@s.whatsapp.net
+              audio: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
+              caption: O áudio que combinámos.
+              phone: 554192421234@s.whatsapp.net
               ptt: true
             schema:
               $ref: '#/components/schemas/PedidoEnvioAudio'
@@ -13011,7 +13023,7 @@ paths:
                       message: audio body is empty
                     success: false
                 missing_audio:
-                  summary: Campo `Audio` vazio
+                  summary: Campo `audio` vazio
                   value:
                     code: 400
                     error:
@@ -13019,7 +13031,7 @@ paths:
                       message: missing Audio in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13060,9 +13072,9 @@ paths:
         copiar um código sem obrigar a pessoa a escrever.
 
         **Regras — e esta é a rota com mais armadilhas medidas do grupo**:
-        - **O rótulo do botão é `title`**, com `text` e `buttonText` como
-          sinónimos. **Não é `displayText`** — esse é o nome de
-          `/chat/send/template`. Medido em 2026-08-26: um botão com `displayText`
+        - **O rótulo do botão é `title`**, com `text` e `button_text` como
+          sinónimos. **Não é `display_text`** — esse é o nome de
+          `/chat/send/template`. Medido em 2026-08-26: um botão com `display_text`
           é DESCARTADO EM SILÊNCIO.
         - Os tipos aceites são `reply`, `cta_url`, `cta_call` e `copy`. Tipo vazio
           vira `reply`; **tipo desconhecido descarta o botão em silêncio** — em
@@ -13074,7 +13086,7 @@ paths:
         - O título é truncado em **20 runas**, e o corte acontece antes de o
           título servir de `id` — logo o identificador que volta no clique já vem
           truncado.
-        - `Phone`, corpo (`Body` ou `text`) e `Buttons` não vazio são recusados
+        - `phone`, corpo (`body` ou `text`) e `buttons` não vazio são recusados
           JUNTOS, numa única mensagem: `400 missing_buttons_fields`.
         - A imagem de cabeçalho é opcional e tolerante: se falhar a obtenção, a
           mensagem segue sem ela.
@@ -13084,8 +13096,8 @@ paths:
         content:
           application/json:
             example:
-              Body: Confirma a entrega para hoje às 15h?
-              Buttons:
+              body: Confirma a entrega para hoje às 15h?
+              buttons:
                 - id: confirmar
                   title: Confirmar
                   type: reply
@@ -13095,9 +13107,9 @@ paths:
                 - title: Ver pedido
                   type: cta_url
                   url: https://exemplo.com/pedido/1234
-              Footer: DisparaZap
-              Phone: 554192421234@s.whatsapp.net
-              Title: Confirmação de entrega
+              footer: DisparaZap
+              phone: 554192421234@s.whatsapp.net
+              title: Confirmação de entrega
             schema:
               $ref: '#/components/schemas/PedidoEnvioBotoes'
         required: true
@@ -13136,7 +13148,7 @@ paths:
                       message: could not parse Phone
                     success: false
                 missing_buttons_fields:
-                  summary: Falta `Phone`, o corpo, ou a lista de botões — recusa única para os três
+                  summary: Falta `phone`, o corpo, ou a lista de botões — recusa única para os três
                   value:
                     code: 400
                     error:
@@ -13144,7 +13156,7 @@ paths:
                       message: missing Phone, Body or Buttons
                     success: false
                 no_valid_buttons:
-                  summary: Todos os botões descartados — medido em 2026-08-26 com `displayText` e com `quickreply`
+                  summary: Todos os botões descartados — medido em 2026-08-26 com `display_text` e com `quickreply`
                   value:
                     code: 400
                     error:
@@ -13178,13 +13190,13 @@ paths:
         própria ação.
 
         **Regras**:
-        - **Cada cartão exige `Buttons`**, e um `Body` não vazio. Cartão sem um
+        - **Cada cartão exige `buttons`**, e um `body` não vazio. Cartão sem um
           dos dois é DESCARTADO EM SILÊNCIO; se nenhum sobreviver, a rota responde
-          `400 no_valid_cards`. Medido em 2026-08-26 com um cartão sem `Buttons`.
+          `400 no_valid_cards`. Medido em 2026-08-26 com um cartão sem `buttons`.
         - Os botões dos cartões seguem as mesmas regras de `/chat/send/buttons`,
           incluindo o descarte silencioso por tipo desconhecido.
-        - `Title` do cartão **é decorativo**: o iOS não o desenha, só o Android
-          (HOUSEKEEP F217). Informação obrigatória vai em `Body`.
+        - `title` do cartão **é decorativo**: o iOS não o desenha, só o Android
+          (HOUSEKEEP F217). Informação obrigatória vai em `body`.
         - A imagem de cada cartão é tolerante: se falhar a obtenção, o cartão
           segue sem imagem. Teto de 10 MB por imagem.
         - Só a apresentação `hscroll_cards` é exposta; o modo de álbum não é
@@ -13200,22 +13212,22 @@ paths:
         content:
           application/json:
             example:
-              Body: As pizzas de hoje.
-              Cards:
-                - Body: Molho de tomate, mozzarella e manjericão. R$ 45,00.
-                  Buttons:
+              body: As pizzas de hoje.
+              cards:
+                - body: Molho de tomate, mozzarella e manjericão. R$ 45,00.
+                  buttons:
                     - id: pedir-margherita
                       title: Pedir
                       type: reply
-                  Title: Pizza margherita
-                - Body: Calabresa e cebola. R$ 48,00.
-                  Buttons:
+                  title: Pizza margherita
+                - body: Calabresa e cebola. R$ 48,00.
+                  buttons:
                     - id: pedir-calabresa
                       title: Pedir
                       type: reply
-                  Title: Pizza calabresa
-              Footer: Entregas até às 22h
-              Phone: 554192421234@s.whatsapp.net
+                  title: Pizza calabresa
+              footer: Entregas até às 22h
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEnvioCarrossel'
         required: true
@@ -13254,7 +13266,7 @@ paths:
                       message: could not parse Phone
                     success: false
                 missing_carousel_fields:
-                  summary: Falta `Phone`, o corpo, ou a lista de cartões — recusa única para os três
+                  summary: Falta `phone`, o corpo, ou a lista de cartões — recusa única para os três
                   value:
                     code: 400
                     error:
@@ -13262,7 +13274,7 @@ paths:
                       message: missing Phone, Body or Cards
                     success: false
                 no_valid_cards:
-                  summary: Todos os cartões descartados — medido em 2026-08-26 com um cartão sem `Buttons`
+                  summary: Todos os cartões descartados — medido em 2026-08-26 com um cartão sem `buttons`
                   value:
                     code: 400
                     error:
@@ -13295,7 +13307,7 @@ paths:
         outro atendimento sem obrigar a pessoa a copiar o número à mão.
 
         **Regras**:
-        - `Name` e `Vcard` são obrigatórios.
+        - `name` e `vcard` são obrigatórios.
         - **O vCard não é validado nem reescrito**: o servidor transporta a string
           tal e qual. Um vCard malformado sai daqui com `200` e chega quebrado.
         - Para o cliente reconhecer o contacto como utilizador de WhatsApp, a
@@ -13306,9 +13318,9 @@ paths:
         content:
           application/json:
             example:
-              Name: Suporte DisparaZap
-              Phone: 554192421234@s.whatsapp.net
-              Vcard: |-
+              name: Suporte DisparaZap
+              phone: 554192421234@s.whatsapp.net
+              vcard: |-
                 BEGIN:VCARD
                 VERSION:3.0
                 FN:Suporte DisparaZap
@@ -13349,7 +13361,7 @@ paths:
                       message: could not parse Phone
                     success: false
                 missing_name:
-                  summary: Campo `Name` vazio
+                  summary: Campo `name` vazio
                   value:
                     code: 400
                     error:
@@ -13357,7 +13369,7 @@ paths:
                       message: missing Name in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13365,7 +13377,7 @@ paths:
                       message: missing Phone in payload
                     success: false
                 missing_vcard:
-                  summary: Campo `Vcard` vazio
+                  summary: Campo `vcard` vazio
                   value:
                     code: 400
                     error:
@@ -13398,23 +13410,23 @@ paths:
         guardado, e não desenhado na conversa.
 
         **Regras**:
-        - `FileName` é **obrigatório**: vazio é `400 missing_filename`. É
+        - `file_name` é **obrigatório**: vazio é `400 missing_filename`. É
           metadata pura e nunca vira operação de ficheiro no servidor.
         - A URI de dados aceite é QUALQUER `data:`, sem restrição de MIME — um
           documento legitimamente carrega `application/pdf`, `application/zip` ou
           `text/plain`.
         - Teto de **100 MB**, o maior das cinco rotas de mídia.
-        - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes.
+        - O MIME final vem de `mime_type` quando dado; senão é farejado dos bytes.
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              Caption: A nota fiscal do pedido.
-              Document: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
-              FileName: nota-fiscal-1234.pdf
-              Phone: 554192421234@s.whatsapp.net
+              caption: A nota fiscal do pedido.
+              document: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
+              file_name: nota-fiscal-1234.pdf
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEnvioDocumento'
         required: true
@@ -13466,7 +13478,7 @@ paths:
                       message: document body is empty
                     success: false
                 missing_document:
-                  summary: Campo `Document` vazio
+                  summary: Campo `document` vazio
                   value:
                     code: 400
                     error:
@@ -13474,7 +13486,7 @@ paths:
                       message: missing Document in payload
                     success: false
                 missing_filename:
-                  summary: Campo `FileName` vazio
+                  summary: Campo `file_name` vazio
                   value:
                     code: 400
                     error:
@@ -13482,7 +13494,7 @@ paths:
                       message: missing FileName in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13523,14 +13535,14 @@ paths:
         reenviar. Para revogar, use `/chat/delete/message`.
 
         **Regras**:
-        - `Id` é o `message_id` da mensagem a editar, e `Body` é o novo texto.
-        - **A ordem de validação é observável**: `Phone` e `Body` são verificados
-          primeiro, e o `Id` só DEPOIS de `Phone` ter sido parseado. Um pedido com
-          `Phone` inválido E `Id` ausente responde `invalid_phone`, e não
+        - `id` é o `message_id` da mensagem a editar, e `body` é o novo texto.
+        - **A ordem de validação é observável**: `phone` e `body` são verificados
+          primeiro, e o `id` só DEPOIS de `phone` ter sido parseado. Um pedido com
+          `phone` inválido E `id` ausente responde `invalid_phone`, e não
           `missing_id`.
-        - `StanzaId` e `Participant` preservam a citação da mensagem original, e
+        - `stanza_id` e `participant` preservam a citação da mensagem original, e
           são opcionais.
-        - **`message_id` na resposta é o da mensagem EDITADA** (o `Id` que foi
+        - **`message_id` na resposta é o da mensagem EDITADA** (o `id` que foi
           enviado), e não o de uma mensagem nova — a edição não cria mensagem.
 
         **Não determinado com segurança pela implementação atual**: a janela de
@@ -13543,9 +13555,9 @@ paths:
         content:
           application/json:
             example:
-              Body: Bom dia! O seu pedido sai para entrega às 15h.
-              Id: 3EB0A4B2AFD45E625C0917
-              Phone: 554192421234@s.whatsapp.net
+              body: Bom dia! O seu pedido sai para entrega às 15h.
+              id: 3EB0A4B2AFD45E625C0917
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEdicaoMensagem'
         required: true
@@ -13568,7 +13580,7 @@ paths:
                         $ref: '#/components/schemas/ResultadoEnvio'
                     type: object
           description: |
-            Edição aceite pelo WhatsApp. `message_id` repete o `Id` enviado — é a
+            Edição aceite pelo WhatsApp. `message_id` repete o `id` enviado — é a
             mensagem editada, não uma nova.
         "400":
           content:
@@ -13591,7 +13603,7 @@ paths:
                       message: missing Body in payload
                     success: false
                 missing_id:
-                  summary: Campo `Id` vazio — só sai quando `Phone` já passou e parseou
+                  summary: Campo `id` vazio — só sai quando `phone` já passou e parseou
                   value:
                     code: 400
                     error:
@@ -13599,7 +13611,7 @@ paths:
                       message: missing Id in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13626,25 +13638,25 @@ paths:
         > **Substitui `POST /chat/send/forward`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Encaminha uma mensagem, marcada como encaminhada no cliente. A rota tem
-        **duas formas**, e é a presença de `MessageID` que escolhe qual delas
+        **duas formas**, e é a presença de `message_id` que escolhe qual delas
         corre.
 
-        **Por chave** (`Phone` + `MessageID`): a mensagem guardada é procurada no
+        **Por chave** (`phone` + `message_id`): a mensagem guardada é procurada no
         histórico e reenviada tal e qual — **incluindo mídia, sem novo upload**. O
-        `ForwardingScore` do payload é IGNORADO: o valor é lido do contexto da
-        mensagem original e incrementado em 1, como o Baileys faz. `Chat` é
+        `forwarding_score` do payload é IGNORADO: o valor é lido do contexto da
+        mensagem original e incrementado em 1, como o Baileys faz. `chat_jid` é
         opcional e hoje não entra na busca; está reservado para desambiguação
         futura.
 
-        **Por conteúdo** (`Phone` + `Body`): a API cria uma mensagem de texto NOVA
-        marcada como encaminhada. O `ForwardingScore` do payload é respeitado
+        **Por conteúdo** (`phone` + `body`): a API cria uma mensagem de texto NOVA
+        marcada como encaminhada. O `forwarding_score` do payload é respeitado
         apenas quando é MAIOR que zero; ausente, `null` e `0` caem todos no
         padrão `1`, logo **não há maneira de pedir score `0`** por esta rota.
 
         **Regras**:
-        - Sem `MessageID`, `Body` passa a ser obrigatório — vazio é
+        - Sem `message_id`, `body` passa a ser obrigatório — vazio é
           `400 missing_body`.
-        - Com `MessageID`, `Body` é ignorado.
+        - Com `message_id`, `body` é ignorado.
         - A forma por chave depende do histórico de mensagens, que **não vem
           ligado por omissão**: com `history = 0` nada é gravado, e a busca
           devolve `404 message_not_found`. Ligue com
@@ -13659,15 +13671,15 @@ paths:
               por_chave:
                 summary: Por chave de mensagem — reenvia a mensagem guardada, mídia incluída
                 value:
-                  Chat: 120363411669320145@g.us
-                  MessageID: 3EB0A4B2AFD45E625C0917
-                  Phone: 554192421234@s.whatsapp.net
+                  chat_jid: 120363411669320145@g.us
+                  message_id: 3EB0A4B2AFD45E625C0917
+                  phone: 554192421234@s.whatsapp.net
               por_conteudo:
                 summary: Por conteúdo — cria texto novo marcado como encaminhado
                 value:
-                  Body: Bom dia! O seu pedido saiu para entrega.
-                  ForwardingScore: 1
-                  Phone: 554192421234@s.whatsapp.net
+                  body: Bom dia! O seu pedido saiu para entrega.
+                  forwarding_score: 1
+                  phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEncaminhamento'
         required: true
@@ -13705,7 +13717,7 @@ paths:
                       message: could not parse Phone
                     success: false
                 missing_body:
-                  summary: Forma por conteúdo sem `Body`
+                  summary: Forma por conteúdo sem `body`
                   value:
                     code: 400
                     error:
@@ -13713,7 +13725,7 @@ paths:
                       message: missing Body in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13738,7 +13750,7 @@ paths:
                       message: stored message has no data
                     success: false
                 message_not_found:
-                  summary: Nenhuma linha no histórico para esse `MessageID`
+                  summary: Nenhuma linha no histórico para esse `message_id`
                   value:
                     code: 404
                     error:
@@ -13748,7 +13760,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            Forma por chave: não há mensagem com esse `MessageID` no histórico
+            Forma por chave: não há mensagem com esse `message_id` no histórico
             desta sessão, ou ela existe sem o conteúdo guardado. A causa mais
             comum é o histórico estar desligado (`history = 0`, o padrão).
         "422":
@@ -13778,7 +13790,7 @@ paths:
           `data:application/pdf;...` **não** conta como imagem e termina em
           `400 unsupported_image_source`.
         - Teto de **16 MB** nos dois transportes.
-        - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes
+        - O MIME final vem de `mime_type` quando dado; senão é farejado dos bytes
           DECODIFICADOS. O rótulo que a própria URI de dados declara é ignorado de
           propósito — aceitá-lo abriria a porta a bytes de um tipo com rótulo de
           outro. Se o resultado não for de imagem, é `400 invalid_image_mime_type`.
@@ -13788,9 +13800,9 @@ paths:
         content:
           application/json:
             example:
-              Caption: A etiqueta do seu pedido.
-              Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-              Phone: 554192421234@s.whatsapp.net
+              caption: A etiqueta do seu pedido.
+              image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEnvioImagem'
         required: true
@@ -13858,7 +13870,7 @@ paths:
                       message: resolved MIME type is not an image type
                     success: false
                 missing_image:
-                  summary: Campo `Image` vazio
+                  summary: Campo `image` vazio
                   value:
                     code: 400
                     error:
@@ -13866,7 +13878,7 @@ paths:
                       message: missing Image in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13907,39 +13919,40 @@ paths:
         lista de serviços, um menu de atendimento.
 
         **Regras**:
-        - Duas formas de entrada: `Sections` (preferida, multi-secção) e `List`
+        - Duas formas de entrada: `sections` (preferida, multi-secção) e `list`
           (legada, lista plana embrulhada numa secção única cujo título vem de
-          `TopText`, ou de `Menu` quando `TopText` vem vazio). Quando `Sections`
-          vem preenchida, `List` é ignorada.
-        - O corpo aceita quatro nomes, nesta ordem: `Desc`, `Body`, `body`,
-          `text`. Nenhum preenchido é `400 missing_desc`.
-        - `ButtonText` vazio vira `Select`.
+          `top_text`, ou de `Menu` quando `top_text` vem vazio). Quando `sections`
+          vem preenchida, `list` é ignorada.
+        - O corpo aceita três nomes, nesta ordem: `desc`, `body`, `text`.
+          Nenhum preenchido é `400 missing_desc`.
+        - `button_text` vazio vira `Select`.
         - **Descarte silencioso em duas camadas**: linha sem `title` é descartada;
           secção que fica sem linhas é descartada. Só quando nenhuma secção
           sobrevive é que a rota recusa, com `400 no_valid_sections`. Mandar três
           linhas e receber `200` não garante que chegaram três.
-        - O identificador de cada linha é `RowId`, com `RowID`, `rowId` e `rowID`
-          como sinónimos; vazios os quatro, o próprio título vira identificador.
+        - O identificador de cada linha é `row_id`; vazio, o próprio título vira
+          identificador (colapso de quatro grafias antigas para uma, HOUSEKEEP
+          F317).
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              ButtonText: Ver cardápio
-              Desc: Escolha um item do cardápio.
-              FooterText: Entregas até às 22h
-              Phone: 554192421234@s.whatsapp.net
-              Sections:
+              button_text: Ver cardápio
+              desc: Escolha um item do cardápio.
+              footer_text: Entregas até às 22h
+              phone: 554192421234@s.whatsapp.net
+              sections:
                 - rows:
-                    - RowId: margherita
-                      desc: Molho de tomate, mozzarella e manjericão
+                    - desc: Molho de tomate, mozzarella e manjericão
+                      row_id: margherita
                       title: Pizza margherita
-                    - RowId: calabresa
-                      desc: Calabresa e cebola
+                    - desc: Calabresa e cebola
+                      row_id: calabresa
                       title: Pizza calabresa
                   title: Pizzas
-              TopText: Cardápio de hoje
+              top_text: Cardápio de hoje
             schema:
               $ref: '#/components/schemas/PedidoEnvioLista'
         required: true
@@ -13977,7 +13990,7 @@ paths:
                       message: missing Desc/Body in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -13985,7 +13998,7 @@ paths:
                       message: missing Phone in payload
                     success: false
                 missing_sections:
-                  summary: Nem `Sections` nem `List`
+                  summary: Nem `sections` nem `list`
                   value:
                     code: 400
                     error:
@@ -14027,21 +14040,21 @@ paths:
         por esta API.
 
         **Regras**:
-        - `Latitude` e `Longitude` são obrigatórios, e **zero é valor VÁLIDO**
+        - `latitude` e `longitude` são obrigatórios, e **zero é valor VÁLIDO**
           (HOUSEKEEP F121). Os campos distinguem "não informado" de "zero": omitir
           é `400 missing_latitude` / `400 missing_longitude`, mandar `0` é aceite —
           é o ponto onde o equador cruza o meridiano de Greenwich.
-        - `Name` é opcional e serve só de rótulo.
+        - `name` é opcional e serve só de rótulo.
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              Latitude: -25.4284
-              Longitude: -49.2733
-              Name: Curitiba
-              Phone: 554192421234@s.whatsapp.net
+              latitude: -25.4284
+              longitude: -49.2733
+              name: Curitiba
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEnvioLocalizacao'
         required: true
@@ -14077,7 +14090,7 @@ paths:
                       message: could not parse Phone
                     success: false
                 missing_latitude:
-                  summary: Campo `Latitude` ausente — note que `0` NÃO cai aqui
+                  summary: Campo `latitude` ausente — note que `0` NÃO cai aqui
                   value:
                     code: 400
                     error:
@@ -14085,7 +14098,7 @@ paths:
                       message: missing Latitude in payload
                     success: false
                 missing_longitude:
-                  summary: Campo `Longitude` ausente
+                  summary: Campo `longitude` ausente
                   value:
                     code: 400
                     error:
@@ -14093,7 +14106,7 @@ paths:
                       message: missing Longitude in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -14126,11 +14139,11 @@ paths:
         pedir resposta em texto livre.
 
         **Regras**:
-        - **O campo de destino chama-se `Group`, e não `Phone`** — mesmo para uma
+        - **O campo de destino chama-se `group`, e não `phone`** — mesmo para uma
           enquete enviada a um contacto individual. Medido em 2026-08-26: com
-          `Phone` a rota responde `400 missing_group`. O nome universal `chat`
+          `phone` a rota responde `400 missing_group`. O nome universal `chat`
           também funciona.
-        - `Header` é a pergunta, e é obrigatório.
+        - `header` é a pergunta, e é obrigatório.
         - São precisas **pelo menos duas** opções; menos é
           `400 insufficient_options`.
         - O número de opções selecionáveis é sempre 1 e **não é configurável** por
@@ -14141,9 +14154,9 @@ paths:
         content:
           application/json:
             example:
-              Group: 120363411669320145@g.us
-              Header: Qual o melhor horário para a entrega?
-              Options:
+              group: 120363411669320145@g.us
+              header: Qual o melhor horário para a entrega?
+              options:
                 - Manhã
                 - Tarde
                 - Noite
@@ -14190,7 +14203,7 @@ paths:
                       message: could not parse Group
                     success: false
                 missing_group:
-                  summary: Destino ausente — é o que sai quando se manda `Phone` em vez de `Group`
+                  summary: Destino ausente — é o que sai quando se manda `phone` em vez de `group`
                   value:
                     code: 400
                     error:
@@ -14250,7 +14263,7 @@ paths:
           **16 MB**.
         - Uma entrada que não seja nenhum dos dois transportes segue tal e qual
           para a conversão e é recusada lá, com `400 sticker_processing_failed`.
-        - Os campos de pacote (`PackId`, `PackName`, `PackPublisher`) e `Emojis`
+        - Os campos de pacote (`pack_id`, `pack_name`, `pack_publisher`) e `emojis`
           são metadata e não alteram a imagem.
 
         **Ressalva medida (2026-08-26)**: a rota devolveu `200` e a mensagem
@@ -14269,8 +14282,8 @@ paths:
         content:
           application/json:
             example:
-              Phone: 554192421234@s.whatsapp.net
-              Sticker: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
+              phone: 554192421234@s.whatsapp.net
+              sticker: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
             schema:
               $ref: '#/components/schemas/PedidoEnvioAutocolante'
         required: true
@@ -14298,7 +14311,7 @@ paths:
             application/json:
               examples:
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -14306,7 +14319,7 @@ paths:
                       message: missing Phone in payload
                     success: false
                 missing_sticker:
-                  summary: Campo `Sticker` vazio
+                  summary: Campo `sticker` vazio
                   value:
                     code: 400
                     error:
@@ -14376,38 +14389,38 @@ paths:
 
         **Regras — atenção ao vocabulário, que é diferente do de
         `/chat/send/buttons`**:
-        - O rótulo do botão é **`DisplayText`**, e não `title`.
+        - O rótulo do botão é **`display_text`**, e não `title`.
         - Os tipos são **`quickreply`, `url` e `call`**, e não `reply`/`cta_url`/
-          `cta_call`/`copy`. Um `Type` desconhecido **não** é recusado nem
+          `cta_call`/`copy`. Um `type` desconhecido **não** é recusado nem
           descartado: cai em `quickreply`.
-        - `Type` é comparado **literalmente**, sem `trim` e sem baixar a caixa:
+        - `type` é comparado **literalmente**, sem `trim` e sem baixar a caixa:
           `URL` e `" url"` não batem em `url` e caem em `quickreply` sem aviso.
-        - `DisplayText` **não é validado**: um botão sem rótulo é aceite e sai com
+        - `display_text` **não é validado**: um botão sem rótulo é aceite e sai com
           o rótulo em branco.
-        - **Não há validação do conteúdo por tipo**: um botão `url` sem `Url` é
+        - **Não há validação do conteúdo por tipo**: um botão `url` sem `url` é
           aceite e produz um botão com destino vazio.
-        - `Footer` é **obrigatório** aqui — é a única rota de envio em que o
+        - `footer` é **obrigatório** aqui — é a única rota de envio em que o
           rodapé não é opcional. Vazio é `400 missing_footer`.
-        - `Buttons` vazio é `400 missing_buttons`.
+        - `buttons` vazio é `400 missing_buttons`.
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              Buttons:
-                - DisplayText: Abrir pedido
-                  Type: url
-                  Url: https://exemplo.com/pedido/1234
-                - DisplayText: Ligar para a loja
-                  PhoneNumber: "+554192421234"
-                  Type: call
-                - DisplayText: Já retirei
-                  Id: "1"
-                  Type: quickreply
-              Content: O seu pedido 1234 está pronto para retirada.
-              Footer: DisparaZap
-              Phone: 554192421234@s.whatsapp.net
+              buttons:
+                - display_text: Abrir pedido
+                  type: url
+                  url: https://exemplo.com/pedido/1234
+                - display_text: Ligar para a loja
+                  phone_number: "+554192421234"
+                  type: call
+                - display_text: Já retirei
+                  id: "1"
+                  type: quickreply
+              content: O seu pedido 1234 está pronto para retirada.
+              footer: DisparaZap
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEnvioModelo'
         required: true
@@ -14443,7 +14456,7 @@ paths:
                       message: missing Buttons in payload
                     success: false
                 missing_content:
-                  summary: Campo `Content` vazio
+                  summary: Campo `content` vazio
                   value:
                     code: 400
                     error:
@@ -14451,7 +14464,7 @@ paths:
                       message: missing Content in payload
                     success: false
                 missing_footer:
-                  summary: Campo `Footer` vazio — obrigatório só nesta rota
+                  summary: Campo `footer` vazio — obrigatório só nesta rota
                   value:
                     code: 400
                     error:
@@ -14459,7 +14472,7 @@ paths:
                       message: missing Footer in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -14492,10 +14505,10 @@ paths:
         elemento interativo passa por aqui.
 
         **Regras**:
-        - `Body` é obrigatório; vazio é `400 missing_body`.
-        - O destino vem em `Phone` ou no nome universal `chat`; `Phone` ganha
+        - `body` é obrigatório; vazio é `400 missing_body`.
+        - O destino vem em `phone` ou no nome universal `chat`; `phone` ganha
           quando os dois vierem. Nenhum dos dois é `400 missing_phone`.
-        - Com `LinkPreview: true`, o serviço busca a metadata Open Graph da
+        - Com `link_preview: true`, o serviço busca a metadata Open Graph da
           primeira URL do corpo. Falha na busca **não** é erro: a mensagem segue
           sem pré-visualização.
 
@@ -14507,8 +14520,8 @@ paths:
         content:
           application/json:
             example:
-              Body: Bom dia! O seu pedido saiu para entrega.
-              Phone: 554192421234@s.whatsapp.net
+              body: Bom dia! O seu pedido saiu para entrega.
+              phone: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoEnvioTexto'
         required: true
@@ -14560,7 +14573,7 @@ paths:
                       message: missing Body in payload
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -14610,7 +14623,7 @@ paths:
         - **Piso de 256 bytes** (`send_video.go:36`): abaixo disso é
           `400 video_too_small`, verificado ANTES de qualquer envio. Medido em
           2026-08-26 com uma URI de dados de 6 bytes.
-        - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes.
+        - O MIME final vem de `mime_type` quando dado; senão é farejado dos bytes.
           Se não for de vídeo, é `400 invalid_video_mime_type`.
 
         **Autenticação**: token de sessão.
@@ -14618,9 +14631,9 @@ paths:
         content:
           application/json:
             example:
-              Caption: O vídeo da montagem.
-              Phone: 554192421234@s.whatsapp.net
-              Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+              caption: O vídeo da montagem.
+              phone: 554192421234@s.whatsapp.net
+              video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
             schema:
               $ref: '#/components/schemas/PedidoEnvioVideo'
         required: true
@@ -14656,7 +14669,7 @@ paths:
                       message: resolved MIME type is not a video type
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -14664,7 +14677,7 @@ paths:
                       message: missing Phone in payload
                     success: false
                 missing_video:
-                  summary: Campo `Video` vazio
+                  summary: Campo `video` vazio
                   value:
                     code: 400
                     error:
@@ -18756,13 +18769,13 @@ paths:
         `/chat/send/poll`.
 
         **Regras**:
-        - `Phone` é a CONVERSA onde a enquete está; `Sender` é quem a CRIOU. São
+        - `phone` é a CONVERSA onde a enquete está; `sender` é quem a CRIOU. São
           campos diferentes e ambos obrigatórios.
-        - `Sender` pode vir em PN ou LID: o servidor resolve a forma correcta
+        - `sender` pode vir em PN ou LID: o servidor resolve a forma correcta
           antes de cifrar, preferindo o que o histórico registou e recorrendo ao
           mapeamento PN→LID quando não a tem (HOUSEKEEP F228).
-        - `PollMessageTimestamp` a zero conta como ausente.
-        - `Options` traz o texto EXACTO das opções votadas.
+        - `poll_message_timestamp` a zero conta como ausente.
+        - `options` traz o texto EXACTO das opções votadas.
 
         **O que `200` significa aqui**: o voto foi DESPACHADO ao servidor do
         WhatsApp. **Não** é confirmação de que foi contabilizado, e a resposta não
@@ -18772,7 +18785,7 @@ paths:
       parameters:
         - description: |
             ID da mensagem de enquete original. Substitui o campo
-            `PollMessageId` do corpo — se ambos vierem, o **corpo ganha**.
+            `poll_message_id` do corpo — se ambos vierem, o **corpo ganha**.
           in: path
           name: poll_message_id
           required: true
@@ -18783,12 +18796,12 @@ paths:
         content:
           application/json:
             example:
-              Options:
+              options:
                 - Manhã
-              Phone: 120363411669320145@g.us
-              PollMessageId: 3EB0A4B2AFD45E625C0917
-              PollMessageTimestamp: 1787748016
-              Sender: 554192421234@s.whatsapp.net
+              phone: 120363411669320145@g.us
+              poll_message_id: 3EB0A4B2AFD45E625C0917
+              poll_message_timestamp: 1787748016
+              sender: 554192421234@s.whatsapp.net
             schema:
               $ref: '#/components/schemas/PedidoVotoEnquete'
         required: true
@@ -18818,7 +18831,7 @@ paths:
             application/json:
               examples:
                 invalid_sender:
-                  summary: '`Sender` não parseia como JID'
+                  summary: '`sender` não parseia como JID'
                   value:
                     code: 400
                     error:
@@ -18834,7 +18847,7 @@ paths:
                       message: at least 1 option is required
                     success: false
                 missing_phone:
-                  summary: Destino ausente em `Phone` e em `chat`
+                  summary: Destino ausente em `phone` e em `chat`
                   value:
                     code: 400
                     error:
@@ -18842,7 +18855,7 @@ paths:
                       message: missing Phone in payload
                     success: false
                 missing_poll_message_id:
-                  summary: Campo `PollMessageId` vazio
+                  summary: Campo `poll_message_id` vazio
                   value:
                     code: 400
                     error:
@@ -18850,7 +18863,7 @@ paths:
                       message: missing PollMessageId in payload
                     success: false
                 missing_poll_message_timestamp:
-                  summary: Campo `PollMessageTimestamp` ausente ou zero
+                  summary: Campo `poll_message_timestamp` ausente ou zero
                   value:
                     code: 400
                     error:
@@ -18858,7 +18871,7 @@ paths:
                       message: missing PollMessageTimestamp in payload
                     success: false
                 missing_sender:
-                  summary: Campo `Sender` vazio
+                  summary: Campo `sender` vazio
                   value:
                     code: 400
                     error:
@@ -22142,18 +22155,19 @@ paths:
         `POST /status/set/image`, `/video` e `/audio`; status de TEXTO não é uma
         capacidade que exista.
 
-        **Regras**: `Body` é obrigatório — vazio é `400 missing_body`. Exige um
+        **Regras**: `body` é obrigatório — vazio é `400 missing_body`. Exige um
         cliente vivo.
 
         **Onde confirmar**: o recado aparece em `GET /session/profile/full`, no
-        campo `Status` dentro de `user_info`.
+        campo `Status` dentro de `user_info` (essa parte continua PascalCase —
+        ver F302, correcção deferida para a família utilizadores).
 
         **Autenticação**: token de sessão.
       requestBody:
         content:
           application/json:
             example:
-              Body: Atendimento das 9h às 18h
+              body: Atendimento das 9h às 18h
             schema:
               $ref: '#/components/schemas/PedidoRecado'
         required: true

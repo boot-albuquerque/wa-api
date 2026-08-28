@@ -123,13 +123,13 @@ const (
 // nonSendAxisDownloadBody monta o payload de download com o MIME da
 // capability, como handler_download_test.go faz.
 func nonSendAxisDownloadBody(mime string) string {
-	return `{"Url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
-		`"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
-		`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
-		`"Mimetype":"` + mime + `",` +
-		`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
-		`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
-		`"FileLength":4242}`
+	return `{"url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
+		`"direct_path":"/v/t62.7118-24/12345_678_90.enc",` +
+		`"media_key":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+		`"mimetype":"` + mime + `",` +
+		`"file_enc_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+		`"file_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+		`"file_length":4242}`
 }
 
 // nonSendAxisDownloadCase monta um dos cinco casos de download, pela rota

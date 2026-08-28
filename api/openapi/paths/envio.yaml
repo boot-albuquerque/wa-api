@@ -23,10 +23,10 @@
       elemento interativo passa por aqui.
 
       **Regras**:
-      - `Body` é obrigatório; vazio é `400 missing_body`.
-      - O destino vem em `Phone` ou no nome universal `chat`; `Phone` ganha
+      - `body` é obrigatório; vazio é `400 missing_body`.
+      - O destino vem em `phone` ou no nome universal `chat`; `phone` ganha
         quando os dois vierem. Nenhum dos dois é `400 missing_phone`.
-      - Com `LinkPreview: true`, o serviço busca a metadata Open Graph da
+      - Com `link_preview: true`, o serviço busca a metadata Open Graph da
         primeira URL do corpo. Falha na busca **não** é erro: a mensagem segue
         sem pré-visualização.
 
@@ -43,8 +43,8 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioTexto'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Body: Bom dia! O seu pedido saiu para entrega.
+            phone: 554192421234@s.whatsapp.net
+            body: Bom dia! O seu pedido saiu para entrega.
     responses:
       '200':
         description: Mensagem aceite pelo WhatsApp.
@@ -71,7 +71,7 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
               missing_body:
                 summary: Corpo vazio
@@ -110,7 +110,7 @@
         `data:application/pdf;...` **não** conta como imagem e termina em
         `400 unsupported_image_source`.
       - Teto de **16 MB** nos dois transportes.
-      - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes
+      - O MIME final vem de `mime_type` quando dado; senão é farejado dos bytes
         DECODIFICADOS. O rótulo que a própria URI de dados declara é ignorado de
         propósito — aceitá-lo abriria a porta a bytes de um tipo com rótulo de
         outro. Se o resultado não for de imagem, é `400 invalid_image_mime_type`.
@@ -125,9 +125,9 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioImagem'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
-            Caption: A etiqueta do seu pedido.
+            phone: 554192421234@s.whatsapp.net
+            image: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+            caption: A etiqueta do seu pedido.
     responses:
       '200':
         description: Imagem subida e mensagem aceite pelo WhatsApp.
@@ -152,10 +152,10 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
               missing_image:
-                summary: Campo `Image` vazio
+                summary: Campo `image` vazio
                 value: {code: 400, error: {code: missing_image, message: missing Image in payload}, success: false}
               unsupported_image_source:
                 summary: Nem URI de dados `data:image`, nem URL http(s)
@@ -201,7 +201,7 @@
       - **Piso de 256 bytes** (`send_video.go:36`): abaixo disso é
         `400 video_too_small`, verificado ANTES de qualquer envio. Medido em
         2026-08-26 com uma URI de dados de 6 bytes.
-      - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes.
+      - O MIME final vem de `mime_type` quando dado; senão é farejado dos bytes.
         Se não for de vídeo, é `400 invalid_video_mime_type`.
 
       **Autenticação**: token de sessão.
@@ -214,9 +214,9 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioVideo'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
-            Caption: O vídeo da montagem.
+            phone: 554192421234@s.whatsapp.net
+            video: data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDE=
+            caption: O vídeo da montagem.
     responses:
       '200':
         description: Vídeo subido e mensagem aceite pelo WhatsApp.
@@ -241,7 +241,7 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_video:
-                summary: Campo `Video` vazio
+                summary: Campo `video` vazio
                 value: {code: 400, error: {code: missing_video, message: missing Video in payload}, success: false}
               video_too_small:
                 summary: Menos de 256 bytes — medido em 2026-08-26
@@ -259,7 +259,7 @@
                 summary: O tipo resolvido não é de vídeo
                 value: {code: 400, error: {code: invalid_video_mime_type, message: resolved MIME type is not a video type}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -302,10 +302,10 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioAudio'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Audio: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
+            phone: 554192421234@s.whatsapp.net
+            audio: data:audio/mp4;base64,AAAAIGZ0eXBNNEEgAAACAGlzb21pc28yYXZjMW1wNDE=
             ptt: true
-            Caption: O áudio que combinámos.
+            caption: O áudio que combinámos.
     responses:
       '200':
         description: |
@@ -338,7 +338,7 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_audio:
-                summary: Campo `Audio` vazio
+                summary: Campo `audio` vazio
                 value: {code: 400, error: {code: missing_audio, message: missing Audio in payload}, success: false}
               audio_too_small:
                 summary: Menos de 128 bytes — medido em 2026-08-26
@@ -356,7 +356,7 @@
                 summary: Zero bytes depois de obtidos
                 value: {code: 400, error: {code: empty_audio_body, message: audio body is empty}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -377,13 +377,13 @@
       guardado, e não desenhado na conversa.
 
       **Regras**:
-      - `FileName` é **obrigatório**: vazio é `400 missing_filename`. É
+      - `file_name` é **obrigatório**: vazio é `400 missing_filename`. É
         metadata pura e nunca vira operação de ficheiro no servidor.
       - A URI de dados aceite é QUALQUER `data:`, sem restrição de MIME — um
         documento legitimamente carrega `application/pdf`, `application/zip` ou
         `text/plain`.
       - Teto de **100 MB**, o maior das cinco rotas de mídia.
-      - O MIME final vem de `MimeType` quando dado; senão é farejado dos bytes.
+      - O MIME final vem de `mime_type` quando dado; senão é farejado dos bytes.
 
       **Autenticação**: token de sessão.
     security:
@@ -395,10 +395,10 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioDocumento'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Document: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
-            FileName: nota-fiscal-1234.pdf
-            Caption: A nota fiscal do pedido.
+            phone: 554192421234@s.whatsapp.net
+            document: data:application/pdf;base64,JVBERi0xLjQKJcOkw7zDtsOfCg==
+            file_name: nota-fiscal-1234.pdf
+            caption: A nota fiscal do pedido.
     responses:
       '200':
         description: Documento subido e mensagem aceite pelo WhatsApp.
@@ -423,10 +423,10 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_document:
-                summary: Campo `Document` vazio
+                summary: Campo `document` vazio
                 value: {code: 400, error: {code: missing_document, message: missing Document in payload}, success: false}
               missing_filename:
-                summary: Campo `FileName` vazio
+                summary: Campo `file_name` vazio
                 value: {code: 400, error: {code: missing_filename, message: missing FileName in payload}, success: false}
               unsupported_document_source:
                 summary: Nem URI de dados `data:`, nem URL http(s)
@@ -441,7 +441,7 @@
                 summary: Zero bytes depois de obtidos
                 value: {code: 400, error: {code: empty_document_body, message: document body is empty}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -481,7 +481,7 @@
         **16 MB**.
       - Uma entrada que não seja nenhum dos dois transportes segue tal e qual
         para a conversão e é recusada lá, com `400 sticker_processing_failed`.
-      - Os campos de pacote (`PackId`, `PackName`, `PackPublisher`) e `Emojis`
+      - Os campos de pacote (`pack_id`, `pack_name`, `pack_publisher`) e `emojis`
         são metadata e não alteram a imagem.
 
       **Ressalva medida (2026-08-26)**: a rota devolveu `200` e a mensagem
@@ -505,8 +505,8 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioAutocolante'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Sticker: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
+            phone: 554192421234@s.whatsapp.net
+            sticker: data:image/webp;base64,UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==
     responses:
       '200':
         description: Autocolante convertido, subido e aceite pelo WhatsApp.
@@ -531,7 +531,7 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_sticker:
-                summary: Campo `Sticker` vazio
+                summary: Campo `sticker` vazio
                 value: {code: 400, error: {code: missing_sticker, message: missing Sticker in payload}, success: false}
               sticker_processing_failed:
                 summary: A entrada não é uma URI de dados que a conversão reconheça
@@ -543,7 +543,7 @@
                 summary: A URL não pôde ser buscada
                 value: {code: 400, error: {code: sticker_fetch_failed, message: failed to fetch sticker from url}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -575,11 +575,11 @@
       por esta API.
 
       **Regras**:
-      - `Latitude` e `Longitude` são obrigatórios, e **zero é valor VÁLIDO**
+      - `latitude` e `longitude` são obrigatórios, e **zero é valor VÁLIDO**
         (HOUSEKEEP F121). Os campos distinguem "não informado" de "zero": omitir
         é `400 missing_latitude` / `400 missing_longitude`, mandar `0` é aceite —
         é o ponto onde o equador cruza o meridiano de Greenwich.
-      - `Name` é opcional e serve só de rótulo.
+      - `name` é opcional e serve só de rótulo.
 
       **Autenticação**: token de sessão.
     security:
@@ -591,10 +591,10 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioLocalizacao'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Latitude: -25.4284
-            Longitude: -49.2733
-            Name: Curitiba
+            phone: 554192421234@s.whatsapp.net
+            latitude: -25.4284
+            longitude: -49.2733
+            name: Curitiba
     responses:
       '200':
         description: Localização aceite pelo WhatsApp.
@@ -619,13 +619,13 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_latitude:
-                summary: Campo `Latitude` ausente — note que `0` NÃO cai aqui
+                summary: Campo `latitude` ausente — note que `0` NÃO cai aqui
                 value: {code: 400, error: {code: missing_latitude, message: missing Latitude in payload}, success: false}
               missing_longitude:
-                summary: Campo `Longitude` ausente
+                summary: Campo `longitude` ausente
                 value: {code: 400, error: {code: missing_longitude, message: missing Longitude in payload}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
               invalid_phone:
                 summary: Destino não parseia como JID
@@ -649,7 +649,7 @@
       outro atendimento sem obrigar a pessoa a copiar o número à mão.
 
       **Regras**:
-      - `Name` e `Vcard` são obrigatórios.
+      - `name` e `vcard` são obrigatórios.
       - **O vCard não é validado nem reescrito**: o servidor transporta a string
         tal e qual. Um vCard malformado sai daqui com `200` e chega quebrado.
       - Para o cliente reconhecer o contacto como utilizador de WhatsApp, a
@@ -665,9 +665,9 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioContacto'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Name: Suporte DisparaZap
-            Vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:Suporte DisparaZap\nTEL;type=CELL;waid=554192421234:+55 41 9242-1234\nEND:VCARD"
+            phone: 554192421234@s.whatsapp.net
+            name: Suporte DisparaZap
+            vcard: "BEGIN:VCARD\nVERSION:3.0\nFN:Suporte DisparaZap\nTEL;type=CELL;waid=554192421234:+55 41 9242-1234\nEND:VCARD"
     responses:
       '200':
         description: Cartão de contacto aceite pelo WhatsApp.
@@ -692,13 +692,13 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_name:
-                summary: Campo `Name` vazio
+                summary: Campo `name` vazio
                 value: {code: 400, error: {code: missing_name, message: missing Name in payload}, success: false}
               missing_vcard:
-                summary: Campo `Vcard` vazio
+                summary: Campo `vcard` vazio
                 value: {code: 400, error: {code: missing_vcard, message: missing Vcard in payload}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
               invalid_phone:
                 summary: Destino não parseia como JID
@@ -722,11 +722,11 @@
       pedir resposta em texto livre.
 
       **Regras**:
-      - **O campo de destino chama-se `Group`, e não `Phone`** — mesmo para uma
+      - **O campo de destino chama-se `group`, e não `phone`** — mesmo para uma
         enquete enviada a um contacto individual. Medido em 2026-08-26: com
-        `Phone` a rota responde `400 missing_group`. O nome universal `chat`
+        `phone` a rota responde `400 missing_group`. O nome universal `chat`
         também funciona.
-      - `Header` é a pergunta, e é obrigatório.
+      - `header` é a pergunta, e é obrigatório.
       - São precisas **pelo menos duas** opções; menos é
         `400 insufficient_options`.
       - O número de opções selecionáveis é sempre 1 e **não é configurável** por
@@ -742,9 +742,9 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioEnquete'
           example:
-            Group: 120363411669320145@g.us
-            Header: Qual o melhor horário para a entrega?
-            Options: [Manhã, Tarde, Noite]
+            group: 120363411669320145@g.us
+            header: Qual o melhor horário para a entrega?
+            options: [Manhã, Tarde, Noite]
     responses:
       '200':
         description: Enquete aceite pelo WhatsApp.
@@ -769,7 +769,7 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_group:
-                summary: Destino ausente — é o que sai quando se manda `Phone` em vez de `Group`
+                summary: Destino ausente — é o que sai quando se manda `phone` em vez de `group`
                 value: {code: 400, error: {code: missing_group, message: missing Group in payload}, success: false}
               missing_header:
                 summary: Pergunta vazia
@@ -801,13 +801,13 @@
       `/chat/send/poll`.
 
       **Regras**:
-      - `Phone` é a CONVERSA onde a enquete está; `Sender` é quem a CRIOU. São
+      - `phone` é a CONVERSA onde a enquete está; `sender` é quem a CRIOU. São
         campos diferentes e ambos obrigatórios.
-      - `Sender` pode vir em PN ou LID: o servidor resolve a forma correcta
+      - `sender` pode vir em PN ou LID: o servidor resolve a forma correcta
         antes de cifrar, preferindo o que o histórico registou e recorrendo ao
         mapeamento PN→LID quando não a tem (HOUSEKEEP F228).
-      - `PollMessageTimestamp` a zero conta como ausente.
-      - `Options` traz o texto EXACTO das opções votadas.
+      - `poll_message_timestamp` a zero conta como ausente.
+      - `options` traz o texto EXACTO das opções votadas.
 
       **O que `200` significa aqui**: o voto foi DESPACHADO ao servidor do
       WhatsApp. **Não** é confirmação de que foi contabilizado, e a resposta não
@@ -822,7 +822,7 @@
         required: true
         description: |
           ID da mensagem de enquete original. Substitui o campo
-          `PollMessageId` do corpo — se ambos vierem, o **corpo ganha**.
+          `poll_message_id` do corpo — se ambos vierem, o **corpo ganha**.
         schema: {type: string, example: 3EB0A4B2AFD45E625C0917}
     requestBody:
       required: true
@@ -831,11 +831,11 @@
           schema:
             $ref: '#/components/schemas/PedidoVotoEnquete'
           example:
-            Phone: 120363411669320145@g.us
-            Sender: 554192421234@s.whatsapp.net
-            PollMessageId: 3EB0A4B2AFD45E625C0917
-            PollMessageTimestamp: 1787748016
-            Options: [Manhã]
+            phone: 120363411669320145@g.us
+            sender: 554192421234@s.whatsapp.net
+            poll_message_id: 3EB0A4B2AFD45E625C0917
+            poll_message_timestamp: 1787748016
+            options: [Manhã]
     responses:
       '200':
         description: |
@@ -862,22 +862,22 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_poll_message_id:
-                summary: Campo `PollMessageId` vazio
+                summary: Campo `poll_message_id` vazio
                 value: {code: 400, error: {code: missing_poll_message_id, message: missing PollMessageId in payload}, success: false}
               missing_poll_message_timestamp:
-                summary: Campo `PollMessageTimestamp` ausente ou zero
+                summary: Campo `poll_message_timestamp` ausente ou zero
                 value: {code: 400, error: {code: missing_poll_message_timestamp, message: missing PollMessageTimestamp in payload}, success: false}
               missing_sender:
-                summary: Campo `Sender` vazio
+                summary: Campo `sender` vazio
                 value: {code: 400, error: {code: missing_sender, message: missing Sender in payload}, success: false}
               missing_options:
                 summary: Nenhuma opção votada
                 value: {code: 400, error: {code: missing_options, message: at least 1 option is required}, success: false}
               invalid_sender:
-                summary: "`Sender` não parseia como JID"
+                summary: "`sender` não parseia como JID"
                 value: {code: 400, error: {code: invalid_sender, message: could not parse Sender}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -898,9 +898,9 @@
       copiar um código sem obrigar a pessoa a escrever.
 
       **Regras — e esta é a rota com mais armadilhas medidas do grupo**:
-      - **O rótulo do botão é `title`**, com `text` e `buttonText` como
-        sinónimos. **Não é `displayText`** — esse é o nome de
-        `/chat/send/template`. Medido em 2026-08-26: um botão com `displayText`
+      - **O rótulo do botão é `title`**, com `text` e `button_text` como
+        sinónimos. **Não é `display_text`** — esse é o nome de
+        `/chat/send/template`. Medido em 2026-08-26: um botão com `display_text`
         é DESCARTADO EM SILÊNCIO.
       - Os tipos aceites são `reply`, `cta_url`, `cta_call` e `copy`. Tipo vazio
         vira `reply`; **tipo desconhecido descarta o botão em silêncio** — em
@@ -912,7 +912,7 @@
       - O título é truncado em **20 runas**, e o corte acontece antes de o
         título servir de `id` — logo o identificador que volta no clique já vem
         truncado.
-      - `Phone`, corpo (`Body` ou `text`) e `Buttons` não vazio são recusados
+      - `phone`, corpo (`body` ou `text`) e `buttons` não vazio são recusados
         JUNTOS, numa única mensagem: `400 missing_buttons_fields`.
       - A imagem de cabeçalho é opcional e tolerante: se falhar a obtenção, a
         mensagem segue sem ela.
@@ -927,11 +927,11 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioBotoes'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Title: Confirmação de entrega
-            Body: Confirma a entrega para hoje às 15h?
-            Footer: DisparaZap
-            Buttons:
+            phone: 554192421234@s.whatsapp.net
+            title: Confirmação de entrega
+            body: Confirma a entrega para hoje às 15h?
+            footer: DisparaZap
+            buttons:
               - {type: reply, title: Confirmar, id: confirmar}
               - {type: reply, title: Remarcar, id: remarcar}
               - {type: cta_url, title: Ver pedido, url: 'https://exemplo.com/pedido/1234'}
@@ -962,10 +962,10 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_buttons_fields:
-                summary: Falta `Phone`, o corpo, ou a lista de botões — recusa única para os três
+                summary: Falta `phone`, o corpo, ou a lista de botões — recusa única para os três
                 value: {code: 400, error: {code: missing_buttons_fields, message: 'missing Phone, Body or Buttons'}, success: false}
               no_valid_buttons:
-                summary: Todos os botões descartados — medido em 2026-08-26 com `displayText` e com `quickreply`
+                summary: Todos os botões descartados — medido em 2026-08-26 com `display_text` e com `quickreply`
                 value: {code: 400, error: {code: no_valid_buttons, message: 'no valid buttons parsed, accepted types: reply, cta_url, cta_call, copy'}, success: false}
               invalid_phone:
                 summary: Destino não parseia como JID
@@ -989,19 +989,20 @@
       lista de serviços, um menu de atendimento.
 
       **Regras**:
-      - Duas formas de entrada: `Sections` (preferida, multi-secção) e `List`
+      - Duas formas de entrada: `sections` (preferida, multi-secção) e `list`
         (legada, lista plana embrulhada numa secção única cujo título vem de
-        `TopText`, ou de `Menu` quando `TopText` vem vazio). Quando `Sections`
-        vem preenchida, `List` é ignorada.
-      - O corpo aceita quatro nomes, nesta ordem: `Desc`, `Body`, `body`,
-        `text`. Nenhum preenchido é `400 missing_desc`.
-      - `ButtonText` vazio vira `Select`.
+        `top_text`, ou de `Menu` quando `top_text` vem vazio). Quando `sections`
+        vem preenchida, `list` é ignorada.
+      - O corpo aceita três nomes, nesta ordem: `desc`, `body`, `text`.
+        Nenhum preenchido é `400 missing_desc`.
+      - `button_text` vazio vira `Select`.
       - **Descarte silencioso em duas camadas**: linha sem `title` é descartada;
         secção que fica sem linhas é descartada. Só quando nenhuma secção
         sobrevive é que a rota recusa, com `400 no_valid_sections`. Mandar três
         linhas e receber `200` não garante que chegaram três.
-      - O identificador de cada linha é `RowId`, com `RowID`, `rowId` e `rowID`
-        como sinónimos; vazios os quatro, o próprio título vira identificador.
+      - O identificador de cada linha é `row_id`; vazio, o próprio título vira
+        identificador (colapso de quatro grafias antigas para uma, HOUSEKEEP
+        F317).
 
       **Autenticação**: token de sessão.
     security:
@@ -1013,16 +1014,16 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioLista'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            TopText: Cardápio de hoje
-            Desc: Escolha um item do cardápio.
-            FooterText: Entregas até às 22h
-            ButtonText: Ver cardápio
-            Sections:
+            phone: 554192421234@s.whatsapp.net
+            top_text: Cardápio de hoje
+            desc: Escolha um item do cardápio.
+            footer_text: Entregas até às 22h
+            button_text: Ver cardápio
+            sections:
               - title: Pizzas
                 rows:
-                  - {title: Pizza margherita, desc: 'Molho de tomate, mozzarella e manjericão', RowId: margherita}
-                  - {title: Pizza calabresa, desc: Calabresa e cebola, RowId: calabresa}
+                  - {title: Pizza margherita, desc: 'Molho de tomate, mozzarella e manjericão', row_id: margherita}
+                  - {title: Pizza calabresa, desc: Calabresa e cebola, row_id: calabresa}
     responses:
       '200':
         description: |
@@ -1052,13 +1053,13 @@
                 summary: Corpo vazio nos quatro nomes aceites
                 value: {code: 400, error: {code: missing_desc, message: missing Desc/Body in payload}, success: false}
               missing_sections:
-                summary: Nem `Sections` nem `List`
+                summary: Nem `sections` nem `list`
                 value: {code: 400, error: {code: missing_sections, message: missing Sections (or List) in payload}, success: false}
               no_valid_sections:
                 summary: Todas as linhas e secções descartadas na normalização
                 value: {code: 400, error: {code: no_valid_sections, message: no valid sections/rows found in payload}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1080,13 +1081,13 @@
       própria ação.
 
       **Regras**:
-      - **Cada cartão exige `Buttons`**, e um `Body` não vazio. Cartão sem um
+      - **Cada cartão exige `buttons`**, e um `body` não vazio. Cartão sem um
         dos dois é DESCARTADO EM SILÊNCIO; se nenhum sobreviver, a rota responde
-        `400 no_valid_cards`. Medido em 2026-08-26 com um cartão sem `Buttons`.
+        `400 no_valid_cards`. Medido em 2026-08-26 com um cartão sem `buttons`.
       - Os botões dos cartões seguem as mesmas regras de `/chat/send/buttons`,
         incluindo o descarte silencioso por tipo desconhecido.
-      - `Title` do cartão **é decorativo**: o iOS não o desenha, só o Android
-        (HOUSEKEEP F217). Informação obrigatória vai em `Body`.
+      - `title` do cartão **é decorativo**: o iOS não o desenha, só o Android
+        (HOUSEKEEP F217). Informação obrigatória vai em `body`.
       - A imagem de cada cartão é tolerante: se falhar a obtenção, o cartão
         segue sem imagem. Teto de 10 MB por imagem.
       - Só a apresentação `hscroll_cards` é exposta; o modo de álbum não é
@@ -1107,17 +1108,17 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioCarrossel'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Body: As pizzas de hoje.
-            Footer: Entregas até às 22h
-            Cards:
-              - Title: Pizza margherita
-                Body: 'Molho de tomate, mozzarella e manjericão. R$ 45,00.'
-                Buttons:
+            phone: 554192421234@s.whatsapp.net
+            body: As pizzas de hoje.
+            footer: Entregas até às 22h
+            cards:
+              - title: Pizza margherita
+                body: 'Molho de tomate, mozzarella e manjericão. R$ 45,00.'
+                buttons:
                   - {type: reply, title: Pedir, id: pedir-margherita}
-              - Title: Pizza calabresa
-                Body: 'Calabresa e cebola. R$ 48,00.'
-                Buttons:
+              - title: Pizza calabresa
+                body: 'Calabresa e cebola. R$ 48,00.'
+                buttons:
                   - {type: reply, title: Pedir, id: pedir-calabresa}
     responses:
       '200':
@@ -1146,10 +1147,10 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_carousel_fields:
-                summary: Falta `Phone`, o corpo, ou a lista de cartões — recusa única para os três
+                summary: Falta `phone`, o corpo, ou a lista de cartões — recusa única para os três
                 value: {code: 400, error: {code: missing_carousel_fields, message: 'missing Phone, Body or Cards'}, success: false}
               no_valid_cards:
-                summary: Todos os cartões descartados — medido em 2026-08-26 com um cartão sem `Buttons`
+                summary: Todos os cartões descartados — medido em 2026-08-26 com um cartão sem `buttons`
                 value: {code: 400, error: {code: no_valid_cards, message: 'no valid cards after normalisation, accepted button types: reply, cta_url, cta_call, copy'}, success: false}
               invalid_phone:
                 summary: Destino não parseia como JID
@@ -1174,19 +1175,19 @@
 
       **Regras — atenção ao vocabulário, que é diferente do de
       `/chat/send/buttons`**:
-      - O rótulo do botão é **`DisplayText`**, e não `title`.
+      - O rótulo do botão é **`display_text`**, e não `title`.
       - Os tipos são **`quickreply`, `url` e `call`**, e não `reply`/`cta_url`/
-        `cta_call`/`copy`. Um `Type` desconhecido **não** é recusado nem
+        `cta_call`/`copy`. Um `type` desconhecido **não** é recusado nem
         descartado: cai em `quickreply`.
-      - `Type` é comparado **literalmente**, sem `trim` e sem baixar a caixa:
+      - `type` é comparado **literalmente**, sem `trim` e sem baixar a caixa:
         `URL` e `" url"` não batem em `url` e caem em `quickreply` sem aviso.
-      - `DisplayText` **não é validado**: um botão sem rótulo é aceite e sai com
+      - `display_text` **não é validado**: um botão sem rótulo é aceite e sai com
         o rótulo em branco.
-      - **Não há validação do conteúdo por tipo**: um botão `url` sem `Url` é
+      - **Não há validação do conteúdo por tipo**: um botão `url` sem `url` é
         aceite e produz um botão com destino vazio.
-      - `Footer` é **obrigatório** aqui — é a única rota de envio em que o
+      - `footer` é **obrigatório** aqui — é a única rota de envio em que o
         rodapé não é opcional. Vazio é `400 missing_footer`.
-      - `Buttons` vazio é `400 missing_buttons`.
+      - `buttons` vazio é `400 missing_buttons`.
 
       **Autenticação**: token de sessão.
     security:
@@ -1198,13 +1199,13 @@
           schema:
             $ref: '#/components/schemas/PedidoEnvioModelo'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Content: O seu pedido 1234 está pronto para retirada.
-            Footer: DisparaZap
-            Buttons:
-              - {DisplayText: Abrir pedido, Url: 'https://exemplo.com/pedido/1234', Type: url}
-              - {DisplayText: Ligar para a loja, PhoneNumber: '+554192421234', Type: call}
-              - {DisplayText: Já retirei, Type: quickreply, Id: '1'}
+            phone: 554192421234@s.whatsapp.net
+            content: O seu pedido 1234 está pronto para retirada.
+            footer: DisparaZap
+            buttons:
+              - {display_text: Abrir pedido, url: 'https://exemplo.com/pedido/1234', type: url}
+              - {display_text: Ligar para a loja, phone_number: '+554192421234', type: call}
+              - {display_text: Já retirei, type: quickreply, id: '1'}
     responses:
       '200':
         description: Modelo aceite pelo WhatsApp.
@@ -1229,16 +1230,16 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_content:
-                summary: Campo `Content` vazio
+                summary: Campo `content` vazio
                 value: {code: 400, error: {code: missing_content, message: missing Content in payload}, success: false}
               missing_footer:
-                summary: Campo `Footer` vazio — obrigatório só nesta rota
+                summary: Campo `footer` vazio — obrigatório só nesta rota
                 value: {code: 400, error: {code: missing_footer, message: missing Footer in payload}, success: false}
               missing_buttons:
                 summary: Lista de botões vazia
                 value: {code: 400, error: {code: missing_buttons, message: missing Buttons in payload}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1253,25 +1254,25 @@
     summary: Encaminhar uma mensagem
     description: |
       Encaminha uma mensagem, marcada como encaminhada no cliente. A rota tem
-      **duas formas**, e é a presença de `MessageID` que escolhe qual delas
+      **duas formas**, e é a presença de `message_id` que escolhe qual delas
       corre.
 
-      **Por chave** (`Phone` + `MessageID`): a mensagem guardada é procurada no
+      **Por chave** (`phone` + `message_id`): a mensagem guardada é procurada no
       histórico e reenviada tal e qual — **incluindo mídia, sem novo upload**. O
-      `ForwardingScore` do payload é IGNORADO: o valor é lido do contexto da
-      mensagem original e incrementado em 1, como o Baileys faz. `Chat` é
+      `forwarding_score` do payload é IGNORADO: o valor é lido do contexto da
+      mensagem original e incrementado em 1, como o Baileys faz. `chat_jid` é
       opcional e hoje não entra na busca; está reservado para desambiguação
       futura.
 
-      **Por conteúdo** (`Phone` + `Body`): a API cria uma mensagem de texto NOVA
-      marcada como encaminhada. O `ForwardingScore` do payload é respeitado
+      **Por conteúdo** (`phone` + `body`): a API cria uma mensagem de texto NOVA
+      marcada como encaminhada. O `forwarding_score` do payload é respeitado
       apenas quando é MAIOR que zero; ausente, `null` e `0` caem todos no
       padrão `1`, logo **não há maneira de pedir score `0`** por esta rota.
 
       **Regras**:
-      - Sem `MessageID`, `Body` passa a ser obrigatório — vazio é
+      - Sem `message_id`, `body` passa a ser obrigatório — vazio é
         `400 missing_body`.
-      - Com `MessageID`, `Body` é ignorado.
+      - Com `message_id`, `body` é ignorado.
       - A forma por chave depende do histórico de mensagens, que **não vem
         ligado por omissão**: com `history = 0` nada é gravado, e a busca
         devolve `404 message_not_found`. Ligue com
@@ -1291,15 +1292,15 @@
             por_chave:
               summary: Por chave de mensagem — reenvia a mensagem guardada, mídia incluída
               value:
-                Phone: 554192421234@s.whatsapp.net
-                MessageID: 3EB0A4B2AFD45E625C0917
-                Chat: 120363411669320145@g.us
+                phone: 554192421234@s.whatsapp.net
+                message_id: 3EB0A4B2AFD45E625C0917
+                chat_jid: 120363411669320145@g.us
             por_conteudo:
               summary: Por conteúdo — cria texto novo marcado como encaminhado
               value:
-                Phone: 554192421234@s.whatsapp.net
-                Body: Bom dia! O seu pedido saiu para entrega.
-                ForwardingScore: 1
+                phone: 554192421234@s.whatsapp.net
+                body: Bom dia! O seu pedido saiu para entrega.
+                forwarding_score: 1
     responses:
       '200':
         description: |
@@ -1326,10 +1327,10 @@
               $ref: '#/components/schemas/Erro'
             examples:
               missing_body:
-                summary: Forma por conteúdo sem `Body`
+                summary: Forma por conteúdo sem `body`
                 value: {code: 400, error: {code: missing_body, message: missing Body in payload}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
               invalid_phone:
                 summary: Destino não parseia como JID
@@ -1338,7 +1339,7 @@
         $ref: '#/components/responses/NaoAutorizado'
       '404':
         description: |
-          Forma por chave: não há mensagem com esse `MessageID` no histórico
+          Forma por chave: não há mensagem com esse `message_id` no histórico
           desta sessão, ou ela existe sem o conteúdo guardado. A causa mais
           comum é o histórico estar desligado (`history = 0`, o padrão).
         content:
@@ -1347,7 +1348,7 @@
               $ref: '#/components/schemas/Erro'
             examples:
               message_not_found:
-                summary: Nenhuma linha no histórico para esse `MessageID`
+                summary: Nenhuma linha no histórico para esse `message_id`
                 value: {code: 404, error: {code: message_not_found, message: message not found in history}, success: false}
               message_no_data:
                 summary: A linha existe, mas sem o conteúdo guardado
@@ -1369,14 +1370,14 @@
       reenviar. Para revogar, use `/chat/delete/message`.
 
       **Regras**:
-      - `Id` é o `message_id` da mensagem a editar, e `Body` é o novo texto.
-      - **A ordem de validação é observável**: `Phone` e `Body` são verificados
-        primeiro, e o `Id` só DEPOIS de `Phone` ter sido parseado. Um pedido com
-        `Phone` inválido E `Id` ausente responde `invalid_phone`, e não
+      - `id` é o `message_id` da mensagem a editar, e `body` é o novo texto.
+      - **A ordem de validação é observável**: `phone` e `body` são verificados
+        primeiro, e o `id` só DEPOIS de `phone` ter sido parseado. Um pedido com
+        `phone` inválido E `id` ausente responde `invalid_phone`, e não
         `missing_id`.
-      - `StanzaId` e `Participant` preservam a citação da mensagem original, e
+      - `stanza_id` e `participant` preservam a citação da mensagem original, e
         são opcionais.
-      - **`message_id` na resposta é o da mensagem EDITADA** (o `Id` que foi
+      - **`message_id` na resposta é o da mensagem EDITADA** (o `id` que foi
         enviado), e não o de uma mensagem nova — a edição não cria mensagem.
 
       **Não determinado com segurança pela implementação atual**: a janela de
@@ -1394,13 +1395,13 @@
           schema:
             $ref: '#/components/schemas/PedidoEdicaoMensagem'
           example:
-            Phone: 554192421234@s.whatsapp.net
-            Id: 3EB0A4B2AFD45E625C0917
-            Body: Bom dia! O seu pedido sai para entrega às 15h.
+            phone: 554192421234@s.whatsapp.net
+            id: 3EB0A4B2AFD45E625C0917
+            body: Bom dia! O seu pedido sai para entrega às 15h.
     responses:
       '200':
         description: |
-          Edição aceite pelo WhatsApp. `message_id` repete o `Id` enviado — é a
+          Edição aceite pelo WhatsApp. `message_id` repete o `id` enviado — é a
           mensagem editada, não uma nova.
         content:
           application/json:
@@ -1426,13 +1427,13 @@
                 summary: Novo texto vazio
                 value: {code: 400, error: {code: missing_body, message: missing Body in payload}, success: false}
               missing_id:
-                summary: Campo `Id` vazio — só sai quando `Phone` já passou e parseou
+                summary: Campo `id` vazio — só sai quando `phone` já passou e parseou
                 value: {code: 400, error: {code: missing_id, message: missing Id in payload}, success: false}
               invalid_phone:
                 summary: Destino não parseia — vence `missing_id` quando os dois falham
                 value: {code: 400, error: {code: invalid_phone, message: could not parse Phone}, success: false}
               missing_phone:
-                summary: Destino ausente em `Phone` e em `chat`
+                summary: Destino ausente em `phone` e em `chat`
                 value: {code: 400, error: {code: missing_phone, message: missing Phone in payload}, success: false}
       '401':
         $ref: '#/components/responses/NaoAutorizado'

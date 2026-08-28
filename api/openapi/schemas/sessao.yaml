@@ -844,10 +844,10 @@ ResultadoConfigS3:
 
     **Ambos os campos têm `omitempty`** (`domain/storage.go`), e isso muda a
     forma da resposta conforme o resultado: a do DELETE — e a de um POST com
-    `enabled: false` — sai só com `Details`, porque `Enabled` fica `false` e
+    `enabled: false` — sai só com `details`, porque `enabled` fica `false` e
     `false` é o valor zero de um booleano.
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       description: |
@@ -856,14 +856,14 @@ ResultadoConfigS3:
         mas os dois casos de uso preenchem-no sempre, logo aparece em toda
         resposta `200`. Nunca `null`.
       example: S3 configuration saved successfully
-    Enabled:
+    enabled:
       type: boolean
       nullable: false
       description: |
         Estado DEPOIS da operação, não eco do pedido.
 
         **Ausente significa `false`.** Com `omitempty`, o valor `false` faz o
-        campo desaparecer do corpo — logo `{"Details":"…"}` sem `Enabled` é a
+        campo desaparecer do corpo — logo `{"details":"…"}` sem `enabled` é a
         resposta de uma revogação bem sucedida, não uma resposta incompleta.
         Nunca vem `null`.
       example: true
@@ -1010,9 +1010,9 @@ ResultadoConfigHmac:
     Resposta de `POST /session/hmac/config` e de `DELETE /session/hmac/config`.
 
     Como em S3, os dois campos têm `omitempty` — a resposta do DELETE sai só
-    com `Details`, porque `Enabled` fica `false` e `false` é o valor zero.
+    com `details`, porque `enabled` fica `false` e `false` é o valor zero.
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       description: |
@@ -1021,7 +1021,7 @@ ResultadoConfigHmac:
         mas os dois casos de uso preenchem-no sempre, logo aparece em toda
         resposta `200`. Nunca `null`.
       example: HMAC configuration saved successfully
-    Enabled:
+    enabled:
       type: boolean
       nullable: false
       description: |
@@ -1072,9 +1072,9 @@ PedidoRecado:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Body]
+  required: [body]
   properties:
-    Body:
+    body:
       type: string
       nullable: false
       minLength: 1

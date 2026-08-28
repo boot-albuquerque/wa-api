@@ -78,13 +78,13 @@ func (c downloadRouteCase) router(md appport.MediaDownloader) http.Handler {
 // body monta um payload com os SETE campos, com o MIME da capability. Os
 // []byte vão em base64, que é como encoding/json os decodifica.
 func (c downloadRouteCase) body() string {
-	return `{"Url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
-		`"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
-		`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
-		`"Mimetype":"` + c.mime + `",` +
-		`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
-		`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
-		`"FileLength":4242}`
+	return `{"url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
+		`"direct_path":"/v/t62.7118-24/12345_678_90.enc",` +
+		`"media_key":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+		`"mimetype":"` + c.mime + `",` +
+		`"file_enc_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+		`"file_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+		`"file_length":4242}`
 }
 
 // downloadServe executa a requisição pela rota registrada.
@@ -234,7 +234,7 @@ func TestDownload_RejectMalformedBody(t *testing.T) {
 		t.Run(c.capability, func(t *testing.T) {
 			md := &contractsfake.MediaDownloader{}
 
-			rec, recs := c.serveCapturingLog(t, md, `{"Url":`, msgAuthed)
+			rec, recs := c.serveCapturingLog(t, md, `{"url":`, msgAuthed)
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			if n := len(md.EnsureSessionCalls); n != 0 {
@@ -256,7 +256,7 @@ func TestDownload_RejectMissingRequiredField(t *testing.T) {
 		t.Run(c.capability, func(t *testing.T) {
 			md := &contractsfake.MediaDownloader{}
 
-			rec, recs := c.serveCapturingLog(t, md, `{"Mimetype":"`+c.mime+`"}`, msgAuthed)
+			rec, recs := c.serveCapturingLog(t, md, `{"mimetype":"`+c.mime+`"}`, msgAuthed)
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			if n := len(md.EnsureSessionCalls); n != 0 {
@@ -284,12 +284,12 @@ func TestDownload_DirectPathOnly_Accepted(t *testing.T) {
 				},
 			}
 
-			body := `{"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
-				`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
-				`"Mimetype":"` + c.mime + `",` +
-				`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
-				`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
-				`"FileLength":4242}`
+			body := `{"direct_path":"/v/t62.7118-24/12345_678_90.enc",` +
+				`"media_key":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+				`"mimetype":"` + c.mime + `",` +
+				`"file_enc_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+				`"file_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+				`"file_length":4242}`
 
 			rec := c.serve(md, body, msgAuthed)
 
@@ -391,7 +391,7 @@ func TestDownload_NoSecretLeak(t *testing.T) {
 		t.Run(c.capability, func(t *testing.T) {
 			md := &contractsfake.MediaDownloader{SessionGuard: contractsfake.FailSession(errors.New("download-session-refused"))}
 
-			body := `{"Url":"https://example.invalid/` + logassertGlobalEncryptionKey + `"}`
+			body := `{"url":"https://example.invalid/` + logassertGlobalEncryptionKey + `"}`
 			mut := func(r *http.Request) *http.Request {
 				r.Header.Set("Authorization", logassertAdminToken)
 				return withUser(r, logassertGlobalHMACKey)

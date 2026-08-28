@@ -31,14 +31,14 @@ const (
 // montar: um sticker webp e uma imagem webp têm o MESMO Mimetype com kinds
 // diferentes — daí não dar para inferir o kind do Mimetype.
 type DownloadRequest struct {
-	Kind          MediaKind `json:"Kind,omitempty"`
-	URL           string    `json:"Url"`
-	DirectPath    string    `json:"DirectPath"`
-	MediaKey      []byte    `json:"MediaKey"`
-	Mimetype      string    `json:"Mimetype"`
-	FileEncSHA256 []byte    `json:"FileEncSHA256"`
-	FileSHA256    []byte    `json:"FileSHA256"`
-	FileLength    uint64    `json:"FileLength"`
+	Kind          MediaKind `json:"kind,omitempty"`
+	URL           string    `json:"url"`
+	DirectPath    string    `json:"direct_path"`
+	MediaKey      []byte    `json:"media_key"`
+	Mimetype      string    `json:"mimetype"`
+	FileEncSHA256 []byte    `json:"file_enc_sha256"`
+	FileSHA256    []byte    `json:"file_sha256"`
+	FileLength    uint64    `json:"file_length"`
 }
 
 // MediaDescriptor é o que a porta de download atravessa: os campos de

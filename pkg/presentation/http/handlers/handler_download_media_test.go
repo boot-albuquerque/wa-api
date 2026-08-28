@@ -35,13 +35,13 @@ func newDownloadMediaRouter(md *contractsfake.MediaDownloader) http.Handler {
 }
 
 func downloadMediaBody(mime string) string {
-	return `{"Url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
-		`"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
-		`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
-		`"Mimetype":"` + mime + `",` +
-		`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
-		`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
-		`"FileLength":4242}`
+	return `{"url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
+		`"direct_path":"/v/t62.7118-24/12345_678_90.enc",` +
+		`"media_key":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+		`"mimetype":"` + mime + `",` +
+		`"file_enc_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+		`"file_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+		`"file_length":4242}`
 }
 
 // TestDownloadMedia_DispatchByPathKind_ViaRegisteredRoute prova, para cada um
@@ -121,12 +121,12 @@ func TestDownloadMedia_BodyKindWinsOverPath(t *testing.T) {
 			return payload, nil
 		},
 	}
-	body := `{"Kind":"image","Url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
-		`"MediaKey":"AQID",` +
-		`"Mimetype":"video/mp4",` +
-		`"FileEncSHA256":"qrs=",` +
-		`"FileSHA256":"tuv=",` +
-		`"FileLength":1}`
+	body := `{"kind":"image","url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
+		`"media_key":"AQID",` +
+		`"mimetype":"video/mp4",` +
+		`"file_enc_sha256":"qrs=",` +
+		`"file_sha256":"tuv=",` +
+		`"file_length":1}`
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/chats/download/video", strings.NewReader(body))
