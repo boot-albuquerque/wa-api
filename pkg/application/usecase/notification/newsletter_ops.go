@@ -237,7 +237,7 @@ const (
 // erro pode divergir.
 var requireJID = newsletterRequirement{
 	code:    codeMissingJID,
-	message: "jid do canal é obrigatório",
+	message: "channel jid is required",
 	missing: func(r NewsletterRequest) bool { return r.JID == "" },
 }
 
@@ -295,24 +295,24 @@ var requireValidUserJID = newsletterRequirement{
 var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 	NewsletterOpCreate: {{
 		code:    "missing_name",
-		message: "nome do canal é obrigatório",
+		message: "channel name is required",
 		missing: func(r NewsletterRequest) bool { return r.Name == "" },
 	}},
 	NewsletterOpInfoInvite: {{
 		code:    "missing_invite",
-		message: "código de convite é obrigatório",
+		message: "invite code is required",
 		missing: func(r NewsletterRequest) bool { return r.Invite == "" },
 	}},
 	NewsletterOpMarkViewed: {requireJID, requireNewsletterServer, {
 		code:    "missing_server_ids",
-		message: "pelo menos um server_id é obrigatório",
+		message: "at least one server_id is required",
 		missing: func(r NewsletterRequest) bool { return len(r.ServerIDs) == 0 },
 	}},
 	// `reaction` NÃO entra na tabela: vazio REMOVE a reação, como no resto do
 	// protocolo. Exigi-lo tornaria impossível desfazer pelo painel.
 	NewsletterOpReact: {requireJID, requireNewsletterServer, {
 		code:    "missing_server_id",
-		message: "server_id é obrigatório",
+		message: "server_id is required",
 		missing: func(r NewsletterRequest) bool { return r.ServerID == 0 },
 	}},
 	NewsletterOpInfo:      {requireJID, requireNewsletterServer},

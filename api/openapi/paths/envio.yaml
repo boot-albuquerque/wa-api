@@ -89,6 +89,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -179,6 +181,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -265,6 +269,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -362,6 +368,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -447,6 +455,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -549,6 +559,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         description: |
           Falha não classificada, ou falha da conversão para WebP
@@ -634,6 +646,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -707,6 +721,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -784,6 +800,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -883,6 +901,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -974,6 +994,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1065,6 +1087,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1159,6 +1183,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1245,6 +1271,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1355,6 +1383,8 @@
                 value: {code: 404, error: {code: message_no_data, message: stored message has no data}, success: false}
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1439,5 +1469,7 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'

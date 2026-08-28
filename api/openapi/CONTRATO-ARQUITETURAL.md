@@ -577,17 +577,25 @@ ter enviado — repetir cegamente duplica.
 
 ## 19. Paginação
 
-**Medido**, sem paginação nenhuma:
+**Corrigido em 2026-08-27 (F294)**: "nenhuma colecção é paginada" nunca foi
+verdade. `GET /chat/list` pagina desde o commit que criou a rota (`9d9dd7ec`,
+2026-08-08) — `limit` (padrão 50, tecto 500), `offset` e `total` na resposta.
+A medição original registou "`GET /chat/list` | 7 144 bytes" e leu esse número
+como a colecção inteira; era a **primeira página de 50**, distinguível de
+"isto é tudo" só pelos campos `total`/`limit`, que estavam na resposta e não
+foram olhados. Ver `HOUSEKEEP.md` F294 para a medição que corrigiu isto.
+
+**Medido, sem paginação nenhuma** (as três que sobram):
 
 | rota | devolveu | com |
 |---|---:|---|
 | `GET /user/contacts` | **61 459 bytes** | 1266 contactos |
-| `GET /chat/list` | 7 144 bytes | — |
 | `POST /group/list` | — | todos os grupos |
 | `GET /newsletter/list` | 1 654 bytes | — |
 
-`GET /chat/history` é a **única** com limite (`limit`), e mesmo essa não tem
-cursor.
+`GET /chat/list` e `GET /chat/history` são as **duas** rotas com limite
+(`limit`); `/chat/list` também devolve `offset` e `total`, `/chat/history` não
+tem cursor.
 
 `GET /user/contacts` cresce com a agenda do utilizador e não tem tecto. É o
 candidato mais claro a paginação. Alvo, para quando existir:

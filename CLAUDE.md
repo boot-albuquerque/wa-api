@@ -369,6 +369,15 @@ qualquer raciocínio de escrivaninha:
   induzida, e a saturação do próprio mecanismo.
 - **Registre o ANTES** antes de mexer. Sem linha de base, o depois não
   significa nada.
+- **Uma colecção mede-se com dados que excedam qualquer página plausível.**
+  Uma resposta pequena não prova "não pagina" — pode ser a primeira página de
+  uma colecção maior, e só os campos `total`/`limit` (quando existem) dizem
+  qual dos dois é. Foi assim que a F294 aconteceu: `GET /chat/list` pagina
+  desde 2026-08-08, mas a medição de 7 144 bytes contra uma conta com poucas
+  conversas foi lida como "a colecção inteira" sem olhar para `total`. Regra
+  prática: semeie dados suficientes para exceder qualquer página plausível
+  (a F294 usou 2 000 conversas contra um padrão de 50) e confira `total`
+  contra a contagem real, não só o tamanho da resposta.
 
 Quando a medição contrariar a hipótese, **a hipótese cai** — inclusive se
 ela já estiver escrita num HOUSEKEEP com número. Corrija a entrada; um

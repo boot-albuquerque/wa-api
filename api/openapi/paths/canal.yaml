@@ -6,9 +6,9 @@
 # de cada operação, e o código de erro de cada um, saem da tabela
 # `newsletterRequirements` — não de convenção.
 #
-# RESSALVA DE IDIOMA (F262): cinco mensagens de erro dessa tabela ainda estão
-# em português no código. Os exemplos abaixo mostram a mensagem COMO ELA SAI,
-# e não uma tradução — quem consome a API vê o que está aqui.
+# RESSALVA DE IDIOMA (F262, corrigida em 2026-08-27): as cinco mensagens de
+# erro dessa tabela estavam em português no código; foram traduzidas para
+# inglês, e os exemplos abaixo mostram a mensagem COMO ELA SAI hoje.
 
 # --- Canais -----------------------------------------------------------------
 
@@ -27,6 +27,25 @@
       **Regras**: `name` é obrigatório; sem ele a resposta é
       `400 missing_name`. É a única das dezoito operações que não recebe `jid`
       — o identificador é o que ela devolve.
+
+      **Ordem de validação** (F270): o corpo passa por DUAS fases distintas
+      antes de chegar ao WhatsApp, e são fases diferentes que devolvem o mesmo
+      `400` com códigos diferentes:
+
+      1. **Descodificação JSON.** `picture` é `[]byte` — a mensagem carrega
+         base64 sem prefixo `data:`. Um valor que não seja base64 válido, ou
+         que não seja sequer texto (`123`, `true`), morre aqui com
+         `400 could_not_decode_payload`, e nunca chega à validação de `name`.
+      2. **Campo obrigatório.** Só depois de o corpo descodificar é que
+         `name` é verificado; ausente ou vazio devolve `400 missing_name`.
+         `picture` **não** é obrigatório nesta fase: `null`, ausente ou `""`
+         descodificam para bytes vazios e PASSAM — o pedido segue e cria o
+         canal sem foto.
+
+      Consequência prática: `{"name":"x","picture":null}` **cria o canal**
+      (o `null` passa as duas fases). Uma sonda que varie só `picture` à
+      espera de `400` não é segura — varie sempre um campo obrigatório
+      DIFERENTE (aqui, `name`) para garantir recusa incondicional.
 
       **Autenticação**: token de sessão.
     security:
@@ -79,7 +98,7 @@
               code: 400
               error:
                 code: missing_name
-                message: nome do canal é obrigatório
+                message: channel name is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -171,7 +190,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -245,7 +264,7 @@
               code: 400
               error:
                 code: missing_invite
-                message: código de convite é obrigatório
+                message: invite code is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -363,7 +382,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -424,7 +443,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -500,7 +519,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -597,7 +616,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -704,7 +723,7 @@
                   code: 400
                   error:
                     code: missing_jid
-                    message: jid do canal é obrigatório
+                    message: channel jid is required
                   success: false
               sinceMalFormatado:
                 summary: '`since` fora do RFC 3339 — código próprio, não o genérico'
@@ -800,7 +819,7 @@
               code: 400
               error:
                 code: missing_server_ids
-                message: pelo menos um server_id é obrigatório
+                message: at least one server_id is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -874,7 +893,7 @@
               code: 400
               error:
                 code: missing_server_id
-                message: server_id é obrigatório
+                message: server_id is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -938,7 +957,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1082,7 +1101,7 @@
               code: 400
               error:
                 code: missing_jid
-                message: jid do canal é obrigatório
+                message: channel jid is required
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'

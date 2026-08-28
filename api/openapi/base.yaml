@@ -475,6 +475,28 @@ components:
               message: WhatsApp refused this request; repeating it unchanged will not help
             success: false
 
+    LimiteDeRitmo:
+      description: |
+        O WhatsApp está a limitar o ritmo desta sessão e recusou o pedido com
+        `429` (ou `419`, que o servidor também usa para o mesmo efeito). Não é
+        protecção própria deste servidor — é o relais do estrangulamento feito
+        pelo WhatsApp.
+
+        **É a única categoria de erro que o cliente deve repetir, sem alterar
+        o pedido**, depois de esperar. Todas as outras (`400`, `401`, `403`,
+        `404`, `409`, `422`) dizem "o pedido não vai funcionar assim"; esta diz
+        "tenta outra vez mais tarde".
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            code: 429
+            error:
+              code: upstream_rate_limited
+              message: WhatsApp is rate limiting this session; retry later
+            success: false
+
     ErroInterno:
       description: |
         Falha não classificada, ou tempo esgotado à espera do WhatsApp (o

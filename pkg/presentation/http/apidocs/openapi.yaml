@@ -72,6 +72,27 @@ components:
         Algumas rotas DEVOLVEM um `500` classificado, com objecto — é o caso de
         `newsletter_failed`. Essas documentam-no na própria resposta, em vez de
         referenciarem esta.
+    LimiteDeRitmo:
+      content:
+        application/json:
+          example:
+            code: 429
+            error:
+              code: upstream_rate_limited
+              message: WhatsApp is rate limiting this session; retry later
+            success: false
+          schema:
+            $ref: '#/components/schemas/Erro'
+      description: |
+        O WhatsApp está a limitar o ritmo desta sessão e recusou o pedido com
+        `429` (ou `419`, que o servidor também usa para o mesmo efeito). Não é
+        protecção própria deste servidor — é o relais do estrangulamento feito
+        pelo WhatsApp.
+
+        **É a única categoria de erro que o cliente deve repetir, sem alterar
+        o pedido**, depois de esperar. Todas as outras (`400`, `401`, `403`,
+        `404`, `409`, `422`) dizem "o pedido não vai funcionar assim"; esta diz
+        "tenta outra vez mais tarde".
     NaoAutorizado:
       content:
         application/json:
@@ -13077,6 +13098,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13194,6 +13217,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13312,6 +13337,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13415,6 +13442,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13540,6 +13569,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13649,6 +13680,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13789,6 +13822,8 @@ paths:
             comum é o histórico estar desligado (`history = 0`, o padrão).
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -13924,6 +13959,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -14044,6 +14081,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -14144,6 +14183,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -14249,6 +14290,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -14381,6 +14424,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           content:
             application/json:
@@ -14510,6 +14555,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -14621,6 +14668,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -14747,6 +14796,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15200,6 +15251,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15265,6 +15318,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15339,6 +15394,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15423,6 +15480,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15705,6 +15764,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15790,6 +15851,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -15932,6 +15995,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -16000,6 +16065,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -16102,6 +16169,8 @@ paths:
           description: |
             O WhatsApp recusou a imagem. **A causa medida foi o formato**: PNG
             chega aqui, JPEG passa.
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -16266,6 +16335,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -16384,6 +16455,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -16593,6 +16666,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -16661,6 +16736,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -17480,7 +17557,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -17658,6 +17735,25 @@ paths:
         `400 missing_name`. É a única das dezoito operações que não recebe `jid`
         — o identificador é o que ela devolve.
 
+        **Ordem de validação** (F270): o corpo passa por DUAS fases distintas
+        antes de chegar ao WhatsApp, e são fases diferentes que devolvem o mesmo
+        `400` com códigos diferentes:
+
+        1. **Descodificação JSON.** `picture` é `[]byte` — a mensagem carrega
+           base64 sem prefixo `data:`. Um valor que não seja base64 válido, ou
+           que não seja sequer texto (`123`, `true`), morre aqui com
+           `400 could_not_decode_payload`, e nunca chega à validação de `name`.
+        2. **Campo obrigatório.** Só depois de o corpo descodificar é que
+           `name` é verificado; ausente ou vazio devolve `400 missing_name`.
+           `picture` **não** é obrigatório nesta fase: `null`, ausente ou `""`
+           descodificam para bytes vazios e PASSAM — o pedido segue e cria o
+           canal sem foto.
+
+        Consequência prática: `{"name":"x","picture":null}` **cria o canal**
+        (o `null` passa as duas fases). Uma sonda que varie só `picture` à
+        espera de `400` não é segura — varie sempre um campo obrigatório
+        DIFERENTE (aqui, `name`) para garantir recusa incondicional.
+
         **Autenticação**: token de sessão.
       requestBody:
         content:
@@ -17716,7 +17812,7 @@ paths:
                 code: 400
                 error:
                   code: missing_name
-                  message: nome do canal é obrigatório
+                  message: channel name is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -17932,7 +18028,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18040,7 +18136,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18128,7 +18224,7 @@ paths:
                 code: 400
                 error:
                   code: missing_invite
-                  message: código de convite é obrigatório
+                  message: invite code is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18279,7 +18375,7 @@ paths:
                 code: 400
                 error:
                   code: missing_server_ids
-                  message: pelo menos um server_id é obrigatório
+                  message: at least one server_id is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18380,7 +18476,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18457,7 +18553,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18508,7 +18604,7 @@ paths:
                 code: 400
                 error:
                   code: missing_server_id
-                  message: server_id é obrigatório
+                  message: server_id is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18574,7 +18670,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18637,7 +18733,7 @@ paths:
                 code: 400
                 error:
                   code: missing_jid
-                  message: jid do canal é obrigatório
+                  message: channel jid is required
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -18730,7 +18826,7 @@ paths:
                     code: 400
                     error:
                       code: missing_jid
-                      message: jid do canal é obrigatório
+                      message: channel jid is required
                     success: false
                 sinceMalFormatado:
                   summary: '`since` fora do RFC 3339 — código próprio, não o genérico'
@@ -18909,6 +19005,8 @@ paths:
           $ref: '#/components/responses/NaoAutorizado'
         "422":
           $ref: '#/components/responses/RecusadoPeloWhatsApp'
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -19140,13 +19238,19 @@ paths:
 
         - `media_delivery`, quando presente, tem de ser `base64`, `s3` ou `both`
           (`400 invalid_media_delivery`). Vazio assume `base64`.
-        - `endpoint`, quando presente, passa pelo validador de saída
-          (`pkg/infra/egress.ValidateOutboundURL`, sec/F24) e não só precisa
-          ser um URL `http`/`https` analisável com host: nenhum dos endereços
-          resolvidos pode cair em faixa reservada ou loopback (por exemplo
-          `http://127.0.0.1:9000`, um MinIO local, é recusado). As duas causas
-          — "não analisei" e "recusei o destino" — devolvem o MESMO código
-          (`400 invalid_s3_endpoint`); a mensagem não distingue uma da outra.
+        - `endpoint`, quando presente, passa pelo validador de saída partilhado
+          (`egress.ValidateOutboundURL`, sec/F24) e precisa de: esquema `http`
+          ou `https`; um host presente; e **nenhum** endereço resolvido em
+          faixa reservada ou loopback (`127.0.0.0/8`, `169.254.0.0/16`,
+          `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, multicast e
+          equivalentes IPv6). Um URL bem formado mas apontando para
+          `127.0.0.1` ou similar **é recusado** — "URL analisável" não é a
+          regra real (F277); `http://127.0.0.1:9000` é perfeitamente
+          analisável e mesmo assim devolve `400 invalid_s3_endpoint`. As duas
+          causas — "não analisei" e "recusei o destino" — devolvem o MESMO
+          código; a mensagem não distingue uma da outra. Consequência
+          prática: não é possível apontar para um MinIO ou S3 compatível em
+          `localhost`.
         - `secret_key` é cifrada antes de tocar no banco e **nunca é devolvida**
           por nenhuma rota.
 
@@ -21086,6 +21190,8 @@ paths:
             **É o que esta rota devolve hoje, em todas as combinações medidas.**
             O pedido chegou ao WhatsApp e foi recusado; repeti-lo sem mudança
             não ajuda. Ver F264.
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
@@ -22329,6 +22435,8 @@ paths:
           description: |
             **É o que esta rota devolve hoje, em todas as combinações medidas.**
             Ver F264.
+        "429":
+          $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:

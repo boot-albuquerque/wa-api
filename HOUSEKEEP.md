@@ -28932,10 +28932,29 @@ logo é a mensagem de erro mais visível de toda a superfície de newsletter.
 `at least one server_id is required`, `server_id is required`). É mudança de
 texto de resposta, portanto contrato observável — merece ir num commit só seu.
 
-**Status**: não corrigido. É anterior a esta sessão (lote de 2026-08-20) e cai
-fora do âmbito da tarefa, logo fica registado em vez de corrigido de graça.
+**Status**: corrigido em 2026-08-27. As cinco mensagens
+(`pkg/application/usecase/notification/newsletter_ops.go:213,227,232,237,244`)
+foram traduzidas para exatamente o texto sugerido acima. Os exemplos de
+`api/openapi/paths/canal.yaml` (nove ocorrências, incluindo a nota de
+cabeçalho do ficheiro) foram atualizados em conjunto — estavam a mostrar as
+mensagens antigas em português, e `openapidoc` regenerou
+`pkg/presentation/http/apidocs/openapi.yaml` sem sobra do texto em português
+(`grep -c` das cinco frases = 0 no ficheiro gerado).
 
-<!-- f-status: aberto -->
+**Anti-regressão**: `TestNewsletterOps_ValidationMessagesAreEnglish`
+(`newsletter_ops_test.go`), tabela com as cinco mensagens. Controle negativo
+EXECUTADO: reverti `requireJID.message` para `"jid do canal é obrigatório"` e
+o teste falhou com
+
+```
+newsletter_ops_test.go:292: requireJID (op info, empty jid): message = "jid do canal é obrigatório", want "channel jid is required"
+```
+
+— revertido de volta ao texto em inglês antes do commit. `go build ./...`,
+`go vet ./...`, `gofmt -l pkg cmd` (limpo) e a suíte completa
+(`go test ./pkg/... ./cmd/...`) verdes.
+
+<!-- f-status: corrigido -->
 
 ## F263 — `/group/updateparticipants` só expõe `add` e `remove`; promover e despromover admin não têm rota
 
@@ -29776,8 +29795,35 @@ confirmado `state.type: non_existing` e ausente de `GET /newsletter/list`).
 Estava vazio — zero subscritores, zero mensagens, minutos de vida —, logo
 apagá-lo REVERTEU o acidente em vez de acrescentar alteração.
 
-**Status**: não corrigido — os dois pontos da correcção sugerida mudam
-contrato observável. A regra de método está em uso.
+**Status**: corrigido parcialmente em 2026-08-27 — só o ponto 1 (documentar a
+ordem de validação), que é o de menor risco. Verificado contra o código atual
+desta branch (que já tem camada DTO, `pkg/presentation/http/dto/newsletter`,
+adicionada depois desta entrada) e não contra a referência antiga:
+
+1. **`decodeAndRespond`** (JSON) decodifica o corpo. `picture` é `[]byte`;
+   base64 inválido ou tipo errado morre aqui com `400 could_not_decode_payload`
+   ANTES de qualquer campo ser inspecionado.
+2. **`NewsletterRequest.Validate()`** (`pkg/presentation/http/dto/newsletter/request.go:68`)
+   valida só `since` (formato RFC 3339) — não participa da ordem que a F270
+   mediu, mas corre antes do use case.
+3. **`validateNewsletter`** (`newsletter_ops.go:341`) aplica a tabela
+   `newsletterRequirements` por operação; para `create`, só `missing_name`.
+   `picture` continua a NÃO ser obrigatório nesta fase — `null`/ausente/`""`
+   passam a descodificação e o pedido segue.
+
+A ordem documentada em `api/openapi/paths/canal.yaml` (`/newsletter/create`,
+secção "Ordem de validação (F270)") é exatamente essa: descodificação
+primeiro, `missing_name` depois, `picture` nunca obrigatório. Confirmado que
+`{"name":"x","picture":null}` ainda cria o canal nesta branch — o
+comportamento que originou o achado não mudou, só ficou documentado.
+
+**Não corrigido, por decisão explícita**: o ponto 2 (`DisallowUnknownFields`)
+muda contrato observável e foi deixado para decisão de design — fora do
+escopo desta sessão, que é só documentação. A regra de método ("sonda só é
+segura se INCONDICIONALMENTE recusada") continua em uso e não foi alterada.
+
+**Sem mudança de contrato**, logo sem anti-regressão de código nova — é
+descrição do comportamento existente, não comportamento novo.
 
 <!-- f-status: aberto -->
 
@@ -30819,31 +30865,36 @@ analisável) e `reserved_s3_endpoint` (destino recusado), como
 `POST /session/proxy` já faz com `reserved_proxy_address`; (c) documentar o
 corpo que `DELETE /s3/config` deixa.
 
-**Status**: corrigido PARCIALMENTE em 2026-08-27 (sessão
-`worktree/housekeep-session`) — só a parte (a); (b) e (c) tratadas abaixo.
+**Status**: corrigido PARCIALMENTE em 2026-08-27 — pontos (a) e (c); (b)
+fica aberto por decisão de design.
+
+**Nota de coordenação**: as partes (a) e (c) foram atribuídas, por engano,
+a dois workers em paralelo (`worktree/housekeep-session` e
+`worktree/housekeep-docs`) — cada um leu `pkg/infra/egress/egress.go`
+independentemente e chegou à MESMA regra medida, o que serve como
+confirmação cruzada. O texto abaixo funde as duas descrições.
 
 (a) **Corrigido.** `api/openapi/paths/infra.yaml` (bloco de regras de
-`POST /s3/config`) passou a citar `pkg/infra/egress.ValidateOutboundURL`
-(sec/F24) e a nomear explicitamente loopback e faixas reservadas como causa
-de recusa, com o exemplo concreto (`http://127.0.0.1:9000`) e a nota de que
-"não analisei" e "recusei o destino" devolvem o MESMO código
-`invalid_s3_endpoint`. Nenhuma mudança de comportamento — só a descrição
-gerada. Regenerado com `go run ./cmd/openapidoc`;
-`curl localhost:8080/docs/openapi.yaml | cmp - pkg/presentation/http/apidocs/openapi.yaml`
-não pôde ser executado nesta sessão (sem servidor rodando), mas o ficheiro
-embutido foi regenerado a partir da fonte e commitado junto — ver
-ARMADILHAS.md #27 antes do próximo `go build`+deploy.
+`POST /s3/config`, campo `endpoint`) passou a citar
+`pkg/infra/egress.ValidateOutboundURL` (sec/F24) e a nomear explicitamente
+as faixas reservadas e loopback como causa de recusa — esquema `http`/
+`https`; host presente; nenhum endereço resolvido em `127.0.0.0/8`,
+`169.254.0.0/16`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`,
+multicast e equivalentes IPv6 — com o exemplo concreto
+(`http://127.0.0.1:9000`, um MinIO local, perfeitamente bem formado e
+mesmo assim recusado) e a nota de que "não analisei" e "recusei o destino"
+devolvem o MESMO código `invalid_s3_endpoint`; a mensagem não distingue
+uma da outra. Nenhuma mudança de comportamento — só a descrição gerada.
+Regenerado com `go run ./cmd/openapidoc`.
 
-(b) **Não corrigido — deixado para decisão de design**, exatamente como a
+(b) **Não corrigido — deixado para decisão de design**, exactamente como a
 tarefa que abriu esta sessão instruiu para o caso ambíguo. Separar
 `invalid_s3_endpoint` em dois códigos (`invalid_s3_endpoint` para "não
 analisável" e `reserved_s3_endpoint` para "destino recusado", espelhando
 `reserved_proxy_address` de `POST /session/proxy`) é uma mudança de
 TAXONOMIA — contrato observável para quem já trata `invalid_s3_endpoint`
 como um único código — e não uma correção de defeito isolado. Precisa de
-decisão consciente (ADR ou aprovação explícita) antes de tocar, nos termos
-da seção "Consultar as implementações de referência" do `CLAUDE.md` sobre
-divergir conscientemente vs. por acidente.
+decisão consciente (ADR ou aprovação explícita) antes de tocar.
 
 (c) **Corrigido** (docs, junto com (a)): a descrição de
 `DELETE /s3/config` em `api/openapi/paths/infra.yaml` passou a avisar que o
@@ -30852,6 +30903,9 @@ corpo pós-DELETE (`path_style: true`, `media_delivery: base64`,
 uma sessão que nunca configurou S3 (`path_style: false`, `media_delivery: ""`,
 `retention_days: 0`), com os dois estados medidos citados. Também
 documentação pura, sem mudança de comportamento.
+
+**Sem mudança de contrato**, logo sem anti-regressão de código nova — é
+descrição do comportamento existente, não comportamento novo.
 
 <!-- f-status: aberto -->
 
@@ -30969,9 +31023,21 @@ documentação, não o desenho.
    com `400` o que o WhatsApp não desenha, em vez de aceitar e produzir bolha
    vazia. É mais um caso de `200` que diz menos do que aparenta.
 
-**Estado**: não corrigido. Achado incidental, fora do escopo da tarefa
-(inventário de observadores), e a parte 2 muda comportamento de rota. Registado
-para decisão. Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` B.1.
+**Estado**: parte 1 (documentação) já estava corrigida quando esta sessão
+(2026-08-27) chegou a esta entrada — confirmado, não presumido: reli
+`pkg/infra/media/sticker/exif.go:40-65` (`ConvertToWebPSticker`) contra o
+código atual e o `default` que deixa WebP passar incólume continua exatamente
+onde a entrada descreve, e `api/openapi/paths/envio.yaml` (`/chat/send/sticker`)
+já tem a secção "CORRECÇÃO medida a 2026-08-26" com a regra real (converte
+`image/jpeg`, `image/png`, `image/jpg`, `image/gif` e `video/*`; WebP e outros
+tipos sobem tal e qual) e cita o mesmo `exif.go:62`. Nenhuma edição foi
+necessária nesta sessão — registo aqui só para fechar o rastreio.
+
+Parte 2 (validar dimensões do WebP recebido e recusar com `400`) continua
+**não corrigida**, por decisão explícita: muda comportamento de rota e está
+fora do escopo desta sessão, que é só documentação.
+
+Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` B.1.
 
 <!-- f-status: aberto -->
 
@@ -31879,10 +31945,34 @@ gera `429` de protecção própria; relaia o do montante.
 documento→código. Falta a inversa: um código de estado que o mapa de categorias
 sabe produzir e que nenhuma operação declara.
 
-**Status**: não corrigido no contrato (é geração de OpenAPI, fora do âmbito
-desta tarefa). As duas linhas do scorecard **foram** corrigidas nesta sessão.
+**Status**: corrigido em 2026-08-27, no mesmo desenho da correção sugerida.
+Acrescentado `components.responses.LimiteDeRitmo` a `api/openapi/base.yaml`
+(schema `Erro`, `code: upstream_rate_limited`, exemplo com a mensagem que
+`errmap.iqMessage` produz) e `'429': $ref LimiteDeRitmo` logo a seguir a cada
+`'422': $ref RecusadoPeloWhatsApp` — 31 operações em `envio.yaml` (16),
+`grupo.yaml` (13) e `contacto.yaml` (2), o número exato que já documentava
+`422` (confirmado por contagem antes e depois da edição). `openapidoc`
+regenerou `pkg/presentation/http/apidocs/openapi.yaml` sem diff inesperado
+(83 linhas adicionadas, todas do bloco `429`/`LimiteDeRitmo`).
 
-<!-- f-status: aberto -->
+**Ressalva de escopo, medida e não corrigida**: as dezoito rotas de canal
+(`api/openapi/paths/canal.yaml`) não têm `422` documentado e por isso também
+não ganharam `429` — confirmado que `pkg/infra/wa-noise/adapters/misc` (o
+adaptador de newsletter) não chama `errmap.ClassifyIQ`; usa outro caminho de
+erro (ver F271, `500 newsletter_failed`). Não é regressão desta correção:
+é uma inconsistência PRÉ-EXISTENTE fora do critério "atravessa
+`errmap.ClassifyIQ`" que a F293 usa, e fica registada aqui para quem decidir
+se as rotas de canal devem ganhar classificação de erro própria.
+
+**Anti-regressão**: `go test ./pkg/bootstrap/...` (contém
+`TestContratoCodigosDeErroExistemNoCodigo` e os demais gates de contrato)
+verde depois da regeneração — confirma que o `429` novo bate com um código
+que `pkg/domain/apperr/codes.go` sabe produzir. A inversa que a entrada pede
+("código que o mapa sabe produzir e nenhuma operação declara") não tem gate
+automatizado ainda; falta escrever, e fica para quem tocar
+`pkg/bootstrap/openapi_contrato_test.go` a seguir.
+
+<!-- f-status: corrigido -->
 
 
 ## F294 — "nenhuma colecção é paginada" nunca foi verdade: `/chats/list` pagina desde 2026-08-08, e a evidência gravada era uma PÁGINA lida como total
@@ -31926,12 +32016,27 @@ que excedam qualquer página plausível**. 1 266 contactos provaram que
 bytes de conversas não provaram nada sobre `/chat/list` porque ninguém verificou
 quantas conversas havia.
 
-**Status**: `docs/PRODUCTION-READINESS.md` corrigido nesta sessão.
-`api/openapi/CONTRATO-ARQUITETURAL.md` §19 **não** corrigido — o contrato é
-gerado/escrito noutro eixo e mexer nele estava fora do âmbito. Fica registado
-para a sessão que o tocar.
+**Status**: corrigido em 2026-08-27. `api/openapi/CONTRATO-ARQUITETURAL.md`
+§19 reescrito: a tabela "sem paginação nenhuma" já não lista `GET /chat/list`
+(confirmado no código atual que a rota continua a chamar-se `/chat/list`, não
+`/chats/list` — verificado contra `api/openapi/paths/conversa.yaml:11` em vez
+de confiar na referência antiga), e um parágrafo novo explica a causa: a
+medição de 7 144 bytes era a primeira página de 50, não a coleção, e só os
+campos `total`/`limit` (presentes na resposta) distinguiam as duas leituras.
+`docs/PRODUCTION-READINESS.md` já tinha sido corrigido antes desta sessão.
 
-<!-- f-status: aberto -->
+A regra de medição que faltava foi acrescentada ao `CLAUDE.md` (raiz), secção
+"Medir antes de projetar", como bullet novo: uma colecção mede-se com dados
+que excedam qualquer página plausível, e a evidência tem de conferir `total`
+contra a contagem real, não só o tamanho da resposta.
+
+**Sem mudança de contrato observável** (é documentação sobre uma rota cujo
+comportamento já paginava desde 2026-08-08), logo sem anti-regressão de
+código exigida por esta entrada — a proteção é o teste que já existe para o
+comportamento (a suíte de `/chat/list`, inalterada), e o gate contra
+recorrência é a regra de processo em `CLAUDE.md`.
+
+<!-- f-status: corrigido -->
 
 ## F295 — o golden de elegibilidade do `cmd/logcov` ficou por regenerar no CAP-10, e o `make check` já entrava vermelho na fundação DTO
 

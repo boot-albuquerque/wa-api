@@ -2,11 +2,13 @@ package notification
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/domain/apperr"
 )
 
 // F231 — a duração da subscrição em SEGUNDOS, não em nanossegundos.
@@ -218,5 +220,77 @@ func TestNewsletterOps_AdminInviteRevoke_RequiresJIDAndUserJID(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("admin_invite_revoke with valid fields failed: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// F262 — the five shared newsletter validation messages must be EN-US
+// (root CLAUDE.md, "Idioma do código"). They were in Portuguese until
+// 2026-08-27; this locks the translated text so it cannot silently regress.
+//
+// Negative control run 2026-08-27: reverting requireJID's message to "jid do
+// canal é obrigatório" made TestNewsletterOps_ValidationMessagesAreEnglish
+// fail with:
+//
+//	newsletter_ops_test.go:296: requireJID (op info, empty jid): message =
+//	"jid do canal é obrigatório", want "channel jid is required"
+//
+// confirming the assertion actually inspects the live string and not a
+// stale copy.
+// ---------------------------------------------------------------------------
+
+func TestNewsletterOps_ValidationMessagesAreEnglish(t *testing.T) {
+	cases := []struct {
+		name    string
+		req     NewsletterRequest
+		wantMsg string
+	}{
+		{
+			name:    "requireJID (op info, empty jid)",
+			req:     NewsletterRequest{Op: NewsletterOpInfo},
+			wantMsg: "channel jid is required",
+		},
+		{
+			name:    "missing_name (op create)",
+			req:     NewsletterRequest{Op: NewsletterOpCreate},
+			wantMsg: "channel name is required",
+		},
+		{
+			name:    "missing_invite (op info_invite)",
+			req:     NewsletterRequest{Op: NewsletterOpInfoInvite},
+			wantMsg: "invite code is required",
+		},
+		{
+			name: "missing_server_ids (op mark_viewed)",
+			req: NewsletterRequest{
+				Op:  NewsletterOpMarkViewed,
+				JID: "120363000000000000@newsletter",
+			},
+			wantMsg: "at least one server_id is required",
+		},
+		{
+			name: "missing_server_id (op react)",
+			req: NewsletterRequest{
+				Op:  NewsletterOpReact,
+				JID: "120363000000000000@newsletter",
+			},
+			wantMsg: "server_id is required",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateNewsletter(tc.req)
+			if err == nil {
+				t.Fatalf("validateNewsletter(%+v) = nil, want an error", tc.req)
+			}
+			var appErr *apperr.AppError
+			if !errors.As(err, &appErr) {
+				t.Fatalf("validateNewsletter error is not *apperr.AppError: %v (%T)", err, err)
+			}
+			if appErr.Message != tc.wantMsg {
+				t.Fatalf("%s: message = %q, want %q", tc.name, appErr.Message, tc.wantMsg)
+			}
+		})
 	}
 }

@@ -285,6 +285,54 @@ func TestContratoCodigosDeErroExistemNoCodigo(t *testing.T) {
 	t.Logf("códigos de erro citados em exemplos: %d, todos presentes no código", len(citados))
 }
 
+// TestContrato422Implica429 é o gate que faltava na F293: um `429` é a
+// resposta que a MESMA função (`errmap.classifyIQCode`) produz quando o
+// WhatsApp estrangula em vez de recusar — as duas categorias vêm do mesmo
+// call site, `errmap.ClassifyIQ`, então uma operação que documenta uma
+// documenta necessariamente a outra. `422` (RecusadoPeloWhatsApp) é o marcador
+// escolhido porque é omnipresente nas 31 operações que atravessam esse
+// caminho; sem este teste, apagar o `429` de uma delas — ou esquecê-lo numa
+// rota nova que ganhe `422` — passaria por todos os gates existentes, porque
+// nenhum deles olha para a RELAÇÃO entre os dois códigos.
+func TestContrato422Implica429(t *testing.T) {
+	doc := especificacao(t)
+	caminhos, _ := doc["paths"].(map[string]any)
+
+	var faltando []string
+	com422 := 0
+	for caminho, item := range caminhos {
+		metodos, _ := item.(map[string]any)
+		for metodo, corpo := range metodos {
+			op, ok := corpo.(map[string]any)
+			if !ok {
+				continue
+			}
+			respostas, _ := op["responses"].(map[string]any)
+			if respostas == nil {
+				continue
+			}
+			if _, tem422 := respostas["422"]; !tem422 {
+				continue
+			}
+			com422++
+			if _, tem429 := respostas["429"]; !tem429 {
+				faltando = append(faltando, strings.ToUpper(metodo)+" "+caminho)
+			}
+		}
+	}
+	sort.Strings(faltando)
+
+	if com422 == 0 {
+		t.Fatal("nenhuma operação documenta 422: o teste não está a medir o que diz")
+	}
+	if len(faltando) > 0 {
+		t.Errorf("%d operação(ões) documentam 422 (RecusadoPeloWhatsApp) sem "+
+			"documentar 429 (LimiteDeRitmo) — as duas vêm do mesmo "+
+			"errmap.ClassifyIQ, e uma sem a outra é o defeito que a F293 mediu:\n  %s",
+			len(faltando), strings.Join(faltando, "\n  "))
+	}
+}
+
 // TestContratoExemploDeErroBateComOEsquema apanha o par que diverge sem
 // estoirar: o exemplo mostra `error` como objecto e o esquema diz que é texto,
 // ou o contrário.

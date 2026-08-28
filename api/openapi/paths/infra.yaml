@@ -1006,13 +1006,19 @@
 
       - `media_delivery`, quando presente, tem de ser `base64`, `s3` ou `both`
         (`400 invalid_media_delivery`). Vazio assume `base64`.
-      - `endpoint`, quando presente, passa pelo validador de saída
-        (`pkg/infra/egress.ValidateOutboundURL`, sec/F24) e não só precisa
-        ser um URL `http`/`https` analisável com host: nenhum dos endereços
-        resolvidos pode cair em faixa reservada ou loopback (por exemplo
-        `http://127.0.0.1:9000`, um MinIO local, é recusado). As duas causas
-        — "não analisei" e "recusei o destino" — devolvem o MESMO código
-        (`400 invalid_s3_endpoint`); a mensagem não distingue uma da outra.
+      - `endpoint`, quando presente, passa pelo validador de saída partilhado
+        (`egress.ValidateOutboundURL`, sec/F24) e precisa de: esquema `http`
+        ou `https`; um host presente; e **nenhum** endereço resolvido em
+        faixa reservada ou loopback (`127.0.0.0/8`, `169.254.0.0/16`,
+        `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, multicast e
+        equivalentes IPv6). Um URL bem formado mas apontando para
+        `127.0.0.1` ou similar **é recusado** — "URL analisável" não é a
+        regra real (F277); `http://127.0.0.1:9000` é perfeitamente
+        analisável e mesmo assim devolve `400 invalid_s3_endpoint`. As duas
+        causas — "não analisei" e "recusei o destino" — devolvem o MESMO
+        código; a mensagem não distingue uma da outra. Consequência
+        prática: não é possível apontar para um MinIO ou S3 compatível em
+        `localhost`.
       - `secret_key` é cifrada antes de tocar no banco e **nunca é devolvida**
         por nenhuma rota.
 
