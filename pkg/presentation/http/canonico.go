@@ -10,26 +10,27 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// Este ficheiro implementava a padronização de caminhos (F269) SEM partir
-// clientes: cada rota antiga continuava registada, e ao lado dela passava a
-// existir a forma canónica, para sempre.
+// This file used to implement path standardization (F269) WITHOUT breaking
+// clients: every old route stayed registered, and the canonical form was
+// added alongside it, forever.
 //
-// REVERSÃO (2026-08-27, ver HOUSEKEEP.md): decisão explícita do utilizador —
-// o projeto não tem consumidores reais antes do lançamento, então não há
-// cliente a proteger, e manter as duas formas registadas era pagar o custo de
-// compatibilidade sem ter quem a use. CanonicalizeRoutes agora RENOMEIA a
-// rota em vez de lhe acrescentar um alias: o caminho antigo deixa de responder
-// (404), só o canónico fica registado. A tabela e o mecanismo de
-// correspondência sobrevivem porque continuam a ser a única forma de aplicar
-// a mudança a noventa e uma rotas sem editar cada `Register` à mão.
+// REVERT (2026-08-27, see HOUSEKEEP.md): explicit decision by the user — the
+// project has no real consumers before launch, so there is no client to
+// protect, and keeping both forms registered was paying the compatibility
+// cost with nobody using it. CanonicalizeRoutes now RENAMES the route
+// instead of adding an alias to it: the old path stops responding (404),
+// only the canonical one stays registered. The table and the matching
+// mechanism survive because they remain the only way to apply the change to
+// ninety-one routes without hand-editing every `Register` call.
 //
-// POR QUE A TABELA E NÃO 91 EDIÇÕES À MÃO. São noventa e uma rotas. Editar cada
-// chamada a Register seria noventa e uma oportunidades de trocar um caractere,
-// e o erro só apareceria quando alguém chamasse a rota errada. Com a tabela, a
-// transformação é uma só, e o gate compara o que foi registado com o que a
-// tabela manda.
+// WHY THE TABLE AND NOT 91 HAND EDITS. There are ninety-one routes. Editing
+// every Register call would be ninety-one chances to typo a character, and
+// the mistake would only surface when someone called the wrong route. With
+// the table, the transformation is a single one, and the gate compares what
+// was registered against what the table mandates.
 
-// CanonicalRoute é uma linha da tabela: a rota antiga e a forma canónica dela.
+// CanonicalRoute is one row of the table: the old route and its canonical
+// form.
 type CanonicalRoute struct {
 	LegacyMethod    string
 	LegacyPath      string
@@ -37,90 +38,92 @@ type CanonicalRoute struct {
 	CanonicalPath   string
 }
 
-// CanonicalizeRoutes substitui, para cada entrada registada que tenha forma
-// canónica na tabela, o registo antigo pelo canónico — mesmo manipulador,
-// caminho novo. A rota antiga deixa de estar no registry e, portanto, deixa
-// de responder.
+// CanonicalizeRoutes replaces, for every registered entry that has a
+// canonical form in the table, the old registration with the canonical one —
+// same handler, new path. The old route stops being in the registry and
+// therefore stops responding.
 //
-// A ORDEM IMPORTA: chame isto DEPOIS de todas as rotas antigas estarem
-// registadas. Uma entrada da tabela sem rota antiga correspondente é erro do
-// chamador — e é devolvida, não engolida, porque uma tabela que aponta para
-// rotas inexistentes é uma tabela que já não descreve o serviço.
-func (r *HandlerRegistry) CanonicalizeRoutes(tabela []CanonicalRoute) []string {
-	porChave := map[string]routeEntry{}
-	for _, entrada := range r.routes {
-		for _, metodo := range entrada.methods {
-			porChave[strings.ToUpper(metodo)+" "+entrada.path] = entrada
+// ORDER MATTERS: call this AFTER all the old routes have been registered. A
+// table entry with no matching old route is a caller error — and it is
+// returned, not swallowed, because a table that points at nonexistent
+// routes is a table that no longer describes the service.
+func (r *HandlerRegistry) CanonicalizeRoutes(table []CanonicalRoute) []string {
+	byKey := map[string]routeEntry{}
+	for _, entry := range r.routes {
+		for _, method := range entry.methods {
+			byKey[strings.ToUpper(method)+" "+entry.path] = entry
 		}
 	}
 
-	consumidas := map[string]bool{}
-	var canonicas []routeEntry
-	var orfas []string
-	for _, linha := range tabela {
-		chave := strings.ToUpper(linha.LegacyMethod) + " " + linha.LegacyPath
-		entrada, existe := porChave[chave]
-		if !existe {
-			orfas = append(orfas, chave)
+	consumed := map[string]bool{}
+	var canonicalEntries []routeEntry
+	var orphans []string
+	for _, row := range table {
+		key := strings.ToUpper(row.LegacyMethod) + " " + row.LegacyPath
+		entry, exists := byKey[key]
+		if !exists {
+			orphans = append(orphans, key)
 			continue
 		}
-		consumidas[chave] = true
-		manipulador := entrada.handler
-		// Quando o caminho canónico traz parâmetros, o identificador deixa de
-		// vir no corpo. O manipulador continua a lê-lo do corpo — logo o
-		// adaptador injecta-o antes de lhe passar o pedido.
-		if strings.Contains(linha.CanonicalPath, "{") {
-			manipulador = InjectPathParams(manipulador)
+		consumed[key] = true
+		handler := entry.handler
+		// When the canonical path carries parameters, the identifier no
+		// longer comes in the body. The handler still reads it from the
+		// body — so the adapter injects it before passing the request on.
+		if strings.Contains(row.CanonicalPath, "{") {
+			handler = InjectPathParams(handler)
 		}
-		canonicas = append(canonicas, routeEntry{
-			path:    linha.CanonicalPath,
-			handler: manipulador,
-			methods: []string{linha.CanonicalMethod},
+		canonicalEntries = append(canonicalEntries, routeEntry{
+			path:    row.CanonicalPath,
+			handler: handler,
+			methods: []string{row.CanonicalMethod},
 		})
 	}
 
-	// Remove do registry os métodos que a tabela consumiu, um a um — uma
-	// entrada pode combinar vários métodos no mesmo Register (ex.:
-	// "/user/privacy" com GET e POST), e só alguns podem ter linha na
-	// tabela. Uma entrada com TODOS os métodos consumidos desaparece;
-	// com só ALGUNS, fica registada com os que sobraram.
-	var restantes []routeEntry
-	for _, entrada := range r.routes {
-		var mantidos []string
-		for _, metodo := range entrada.methods {
-			chave := strings.ToUpper(metodo) + " " + entrada.path
-			if !consumidas[chave] {
-				mantidos = append(mantidos, metodo)
+	// Remove from the registry the methods the table consumed, one by one —
+	// a single entry can combine several methods in the same Register call
+	// (e.g. "/user/privacy" with GET and POST), and only some of them may
+	// have a row in the table. An entry with ALL of its methods consumed
+	// disappears; with only SOME, it stays registered with whichever
+	// methods are left.
+	var remaining []routeEntry
+	for _, entry := range r.routes {
+		var kept []string
+		for _, method := range entry.methods {
+			key := strings.ToUpper(method) + " " + entry.path
+			if !consumed[key] {
+				kept = append(kept, method)
 			}
 		}
-		if len(mantidos) == 0 {
+		if len(kept) == 0 {
 			continue
 		}
-		if len(mantidos) != len(entrada.methods) {
-			entrada.methods = mantidos
+		if len(kept) != len(entry.methods) {
+			entry.methods = kept
 		}
-		restantes = append(restantes, entrada)
+		remaining = append(remaining, entry)
 	}
-	r.routes = append(restantes, canonicas...)
-	return orfas
+	r.routes = append(remaining, canonicalEntries...)
+	return orphans
 }
 
-// bodyFieldForPathParam diz em que campo do corpo cada parâmetro de caminho
-// deve ser injectado.
+// bodyFieldForPathParam says which body field each path parameter must be
+// injected into.
 //
-// Os nomes de destino são os que os manipuladores JÁ leem — não uma
-// normalização nova. Mudar o nome do campo aqui mudaria o contrato do corpo, e
-// o objectivo desta camada é exactamente o contrário: caminho novo, corpo
-// igual.
+// The destination names are the ones the handlers ALREADY read — not a new
+// normalization. Changing a field name here would change the body contract,
+// and the whole point of this layer is exactly the opposite: new path, same
+// body.
 //
-// INTEGRAÇÃO (2026-08-27): esta tabela apontava para os nomes ANTIGOS
-// (`groupJID`, `ChatPhone`, `PollMessageId`, `Code`) porque foi escrita antes
-// das migrações DTO das famílias grupo e mensagens serem integradas nesta
-// árvore. Depois delas, os manipuladores passaram a ler exclusivamente os
-// nomes canónicos — a tabela ficou a apontar para campos que já não existem,
-// e as rotas cortadas (worktree http-dto-paths) que dependem desta injecção
-// para preencher group_jid/chat_phone/poll_message_id a partir do caminho
-// paravam de resolver (404→400 missing_*). Corrigido para os nomes actuais.
+// INTEGRATION (2026-08-27): this table used to point at the OLD names
+// (`groupJID`, `ChatPhone`, `PollMessageId`, `Code`) because it was written
+// before the group and message families' DTO migrations were integrated
+// into this tree. After those migrations, the handlers started reading
+// exclusively the canonical names — the table was left pointing at fields
+// that no longer existed, and the cut-over routes (worktree http-dto-paths)
+// that rely on this injection to fill in group_jid/chat_phone/poll_message_id
+// from the path stopped resolving (404→400 missing_*). Fixed to the current
+// names.
 var bodyFieldForPathParam = map[string]string{
 	"group_jid":       "group_jid",
 	"community_jid":   "community_jid",
@@ -129,17 +132,17 @@ var bodyFieldForPathParam = map[string]string{
 	"invite_code":     "code",
 }
 
-// InjectPathParams copia os parâmetros do caminho para o corpo JSON, e só
-// então chama o manipulador original.
+// InjectPathParams copies the path parameters into the JSON body, and only
+// then calls the original handler.
 //
-// NÃO SOBRESCREVE. Se o corpo já trouxer o campo, o corpo ganha — o caminho é
-// a forma nova de dizer a mesma coisa, e não uma autoridade sobre quem já a
-// dizia. Isso mantém a rota canónica utilizável por um cliente que ainda
-// envie o identificador no corpo, durante a migração.
+// DOES NOT OVERWRITE. If the body already carries the field, the body wins —
+// the path is a new way to say the same thing, not an authority over
+// whoever already said it. That keeps the canonical route usable by a
+// client that still sends the identifier in the body, during the migration.
 //
-// Exportada porque também é usada por rotas cortadas directamente para a
-// forma canónica (sem passar por RegisterCanonicalAliases) — ver
-// pkg/bootstrap/wiring_routes.go.
+// Exported because it is also used directly by cut-over routes going
+// straight to the canonical form (without going through
+// CanonicalizeRoutes) — see pkg/bootstrap/wiring_routes.go.
 func InjectPathParams(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
@@ -148,46 +151,48 @@ func InjectPathParams(next http.Handler) http.Handler {
 			return
 		}
 
-		bruto, err := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
 		if err != nil {
-			// Ler o corpo falhou: deixa o manipulador original responder pelo
-			// erro, com a mensagem que ele já dá. Inventar uma aqui seria uma
-			// segunda forma de dizer a mesma falha.
+			// Reading the body failed: let the original handler respond
+			// with the error, using the message it already gives. Making
+			// one up here would be a second way of saying the same
+			// failure.
 			next.ServeHTTP(w, r)
 			return
 		}
 		_ = r.Body.Close()
 
-		corpo := map[string]any{}
-		if len(bytes.TrimSpace(bruto)) > 0 {
-			if err := json.Unmarshal(bruto, &corpo); err != nil {
-				// Corpo ilegível: repõe-no tal e qual, para que a recusa venha
-				// do decodificador do manipulador e traga o código habitual.
-				r.Body = io.NopCloser(bytes.NewReader(bruto))
+		body := map[string]any{}
+		if len(bytes.TrimSpace(raw)) > 0 {
+			if err := json.Unmarshal(raw, &body); err != nil {
+				// Unreadable body: put it back as-is, so the rejection
+				// comes from the handler's own decoder and carries the
+				// usual code.
+				r.Body = io.NopCloser(bytes.NewReader(raw))
 				next.ServeHTTP(w, r)
 				return
 			}
 		}
 
-		for parametro, valor := range vars {
-			campo, conhecido := bodyFieldForPathParam[parametro]
-			if !conhecido {
+		for param, value := range vars {
+			field, known := bodyFieldForPathParam[param]
+			if !known {
 				continue
 			}
-			if _, jaVeio := corpo[campo]; jaVeio {
+			if _, alreadyPresent := body[field]; alreadyPresent {
 				continue
 			}
-			corpo[campo] = valor
+			body[field] = value
 		}
 
-		novo, err := json.Marshal(corpo)
+		updated, err := json.Marshal(body)
 		if err != nil {
-			r.Body = io.NopCloser(bytes.NewReader(bruto))
+			r.Body = io.NopCloser(bytes.NewReader(raw))
 			next.ServeHTTP(w, r)
 			return
 		}
-		r.Body = io.NopCloser(bytes.NewReader(novo))
-		r.ContentLength = int64(len(novo))
+		r.Body = io.NopCloser(bytes.NewReader(updated))
+		r.ContentLength = int64(len(updated))
 		next.ServeHTTP(w, r)
 	})
 }
