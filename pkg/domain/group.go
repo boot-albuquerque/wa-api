@@ -28,9 +28,17 @@ type ListGroupsResult struct {
 }
 
 // GetGroupInfoRequest representa a requisição para obter informações de um grupo
+//
+// F267: GroupJID carried a dead `json:"groupJID"` tag left over from before
+// the DTO migration. Nothing decodes JSON into this type — the wire shape is
+// pkg/presentation/http/dto/group.GetGroupInfoRequest
+// (handler_group.go:170) — so the tag was never live; it was exactly the trap
+// this file's own package comment warns about, misleading anything that
+// walked pkg/domain to infer the route's contract. See
+// group_no_wire_tags_test.go.
 type GetGroupInfoRequest struct {
 	ChatTarget
-	GroupJID string `json:"groupJID"`
+	GroupJID string
 }
 
 func (r *GetGroupInfoRequest) ResolveChat() { ResolveChatField(&r.GroupJID, r.ChatAlias) }
@@ -103,6 +111,10 @@ const (
 	ParticipantAdd ParticipantAction = "add"
 	// ParticipantRemove remove participantes do grupo.
 	ParticipantRemove ParticipantAction = "remove"
+	// ParticipantPromote torna participantes administradores do grupo (F263).
+	ParticipantPromote ParticipantAction = "promote"
+	// ParticipantDemote retira o cargo de administrador de participantes (F263).
+	ParticipantDemote ParticipantAction = "demote"
 )
 
 // RequestAction é o veredito sobre uma solicitação de entrada em grupo.

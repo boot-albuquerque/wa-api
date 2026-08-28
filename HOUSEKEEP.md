@@ -28976,9 +28976,111 @@ conjunto que ela guarda ser pequeno demais.
 `pkg/domain/group.go:214-217`, os dois casos ao `switch`, e o mapeamento no
 adaptador. Sem tocar na guarda.
 
-**Status**: não corrigido.
+**Corrigido em 2026-08-27**, exactamente pelo caminho sugerido, mais um elo em
+falta que a sugestão não via: `internal/wa-noise/main.go` (a fachada estreita
+sobre `internal/wa-noise/core`) só reexportava
+`ParticipantChangeAdd`/`ParticipantChangeRemove`, apesar de
+`core.ParticipantChangePromote`/`ParticipantChangeDemote` já existirem
+(`internal/wa-noise/core/group_participants.go:20-21`, aliases directos de
+`internal/wa-noise/capabilities/group.ChangePromote`/`ChangeDemote`). A
+capacidade sempre existiu; faltavam TRÊS elos, não um:
 
-<!-- f-status: aberto -->
+1. `pkg/domain/group.go` — `ParticipantPromote`/`ParticipantDemote` ao lado de
+   `ParticipantAdd`/`ParticipantRemove`.
+2. `pkg/application/usecase/group/group_management.go:271-283` — os dois casos
+   novos no `switch` de `UpdateGroupParticipants`, com a mensagem de erro do
+   `default` actualizada para citar as quatro acções.
+3. `internal/wa-noise/main.go` — reexportar `ParticipantChangePromote`/
+   `ParticipantChangeDemote` de `core`, sem o que o passo 4 não compila.
+4. `pkg/infra/wa-noise/adapters/group/participants.go` — o mapeamento binário
+   `change := wa.ParticipantChangeRemove; if action == domain.ParticipantAdd
+   { change = wa.ParticipantChangeAdd }` tratava QUALQUER acção que não fosse
+   "add" como remoção. Isto já estava ali ANTES da F247 guardar o `switch` do
+   use case — ou seja, mesmo com o `switch` aceitando "promote"/"demote", o
+   adaptador continuaria a enviá-los como "remove" ao protocolo. Substituído
+   por um `switch` exaustivo com `default` que devolve erro em vez de cair
+   silenciosamente em remove — a MESMA armadilha da F247, uma camada abaixo,
+   e só visível porque o teste de adaptador (abaixo) chama a porta fake e lê
+   qual `wa.ParticipantChange` ela recebeu, não só se `UpdateGroupParticipants`
+   devolveu erro.
+
+Doc actualizada: `api/openapi/schemas/grupo.yaml` (`enum: [add, remove,
+promote, demote]`, tabela e explicação reescritas), `cmd/openapidoc`
+corrido de novo.
+
+**Testes que travam**:
+
+- `pkg/domain/jid_user_test.go` (não relacionado — ver F271 abaixo).
+- `pkg/application/usecase/group/group_management_test.go`:
+  `TestGroupManagement_UpdateParticipantsTraduzAction` ganhou os casos
+  `promote`→`ParticipantPromote` e `demote`→`ParticipantDemote`;
+  `TestGroupManagement_UpdateParticipantsRejectsUnknownAction` perdeu
+  `"promote"` da lista de rejeitados (deixou de ser desconhecido) e ganhou
+  `"ADD"`/`"PROMOTE"` (a guarda é sensível a maiúsculas, e isso continua a
+  valer).
+- `pkg/presentation/http/handlers/handler_group_mgmt_test.go`:
+  `TestUpdateGroupParticipants_PromoteAndDemote` — roda promote/demote pela
+  MESMA cadeia de produção (`grpMgmtServe`) que todo o resto do ficheiro usa,
+  e afirma o `domain.ParticipantAction` que chegou à porta fake, não só o
+  status HTTP. `TestUpdateGroupParticipants_RejectsUnknownAction` também
+  perdeu `"promote"` e ganhou `"ADD"`.
+- `pkg/infra/wa-noise/adapters/group/participants_test.go` — é aqui que o
+  defeito REAL do adaptador é travado:
+  `TestGroupAdapter_UpdateGroupParticipants_PromoteOK`,
+  `TestGroupAdapter_UpdateGroupParticipants_DemoteOK` (afirmam
+  `wa.ParticipantChangePromote`/`Demote`, não apenas ausência de erro — um
+  teste que só checasse "sem erro" teria passado com promote saindo como
+  remove) e `TestGroupAdapter_UpdateGroupParticipants_UnknownAction` (a porta
+  fake falha o teste se for chamada, travando que um valor desconhecido NUNCA
+  alcance o protocolo).
+
+**Controlo negativo EXECUTADO**, duas mutações, uma por camada:
+
+1. Reverti o adaptador para o mapeamento binário original (`change :=
+   wa.ParticipantChangeRemove; if action == domain.ParticipantAdd { change =
+   wa.ParticipantChangeAdd }`):
+
+```
+--- FAIL: TestGroupAdapter_UpdateGroupParticipants_PromoteOK
+    participants_test.go:65: UpdateGroupParticipants action = remove, want
+    Promote (F263: this used to silently come out as Remove)
+--- FAIL: TestGroupAdapter_UpdateGroupParticipants_DemoteOK
+    participants_test.go:80: UpdateGroupParticipants action = remove, want
+    Demote (F263: this used to silently come out as Remove)
+--- FAIL: TestGroupAdapter_UpdateGroupParticipants_UnknownAction
+    participants_test.go:90: port reached with unknown action remove; the
+    adapter must refuse before calling it
+```
+
+   Prova exactamente a consequência medida na entrada original: mesmo que o
+   use case aceitasse "promote", o pedido saía ao protocolo como "remove".
+
+2. Removi os dois casos novos do `switch` do use case
+   (`group_management.go`):
+
+```
+--- FAIL: TestGroupManagement_UpdateParticipantsTraduzAction/promote
+    unknown participant action "promote" (must be "add", "remove", "promote"
+    or "demote")
+--- FAIL: TestGroupManagement_UpdateParticipantsTraduzAction/demote
+    unknown participant action "demote" (must be "add", "remove", "promote"
+    or "demote")
+--- FAIL: TestUpdateGroupParticipants_PromoteAndDemote/promote
+    status 400, want 200
+--- FAIL: TestUpdateGroupParticipants_PromoteAndDemote/demote
+    status 400, want 200
+```
+
+Ambas as mutações restauradas antes do commit; suíte completa
+(`go test ./pkg/... ./cmd/...`) verde depois.
+
+**Status**: corrigido. `go build ./...`, `go vet ./...` e `make
+waclient-facade`/`waclient-filesize`/`waclient-test` verdes; `internal/wa-noise/main.go`
+mudou (reexport), mas não a árvore de `core` nem `capabilities` — nenhuma
+lógica de protocolo foi tocada, só o que já existia ficou visível ao resto do
+código.
+
+<!-- f-status: corrigido -->
 
 ## F264 — `/user/block` e `/user/unblock` são recusados pelo WhatsApp nas DUAS contas, com PN e com LID
 
@@ -29231,6 +29333,88 @@ proporção possível, porque parece de confiança.
 **Status**: não corrigido. O `docs/ENDPOINTS.md` foi escrito a partir da
 MEDIÇÃO e não das structs, e diz isso na secção "O que a bateria corrigiu nos
 meus próprios exemplos".
+
+## Passo 1 (teste-comparação) feito em 2026-08-27 — os outros dois ficam abertos
+
+**O que mudou desde que a entrada foi escrita**: entre esta entrada e agora, a
+família de grupo migrou para DTOs dedicados
+(`pkg/presentation/http/dto/group`). `handler_group_mgmt.go` já não declara
+`var req struct{...}` anónimas — as onze funções decodificam
+`dtogroup.JoinGroupRequest`, `dtogroup.SetGroupPhotoRequest`, etc., cada uma
+com as suas próprias tags `json` correctas (medidas contra o que a rota
+sempre leu: `code` para o convite, `photo` para a foto, e assim por diante).
+**Medi as dez linhas da tabela desta entrada de novo, uma a uma**: as nove que
+vivem em `handler_group_mgmt.go`/`handler_group.go` já passam pela DTO
+correcta hoje; a décima (`/chat/mute`) já tinha sido fechada pela F268. Ou
+seja: a CAUSA estrutural original (handlers com struct anónima confundida com
+o contrato) já não existe mais para as dez rotas medidas.
+
+**O que NÃO mudou, e é o que este passo fecha**: `pkg/domain/group.go` tem, no
+topo, a promessa "Hence: Go-idiomatic names, and no `json` tags" — mas
+`GetGroupInfoRequest.GroupJID` ainda carregava `json:"groupJID"`, um resto de
+ANTES da migração para DTO. Nada decodifica JSON directamente para
+`domain.GetGroupInfoRequest` (o handler decodifica
+`dtogroup.GetGroupInfoRequest`, `handler_group.go:170`), então a tag estava
+MORTA — mas é exactamente a armadilha que esta entrada descreve: uma
+ferramenta futura (gerador de docs, exportador de SDK, ou só alguém a
+percorrer `pkg/domain` à procura do contrato) não tem como distinguir uma tag
+viva de uma morta, e produziria `groupJID` onde a DTO já diz `group_jid`.
+
+**Escopo desta sessão**: só o passo 1 da correcção sugerida (o teste que trava
+a divergência), sem tocar em nenhum contrato servido — nem o passo 2 (fazer
+os handlers desserializarem `pkg/domain`, que aliás já não se aplica: a
+arquitectura correcta agora é a DTO, não o domínio) nem o passo 3
+(`/group/photo` aceitar URI de dados) foram tocados.
+
+**O teste**: `pkg/domain/group_no_wire_tags_test.go`,
+`TestGroupDomainTypesCarryNoWireTags`. Em vez da comparação campo-a-campo
+original (que não faz mais sentido: as dez rotas já não leem `pkg/domain`
+para decodificar), ele afirma a invariante que o PRÓPRIO `group.go` já
+declarava e que a tag morta violava: nenhum tipo declarado nesse ficheiro pode
+carregar uma tag `json`. Usa `go/ast`/`go/parser` sobre o ficheiro fonte — a
+mesma técnica que `respondjson_ledger_test.go` já usa neste repositório para
+gates arquitecturais — para que um tipo NOVO acrescentado a `group.go` seja
+coberto automaticamente, sem lista mantida à mão (que é exactamente o tipo de
+coisa que fica desactualizada, o mesmo problema que esta entrada trata).
+
+**Corrigido junto**: removida a tag morta de `GetGroupInfoRequest.GroupJID`.
+Mudança de METADADO, não de comportamento — `go build ./...` confirma que
+nada dependia dela (nada quebrou ao remover); o campo real usado para decode é
+`dtogroup.GetGroupInfoRequest.GroupJID` (`json:"group_jid"`), intocado.
+
+**Testes que travam**: `pkg/domain/group_no_wire_tags_test.go`,
+`TestGroupDomainTypesCarryNoWireTags`.
+
+**Controlo negativo EXECUTADO**: reintroduzida a tag (`GroupJID string
+`json:"groupJID"``):
+
+```
+--- FAIL: TestGroupDomainTypesCarryNoWireTags
+    group_no_wire_tags_test.go:57: group.go declares it carries no `json`
+    tags (see the file's own package comment), but 1 field(s) do:
+      GetGroupInfoRequest.GroupJID `json:"groupJID"`
+```
+
+Restaurado antes do commit; `go test ./pkg/domain/...` verde depois.
+
+**Por que o escopo ficou em `group.go` e não no pacote `pkg/domain` inteiro**:
+medi (`grep json:\" pkg/domain/*.go`) e a maior parte do pacote — `mute.go`,
+`star.go`, `pin.go`, `archive.go`, `entities.go`, `user.go`, `profile.go`,
+`download.go`, `unavailable_message.go`, `chat_target.go` — CONTINUA a
+carregar tags `json` vivas, porque essas rotas não migraram para DTO. Só
+`group.go` (e `group_info.go`, `newsletter.go`, `health.go`, ao lado) faz a
+promessa explícita de não carregar tags — estender o teste ao pacote inteiro
+falharia em dezenas de sítios que não são o defeito da F267, e cada um exigiria
+decidir se é o próximo candidato à migração DTO (fora do escopo desta sessão)
+ou não. Registado aqui para quem pegar o próximo lote de migração: o mesmo
+`go/ast` scanner serve, só a lista de ficheiros muda.
+
+**Status**: passo 1 (comparação/teste) concluído para o grupo, que é a
+família que a entrada original mediu. Os passos 2 e 3 continuam em aberto —
+2 nem se aplica mais na forma original (os handlers já não leem `pkg/domain`
+directamente; leem DTO), e a decisão sobre estender o mesmo scanner a outros
+ficheiros de `pkg/domain` que ainda não migraram fica para quando esses
+ficheiros migrarem.
 
 <!-- f-status: aberto -->
 
@@ -29779,8 +29963,80 @@ corpo da função por `return false`, que compila:
 **Status**: corrigido para `jid` nas catorze operações. `userJID` e `invite`
 continuam a devolver `500` — medidos, e à espera de decisão.
 
-<!-- f-status: aberto -->
+## `userJID` corrigido em 2026-08-27 — MESMO padrão que `jid`, `invite` continua em aberto
 
+`userJID` (exigido por `demote`, `change_owner`, `admin_invite`,
+`admin_invite_revoke`) recebeu o MESMO tratamento que `jid` recebeu nesta
+entrada: uma regra de forma nova, `requireValidUserJID`, colocada logo a
+seguir à regra de ausência (`missing_user_jid`) na tabela de requisitos —
+mesma razão de ordem que `requireNewsletterServer` tem ao lado de `requireJID`.
+
+A regra em si é `domain.JID.IsUserJID()`
+(`pkg/domain/jid.go`), ao lado de `IsLID`, `IsPN` e `IsNewsletter`: exige
+sufixo `@s.whatsapp.net` ou `@lid` E parte de utilizador não vazia e sem
+brancos — igual a `IsNewsletter`, e pela MESMA razão (é usada para ADMITIR um
+pedido, não para descrever um jid; um `IsLID`/`IsPN` puros aceitariam
+`"   @lid"` pelo sufixo sozinho). Escrita como uma única expressão-retorno
+(não um `if`-chain) de propósito: o gate de cobertura de log classifica
+funções triviais (≤2 comandos, sem caminho de saída) como X1/excluídas do
+denominador; um `if`-chain teria tornado `IsUserJID` elegível sem log nenhum,
+e derrubado `func_coverage` de 594 para 593 décimos — a MESMA armadilha que
+esta entrada já tinha batido com os ajudantes descartados de `withJID(...)`.
+
+Resposta nova: `400` com `error.code = "invalid_user_jid"`.
+
+**Testes que travam**:
+
+- `pkg/domain/jid_user_test.go`: `TestJID_IsUserJID` (os dois valores medidos
+  × as formas malformadas, e o caminho de sucesso PN/LID),
+  `TestJID_UserJIDDoesNotDisturbOtherRules`.
+- `pkg/application/usecase/notification/newsletter_jid_validation_test.go`:
+  `TestNewsletter_MalformedUserJID_IsValidation` (as quatro operações),
+  `TestNewsletter_MissingUserJID_StillMissingUserJID`,
+  `TestNewsletter_ValidUserJID_PassesValidation` (caminho de sucesso),
+  `TestNewsletter_UserJIDRulesAreNeverSplit` (teste da CAUSA — mesma forma que
+  `TestNewsletter_JIDRulesAreNeverSplit`),
+  `TestNewsletter_MalformedUserJID_NeverReachesThePort`.
+- `pkg/presentation/http/handlers/handler_newsletter_jid_test.go`:
+  `TestNewsletter_UserJIDMalformadoE400` (as quatro rotas × os dois valores,
+  contrato de resposta), `TestNewsletter_UserJIDValidoContinuaA200`.
+
+**Controlo negativo EXECUTADO**, duas mutações:
+
+1. `IsUserJID` enfraquecido para só checar o sufixo
+   (`hasSuffix(s, ServerPN) || hasSuffix(s, ServerLID)`, sem checar parte de
+   utilizador):
+
+```
+--- FAIL: TestJID_IsUserJID
+    jid_user_test.go:37: JID("@s.whatsapp.net").IsUserJID() = true, want false
+    jid_user_test.go:37: JID("@lid").IsUserJID() = true, want false
+    jid_user_test.go:37: JID("   @lid").IsUserJID() = true, want false
+```
+
+2. Removida a `requireValidUserJID` das quatro linhas da tabela
+   (`newsletterRequirements`):
+
+```
+--- FAIL: TestNewsletter_MalformedUserJID_IsValidation (8 subtestes)
+--- FAIL: TestNewsletter_UserJIDRulesAreNeverSplit
+    op "change_owner": missing_user_jid=true invalid_user_jid=false; the two
+    rules must travel together
+--- FAIL: TestNewsletter_MalformedUserJID_NeverReachesThePort (2 subtestes)
+```
+
+Ambas restauradas antes do commit; `go test ./pkg/... ./cmd/...` verde
+depois.
+
+**O `invite` inexistente de `POST /newsletter/info-invite` continua em
+aberto**: é `404`, não `400` — caso diferente, já explicado acima, fora do
+escopo desta correcção.
+
+**Status**: corrigido para `jid` e `userJID`. `invite` (código de convite
+inexistente → deveria ser `404`, hoje é `500`) continua em aberto, é um caso
+de outra natureza (existência, não forma) e requer decisão própria.
+
+<!-- f-status: aberto -->
 
 ## F272 — o adaptador de infra repete a validação de `mode` e não distingue ausente de inválido
 
@@ -34306,3 +34562,44 @@ existem." `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd` e
 `go test ./pkg/... ./cmd/...` limpos.
 
 <!-- f-status: corrigido -->
+## F341 — o `.golangci-baseline` de lint está desactualizado (575 → 618, medido sem mexer em nada)
+
+**Data/contexto**: 2026-08-27, ao correr `make check` como parte da sessão de
+F263/F271/F267. Achado INCIDENTAL — não faz parte do escopo dessas três
+entradas — encontrado ao rodar os gates completos antes do commit.
+
+A entrada original também apontava `pkg/bootstrap/caminhos_canonicos_test.go`
+divergindo do `gofmt` — isso já estava corrigido em paralelo por F339
+(worktree `worktree/housekeep-infra`), então esta entrada fica só com a
+segunda metade.
+
+**Lint baseline**: `make lint` reporta 618 problemas contra um piso
+gravado de 575:
+
+```
+lint: complexidade maxima 50 (baseline 50) | 618 issue(s) (informativo, baseline 575)
+ATENCAO: a contagem de issues SUBIU (575 -> 618). Atualize count em .golangci-baseline neste PR.
+```
+
+Confirmado com `git stash -u` que os 618 já são a contagem da árvore
+LIMPA, sem nenhuma mudança desta sessão — a contagem é IDÊNTICA (618) com e
+sem os ficheiros de F263/F271/F267. O `.golangci-baseline` ficou parado em
+575 nalgum commit anterior a este, e ninguém actualizou.
+
+**Onde**: `.golangci-baseline` (contagem de lint).
+
+**Por que não corrigi aqui**: o gate de lint é `informativo` nesta fase
+(não bloqueia `make check`, só avisa), e a contagem não pertence a nenhuma
+das três entradas desta sessão — tocá-la misturaria uma actualização de
+piso sem relação com F263/F271/F267 no mesmo diff.
+
+**Correcção sugerida**: rodar `make lint` na árvore limpa e actualizar
+`count=` em `.golangci-baseline` para 618 — ou investigar se algum PR
+recente introduziu issues genuínas antes de aceitar o número: 43 issues a
+mais é grande o suficiente para merecer uma olhada, não só um bump cego.
+
+**Status**: não corrigido — fora do escopo desta sessão (F263/F271/F267) e
+da normalização de contrato HTTP. Medido e confirmado pré-existente com
+`git stash -u`.
+
+<!-- f-status: aberto -->

@@ -2644,7 +2644,8 @@ pkg/application/usecase/notification.newsletterRequirements.func8	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func9	EXCLUDED	X6
 pkg/application/usecase/notification.requireJID.func1	EXCLUDED	X6
 pkg/application/usecase/notification.requireNewsletterServer.func1	EXCLUDED	X6
-pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:344);uncovered:L2(S-ret,newsletter_ops.go:349)
+pkg/application/usecase/notification.requireValidUserJID.func1	EXCLUDED	X6
+pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:362);uncovered:L2(S-ret,newsletter_ops.go:367)
 pkg/application/usecase/profile.GetProfileFullUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherPrivacidade	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherUserInfo	ELIGIBLE	covered
@@ -3094,11 +3095,12 @@ pkg/domain.IsValidMediaDelivery	EXCLUDED	X1
 pkg/domain.JID.IsLID	EXCLUDED	X1
 pkg/domain.JID.IsNewsletter	EXCLUDED	X1
 pkg/domain.JID.IsPN	EXCLUDED	X1
+pkg/domain.JID.IsUserJID	EXCLUDED	X1
 pkg/domain.JID.Namespace	EXCLUDED	X1
 pkg/domain.JID.Server	ELIGIBLE	uncovered:L1
 pkg/domain.MuteChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.NormalizeIdentityInput	EXCLUDED	X1
-pkg/domain.ParticipantsUpdate.Valida	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group.go:161)
+pkg/domain.ParticipantsUpdate.Valida	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,group.go:173)
 pkg/domain.PinChatRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ReactRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.ResolveChatField	EXCLUDED	X1

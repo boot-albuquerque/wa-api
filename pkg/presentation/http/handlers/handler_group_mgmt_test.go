@@ -465,9 +465,11 @@ func TestGroupMgmtHandlers_ChatAlias_LegacyWins(t *testing.T) {
 	}
 }
 
-// F247: unknown participant action returns 400 from the handler, not 500.
+// F247/F263: unknown participant action returns 400 from the handler, not
+// 500. "promote" left this list in F263 — it is a valid action now, covered
+// by TestUpdateGroupParticipants_PromoteAndDemote below.
 func TestUpdateGroupParticipants_RejectsUnknownAction(t *testing.T) {
-	for _, action := range []string{"approve", "promote", "qualquer-coisa"} {
+	for _, action := range []string{"approve", "qualquer-coisa", "ADD"} {
 		t.Run(action, func(t *testing.T) {
 			f := newGrpMgmtFakes()
 			body := `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"` + action + `"}`
@@ -518,6 +520,50 @@ func TestUpdateGroupParticipants_ReturnsResult(t *testing.T) {
 	}
 	if !strings.Contains(respBody, `"confirmed":true`) {
 		t.Errorf("response should contain confirmed field: %s", respBody)
+	}
+}
+
+// F263: promote and demote reach the port with the right domain.ParticipantAction,
+// through the SAME handler chain grpMgmtServe uses for every other operation
+// in this file (production request-scoped chain, not a raw use case call) —
+// the boundary half of the F263 fix. The use-case-level translation is
+// TestGroupManagement_UpdateParticipantsTraduzAction.
+func TestUpdateGroupParticipants_PromoteAndDemote(t *testing.T) {
+	tests := []struct {
+		action string
+		want   domain.ParticipantAction
+	}{
+		{"promote", domain.ParticipantPromote},
+		{"demote", domain.ParticipantDemote},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			f := newGrpMgmtFakes()
+			f.settings.UpdateGroupParticipantsFunc = func(_ context.Context, _ string, _ domain.JID, _ []domain.JID, _ domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+				return domain.ParticipantsUpdate{
+					Participants: []domain.GroupParticipant{{JID: "5511999999999@s.whatsapp.net", IsAdmin: tt.action == "promote"}},
+					Confirmed:    true,
+				}, nil
+			}
+			body := `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"` + tt.action + `"}`
+			rec, _ := grpMgmtServe(grpMgmtCase{
+				name: "UpdateGroupParticipants",
+				path: "/group/updateparticipants",
+				body: body,
+				pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
+			}, f, body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+			}
+			if len(f.settings.UpdateGroupParticipantsCalls) != 1 {
+				t.Fatalf("port called %d time(s), want 1", len(f.settings.UpdateGroupParticipantsCalls))
+			}
+			if got := f.settings.UpdateGroupParticipantsCalls[0].Action; got != tt.want {
+				t.Fatalf("Action = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

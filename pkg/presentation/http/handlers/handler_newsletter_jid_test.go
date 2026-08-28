@@ -100,6 +100,79 @@ func TestNewsletter_JIDValidoContinuaA200(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Follow-up to F271 — "O que a correcção NÃO cobriu": userJID never got the
+// same form rule as the channel jid, so a malformed userJID on demote,
+// change_owner, admin_invite and admin_invite/revoke still reaches the
+// adapter and comes back as 500 instead of 400.
+// ---------------------------------------------------------------------------
+
+// jidsMedidosUserJID são os dois valores medidos em campo contra
+// POST /newsletter/admin-invite (HOUSEKEEP.md F271, seccao de seguimento).
+var jidsMedidosUserJID = []string{
+	"   ",
+	"nao-e-jid",
+}
+
+// newsletterUserJIDRoutes covers the four operations that read userJID,
+// registered exactly as wiring_routes.go does, so the test exercises the same
+// handler + method + path the real mux serves.
+var newsletterUserJIDRoutes = []struct {
+	name   string
+	method string
+	path   string
+	pick   func(*NewsletterHandlers) *newsletterOpHandler
+}{
+	{"demote", http.MethodPost, "/newsletter/demote", func(h *NewsletterHandlers) *newsletterOpHandler { return h.Demote }},
+	{"change_owner", http.MethodPost, "/newsletter/change-owner", func(h *NewsletterHandlers) *newsletterOpHandler { return h.ChangeOwner }},
+	{"admin_invite", http.MethodPost, "/newsletter/admin-invite", func(h *NewsletterHandlers) *newsletterOpHandler { return h.AdminInvite }},
+	{"admin_invite_revoke", http.MethodPost, "/newsletter/admin-invite/revoke", func(h *NewsletterHandlers) *newsletterOpHandler { return h.AdminInviteRevoke }},
+}
+
+func TestNewsletter_UserJIDMalformadoE400(t *testing.T) {
+	for _, route := range newsletterUserJIDRoutes {
+		for _, jid := range jidsMedidosUserJID {
+			t.Run(route.name+"/"+jid, func(t *testing.T) {
+				nr := &contractsfake.NewsletterReader{}
+
+				rec, _ := ipmServe(t, route.pick(newsletterOps(nr)), route.method, route.path,
+					`{"jid":"`+canalDeTeste+`","user_jid":`+strconvQuote(jid)+`}`,
+					func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+				assertErrorEnvelope(t, rec, http.StatusBadRequest)
+				if code := errorCode(t, rec.Body.Bytes()); code != "invalid_user_jid" {
+					t.Fatalf("error.code = %q, quero %q (corpo: %s)", code, "invalid_user_jid", rec.Body.String())
+				}
+				if len(nr.NewsletterCalls) != 0 {
+					t.Fatalf("user jid malformado alcancou a porta: %+v", nr.NewsletterCalls)
+				}
+			})
+		}
+	}
+}
+
+// TestNewsletter_UserJIDValidoContinuaA200 e' o controlo de sucesso desta
+// fronteira: uma regra que recusasse tudo passaria em
+// TestNewsletter_UserJIDMalformadoE400 sem validar nada.
+func TestNewsletter_UserJIDValidoContinuaA200(t *testing.T) {
+	for _, route := range newsletterUserJIDRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			nr := &contractsfake.NewsletterReader{}
+
+			rec, _ := ipmServe(t, route.pick(newsletterOps(nr)), route.method, route.path,
+				`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
+				func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
+			}
+			if len(nr.NewsletterCalls) != 1 {
+				t.Fatalf("porta chamada %d vez(es), quero 1", len(nr.NewsletterCalls))
+			}
+		})
+	}
+}
+
 // strconvQuote produz o literal JSON do valor, para que o jid com espacos
 // atravesse o corpo exactamente como foi medido.
 func strconvQuote(s string) string {

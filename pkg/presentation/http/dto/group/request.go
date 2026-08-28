@@ -152,11 +152,12 @@ func (r *SetDisappearingTimerRequest) ResolveChat() {
 	domain.ResolveChatField(&r.GroupJID, r.ChatAlias)
 }
 
-// UpdateGroupParticipantsRequest is the body of the add/remove members route.
+// UpdateGroupParticipantsRequest is the body of the add/remove/promote/demote
+// members route.
 type UpdateGroupParticipantsRequest struct {
 	GroupJID  string   `json:"group_jid"`
 	Phone     []string `json:"phone"`
-	Action    string   `json:"action"` // "add" or "remove"
+	Action    string   `json:"action"` // "add", "remove", "promote" or "demote" (F263)
 	ChatAlias string   `json:"chat"`
 }
 

@@ -72,8 +72,10 @@ type (
 )
 
 const (
-	ParticipantChangeAdd    = core.ParticipantChangeAdd
-	ParticipantChangeRemove = core.ParticipantChangeRemove
+	ParticipantChangeAdd     = core.ParticipantChangeAdd
+	ParticipantChangeRemove  = core.ParticipantChangeRemove
+	ParticipantChangePromote = core.ParticipantChangePromote
+	ParticipantChangeDemote  = core.ParticipantChangeDemote
 
 	ParticipantChangeApprove = core.ParticipantChangeApprove
 	ParticipantChangeReject  = core.ParticipantChangeReject

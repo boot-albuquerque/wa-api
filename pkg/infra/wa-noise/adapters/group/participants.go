@@ -25,11 +25,25 @@ func (a *GroupAdapter) UpdateGroupParticipants(ctx context.Context, txtID string
 		return domain.ParticipantsUpdate{}, err
 	}
 
-	// O upstream tratava qualquer ação diferente de "add" como remoção;
-	// a validação do valor agora é do use case, e aqui só resta o mapeamento.
-	change := wa.ParticipantChangeRemove
-	if action == domain.ParticipantAdd {
+	// F263: o upstream tratava qualquer ação diferente de "add" como remoção,
+	// o que silenciosamente enviava "remove" para "promote"/"demote" antes de o
+	// use case sequer aceitar esses valores. A validação do valor é do use case
+	// (group_management.go); aqui, com só quatro valores possíveis, um switch
+	// exaustivo é o que impede a mesma armadilha de voltar quando um quinto
+	// action for aceite lá sem entrar aqui — o default devolve erro em vez de
+	// silenciosamente cair em "remove".
+	var change wa.ParticipantChange
+	switch action {
+	case domain.ParticipantAdd:
 		change = wa.ParticipantChangeAdd
+	case domain.ParticipantRemove:
+		change = wa.ParticipantChangeRemove
+	case domain.ParticipantPromote:
+		change = wa.ParticipantChangePromote
+	case domain.ParticipantDemote:
+		change = wa.ParticipantChangeDemote
+	default:
+		return domain.ParticipantsUpdate{}, fmt.Errorf("wanoise: unknown participant action %q", string(action))
 	}
 	res, err := client.UpdateGroupParticipants(ctx, jid, jids, change)
 	if err != nil {

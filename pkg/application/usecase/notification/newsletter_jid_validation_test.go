@@ -210,6 +210,151 @@ func TestNewsletter_JIDRulesAreNeverSplit(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Follow-up to F271 — "O que a correcção NÃO cobriu": userJID is required by
+// four operations (demote, change_owner, admin_invite, admin_invite_revoke)
+// and never gained a form rule, so the same measured values that broke the
+// channel jid still reach the adapter through userJID and come back as
+// `500 newsletter_failed`.
+// ---------------------------------------------------------------------------
+
+// measuredBadUserJIDs are the values measured in the field against
+// POST /newsletter/admin-invite (HOUSEKEEP.md F271, follow-up section).
+var measuredBadUserJIDs = []domain.JID{
+	"   ",
+	"nao-e-jid",
+}
+
+// validUserJID is the success control for the userJID rule.
+const validUserJID domain.JID = "5516900000000@s.whatsapp.net"
+
+// opsRequiringUserJID enumerates, by name, the four operations that take a
+// target userJID. Written out rather than derived for the same reason
+// opsRequiringChannelJID is: the test must assert the SET.
+var opsRequiringUserJID = []NewsletterOp{
+	NewsletterOpDemote,
+	NewsletterOpChangeOwner,
+	NewsletterOpAdminInvite,
+	NewsletterOpAdminInviteRevoke,
+}
+
+// requestWithUserJID builds a request that satisfies every requirement of the
+// operation EXCEPT the userJID rule under test.
+func requestWithUserJID(op NewsletterOp, userJID domain.JID) NewsletterRequest {
+	return NewsletterRequest{
+		Op:      op,
+		JID:     validChannelJID,
+		UserJID: userJID,
+	}
+}
+
+// TestNewsletter_MalformedUserJID_IsValidation is the test of the defect: the
+// two measured values, on all four operations that take a userJID, must be
+// refused as validation — which is what makes the boundary answer 400 instead
+// of 500.
+func TestNewsletter_MalformedUserJID_IsValidation(t *testing.T) {
+	if len(opsRequiringUserJID) != 4 {
+		t.Fatalf("the user-jid family has 4 operations, the list has %d", len(opsRequiringUserJID))
+	}
+
+	for _, op := range opsRequiringUserJID {
+		for _, jid := range measuredBadUserJIDs {
+			t.Run(string(op)+"/"+string(jid), func(t *testing.T) {
+				err := validateNewsletter(requestWithUserJID(op, jid))
+				appErr := appErrorOf(t, err)
+
+				if appErr.Code != codeInvalidUserJID {
+					t.Fatalf("code = %q, want %q", appErr.Code, codeInvalidUserJID)
+				}
+				if appErr.Category != apperr.CategoryValidation {
+					t.Fatalf("category = %q, want %q (this is what produces 400)",
+						appErr.Category, apperr.CategoryValidation)
+				}
+				if appErr.Retryable {
+					t.Fatal("retryable = true; the same jid fails forever, so retrying is never right")
+				}
+			})
+		}
+	}
+}
+
+// TestNewsletter_MissingUserJID_StillMissingUserJID guards against trading one
+// wrong code for another: the ABSENCE was already correct and must stay
+// correct.
+func TestNewsletter_MissingUserJID_StillMissingUserJID(t *testing.T) {
+	for _, op := range opsRequiringUserJID {
+		t.Run(string(op), func(t *testing.T) {
+			err := validateNewsletter(requestWithUserJID(op, ""))
+			appErr := appErrorOf(t, err)
+
+			if appErr.Code != codeMissingUserJID {
+				t.Fatalf("code = %q, want %q", appErr.Code, codeMissingUserJID)
+			}
+			if appErr.Category != apperr.CategoryValidation {
+				t.Fatalf("category = %q, want %q", appErr.Category, apperr.CategoryValidation)
+			}
+		})
+	}
+}
+
+// TestNewsletter_ValidUserJID_PassesValidation is the SUCCESS path. A rule
+// that refused everything would satisfy both tests above; only this one says
+// the rule still admits a real user jid.
+func TestNewsletter_ValidUserJID_PassesValidation(t *testing.T) {
+	for _, op := range opsRequiringUserJID {
+		t.Run(string(op), func(t *testing.T) {
+			if err := validateNewsletter(requestWithUserJID(op, validUserJID)); err != nil {
+				t.Fatalf("valid user jid refused: %v", err)
+			}
+		})
+	}
+}
+
+// TestNewsletter_UserJIDRulesAreNeverSplit reads the table itself: every row
+// that demands a userJID must ALSO carry the malformed-userJID rule — the
+// same causal test as TestNewsletter_JIDRulesAreNeverSplit, for the sibling
+// field.
+func TestNewsletter_UserJIDRulesAreNeverSplit(t *testing.T) {
+	for op, rules := range newsletterRequirements {
+		var hasMissing, hasInvalid bool
+		for _, rule := range rules {
+			switch rule.code {
+			case codeMissingUserJID:
+				hasMissing = true
+			case codeInvalidUserJID:
+				hasInvalid = true
+			}
+		}
+		if hasMissing != hasInvalid {
+			t.Errorf("op %q: missing_user_jid=%v invalid_user_jid=%v; the two rules must travel together",
+				op, hasMissing, hasInvalid)
+		}
+	}
+}
+
+// TestNewsletter_MalformedUserJID_NeverReachesThePort closes the loop through
+// Execute: the refusal has to happen BEFORE dispatch.
+func TestNewsletter_MalformedUserJID_NeverReachesThePort(t *testing.T) {
+	for _, jid := range measuredBadUserJIDs {
+		t.Run(string(jid), func(t *testing.T) {
+			nr := &contractsfake.NewsletterReader{}
+			nr.SessionGuard = contractsfake.FailSession(nil)
+			uc := NewNewsletterOpsUseCase(nr, &contractsfake.Logger{})
+
+			_, err := uc.Execute(context.Background(), "u1",
+				NewsletterRequest{Op: NewsletterOpAdminInvite, JID: validChannelJID, UserJID: jid})
+
+			appErr := appErrorOf(t, err)
+			if appErr.Code != codeInvalidUserJID {
+				t.Fatalf("code = %q, want %q", appErr.Code, codeInvalidUserJID)
+			}
+			if len(nr.NewsletterCalls) != 0 {
+				t.Fatalf("malformed user jid reached the port: %+v", nr.NewsletterCalls)
+			}
+		})
+	}
+}
+
 // TestNewsletter_MalformedJID_NeverReachesThePort closes the loop through
 // Execute: the refusal has to happen BEFORE dispatch, or the adapter still
 // pays for the bad request even if the status is now right.
