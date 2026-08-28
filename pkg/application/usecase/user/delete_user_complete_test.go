@@ -58,7 +58,7 @@ func insertUser(t *testing.T, db *sql.DB, stmt string, args ...any) {
 func TestDeleteUserCompleteUseCase_Execute_MissingID(t *testing.T) {
 	t.Parallel()
 
-	uc := user.NewDeleteUserCompleteUseCase(nil, &contractsfake.SessionController{}, &contractsfake.Logger{}, t.TempDir())
+	uc := user.NewDeleteUserCompleteUseCase(nil, &contractsfake.SessionController{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{}, t.TempDir())
 	if _, err := uc.Execute(context.Background(), ""); err == nil {
 		t.Fatal("esperava erro para ID vazio")
 	}
@@ -70,7 +70,7 @@ func TestDeleteUserCompleteUseCase_Execute_ExistenceQueryFails(t *testing.T) {
 	// Sem a tabela users, a primeira consulta já falha.
 	db := openTestDB(t)
 	logger := &contractsfake.Logger{}
-	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, logger, t.TempDir())
+	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, &contractsfake.UserInfoRepublisher{}, logger, t.TempDir())
 
 	if _, err := uc.Execute(context.Background(), "u1"); err == nil {
 		t.Fatal("esperava erro de banco")
@@ -84,7 +84,7 @@ func TestDeleteUserCompleteUseCase_Execute_UserNotFound(t *testing.T) {
 	t.Parallel()
 
 	db := openTestDB(t, fullSchema)
-	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, &contractsfake.Logger{}, t.TempDir())
+	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, &contractsfake.UserInfoRepublisher{}, &contractsfake.Logger{}, t.TempDir())
 
 	if _, err := uc.Execute(context.Background(), "ausente"); err == nil {
 		t.Fatal("esperava erro de usuário inexistente")
@@ -99,7 +99,7 @@ func TestDeleteUserCompleteUseCase_Execute_PartialSchemaKeepsGoing(t *testing.T)
 	db := openTestDB(t, `CREATE TABLE users (id TEXT PRIMARY KEY)`)
 	insertUser(t, db, `INSERT INTO users (id) VALUES ('u1')`)
 	logger := &contractsfake.Logger{}
-	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, logger, t.TempDir())
+	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, &contractsfake.UserInfoRepublisher{}, logger, t.TempDir())
 
 	res, err := uc.Execute(context.Background(), "u1")
 	if err != nil {
@@ -132,13 +132,64 @@ func TestDeleteUserCompleteUseCase_Execute_DeleteFails(t *testing.T) {
 		`CREATE TRIGGER no_delete BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, 'proibido'); END`)
 	insertUser(t, db, `INSERT INTO users (id, name, jid, token, s3_enabled) VALUES ('u1','alice','5511@s.whatsapp.net','tok',0)`)
 	logger := &contractsfake.Logger{}
-	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, logger, t.TempDir())
+	rep := &contractsfake.UserInfoRepublisher{}
+	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, rep, logger, t.TempDir())
 
 	if _, err := uc.Execute(context.Background(), "u1"); err == nil {
 		t.Fatal("esperava erro de banco na deleção")
 	}
 	if !logger.Logged("database error deleting user") {
 		t.Errorf("log ausente; houve %v", logger.Messages())
+	}
+	// F273 companion assertion: a deleção falhou (o trigger a barrou), então
+	// a cache do usuário — que ainda existe na tabela — não pode ser
+	// invalidada. Se isso acontecesse, uma leitura concorrente repovoaria a
+	// cache a partir da MESMA linha, mas o token ficaria descoberto por uma
+	// janela sem necessidade.
+	if len(rep.RepublishCalls) != 0 {
+		t.Errorf("RepublishUser chamado %d vez(es), queria 0 — a deleção falhou", len(rep.RepublishCalls))
+	}
+}
+
+// TestDeleteUserCompleteUseCase_Execute_InvalidaCacheAposDeletar é o teste
+// do defeito F273 para este segundo caminho de remoção
+// (`DELETE /admin/users/{id}/full`): a entrada mede que `GET /webhook`
+// respondia 200 com o token da sessão `descartavel-4` mesmo depois do
+// `/full`. Trava também a ORDEM — apagar a linha primeiro, invalidar
+// depois — com o mesmo dublê contador que delete_user_test.go usa.
+func TestDeleteUserCompleteUseCase_Execute_InvalidaCacheAposDeletar(t *testing.T) {
+	t.Parallel()
+
+	db := openTestDB(t, fullSchema)
+	insertUser(t, db, `INSERT INTO users (id, name, jid, token, s3_enabled) VALUES ('descartavel-4','alice','5511@s.whatsapp.net','tok-desc-4',0)`)
+	logger := &contractsfake.Logger{}
+	rep := &contractsfake.UserInfoRepublisher{
+		ContadorDeEscritas: func() int {
+			var count int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE id = 'descartavel-4'`).Scan(&count); err != nil {
+				t.Fatalf("contar usuários: %v", err)
+			}
+			// 0 restante == já apagado.
+			if count == 0 {
+				return 1
+			}
+			return 0
+		},
+	}
+	uc := user.NewDeleteUserCompleteUseCase(db, &contractsfake.SessionController{}, rep, logger, t.TempDir())
+
+	if _, err := uc.Execute(context.Background(), "descartavel-4"); err != nil {
+		t.Fatalf("erro inesperado: %v", err)
+	}
+
+	if len(rep.RepublishCalls) != 1 {
+		t.Fatalf("RepublishUser chamado %d vez(es), queria 1", len(rep.RepublishCalls))
+	}
+	if rep.RepublishCalls[0].UserID != "descartavel-4" {
+		t.Errorf("RepublishUser userID = %q, queria %q", rep.RepublishCalls[0].UserID, "descartavel-4")
+	}
+	if len(rep.EscritasAoSerChamado) != 1 || rep.EscritasAoSerChamado[0] != 1 {
+		t.Fatalf("invalidou ANTES de a linha sumir da tabela: EscritasAoSerChamado=%v", rep.EscritasAoSerChamado)
 	}
 }
 
@@ -213,7 +264,7 @@ func TestDeleteUserCompleteUseCase_Execute_Success(t *testing.T) {
 			}
 			sc.SessionStatusFunc = func(context.Context, string) (bool, bool) { return tt.connected, tt.connected }
 			logger := &contractsfake.Logger{}
-			uc := user.NewDeleteUserCompleteUseCase(db, sc, logger, exPath)
+			uc := user.NewDeleteUserCompleteUseCase(db, sc, &contractsfake.UserInfoRepublisher{}, logger, exPath)
 
 			res, err := uc.Execute(context.Background(), "u1")
 			if err != nil {

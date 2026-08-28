@@ -169,7 +169,14 @@ func initCustomHandlers(s *server) {
 
 	// Session UseCases
 	connectUC := session.NewConnectUseCase(logger)
-	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
+	// disconnectInFlightReleaser (F274): a successful disconnect also clears
+	// the orchestrator's per-user "start in flight" mark, so a `connect`
+	// right after `disconnect` is not blocked by a pairing flow the
+	// disconnect itself just tore down.
+	disconnectUC := session.NewDisconnectUseCase(
+		disconnectInFlightReleaser{SessionDisconnector: sessionGuard, orch: s.SessionOrchestrator},
+		logger,
+	)
 	getQRUC := session.NewGetQRUseCase(sessionGuard, userRepo, logger)
 	// O detacher e' o MESMO adapter que o orchestrator usa (Fase 2f): sem
 	// ele, o logout pela API apagava o store e deixava o cliente
@@ -282,7 +289,7 @@ func initCustomHandlers(s *server) {
 	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
 	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, s3SecretCipher{}, logger)
 	editUserUC := user.NewEditUserUseCase(userRepo, s3SecretCipher{}, userInfoRepublisher{db: s.DB}, logger)
-	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
+	deleteUserUC := user.NewDeleteUserUseCase(userRepo, userInfoRepublisher{db: s.DB}, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
@@ -319,7 +326,7 @@ func initCustomHandlers(s *server) {
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	newsletterOpsUC := notification.NewNewsletterOpsUseCase(miscAdapter, logger)
-	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, userInfoRepublisher{db: s.DB}, logger, s.ExPath)
 	rejectCallUC := chat.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
@@ -496,7 +503,23 @@ func initCustomHandlers(s *server) {
 // initConnectHandler creates a ConnectHandler wired to the SessionOrchestrator.
 func initConnectHandler(uc *session.ConnectUseCase, s *server) *handlers.ConnectHandler {
 	h := handlers.NewConnectHandler(uc)
-	return h.WithStartSession(s.startSession).WithCheckOwnership(connectOwnershipCheck(s))
+	return h.WithStartSession(s.startSession).
+		WithCheckStartInFlight(connectStartInFlightCheck(s)).
+		WithCheckOwnership(connectOwnershipCheck(s))
+}
+
+// connectStartInFlightCheck returns the F274 pre-check function for the
+// ConnectHandler. s.SessionOrchestrator is read at CALL time, not captured
+// now: some tests build a bare *server without setting it (mirrors
+// connectOwnershipCheck's own s.Leases nil-tolerance) — treated as "no guard
+// installed yet", never as a crash.
+func connectStartInFlightCheck(s *server) func(string) error {
+	return func(userID string) error {
+		if s.SessionOrchestrator == nil {
+			return nil
+		}
+		return s.SessionOrchestrator.CheckStartAvailable(userID)
+	}
 }
 
 // connectOwnershipCheck returns a pre-check function for the ConnectHandler

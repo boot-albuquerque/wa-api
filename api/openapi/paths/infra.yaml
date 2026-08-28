@@ -1006,8 +1006,13 @@
 
       - `media_delivery`, quando presente, tem de ser `base64`, `s3` ou `both`
         (`400 invalid_media_delivery`). Vazio assume `base64`.
-      - `endpoint`, quando presente, tem de ser um URL analisável
-        (`400 invalid_s3_endpoint`).
+      - `endpoint`, quando presente, passa pelo validador de saída
+        (`pkg/infra/egress.ValidateOutboundURL`, sec/F24) e não só precisa
+        ser um URL `http`/`https` analisável com host: nenhum dos endereços
+        resolvidos pode cair em faixa reservada ou loopback (por exemplo
+        `http://127.0.0.1:9000`, um MinIO local, é recusado). As duas causas
+        — "não analisei" e "recusei o destino" — devolvem o MESMO código
+        (`400 invalid_s3_endpoint`); a mensagem não distingue uma da outra.
       - `secret_key` é cifrada antes de tocar no banco e **nunca é devolvida**
         por nenhuma rota.
 
@@ -1076,6 +1081,15 @@
 
       **Não apaga os objectos já guardados no bucket** — só a configuração que
       apontava para ele. A limpeza do que lá está é sua.
+
+      **`enabled: false`, mas não é o mesmo corpo de uma sessão que nunca
+      configurou S3.** Medido em 2026-08-26: depois deste DELETE,
+      `GET /s3/config` volta com `path_style: true`, `media_delivery: base64`
+      e `retention_days: 30` — os valores por OMISSÃO do schema — enquanto uma
+      sessão que nunca chamou `POST /s3/config` mostra `path_style: false`,
+      `media_delivery: ""` e `retention_days: 0`. "Apagar" e "nunca ter tido"
+      não são o mesmo corpo; quem compara os dois não é avisado por nenhum
+      outro lugar deste documento.
 
       Não recebe corpo.
 

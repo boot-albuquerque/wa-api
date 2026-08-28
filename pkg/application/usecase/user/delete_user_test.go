@@ -57,7 +57,8 @@ func TestDeleteUserUseCase_Execute(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{DeleteUserFunc: tt.deleteFunc}
 			logger := &contractsfake.Logger{}
-			uc := user.NewDeleteUserUseCase(repo, logger)
+			rep := &contractsfake.UserInfoRepublisher{}
+			uc := user.NewDeleteUserUseCase(repo, rep, logger)
 
 			err := uc.Execute(context.Background(), tt.req)
 			if (err != nil) != tt.wantErr {
@@ -79,5 +80,83 @@ func TestDeleteUserUseCase_Execute(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDeleteUserUseCase_RepublicaCacheSoAposSucesso é o teste do defeito
+// F273: um token de uma sessão APAGADA continuava a autenticar porque nem
+// DeleteUserUseCase nem DeleteUserCompleteUseCase invalidavam a entrada de
+// cache do token ao apagar a linha. Aqui a asserção é dupla: (1) a
+// invalidação acontece, e (2) só quando a deleção teve sucesso — uma falha
+// de banco não pode disparar a limpeza de uma cache que ainda reflete um
+// usuário que continua na tabela.
+func TestDeleteUserUseCase_RepublicaCacheSoAposSucesso(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sucesso invalida a cache do usuário apagado", func(t *testing.T) {
+		t.Parallel()
+		repo := &contractsfake.UserRepository{
+			DeleteUserFunc: func(context.Context, string) (bool, error) { return true, nil },
+		}
+		rep := &contractsfake.UserInfoRepublisher{}
+		uc := user.NewDeleteUserUseCase(repo, rep, &contractsfake.Logger{})
+
+		if err := uc.Execute(context.Background(), domain.DeleteUserInput{UserID: "descartavel-2"}); err != nil {
+			t.Fatalf("Execute = %v", err)
+		}
+		if len(rep.RepublishCalls) != 1 {
+			t.Fatalf("RepublishUser chamado %d vez(es), queria 1", len(rep.RepublishCalls))
+		}
+		if rep.RepublishCalls[0].UserID != "descartavel-2" {
+			t.Errorf("RepublishUser userID = %q, queria %q", rep.RepublishCalls[0].UserID, "descartavel-2")
+		}
+	})
+
+	t.Run("erro de banco NÃO invalida a cache", func(t *testing.T) {
+		t.Parallel()
+		repo := &contractsfake.UserRepository{
+			DeleteUserFunc: func(context.Context, string) (bool, error) { return false, errors.New("boom") },
+		}
+		rep := &contractsfake.UserInfoRepublisher{}
+		uc := user.NewDeleteUserUseCase(repo, rep, &contractsfake.Logger{})
+
+		if err := uc.Execute(context.Background(), domain.DeleteUserInput{UserID: "u1"}); err == nil {
+			t.Fatal("esperava erro")
+		}
+		if len(rep.RepublishCalls) != 0 {
+			t.Fatalf("RepublishUser chamado %d vez(es), queria 0 — a deleção falhou", len(rep.RepublishCalls))
+		}
+	})
+}
+
+// TestDeleteUserUseCase_InvalidaDEPOISDeApagarENaoAntes trava a ORDEM
+// exigida pela política anti-regressão do CLAUDE.md para este achado:
+// apagar a linha primeiro, invalidar a cache depois. Invalidar antes
+// deixaria uma janela em que uma leitura concorrente repovoa a cache a
+// partir da linha que ainda existe (ver a correção sugerida na F273). O
+// dublê conta quantas chamadas a DeleteUser já aconteceram no instante em
+// que RepublishUser é chamado — inverter a ordem no código faz esse número
+// cair para 0.
+func TestDeleteUserUseCase_InvalidaDEPOISDeApagarENaoAntes(t *testing.T) {
+	t.Parallel()
+
+	repo := &contractsfake.UserRepository{
+		DeleteUserFunc: func(context.Context, string) (bool, error) { return true, nil },
+	}
+	rep := &contractsfake.UserInfoRepublisher{
+		ContadorDeEscritas: func() int { return len(repo.DeleteUserCalls) },
+	}
+	uc := user.NewDeleteUserUseCase(repo, rep, &contractsfake.Logger{})
+
+	if err := uc.Execute(context.Background(), domain.DeleteUserInput{UserID: "descartavel-2"}); err != nil {
+		t.Fatalf("Execute = %v", err)
+	}
+
+	if len(rep.EscritasAoSerChamado) != 1 {
+		t.Fatalf("republicador chamado %d vez(es)", len(rep.EscritasAoSerChamado))
+	}
+	if rep.EscritasAoSerChamado[0] != 1 {
+		t.Fatalf("invalidou com %d deleções feitas, quero 1 — a invalidação está ANTES da deleção",
+			rep.EscritasAoSerChamado[0])
 	}
 }

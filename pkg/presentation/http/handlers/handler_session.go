@@ -56,9 +56,10 @@ func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 // ConnectHandler handles GET /session/connect. After validation, it spawns
 // a goroutine to start the WhatsApp WebSocket connection.
 type ConnectHandler struct {
-	usecase        *session.ConnectUseCase
-	StartSession   func(userID, token string) // injected by bootstrap
-	CheckOwnership func(userID string) error  // injected by bootstrap (F108)
+	usecase            *session.ConnectUseCase
+	StartSession       func(userID, token string) // injected by bootstrap
+	CheckOwnership     func(userID string) error  // injected by bootstrap (F108)
+	CheckStartInFlight func(userID string) error  // injected by bootstrap (F274)
 }
 
 func NewConnectHandler(uc *session.ConnectUseCase) *ConnectHandler {
@@ -84,6 +85,20 @@ func (h *ConnectHandler) WithCheckOwnership(fn func(userID string) error) *Conne
 	return h
 }
 
+// WithCheckStartInFlight injects a synchronous pre-check (F274) for a
+// pairing flow already in progress for this user.
+//
+// Without it, the guard lives entirely inside Start, which runs in a
+// goroutine fired AFTER the handler already responded 200. A client hitting
+// `GET /session/connect` while a previous pairing flow was still active (for
+// example, right after `/session/disconnect` cut the transport but left the
+// flow running) got `200 {"status":"connecting"}` for an attempt that never
+// started — the same class of lie F108 closed for ownership.
+func (h *ConnectHandler) WithCheckStartInFlight(fn func(userID string) error) *ConnectHandler {
+	h.CheckStartInFlight = fn
+	return h
+}
+
 func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -99,6 +114,24 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hlog.FromRequest(r).Error().Err(err).Str("handler", "Connect").Str("user_id", id).Msg("session use case failed")
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
+	}
+
+	// F274: in-flight check BEFORE ownership, mirroring the order Start
+	// itself uses internally (inFlight.acquire runs before claimOwnership).
+	// Unlike the ownership check, this one is a read-only PEEK — see
+	// Orchestrator.CheckStartAvailable — so it does not touch the guard that
+	// Start's own acquire, moments later inside the goroutine, still needs to
+	// succeed.
+	if h.CheckStartInFlight != nil {
+		if flightErr := h.CheckStartInFlight(id); flightErr != nil {
+			if isClientCausedSessionError(flightErr) {
+				hlog.FromRequest(r).Warn().Err(flightErr).Str("handler", "Connect").Str("user_id", id).Msg("session start already in flight")
+			} else {
+				hlog.FromRequest(r).Error().Err(flightErr).Str("handler", "Connect").Str("user_id", id).Msg("session start already in flight")
+			}
+			customhttp.RespondJSON(w, 500, nil, flightErr)
+			return
+		}
 	}
 
 	// F108: ownership check BEFORE responding. Without this, the handler

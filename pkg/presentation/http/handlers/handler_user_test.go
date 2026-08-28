@@ -72,7 +72,7 @@ func (f *uhFakes) handlers() *UserHandlers {
 		user.NewListUsersUseCase(f.users, f.logger, f.sessions),
 		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger),
 		user.NewEditUserUseCase(f.users, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, f.logger),
-		user.NewDeleteUserUseCase(f.users, f.logger),
+		user.NewDeleteUserUseCase(f.users, &contractsfake.UserInfoRepublisher{}, f.logger),
 		user.NewCheckUserUseCase(f.contacts, f.logger),
 		user.NewGetUserUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserLIDUseCase(f.contacts, f.jids, f.logger),

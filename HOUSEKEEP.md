@@ -30361,12 +30361,59 @@ partir da linha que ainda existe. Alternativa mais forte: a resolução do token
 deixar de ser servida por cache sem revalidação, e passar a confirmar a
 existência da linha.
 
-**Status**: não corrigido. Fora do escopo da tarefa (medição de evidências),
-e o conserto toca na fronteira de autenticação — exige teste do defeito, teste
-da ORDEM (apagar antes de invalidar) e controlo negativo executado, nos termos
-do `CLAUDE.md`. Registado para decisão.
+**Status**: corrigido em 2026-08-27 (sessão `worktree/housekeep-session`).
 
-<!-- f-status: aberto -->
+Correção: `DeleteUserUseCase` e `DeleteUserCompleteUseCase` passaram a
+consumir `appport.UserInfoRepublisher` (a mesma porta que `publish_userinfo`
+usa para escrever, já existente desde a F200/F201 para o caminho de edição) e
+chamá-la logo APÓS a deleção da linha ter sucesso —
+`pkg/application/usecase/user/delete_user.go:44-48` e
+`pkg/application/usecase/user/delete_user_complete.go:97-100`.
+`RepublishUser` apaga a entrada do `appCtx.UserInfoCache` (chave por
+`userID`) e varre `userinfocache` (chave por token) apagando toda entrada
+cujo `Id` bate com o `userID` — a mesma implementação de
+`pkg/bootstrap/user_republish_adapter.go`, sem alteração. Wiring em
+`pkg/bootstrap/wiring_handlers.go:285` e `:322-329`.
+
+ORDEM (exigida pelo `CLAUDE.md`): apagar a linha PRIMEIRO, invalidar a cache
+DEPOIS — igual à correção sugerida. Travada por
+`TestDeleteUserUseCase_InvalidaDEPOISDeApagarENaoAntes`
+(`pkg/application/usecase/user/delete_user_test.go`) e por
+`TestDeleteUserCompleteUseCase_Execute_InvalidaCacheAposDeletar`
+(`pkg/application/usecase/user/delete_user_complete_test.go`), ambos com um
+dublê que conta quantas deleções já aconteceram no instante em que
+`RepublishUser` é chamado — inverter a ordem no código faz esse número cair
+para 0.
+
+Testes adicionais: `TestDeleteUserUseCase_RepublicaCacheSoAposSucesso`
+(sucesso invalida; erro de banco NÃO invalida) e
+`TestDeleteUserCompleteUseCase_Execute_DeleteFails` (idem, para o segundo
+caminho de remoção).
+
+Controlo negativo EXECUTADO: removida a chamada a `RepublishUser` de
+`DeleteUserUseCase.Execute` — `TestDeleteUserUseCase_InvalidaDEPOISDeApagarENaoAntes`
+e a suíte `TestDeleteUserUseCase_RepublicaCacheSoAposSucesso` falharam:
+
+```
+delete_user_test.go:156: republicador chamado 0 vez(es)
+--- FAIL: TestDeleteUserUseCase_InvalidaDEPOISDeApagarENaoAntes (0.00s)
+delete_user_test.go:108: RepublishUser chamado 0 vez(es), queria 1
+--- FAIL: TestDeleteUserUseCase_RepublicaCacheSoAposSucesso (0.00s)
+```
+
+E, separadamente, removida a chamada equivalente de
+`DeleteUserCompleteUseCase.Execute` —
+`TestDeleteUserCompleteUseCase_Execute_InvalidaCacheAposDeletar` falhou:
+
+```
+delete_user_complete_test.go:186: RepublishUser chamado 0 vez(es), queria 1
+--- FAIL: TestDeleteUserCompleteUseCase_Execute_InvalidaCacheAposDeletar (0.00s)
+```
+
+Fix restaurado após confirmar a falha nos dois casos; `go build ./...`,
+`go vet ./...` e `go test ./pkg/... ./cmd/...` verdes depois da restauração.
+
+<!-- f-status: corrigido -->
 
 
 ## F274 — `GET /session/connect` depois de `/session/disconnect` devolve `200` e não religa
@@ -30433,10 +30480,88 @@ deixa de responder `200` quando `startSession` devolve erro — devolve `409`
 com o código que o próprio erro já traz (`read the current QR from
 GET /session/qr`).
 
-**Status**: não corrigido. Fora do escopo (medição de evidências) e o conserto
-mexe no ciclo de vida da sessão. Registado para decisão.
+**Status**: corrigido em 2026-08-27 (sessão `worktree/housekeep-session`).
 
-<!-- f-status: aberto -->
+Correção, em duas partes, como a correção sugerida pedia:
+
+1. **Pré-check síncrono no handler** (mesma forma do pré-check de posse do
+   F108): `Orchestrator.CheckStartAvailable(userID)` — novo método público em
+   `pkg/application/session/orchestrator.go` — faz um PEEK (não um acquire)
+   no guarda de `startInFlight` via o novo `startInFlight.busy`, e devolve o
+   MESMO `apperr` que `Start` devolveria (extraído para
+   `errSessionStartAlreadyInFlight()`, ponto único para as duas chamadas não
+   divergirem). `ConnectHandler` ganhou o campo `CheckStartInFlight` e o
+   método `WithCheckStartInFlight`
+   (`pkg/presentation/http/handlers/handler_session.go`), chamado ANTES da
+   checagem de posse — mesma ordem que `Start` usa internamente
+   (`inFlight.acquire` antes de `claimOwnership`). Wiring em
+   `pkg/bootstrap/wiring_handlers.go` via `connectStartInFlightCheck(s)`
+   (tolerante a `s.SessionOrchestrator == nil`, mesmo padrão de
+   `connectOwnershipCheck`).
+2. **`DisconnectUseCase` limpa a marca de start em voo**: novo método
+   `Orchestrator.ReleaseStart(userID)` (repasse a `startInFlight.release`), e
+   o decorator `disconnectInFlightReleaser`
+   (`pkg/bootstrap/session_orchestrator_wiring.go`) envolve o
+   `appport.SessionDisconnector` que `DisconnectUseCase` consome — chama
+   `ReleaseStart` SOMENTE quando o `Disconnect` real tiver sucesso (uma falha
+   deixa o transporte, e o que ele estava a fazer, intocados). Wiring em
+   `pkg/bootstrap/wiring_handlers.go`.
+
+Testes do defeito e de ordem (`pkg/application/session/orchestrator_test.go`):
+`TestCheckStartAvailable_RecusaEnquantoHaFluxoEmCurso`,
+`TestCheckStartAvailable_NaoReivindicaAChave` (prova que o pré-check é um
+PEEK — não bloqueia o `Start` real que vem a seguir),
+`TestCheckStartAvailable_LivreQuandoNaoHaFluxo`,
+`TestReleaseStart_LibertaAChaveAntesDoTTL`,
+`TestReleaseStart_DeUtilizadorSemChaveENoop`. No pacote de handlers:
+`TestConnectHandler_StartInFlight_409`,
+`TestConnectHandler_StartInFlight_CheckedBeforeOwnership` (trava a ORDEM),
+`TestConnectHandler_StartAvailable_200`,
+`TestConnectHandler_WithoutCheckStartInFlight_200`. No bootstrap
+(`pkg/bootstrap/session_orchestrator_wiring_test.go`, novo ficheiro):
+`TestConnectStartInFlightCheckIsWired` (trava a fiação pela ROTA REGISTADA,
+não pelo handler cru — ARMADILHAS.md #2),
+`TestConnectStartInFlightCheck_ToleratesNilOrchestrator`,
+`TestDisconnectInFlightReleaser_ChamaReleaseStartQuandoDisconnectTemSucesso`,
+`TestDisconnectInFlightReleaser_NaoLiberaQuandoDisconnectFalha`,
+`TestDisconnectInFlightReleaser_ToleraOrchestratorNil`.
+
+Controlo negativo EXECUTADO em quatro pontos separados:
+
+```
+# 1) remoção de .WithCheckStartInFlight(...) em initConnectHandler
+session_orchestrator_wiring_test.go:64: CheckStartInFlight is nil after
+  initCustomHandlers — ... (F274).
+--- FAIL: TestConnectStartInFlightCheckIsWired (0.01s)
+
+# 2) remoção do ReleaseStart em disconnectInFlightReleaser.Disconnect
+session_orchestrator_wiring_test.go:157: CheckStartAvailable depois do
+  Disconnect = a session start is already in flight..., queria nil — a
+  chave não foi liberada
+--- FAIL: TestDisconnectInFlightReleaser_ChamaReleaseStartQuandoDisconnectTemSucesso
+
+# 3) remoção da chamada a h.CheckStartInFlight em ConnectHandler.ServeHTTP
+handler_session_test.go:742: status 200, want 409 — CategoryConflict must
+  reach the HTTP boundary...
+--- FAIL: TestConnectHandler_StartInFlight_409
+
+# 4) CheckStartAvailable devolvendo sempre nil (corpo esvaziado)
+orchestrator_test.go:1026: CheckStartAvailable devolveu nil com um Start em
+  curso para o mesmo utilizador
+--- FAIL: TestCheckStartAvailable_RecusaEnquantoHaFluxoEmCurso
+```
+
+Fix restaurado após cada controlo confirmar a falha esperada;
+`go build ./...`, `go vet ./...` e `go test ./pkg/... ./cmd/...` verdes
+depois da restauração, incluindo `-race` nos testes novos de
+`pkg/bootstrap` (nenhuma condição de corrida detectada em
+`busyOrchestrator`).
+
+Nota de escopo: só foi corrigido — e só foi medido — o caso de sessão NUNCA
+emparelhada, a mesma limitação que a medição original já assinalava. O
+comportamento numa sessão já emparelhada não foi alterado.
+
+<!-- f-status: corrigido -->
 
 
 ## F275 — `POST /session/logout` numa sessão ligada mas nunca emparelhada responde `500` com envelope de texto simples
@@ -30478,11 +30603,77 @@ a ordem: o `Detach` do ramo `session_not_connected` é deliberado (F93) e não
 deve ser estendido cegamente ao caso novo — uma sessão viva sem par não está a
 mentir sobre `users.connected`.
 
-**Status**: não corrigido. Fora do escopo. Consequência directa: a rota fica
-classificada **❌** em `api/openapi/evidencias.tsv`, com este erro como
-evidência — o caminho de `200` exige conta emparelhada e é doutro lote.
+**Status**: corrigido em 2026-08-27 (sessão `worktree/housekeep-session`).
 
-<!-- f-status: aberto -->
+Correção em `pkg/infra/wa-noise/runtime/session/guard.go`
+(`SessionGuardAdapter.Logout`): quando `client.Logout` devolve a sentinela
+crua `wanoise.ErrNotLoggedIn` ("the store doesn't contain a device JID"), o
+adaptador traduz para `apperr.New(apperr.CodeSessionNotPaired,
+apperr.CategoryConflict, ...)` — 409, distinto de `CodeSessionNotConnected`
+(F93). A checagem é por ESTADO (`errors.Is`), não por texto — a sentinela foi
+reexportada em `internal/wa-noise/main.go` (`ErrNotLoggedIn = core.ErrNotLoggedIn`),
+seguindo o MESMO padrão já usado ali para `ErrIQBadRequest` e companhia
+(comentário do próprio ficheiro cita a F204). Novo código
+`apperr.CodeSessionNotPaired = "session_not_paired"` em
+`pkg/domain/apperr/codes.go`.
+
+**Cuidado com o Detach respeitado**: `LogoutUseCase`
+(`pkg/application/usecase/session/logout.go`) não foi tocado — o `switch` que
+chama `uc.detacher.Detach(txtID)` continua a verificar SÓ
+`CodeSessionNotConnected`, exatamente como a correção sugerida pedia
+("não deve ser estendido cegamente ao caso novo"). Travado por
+`TestLogoutUseCase_ConectadaSemParNaoEstendeODetach`.
+
+Testes do defeito (`pkg/infra/wa-noise/runtime/session/guard_test.go`):
+`TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa` (código, 409,
+`errors.Is` contra a sentinela original preservada na cadeia de causa, e que
+NÃO é classificado como `CodeSessionNotConnected`) e
+`TestSessionGuardAdapter_Logout_OutroErroDeSDKContinuaCru` (controlo: um erro
+de SDK qualquer que NÃO seja a sentinela continua cru — a correção não vira
+catch-all). No use case
+(`pkg/application/usecase/session/encerramento_test.go`):
+`TestLogoutUseCase_ConectadaSemParNaoEstendeODetach`. Na fronteira HTTP
+(`pkg/presentation/http/handlers/handler_session_test.go`):
+`TestLogoutHandler_ConectadaSemPareamento_409ComEnvelopeCanonico` — prova
+status 409 E a forma do envelope (`success:false`, `code:409`,
+`error:{code:"session_not_paired", message:string}`, sem `data`) pela rota
+registada.
+
+Controlo negativo EXECUTADO na camada onde o fix vive
+(`pkg/infra/wa-noise/runtime/session`):
+
+```
+guard_test.go:269: code = "", quero "session_not_paired"
+guard_test.go:273: erro nao e' *apperr.AppError: the store doesn't contain
+  a device JID (*errors.errorString)
+--- FAIL: TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa (0.00s)
+```
+
+E, contra a fronteira HTTP com o fix ainda revertido, o corpo confirmou
+exatamente a classe de defeito medida — objeto genérico e status 500 (não a
+string solta que a medição original observou contra um binário mais antigo;
+ver a nota abaixo):
+
+```
+{"code":500,"error":{"code":"internal_error","message":"Ocorreu um erro
+  interno."},"success":false}
+```
+
+Nota sobre o "envelope de texto simples" da medição original: a
+`RespondJSON` atual (`pkg/presentation/http/response.go`) já serve SEMPRE um
+objeto `{code,message}` em `error`, mesmo para erro não tipado — o defeito de
+FORMA (string vs objeto) parece ter sido fechado por outra correção entre a
+medição da F275 (2026-08-26) e este trabalho, o que a própria entrada já
+cogitava ("é mais um ponto da F266"). O que sobrevivia, e que este trabalho
+corrigiu, era o STATUS errado (500 em vez de 409) e o CÓDIGO errado
+(`internal_error` em vez de `session_not_paired`) — que continuam a impedir o
+cliente de reagir à recusa. Registrado aqui para não reabrir uma investigação
+sobre um sintoma que já não existe.
+
+Fix restaurado após confirmar a falha; `go build ./...`, `go vet ./...` e
+`go test ./pkg/... ./cmd/...` verdes depois da restauração.
+
+<!-- f-status: corrigido -->
 
 
 ## F276 — `POST /s3/test` transforma recusa do upstream em `500` com envelope de texto simples
@@ -30519,12 +30710,64 @@ mesmo em `POST /session/s3/test`, que é o mesmo manipulador.
 upstream_rejected` (o código que `/users/block` já usa) e levar a mensagem do
 upstream — sem credenciais — para o corpo.
 
-**Status**: não corrigido. Fora do escopo. Nota de classificação: a rota
-mantém-se **⬜**, e não passa a ❌, porque a falha medida foi provocada por
-credenciais deliberadamente falsas — é o meu input, não um defeito do
-percurso. O percurso em si foi exercitado até ao servidor da AWS e voltou.
+**Status**: corrigido em 2026-08-27 (sessão `worktree/housekeep-session`).
 
-<!-- f-status: aberto -->
+Correção em `pkg/application/usecase/storage/test_s3_connection.go`
+(`TestS3ConnectionUseCase.Execute`): a falha de `uc.clients.TestConnection`
+deixou de subir como `fmt.Errorf` cru e passou a
+`apperr.New(s3UpstreamRejectedCode, apperr.CategoryUpstreamRejected, ...)` —
+422, com a mensagem do upstream (sem o segredo armazenado) no corpo. O código
+(`"upstream_rejected"`) é o MESMO valor que
+`errmap.CodeUpstreamRejected` usa para `/users/block`
+(`pkg/infra/wa-noise/errmap/iqerror.go`), declarado LOCALMENTE — importar
+`pkg/infra/wa-noise/errmap` de um use case de `pkg/application` inverteria a
+direção do Clean Architecture (ADR-001), por isso a constante é duplicada de
+propósito, com comentário citando a origem.
+
+Testes do defeito, no use case
+(`pkg/application/usecase/storage/storage_test.go`):
+`TestTestS3Connection_RecusaDoUpstreamVira422TipadoENaoTextoSolto` — código,
+categoria, status 422, mensagem trazendo o diagnóstico do upstream
+(`InvalidAccessKeyId`) e SEM o segredo armazenado (`sk`), e `errors.Is`
+preservando a causa original. Na fronteira HTTP
+(`pkg/presentation/http/handlers/handler_storage_test.go`):
+`TestTestS3ConnectionHandler_RecusaDoUpstream_422ComEnvelopeCanonico` — prova
+o status E a forma do envelope pela rota registada. No teste de integração
+com endpoint HTTP fake real
+(`pkg/bootstrap/s3_config_route_test.go`), o teste PRÉ-EXISTENTE
+`TestS3Route_TestComFakeErro_500` (que **afirmava o defeito** como
+comportamento correto) foi renomeado e reescrito para
+`TestS3Route_TestComFakeErro_422ComEnvelopeCanonico`, agora a validar 422 e o
+envelope `{code,error:{code,message}}` contra um servidor HTTP fake real que
+devolve `AccessDenied` — este é o teste que capturaria uma regressão
+end-to-end (fake S3 → adaptador AWS SDK real → use case → handler → JSON).
+
+Controlo negativo EXECUTADO em dois pontos:
+
+```
+# no use case, com o mapeamento revertido
+storage_test.go:431: erro não é *apperr.AppError (ficaria 500 opaco na
+  fronteira HTTP): S3 connection test failed: operation error S3:
+  ListObjectsV2, ... (*errors.errorString)
+--- FAIL: TestTestS3Connection_RecusaDoUpstreamVira422TipadoENaoTextoSolto
+
+# na fronteira HTTP, mesma reversão
+handler_storage_test.go:496: status: got 500, want 422 (corpo:
+  {"code":500,"error":{"code":"internal_error","message":"Ocorreu um erro
+  interno."},"success":false})
+--- FAIL: TestTestS3ConnectionHandler_RecusaDoUpstream_422ComEnvelopeCanonico
+```
+
+Nota sobre a forma do envelope (mesma observação da F275): a `RespondJSON`
+atual já serve sempre um objeto `{code,message}` — o controlo negativo acima
+confirma isso mesmo sem o fix (o corpo NÃO regride a uma string solta). O que
+o controlo negativo prova que a correção resolve é o STATUS (500→422) e o
+CÓDIGO (`internal_error`→`upstream_rejected`).
+
+Fix restaurado após confirmar as duas falhas; `go build ./...`,
+`go vet ./...` e `go test ./pkg/... ./cmd/...` verdes depois da restauração.
+
+<!-- f-status: corrigido -->
 
 
 ## F277 — a documentação de `endpoint` do S3 diz "URL analisável" e a validação real recusa loopback e faixas reservadas
@@ -30576,8 +30819,39 @@ analisável) e `reserved_s3_endpoint` (destino recusado), como
 `POST /session/proxy` já faz com `reserved_proxy_address`; (c) documentar o
 corpo que `DELETE /s3/config` deixa.
 
-**Status**: não corrigido — é alteração de documentação gerada e de taxonomia,
-fora do escopo desta tarefa. Registado para decisão.
+**Status**: corrigido PARCIALMENTE em 2026-08-27 (sessão
+`worktree/housekeep-session`) — só a parte (a); (b) e (c) tratadas abaixo.
+
+(a) **Corrigido.** `api/openapi/paths/infra.yaml` (bloco de regras de
+`POST /s3/config`) passou a citar `pkg/infra/egress.ValidateOutboundURL`
+(sec/F24) e a nomear explicitamente loopback e faixas reservadas como causa
+de recusa, com o exemplo concreto (`http://127.0.0.1:9000`) e a nota de que
+"não analisei" e "recusei o destino" devolvem o MESMO código
+`invalid_s3_endpoint`. Nenhuma mudança de comportamento — só a descrição
+gerada. Regenerado com `go run ./cmd/openapidoc`;
+`curl localhost:8080/docs/openapi.yaml | cmp - pkg/presentation/http/apidocs/openapi.yaml`
+não pôde ser executado nesta sessão (sem servidor rodando), mas o ficheiro
+embutido foi regenerado a partir da fonte e commitado junto — ver
+ARMADILHAS.md #27 antes do próximo `go build`+deploy.
+
+(b) **Não corrigido — deixado para decisão de design**, exatamente como a
+tarefa que abriu esta sessão instruiu para o caso ambíguo. Separar
+`invalid_s3_endpoint` em dois códigos (`invalid_s3_endpoint` para "não
+analisável" e `reserved_s3_endpoint` para "destino recusado", espelhando
+`reserved_proxy_address` de `POST /session/proxy`) é uma mudança de
+TAXONOMIA — contrato observável para quem já trata `invalid_s3_endpoint`
+como um único código — e não uma correção de defeito isolado. Precisa de
+decisão consciente (ADR ou aprovação explícita) antes de tocar, nos termos
+da seção "Consultar as implementações de referência" do `CLAUDE.md` sobre
+divergir conscientemente vs. por acidente.
+
+(c) **Corrigido** (docs, junto com (a)): a descrição de
+`DELETE /s3/config` em `api/openapi/paths/infra.yaml` passou a avisar que o
+corpo pós-DELETE (`path_style: true`, `media_delivery: base64`,
+`retention_days: 30` — valores por omissão do schema) NÃO é o mesmo corpo de
+uma sessão que nunca configurou S3 (`path_style: false`, `media_delivery: ""`,
+`retention_days: 0`), com os dois estados medidos citados. Também
+documentação pura, sem mudança de comportamento.
 
 <!-- f-status: aberto -->
 

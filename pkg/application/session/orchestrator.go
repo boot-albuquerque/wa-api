@@ -153,6 +153,20 @@ func (f *startInFlight) release(userID string) {
 	delete(f.since, userID)
 }
 
+// busy reporta se userID está com um Start em curso e não estagnado, SEM
+// reivindicar a chave (ver acquire). Usado pelo pré-check síncrono do
+// handler (F274): ao contrário da posse (ADR-0005 D2, reivindicação
+// idempotente para o mesmo dono), esta chave não é reentrante — reivindicá-la
+// duas vezes na mesma requisição faria a segunda chamada (dentro da goroutine
+// de Start) encontrar-se a si própria como "ocupada" e falhar sempre. Por
+// isso o pré-check apenas OLHA, e não marca.
+func (f *startInFlight) busy(userID string, now time.Time, ttl time.Duration) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	since, busy := f.since[userID]
+	return busy && now.Sub(since) < ttl
+}
+
 // Orchestrator conduz o ciclo de vida de uma sessão: resolve a configuração
 // no banco, materializa a sessão pelo SessionProvider, registra os handles,
 // anexa o handler de domínio e então pareia ou conecta.
@@ -232,6 +246,20 @@ const codeSessionStartAlreadyInFlight = "session_start_already_in_flight"
 
 const codeSessionAlreadyConnected = "session_already_connected"
 
+// errSessionStartAlreadyInFlight builds the apperr Start returns when the
+// in-flight guard refuses a second pairing flow, and the same value
+// CheckStartAvailable's synchronous pre-check (F274) returns — a single
+// point so the code and the message can never drift between the two paths.
+func errSessionStartAlreadyInFlight() error {
+	return apperr.New(
+		codeSessionStartAlreadyInFlight,
+		apperr.CategoryConflict,
+		"a session start is already in flight for this user; read the current QR from GET /session/qr",
+		false,
+		nil,
+	)
+}
+
 type Option func(*Orchestrator)
 
 // WithOwnershipCheck instala a verificação de posse do ADR-0005 D2.
@@ -307,6 +335,31 @@ func NewOrchestrator(
 	return o
 }
 
+// CheckStartAvailable is the synchronous pre-check ConnectHandler runs
+// BEFORE firing Start in a goroutine (F274, same shape as F108's ownership
+// pre-check). Without it, the handler always responds 200
+// {"status":"connecting"} and only learns Start refused — because a pairing
+// flow for this user was already in flight — from a background log line the
+// client never sees. It only PEEKS at the guard (see startInFlight.busy):
+// mutating it here would make Start's own acquire, moments later inside the
+// goroutine, find the key already held and always fail.
+func (o *Orchestrator) CheckStartAvailable(userID string) error {
+	if o.inFlight.busy(userID, o.now(), startInFlightTTL) {
+		return errSessionStartAlreadyInFlight()
+	}
+	return nil
+}
+
+// ReleaseStart clears the in-flight mark for userID without waiting for
+// startInFlightTTL. DisconnectUseCase calls it after tearing down the
+// transport (F274): disconnecting a session whose pairing flow was still
+// active left the guard busy for up to startInFlightTTL, so
+// `GET /session/connect` right after `/session/disconnect` found the slot
+// occupied by a flow that the disconnect itself just cut off.
+func (o *Orchestrator) ReleaseStart(userID string) {
+	o.inFlight.release(userID)
+}
+
 // Start materializa e põe de pé a sessão de userID, na mesma sequência de
 // startClient: configuração de proxy, cliente de webhook, S3, attach do
 // handler de domínio e então pareamento (sem credenciais) ou conexão com
@@ -323,13 +376,7 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) (err err
 	// estas duas passa em qualquer teste que só olhe para o resultado final.
 	if !o.inFlight.acquire(userID, o.now(), startInFlightTTL) {
 		log.Warn().Str("userid", userID).Msg("start already in flight for this user; not starting a second pairing flow")
-		return apperr.New(
-			codeSessionStartAlreadyInFlight,
-			apperr.CategoryConflict,
-			"a session start is already in flight for this user; read the current QR from GET /session/qr",
-			false,
-			nil,
-		)
+		return errSessionStartAlreadyInFlight()
 	}
 	defer o.inFlight.release(userID)
 
