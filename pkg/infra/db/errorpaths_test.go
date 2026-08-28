@@ -532,7 +532,7 @@ func TestApplyMigration_PostgresBranchExecutesUpSQL(t *testing.T) {
 		// would silently drop coverage of its branch, so it gets its own
 		// assertion below: TestApplyMigration_PortableDDLBranchStillRuns.
 		if m.ID == migrationIDSessionLeases || m.ID == migrationIDWebhookOutbox ||
-			m.ID == migrationIDLabels {
+			m.ID == migrationIDLabels || m.ID == migrationIDAccountOwnership {
 			continue
 		}
 		err := applyMigration(pg, m)
@@ -1300,6 +1300,7 @@ func TestApplyMigration_PortableDDLBranchStillRuns(t *testing.T) {
 		{migrationIDLabels, "wa_labels"},
 		{migrationIDLabels, "wa_label_chats"},
 		{migrationIDLabels, "wa_label_messages"},
+		{migrationIDAccountOwnership, "account_ownership"},
 	} {
 		t.Run(tc.table, func(t *testing.T) {
 			raw := openTestDB(t)

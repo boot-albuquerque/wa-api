@@ -1310,7 +1310,14 @@ rules_frozen=true
 # baseline (min_func_coverage=595, via a integracao da onda 2) descreve uma
 # arvore diferente da nossa — recalculado abaixo apos aplicar o porte
 # completo, nao herdado.
-min_func_coverage=596
+# PORTE 4c84304b/account-ownership (2026-08-28): a versao de macbook-lucas
+# deste baseline (min_func_coverage=592) descreve uma arvore diferente da
+# nossa — recalculado abaixo apos aplicar o porte completo, nao herdado.
+# func_coverage SOBE 596->597 (+1, ratchet-UP honesto): as tres funcoes
+# elegiveis novas de account_ownership.go (ClaimAccountIdentity,
+# CurrentActiveOwner, CurrentStatusForSession) tem log.Error estruturado em
+# cada caminho de erro.
+min_func_coverage=597
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1567,7 +1574,13 @@ min_func_coverage=596
 # INTEGRACAO com http-dto-download-paths (2026-08-27): errpath_coverage CAI 779->777 (mesma remocao). Ratchet-DOWN justificado.
 # INTEGRACAO com housekeep-session (2026-08-27): errpath_coverage CAI 777->776.
 # INTEGRACAO com engine-decisao-94 + F278 + F280 (2026-08-28): errpath_coverage SOBE 776->777. Ratchet-UP.
-min_errpath_coverage=777
+# PORTE 4c84304b/account-ownership (2026-08-28): a versao de macbook-lucas
+# deste baseline (min_errpath_coverage=780) descreve uma arvore diferente
+# da nossa — recalculado abaixo apos aplicar o porte completo, nao
+# herdado. errpath_coverage SOBE 777->779 (+2, ratchet-UP honesto): os
+# caminhos de saida de account_ownership.go chegam com log.Error(...).Msg
+# em cada branch de erro.
+min_errpath_coverage=779
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1657,7 +1670,14 @@ min_errpath_coverage=777
 # menos as que saem com a remocao de WithStartSession/WithCheckOwnership do
 # ConnectHandler (initConnectHandler, connectOwnershipCheck). Medido com
 # `go run ./cmd/logcov -json ./pkg` apos o porte completo de 8069997f.
-min_eligible=1026
+# PORTE 4c84304b/account-ownership (2026-08-28): a versao de macbook-lucas
+# deste baseline (min_eligible=997) descreve uma arvore diferente da
+# nossa — recalculado abaixo apos aplicar o porte completo, nao herdado.
+# min_eligible SOBE 1026->1029 (+3, ratchet-UP honesto). ENTRAM (3):
+# AccountOwnershipRepository.ClaimAccountIdentity, .CurrentActiveOwner e
+# .CurrentStatusForSession (pkg/infra/db/account_ownership.go) — todas
+# publicas, com corpo >2 statements e log.Error nos caminhos de erro.
+min_eligible=1029
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

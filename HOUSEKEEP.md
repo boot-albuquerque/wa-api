@@ -37634,3 +37634,110 @@ por causa deste item pré-existente e em `TestHousekeepEntriesAreMachineReadable
 (H144 do wa-headless), ambos confirmados como não introduzidos por mim.
 
 <!-- f-status: aberto -->
+
+## F368 — Porta `account_ownership` (migração 20) + ADR-0010 de `feature/macbook-lucas`, fechando o Passo 3/4 da reconciliação com `feature/wa-noise`
+
+**Data/contexto**: 2026-08-28, continuação de F358 (capability-registry,
+mesma sessão) e F273 (pairing registry, também portado nesta sessão). A
+pedido do usuário ("portar tudo agora"), depois de confirmar com ele que
+o escopo real do pedido original ("engine + imutabilidade + ADR-0010")
+tinha crescido para duas features inteiras não relacionadas
+(capability-registry/pairing-registry, já fechadas; e esta, ownership
+multi-pod).
+
+**O que foi portado**: `pkg/infra/db/account_ownership.go` (355 linhas,
+commit `4c84304b` de `feature/macbook-lucas`) — tabela `account_ownership`
+(migração 20), chave `(identity, engine)`, distinta de `session_leases`
+(ADR-0005, só `wa_noise`, chaveada por `user_id`). `ClaimAccountIdentity`
+é a operação atômica: `pg_advisory_xact_lock` por `(identity,engine)` +
+`FOR UPDATE` + índice único PARCIAL (`WHERE status='active'`) como
+proteção estrutural — um `INSERT` direto via SQL cru, contornando a
+aplicação, é rejeitado pelo próprio banco. `ownership_revision` incrementa
+por linhagem e serve de fencing token. Também portados: a suíte de
+integração (`account_ownership_integration_test.go`, 6 testes: Race,
+CrossEngine, Fencing, Restart, StructuralConstraint,
+RenewalIsIdempotent), a suíte "newest wins"
+(`account_ownership_newest_wins_test.go`, commit `becaf578`, 5 testes de
+interleaving), e `docs/adr/0010-newest-wins-e-a-ordem-que-o-claim-decide.md`
+(commit `dedba924`), que formaliza "mais recente" como "o claim mais
+recentemente ACEITO pelo coordenador autoritativo (o Postgres)", não
+"autenticação mais recente" — sem mudança de algoritmo, `ClaimAccountIdentity`
+já implementava essa semântica.
+
+**O que NÃO foi portado, e por quê**: `becaf578`/`dedba924` também mexiam
+em `pkg/infra/db/user_repository.go`, adicionando um guarda EXPLÍCITO de
+imutabilidade de engine em `UpdateUser` (validar `upd.Engine.IsValidForCreate()`
+antes de checar imutabilidade — o fix de F279 na worktree de origem).
+Essa mudança não se aplica aqui: o `domain.UserUpdate` desta worktree
+**não tem campo `Engine`** — a imutabilidade já é estrutural, por
+omissão de campo (ver F358/capability-registry, já documentado). Portar
+o guarda seria código morto: nenhum caminho desta base consegue montar um
+`UserUpdate` com `Engine` preenchido para o guarda rejeitar. Também não
+foram portados `account_ownership_audit_test.go` (auditoria adversarial
+de outra worktree, referenciada só em prosa no ADR) nem a remoção do
+wrapper `updateUser()` de `dedba924` (específica da estrutura de
+`user_repository.go` de macbook-lucas, que diverge da desta branch desde
+a migração para DTO).
+
+**Verificação ao vivo, Postgres real** (`infra/compose.yaml`,
+`docker compose up -d postgres`, `WA_API_TEST_POSTGRES=postgres://waapi:waapi@127.0.0.1:5433/waapi?sslmode=disable`):
+
+```
+go test ./pkg/infra/db/ -run "TestAccountOwnership|TestClaimAccountIdentity" -race -v
+  6 PASS, incluindo TestAccountOwnership_StructuralConstraint:
+  "negative control confirmed: raw insert rejected by the database:
+   pq: duplicate key value violates unique constraint idx_account_ownership_active_unique"
+
+go test ./pkg/infra/db/ -run "TestNewestWins" -race -v
+  5 PASS (TrivialSequential, ClaimOrderDecidesNotAuthOrder,
+  ConcurrentClaimsSameReplica, ConcurrentClaimsDifferentReplicas,
+  CleanupFailureDoesNotReturnOwnership)
+```
+
+**Adaptação de vocabulário** (mesmo padrão de F358/F273): os testes
+portados usavam `"wa_noise"` como valor arbitrário de string na chave
+`(identity, engine)` — normalizado para `"noise"`, o valor real desta
+worktree, ainda que esta tabela não valide o campo contra
+`domain.EngineValido` (é `TEXT` livre, parte da chave composta, não um
+enum aplicado).
+
+**Ratchet de log-coverage recalculado** (não herdado da baseline de
+macbook-lucas, que descreve outra árvore): `min_func_coverage` 596→597,
+`min_errpath_coverage` 777→779, `min_eligible` 1026→1029 — as três
+funções elegíveis novas de `account_ownership.go`
+(`ClaimAccountIdentity`, `CurrentActiveOwner`, `CurrentStatusForSession`)
+têm `log.Error` estruturado em cada caminho de erro.
+
+**Correção de documentação**: `docs/adr/0010-*.md` teve a linha
+"Relacionado" e a "Nota sobre o teste de auditoria original" reescritas
+para não citar `HOUSEKEEP F280`/`account_ownership_audit_test.go`
+(existem só na worktree de origem) — a tabela de cobertura de testes
+também perdeu as duas referências a `TestAudit_*` que não existem aqui.
+
+**Achado incidental de ambiente, não deste código**: `make coverage-gate`
+falha nesta máquina com `go: no such tool "covdata"` para QUALQUER pacote
+sem arquivo de teste — reproduzido também em `pkg/presentation/http/dto/
+{health,newsletter,storage,webhook}`, pacotes que esta sessão não tocou.
+Confirmado: o toolchain Go 1.26 instalado
+(`~/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.0.darwin-arm64/pkg/tool/
+darwin_arm64/`) não tem o binário `covdata` (só `asm/cgo/compile/cover/
+fix/link/preprofile/vet`), embora o código-fonte exista em `src/cmd/
+covdata/`. É defeito de instalação da máquina, não do repositório —
+registrado e não corrigido (mexer no toolchain Go global está fora do
+escopo de uma sessão de código, e exige autorização). `make check` também
+falha em `lint` nesta árvore, mas por F278 (complexidade 51 pré-existente
+em `applyMigration`, já documentado, confirmado não introduzido por
+nenhuma sessão).
+
+**Status**: corrigido e verificado ao vivo contra Postgres real. Passos 3
+e 4 do plano de reconciliação com `feature/macbook-lucas`/
+`feature/wa-headless-foundation` completos. Build, vet, fmt, o conjunto
+completo de testes (`go test ./pkg/... ./cmd/... ./internal/...`),
+`make handler-route` e os testes de integração contra Postgres real
+verificados sem exceção — só os DOIS itens de `make check` acima ficam
+sem verificação direta, e ambos são falhas de ambiente pré-existentes,
+não desta mudança. Resta: Passo 6 (merge desta branch nas outras duas
+worktrees). Nenhum commit feito até este ponto do achado —
+ver commit separado.
+
+<!-- f-status: corrigido -->
