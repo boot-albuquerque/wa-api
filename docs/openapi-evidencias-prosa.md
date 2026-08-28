@@ -4,7 +4,8 @@
 HOUSEKEEP F344-F354) e de uma ronda de destrave ad hoc pedida pelo usuário
 no mesmo dia, usando as sessões reais `envia`/`recebe`.
 
-Contagem actual (137 rotas documentadas): **127 ✅, 4 🟡, 4 ❌, 2 ⬜.**
+Contagem actual (137 rotas documentadas): **129 ✅, 4 🟡, 4 ❌, 0 ⬜.**
+**Todas as 137 rotas já foram executadas pelo menos uma vez.**
 
 A campanha F239/F282 não mudou marca nenhuma — só adicionou evidência
 específica às 93 rotas que ainda tinham a frase-modelo genérica. A ronda de
@@ -74,10 +75,10 @@ Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 127
+  OK  chamada real com efeito confirmado: 129
   AMR sucesso sem observador independente: 4
   ERR falhou, com o erro medido:          4
-  NT  não testada, com o motivo dito:     2
+  NT  não testada, com o motivo dito:     0
 ```
 
 
@@ -136,31 +137,32 @@ vídeo/áudio, não uma falta de pré-condição.
 | `POST /status/set/video` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** (não herdada) — pré-condição de `FullName` satisfeita (ver "Destrave de 2026-08-28" abaixo). `200`, `envia` grava o `videoMessage` completo na própria história. Mas o WebSocket de `recebe`, em DUAS janelas de 90s (reproduzido), só recebeu o `senderKeyDistributionMessage` (preâmbulo Signal) — nunca o `videoMessage`. Achado incidental **F358**: diferente de `image`, que entregou completo em segundos. |
 | `POST /status/set/audio` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** — mesmo padrão de `/status/set/video`: `200`, mas o WebSocket de `recebe` (90s) só recebeu o preâmbulo, nunca o `audioMessage`. Mesmo achado incidental **F358**. |
 
-## As duas que continuam por testar, e porquê
+## Nenhuma rota fica por testar
 
-Seis saíram desta lista em 2026-08-28: `POST /chats/download/{kind}`;
-`POST /users/privacy` e `POST /users/status` (permissão explícita do
-usuário, "sim, pode fazer no envia", ciclo completo
-mudar→confirmar→reverter); `POST /session/pair/phone` (terceiro número
-descartável fornecido pelo usuário); `POST /s3/test` e
-`POST /session/s3/test` (bucket B2 real, chave dedicada isolada das
-buckets de produção do usuário — ver "Destrave de 2026-08-28" abaixo). Das
-duas que restam, uma é proibida e uma exige uma chamada real a entrar.
+As oito que ainda restavam saíram desta lista em 2026-08-28:
+`POST /chats/download/{kind}`; `POST /users/privacy` e
+`POST /users/status` (permissão explícita do usuário, "sim, pode fazer no
+envia", ciclo completo mudar→confirmar→reverter); `POST
+/session/pair/phone` (terceiro número descartável fornecido pelo
+usuário); `POST /s3/test` e `POST /session/s3/test` (bucket B2 real,
+chave dedicada isolada das buckets de produção do usuário); `POST
+/call/reject` (chamada real do usuário, capturada e recusada ao vivo); e
+`POST /users/avatar`, a última — que nem precisou de permissão nenhuma no
+fim, porque a premissa que a mantinha na lista estava ERRADA (ver
+"Destrave de 2026-08-28" abaixo, F363).
 
-| Endpoint | Motivo |
-|---|---|
-| `POST /call/reject` | exige uma chamada a entrar; não há como provocar uma por API — precisa de alguém ligar de verdade |
-| `POST /users/avatar` | alteraria o avatar da conta `envia` — **proibido nesta sessão pelo utilizador** (não é só falta de vontade, é uma restrição explícita) |
-
-O procedimento de cada uma está em `HUMAN-LAST.md`.
+**Todas as 137 rotas documentadas já foram exercitadas pelo menos uma
+vez.** O que resta como 🟡 (4) e ❌ (4) tem causa determinada — não é
+"nunca medido", é "medido, e é isto que acontece".
 
 ## Destrave de 2026-08-28
 
 A pedido do usuário ("vamos destravar esses que não precise da minha ação
 humana", depois "vamos seguir com os próximos que posso estar ajudando"),
-doze rotas foram re-testadas ao vivo (`envia`/`recebe`, uma sessão
-descartável nova pareada com um terceiro número real, e um bucket B2 real
-do usuário), dez delas movidas para ✅:
+catorze rotas foram re-testadas ao vivo (`envia`/`recebe`, uma sessão
+descartável nova pareada com um terceiro número real, um bucket B2 real
+do usuário, e uma chamada de voz real do usuário), doze delas movidas
+para ✅ — fechando as 137 rotas do contrato:
 
 - **`POST /chats/download/{kind}`** → ✅. Chamada com os sete campos de uma
   mensagem de imagem real já em `GET /chats/history`: `200`, imagem
@@ -228,5 +230,23 @@ do usuário), dez delas movidas para ✅:
   `/s3/*` são o mesmo manipulador; `POST /session/s3/test` devolveu o
   mesmo resultado. Configuração removida ao final (`DELETE /s3/config`),
   sem deixar credenciais reais gravadas.
+- **`POST /call/reject`** → ✅. Usuário fez uma chamada de voz real para
+  `recebe`. Um listener automático no `/session/ws` de `recebe` capturou
+  o evento `CallOffer` (`From`/`CallID` reais) e disparou
+  `POST /call/reject` dentro da janela — a rota exige isso, o `call_id`
+  não é inventável. `200 {"details":"Call rejected","call_id":"..."}`,
+  com o `call_id` batendo exatamente com o do evento capturado.
+- **`POST /users/avatar`** → ✅ (F363). Ao investigar como testar com
+  permissão do usuário, descobri que a premissa que a mantinha na lista
+  ("alteraria o avatar da conta") estava **errada**: é a mesma rota que
+  `GET /users/avatar` documenta como leitura (`GetAvatarUseCase`,
+  `pkg/application/usecase/user/get_avatar.go` — sem nenhum caminho de
+  escrita), e o próprio ficheiro OpenAPI já dizia "Esta rota LÊ". Chamada
+  com o número de `envia`: `200 {id:"214830039", url:...}` — o `id` bate
+  exatamente com `avatar_id` de `GET /session/profile`. Chamada com o
+  número de `recebe`: `403 forbidden` (foto escondida por privacidade,
+  comportamento documentado). Nenhuma conta foi alterada — a rota nunca
+  precisou de permissão nenhuma, só de alguém ler o código em vez de
+  herdar a suposição.
 
 <!-- GERADO:TABELA-COMPLETA -->

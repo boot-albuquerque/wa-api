@@ -37067,3 +37067,111 @@ total). Restam apenas 2: `call/reject` (chamada real) e `users/avatar`
 (proibida). Nenhum commit feito.
 
 <!-- f-status: corrigido -->
+
+## F362 — `/call/reject` destravado com uma chamada de voz real do usuário
+
+**Data/contexto**: 2026-08-28, continuação de F355/F357-F361, última rota
+que não era proibida. `POST /call/reject` exige `call_from`/`call_id`
+reais, que só chegam pelo evento `CallOffer` — não são invocáveis por
+API, e a janela para usar esses valores fecha quando a chamada termina.
+
+**Abordagem**: em vez de eu observar o evento e depois pedir para reagir
+manualmente (a janela é curta demais para esse ciclo), escrevi um script
+que já reage sozinho — conecta ao `/session/ws` de `recebe`, espera o
+evento `CallOffer`, extrai `From`/`CallID` do payload
+(`types.BasicCallMeta`, `internal/wa-noise/protocol/types/call.go:5-12`)
+e dispara `POST /call/reject` imediatamente, dentro do mesmo processo.
+
+**Medição**: usuário fez uma chamada de voz real para o número de
+`recebe`. O script capturou `CallOffer` com `From:29343770251463@lid,
+CallID:0047648E4FE071B82B056959FAF567EC` e respondeu em seguida com
+`200 {"details":"Call rejected","call_id":"0047648E4FE071B82B056959FAF567EC"}`
+— o `call_id` devolvido bate exatamente com o do evento capturado,
+confirmando que a rota agiu sobre a chamada certa.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — a linha ⬜→✅.
+`docs/openapi-evidencias-prosa.md` (tabela dos ⬜ — agora só resta
+`users/avatar` —, contagens, secção "Destrave de 2026-08-28") e
+`api/openapi/base.yaml` (legenda) atualizados. `docs/OPENAPI-EVIDENCIAS.md`
+regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...` (`TestEvidenceLegendMatchesTable`
+falhou uma vez por eu ter mudado a frase fixa "As N por testar" que o
+teste de reconciliação exige por regex — corrigido, voltou a passar),
+`make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — é
+medição/documentação com uma ação real do usuário. Sem teste próprio.
+
+**Status**: concluído. Contagem atual: **128 ✅, 4 🟡, 4 ❌, 1 ⬜** (137
+total). Só resta `POST /users/avatar`, proibido explicitamente pelo
+utilizador. Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F363 — `/users/avatar` NÃO altera a conta — é leitura; a proibição anterior vinha de premissa errada, nunca confirmada contra o código
+
+**Data/contexto**: 2026-08-28, última rota da lista de destrave. Usuário
+liberou explicitamente a proibição anterior ("Liberar, pode testar e
+reverter") para eu testar `POST /users/avatar`. Antes de agir, fui
+conferir o código para saber exatamente o que reverter — e descobri que
+não havia nada a reverter.
+
+**A descoberta**: `POST /users/avatar` (canónico) mapeia de
+`POST /user/avatar` (`api/openapi/caminhos.tsv:69`), registado em
+`pkg/bootstrap/wiring_routes.go:171` para `ch.Contact.Avatar` — o MESMO
+manipulador que a própria especificação OpenAPI já documenta, na íntegra,
+como leitura: *"Esta rota LÊ. Apesar do método POST e do nome, ela não
+altera a foto de conta nenhuma: devolve o URL da foto de perfil do
+contacto indicado"* (`api/openapi/paths/contacto.yaml:340-342`). O caso de
+uso por trás, `GetAvatarUseCase`
+(`pkg/application/usecase/user/get_avatar.go`), não tem NENHUM caminho de
+escrita — só resolve o JID do alvo (do campo `phone` do corpo) e busca a
+foto dele.
+
+**A entrada `⬜` de `evidencias.tsv` dizia o oposto** ("alteraria o avatar
+da conta — proibido nesta sessao pelo utilizador"), e essa frase já
+existia ANTES desta sessão (não foi introduzida por mim). Não investiguei
+quando/por quem foi escrita — o que importa é que nunca foi confirmada
+contra o código, e sobreviveu a toda a campanha F239/F282 (93 rotas
+re-medidas) e a F355-F362 sem ninguém a questionar, porque a rota nunca
+tinha sido chamada.
+
+**Medição, sem necessidade de reverter nada**: `POST /users/avatar` com
+o número de `envia` → `200 {id:"214830039", url:"https://pps.whatsapp.net/..."}`
+— o `id` bate EXATAMENTE com `avatar_id` de `GET /session/profile`,
+medido na mesma sessão (segunda-rota). `POST /users/avatar` com o número
+de `recebe` → `403 forbidden` (foto escondida por privacidade) —
+comportamento documentado, confirmado ao vivo. Nenhuma conta foi
+alterada, porque a rota não tem como alterar nenhuma.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — a linha ⬜→✅, com
+a correção de premissa explícita na evidência. `docs/openapi-evidencias-prosa.md`
+(remove a secção "por testar", que ficou vazia; adiciona a entrada final
+em "Destrave de 2026-08-28"; anuncia que as 137 rotas foram todas
+exercitadas) e `api/openapi/base.yaml` (legenda, `As 0 por testar` — a
+frase fixa que `TestEvidenceLegendMatchesTable` exige por regex, mantida
+mesmo com contagem zero) atualizados. `docs/OPENAPI-EVIDENCIAS.md`
+regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — a rota
+já se comportava assim; o que corrigi foi a DOCUMENTAÇÃO da evidência, que
+estava errada. Sem teste próprio.
+
+**Lição a reter**: uma marca `⬜` com motivo "proibido"/"alteraria a
+conta" merece a mesma disciplina de verificação que qualquer outra
+afirmação neste projeto — não é auto-evidente só porque soa perigosa.
+Bastou ler o handler wired para descobrir que o "perigo" nunca existiu.
+
+**Status**: concluído. **Campanha de destrave fechada**: contagem final
+**129 ✅, 4 🟡, 4 ❌, 0 ⬜** (137 total) — todas as rotas documentadas já
+foram exercitadas pelo menos uma vez. Os 4 🟡 e os 4 ❌ restantes têm
+causa determinada (F264, F265, F275, F356, F358 — e
+`request-unavailable-message`, pré-condição não fabricável). Nenhum
+commit feito.
+
+<!-- f-status: corrigido -->

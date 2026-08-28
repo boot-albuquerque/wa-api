@@ -111,13 +111,11 @@ info:
     | ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |
     | ⬜ | **não executada**, e a descrição diz porquê |
 
-    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **127 ✅,
-    4 🟡, 4 ❌, 2 ⬜**.
-
-    As 2 por testar exigem uma chamada real a entrar
-    (`POST /call/reject`), ou estão explicitamente proibidas nesta sessão
-    pelo utilizador (`POST /users/avatar`). O detalhe rota a rota está em
-    `docs/OPENAPI-EVIDENCIAS.md`.
+    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **129 ✅,
+    4 🟡, 4 ❌, 0 ⬜**. As 0 por testar fecham a campanha — todas as 137
+    rotas foram executadas pelo menos uma vez. Os 4 🟡 e os 4 ❌ que
+    restam têm causa determinada (não são "nunca medidos"): o detalhe
+    rota a rota está em `docs/OPENAPI-EVIDENCIAS.md`.
 
     **Um 🟡 não é um ✅ mais fraco por descuido** — é a recusa deliberada de
     chamar confirmado aquilo que só devolveu `2xx`.

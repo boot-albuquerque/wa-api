@@ -4,7 +4,8 @@
 HOUSEKEEP F344-F354) e de uma ronda de destrave ad hoc pedida pelo usuário
 no mesmo dia, usando as sessões reais `envia`/`recebe`.
 
-Contagem actual (137 rotas documentadas): **127 ✅, 4 🟡, 4 ❌, 2 ⬜.**
+Contagem actual (137 rotas documentadas): **129 ✅, 4 🟡, 4 ❌, 0 ⬜.**
+**Todas as 137 rotas já foram executadas pelo menos uma vez.**
 
 A campanha F239/F282 não mudou marca nenhuma — só adicionou evidência
 específica às 93 rotas que ainda tinham a frase-modelo genérica. A ronda de
@@ -74,10 +75,10 @@ Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 127
+  OK  chamada real com efeito confirmado: 129
   AMR sucesso sem observador independente: 4
   ERR falhou, com o erro medido:          4
-  NT  não testada, com o motivo dito:     2
+  NT  não testada, com o motivo dito:     0
 ```
 
 
@@ -88,16 +89,16 @@ Validação:
 | Administração | 6 | 6 | 0 | 0 | 0 |
 | Canais | 18 | 16 | 1 | 1 | 0 |
 | Comunidades | 4 | 4 | 0 | 0 | 0 |
-| Contactos e utilizadores | 14 | 11 | 0 | 2 | 1 |
+| Contactos e utilizadores | 14 | 12 | 0 | 2 | 0 |
 | Conversas | 13 | 12 | 1 | 0 | 0 |
 | Descarga de mídia | 1 | 1 | 0 | 0 | 0 |
 | Envio de mensagens | 16 | 16 | 0 | 0 | 0 |
 | Grupos | 18 | 18 | 0 | 0 | 0 |
-| Integrações e configuração | 19 | 18 | 0 | 0 | 1 |
+| Integrações e configuração | 19 | 19 | 0 | 0 | 0 |
 | Saúde | 4 | 4 | 0 | 0 | 0 |
 | Sessões | 21 | 20 | 0 | 1 | 0 |
 | Status | 3 | 1 | 2 | 0 | 0 |
-| **Total** | **137** | **127** | **4** | **4** | **2** |
+| **Total** | **137** | **129** | **4** | **4** | **0** |
 
 ## As quatro que falharam
 
@@ -152,31 +153,32 @@ vídeo/áudio, não uma falta de pré-condição.
 | `POST /status/set/video` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** (não herdada) — pré-condição de `FullName` satisfeita (ver "Destrave de 2026-08-28" abaixo). `200`, `envia` grava o `videoMessage` completo na própria história. Mas o WebSocket de `recebe`, em DUAS janelas de 90s (reproduzido), só recebeu o `senderKeyDistributionMessage` (preâmbulo Signal) — nunca o `videoMessage`. Achado incidental **F358**: diferente de `image`, que entregou completo em segundos. |
 | `POST /status/set/audio` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** — mesmo padrão de `/status/set/video`: `200`, mas o WebSocket de `recebe` (90s) só recebeu o preâmbulo, nunca o `audioMessage`. Mesmo achado incidental **F358**. |
 
-## As duas que continuam por testar, e porquê
+## Nenhuma rota fica por testar
 
-Seis saíram desta lista em 2026-08-28: `POST /chats/download/{kind}`;
-`POST /users/privacy` e `POST /users/status` (permissão explícita do
-usuário, "sim, pode fazer no envia", ciclo completo
-mudar→confirmar→reverter); `POST /session/pair/phone` (terceiro número
-descartável fornecido pelo usuário); `POST /s3/test` e
-`POST /session/s3/test` (bucket B2 real, chave dedicada isolada das
-buckets de produção do usuário — ver "Destrave de 2026-08-28" abaixo). Das
-duas que restam, uma é proibida e uma exige uma chamada real a entrar.
+As oito que ainda restavam saíram desta lista em 2026-08-28:
+`POST /chats/download/{kind}`; `POST /users/privacy` e
+`POST /users/status` (permissão explícita do usuário, "sim, pode fazer no
+envia", ciclo completo mudar→confirmar→reverter); `POST
+/session/pair/phone` (terceiro número descartável fornecido pelo
+usuário); `POST /s3/test` e `POST /session/s3/test` (bucket B2 real,
+chave dedicada isolada das buckets de produção do usuário); `POST
+/call/reject` (chamada real do usuário, capturada e recusada ao vivo); e
+`POST /users/avatar`, a última — que nem precisou de permissão nenhuma no
+fim, porque a premissa que a mantinha na lista estava ERRADA (ver
+"Destrave de 2026-08-28" abaixo, F363).
 
-| Endpoint | Motivo |
-|---|---|
-| `POST /call/reject` | exige uma chamada a entrar; não há como provocar uma por API — precisa de alguém ligar de verdade |
-| `POST /users/avatar` | alteraria o avatar da conta `envia` — **proibido nesta sessão pelo utilizador** (não é só falta de vontade, é uma restrição explícita) |
-
-O procedimento de cada uma está em `HUMAN-LAST.md`.
+**Todas as 137 rotas documentadas já foram exercitadas pelo menos uma
+vez.** O que resta como 🟡 (4) e ❌ (4) tem causa determinada — não é
+"nunca medido", é "medido, e é isto que acontece".
 
 ## Destrave de 2026-08-28
 
 A pedido do usuário ("vamos destravar esses que não precise da minha ação
 humana", depois "vamos seguir com os próximos que posso estar ajudando"),
-doze rotas foram re-testadas ao vivo (`envia`/`recebe`, uma sessão
-descartável nova pareada com um terceiro número real, e um bucket B2 real
-do usuário), dez delas movidas para ✅:
+catorze rotas foram re-testadas ao vivo (`envia`/`recebe`, uma sessão
+descartável nova pareada com um terceiro número real, um bucket B2 real
+do usuário, e uma chamada de voz real do usuário), doze delas movidas
+para ✅ — fechando as 137 rotas do contrato:
 
 - **`POST /chats/download/{kind}`** → ✅. Chamada com os sete campos de uma
   mensagem de imagem real já em `GET /chats/history`: `200`, imagem
@@ -244,6 +246,24 @@ do usuário), dez delas movidas para ✅:
   `/s3/*` são o mesmo manipulador; `POST /session/s3/test` devolveu o
   mesmo resultado. Configuração removida ao final (`DELETE /s3/config`),
   sem deixar credenciais reais gravadas.
+- **`POST /call/reject`** → ✅. Usuário fez uma chamada de voz real para
+  `recebe`. Um listener automático no `/session/ws` de `recebe` capturou
+  o evento `CallOffer` (`From`/`CallID` reais) e disparou
+  `POST /call/reject` dentro da janela — a rota exige isso, o `call_id`
+  não é inventável. `200 {"details":"Call rejected","call_id":"..."}`,
+  com o `call_id` batendo exatamente com o do evento capturado.
+- **`POST /users/avatar`** → ✅ (F363). Ao investigar como testar com
+  permissão do usuário, descobri que a premissa que a mantinha na lista
+  ("alteraria o avatar da conta") estava **errada**: é a mesma rota que
+  `GET /users/avatar` documenta como leitura (`GetAvatarUseCase`,
+  `pkg/application/usecase/user/get_avatar.go` — sem nenhum caminho de
+  escrita), e o próprio ficheiro OpenAPI já dizia "Esta rota LÊ". Chamada
+  com o número de `envia`: `200 {id:"214830039", url:...}` — o `id` bate
+  exatamente com `avatar_id` de `GET /session/profile`. Chamada com o
+  número de `recebe`: `403 forbidden` (foto escondida por privacidade,
+  comportamento documentado). Nenhuma conta foi alterada — a rota nunca
+  precisou de permissão nenhuma, só de alguém ler o código em vez de
+  herdar a suposição.
 
 ## Tabela completa
 
@@ -279,7 +299,7 @@ A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido 
 | Comunidades | `GET` | `/communities/{community_jid}/subgroups` | `POST /community/subgroups` | ✅ | Listar os sub-grupos de uma comunidade | usado como segunda-rota de PUT/DELETE nesta mesma ronda: antes do link só o subgrupo-padrão da comunidade aparecia; depois do PUT (link) o subgrupo descartável passou a aparecer também; depois do DELETE (unlink) voltou a sumir. |
 | Comunidades | `DELETE` | `/communities/{community_jid}/subgroups/{group_jid}` | `POST /community/unlink` | ✅ | Desligar um grupo de uma comunidade | `200 {details:"Group unlinked from community successfully"}`; `GET /communities/{jid}/subgroups` confirmou — o subgrupo descartável, que tinha acabado de ser linkado nesta mesma ronda, deixou de aparecer na lista. |
 | Comunidades | `PUT` | `/communities/{community_jid}/subgroups/{group_jid}` | `POST /community/link` | ✅ | Ligar um grupo a uma comunidade | `200 {details:"Group linked to community successfully"}`; `GET /communities/{jid}/subgroups` confirmou — o subgrupo descartável (criado à parte, sem vínculo) passou a aparecer na lista da comunidade. |
-| Contactos e utilizadores | `POST` | `/users/avatar` | `POST /user/avatar` | ⬜ | Obter a foto de perfil de um contacto | alteraria o avatar da conta — proibido nesta sessao pelo utilizador. |
+| Contactos e utilizadores | `POST` | `/users/avatar` | `POST /user/avatar` | ✅ | Obter a foto de perfil de um contacto | CORREÇÃO DE PREMISSA (F363): esta rota é LEITURA, não escrita — busca a foto de perfil de um contacto, não altera a conta chamadora; o `⬜` anterior ("proibido, alteraria o avatar da conta") vinha de uma premissa errada, não confirmada contra o código (`GetAvatarUseCase`, só leitura). Chamada com o número de `envia`: `200 {id:"214830039", url:...}` — o `id` bate exatamente com `avatar_id` de `GET /session/profile`, medido na mesma sessão. Chamada com o número de `recebe`: `403 forbidden` (foto escondida por privacidade) — comportamento documentado, confirmado ao vivo. Nenhuma conta foi alterada. |
 | Contactos e utilizadores | `POST` | `/users/block` | `POST /user/block` | ❌ | Bloquear um contacto | 422 upstream_rejected; WhatsApp devolve 400 bad-request. Medido nas duas contas, PN e LID (F264). |
 | Contactos e utilizadores | `GET` | `/users/blocklist` | `GET /user/blocklist` | ✅ | Listar os contactos bloqueados | `200 {blocklist:[], dhash:"1787924842884699"}` — lista vazia bate com o estado real (nenhum contacto bloqueado nesta sessão); bloqueio/desbloqueio em si já foi remedido no F278 em fase anterior. |
 | Contactos e utilizadores | `POST` | `/users/check` | `POST /user/check` | ✅ | Verificar se números têm WhatsApp | `{phone:["554192421234"]}` (número de `recebe`) devolveu `200`, `is_in_whatsapp:true`, `jid:554192421234@s.whatsapp.net` — bate com a sessão real e pareada de `recebe`. |
@@ -341,7 +361,7 @@ A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido 
 | Grupos | `PUT` | `/groups/{group_jid}/photo` | `POST /group/photo` | ✅ | Definir a foto de um grupo | primeira tentativa com um JPEG sintético inválido (1x1) devolveu `422 upstream_rejected` — "the given data is not a valid image", erro correto do WhatsApp, não bug. Com um JPEG 200x200 real (Pillow): `200 "Group photo set successfully"`; `GET /groups/{group_jid}` não expõe campo de foto, então a confirmação foi visual: o avatar do grupo em web.whatsapp.com (sessão envia) passou a mostrar exatamente a cor vermelha enviada, com o sistema "Você mudou a imagem do grupo". |
 | Grupos | `PUT` | `/groups/{group_jid}/settings/join-approval` | `POST /group/joinapprovalmode` | ✅ | Exigir aprovação de administrador para entrar no grupo | campo correto é `mode` (não `require_approval`) — a primeira tentativa com o nome errado devolveu `200` mas na prática DESLIGOU a exigência (`mode` ausente vale `false`, como a própria documentação avisa), medido por `GET /groups/{group_jid}` continuando com `is_join_approval_required:false`. Com `mode:true`: `200`, e `GET` passou a `true` — confirmado também pelo efeito de ponta a ponta: `POST /groups/join` (recebe) virou PEDIDO pendente em vez de entrada direta. |
 | Grupos | `PUT` | `/groups/{group_jid}/topic` | — | ✅ | Mudar a descrição de um grupo | `200`; `GET /groups/{group_jid}` passou a devolver o tópico novo, na mesma leva de name/announce-only/ephemeral/locked. |
-| Integrações e configuração | `POST` | `/call/reject` | — | ⬜ | Recusar uma chamada a entrar | exige uma chamada a entrar; nao ha como provocar uma no ambiente. |
+| Integrações e configuração | `POST` | `/call/reject` | — | ✅ | Recusar uma chamada a entrar | DESTRAVADO: usuário fez uma chamada de voz real para `recebe`. Listener no `/session/ws` de `recebe` capturou o evento `CallOffer` (`From`/`CallID` reais) e disparou `POST /call/reject` automaticamente, dentro da janela exigida pela rota. `200 {"details":"Call rejected","call_id":"..."}` — o `call_id` devolvido bate exatamente com o do evento capturado. |
 | Integrações e configuração | `DELETE` | `/hmac/config` | — | ✅ | Revogar a chave HMAC da sessão | `200 {"Details":"HMAC configuration deleted successfully"}`; `GET /hmac/config` voltou de `{"hmac_key":"***"}` para `{"hmac_key":""}`. |
 | Integrações e configuração | `GET` | `/hmac/config` | — | ✅ | Consultar se há chave HMAC configurada | estado inicial `hmac_key:""`; `POST /hmac/config` com chave de 37 carateres devolveu `200`, e esta rota passou a devolver `hmac_key:"***"` — confirma que reflete o estado real, não um valor fixo. Revertido com `DELETE /hmac/config` ao final. |
 | Integrações e configuração | `POST` | `/hmac/config` | — | ✅ | Gravar a chave HMAC da sessão | `200 {"Details":"HMAC configuration saved successfully","Enabled":true}`; `GET /hmac/config` passou de `{"hmac_key":""}` para `{"hmac_key":"***"}`. |
