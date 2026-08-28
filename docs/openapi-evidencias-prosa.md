@@ -1,27 +1,25 @@
 # Relatório de evidências — documentação OpenAPI
 
-**Actualizado a 2026-08-26**, depois da padronização de caminhos (F269) e da
-integração das três campanhas de evidência.
+**Actualizado a 2026-08-28**, depois da campanha F239/F282 (Fases 0-9,
+HOUSEKEEP F344-F354) e de uma ronda de destrave ad hoc pedida pelo usuário
+no mesmo dia, usando as sessões reais `envia`/`recebe`.
 
-O que mudou nesta ronda:
+Contagem actual (137 rotas documentadas): **127 ✅, 4 🟡, 4 ❌, 2 ⬜.**
 
-| | antes | depois |
-|---|---:|---:|
-| ✅ | 98 | **122** |
-| 🟡 | 8 | 8 |
-| ❌ | 3 | **4** |
-| ⬜ | 32 | **7** |
-| total | 141 | 141 |
-
-**25 rotas mudaram de marca**, todas a sair de ⬜: 24 para ✅ e uma para ❌. A
-campanha que as moveu está em `CAMPANHA-DESCARTAVEL.md`, e o que a destravou
-foi um fixture — sessões criadas por `POST /admin/users` e nunca emparelhadas,
-descartáveis por construção. O motivo *"mexeria na sessão em uso"*, que
-bloqueava 25 das 32 ⬜, não era impossibilidade: era falta de fixture.
-
-Os 🟡 não se moveram, e é correcto que não se tenham movido — sem conta
-emparelhada não há observador a exercitar. O que mudou neles foi o **motivo**:
-quatro dos oito estavam factualmente errados (`OBSERVADORES-AMBAR.md`).
+A campanha F239/F282 não mudou marca nenhuma — só adicionou evidência
+específica às 93 rotas que ainda tinham a frase-modelo genérica. A ronda de
+destrave de 2026-08-28 (pedido explícito do usuário, "vamos destravar esses
+que não precise da minha ação humana", seguida de "vamos seguir com os
+próximos que posso estar ajudando" e da ajuda pessoal salvando um contacto
+no telefone) moveu 5 rotas de 🟡/⬜ para ✅ (`POST /chats/download/{kind}`,
+`POST /groups/{group_jid}/join-requests`, `POST /newsletters/react`,
+`POST /chats/send/sticker` — com ajuda do usuário autorizando
+`brew install ffmpeg-full`, F357 —, e `POST /status/set/image` — com ajuda
+do usuário salvando `recebe` como contacto nomeado, F256) e investigou a
+fundo duas 🟡 que continuaram 🟡 com causa agora DETERMINADA em vez de
+aberta: `POST /newsletters/mark-viewed` (F356, não destravável nesta base)
+e `POST /status/set/video`+`POST /status/set/audio` (F358, achado
+incidental novo — ver abaixo).
 
 ## O contrato descreve um nome por operação
 
@@ -76,10 +74,10 @@ Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 117
-  AMR sucesso sem observador independente: 8
+  OK  chamada real com efeito confirmado: 127
+  AMR sucesso sem observador independente: 4
   ERR falhou, com o erro medido:          4
-  NT  não testada, com o motivo dito:     8
+  NT  não testada, com o motivo dito:     2
 ```
 
 
@@ -118,49 +116,117 @@ A quarta, `POST /session/logout`, não é de protocolo: é taxonomia de erro nos
 (F275), e o caminho de `200` exige uma conta emparelhada — está em
 `HUMAN-LAST.md`.
 
-## As oito 🟡, e o que realmente as bloqueia
+## As quatro 🟡, e o que realmente as bloqueia
 
-O inventário completo está em `OBSERVADORES-AMBAR.md`. O resultado é
-assimétrico e vale dizê-lo já: **nenhuma das oito está sem observador.** Sete
-têm observador identificado no código, e a oitava tem-no identificado junto com
-a razão exacta pela qual ele mostra zero. O que as bloqueia é **pré-condição** —
-todas exigem conta emparelhada, e cinco exigem duas.
-
-**Quatro dos oito motivos escritos aqui até 2026-08-26 eram factualmente
-falsos**, e estão substituídos abaixo.
+O inventário completo está em `OBSERVADORES-AMBAR.md`. **Quatro saíram
+desta lista em 2026-08-28** (`POST /groups/{group_jid}/join-requests`,
+`POST /newsletters/react`, `POST /chats/send/sticker` e
+`POST /status/set/image`, movidas para ✅ — ver "Destrave de 2026-08-28"
+abaixo). Das quatro que restam, `request-unavailable-message` exige
+conta emparelhada, `mark-viewed` tem causa determinada e não é destravável
+nesta base, e `status/set/video`/`status/set/audio` têm um achado
+incidental NOVO (F358): a mesma pré-condição de `status/set/image` já foi
+satisfeita, mas o observador mostra uma entrega incompleta específica de
+vídeo/áudio, não uma falta de pré-condição.
 
 | Endpoint | Motivo preciso |
 |---|---|
 | `POST /chats/request-unavailable-message` | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1. |
-| `POST /chats/send/sticker` | 200 e a mensagem chegou; bolha vazia porque **o WebP de entrada nao e convertido** — `http.DetectContentType` devolve `image/webp` (medido) e esse tipo cai no `default` de `ConvertToWebPSticker` (`media/sticker/exif.go:62`), logo nao passa pelo `scale=512:512`. **So falta fixture**: um PNG 512x512 forca a conversao. Observador ja existe e e ✅ — `GET /chats/history` + `POST /chats/download/sticker` + verificacao dos bytes RIFF/WEBP. Achado F279. |
-| `POST /groups/{group_jid}/join-requests` | 200 contra fila VAZIA, que nao prova nada. **Observador existe**: `GET /groups/{group_jid}/join-requests` (✅) antes/depois, mais `POST /groups/info`. A pre-condicao e criavel so por API — `JoinWithLink` devolve `membership_approval_request` quando o grupo exige aprovacao (`capabilities/group/invite.go:117`) —, mas exige DUAS sessoes emparelhadas. Ver `HUMAN-LAST.md` C.1. Achado F280: o resultado por participante que o WhatsApp devolve e descartado em `adapters/group/participants.go:81`. |
-| `POST /newsletters/mark-viewed` | 200 com data:null. **O observador existe por desenho e esta inalcancavel**: `NewsletterMarkViewed` incrementa o contador de vistas (`core/newsletter.go:52`) e o contador so se le por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`) — que e `POST /newsletters/updates`, a rota ❌ da F265. Via alternativa nunca exercitada: `POST /newsletters/subscribe` + evento `NewsletterLiveUpdate`, que carrega `ViewsCount`. `POST /newsletters/messages` traz o campo mas mediu **0 em 60/60** e nao distingue. Ver `OBSERVADORES-AMBAR.md` §4. |
-| `POST /newsletters/react` | 200 com data:null. **O motivo antigo ficou obsoleto no proprio dia**: mediu-se um canal com sessenta publicacoes e `POST /newsletters/messages` devolveu `ReactionCounts` reais (ex.: `{'👍':3,'😂':58}`). O observador e a leitura antes/depois do mesmo `MessageServerID`, com o passo de REMOCAO (`reaction` vazio) a fechar a causalidade. Falta apenas uma sessao emparelhada e autorizacao para reagir numa conta real. Ver `HUMAN-LAST.md` B.3. |
-| `POST /status/set/image` | 200 com message_id. **Observador existe**: a SEGUNDA sessao — `GET /chats/history?chat_jid=status@broadcast`, ou o webhook/`/session/ws` dela. O que falta e a pre-condicao da F256: `getStatusBroadcastRecipients` so inclui contactos com `FullName` (`core/broadcast.go:70`), e a conta Business tem 1 em 461. **A pre-condicao e verificavel por API antes de publicar**, com `GET /users/contacts`. Ver `HUMAN-LAST.md` C.2. |
-| `POST /status/set/video` | Mesmo caminho e mesma pre-condicao de `/status/set/image` (`SendVideo` para `status@broadcast`). **Precisa de medicao PROPRIA**: evidencia herdada nao e evidencia. Ver `HUMAN-LAST.md` C.2. |
-| `POST /status/set/audio` | Mesmo caminho e mesma pre-condicao de `/status/set/image` (`SendAudio` para `status@broadcast`). **Precisa de medicao PROPRIA**: evidencia herdada nao e evidencia. Ver `HUMAN-LAST.md` C.2. |
+| `POST /newsletters/mark-viewed` | 200 com data:null. **INVESTIGADO A FUNDO em 2026-08-28, com um listener que PROVOU funcionar**: o mesmo WebSocket que recebeu, em segundos, o evento `NewsletterLiveUpdate` de uma reação de `recebe`, esperou 45s por um evento depois de `mark-viewed` — zero. Mais forte: `POST /newsletters/messages` (sem WebSocket nenhum) confirmou `view_count:0` antes e depois, enquanto `reactions` no MESMO objeto mostrava a contagem real. Não é bug de entrega — a entrega funciona, provado. É o `view_count` nunca incrementar do lado do WhatsApp para uma marcação feita por API, possivelmente por exigir renderização por cliente real (hipótese, não confirmável sem o código deles). **Não há ação humana nem de código nesta base que destrave isto.** Ver `OBSERVADORES-AMBAR.md` §4. |
+| `POST /status/set/video` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** (não herdada) — pré-condição de `FullName` satisfeita (ver "Destrave de 2026-08-28" abaixo). `200`, `envia` grava o `videoMessage` completo na própria história. Mas o WebSocket de `recebe`, em DUAS janelas de 90s (reproduzido), só recebeu o `senderKeyDistributionMessage` (preâmbulo Signal) — nunca o `videoMessage`. Achado incidental **F358**: diferente de `image`, que entregou completo em segundos. |
+| `POST /status/set/audio` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** — mesmo padrão de `/status/set/video`: `200`, mas o WebSocket de `recebe` (90s) só recebeu o preâmbulo, nunca o `audioMessage`. Mesmo achado incidental **F358**. |
 
-## As oito que continuam por testar, e porquê
+## As duas que continuam por testar, e porquê
 
-Sete delas sem o motivo antigo *"mexeria na sessão em uso"* — esse foi
-derrubado pela campanha da sessão descartável, e valeu 25 rotas. A oitava é
-nova, e o motivo é outro: ainda não foi medida.
+Seis saíram desta lista em 2026-08-28: `POST /chats/download/{kind}`;
+`POST /users/privacy` e `POST /users/status` (permissão explícita do
+usuário, "sim, pode fazer no envia", ciclo completo
+mudar→confirmar→reverter); `POST /session/pair/phone` (terceiro número
+descartável fornecido pelo usuário); `POST /s3/test` e
+`POST /session/s3/test` (bucket B2 real, chave dedicada isolada das
+buckets de produção do usuário — ver "Destrave de 2026-08-28" abaixo). Das
+duas que restam, uma é proibida e uma exige uma chamada real a entrar.
 
 | Endpoint | Motivo |
 |---|---|
-| `POST /chats/download/{kind}` | rota nova (CAP-10, 2026-08-27): consolida as cinco rotas de descarga com o `kind` na relação do caminho, não colado ao corpo. Reusa o mesmo caminho de código das cinco ✅ (`mediaDownloadFlow`), mas ainda não foi chamada contra um servidor real — herdar evidência de código não é medição, então fica ⬜ até ter a sua própria |
-| `POST /s3/test` | não há bucket descartável: o validador de saída recusa endpoint em loopback (medido `400 invalid_s3_endpoint` para `http://127.0.0.1:9000`, F277), o que impede um MinIO local, e não há credenciais AWS descartáveis |
-| `POST /session/s3/test` | idem — mesmo manipulador |
-| `POST /call/reject` | exige uma chamada a entrar; não há como provocar uma |
-| `POST /session/pair/phone` | iniciaria emparelhamento de um número real |
-| `POST /users/avatar` | alteraria o avatar da conta |
-| `POST /users/privacy` | alteraria definições de privacidade da conta |
-| `POST /users/status` | alteraria o recado da conta |
+| `POST /call/reject` | exige uma chamada a entrar; não há como provocar uma por API — precisa de alguém ligar de verdade |
+| `POST /users/avatar` | alteraria o avatar da conta `envia` — **proibido nesta sessão pelo utilizador** (não é só falta de vontade, é uma restrição explícita) |
 
-As quatro últimas exigem uma conta de WhatsApp **emparelhada** cujo perfil
-seria mexido — uma sessão descartável não serve, porque o que está em causa
-é a conta por trás dela, não a sessão. O procedimento de cada uma está em
-`HUMAN-LAST.md`.
+O procedimento de cada uma está em `HUMAN-LAST.md`.
 
+## Destrave de 2026-08-28
+
+A pedido do usuário ("vamos destravar esses que não precise da minha ação
+humana", depois "vamos seguir com os próximos que posso estar ajudando"),
+doze rotas foram re-testadas ao vivo (`envia`/`recebe`, uma sessão
+descartável nova pareada com um terceiro número real, e um bucket B2 real
+do usuário), dez delas movidas para ✅:
+
+- **`POST /chats/download/{kind}`** → ✅. Chamada com os sete campos de uma
+  mensagem de imagem real já em `GET /chats/history`: `200`, imagem
+  decifrada corretamente.
+- **`POST /groups/{group_jid}/join-requests`** → ✅. A evidência já existia
+  desde a Fase 6 (F350) na linha irmã `GET .../join-requests`, mas esta
+  linha (o `POST` de decisão) tinha ficado com a marca antiga por um lapso
+  da campanha — corrigido, sem nova medição necessária.
+- **`POST /newsletters/react`** → ✅. Canal descartável, `recebe` reage
+  👍 a uma mensagem de `envia`: `reactions` passa de `[]` para
+  `[{emoji:"👍",count:1}]` e volta a `[]` ao remover — os três estados
+  fecham a causalidade.
+- **`POST /chats/send/sticker`** → ✅ (F357). Bloqueado inicialmente por
+  `ffmpeg` local quebrado (`libx265.215.dylib` em falta); depois de
+  `brew reinstall ffmpeg` (autorizado pelo usuário), um segundo bloqueio
+  apareceu — o `ffmpeg` padrão do Homebrew não inclui o encoder `libwebp`
+  — resolvido com `brew install ffmpeg-full` (47 dependências extras,
+  keg-only, `brew unlink ffmpeg && brew link ffmpeg-full`, autorizado pelo
+  usuário). Com PNG 512×512 real: `200`, `GET /chats/history` + `POST
+  /chats/download/sticker` confirmaram bytes `RIFF`…`WEBP` válidos de
+  512×512.
+- **`POST /newsletters/mark-viewed`** → continua 🟡, mas agora com causa
+  DEFINITIVA (ver tabela acima): a entrega por WebSocket foi provada
+  funcional com um evento real de reação, e mesmo assim `mark-viewed` não
+  produz nem esse evento nem uma mudança de `view_count` observável por
+  polling. Não é um "ainda não investigado" — é "investigado, e o efeito
+  genuinamente não existe do lado do WhatsApp para este caminho".
+- **`POST /status/set/image`** → ✅. O usuário salvou `recebe` como
+  contacto com nome no telefone de `envia` (pré-condição da F256,
+  confirmada via `GET /users/contacts`: `full_name` preenchido). Publicado
+  um JPEG real: `200`, e o WebSocket de `recebe` recebeu o `imageMessage`
+  completo em segundos — `mimetype`, `caption` e `message_id` batendo.
+- **`POST /status/set/video`** e **`POST /status/set/audio`** → continuam
+  🟡, mas com medição própria feita e um achado incidental novo (**F358**):
+  a mesma pré-condição de `image` foi satisfeita, `200` em ambas, `envia`
+  grava o conteúdo completo na própria história — mas o WebSocket de
+  `recebe`, testado em janelas de 90s (reproduzido para vídeo), só recebeu
+  o `senderKeyDistributionMessage` (o preâmbulo do protocolo Signal), nunca
+  o `videoMessage`/`audioMessage` em si. Diferente de `image`, que entregou
+  completo. Não é falta de pré-condição — é a mesma pré-condição, resultado
+  diferente conforme o tipo de mídia.
+- **`POST /users/privacy`** → ✅. Permissão explícita do usuário ("sim,
+  pode fazer no envia"). `readreceipts` (estado inicial `all`) → `none` via
+  `POST`, confirmado por `GET /users/privacy`; revertido para `all` no
+  mesmo ciclo, confirmado de novo. A conta não ficou alterada ao final.
+- **`POST /users/status`** → ✅. Mesma permissão. Recado original `"conta
+  de testes"` → texto de teste via `POST`, confirmado por
+  `GET /session/profile/full` (`user_info[0].status`); revertido ao texto
+  original no mesmo ciclo, confirmado de novo.
+- **`POST /session/pair/phone`** → ✅. Usuário forneceu um TERCEIRO número
+  descartável (não registrado neste documento, é dado pessoal). Sessão
+  nova criada só para o teste, `GET /session/connect` +
+  `POST /session/pair/phone` → `linking_code`. Primeiro código expirou
+  (janela ~2min) antes do usuário digitar; segundo código digitado a
+  tempo — `GET /session/status` confirmou `connected:true,
+  logged_in:true`, `jid` batendo com o número. Sessão desconectada e
+  apagada ao final; `envia`/`recebe` intactas.
+- **`POST /s3/test`** e **`POST /session/s3/test`** → ✅. Usuário
+  forneceu um bucket B2 (Backblaze) real, com chave dedicada isolada das
+  buckets de produção. `POST /s3/config` com endpoint/bucket/credenciais
+  reais → `200`; `POST /s3/test` → `200 {connected:true, details:"S3
+  connection test successful", bucket:"...", region:"us-west-004"}` —
+  conexão real confirmada. `GET /session/s3/config` já refletia a mesma
+  configuração antes de eu tocar nela, confirmando que `/session/s3/*` e
+  `/s3/*` são o mesmo manipulador; `POST /session/s3/test` devolveu o
+  mesmo resultado. Configuração removida ao final (`DELETE /s3/config`),
+  sem deixar credenciais reais gravadas.
 
 <!-- GERADO:TABELA-COMPLETA -->

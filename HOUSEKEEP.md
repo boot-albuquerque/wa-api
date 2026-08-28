@@ -36630,3 +36630,440 @@ medição/documentação sobre uma rota já classificada ✅.
 **Status**: concluído. Nenhum commit feito.
 
 <!-- f-status: corrigido -->
+
+## F355 — Destrave de 4 dos 14 restantes (6 🟡 + 8 ⬜) sem ação humana; achado de ambiente no ffmpeg local
+
+**Data/contexto**: 2026-08-28, pedido explícito do usuário: "vamos
+destravar esses que nao precise da minha acao humana e as demais vamos por
+ordem de prioridade que vou ajudando pessoalmente a destravar". Partiu do
+levantamento das 14 rotas 🟡/⬜ restantes pós-campanha F239/F282 (F345-F354).
+Sessões reais `envia`/`recebe`.
+
+**Categorização feita antes de agir** (para não tocar nada que precisasse
+de ação do usuário):
+- **Autônomas (5 tentadas)**: `POST /chats/send/sticker` (F279 — só
+  faltava fixture), `POST /groups/{jid}/join-requests` (já tinha as duas
+  sessões pareadas), `POST /newsletters/mark-viewed` e `POST
+  /newsletters/react` (canal descartável + envia/recebe), `POST
+  /chats/download/{kind}` (só faltava chamar contra mídia real).
+- **Precisam de ação humana, NÃO tocadas**: `POST /users/avatar`
+  (**proibido explicitamente pelo usuário** numa sessão anterior — achado
+  já registado na linha do TSV antes desta sessão, respeitado aqui),
+  `POST /users/privacy`/`POST /users/status` (mudam configuração real e
+  visível a terceiros da conta `envia` — categoria "mudar definições de
+  conta" das minhas próprias regras de segurança, pedem permissão
+  explícita antes, não só a licença genérica "envia pode testar à
+  vontade"), `POST /s3/test`/`POST /session/s3/test` (bucket real),
+  `POST /call/reject` (chamada real a entrar), `POST /session/pair/phone`
+  (número real), `POST /chats/request-unavailable-message` (pré-condição
+  não fabricável nem com ajuda humana simples).
+
+**Resultado das 5 tentativas autônomas**:
+
+1. `POST /chats/download/{kind}` → ✅. `kind=image` contra uma mensagem
+   real de `GET /chats/history` (enviada na Fase 3): `200`, os sete campos
+   de `PedidoDescargaDeMidia` extraídos do `data_json.Message.imageMessage`
+   da própria mensagem, imagem decifrada com sucesso.
+2. `POST /groups/{group_jid}/join-requests` → ✅, mas por uma via
+   diferente do previsto: a evidência da decisão (`approve`) **já existia**
+   desde a Fase 6 (F350), registada na linha irmã `GET
+   .../join-requests` ("depois de aprovado... voltou a ficar vazia — os
+   três estados medidos na mesma ronda"), mas a linha do `POST` tinha
+   ficado com a marca 🟡 antiga por um lapso da própria campanha — corrigi
+   sem precisar de nova medição. A NOVA tentativa de recriar o fluxo do
+   zero (`recebe` a pedir entrada de novo num grupo descartável fresco)
+   bateu em `401 upstream_unauthorized` do WhatsApp — não investigado a
+   fundo (não era necessário, a evidência já existia), mas consistente
+   com um cooldown do lado do WhatsApp para reentrada logo após remoção.
+3. `POST /newsletters/react` → ✅. Canal descartável, `recebe` reage 👍 a
+   uma mensagem de `envia`: `reactions` de `[]` para
+   `[{emoji:"👍",count:1}]`, e de volta a `[]` ao remover — três estados,
+   causalidade fechada.
+4. `POST /newsletters/mark-viewed` → continua 🟡. Tentado pelas DUAS vias
+   que a própria especificação da rota sugere: `envia` subscrito
+   (`POST /newsletters/subscribe`) + `recebe` chama `mark-viewed`, 20s de
+   escuta no WebSocket de `envia` — zero eventos `NewsletterLiveUpdate`;
+   e o inverso, `recebe` subscrito e escutando o próprio WebSocket — zero
+   eventos também. `POST /newsletters/messages` confirmou `view_count:0`
+   antes e depois nos dois casos. **Achado incidental**: o log do servidor
+   registou "Newsletter live update" internamente logo depois de cada
+   tentativa (`internal/wa-noise/core/newsletter.go`, handler do evento),
+   mas nada chegou a nenhum dos dois WebSockets clientes — o evento existe
+   e é recebido do WhatsApp, mas não é entregue por este caminho. Não
+   corrigido nesta sessão (fora do escopo do pedido — era para destravar
+   evidência, não caçar bug de entrega); registado como resposta NEGATIVA,
+   que é informação, não fracasso.
+5. `POST /chats/send/sticker` → **continua 🟡, bloqueado por ambiente,
+   não pelo wa-api**. Fixture certo desta vez (PNG 512×512 real, gerado
+   com Pillow — a tentativa anterior com um PNG sintético mínimo também
+   falhou, mas por outro motivo). `500 sticker_conversion_failed`; no log,
+   `ffmpeg` local aborta: `dyld[...]: Library not loaded:
+   /opt/homebrew/opt/x265/lib/libx265.215.dylib`. É um `ffmpeg`/`x265`
+   quebrado nesta máquina de desenvolvimento (Homebrew) — o caminho de
+   código e o fixture já estão certos. Não tentei `brew reinstall`
+   sozinho: é mudança de pacote do sistema do usuário, fora do que devo
+   fazer sem perguntar.
+
+**Limpeza**: canal descartável e grupo descartável desta sessão apagados
+(`DELETE /newsletters/delete`, `POST /groups/leave`) ao final.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — 3 linhas ⬜/🟡→✅, 1
+linha 🟡 com motivo refinado. `docs/OPENAPI-EVIDENCIAS.md` regenerado.
+`docs/openapi-evidencias-prosa.md` (hand-maintained) reescrito para bater
+com as novas contagens — estava referenciando "as oito 🟡"/"as oito por
+testar" com números de 2026-08-26. `api/openapi/base.yaml`
+(`info.description`, a legenda) também estava com os números antigos
+(117/8/4/8) — `TestEvidenceLegendMatchesTable` pegou a divergência e falhou
+até eu corrigir, confirmando que o teste de reconciliação funciona.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...` (todos `ok`, incluindo
+`TestEvidenceLegendMatchesTable` que falhou e depois passou),
+`make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — é
+medição/documentação. O achado do WebSocket de newsletter e o do `ffmpeg`
+local ficam registados sem teste próprio, por não serem o escopo desta
+sessão.
+
+**Status**: concluído. Restam 13 rotas (6 🟡, 7 ⬜) — todas precisam de
+alguma forma de ação/decisão do usuário: 3 permissão explícita
+(`avatar` proibido, `privacy`/`status` a pedir), 4 recurso externo (S3,
+chamada, número de telefone), 1 ação no telefone (salvar contacto com
+nome), 1 reinstalação de pacote local (`ffmpeg`/`x265`), 1 investigação de
+entrega de evento fora do escopo pedido (`newsletters/mark-viewed`), 1
+pré-condição não fabricável (`chats/request-unavailable-message`),
+1 correção de rótulo sem ação nova (já contabilizada em `join-requests`,
+que já saiu da lista). Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F356 — `/newsletters/mark-viewed`: entrega por WebSocket provada funcional; `view_count` nunca observado por nenhum caminho
+
+**Data/contexto**: 2026-08-28, pedido explícito do usuário logo após F355:
+"não deixar para trás" o `POST /newsletters/mark-viewed`, que tinha ficado
+🟡 com um resultado negativo mas não definitivo. Investigação de código +
+medição ao vivo com `envia`/`recebe`.
+
+**O que a F355 tinha medido**: dois listeners de WebSocket (um em `envia`,
+um em `recebe`), 20s cada, zero eventos após `mark-viewed`. Isso por si só
+não distinguia "o evento não é entregue" de "o evento não existe" — a
+entrega nunca tinha sido provada funcional neste ambiente para NENHUM
+evento de newsletter.
+
+**Rastreio de código**: `handleNewsletterLiveUpdate`
+(`pkg/bootstrap/eventhandler_group.go:44-48`) marca `st.dowebhook = 1`, que
+`sendEventWithWebHook` (`pkg/bootstrap/lifecycle_webhook.go:112`) processa
+em quatro canais — webhook por utilizador, webhook global, RabbitMQ, e
+`dispatchGo("sendToWS", ..., clientManager.BroadcastToUser(...))` na linha
+165 — GATEADO só por `checkIfSubscribedToEvent` (`pkg/bootstrap/lifecycle.go:36`),
+que aceita `"All"`. `envia` e `recebe` têm `events:"All"` (confirmado em
+`GET /admin/users` ao longo de toda esta sessão), logo o gate não deveria
+bloquear nada.
+
+**Medição que prova a entrega, antes de julgar `mark-viewed`**: canal
+descartável novo, `envia` subscrito, listener no WebSocket de `envia`.
+`recebe` reage (`👍`→depois `🔥` num canal seguinte) a uma mensagem de
+`envia`: o evento chegou em segundos —
+`{"event":{"JID":"...","Time":"...","Messages":[]},"type":"NewsletterLiveUpdate"}`.
+**A entrega funciona.** (O `Messages:[]` vazio é uma observação à parte,
+não investigada — o "ping" chega sem o detalhe da reação embutido, que se
+lê por segunda-rota via `POST /newsletters/messages`, já ✅ desde F239/F282.)
+
+**A mesma medição com `mark-viewed` em vez de `react`, MESMO canal, MESMO
+listener já provado**: 45s de espera — zero eventos. E mais decisivo:
+`POST /newsletters/messages` no mesmo objeto mostrou `reactions` com a
+contagem real e `view_count:0` — **o contador nunca incrementa, nem por
+segunda-rota, nem por WebSocket, nem imediatamente nem depois de esperar.**
+Não é problema de entrega (a entrega foi provada); é o efeito em si nunca
+acontecer, do lado do WhatsApp, para uma marcação de "visto" feita por API.
+
+**Hipótese, marcada como hipótese e não como fato**: `view_count` pode
+exigir que a mensagem seja efetivamente renderizada por um cliente
+WhatsApp real (anti-fraude contra inflar contadores por chamada direta),
+não bastando o `mark-viewed` do protocolo. Não confirmável sem acesso ao
+lado do servidor do WhatsApp.
+
+**Conclusão prática**: ao contrário das outras 13 rotas 🟡/⬜ ainda
+pendentes, esta não tem ação humana nem de código nesta base que a
+destrave. Fica 🟡 com causa determinada, não com motivo em aberto.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` (linha de
+`POST /newsletters/mark-viewed`) e `docs/openapi-evidencias-prosa.md`
+reescritos com a conclusão definitiva. `docs/OPENAPI-EVIDENCIAS.md`
+regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento — investigação e
+documentação. O `Messages:[]` vazio no evento de reação fica anotado como
+observação lateral, sem teste próprio, por estar fora do escopo pedido.
+
+**Status**: concluído. `POST /newsletters/mark-viewed` sai da lista de "a
+destravar" — não é destravável nesta base, e isso agora está provado, não
+suposto. Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F357 — `/chats/send/sticker` destravado: `ffmpeg` padrão do Homebrew não tem encoder `libwebp`
+
+**Data/contexto**: 2026-08-28, continuação de F355 ("vamos seguir com os
+próximos que posso estar ajudando a destravar"). Primeiro item da lista
+priorizada: o `ffmpeg` local quebrado que bloqueava `POST
+/chats/send/sticker` (F279).
+
+**Dois bloqueios em sequência, não um só**:
+
+1. **`libx265.215.dylib` em falta** (já registado em F355): `ffmpeg` do
+   Homebrew abortava com `dyld: Library not loaded`. Usuário autorizou
+   `brew reinstall ffmpeg`. Resolveu o abort, mas revelou o segundo
+   bloqueio.
+2. **Encoder `libwebp` ausente**: com o `ffmpeg` reinstalado, a conversão
+   passou a falhar com `Unknown encoder 'libwebp'` — a build padrão do
+   formulário `ffmpeg` do Homebrew não inclui suporte a WebP. Só o
+   formulário `ffmpeg-full` inclui (`--enable-libwebp` entre 47
+   dependências), e é `keg-only` (não fica em PATH por padrão). Usuário
+   autorizou `brew install ffmpeg-full` e o link manual
+   (`brew unlink ffmpeg && brew link ffmpeg-full`), depois de eu explicitar
+   o custo (47 dependências extras) antes de agir.
+
+**Medição pós-fix**: PNG 512×512 real (Pillow) enviado a `recebe`: `200`.
+Seguindo o procedimento que a própria documentação da rota já prescrevia
+(`api/openapi/paths/envio.yaml`): `GET /chats/history` trouxe o
+`stickerMessage` com os sete campos de descarga; `POST
+/chats/download/sticker` devolveu `mimetype:image/webp`; os bytes
+decodificados começam com `RIFF`…`WEBP` e o PIL confirma `512×512,
+format=WEBP`. É a mesma verificação que a F279 original pedia e nunca
+tinha sido possível fazer.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` (linha de `POST
+/chats/send/sticker`, 🟡→✅), `docs/openapi-evidencias-prosa.md` (tabela
+dos 🟡, contagens, secção "Destrave de 2026-08-28") e `api/openapi/base.yaml`
+(legenda de `info.description`) atualizados. `docs/OPENAPI-EVIDENCIAS.md`
+regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...` (`TestEvidenceLegendMatchesTable`
+falhou uma vez por eu esquecer de atualizar a legenda primeiro, e passou
+depois de corrigida — o teste de reconciliação funcionando como desenhado),
+`make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — é fix de
+ambiente local (Homebrew) + medição/documentação. Não há teste de
+regressão a escrever: o `ffmpeg`/`libwebp` não é uma dependência do
+repositório, é uma dependência de sistema desta máquina.
+
+**Status**: concluído. Contagem confirmada em `evidencias.tsv`: **121 ✅,
+5 🟡, 4 ❌, 7 ⬜** (137 total). Dos 5 🟡: `mark-viewed` (não-destravável,
+F356), `request-unavailable-message` (pré-condição não fabricável) e os
+3 `status/set/{image,video,audio}` (precisam de `recebe` salvo com nome
+nos contactos de `envia` — ação no telefone). Dos 7 ⬜: `users/avatar`
+(proibido), `users/privacy`/`users/status` (pedem permissão explícita),
+`s3/test`/`session/s3/test` (bucket real), `call/reject` (chamada real),
+`session/pair/phone` (número real). Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F358 — `/status/set/{video,audio}`: entrega incompleta a quem recebe (só o preâmbulo do protocolo chega, nunca o conteúdo) — diferente de `/status/set/image`
+
+**Data/contexto**: 2026-08-28, continuação de F355. Usuário salvou `recebe`
+como contacto nomeado no telefone de `envia` (pré-condição da F256), o que
+destravou os 3 `status/set/*`. Sessões reais `envia`/`recebe`.
+
+**`POST /status/set/image` → ✅, entrega completa e imediata**: JPEG
+600×800 real publicado, `200`. WebSocket de `recebe` recebeu, em ~1
+segundo, o evento completo com `imageMessage` (`mimetype`, `caption`,
+`message_id` batendo com o enviado).
+
+**`POST /status/set/video` e `POST /status/set/audio` → continuam 🟡, com
+um achado incidental que a medição isolou**: MP4 e M4A reais gerados com
+`ffmpeg` (agora funcional, F357), `200` nos dois, e `envia` grava o
+`videoMessage`/`audioMessage` completo na própria história
+(`GET /chats/history`, segunda-rota). Mas o WebSocket de `recebe`, testado
+em janelas de **90 segundos cada**, com o teste de vídeo REPRODUZIDO do
+zero (segunda rodada limpa, mesmo resultado), só recebeu o
+`senderKeyDistributionMessage` — o preâmbulo do protocolo Signal que
+estabelece a chave de grupo — e NUNCA o `videoMessage`/`audioMessage` em
+si. Não houve retry, nem numa reconexão fresca do WebSocket 20s depois.
+
+**Por que isto é um achado real, não um erro de medição**: a mesma
+pré-condição (contacto com `FullName`), o mesmo destinatário, o mesmo
+canal de observação (`/session/ws`), a mesma sessão de `envia` publicando
+— só a MÍDIA muda. `image` chegou completo consistentemente; `video`/
+`audio` nunca chegaram além do preâmbulo, em quatro tentativas ao todo (2
+de vídeo, 2 de áudio, incluindo uma reconexão). Não é falta de pré-condição
+— a pré-condição está satisfeita, `envia` publica com sucesso, e o gap é
+especificamente na entrega/decifragem do conteúdo de vídeo/áudio do lado
+de quem recebe.
+
+**Hipótese, marcada como hipótese**: pode ser um comportamento
+deliberado do WhatsApp (ex.: vídeo/áudio de status exigem um passo de
+transcodificação/CDN adicional do lado deles antes de ficarem disponíveis
+para descarga, e esse passo simplesmente não completou na janela medida),
+ou pode ser um gap real na forma como este projeto lida com o retry de
+mensagens de mídia maiores no fluxo de status. Não investigado a fundo —
+estava fora do escopo do pedido (destravar evidência, não caçar a causa
+raiz de um possível defeito). Fica registado para investigação futura, se
+o usuário quiser.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — `status/set/image`
+🟡→✅; `status/set/video` e `status/set/audio` continuam 🟡 mas com
+`observador=websocket` e evidência específica em vez de "precisa de
+medição própria". `docs/openapi-evidencias-prosa.md` e `api/openapi/base.yaml`
+(legenda) atualizados. `docs/OPENAPI-EVIDENCIAS.md` regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento — é achado
+incidental registado, não corrigido (fora do escopo do pedido). Sem teste
+próprio.
+
+**Status**: `status/set/image` destravado e fechado. `status/set/video` e
+`status/set/audio` continuam 🟡, mas com causa registada em vez de "nunca
+medido" — e um achado incidental sobre entrega de mídia grande no fluxo de
+status que pode merecer investigação própria se o usuário priorizar.
+Contagem atual: **122 ✅, 4 🟡, 4 ❌, 7 ⬜** (137 total). Nenhum commit
+feito.
+
+<!-- f-status: corrigido -->
+
+## F359 — `/users/privacy` e `/users/status` destravadas com permissão explícita do usuário
+
+**Data/contexto**: 2026-08-28, continuação de F355/F357/F358. Usuário
+autorizou explicitamente ("sim, pode fazer no envia") depois de eu pedir
+permissão para mexer em configuração real e visível a terceiros da conta
+`envia` — categoria "mudar definições de conta" das minhas próprias regras
+de segurança, que exige permissão explícita e não a licença genérica já
+dada ("envia pode testar à vontade").
+
+**`POST /users/privacy`**: baseline capturado primeiro (`GET
+/users/privacy`, 10 definições, `read_receipts:all`). Escolhida
+`readreceipts` para o ciclo por ser a de menor exposição das sete
+definíveis por esta rota. `POST {privacy_setting:readreceipts,
+value:none}` → `200` com `read_receipts:none` já na resposta; `GET`
+confirmou. Revertido com `value:all` no mesmo ciclo; `GET` confirmou a
+volta ao estado original. A conta não ficou alterada ao final.
+
+**`POST /users/status`**: baseline capturado primeiro (`GET
+/session/profile/full`, `user_info[0].status = "conta de testes"`).
+`POST {body:"Teste ao vivo — F239/F282 destrave 2026-08-28"}` → `200`;
+`GET /session/profile/full` confirmou o texto novo no mesmo campo.
+Revertido com `POST {body:"conta de testes"}`; `GET` confirmou a volta ao
+texto original.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — as duas linhas
+⬜→✅, com o ciclo mudar→confirmar→reverter documentado na evidência.
+`docs/openapi-evidencias-prosa.md` (tabela dos ⬜, contagens, secção
+"Destrave de 2026-08-28") e `api/openapi/base.yaml` (legenda) atualizados.
+`docs/OPENAPI-EVIDENCIAS.md` regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — é
+medição/documentação com permissão explícita. Sem teste próprio.
+
+**Status**: concluído. Contagem atual: **124 ✅, 4 🟡, 4 ❌, 5 ⬜** (137
+total). Restam 5 ⬜ (`s3/test`, `session/s3/test`, `call/reject`,
+`session/pair/phone`, `users/avatar` — proibida) + 4 🟡 (`mark-viewed`,
+`request-unavailable-message`, `status/set/video`, `status/set/audio`).
+Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F360 — `/session/pair/phone` destravado com um terceiro número descartável fornecido pelo usuário
+
+**Data/contexto**: 2026-08-28, continuação de F355/F357/F358/F359. Usuário
+forneceu um terceiro número de telefone (descartável, não `envia`/`recebe`)
+especificamente para este teste — número não registado neste ficheiro nem
+em `evidencias.tsv`/`docs/OPENAPI-EVIDENCIAS.md`, por ser dado pessoal.
+
+**Fluxo medido**: `POST /admin/users` criou uma sessão nova só para o
+teste (`descartavel-pairphone`). `GET /session/connect` + `POST
+/session/pair/phone {phone:"..."}` devolveu `200 {linking_code:"BZKA-73RK"}`
+na primeira tentativa. O código expirou (`QRTimeout` no log, janela de
+~2 minutos) antes do usuário conseguir digitá-lo no telemóvel — não é
+defeito da rota, é o tempo real gasto entre eu comunicar o código e o
+usuário agir. Pedido um segundo código (`7B2T-Q25F`), digitado a tempo:
+`GET /session/status` confirmou `connected:true, logged_in:true, jid`
+batendo com o número fornecido.
+
+**Limpeza**: `GET /session/disconnect` + `DELETE /admin/users/{id}/full`
+removeram a sessão descartável do wa-api por completo. O NÚMERO continua
+pareado normalmente no WhatsApp — desemparelhar do lado do telefone
+("Aparelhos conectados") fica a critério do usuário, não fiz isso.
+`envia`/`recebe` confirmadas intactas (`GET /admin/users` só as lista a
+elas depois da limpeza).
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — a linha ⬜→✅, sem
+expor o número real (a evidência descreve o fluxo e o resultado, não o
+dado pessoal). `docs/openapi-evidencias-prosa.md` (tabela dos ⬜,
+contagens, secção "Destrave de 2026-08-28") e `api/openapi/base.yaml`
+(legenda) atualizados. `docs/OPENAPI-EVIDENCIAS.md` regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — é
+medição/documentação com um recurso externo fornecido pelo usuário. Sem
+teste próprio.
+
+**Status**: concluído. Contagem atual: **125 ✅, 4 🟡, 4 ❌, 4 ⬜** (137
+total). Restam apenas 4: `s3/test`, `session/s3/test` (bucket real),
+`call/reject` (chamada real), `users/avatar` (proibida). Nenhum commit
+feito.
+
+<!-- f-status: corrigido -->
+
+## F361 — `/s3/test` e `/session/s3/test` destravados com bucket B2 real fornecido pelo usuário
+
+**Data/contexto**: 2026-08-28, continuação de F355/F357/F358/F359/F360.
+Usuário ofereceu MinIO local (docker compose) ou Backblaze B2 já existente
+em `/Users/albuquerque/Documents/projetos/decolapps/infra`, "como
+preferir". Optei por B2: é endpoint real e público, não esbarra na
+restrição de endpoint-loopback já medida (F277), e é mais representativo
+de uso em produção do que um MinIO efêmero. Encontrei as credenciais em
+`.decolapps-secrets.md` (fora deste repositório) e pedi confirmação de
+qual bucket usar antes de agir, já que o ficheiro lista buckets de
+produção reais (`tudobrigadeiro-files`, `decolapps-db-backups`,
+`decolapps-terraform-state`) ao lado de uma chave dedicada
+(`AULAPRATICA_B2_*`, bucket `aulapratica-files`). Usuário confirmou a
+chave dedicada.
+
+**Medição**: `POST /s3/config` (sessão `envia`) com o endpoint, bucket e
+credenciais reais do B2, `enabled:true` → `200`. `POST /s3/test` → `200
+{connected:true, details:"S3 connection test successful",
+bucket:"aulapratica-files", region:"us-west-004"}` — primeira conexão S3
+REAL e bem-sucedida medida neste projeto (F276/F277 só tinham medido
+falhas: endpoint loopback recusado, e credenciais AWS falsas devolvendo
+`403`). `GET /session/s3/config` já refletia a mesma configuração ANTES
+de eu chamar `POST /session/s3/config` — confirma que `/s3/*` e
+`/session/s3/*` partilham o mesmo manipulador, como já documentado.
+`POST /session/s3/test` devolveu o mesmo resultado.
+
+**Higiene de segredo**: as credenciais B2 nunca foram escritas em
+nenhum ficheiro deste repositório (`evidencias.tsv`/`HOUSEKEEP.md` citam
+só o nome do bucket e a região, não a chave nem o segredo) — confirmado
+com `grep` pela chave e pelo `key_id` em todo o repositório, sem
+ocorrência. `DELETE /s3/config` removeu a configuração gravada em
+`envia` ao final; `GET /s3/config` confirmou o estado zerado de novo.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — as duas linhas
+⬜→✅. `docs/openapi-evidencias-prosa.md` (tabela dos ⬜, contagens,
+secção "Destrave de 2026-08-28") e `api/openapi/base.yaml` (legenda)
+atualizados. `docs/OPENAPI-EVIDENCIAS.md` regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código — é
+medição/documentação com um recurso externo fornecido pelo usuário. Sem
+teste próprio.
+
+**Status**: concluído. Contagem atual: **127 ✅, 4 🟡, 4 ❌, 2 ⬜** (137
+total). Restam apenas 2: `call/reject` (chamada real) e `users/avatar`
+(proibida). Nenhum commit feito.
+
+<!-- f-status: corrigido -->
