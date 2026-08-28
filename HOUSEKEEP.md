@@ -37415,3 +37415,121 @@ total). Os 4 🟡 restantes (`mark-viewed`, `request-unavailable-message`,
 "nunca investigado". Nenhum commit feito.
 
 <!-- f-status: corrigido -->
+
+## F367 — `/status/set/{video,audio}` corrigido: a deduplicação F103 poluía o cache com a cópia SEM mídia e suprimia a que trazia o conteúdo real
+
+**Data/contexto**: 2026-08-28, a pedido explícito do usuário ("sim vamos
+nesses do 'status/set/video' e 'status/set/audio'"), investigação e
+correção do achado incidental registado em F358.
+
+**Causa raiz, encontrada cruzando o log estruturado do servidor com o
+código da deduplicação (F103, `pkg/bootstrap/message_dedup.go`)**: o
+WhatsApp entrega o status de vídeo/áudio em DUAS cópias de
+`*events.Message` com o MESMO `message_id`. A primeira é só o
+`senderKeyDistributionMessage` — o preâmbulo Signal que estabelece a
+sessão de grupo/broadcast, sem NENHUM payload de mídia, mas ainda assim
+com `Info.Type="media"` e `Info.MediaType` preenchidos ao nível do
+envelope. A segunda, entregue via retry automático do próprio protocolo
+(não deste projeto), traz o `videoMessage`/`audioMessage` de verdade. A
+F103 original comparava só `Type`/`MediaType`/`PushName` para decidir se a
+segunda cópia trazia metadado que a primeira não tinha — e as duas cópias
+têm esses três campos IDÊNTICOS, então a comparação nunca disparava, e a
+única cópia com conteúdo baixável era descartada como duplicata.
+
+Confirmado que o bug é PROBABILÍSTICO, não determinístico: em algumas
+tentativas, a primeira entrega chega como `*events.UndecryptableMessage`
+em vez de `*events.Message` — esse tipo nunca passa por
+`mensagemJaProcessada`, então o cache nunca é poluído e a segunda cópia
+(agora "primeira" do ponto de vista do dedup) chega normalmente. Foi
+preciso reproduzir várias vezes até acertar o cenário exato (primeira
+cópia como `*events.Message` só com SKDM) para observar o defeito ao
+vivo de forma inequívoca.
+
+**Correção**, em `pkg/bootstrap/message_dedup.go`:
+- Novo campo `TemConteudoUtilizavel bool` em `mensagemVista`.
+- Nova função `temConteudoDeMidiaUtilizavel(info *events.Message) bool`
+  — para mensagens não-mídia devolve sempre `true` (não têm este modo de
+  falha); para mídia, checa se o `Message` decodificado tem pelo menos um
+  de `GetImageMessage`, `GetAudioMessage`, `GetDocumentMessage`,
+  `GetVideoMessage`, `GetStickerMessage`, `GetAlbumMessage`.
+- Em `mensagemJaProcessada`, novo ramo ANTES da comparação de metadado
+  perdido da F103: se a cópia já em cache não tinha conteúdo utilizável e
+  a cópia atual tem, a supressão é pulada e a nova cópia substitui a
+  anterior no cache — não duplica nada, porque a cópia suprimida nunca
+  tinha o que baixar ou entregar.
+
+**Testes** (`pkg/bootstrap/message_dedup_test.go`, com
+`waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"` importado):
+- `TestDedup_SegundaCopiaComMidiaNaoEhSuprimidaQuandoPrimeiraEraVazia` —
+  trava a causa: primeira cópia com `SenderKeyDistributionMessage` vazio,
+  segunda com `VideoMessage` real, mesmo `message_id` → segunda NÃO
+  suprimida.
+- `TestDedup_SegundaCopiaSemMidiaContinuaSuprimidaQuandoPrimeiraJaTinha` —
+  controlo: quando a primeira cópia JÁ tinha mídia, a política original da
+  F103 continua intacta (segunda cópia suprimida).
+- `TestDedup_MensagemDeTextoNuncaContaComoMidiaVazia` — controlo: mensagem
+  de texto nunca entra no novo ramo, `TemConteudoUtilizavel` é sempre
+  `true` para não-mídia.
+
+**Controlo negativo EXECUTADO**: comentado o novo `if` (trocado por
+`if false && ...`) em `mensagemJaProcessada`, rodado
+`TestDedup_SegundaCopiaComMidiaNaoEhSuprimidaQuandoPrimeiraEraVazia`:
+
+```
+message_dedup_test.go:166: a segunda copia (com o video de verdade) foi
+suprimida; e' exatamente o defeito da F358 — Type/MediaType identicos
+escondem que so' a segunda copia tem payload
+--- FAIL: TestDedup_SegundaCopiaComMidiaNaoEhSuprimidaQuandoPrimeiraEraVazia (0.00s)
+```
+
+Restaurado o código original (cópia de segurança em `/tmp` antes da
+mutação); os três testes voltaram a passar.
+
+**Verificação em campo, para os dois tipos, reproduzindo o cenário exato
+do defeito** (não a versão "sortuda" com `UndecryptableMessage` primeiro):
+log do servidor mostra
+`mensagem reentregue NAO suprimida; a primeira copia nao tinha midia
+utilizavel (F358)`, e `GET /session/ws` de `recebe` recebeu o
+`videoMessage`/`audioMessage` completo (`url`, `mediaKey`, `caption`
+quando aplicável) na segunda cópia — onde antes só chegava o preâmbulo.
+
+**Efeito colateral de build, não de comportamento**: `temConteudoDeMidia
+Utilizavel` apareceu como `ELIGIBLE` para `cmd/logcov` (função nova sem
+log próprio). Marcada com `// log:exempt` — é predicado puro sem I/O nem
+erro, e o único chamador já loga o resultado desta checagem quando ele
+muda o desfecho. `cmd/logcov/testdata/eligible.golden` regenerado
+(`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`).
+`.log-coverage-baseline`: `max_exempt_annotations` 2→3, com comentário
+datado citando esta entrada — é um orçamento que só desce sem
+justificativa explícita, e esta é a justificativa.
+
+**Correção de documentação**: `api/openapi/evidencias.tsv` —
+`status/set/video` e `status/set/audio` 🟡→✅, com evidência detalhada.
+`docs/openapi-evidencias-prosa.md` — secção "Consertos de código" ganhou
+o detalhe desta correção; a tabela "As quatro 🟡" virou "As duas 🟡" (só
+`request-unavailable-message` e `mark-viewed` restam, nenhuma
+consertável nesta base); o bullet de F358 em "Destrave de 2026-08-28"
+passou a apontar para "Consertos de código" em vez de descrever o defeito
+como ainda aberto. `api/openapi/base.yaml` (legenda, mantendo a frase
+fixa "As 0 por testar" que `TestEvidenceLegendMatchesTable` exige por
+regex) atualizado para **135 ✅, 2 🟡, 0 ❌, 0 ⬜**.
+`docs/OPENAPI-EVIDENCIAS.md` regenerado via `go run ./cmd/openapidoc`.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/... ./internal/...` (limpo),
+`make handler-route` (23 constantes contra 120 rotas, todas existem).
+Servidor de teste reconstruído e reiniciado; `curl
+localhost:8080/docs/openapi.yaml | cmp - pkg/presentation/http/apidocs/
+openapi.yaml` sai limpo (exit 0).
+
+**Anti-regressão**: três testes novos, controlo negativo executado,
+causa (não só sintoma) travada — a asserção verifica que o CONTEÚDO chega,
+não só que "algum evento" chega.
+
+**Status**: corrigido e verificado ao vivo para vídeo e áudio. Restam só
+duas 🟡 no projeto inteiro (`mark-viewed`, F356;
+`request-unavailable-message`, precondição não criável por HTTP), nenhuma
+consertável nesta base. Contagem final: **135 ✅, 2 🟡, 0 ❌, 0 ⬜** (137
+total). Nenhum commit feito.
+
+<!-- f-status: corrigido -->

@@ -4,7 +4,7 @@
 HOUSEKEEP F344-F354) e de uma ronda de destrave ad hoc pedida pelo usuário
 no mesmo dia, usando as sessões reais `envia`/`recebe`.
 
-Contagem actual (137 rotas documentadas): **133 ✅, 4 🟡, 0 ❌, 0 ⬜.**
+Contagem actual (137 rotas documentadas): **135 ✅, 2 🟡, 0 ❌, 0 ⬜.**
 **Todas as 137 rotas já foram executadas pelo menos uma vez.**
 
 A campanha F239/F282 não mudou marca nenhuma — só adicionou evidência
@@ -12,15 +12,14 @@ específica às 93 rotas que ainda tinham a frase-modelo genérica. A ronda de
 destrave de 2026-08-28 (pedido explícito do usuário, "vamos destravar esses
 que não precise da minha ação humana", seguida de "vamos seguir com os
 próximos que posso estar ajudando" e da ajuda pessoal salvando um contacto
-no telefone) moveu 5 rotas de 🟡/⬜ para ✅ (`POST /chats/download/{kind}`,
+no telefone) moveu 7 rotas de 🟡/⬜/❌ para ✅ (`POST /chats/download/{kind}`,
 `POST /groups/{group_jid}/join-requests`, `POST /newsletters/react`,
 `POST /chats/send/sticker` — com ajuda do usuário autorizando
-`brew install ffmpeg-full`, F357 —, e `POST /status/set/image` — com ajuda
-do usuário salvando `recebe` como contacto nomeado, F256) e investigou a
-fundo duas 🟡 que continuaram 🟡 com causa agora DETERMINADA em vez de
-aberta: `POST /newsletters/mark-viewed` (F356, não destravável nesta base)
-e `POST /status/set/video`+`POST /status/set/audio` (F358, achado
-incidental novo — ver abaixo).
+`brew install ffmpeg-full`, F357 —, `POST /status/set/image` — com ajuda
+do usuário salvando `recebe` como contacto nomeado, F256 —, e
+`POST /status/set/video`+`POST /status/set/audio` — código novo, F358, ver
+"Consertos de código" abaixo) e determinou que uma última fica 🟡 sem
+destrave possível: `POST /newsletters/mark-viewed` (F356).
 
 ## O contrato descreve um nome por operação
 
@@ -75,8 +74,8 @@ Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 133
-  AMR sucesso sem observador independente: 4
+  OK  chamada real com efeito confirmado: 135
+  AMR sucesso sem observador independente: 2
   ERR falhou, com o erro medido:          0
   NT  não testada, com o motivo dito:     0
 ```
@@ -88,7 +87,9 @@ Validação:
 
 A pedido do usuário ("consertar o que for consertável no código"), três
 dos quatro ❌ anteriores foram fechados — dois deles CÓDIGO NOVO, não só
-re-medição:
+re-medição. Depois, a pedido do usuário ("vamos nesses do 'status/set/video'
+e 'status/set/audio'"), um quarto conserto de código fechou os dois últimos
+🟡 restáveis:
 
 - **`POST /session/logout`** (F275) — já estava corrigido em 2026-08-27,
   um dia antes desta sessão de trabalho começar. A evidência ❌ estava
@@ -112,6 +113,30 @@ re-medição:
   esperada, depois restaurada. Medido ao vivo, `envia`→`recebe`: `200
   {jid:"90937376170214@lid", blocklist:["90937376170214@lid"]}` — era
   `422`. Revertido com unblock ao final. Ver HOUSEKEEP F365.
+- **`POST /status/set/video`** e **`POST /status/set/audio`** (F358) —
+  causa raiz na deduplicação de mensagem reentregue (F103,
+  `pkg/bootstrap/message_dedup.go`): o WhatsApp entrega o status de
+  vídeo/áudio em DUAS cópias com o MESMO `message_id` — a primeira é só o
+  `senderKeyDistributionMessage` (preâmbulo Signal, sem payload), a segunda
+  (via retry automático do protocolo) traz o `videoMessage`/`audioMessage`
+  de verdade. A F103 original comparava só `Type`/`MediaType`/`PushName`, e
+  as duas cópias têm esses três campos idênticos (`type=media`), então a
+  segunda — a única com conteúdo — era suprimida como duplicata. Corrigido
+  com um novo campo `TemConteudoUtilizavel` em `mensagemVista` e a função
+  `temConteudoDeMidiaUtilizavel`, que checa se o `Message` decodificado tem
+  pelo menos um payload de mídia (`GetImageMessage`, `GetVideoMessage`
+  etc.); quando a primeira cópia não tinha e a atual tem, a supressão não
+  acontece. Três testes novos em `message_dedup_test.go`, com controlo
+  negativo EXECUTADO: comentada a condição nova, o teste causal falhou com
+  `a segunda copia (com o video de verdade) foi suprimida; e' exatamente o
+  defeito da F358 — Type/MediaType identicos escondem que so' a segunda
+  copia tem payload`, depois restaurado. Medido ao vivo para os dois tipos,
+  reproduzindo o cenário exato (primeira cópia chega como `*events.Message`
+  com só o SKDM, não como `*events.UndecryptableMessage`): log
+  `mensagem reentregue NAO suprimida; a primeira copia nao tinha midia
+  utilizavel (F358)`, e `GET /session/ws` de `recebe` recebeu o
+  `videoMessage`/`audioMessage` completo (URL, mediaKey, caption) na
+  segunda cópia. Ver HOUSEKEEP F367.
 
 ## Nenhuma rota falha hoje
 
@@ -142,23 +167,18 @@ desta rota. Ver HOUSEKEEP F366.
 
 ## As quatro 🟡, e o que realmente as bloqueia
 
-O inventário completo está em `OBSERVADORES-AMBAR.md`. **Quatro saíram
-desta lista em 2026-08-28** (`POST /groups/{group_jid}/join-requests`,
-`POST /newsletters/react`, `POST /chats/send/sticker` e
-`POST /status/set/image`, movidas para ✅ — ver "Destrave de 2026-08-28"
-abaixo). Das quatro que restam, `request-unavailable-message` exige
-conta emparelhada, `mark-viewed` tem causa determinada e não é destravável
-nesta base, e `status/set/video`/`status/set/audio` têm um achado
-incidental NOVO (F358): a mesma pré-condição de `status/set/image` já foi
-satisfeita, mas o observador mostra uma entrega incompleta específica de
-vídeo/áudio, não uma falta de pré-condição.
+O inventário completo está em `OBSERVADORES-AMBAR.md`. **Seis saíram
+desta lista em 2026-08-28**: `POST /groups/{group_jid}/join-requests`,
+`POST /newsletters/react`, `POST /chats/send/sticker`,
+`POST /status/set/image` (movidas para ✅ — ver "Destrave de 2026-08-28"
+abaixo), e `POST /status/set/video`/`POST /status/set/audio` (também ✅,
+mas por CÓDIGO NOVO — F358, ver "Consertos de código" acima). Restam só
+duas, e nenhuma tem conserto possível nesta base.
 
 | Endpoint | Motivo preciso |
 |---|---|
 | `POST /chats/request-unavailable-message` | 200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1. |
 | `POST /newsletters/mark-viewed` | 200 com data:null. **INVESTIGADO A FUNDO em 2026-08-28, com um listener que PROVOU funcionar**: o mesmo WebSocket que recebeu, em segundos, o evento `NewsletterLiveUpdate` de uma reação de `recebe`, esperou 45s por um evento depois de `mark-viewed` — zero. Mais forte: `POST /newsletters/messages` (sem WebSocket nenhum) confirmou `view_count:0` antes e depois, enquanto `reactions` no MESMO objeto mostrava a contagem real. Não é bug de entrega — a entrega funciona, provado. É o `view_count` nunca incrementar do lado do WhatsApp para uma marcação feita por API, possivelmente por exigir renderização por cliente real (hipótese, não confirmável sem o código deles). **Não há ação humana nem de código nesta base que destrave isto.** Ver `OBSERVADORES-AMBAR.md` §4. |
-| `POST /status/set/video` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** (não herdada) — pré-condição de `FullName` satisfeita (ver "Destrave de 2026-08-28" abaixo). `200`, `envia` grava o `videoMessage` completo na própria história. Mas o WebSocket de `recebe`, em DUAS janelas de 90s (reproduzido), só recebeu o `senderKeyDistributionMessage` (preâmbulo Signal) — nunca o `videoMessage`. Achado incidental **F358**: diferente de `image`, que entregou completo em segundos. |
-| `POST /status/set/audio` | **MEDIÇÃO PRÓPRIA feita em 2026-08-28** — mesmo padrão de `/status/set/video`: `200`, mas o WebSocket de `recebe` (90s) só recebeu o preâmbulo, nunca o `audioMessage`. Mesmo achado incidental **F358**. |
 
 ## Nenhuma rota fica por testar
 
@@ -218,15 +238,11 @@ para ✅ — fechando as 137 rotas do contrato:
   confirmada via `GET /users/contacts`: `full_name` preenchido). Publicado
   um JPEG real: `200`, e o WebSocket de `recebe` recebeu o `imageMessage`
   completo em segundos — `mimetype`, `caption` e `message_id` batendo.
-- **`POST /status/set/video`** e **`POST /status/set/audio`** → continuam
-  🟡, mas com medição própria feita e um achado incidental novo (**F358**):
-  a mesma pré-condição de `image` foi satisfeita, `200` em ambas, `envia`
-  grava o conteúdo completo na própria história — mas o WebSocket de
-  `recebe`, testado em janelas de 90s (reproduzido para vídeo), só recebeu
-  o `senderKeyDistributionMessage` (o preâmbulo do protocolo Signal), nunca
-  o `videoMessage`/`audioMessage` em si. Diferente de `image`, que entregou
-  completo. Não é falta de pré-condição — é a mesma pré-condição, resultado
-  diferente conforme o tipo de mídia.
+- **`POST /status/set/video`** e **`POST /status/set/audio`** → a medição
+  própria feita aqui achou um achado incidental novo (**F358**), diferente
+  de qualquer coisa nesta lista de destrave: não faltava pré-condição nem
+  ação humana — era um bug de código (dedup poluído). Consertado com
+  código novo, não com destrave externo; ver "Consertos de código" acima.
 - **`POST /users/privacy`** → ✅. Permissão explícita do usuário ("sim,
   pode fazer no envia"). `readreceipts` (estado inicial `all`) → `none` via
   `POST`, confirmado por `GET /users/privacy`; revertido para `all` no

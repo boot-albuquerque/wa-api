@@ -3061,6 +3061,7 @@ pkg/bootstrap.syncHistoryForChat	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring
 pkg/bootstrap.syncHistoryForChat.func1	EXCLUDED	X6
 pkg/bootstrap.syncHistoryForChat.func2	EXCLUDED	X6
 pkg/bootstrap.tamanhoDoPayload	EXCLUDED	X1
+pkg/bootstrap.temConteudoDeMidiaUtilizavel	EXCLUDED	X8:predicado puro sem I/O nem erro; o único chamador
 pkg/bootstrap.templateText	EXCLUDED	X1
 pkg/bootstrap.tentarWebhook	ELIGIBLE	covered
 pkg/bootstrap.unhandledEventFields	ELIGIBLE	uncovered:L1

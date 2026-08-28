@@ -111,10 +111,11 @@ info:
     | ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |
     | ⬜ | **não executada**, e a descrição diz porquê |
 
-    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **133 ✅,
-    4 🟡, 0 ❌, 0 ⬜**. As 0 por testar e os 0 que falham fecham a
+    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **135 ✅,
+    2 🟡, 0 ❌, 0 ⬜**. As 0 por testar e os 0 que falham fecham a
     campanha — os quatro `❌` medidos ao longo do projeto foram todos
-    corrigidos nesta sessão (F275, F264, F265). Os 4 🟡 que restam têm
+    corrigidos nesta sessão (F275, F264, F265), e dois dos seis 🟡 também
+    (`status/set/video`/`status/set/audio`, F358). Os 2 🟡 que restam têm
     causa determinada (não são "nunca medidos"): o detalhe rota a rota
     está em `docs/OPENAPI-EVIDENCIAS.md`.
 

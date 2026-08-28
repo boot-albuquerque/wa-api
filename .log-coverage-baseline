@@ -1913,7 +1913,13 @@ min_eligible=1003
 # Nota: esta anotacao so' e' contabilizada corretamente porque a F189 foi
 # corrigida hoje. Antes, o contador fazia strings.Count sobre o ficheiro inteiro
 # e teria contado tambem as mencoes ao token no comentario que a justifica.
-max_exempt_annotations=2
+#
+# 2026-08-28 (F358): 2 -> 3. Nova isencao em
+# pkg/bootstrap/message_dedup.go, temConteudoDeMidiaUtilizavel — predicado
+# puro sem I/O nem erro, cujo unico chamador (mensagemJaProcessada) ja loga
+# o resultado quando ele muda o desfecho. Ver HOUSEKEEP.md F358 para o
+# achado que motivou a funcao.
+max_exempt_annotations=3
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
 #   min_eligible 509 -> 507: os tres helpers privados client() identicos de
