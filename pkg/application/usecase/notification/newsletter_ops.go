@@ -228,6 +228,8 @@ type newsletterRequirement struct {
 const (
 	codeMissingJID        = "missing_jid"
 	codeInvalidNewsletter = "invalid_newsletter_jid"
+	codeMissingUserJID    = "missing_user_jid"
+	codeInvalidUserJID    = "invalid_user_jid"
 )
 
 // requireJID é partilhado porque sete das onze operações pedem o mesmo canal:
@@ -257,6 +259,22 @@ var requireNewsletterServer = newsletterRequirement{
 	code:    codeInvalidNewsletter,
 	message: "jid must be a channel jid ending in " + domain.ServerNewsletter,
 	missing: func(r NewsletterRequest) bool { return !r.JID.IsNewsletter() },
+}
+
+// requireValidUserJID is the same defect as requireNewsletterServer, on the
+// sibling field: the F271 fix only reached the channel jid, and a userJID that
+// is PRESENT but malformed ("   ", "nao-e-jid") still fell through to the
+// adapter and came back as `500 newsletter_failed`
+// (HOUSEKEEP.md, "O que a correcção NÃO cobriu, medido depois de integrar").
+//
+// It only runs on rows that already carry a "missing user jid" rule ahead of
+// it, so ABSENCE keeps its own code and this one only fires for a value that
+// is present and impossible — same ordering reason as requireNewsletterServer
+// next to requireJID.
+var requireValidUserJID = newsletterRequirement{
+	code:    codeInvalidUserJID,
+	message: "user jid must be a whatsapp user jid (" + domain.ServerPN + " or " + domain.ServerLID + ")",
+	missing: func(r NewsletterRequest) bool { return r.UserJID != "" && !r.UserJID.IsUserJID() },
 }
 
 // The two rules travel TOGETHER in every row of the table below: an operation
@@ -305,31 +323,31 @@ var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 	NewsletterOpUpdates:   {requireJID, requireNewsletterServer},
 	NewsletterOpSubscribe: {requireJID, requireNewsletterServer},
 	NewsletterOpDemote: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "user jid is required for demote",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 	NewsletterOpChangeOwner: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "new owner jid is required",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 	NewsletterOpDelete: {requireJID, requireNewsletterServer, {
 		code:    "missing_confirm_jid",
 		message: "confirm_jid must match the channel jid",
 		missing: func(r NewsletterRequest) bool { return r.ConfirmJID == "" || r.ConfirmJID != r.JID },
 	}},
 	NewsletterOpAdminInvite: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "invitee jid is required",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 	NewsletterOpAdminInviteAccept: {requireJID, requireNewsletterServer},
 	NewsletterOpAdminInviteRevoke: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "invitee jid is required for revoke",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 }
 
 // validateNewsletter exige o que CADA operação precisa.

@@ -44,6 +44,59 @@ func TestGroupAdapter_UpdateGroupParticipants_RemoveOK(t *testing.T) {
 	}
 }
 
+// TestGroupAdapter_UpdateGroupParticipants_PromoteOK and
+// TestGroupAdapter_UpdateGroupParticipants_DemoteOK are the test of the F263
+// defect: the adapter used to map every action that was not literally
+// domain.ParticipantAdd to wa.ParticipantChangeRemove — so a promote/demote
+// request that had already cleared the use case's switch (F263, part one)
+// would STILL have gone out on the wire as a removal. This is what closes the
+// gap the use-case-level test cannot see, since the mapping bug lived here.
+func TestGroupAdapter_UpdateGroupParticipants_PromoteOK(t *testing.T) {
+	var seen wanoise.ParticipantChange
+	fake := &testkit.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
+		seen = action
+		return nil, nil
+	}}
+	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	if _, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"u2@s.whatsapp.net"}, domain.ParticipantPromote); err != nil {
+		t.Fatalf("UpdateGroupParticipants = %v", err)
+	}
+	if seen != wanoise.ParticipantChangePromote {
+		t.Errorf("UpdateGroupParticipants action = %v, want Promote (F263: this used to silently come out as Remove)", seen)
+	}
+}
+
+func TestGroupAdapter_UpdateGroupParticipants_DemoteOK(t *testing.T) {
+	var seen wanoise.ParticipantChange
+	fake := &testkit.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
+		seen = action
+		return nil, nil
+	}}
+	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	if _, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"u2@s.whatsapp.net"}, domain.ParticipantDemote); err != nil {
+		t.Fatalf("UpdateGroupParticipants = %v", err)
+	}
+	if seen != wanoise.ParticipantChangeDemote {
+		t.Errorf("UpdateGroupParticipants action = %v, want Demote (F263: this used to silently come out as Remove)", seen)
+	}
+}
+
+// TestGroupAdapter_UpdateGroupParticipants_UnknownAction is the negative
+// space of the switch: a value that is neither of the four must be refused
+// here too, and not fall through to Remove — the exact silent-default bug
+// this switch replaces.
+func TestGroupAdapter_UpdateGroupParticipants_UnknownAction(t *testing.T) {
+	fake := &testkit.Fake{UpdateGroupParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantChange) ([]types.GroupParticipant, error) {
+		t.Fatalf("port reached with unknown action %v; the adapter must refuse before calling it", action)
+		return nil, nil
+	}}
+	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	_, err := a.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"u2@s.whatsapp.net"}, domain.ParticipantAction("weird"))
+	if err == nil {
+		t.Fatal("UpdateGroupParticipants com ação desconhecida = nil")
+	}
+}
+
 // TestGroupAdapter_UpdateGroupParticipants_NoSession.
 func TestGroupAdapter_UpdateGroupParticipants_NoSession(t *testing.T) {
 	a := NewGroupAdapter(testkit.GetterWith(nil))

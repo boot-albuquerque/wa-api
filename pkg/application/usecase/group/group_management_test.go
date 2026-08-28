@@ -553,8 +553,9 @@ func TestGroupManagement_DisappearingTimerTraduzDuracao(t *testing.T) {
 	}
 }
 
-// TestGroupManagement_UpdateParticipantsAction fixa a regra preservada do
-// upstream: só "add" adiciona; qualquer outro valor remove.
+// TestGroupManagement_UpdateParticipantsTraduzAction fixa as quatro traduções
+// aceites. F263: "promote" e "demote" entraram ao lado de "add"/"remove" — a
+// biblioteca já sabia fazer as duas, só a rota não as expunha.
 func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 	tests := []struct {
 		action string
@@ -562,6 +563,8 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 	}{
 		{"add", domain.ParticipantAdd},
 		{"remove", domain.ParticipantRemove},
+		{"promote", domain.ParticipantPromote},
+		{"demote", domain.ParticipantDemote},
 	}
 
 	for _, tt := range tests {
@@ -599,9 +602,12 @@ func TestGroupManagement_UpdateParticipantsTraduzAction(t *testing.T) {
 	}
 }
 
-// F247: unknown actions must be rejected, not silently treated as remove.
+// F247/F263: unknown actions must be rejected, not silently treated as
+// remove. "promote"/"demote" moved out of this list in F263 — they are valid
+// actions now — and "ADD" stays here because the guard is case sensitive
+// (documented in api/openapi/schemas/grupo.yaml).
 func TestGroupManagement_UpdateParticipantsRejectsUnknownAction(t *testing.T) {
-	for _, action := range []string{"", "qualquer-coisa", "approve", "promote"} {
+	for _, action := range []string{"", "qualquer-coisa", "approve", "ADD", "PROMOTE"} {
 		t.Run(action, func(t *testing.T) {
 			f := newMgmt()
 			_, err := f.uc.UpdateGroupParticipants(context.Background(), "u1", "g@g.us", action, []string{"5511987654321"})

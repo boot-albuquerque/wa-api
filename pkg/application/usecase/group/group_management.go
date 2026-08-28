@@ -275,10 +275,15 @@ func (uc *GroupManagementUseCase) UpdateGroupParticipants(ctx context.Context, t
 		participantAction = domain.ParticipantAdd
 	case string(domain.ParticipantRemove):
 		participantAction = domain.ParticipantRemove
+	case string(domain.ParticipantPromote):
+		participantAction = domain.ParticipantPromote
+	case string(domain.ParticipantDemote):
+		participantAction = domain.ParticipantDemote
 	default:
 		uc.logger.Warn(ctx, "unknown participant action", "txtID", txtID, "groupJID", groupJID, "action", action)
 		return domain.ParticipantsUpdate{}, apperr.New("invalid_action", apperr.CategoryValidation,
-			fmt.Sprintf("unknown participant action %q (must be %q or %q)", action, domain.ParticipantAdd, domain.ParticipantRemove), false, nil)
+			fmt.Sprintf("unknown participant action %q (must be %q, %q, %q or %q)", action,
+				domain.ParticipantAdd, domain.ParticipantRemove, domain.ParticipantPromote, domain.ParticipantDemote), false, nil)
 	}
 	res, err := uc.parts.UpdateGroupParticipants(ctx, txtID, jid, jids, participantAction)
 	if err != nil {

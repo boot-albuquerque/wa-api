@@ -679,7 +679,7 @@ PedidoAtualizarParticipantes:
       example: [554192421234@s.whatsapp.net]
     action:
       type: string
-      enum: [add, remove]
+      enum: [add, remove, promote, demote]
       nullable: false
       description: |
         O que fazer com os participantes indicados.
@@ -689,19 +689,23 @@ PedidoAtualizarParticipantes:
         | ausente | não | `400 invalid_request`, e só depois de `phone` passar |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente** |
-        | `add` / `remove` | sim | — |
+        | `add` / `remove` / `promote` / `demote` | sim | — |
         | `ADD` | **não** | `400 invalid_action` — medido; **é sensível a maiúsculas** |
-        | `promote` / `demote` | **não** | `400 invalid_action` — medido |
-        | qualquer outro valor | não | `400 invalid_action`, envelope NOVO, com o valor citado: `unknown participant action "promote" (must be "add" or "remove")` |
+        | qualquer outro valor | não | `400 invalid_action`, com o valor citado: `unknown participant action "..." (must be "add", "remove", "promote" or "demote")` |
 
         **Valor fora da lista é sempre RECUSADO**, nunca ignorado nem tratado
         como padrão. Não há valor por omissão.
 
-        A biblioteca por baixo sabe promover e despromover há anos
-        (`internal/wa-noise/capabilities/group/participants.go:18-19`); a
-        rota é que não o expõe. Está registado como F263 no `HOUSEKEEP.md`, e
-        a consequência é concreta: **por esta API não há forma de dar nem de
-        tirar administrador a ninguém.**
+        `promote` e `demote` foram corrigidos em F263: a biblioteca por baixo
+        já sabia promover e despromover há anos
+        (`internal/wa-noise/capabilities/group/participants.go:18-19`); só a
+        rota não os expunha. `pkg/domain/group.go` ganhou
+        `ParticipantPromote`/`ParticipantDemote`, o use case
+        (`pkg/application/usecase/group/group_management.go`) passou a aceitar
+        os dois valores, e o adaptador
+        (`pkg/infra/wa-noise/adapters/group/participants.go`) trocou o
+        mapeamento binário add/remove por um `switch` exaustivo sobre as
+        quatro ações.
       example: add
 
 PedidoModoAprovacao:
