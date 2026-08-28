@@ -78,6 +78,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -193,6 +195,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -264,6 +268,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -391,6 +397,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -596,6 +604,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -676,6 +686,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -811,6 +823,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -962,6 +976,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1044,6 +1060,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1136,6 +1154,8 @@
                 code: upstream_rejected
                 message: WhatsApp refused this request; repeating it unchanged will not help
               success: false
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1193,6 +1213,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1376,6 +1398,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
@@ -1507,6 +1531,8 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         $ref: '#/components/responses/RecusadoPeloWhatsApp'
+      '429':
+        $ref: '#/components/responses/LimiteDeRitmo'
       '500':
         $ref: '#/components/responses/ErroInterno'
 
