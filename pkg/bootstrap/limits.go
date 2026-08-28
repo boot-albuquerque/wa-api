@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	customhttp "wa-api/pkg/presentation/http"
 
@@ -47,9 +48,47 @@ func (e *simpleBootstrapError) Error() string { return e.msg }
 // numbers dropping legitimate traffic. One release of observation is what
 // turns "limit BLOCKER, no data" into a limit backed by what was actually
 // seen — see plano-correcao-wa-api.md Fase 5c.
+// rateLimitEntryTTL and rateLimitMaxEntries bound the per-IP map (F290):
+// the map's key is net.RemoteAddr, which is untrusted client input — every
+// distinct source IP that ever connects gets an entry, and nothing removed
+// one before this fix. Two independent bounds:
+//
+//   - rateLimitEntryTTL: an entry idle longer than this is assumed to be a
+//     client that isn't coming back soon; it's evicted for free (a
+//     rate.Limiter with a full bucket is indistinguishable from a
+//     freshly-created one, so evicting an idle entry loses no state that
+//     matters).
+//   - rateLimitMaxEntries: a hard cap on cardinality. If eviction of
+//     expired entries doesn't bring the map back under the cap (e.g. an
+//     attacker holding many distinct source IPs simultaneously active),
+//     the single least-recently-seen entry is evicted instead (LRU
+//     fallback) so the map can never exceed this size regardless of
+//     traffic shape.
+//
+// Regra 1 do CLAUDE.md (inventário de detentores): o único detentor de uma
+// entrada neste mapa é um IP de origem distinto que já fez pelo menos um
+// pedido. Pior caso de ocupação por detentor: um pedido único (o `Allow()`
+// já cria a entrada). Não há goroutine nem timer por pedido — a limpeza só
+// corre inline, dentro do mesmo lock que já protege o mapa, disparada pelo
+// PRÓPRIO pedido que encontraria o mapa cheio. Isso evita introduzir um
+// novo mecanismo de fundo (goroutine com ticker) só para isto.
+const (
+	rateLimitEntryTTL   = 10 * time.Minute
+	rateLimitMaxEntries = 10000
+)
+
+// rateLimitEntry pairs a limiter with the last time it was touched, so
+// idle entries can be told apart from active ones without a background
+// sweep — the check happens lazily, on the request that would grow the
+// map past its cap.
+type rateLimitEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 type rateLimitObserver struct {
 	mu       sync.Mutex
-	limiters map[string]*rate.Limiter
+	limiters map[string]*rateLimitEntry
 	// perIPRate/perIPBurst are the values a future active limiter would
 	// enforce — recorded here so the log line names the number now.
 	perIPRate  rate.Limit
@@ -58,7 +97,7 @@ type rateLimitObserver struct {
 
 func newRateLimitObserver() *rateLimitObserver {
 	return &rateLimitObserver{
-		limiters:   make(map[string]*rate.Limiter),
+		limiters:   make(map[string]*rateLimitEntry),
 		perIPRate:  rate.Limit(10), // 10 req/s per IP
 		perIPBurst: 20,
 	}
@@ -67,12 +106,64 @@ func newRateLimitObserver() *rateLimitObserver {
 func (o *rateLimitObserver) limiterFor(ip string) *rate.Limiter {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	l, ok := o.limiters[ip]
-	if !ok {
-		l = rate.NewLimiter(o.perIPRate, o.perIPBurst)
-		o.limiters[ip] = l
+
+	now := time.Now()
+
+	if e, ok := o.limiters[ip]; ok {
+		// Caminho de sucesso: um cliente ativo (visto de novo antes do
+		// TTL) só atualiza lastSeen — nunca é candidato a despejo LRU
+		// enquanto continuar a aparecer aqui, mesmo que o mapa esteja no
+		// teto quando OUTRO IP novo chegar.
+		e.lastSeen = now
+		return e.limiter
 	}
-	return l
+
+	if len(o.limiters) >= rateLimitMaxEntries {
+		o.evictLocked(now)
+	}
+
+	e := &rateLimitEntry{
+		limiter:  rate.NewLimiter(o.perIPRate, o.perIPBurst),
+		lastSeen: now,
+	}
+	o.limiters[ip] = e
+	return e.limiter
+}
+
+// evictLocked frees room in the map for a new entry. Called with o.mu
+// already held. First pass: remove every entry idle past the TTL — free
+// for anyone still active, since nothing they'd notice is lost. If that
+// isn't enough to get back under the cap (every entry is still fresh),
+// fall back to evicting the single least-recently-seen entry, which bounds
+// the map at rateLimitMaxEntries unconditionally.
+func (o *rateLimitObserver) evictLocked(now time.Time) {
+	for ip, e := range o.limiters {
+		if now.Sub(e.lastSeen) > rateLimitEntryTTL {
+			delete(o.limiters, ip)
+		}
+	}
+
+	if len(o.limiters) < rateLimitMaxEntries {
+		return
+	}
+
+	log.Warn().
+		Int("cardinality", len(o.limiters)).
+		Int("cap", rateLimitMaxEntries).
+		Msg("rate limit observer map at cap, evicting least-recently-seen entry")
+
+	var oldestIP string
+	var oldestSeen time.Time
+	first := true
+	for ip, e := range o.limiters {
+		if first || e.lastSeen.Before(oldestSeen) {
+			oldestIP, oldestSeen = ip, e.lastSeen
+			first = false
+		}
+	}
+	if oldestIP != "" {
+		delete(o.limiters, oldestIP)
+	}
 }
 
 // middleware wraps next, observing but never blocking.

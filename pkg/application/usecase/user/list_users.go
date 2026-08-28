@@ -56,14 +56,15 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersInp
 				WebhookUseProxy: entry.WebhookUseProxy,
 			},
 			S3: domain.UserS3Settings{
-				Enabled:       entry.S3.Enabled,
-				Endpoint:      entry.S3.Endpoint,
-				Region:        entry.S3.Region,
-				Bucket:        entry.S3.Bucket,
-				PathStyle:     entry.S3.PathStyle,
-				PublicURL:     entry.S3.PublicURL,
-				MediaDelivery: entry.S3.MediaDelivery,
-				RetentionDays: entry.S3.RetentionDays,
+				Enabled:             entry.S3.Enabled,
+				Endpoint:            entry.S3.Endpoint,
+				Region:              entry.S3.Region,
+				Bucket:              entry.S3.Bucket,
+				PathStyle:           entry.S3.PathStyle,
+				PublicURL:           entry.S3.PublicURL,
+				MediaDelivery:       entry.S3.MediaDelivery,
+				RetentionDays:       entry.S3.RetentionDays,
+				AccessKeyConfigured: entry.S3.AccessKeyConfigured,
 			},
 		})
 	}

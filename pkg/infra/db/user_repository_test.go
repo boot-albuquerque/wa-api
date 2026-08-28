@@ -209,6 +209,60 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	}
 }
 
+// TestListUsersReportsS3AccessKeyConfigured trava a F308: `enabled: true`
+// com a chave vazia tinha de ficar indistinguível de uma configuração
+// completa — o operador só via "enabled". Cria dois usuários com S3
+// habilitado, um com access_key preenchida e outro sem, e confirma que
+// AccessKeyConfigured os distingue (e que a CHAVE em si nunca aparece na
+// listagem — o achado original excluiu access_key da resposta por decisão,
+// e este teste não deve reabrir esse vazamento).
+func TestListUsersReportsS3AccessKeyConfigured(t *testing.T) {
+	db := newUserTestDB(t)
+	ctx := context.Background()
+	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
+
+	withKey, err := add.Execute(ctx, domain.AddUserInput{
+		Name: "with-key", Token: "tok-with-key",
+		S3Config: &domain.S3Config{Enabled: true, Bucket: "b1", AccessKey: "AKIAEXAMPLE"},
+	})
+	if err != nil {
+		t.Fatalf("add with-key: %v", err)
+	}
+	withoutKey, err := add.Execute(ctx, domain.AddUserInput{
+		Name: "without-key", Token: "tok-without-key",
+		S3Config: &domain.S3Config{Enabled: true, Bucket: "b2"},
+	})
+	if err != nil {
+		t.Fatalf("add without-key: %v", err)
+	}
+
+	users, err := user.NewListUsersUseCase(dbpkg.NewUserRepository(db), discardLogger{}, stubSessionStatus{}).
+		Execute(ctx, domain.ListUsersInput{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+
+	var gotWithKey, gotWithoutKey *domain.UserAccount
+	for i := range users {
+		switch users[i].ID {
+		case withKey.ID:
+			gotWithKey = &users[i]
+		case withoutKey.ID:
+			gotWithoutKey = &users[i]
+		}
+	}
+	if gotWithKey == nil || gotWithoutKey == nil {
+		t.Fatalf("listing missing seeded users: with=%v without=%v", gotWithKey, gotWithoutKey)
+	}
+
+	if !gotWithKey.S3.AccessKeyConfigured {
+		t.Error("AccessKeyConfigured = false for a user WITH an access key; GET /admin/users can't tell it's configured (F308)")
+	}
+	if gotWithoutKey.S3.AccessKeyConfigured {
+		t.Error("AccessKeyConfigured = true for a user WITHOUT an access key")
+	}
+}
+
 // stubSessionStatus reporta sempre "sem sessão". Antes da ADR-001 a fake
 // equivalente precisava de três métodos, um deles devolvendo interface{}.
 type stubSessionStatus struct{}

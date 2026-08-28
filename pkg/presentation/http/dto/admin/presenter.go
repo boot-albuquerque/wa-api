@@ -43,14 +43,15 @@ func PresentUser(u domain.UserAccount) UserResponse {
 			WebhookUseProxy: u.Proxy.WebhookUseProxy,
 		},
 		S3Config: UserS3ConfigResponse{
-			Enabled:       u.S3.Enabled,
-			Endpoint:      u.S3.Endpoint,
-			Region:        u.S3.Region,
-			Bucket:        u.S3.Bucket,
-			PathStyle:     u.S3.PathStyle,
-			PublicURL:     u.S3.PublicURL,
-			MediaDelivery: u.S3.MediaDelivery,
-			RetentionDays: u.S3.RetentionDays,
+			Enabled:             u.S3.Enabled,
+			Endpoint:            u.S3.Endpoint,
+			Region:              u.S3.Region,
+			Bucket:              u.S3.Bucket,
+			PathStyle:           u.S3.PathStyle,
+			PublicURL:           u.S3.PublicURL,
+			MediaDelivery:       u.S3.MediaDelivery,
+			RetentionDays:       u.S3.RetentionDays,
+			AccessKeyConfigured: u.S3.AccessKeyConfigured,
 		},
 	}
 }

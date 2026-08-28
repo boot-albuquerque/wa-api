@@ -108,6 +108,14 @@ type S3Config struct {
 	PublicURL     string `json:"publicUrl"`
 	MediaDelivery string `json:"mediaDelivery"`
 	RetentionDays int    `json:"retentionDays"`
+
+	// AccessKeyConfigured (F308) is derived by the repository's SELECT
+	// (COALESCE(s3_access_key,'') <> '') for the read path only — it is
+	// never set by a write path, and AccessKey above still carries the
+	// real secret there. It exists so a caller that only ever reads this
+	// struct (the admin listing) can report whether a key is present
+	// without the key itself ever leaving the database.
+	AccessKeyConfigured bool `json:"accessKeyConfigured"`
 }
 
 // UserAccount is the use case RESULT describing one provisioned API user:
@@ -168,6 +176,13 @@ type UserS3Settings struct {
 	PublicURL     string
 	MediaDelivery string
 	RetentionDays int
+
+	// AccessKeyConfigured (F308) reports whether an access key is present
+	// for this session, without exposing the key itself. Before this
+	// field, `enabled: true` and an empty key were indistinguishable from
+	// the API — an operator had no way to tell a live S3 config from a
+	// half-set-up one.
+	AccessKeyConfigured bool
 }
 
 // SessionDeviceInfo carrega os dados de identidade e estado do aparelho

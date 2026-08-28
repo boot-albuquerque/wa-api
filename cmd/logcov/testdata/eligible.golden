@@ -2868,7 +2868,7 @@ pkg/bootstrap.agendarProximaTentativa.func2	EXCLUDED	X6
 pkg/bootstrap.analisarCaminhos	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,caminhos_canonicos.go:44);uncovered:L2(S-ret,caminhos_canonicos.go:55)
 pkg/bootstrap.atrasoDaTentativa	ELIGIBLE	uncovered:L1
 pkg/bootstrap.bodyLimitMiddleware	EXCLUDED	X1
-pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:29)
+pkg/bootstrap.bodyLimitMiddleware.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,limits.go:30)
 pkg/bootstrap.boundaryLogMiddlewares	EXCLUDED	X1
 pkg/bootstrap.buildLeaseManager	ELIGIBLE	covered
 pkg/bootstrap.buildOwnerAddr	ELIGIBLE	covered
@@ -2885,7 +2885,7 @@ pkg/bootstrap.chaveDedup	EXCLUDED	X1
 pkg/bootstrap.checkIfSubscribedToEvent	EXCLUDED	X1
 pkg/bootstrap.claimSessionOwnership	ELIGIBLE	covered
 pkg/bootstrap.classifyMessage	EXCLUDED	X8:classificacao pura, sem modo de falha, no caminho de CADA mensagem
-pkg/bootstrap.clientIP	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,limits.go:102)
+pkg/bootstrap.clientIP	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,limits.go:193)
 pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluster.go:72)
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
@@ -2972,6 +2972,7 @@ pkg/bootstrap.prepareCluster	ELIGIBLE	covered
 pkg/bootstrap.prepareCluster.func1	EXCLUDED	X6
 pkg/bootstrap.publishCapabilities	ELIGIBLE	covered
 pkg/bootstrap.publishUserInfo	ELIGIBLE	covered
+pkg/bootstrap.rateLimitObserver.evictLocked	ELIGIBLE	covered
 pkg/bootstrap.rateLimitObserver.limiterFor	ELIGIBLE	uncovered:L1
 pkg/bootstrap.rateLimitObserver.middleware	EXCLUDED	X1
 pkg/bootstrap.rateLimitObserver.middleware.func1	ELIGIBLE	covered

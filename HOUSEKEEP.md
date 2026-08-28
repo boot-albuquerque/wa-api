@@ -30953,17 +30953,61 @@ limiar de idade voltaria a apanhar o caso vivo.
 só a recusa": hoje o gate só foi validado no caso em que deve falhar, e é por
 isso que o falso positivo sobreviveu.
 
-**Status**: não corrigido, e **não corrigido por decisão**. É achado incidental
-fora do escopo da tarefa (investigação da F264/F265), e o CLAUDE.md proíbe
-corrigir de graça sem perguntar. O browser acusado NÃO foi morto, pelo mesmo
-motivo: pertence a outra sessão.
+**Status**: **corrigido** (2026-08-27, worktree `worktree/housekeep-infra`).
 
-**Impacto no gate desta sessão**: `make check` parou aqui com `EXIT=2` nas duas
-corridas. Os alvos anteriores — `build`, `vet`, `fmt-gate` — passaram nas duas.
-Os commits desta sessão tocam **zero ficheiros `.go`** (7 ficheiros, todos
-Markdown), pelo que não há alteração de código por validar.
+**Correção aplicada**: `scripts/orphan-browser-check.sh` ganhou duas funções
+isoladas para poderem ser substituídas por dublê nos testes —
+`list_candidatos()` (a recolha antiga, inalterada) e `ppid_alive(ppid)`
+(nova: `[ "$ppid" != "1" ] && ps -p "$ppid" >/dev/null 2>&1`). `main()` só
+reporta como órfão a linha cujo `ppid_alive` devolve falso — pai morto ou
+`ppid=1`. Um browser cujo pai está vivo (a assinatura medida: mesmo `ppid`,
+PID de browser novo a cada corrida) já não entra na lista de órfãos, mesmo
+casando o padrão de `--user-data-dir`. O script ganhou também a guarda
+`if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then main; fi`, que permite `source`
+sem disparar `main()` — é o que torna `list_candidatos`/`ppid_alive`
+substituíveis por teste.
 
-<!-- f-status: aberto -->
+**Teste**: `scripts/orphan-browser-check_test.sh` (bash puro, sem framework —
+não havia convenção de teste de shell no repositório antes desta correção).
+Três casos, `source` do script real com os dois dublês substituídos:
+- `teste_ppid_morto` — `ppid_alive` devolve falso; espera `exit 1` e
+  "SOBREVIVERAM".
+- `teste_ppid_vivo` — `ppid_alive` devolve verdadeiro (a assinatura da F289:
+  outro worktree com suíte em curso); espera `exit 0` e "dono ainda vivo". É
+  o caminho de SUCESSO que faltava — antes desta correção o script só tinha
+  sido validado no caso em que deve falhar.
+- `teste_sem_candidatos` — `list_candidatos` vazio; espera `exit 0`.
+
+Rodar: `bash scripts/orphan-browser-check_test.sh`. Os três passam.
+
+**Controlo negativo EXECUTADO**: reintroduzi o defeito (`ppid_alive` sempre
+`return 1`, ignorando o `ppid`, reproduzindo o comportamento pré-correcao) e
+chamei `main()` com o mesmo candidato do caso `ppid vivo` (mesmo `ppid_alive`
+NÃO substituído pelo teste — usando o da função defeituosa do próprio
+script). Saída:
+
+```
+STATUS=1
+orphan-browser-check: 1 browser(s) de teste SOBREVIVERAM a execucoes anteriores.
+  pid=32481 ppid=32190 idade=00:16
+```
+
+`STATUS=1` quando o pai estava vivo — a falsa acusação exacta da F289.
+Restaurado o script corrigido, a mesma chamada devolve `STATUS=0` e "dono
+ainda vivo". Evidência colada, script restaurado depois de confirmar a
+regressão.
+
+**Limitação registada**: o teste exercita `main()`/`ppid_alive`/
+`list_candidatos` isoladamente, via dublê — não spawna dois processos
+`go test` concorrentes de verdade em dois worktrees. É o melhor teste
+praticável sem infra-estrutura de processo real neste ambiente; a garantia
+de que `ppid_alive` chama `ps -p` correctamente (e não, por exemplo,
+`ps -p` com sintaxe que falha num shell não-bash) só foi confirmada
+manualmente, correndo o script tal e qual contra o processo do próprio shell
+de teste (não anexado ao HOUSEKEEP por não ser reproduzível de forma
+determinística).
+
+<!-- f-status: corrigido -->
 
 
 ## F290 — o mapa por IP do observador de ritmo nunca é purgado: cresce com entrada não confiável
@@ -31024,10 +31068,67 @@ negativo que remova o despejo e mostre o teste a falhar. E o caminho de
 SUCESSO: um cliente activo não pode ser despejado enquanto está a ser limitado —
 é a variante do defeito que um teste só de teto não apanha.
 
-**Status**: não corrigido. Achado incidental fora do âmbito da tarefa, e o
-`CLAUDE.md` proíbe corrigir de graça sem perguntar.
+**Status**: **corrigido** (2026-08-27, worktree `worktree/housekeep-infra`).
 
-<!-- f-status: aberto -->
+**Correção aplicada**, `pkg/bootstrap/limits.go`: cada entrada do mapa virou
+`rateLimitEntry{limiter, lastSeen}`. `limiterFor` marca `lastSeen = now` a
+cada pedido (existente ou novo). Ao criar uma entrada nova com o mapa no
+teto (`rateLimitMaxEntries = 10000`), `evictLocked` corre DENTRO do mesmo
+lock que já protege o mapa — sem goroutine nem timer novos:
+
+1. primeiro despeja toda entrada com `now - lastSeen > rateLimitEntryTTL`
+   (`10 * time.Minute`) — grátis, porque um `*rate.Limiter` com o balde
+   cheio é indistinguível de um recém-criado;
+2. se ainda estiver no teto (nenhuma expirada — ex.: inundação de IPs todos
+   frescos), despeja a ÚNICA entrada de `lastSeen` mais antigo (LRU), o que
+   garante o teto **incondicionalmente**, e regista `log.Warn` com a
+   cardinalidade quando isso acontece.
+
+**Inventário de detentores (Regra 1 do CLAUDE.md)**: o único detentor de uma
+entrada é um IP de origem distinto que fez pelo menos um pedido —
+`clientIP(r)` lê `r.RemoteAddr`, não `X-Forwarded-For` (não confiável, mas
+também não fácil de falsificar em massa sem controlar IPs de origem de
+verdade). Pior caso de ocupação por detentor: **um pedido único** já cria a
+entrada (`Allow()` não bloqueia — o observador é observe-only). Não há
+detentor capaz de segurar por tempo indeterminado: mesmo sem nenhum pedido
+novo, a pior entrada morre no máximo `rateLimitEntryTTL` depois do último
+pedido daquele IP, OU imediatamente por LRU se outro IP precisar do slot.
+
+**Teste** (`pkg/bootstrap/limits_test.go`):
+- `TestRateLimitObserver_MapBoundedByCardinalityCap` — insere
+  `rateLimitMaxEntries + 1000` IPs distintos, todos "frescos" (sem TTL
+  expirado); confirma `len(o.limiters) <= rateLimitMaxEntries`. É o teste do
+  TECTO.
+- `TestRateLimitObserver_ExpiredEntriesEvictedBeforeLRU` — enche o mapa até
+  o teto, força `lastSeen` de TODAS as entradas para além do TTL, insere
+  mais um IP, e confirma que o mapa encolheu em BLOCO (não só 1 entrada) —
+  prova que o caminho de TTL corre antes do fallback LRU, não só que "coube
+  mais um".
+- `TestRateLimitObserver_ActiveClientSurvivesEviction` — é o caminho de
+  SUCESSO exigido pela nota de anti-regressão: um IP activo (`lastSeen`
+  actualizado a cada poucos pedidos) sobrevive a uma inundação de
+  `rateLimitMaxEntries + 500` IPs novos que mantém o mapa sempre no teto.
+  Um despejo por ORDEM DE INSERÇÃO em vez de recência falharia este teste.
+
+Rodar: `go test ./pkg/bootstrap/... -run TestRateLimitObserver -v`. Os
+quatro (os três novos + o `TestRateLimitObserver_NeverBlocks` pré-existente)
+passam.
+
+**Controlo negativo EXECUTADO**: reintroduzi o defeito — removi a chamada a
+`evictLocked` em `limiterFor` (`_ = now` no lugar), reproduzindo o mapa sem
+teto de antes da correcao — e rodei
+`TestRateLimitObserver_MapBoundedByCardinalityCap`:
+
+```
+--- FAIL: TestRateLimitObserver_MapBoundedByCardinalityCap (0.00s)
+    limits_test.go:94: map cardinality = 11000, want <= 10000 (rateLimitMaxEntries) — the cap is not being enforced
+```
+
+`11000` é exactamente `rateLimitMaxEntries + extra` do teste — o mapa
+cresceu sem limite algum, a falha exacta que a F290 mediu. Restaurada a
+versão corrigida e reconfirmado `PASS` nos quatro testes.
+
+<!-- f-status: corrigido -->
 
 
 ## F291 — `GET /chats/history` aceita `limit` sem tecto, e `limit=-1` devolve a conversa inteira
@@ -32395,10 +32496,66 @@ que existisse sem esta mudança de `SELECT` viria SEMPRE `false` na listagem —
 uma mentira, pior que a ausência, e foi por isso que ele foi retirado antes de
 entrar.
 
-**Status**: **não corrigido** — fica a pergunta: acrescentar
-`access_key_configured` agora, ou deixar a informação fora da API?
+**Status**: **corrigido** (2026-08-27, worktree `worktree/housekeep-infra`).
 
-<!-- f-status: aberto -->
+**Correção aplicada**, seguindo exactamente a sugestão registada:
+- `pkg/infra/db/user_repository.go`, `userS3Config`: o `SELECT` ganhou
+  `COALESCE(s3_access_key, '') <> '' AS access_key_configured`, escaneado
+  para `domain.S3Config.AccessKeyConfigured` (campo novo — `S3Config` é
+  reusado pelos caminhos de ESCRITA também, mas nenhum deles seta este
+  campo: só a leitura o preenche, e `AccessKey`/`SecretKey` continuam a
+  carregar o valor real nos caminhos de escrita, sem mudança).
+- `pkg/domain/user.go`, `UserS3Settings` (o tipo sem segredos, exposto pela
+  resposta) ganhou `AccessKeyConfigured bool`.
+- `pkg/application/usecase/user/list_users.go` (`ListUsersUseCase.Execute`)
+  passou `entry.S3.AccessKeyConfigured` adiante.
+- `pkg/application/usecase/user/add_user.go` também passou
+  `req.S3Config.AccessKey != ""` — sem isto, a resposta de
+  `POST /admin/users` (que usa o MESMO DTO/presenter) traria sempre
+  `false`, exactamente a "mentira pior que a ausência" que o achado citou
+  como razão de não ter entrado sem o `SELECT`.
+- `pkg/presentation/http/dto/admin/user.go`:
+  `UserS3ConfigResponse.AccessKeyConfigured bool
+  \`json:"access_key_configured"\``.
+- `pkg/presentation/http/dto/admin/presenter.go`, `PresentUser`: mapeia o
+  campo. A chave em si (`access_key`) continua ausente da resposta — só o
+  booleano derivado atravessa a fronteira.
+- `api/openapi/schemas/infra.yaml`, `UtilizadorAdmin.s3_config`: propriedade
+  `access_key_configured` documentada, com a nota de que é derivada e não a
+  chave. `go run ./cmd/openapidoc` regenerado;
+  `pkg/presentation/http/apidocs/openapi.yaml` sem diff espúrio ao rodar de
+  novo (idempotente).
+
+**Teste** (`pkg/infra/db/user_repository_test.go`,
+`TestListUsersReportsS3AccessKeyConfigured`): cria dois usuários com S3
+`enabled: true` via `AddUserUseCase` — um com `access_key` preenchida, outro
+sem — lista os dois via `ListUsersUseCase`, e confirma que
+`AccessKeyConfigured` os distingue. Confirma também, por CONSTRUÇÃO de
+tipo, que a chave em si nunca aparece: `domain.UserS3Settings` não tem campo
+`AccessKey` nenhum.
+
+Rodar: `go test ./pkg/infra/db/... -run TestListUsersReportsS3AccessKeyConfigured -v`.
+
+**Controlo negativo EXECUTADO**: reverti o `SELECT` para a versão sem a
+coluna derivada (e o `Scan` correspondente) e rodei o teste:
+
+```
+--- FAIL: TestListUsersReportsS3AccessKeyConfigured (0.01s)
+    user_repository_test.go:259: AccessKeyConfigured = false for a user WITH an access key; GET /admin/users can't tell it's configured (F308)
+FAIL
+```
+
+Falha exactamente na asserção que trava o defeito original — `enabled:
+true` com chave preenchida ficava indistinguível de sem chave. Restaurado o
+`SELECT` corrigido, teste volta a `PASS`.
+
+**Gates**: `go build ./...`, `go vet ./...` limpos.
+`go test ./pkg/... ./cmd/...` verde (inclui `cmd/logcov`, cujo golden e
+`.log-coverage-baseline` foram regenerados — ver F290 no mesmo bloco de
+correção desta sessão, que introduziu a única função elegível nova; F308
+não acrescentou função elegível própria).
+
+<!-- f-status: corrigido -->
 ## F312 — a especificação OpenAPI da família de grupo continua a descrever o corpo ANTIGO das 20 rotas migradas
 
 **Data/contexto**: 2026-08-27, migração da família grupo/comunidade para DTO
@@ -34031,3 +34188,83 @@ fecha de vez.
 **Status**: corrigido.
 
 <!-- f-status: corrigido -->
+
+## F339 — `pkg/bootstrap/caminhos_canonicos_test.go` já não bate com o `gofmt` deste toolchain, e bloqueia `fmt-gate` para qualquer sessão
+
+**Data/contexto**: 2026-08-27, achado de lado durante a correção de F289/F290/
+F308 (worktree `worktree/housekeep-infra`). **Fora do escopo dessas três
+tarefas** — registado, não corrigido.
+
+**Onde**: `pkg/bootstrap/caminhos_canonicos_test.go:89-92`. O arquivo não foi
+tocado por nenhuma das três correções desta sessão (`git diff` confirma:
+nenhuma mudança).
+
+**Problema**: `gofmt -l pkg cmd` (exatamente o comando que `make fmt-gate`
+roda) acusa o arquivo. `gofmt -d` mostra a causa: falta uma linha em branco
+entre o fecho de uma função de teste e o comentário doc da próxima:
+
+```diff
+ 		})
+ 	}
+ }
++
+ // TestNenhumaFamiliaDeColeccaoFicouNoSingular é o teste que impede a
+ // padronização de ficar a meio: ...
+```
+
+Como `make check` corre `fmt-gate` ANTES de `test`/`lint`/`coverage-gate`, e
+o alvo falha assim que qualquer arquivo diverge, este único arquivo bloqueia
+`make check` para **qualquer** worktree que rode esta suíte — mesmo quando
+as mudanças da sessão não tocam o arquivo, e mesmo quando `go build`,
+`go vet` e todos os testes passam limpos.
+
+**Correção sugerida**: `gofmt -w pkg/bootstrap/caminhos_canonicos_test.go` —
+é literalmente uma linha em branco. Trivial, mas o CLAUDE.md proíbe corrigir
+de graça fora do âmbito sem perguntar, e este arquivo é de outra tarefa.
+
+**Status**: não corrigido. Nesta sessão, `fmt-gate` foi verificado
+manualmente restrito aos arquivos tocados por F289/F290/F308
+(`gofmt -l <arquivos-da-sessão>` limpo) em vez de `make fmt-gate` completo,
+para não misturar uma correção de formatação alheia com o diff desta sessão.
+
+<!-- f-status: aberto -->
+
+## F340 — `handler-route` acusa `/message/star` (constante `route`) como não-registrado: singular vs `/messages/star` (plural) registrado
+
+**Data/contexto**: 2026-08-27, achado de lado durante a correção de F289/F290/
+F308 (worktree `worktree/housekeep-infra`), ao rodar `make handler-route`
+manualmente porque `fmt-gate` (F339) bloqueava `make check` antes de chegar
+aqui. **Fora do escopo dessas três tarefas** — registado, não corrigido.
+
+**Onde**: `pkg/presentation/http/handlers/handler_star_message.go:22` — a
+constante `route` vale `"/message/star"` (singular). A rota REGISTRADA em
+`pkg/bootstrap/wiring_routes.go` é `/messages/star` (plural, junto de
+`/messages/unstar` etc. — a família já normalizada para plural nesta
+branch).
+
+**Problema**: `make handler-route` (`F146`) falha:
+
+```
+FALHA: constante route aponta para caminho NAO REGISTRADO
+  valor:  "/message/star"
+  onde:   pkg/presentation/http/handlers/handler_star_message.go:22
+  rotas registradas mais parecidas:
+    /messages/star
+```
+
+O arquivo não foi tocado por nenhuma das três correções desta sessão (`git
+log` mostra o último commit a tocá-lo como `e3e6d178`, de uma migração de
+mensagens para DTO — não relacionado a F289/F290/F308).
+
+**Consequência**: o carimbo `route` no log desta rota está errado (singular),
+e — mais imediato — bloqueia `handler-route`, um dos alvos finais de
+`make check`, para qualquer sessão que chegue até lá.
+
+**Correção sugerida**: trocar a constante para `"/messages/star"`, o caminho
+registrado. Não é registrar rota nova — é alinhar o carimbo à rota que já
+existe.
+
+**Status**: não corrigido. Fora do âmbito das tarefas desta sessão, e o
+CLAUDE.md proíbe corrigir de graça sem perguntar.
+
+<!-- f-status: aberto -->
