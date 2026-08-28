@@ -9,6 +9,7 @@ import (
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/usecase/profile"
 	"wa-api/pkg/domain/apperr"
+	dtouser "wa-api/pkg/presentation/http/dto/user"
 
 	"github.com/rs/zerolog/hlog"
 )
@@ -153,5 +154,41 @@ func (h *ProfileFullHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Cache-Control", cacheControlPerfil)
-	RespondJSON(w, http.StatusOK, result, nil)
+	RespondJSON(w, http.StatusOK, presentProfileFull(result), nil)
+}
+
+// profileFullResponse is the wire body for GET /session/profile/full.
+//
+// It embeds profile.ProfileResult verbatim: that type's `json` tags already
+// ARE the wire contract for GET /session/profile (get_profile.go marshals it
+// directly), so re-declaring the same six-plus-device fields here would only
+// create a second place for them to drift. UserInfo and Privacy replace the
+// two fields that carried raw domain types with no `json` tags at all
+// (F302) — domain.UserInfo and domain.PrivacySettings are deliberately
+// untagged, so serializing them directly emits Go field names (`JID`,
+// `PictureID`, `GroupAdd`) instead of the wire contract.
+type profileFullResponse struct {
+	profile.ProfileResult
+	UserInfo    []dtouser.UserInfoResponse      `json:"user_info,omitempty"`
+	Privacy     dtouser.PrivacySettingsResponse `json:"privacy,omitempty"`
+	Unavailable map[string]string               `json:"unavailable,omitempty"`
+}
+
+// presentProfileFull maps the use case result onto the route's wire body,
+// routing UserInfo and Privacy through the ALREADY-EXISTING user-family
+// presenters (dtouser.PresentUserInfo / PresentPrivacySettings) instead of
+// serializing the domain types directly.
+func presentProfileFull(r *profile.ProfileFullResult) profileFullResponse {
+	out := profileFullResponse{
+		ProfileResult: r.ProfileResult,
+		Privacy:       dtouser.PresentPrivacySettings(r.Privacy),
+		Unavailable:   r.Unavailable,
+	}
+	if len(r.UserInfo) > 0 {
+		out.UserInfo = make([]dtouser.UserInfoResponse, 0, len(r.UserInfo))
+		for _, u := range r.UserInfo {
+			out.UserInfo = append(out.UserInfo, dtouser.PresentUserInfo(u))
+		}
+	}
+	return out
 }

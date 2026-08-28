@@ -568,64 +568,64 @@ PerfilSessaoCompleto:
         deste grupo, eles PODEM não aparecer. Nenhum deles vem `null`.
       properties:
         user_info:
-          type: object
+          type: array
           nullable: false
-          additionalProperties: true
           description: |
-            Bloco CRU do SDK para o próprio JID, indexado pelo JID. Carrega o
-            recado (`Status`), a lista de dispositivos que o servidor conhece
-            e o LID. As chaves são as do SDK, em maiúsculas iniciais — não
-            passam por normalização nenhuma.
+            Os metadados da conta do PRÓPRIO JID — mesma forma de
+            `POST /user/info` e de `GET /user/profile`
+            (`InfoUtilizador`/`pkg/presentation/http/dto/user.UserInfoResponse`).
 
-            | estado | quando |
-            |---|---|
-            | ausente | a sessão não tem JID próprio, ou a consulta falhou — e então `unavailable.user_info` diz qual dos dois |
-            | `{}` | o servidor respondeu sem nenhum nó de utilizador; a chamada foi bem sucedida e não trouxe dado |
-            | preenchido | o caso normal |
+            > **Corrigido em HOUSEKEEP F302 (2026-08-27).** Até aqui este
+            > campo era servido a partir de `domain.UserInfo` diretamente, sem
+            > etiqueta `json` — o codificador emitia os nomes de campo Go
+            > (`JID`, `PictureID`, `GroupAdd`…) em vez do contrato. O
+            > manipulador passou a chamar `dtouser.PresentUserInfo`, a mesma
+            > função que já servia `POST /user/info`.
 
-            **Nunca vem `null`**: o construtor devolve sempre um mapa não-nulo
-            (`capabilities/user/usync.go`, `GetInfo`), e o `omitempty` do
-            campo faz a ausência ser ausência de verdade, não `null`.
-
-            Os valores DENTRO do bloco são do SDK e podem ser `null` — medido
-            `"VerifiedName": null` nas duas sessões. Isso é conteúdo do par,
-            não contrato nosso.
+            **Ausente** (o campo tem `omitempty`) quando a sessão não tem JID
+            próprio ou quando a consulta à rede falhou — e então
+            `unavailable.user_info` diz qual dos dois. Presente e vazio (`[]`)
+            quando a consulta teve sucesso mas o servidor não respondeu nada.
+            Nunca `null`.
+          items:
+            $ref: '#/components/schemas/InfoUtilizador'
           example:
-            '5516981818244@s.whatsapp.net':
-              VerifiedName: null
-              Status: conta de testes
-              PictureID: '214830039'
-              Devices:
-                - '5516981818244@s.whatsapp.net'
+            - jid: 5516981818244@s.whatsapp.net
+              lid: 29343770251463@lid
+              status: conta de testes
+              picture_id: '214830039'
+              verified_name: ''
+              devices:
+                - 5516981818244@s.whatsapp.net
                 - '5516981818244:25@s.whatsapp.net'
-              LID: '29343770251463@lid'
+              push_name: ''
+              business_name: ''
         privacy:
-          type: object
+          allOf:
+            - $ref: '#/components/schemas/DefinicoesPrivacidade'
           nullable: false
-          additionalProperties: true
           description: |
-            Definições de privacidade da conta, como o servidor as reporta.
-            Chaves e valores vêm do SDK sem tradução.
+            Definições de privacidade da conta — mesma forma de
+            `GET /user/privacy` (`DefinicoesPrivacidade`).
 
-            **Ausente quando a consulta falhou** — e então `unavailable.privacy`
-            traz o motivo. **Nunca vem `null`**: a origem
-            (`core/privacysettings.go:14-37`) devolve ou um ponteiro válido ou
-            um erro, nunca `(nil, nil)`.
+            > **Corrigido em HOUSEKEEP F302 (2026-08-27).** Mesmo defeito e
+            > mesma correção do `user_info` acima: o manipulador passou a
+            > chamar `dtouser.PresentPrivacySettings`.
 
-            Os valores são do SDK e não têm `enum` aqui de propósito: medido
-            em 2026-08-26, `all`, `contacts`, `none`, `off` e
-            `match_last_seen` — e a lista é do par, não nossa.
+            **Ausente** (o campo tem `omitempty`) quando a consulta à rede
+            falhou — e então `unavailable.privacy` traz o motivo. Nunca
+            `null`.
           example:
-            GroupAdd: all
-            LastSeen: contacts
-            Status: contacts
-            Profile: all
-            ReadReceipts: all
-            CallAdd: all
-            Online: all
-            Messages: all
-            Defense: 'off'
-            Stickers: contacts
+            group_add: all
+            last_seen: contacts
+            status: contacts
+            profile: all
+            read_receipts: all
+            call_add: all
+            online: all
+            messages: all
+            defense: 'off'
+            stickers: contacts
         unavailable:
           type: object
           nullable: false

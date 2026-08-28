@@ -49,6 +49,47 @@ func PresentStarMessage(r *domain.StarMessageResult) *StarMessageResponse {
 	}
 }
 
+// PresentMuteChat maps POST /chat/mute.
+func PresentMuteChat(r *domain.MuteChatResult) *MuteChatResponse {
+	if r == nil {
+		return nil
+	}
+	return &MuteChatResponse{Success: r.Success, Message: r.Message}
+}
+
+// PresentArchiveChat maps POST /chat/archive.
+func PresentArchiveChat(r *domain.ArchiveChatResult) *ArchiveChatResponse {
+	if r == nil {
+		return nil
+	}
+	return &ArchiveChatResponse{Success: r.Success, Message: r.Message}
+}
+
+// PresentPinChat maps POST /chat/pin.
+func PresentPinChat(r *domain.PinChatResult) *PinChatResponse {
+	if r == nil {
+		return nil
+	}
+	return &PinChatResponse{Success: r.Success, Message: r.Message}
+}
+
+// PresentRequestUnavailableMessage maps POST
+// /chat/request-unavailable-message.
+func PresentRequestUnavailableMessage(r *domain.RequestUnavailableMessageResult) *RequestUnavailableMessageResponse {
+	if r == nil {
+		return nil
+	}
+	return &RequestUnavailableMessageResponse{
+		Success:   r.Success,
+		Message:   r.Message,
+		RequestID: r.RequestID,
+		Chat:      r.Chat,
+		Sender:    r.Sender,
+		MessageID: r.MessageID,
+		Timestamp: r.Timestamp,
+	}
+}
+
 // PresentPublishStatusImage maps POST /status/set/image.
 func PresentPublishStatusImage(r *domain.PublishStatusImageResult) *SendResponse {
 	if r == nil {
