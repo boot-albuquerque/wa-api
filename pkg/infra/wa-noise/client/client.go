@@ -136,7 +136,7 @@ type Client interface {
 
 	// Família de blocklist
 	GetBlocklist(ctx context.Context) (*types.Blocklist, error)
-	UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
+	UpdateBlocklist(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
 
 	// Família de privacidade
 	SetStatusMessage(ctx context.Context, msg string) error

@@ -3178,20 +3178,41 @@ tocar na biblioteca**.
 e o `pn_jid` só no `block`), teste da DIRECÇÃO da resolução, e controlo
 negativo EXECUTADO repondo `"jid": jid` — com a saída da falha colada aqui.
 
-**Status**: não corrigido AQUI — a biblioteca vendorizada continua a montar o
-`<item>` sem `pn_jid`, e `block` continua a falhar (`422`, `400 bad-request`),
-confirmado ao vivo em 2026-08-28 com sessão real pareada.
+**Status**: CORRIGIDO em 2026-08-28 (mesma sessão que confirmou o defeito
+ao vivo pela manhã). `UpdateBlocklist`
+(`internal/wa-noise/capabilities/user/blocklist.go`) ganhou o parâmetro
+`pnJID types.JID`: quando `action` é `block` e `pnJID` não é vazio, o
+`<item>` passa a levar `pn_jid`, exatamente como `8d023aa973` (whatsmeow)
+e `8ca9316a10` (Baileys) fazem. `unblock` continua sem o atributo — a
+regra é assimétrica por desenho, não um esquecimento.
 
-O sub-caso barato ("para `unblock` a forma nova é `<item jid='…@lid'
-action='unblock'/>` — sem `pn_jid`. Se o adaptador parar de degradar
-LID→PN... esta função já emite o stanza correto sem tocar na biblioteca")
-**foi aplicado e confirmado** — do lado da aplicação, sem tocar nesta
-biblioteca — ver `HOUSEKEEP.md` (raiz), F278. `unblock` funciona hoje,
-`block` não: ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md` (E.1,
-E.2) para o resto — a correção "completa" (`pn_jid` no `block`, porta de
-whatsmeow `8d023aa973`) continua pendente e É desta biblioteca.
+A resolução do PN (de onde vem `pnJID`) fica do lado da aplicação, não
+aqui: `pkg/infra/wa-noise/adapters/user/blocklist.go`
+(`resolveBlocklistPN`, nova) resolve o PN do alvo — direto, se o pedido já
+veio em PN, ou via mapeamento LID→PN em cache, se veio em LID — e passa
+esse valor a `UpdateBlocklist`. Sem mapeamento em cache, `resolveBlocklistPN`
+devolve o JID zero, e esta biblioteca OMITE o atributo em vez de enviar um
+`pn_jid` inventado — pior que a forma completa, nunca pior que antes da
+correção.
 
-<!-- f-status: aberto -->
+**Testes** (`internal/wa-noise/capabilities/user/blocklist_test.go`):
+`TestUpdateBlocklistBlockCarriesPNJID` (block carrega `pn_jid`),
+`TestUpdateBlocklistUnblockOmitsPNJID` (unblock nunca carrega, mesmo com
+`pnJID` preenchido), `TestUpdateBlocklistBlockWithZeroPNJIDOmitsAttribute`
+(zero-valor → atributo omitido, não um valor vazio no fio). Controlo
+negativo EXECUTADO: comentada a linha que adiciona `pn_jid`,
+`TestUpdateBlocklistBlockCarriesPNJID` falhou com `pn_jid = <nil>, want
+5511999@s.whatsapp.net`; restaurada, voltou a passar.
+
+**Verificação em campo**: sessões reais `envia`→`recebe` (projeto
+`wa-api`, sessão de 2026-08-28). `POST /users/block` antes da correção:
+`422 upstream_rejected`. Depois: `200 {details:"User blocked",
+jid:"90937376170214@lid", blocklist:["90937376170214@lid"]}`. Revertido
+com `unblock` (`200`, `blocklist:[]`) ao final. Ver `HOUSEKEEP.md` (raiz),
+F365, para o detalhe do lado da aplicação (`resolveBlocklistPN` e os
+testes do adaptador).
+
+<!-- f-status: corrigido -->
 
 ## LIB-03 — `GetMessageUpdates` envia um stanza que o servidor deixou de atender: silêncio até ao timeout
 
@@ -3263,13 +3284,38 @@ da resposta, e fundir ou manter é escolha de contrato.
 controlo negativo EXECUTADO repondo `To: jid` — confirmando que a mutação
 COMPILA e falha com mensagem.
 
-**Status**: não corrigido. Causa determinada. A confirmação que faltava (um
-canal COM mensagens) foi feita em 2026-08-28 — ver `HOUSEKEEP.md` (raiz),
-F265: mesmo sintoma exato (`500` aos 30,01s) com conteúdo real no canal,
-eliminando "canal vazio" como variável. Ver `INVESTIGATION-newsletter-updates.md`
-e `HUMAN-LAST.md` (B.4) para o resto.
+**Status**: CORRIGIDO em 2026-08-28 (mesma sessão que confirmou o
+sintoma exato num canal com conteúdo real). `GetMessageUpdates`
+(`internal/wa-noise/capabilities/newsletter/messages.go`) foi reescrito
+para reaproveitar o mesmo construtor de atributos e a mesma tag
+(`messagesAttrs`/`messagesTag`) que `GetMessages` já usava com sucesso —
+`To: types.ServerJID` no lugar de `To: jid`, filho `<messages type='jid'
+jid=… count=… before=…>` no lugar de `<message_updates
+count=… since=… after=…>`. `messageUpdatesAttrs` e a tag
+`message_updates` foram removidos, não só contornados.
 
-<!-- f-status: aberto -->
+`Since` (cursor por tempo) não sobrevive à correção — a forma nova só
+entende `before` (cursor por ID de mensagem, já existia como `After` em
+`GetUpdatesParams`). Documentado no código: um chamador que só
+preenchesse `Since` passa a receber a página mais recente, sem filtro,
+em vez de um erro — decisão deliberada, não um esquecimento.
+
+**Testes** (`internal/wa-noise/capabilities/newsletter/messages_test.go`):
+`TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages` (destino,
+tag, `count`/`before`), `TestGetMessageUpdatesSinceEIgnorado` (`since`
+não vaza para o fio). Controlo negativo EXECUTADO: revertido `To:
+types.ServerJID` para `To: jid`, o teste falhou com `to =
+1234567890@newsletter, esperava s.whatsapp.net`; restaurado, voltou a
+passar.
+
+**Verificação em campo**: canal descartável (projeto `wa-api`, sessão
+`envia`, 2026-08-28), uma mensagem real publicada. `200` em ~0,15s — era
+`500` aos 30s. Ver `HOUSEKEEP.md` (raiz), F366, para o detalhe completo
+e para o achado colateral que fecha F356 (`mark-viewed`) de vez:
+`view_count` continuou `0` mesmo por este caminho corrigido, confirmando
+que o problema nunca foi a entrega da atualização.
+
+<!-- f-status: corrigido -->
 
 
 ## LIB-04 — `newsletter.MarkViewed` espera a resposta do servidor e deita-a fora

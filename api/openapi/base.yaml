@@ -111,11 +111,12 @@ info:
     | ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |
     | ⬜ | **não executada**, e a descrição diz porquê |
 
-    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **129 ✅,
-    4 🟡, 4 ❌, 0 ⬜**. As 0 por testar fecham a campanha — todas as 137
-    rotas foram executadas pelo menos uma vez. Os 4 🟡 e os 4 ❌ que
-    restam têm causa determinada (não são "nunca medidos"): o detalhe
-    rota a rota está em `docs/OPENAPI-EVIDENCIAS.md`.
+    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **133 ✅,
+    4 🟡, 0 ❌, 0 ⬜**. As 0 por testar e os 0 que falham fecham a
+    campanha — os quatro `❌` medidos ao longo do projeto foram todos
+    corrigidos nesta sessão (F275, F264, F265). Os 4 🟡 que restam têm
+    causa determinada (não são "nunca medidos"): o detalhe rota a rota
+    está em `docs/OPENAPI-EVIDENCIAS.md`.
 
     **Um 🟡 não é um ✅ mais fraco por descuido** — é a recusa deliberada de
     chamar confirmado aquilo que só devolveu `2xx`.

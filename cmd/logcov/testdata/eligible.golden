@@ -750,7 +750,6 @@ internal/wa-noise/capabilities/newsletter.ToggleMute	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.Unfollow	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.decodeArgoResult	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.decodeGraphQLResult	EXCLUDED	X5
-internal/wa-noise/capabilities/newsletter.messageUpdatesAttrs	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.messagesAttrs	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.reactionAttrs	EXCLUDED	X5
 internal/wa-noise/capabilities/newsletter.viewedItems	EXCLUDED	X5
@@ -3653,6 +3652,7 @@ pkg/infra/wa-noise/adapters/user.getCachedLIDForPN	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.getCachedPNForLID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.mapPrivacySettings	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.normalizeBlocklistJID	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/user.resolveBlocklistPN	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.resolveBlocklistPNJID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.toDomainBlocklist	EXCLUDED	X5
 pkg/infra/wa-noise/client.ClientForGetter	EXCLUDED	X5

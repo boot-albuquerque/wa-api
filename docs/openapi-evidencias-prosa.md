@@ -4,7 +4,7 @@
 HOUSEKEEP F344-F354) e de uma ronda de destrave ad hoc pedida pelo usuário
 no mesmo dia, usando as sessões reais `envia`/`recebe`.
 
-Contagem actual (137 rotas documentadas): **129 ✅, 4 🟡, 4 ❌, 0 ⬜.**
+Contagem actual (137 rotas documentadas): **133 ✅, 4 🟡, 0 ❌, 0 ⬜.**
 **Todas as 137 rotas já foram executadas pelo menos uma vez.**
 
 A campanha F239/F282 não mudou marca nenhuma — só adicionou evidência
@@ -75,47 +75,70 @@ Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 129
+  OK  chamada real com efeito confirmado: 133
   AMR sucesso sem observador independente: 4
-  ERR falhou, com o erro medido:          4
+  ERR falhou, com o erro medido:          0
   NT  não testada, com o motivo dito:     0
 ```
 
 
 <!-- GERADO:POR-GRUPO -->
 
-## As quatro que falharam
+## Consertos de código (2026-08-28)
 
-| Endpoint | Esperado | Obtido | Erro |
-|---|---|---|---|
-| `POST /users/block` | `200` | `422` | `upstream_rejected`; no log, `info query returned status 400: bad-request`. Medido nas duas contas, com número real e inexistente. Achado **F264**. |
-| `POST /users/unblock` | `200` | `422` | idem. `GET /users/blocklist` funciona — só a escrita é recusada. |
-| `POST /newsletters/updates` | `200` | `500` | `context deadline exceeded` ao fim de 30,0 s: o servidor do WhatsApp nunca responde. `POST /newsletters/messages` no mesmo canal e segundo devolve `200`. Achado **F265**. |
-| `POST /session/logout` | `200` | `500` | `{"error":"internal server error"}` numa sessão descartável LIGADA e nunca emparelhada; no log, `the store doesn't contain a device JID`. Sem transporte vivo a rota responde `409 session_not_connected`, que bate com a documentação — é o ramo do meio que não tem código próprio. Achado **F275**. |
+A pedido do usuário ("consertar o que for consertável no código"), três
+dos quatro ❌ anteriores foram fechados — dois deles CÓDIGO NOVO, não só
+re-medição:
 
-### As três de protocolo têm causa DETERMINADA (2026-08-26)
+- **`POST /session/logout`** (F275) — já estava corrigido em 2026-08-27,
+  um dia antes desta sessão de trabalho começar. A evidência ❌ estava
+  desatualizada, medindo o sintoma pré-conserto (`500`). Re-medido ao
+  vivo: `409 {code:"session_not_paired"}`, como o código já implementava.
+  Nenhum código tocado — só a documentação da evidência.
+- **`POST /users/unblock`** (F278/LIB-02) — também já corrigido antes
+  desta sessão, mas nunca re-medido: `200`, resolve para LID
+  corretamente.
+- **`POST /users/block`** (F264/LIB-02) — este SIM precisou de código
+  novo. O WhatsApp exige, além do `jid` em LID (já corrigido para
+  unblock), um atributo `pn_jid` adicional no block, que a biblioteca
+  vendorizada não emitia. Portado de whatsmeow (`8d023aa973`) para
+  `internal/wa-noise/capabilities/user/blocklist.go` (`UpdateBlocklist`
+  ganha o parâmetro `pnJID`, emitido só quando a ação é `block` e o valor
+  não é vazio) e `pkg/infra/wa-noise/adapters/user/blocklist.go`
+  (`resolveBlocklistPN`, resolve o PN do alvo — do próprio JID pedido, ou
+  via mapeamento LID→PN em cache). Sete testes novos (biblioteca +
+  adaptador), com controlo negativo EXECUTADO nas duas camadas — revertida
+  cada correção, o teste correspondente falhou com a mensagem exata
+  esperada, depois restaurada. Medido ao vivo, `envia`→`recebe`: `200
+  {jid:"90937376170214@lid", blocklist:["90937376170214@lid"]}` — era
+  `422`. Revertido com unblock ao final. Ver HOUSEKEEP F365.
 
-Continuam ❌ — nada foi corrigido, e a marca só muda quando a rota responder.
-Mas nenhuma é já "não funciona e não sabemos porquê": as duas investigações
-estão em `INVESTIGATION-block-unblock.md` e
-`INVESTIGATION-newsletter-updates.md`, e a matriz de capacidades com nível de
-evidência por afirmação em `WHATSAPP-CAPABILITIES.md`.
+## Nenhuma rota falha hoje
 
-| Endpoint | Classificação | Causa |
-|---|---|---|
-| `POST /users/block` | `PROTOCOL_CHANGED` | a escrita da blocklist migrou para endereçamento por **LID**: `<item jid='…@lid' action='block' pn_jid='…@s.whatsapp.net'/>`. Enviamos a forma anterior. Baileys migrou em 2026-04-24, whatsmeow em 2026-08-13 — 13 dias antes desta medição. |
-| `POST /users/unblock` | `PROTOCOL_CHANGED` | idem, com `jid`=LID e **sem** `pn_jid`. |
-| `POST /newsletters/updates` | `PROTOCOL_CHANGED` | o servidor deixou de atender `<message_updates>` endereçado ao JID do canal — ignora-o, daí o silêncio até ao timeout. O WA Web usa `<messages type='jid'>` para `s.whatsapp.net`, que é o que `/newsletters/messages` já envia com sucesso. |
+`POST /session/logout` (F275), `POST /users/block`, `POST /users/unblock`
+(F264) e `POST /newsletters/updates` (F265) — as quatro ❌ que a campanha
+de evidência tinha catalogado — foram todas corrigidas em 2026-08-28. Ver
+"Consertos de código" acima para F275/F264, e abaixo para F265.
 
-**Duas linhas da tabela acima estavam erradas e foram corrigidas**: a F264 dizia
-"testado em PN e em LID", mas o adaptador converte LID → PN antes de enviar, e
-as duas entradas produzem o mesmo stanza (F278). A F265 atribuía o silêncio a um
-query ID desactualizado, e essa rota não tem query ID nenhum (não é MEX), o que
-faz cair a hipótese.
-
-A quarta, `POST /session/logout`, não é de protocolo: é taxonomia de erro nossa
-(F275), e o caminho de `200` exige uma conta emparelhada — está em
-`HUMAN-LAST.md`.
+**`POST /newsletters/updates`** (F265/LIB-03) — a causa já estava
+determinada (2026-08-26): o servidor deixou de atender `<message_updates>`
+endereçado ao JID do canal, e ignora-o em silêncio até o timeout de 30s —
+não é um `400`, é ausência de resposta. A forma que o WA Web usa hoje é
+**idêntica** ao IQ de `/newsletters/messages`, que já funcionava: destino
+o SERVIDOR, filho `<messages type='jid' jid=… count=… before=…>` em vez
+de `<message_updates>`. Portado (mesma decisão do usuário: manter as duas
+rotas separadas, sem fundir contrato) em
+`internal/wa-noise/capabilities/newsletter/messages.go` —
+`GetMessageUpdates` reaproveita `messagesAttrs`/`messagesTag`, mapeando o
+cursor `After` (`types.MessageServerID`) para o atributo `before`; `Since`
+(`time.Time`) não tem equivalente na forma nova e fica sem efeito no
+pedido, documentado no código. Cinco testes novos, com controlo negativo
+EXECUTADO (revertido `To: types.ServerJID` para `To: jid`, o teste falhou
+exatamente como esperado). Medido ao vivo, canal descartável com mensagem
+real: `200` em ~0,15s — era `500` aos 30s. `view_count` continuou `0`
+mesmo por este caminho corrigido, o que CONFIRMA de forma independente a
+conclusão de F356: `mark-viewed` não é destravável, e nunca foi por causa
+desta rota. Ver HOUSEKEEP F366.
 
 ## As quatro 🟡, e o que realmente as bloqueia
 

@@ -37175,3 +37175,243 @@ causa determinada (F264, F265, F275, F356, F358 — e
 commit feito.
 
 <!-- f-status: corrigido -->
+
+## F364 — `POST /session/logout` já estava corrigido (F275, 2026-08-27); a evidência ❌ estava desatualizada, não o código
+
+**Data/contexto**: 2026-08-28, primeiro dos "8 achados a finalizar" que o
+usuário pediu para atacar, seguindo a ordem combinada: consertar o que
+for consertável no código, começando pelo que é bug NOSSO (F275) antes
+dos dois de protocolo do WhatsApp (F264, F265).
+
+**Descoberta antes de qualquer código**: fui ler o próprio F275 no
+HOUSEKEEP para planear o conserto, e ele já dizia **"Status: corrigido em
+2026-08-27"** — um dia antes desta sessão de trabalho ter começado. A
+correção (`pkg/infra/wa-noise/runtime/session/guard.go`,
+`apperr.CodeSessionNotPaired`, `409`) já estava no código, com testes
+(`TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa`,
+`TestLogoutHandler_ConectadaSemPareamento_409ComEnvelopeCanonico`) e
+controlo negativo executado, tudo documentado na própria entrada.
+
+**O que estava errado era só a evidência**: `api/openapi/evidencias.tsv`
+ainda tinha a linha de `POST /session/logout` marcada ❌ com o texto do
+sintoma PRÉ-conserto (`500 {"error":"internal server error"}`, medido em
+2026-08-26) — nunca reconfirmada depois do fix, e sobrevivendo à
+campanha F239/F282 inteira e a F355-F363 sem ninguém questionar.
+
+**Verificação ao vivo**: sessão descartável nova, conectada e nunca
+emparelhada; `POST /session/logout` → `409
+{code:"session_not_paired", message:"session has a live connection but
+was never paired; there is no device to log out"}` — exatamente o
+comportamento que F275 diz ter implementado. Nenhum código foi tocado
+nesta entrada — não havia nada para consertar.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — ❌→✅, evidência
+reescrita com a re-medição e a nota de que o ❌ anterior estava
+desatualizado. `docs/openapi-evidencias-prosa.md` (a tabela "As quatro
+que falharam" vira "As três que falham hoje", remove a linha de
+`session/logout` e o parágrafo que a explicava, contagens atualizadas) e
+`api/openapi/base.yaml` (legenda) atualizados. `docs/OPENAPI-EVIDENCIAS.md`
+regenerado.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/...`, `make handler-route`.
+
+**Anti-regressão**: nenhuma correção de comportamento de código nesta
+entrada — F275 já tinha os seus próprios testes e controlo negativo.
+Sem teste novo.
+
+**Lição a reter**: a mesma de F363 — uma marca de evidência não se
+revalida sozinha quando o código muda por baixo dela. Duas das últimas
+oito entradas "a finalizar" já não precisavam de finalização nenhuma,
+só de re-medição.
+
+**Status**: concluído. Contagem atual: **130 ✅, 4 🟡, 3 ❌, 0 ⬜** (137
+total). Restam 3 ❌ (F264 ×2, F265 — protocolo do WhatsApp, ainda por
+investigar/consertar) e 4 🟡 (mark-viewed, request-unavailable-message,
+status/set/video, status/set/audio). Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F365 — `POST /users/block` corrigido: porta o `pn_jid` de whatsmeow/Baileys para a biblioteca vendorizada; `POST /users/unblock` re-confirmado
+
+**Data/contexto**: 2026-08-28, segundo dos "8 achados a finalizar"
+(ordem: F275 primeiro, já resolvido por re-medição — depois F264/F265, os
+dois de protocolo). `INVESTIGATION-block-unblock.md` (2026-08-26) já
+tinha a causa determinada e o caminho do conserto desenhado; esta entrada
+é a execução dele.
+
+**Confirmação antes de codar**: re-medi ao vivo com `envia`→`recebe` antes
+de tocar em código. `POST /users/unblock` já devolvia `200` (F278, corrigido
+em 2026-08-27, nunca re-confirmado — mesmo padrão de F275/F363: entrada ❌
+desatualizada, não código quebrado). `POST /users/block` continuava
+`422 upstream_rejected` — este sim precisava de código novo.
+
+**A correção, portada de whatsmeow `8d023aa973` e Baileys `8ca9316a10`**:
+o `block` exige, além do `jid` em LID (já resolvido pela app desde F278),
+um segundo atributo `pn_jid` com o número de telefone — que a biblioteca
+vendorizada nunca emitia.
+
+- `internal/wa-noise/capabilities/user/blocklist.go` — `UpdateBlocklist`
+  ganha o parâmetro `pnJID types.JID`; o `<item>` leva `pn_jid` só quando
+  `action==block` e `pnJID` não é vazio. Ver LIB-02 no HOUSEKEEP da
+  biblioteca (`internal/wa-noise/HOUSEKEEP.md`) para o detalhe da porta.
+- `internal/wa-noise/core/user_queries.go` — `Client.UpdateBlocklist`
+  propaga o parâmetro novo.
+- `pkg/infra/wa-noise/client/{client.go,realclient_wrappers.go}` e
+  `pkg/infra/wa-noise/client/testkit/{fake.go,fake_user.go}` — interface e
+  dublê atualizados com o mesmo parâmetro (assinatura muda em toda a
+  cadeia, mecânico).
+- `pkg/infra/wa-noise/adapters/user/blocklist.go` — `resolveBlocklistPN`
+  (nova): resolve o PN do alvo — direto se o pedido já veio em PN, via
+  `getCachedPNForLID` se veio em LID — só quando a ação é `block` (não
+  gasta info query à toa no `unblock`, que não usa `pn_jid`). Sem
+  mapeamento em cache, devolve o JID zero; `UpdateBlocklist` trata isso
+  como "omitir o atributo", nunca "enviar um valor inventado".
+
+**Testes** (sete novos, biblioteca + adaptador):
+`TestUpdateBlocklistBlockCarriesPNJID`, `TestUpdateBlocklistUnblockOmitsPNJID`,
+`TestUpdateBlocklistBlockWithZeroPNJIDOmitsAttribute` (biblioteca);
+`TestUserAdapter_UpdateBlocklist_BlockPassesPNJID`,
+`TestUserAdapter_UpdateBlocklist_UnblockDoesNotResolvePNJID` (adaptador),
+mais os dois testes existentes ajustados à assinatura nova.
+
+**Controlo negativo EXECUTADO nas duas camadas**:
+
+```
+# internal/wa-noise (revertida a linha que adiciona pn_jid ao Attrs)
+--- FAIL: TestUpdateBlocklistBlockCarriesPNJID
+    blocklist_test.go:166: pn_jid = <nil>, want 5511999@s.whatsapp.net
+
+# pkg/infra (revertida a chamada a resolveBlocklistPN no adaptador)
+--- FAIL: TestUserAdapter_UpdateBlocklist_BlockPassesPNJID
+    blocklist_test.go:104: pnJID = , queria o PN pedido (5511@s.whatsapp.net)
+```
+
+As duas correções restauradas depois, testes voltaram a passar.
+
+**Verificação em campo, `envia`→`recebe`, sessões reais**: baseline
+`GET /users/blocklist` vazio. `POST /users/block {phone:"554192421234@s.whatsapp.net"}`
+— **antes** da correção: `422 upstream_rejected` (confirmado com um
+processo antigo ainda rodando por engano — descoberto e corrigido: matei
+o processo velho e rebuildei antes de medir de novo). **Depois**: `200
+{details:"User blocked", jid:"90937376170214@lid",
+blocklist:["90937376170214@lid"]}`. `GET /users/blocklist` confirmou a
+entrada. Revertido com `POST /users/unblock`: `200 {blocklist:[]}`,
+confirmado vazio de novo.
+
+**Achado incidental durante a verificação**: um processo `wa-api-test`
+antigo (de uma medição anterior nesta sessão) continuava rodando na porta
+8080 e respondeu à primeira tentativa de medição pós-fix, fazendo parecer
+que a correção não tinha funcionado (`422` de novo). O log do processo
+NOVO mostrava `FATAL configuracao de cluster invalida... another process
+is already using the data directory` — o sinal de que havia dois
+processos disputando o mesmo `/tmp`. Lição: sempre confirmar
+`lsof -ti:8080` antes de medir depois de uma mudança de binário, não só
+depois de `kill`.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — `users/block` e
+`users/unblock` ❌→✅. `docs/openapi-evidencias-prosa.md` (nova secção
+"Consertos de código", tabela "As três que falham hoje" vira "Só uma
+continua a falhar hoje" com só `newsletters/updates`, contagens
+atualizadas) e `api/openapi/base.yaml` (legenda) atualizados.
+`docs/OPENAPI-EVIDENCIAS.md` regenerado. `cmd/logcov/testdata/eligible.golden`
+regenerado (`resolveBlocklistPN`, nova função elegível, EXCLUDED).
+`internal/wa-noise/HOUSEKEEP.md` LIB-02 fechado (`aberto`→`corrigido`),
+com o mesmo detalhe de teste/controlo negativo.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/... ./internal/...` (todos
+`ok`, incluindo `cmd/logcov` depois de regenerar o golden),
+`make handler-route`.
+
+**Anti-regressão**: sete testes novos, dois controlos negativos executados
+(um por camada), como detalhado acima.
+
+**Status**: concluído. `POST /users/unblock` re-confirmado (já corrigido,
+F278). `POST /users/block` corrigido de verdade nesta entrada — código
+novo em três camadas (biblioteca, cliente, adaptador), com testes e
+controlo negativo. Contagem atual: **132 ✅, 4 🟡, 1 ❌, 0 ⬜** (137
+total). Resta só `newsletters/updates` (F265) — protocolo mudou do lado
+do servidor, sem stanza alternativa conhecida para produzir o mesmo
+efeito. Nenhum commit feito.
+
+<!-- f-status: corrigido -->
+
+## F366 — `POST /newsletters/updates` corrigido: mesma forma de IQ que `/newsletters/messages` já usava com sucesso; zero rotas com erro no projeto
+
+**Data/contexto**: 2026-08-28, terceiro e último dos "8 achados a
+finalizar". `INVESTIGATION-newsletter-updates.md` (2026-08-26) já tinha a
+causa determinada e a correção sugerida desenhada; usuário decidiu
+explicitamente manter `/newsletters/updates` e `/newsletters/messages`
+como rotas separadas (não fundir contrato), mesmo os dois emitindo agora
+o mesmo stanza por baixo.
+
+**A correção, portada de whatsmeow/Baileys (mesmas referências de F264) e
+da forma que o WA Web usa hoje**: o `<message_updates>` endereçado ao JID
+do CANAL nunca era respondido pelo servidor — não recusa, simplesmente
+ignora, daí o timeout de 30s. A forma nova é idêntica ao IQ de
+`GetMessages`: destino o SERVIDOR, filho `<messages type='jid' jid=…
+count=… before=…>`.
+
+`internal/wa-noise/capabilities/newsletter/messages.go` —
+`GetMessageUpdates` reescrito para reaproveitar `messagesAttrs`/
+`messagesTag` (o mesmo construtor que `GetMessages` já usa) em vez de ter
+o seu próprio `messageUpdatesAttrs`/`message_updates`, removidos. O
+parâmetro `After` (`types.MessageServerID`, cursor por ID de mensagem) é
+mapeado para o atributo `before`; `Since` (`time.Time`, cursor por
+tempo) não tem equivalente na forma nova e fica **sem efeito no pedido**
+— documentado no código e no `GetUpdatesParams`, para não quebrar
+chamadores existentes que só preenchiam `Since` sem avisar por que
+deixaram de filtrar por tempo.
+
+**Testes** (`internal/wa-noise/capabilities/newsletter/messages_test.go`):
+removidos os quatro testes de `messageUpdatesAttrs` (função extinta);
+`TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages` (trava a
+causa: destino servidor, tag `messages`, `count`/`before` corretos),
+`TestGetMessageUpdatesSinceEIgnorado` (trava que `since` não vaza para o
+fio), e os dois testes de erro/elemento-ausente adaptados à forma nova.
+
+**Controlo negativo EXECUTADO**: revertido `To: types.ServerJID` para
+`To: jid` em `GetMessageUpdates` —
+`TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages` falhou com
+`to = 1234567890@newsletter, esperava s.whatsapp.net`; restaurado, voltou
+a passar.
+
+**Verificação em campo**: canal descartável criado com `envia`, uma
+mensagem de texto real publicada. `POST /newsletters/updates` **antes**
+da correção não foi re-medido nesta sessão (o log de 2026-08-26 já
+bastava — 30s de timeout, `500`); **depois**: `200` em ~0,15 segundos,
+com a mensagem publicada de volta (`text`, `view_count:0`,
+`reactions:[]`). Canal apagado ao final.
+
+**Achado que fecha F356 de vez, sem reabri-lo**: `view_count` continuou
+`0` mesmo através deste caminho corrigido (`POST /newsletters/updates`
+sobre a mesma mensagem já marcada com `mark-viewed`). Isso CONFIRMA,
+independentemente da investigação de F356 (que usava WebSocket, não esta
+rota), que o problema nunca foi a entrega — é o contador em si nunca
+incrementar do lado do WhatsApp para uma marcação feita por API.
+
+**Correção aplicada**: `api/openapi/evidencias.tsv` — `newsletters/updates`
+❌→✅. `docs/openapi-evidencias-prosa.md` (secção "Consertos de código"
+com o detalhe de F265, "Só uma continua a falhar hoje" vira "Nenhuma rota
+falha hoje", contagens atualizadas) e `api/openapi/base.yaml` (legenda,
+mantendo a frase fixa "As 0 por testar" que `TestEvidenceLegendMatchesTable`
+exige por regex) atualizados. `docs/OPENAPI-EVIDENCIAS.md` regenerado.
+`internal/wa-noise/HOUSEKEEP.md` LIB-03 fechado (`aberto`→`corrigido`),
+com o mesmo detalhe de teste/controlo negativo.
+
+**Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
+internal` (limpo), `go test ./pkg/... ./cmd/... ./internal/...`,
+`make handler-route`.
+
+**Anti-regressão**: cinco testes (três novos, dois reescritos), um
+controlo negativo executado, detalhados acima.
+
+**Status**: concluído. **Zero rotas com evidência de erro no projeto** —
+os quatro ❌ que a campanha de evidência catalogou (F275, F264 ×2, F265)
+estão todos corrigidos. Contagem final: **133 ✅, 4 🟡, 0 ❌, 0 ⬜** (137
+total). Os 4 🟡 restantes (`mark-viewed`, `request-unavailable-message`,
+`status/set/video`, `status/set/audio`) têm causa determinada e nenhum é
+"nunca investigado". Nenhum commit feito.
+
+<!-- f-status: corrigido -->

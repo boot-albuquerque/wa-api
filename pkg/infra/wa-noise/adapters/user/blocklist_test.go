@@ -66,7 +66,7 @@ func TestUserAdapter_UpdateBlocklist_NoSession(t *testing.T) {
 // TestUserAdapter_UpdateBlocklist_BlockOK.
 func TestUserAdapter_UpdateBlocklist_BlockOK(t *testing.T) {
 	var seenAction events.BlocklistChangeAction
-	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
 		seenAction = action
 		return &types.Blocklist{JIDs: []types.JID{jid}, DHash: "h"}, nil
 	}}
@@ -83,10 +83,51 @@ func TestUserAdapter_UpdateBlocklist_BlockOK(t *testing.T) {
 	}
 }
 
+// TestUserAdapter_UpdateBlocklist_BlockPassesPNJID trava a causa da
+// F264/LIB-02 na camada do adaptador: um pedido de block com telefone
+// (o caso comum de quem chama a API) tem de entregar esse MESMO telefone
+// como pnJID ao cliente — é o valor que vira `pn_jid` no stanza. Sem
+// isto, mesmo com a biblioteca já corrigida, o adaptador nunca oferece o
+// PN e o atributo sai sempre omitido.
+func TestUserAdapter_UpdateBlocklist_BlockPassesPNJID(t *testing.T) {
+	var seenPNJID types.JID
+	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+		seenPNJID = pnJID
+		return &types.Blocklist{}, nil
+	}}
+	a := NewUserAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	_, err := a.UpdateBlocklist(context.Background(), "u1", "5511@s.whatsapp.net", true)
+	if err != nil {
+		t.Fatalf("UpdateBlocklist = %v", err)
+	}
+	if seenPNJID.Server != types.DefaultUserServer || seenPNJID.User != "5511" {
+		t.Errorf("pnJID = %v, queria o PN pedido (5511@s.whatsapp.net)", seenPNJID)
+	}
+}
+
+// TestUserAdapter_UpdateBlocklist_UnblockDoesNotResolvePNJID trava que
+// unblock não gasta um info query à toa: pnJID chega sempre zero ao
+// cliente nesse caminho, porque a biblioteca nunca o usa fora de block.
+func TestUserAdapter_UpdateBlocklist_UnblockDoesNotResolvePNJID(t *testing.T) {
+	var seenPNJID types.JID
+	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+		seenPNJID = pnJID
+		return &types.Blocklist{}, nil
+	}}
+	a := NewUserAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
+	_, err := a.UpdateBlocklist(context.Background(), "u1", "5511@s.whatsapp.net", false)
+	if err != nil {
+		t.Fatalf("UpdateBlocklist unblock = %v", err)
+	}
+	if !seenPNJID.IsEmpty() {
+		t.Errorf("pnJID = %v, queria zero (unblock não usa pn_jid)", seenPNJID)
+	}
+}
+
 // TestUserAdapter_UpdateBlocklist_UnblockOK.
 func TestUserAdapter_UpdateBlocklist_UnblockOK(t *testing.T) {
 	var seenAction events.BlocklistChangeAction
-	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
 		seenAction = action
 		return &types.Blocklist{}, nil
 	}}

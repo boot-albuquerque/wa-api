@@ -61,7 +61,7 @@ type Fake struct {
 	GetUserInfoFn                    func(ctx context.Context, jids []types.JID) (map[types.JID]types.UserInfo, error)
 	GetProfilePictureInfoFn          func(ctx context.Context, jid types.JID, params *wanoise.GetProfilePictureParams) (*types.ProfilePictureInfo, error)
 	GetBlocklistFn                   func(ctx context.Context) (*types.Blocklist, error)
-	UpdateBlocklistFn                func(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
+	UpdateBlocklistFn                func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
 	TryFetchPrivacySettingsFn        func(ctx context.Context, ignoreCache bool) (*types.PrivacySettings, error)
 	SetPrivacySettingFn              func(ctx context.Context, name types.PrivacySettingType, value types.PrivacySetting) (types.PrivacySettings, error)
 	RejectCallFn                     func(ctx context.Context, callFrom types.JID, callID string) error

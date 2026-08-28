@@ -639,28 +639,30 @@
 /newsletter/updates:
   post:
     tags: [Canais]
-    summary: Buscar atualizações de mensagens de um canal (INOPERANTE)
+    summary: Buscar atualizações de mensagens de um canal
     description: |
-      Deveria devolver as ALTERAÇÕES a mensagens já conhecidas — edições,
-      contagens de reação, remoções —, ao contrário de
-      `POST /newsletter/messages`, que devolve as mensagens em si.
+      Devolve as mensagens de um canal com os seus contadores (vistas,
+      reações) — a mesma forma de `POST /newsletter/messages`, com um
+      cursor de paginação diferente.
 
-      **Esta rota está inoperante.** Medida a 2026-08-26 e de novo nesta
-      sessão: responde **`500` ao fim de 30,0 segundos**, com
-      `error.code: newsletter_failed` e, no log,
-      `context deadline exceeded`. Os 30 s são exactamente o tempo limite por
-      pedido — o servidor do WhatsApp **não responde**, não é ele a recusar.
-      `POST /newsletter/messages` sobre o mesmo canal e no mesmo segundo
-      devolve `200`, logo a sessão, o canal e o transporte estão bons. Está
-      registado como F265 no `HOUSEKEEP.md`; a hipótese em aberto é um query
-      ID desactualizado, e um ID inexistente produz silêncio, não erro.
+      **CORRIGIDO em 2026-08-28 (F265/LIB-03).** Até então, o `<iq>` desta
+      rota ia endereçado ao JID do CANAL, num nó `<message_updates>` que o
+      servidor do WhatsApp deixou de atender — não recusava, simplesmente
+      não respondia, daí o `500` ao fim dos 30 s de timeout. A forma que o
+      WA Web usa hoje é **idêntica** à de `POST /newsletter/messages`:
+      destino o SERVIDOR, nó `<messages type='jid' jid=… count=… before=…>`.
+      Medido ao vivo num canal descartável com mensagem real: `200` em
+      ~0,15 s.
 
-      **Não use esta rota em produção.** Para acompanhar um canal, use
-      `POST /newsletter/messages` ou `POST /newsletter/subscribe`.
-
-      **Regras**: `jid` é obrigatório. `since` vai em RFC 3339 e é o único
-      campo destas dezoito rotas validado no DTO de pedido, antes do use case —
-      um instante malformado devolve `400 invalid_since`.
+      **`since` deixou de ter efeito — use `after` para paginar.** O campo
+      do pedido continua a chamar-se `after` (já existia); o que mudou é
+      que agora ele chega mesmo ao fio, como o atributo `before` do
+      `<messages>` acima. `since` (um instante) não tem tradução possível
+      para esse cursor (um ID de mensagem) e fica sem efeito — um pedido
+      que só preencha `since` continua a ser aceite (`400 invalid_since`
+      só dispara com um valor malformado), mas o filtro por tempo é
+      ignorado: a resposta vem sem cursor nenhum, como se `since` não
+      tivesse sido enviado.
 
       **Autenticação**: token de sessão.
     security:
@@ -677,8 +679,8 @@
     responses:
       '200':
         description: |
-          Nunca observado. Documentado por ser o que o código devolveria se o
-          servidor respondesse; a forma dos elementos não foi medida.
+          Medido em 2026-08-28, canal descartável com uma mensagem de
+          texto real publicada minutos antes.
         content:
           application/json:
             schema:
@@ -691,7 +693,14 @@
             example:
               code: 200
               data:
-                messages: []
+                messages:
+                  - server_id: 100
+                    message_id: 3EB0A553310BE6112D0EC6
+                    type: text
+                    timestamp: '2026-08-28T21:03:37Z'
+                    view_count: 0
+                    reactions: []
+                    text: Teste F265 - conserto do updates
               success: true
       '400':
         description: |
@@ -736,19 +745,7 @@
       '401':
         $ref: '#/components/responses/NaoAutorizado'
       '500':
-        description: |
-          **O que esta rota devolve hoje, sempre**, ao fim de 30 segundos de
-          espera pelo WhatsApp.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Erro'
-            example:
-              code: 500
-              error:
-                code: newsletter_failed
-                message: newsletter operation failed
-              success: false
+        $ref: '#/components/responses/ErroInterno'
 
 /newsletter/mark-viewed:
   post:
@@ -764,21 +761,27 @@
       **Regras**: `jid` e `server_ids` são obrigatórios; lista vazia é recusada
       com `400 missing_server_ids`. `data` traz `{"status": "sent"}` em sucesso.
 
-      **CORRECÇÃO a 2026-08-26**: esta descrição dizia que "não há forma de
-      confirmar o efeito por esta API". O observador **existe por desenho** —
-      a operação incrementa o contador de visualizações
-      (`internal/wa-noise/core/newsletter.go:52`), e esse contador é servido
-      por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`), que é
-      `POST /newsletters/updates`. O que acontece é que essa rota está
-      **inoperante** (F265: `500` ao fim de 30 s). Há uma segunda via, nunca
-      exercitada: `POST /newsletters/subscribe` entrega os mesmos dados como
-      evento `NewsletterLiveUpdate`, que chega ao webhook e a `/session/ws`
-      com `view_count` por mensagem.
+      **`200`, mas o efeito nunca foi observado — e agora sabemos que não é
+      por falta de tentar.** `NewsletterMarkViewed` incrementa o contador de
+      visualizações do lado da biblioteca (`internal/wa-noise/core/newsletter.go:52`),
+      e esse contador é servido por `POST /newsletters/updates`, que estava
+      **inoperante** até 2026-08-28 (F265/LIB-03: o servidor não respondia,
+      `500` ao fim de 30s) — já corrigida (ver a descrição de
+      `POST /newsletters/updates`).
 
-      **O que NÃO serve como observador**: o `view_count` de
-      `POST /newsletters/messages`. O campo existe e chega ao JSON, mas veio
-      `0` nas sessenta publicações medidas — um valor que nunca muda não
-      distingue caso nenhum. Ver `OBSERVADORES-AMBAR.md` §4.
+      **Mesmo com a via corrigida, o efeito continua invisível.** Medido em
+      2026-08-28 (F356, F366): (1) `POST /newsletters/subscribe` +
+      escuta em `/session/ws`, com um listener já provado capaz de receber
+      o evento `NewsletterLiveUpdate` de uma reação real — zero eventos
+      depois de `mark-viewed`, em janelas de até 90s; (2) `POST
+      /newsletters/updates`, já corrigido, devolveu a mensagem marcada com
+      `view_count:0` — o mesmo valor de antes. A conclusão: o contador
+      simplesmente não incrementa do lado do WhatsApp para uma marcação
+      feita por API, possivelmente por exigir renderização por um cliente
+      real (hipótese, não confirmável sem o código do servidor deles).
+      **Não há forma conhecida de confirmar o efeito desta rota.**
+
+      Ver `OBSERVADORES-AMBAR.md` §4 para o histórico da investigação.
 
       **Autenticação**: token de sessão.
     security:

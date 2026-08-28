@@ -40,13 +40,15 @@ func (cli *Client) GetBlocklist(ctx context.Context) (*types.Blocklist, error) {
 }
 
 // UpdateBlocklist updates the user's block list and returns the updated list.
+// pnJID is the phone-number counterpart of jid, sent as `pn_jid` when
+// action is block; pass a zero JID when there is none to offer.
 func (cli *Client) UpdateBlocklist(
-	ctx context.Context, jid types.JID, action events.BlocklistChangeAction,
+	ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction,
 ) (*types.Blocklist, error) {
 	if cli == nil {
 		return nil, ErrClientIsNil
 	}
-	return user.UpdateBlocklist(ctx, cli.userT(), jid, action)
+	return user.UpdateBlocklist(ctx, cli.userT(), jid, pnJID, action)
 }
 
 // GetBotListV2 lists the bots available to this account.

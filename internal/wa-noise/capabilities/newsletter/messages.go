@@ -55,51 +55,56 @@ func GetMessages(ctx context.Context, t Transport, jid types.JID, params *GetMes
 }
 
 // GetUpdatesParams e' reexportado pela raiz como GetNewsletterUpdatesParams.
+//
+// Since deixou de ir para o fio (LIB-03, 2026-08-28): o servidor nao
+// responde mais ao <message_updates> que carregava esse cursor por tempo
+// (`since`), e a forma que o WA Web usa hoje so' pagina por ID de
+// mensagem (`before`). O campo continua aqui para nao quebrar chamadores
+// existentes, mas e' ignorado na montagem do pedido — ver o comentario em
+// GetMessageUpdates.
 type GetUpdatesParams struct {
 	Count int
 	Since time.Time
 	After types.MessageServerID
 }
 
-// messageUpdatesAttrs monta os atributos do no <message_updates>. Assim como em
-// messagesAttrs, campo zerado vira atributo ausente.
-func messageUpdatesAttrs(params *GetUpdatesParams) waBinary.Attrs {
-	attrs := waBinary.Attrs{}
-	if params != nil {
-		if params.Count != 0 {
-			attrs["count"] = params.Count
-		}
-		if !params.Since.IsZero() {
-			attrs["since"] = params.Since.Unix()
-		}
-		if params.After != 0 {
-			attrs["after"] = params.After
-		}
-	}
-	return attrs
-}
-
 // GetMessageUpdates busca updates (contadores de reacao e visualizacao) de um
 // canal.
 //
-// Repare na assimetria com GetMessages, herdada do upstream e preservada: o
-// <iq> de updates vai para o JID do canal, o de mensagens vai para o servidor; e
-// o ElementMissingError de updates reporta a tag "messages" (a interna), nao
-// "message_updates".
+// CORRIGIDO em 2026-08-28 (LIB-03): o servidor deixou de responder ao IQ
+// `<message_updates>` enderecado ao JID do canal — nao recusa, so' nao
+// responde, e a chamada morria no timeout de 30s. A forma que o WA Web usa
+// hoje e' identica ao IQ de GetMessages: destino o SERVIDOR (nao o
+// canal), no filho `<messages type='jid' jid=… count=… before=…>` (nao
+// `<message_updates>`). Reaproveita messagesAttrs/messagesTag em vez de
+// duplicar o formato — as duas rotas emitem o MESMO stanza agora, so'
+// diferindo na projecao da resposta que o wa-api devolve por cima (decisao
+// deliberada, mantida separada por pedido explicito ao portar esta
+// correcao — nao fundida com GetMessages).
+//
+// Since NAO tem equivalente na forma nova (que so' pagina por `before`,
+// um ID de mensagem) e fica sem efeito no pedido — um chamador que so'
+// preenchia Since deixa de filtrar por tempo e passa a receber a pagina
+// mais recente, como se tivesse pedido sem cursor nenhum. Preenchido
+// junto com After, After prevalece (e' o unico que o fio entende).
 func GetMessageUpdates(ctx context.Context, t Transport, jid types.JID, params *GetUpdatesParams) ([]*types.NewsletterMessage, error) {
+	var msgParams *GetMessagesParams
+	if params != nil {
+		msgParams = &GetMessagesParams{Count: params.Count, Before: params.After}
+	}
 	resp, err := t.SendIQ(ctx, IQ{
 		Namespace: Namespace,
 		Type:      IQGet,
-		To:        jid,
+		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag:   messageUpdatesTag,
-			Attrs: messageUpdatesAttrs(params),
+			Tag:   messagesTag,
+			Attrs: messagesAttrs(jid, msgParams),
 		}},
 	})
 	if err != nil {
 		return nil, err
 	}
-	messages, ok := resp.GetOptionalChildByTag(messageUpdatesTag, messagesTag)
+	messages, ok := resp.GetOptionalChildByTag(messagesTag)
 	if !ok {
 		return nil, t.ElementMissing(messagesTag, messagesErrContext)
 	}

@@ -313,9 +313,11 @@ PedidoMensagensCanal:
 PedidoAtualizacoesCanal:
   type: object
   description: |
-    Pedido de ATUALIZAÇÕES de mensagens já conhecidas — edições, contagens de
-    reação, remoções. **Rota inoperante**: devolve `500` ao fim de 30 s em
-    todos os casos medidos (F265). Ver a descrição da rota.
+    Pedido de mensagens de um canal com os seus contadores (vistas,
+    reações). **CORRIGIDO em 2026-08-28** (F265/LIB-03) — a rota
+    respondia `500` ao fim de 30s em todos os casos medidos; agora usa a
+    mesma forma de IQ que `/newsletter/messages` já usava com sucesso. Ver
+    a descrição da rota.
   required: [jid]
   properties:
     jid:
@@ -330,15 +332,10 @@ PedidoAtualizacoesCanal:
       type: integer
       nullable: false
       description: |
-        Quantas atualizações trazer. Ausente, `null` e `0` são indistinguíveis
-        entre si e fazem o adaptador omitir o atributo do pedido.
-
-        **O efeito de `count` nesta rota não foi determinado com segurança**:
-        a rota devolve `500` com qualquer valor, incluindo `2`, logo não há
-        como distinguir a falha do campo da falha da rota. Em
-        `/newsletter/messages`, que partilha o mesmo mecanismo, `count`
-        ausente ou zero é o que causa o `500` — a hipótese razoável é que aqui
-        seja igual, mas **é hipótese, não medição**.
+        Quantas mensagens trazer. Ausente, `null` e `0` são indistinguíveis
+        entre si e fazem o adaptador omitir o atributo do pedido — o mesmo
+        comportamento de `count` em `/newsletter/messages`, que partilha o
+        mecanismo desde a correção de F265.
       example: 5
     since:
       type: string
@@ -347,38 +344,34 @@ PedidoAtualizacoesCanal:
       description: |
         Instante mínimo, em RFC 3339.
 
+        **SEM EFEITO no pedido desde 2026-08-28 (F265/LIB-03).** A forma de
+        IQ corrigida só pagina por `after` (um `server_id`, não um
+        instante) — não há tradução possível entre os dois cursores. Um
+        `since` bem formado continua aceite e é simplesmente ignorado: a
+        resposta vem sem cursor nenhum, como se o campo não tivesse sido
+        enviado. Preferir `after` para paginar.
+
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | sim | instante zero — sem limite inferior |
-        | `null` | sim | idem — indistinguível de ausente |
-        | `""` | sim | idem: só se tenta interpretar quando o valor é não-vazio (`dto/newsletter/request.go`) |
-        | mal formatado | **não** | `400 invalid_since` |
+        | ausente | sim | sem efeito (nunca teve, desde a correção) |
+        | `null` | sim | idem |
+        | `""` | sim | idem |
+        | mal formatado | **não** | `400 invalid_since` — a validação de formato continua a correr, mesmo sem o valor ser usado |
         | tipo não-texto | não | `400 could_not_decode_payload` |
-
-        **É o único campo das dezoito rotas validado no DTO DE PEDIDO, antes do
-        use case.** Tudo o resto que estas rotas exigem depende de QUAL
-        operação a rota carrega, e essa tabela vive no use case
-        (`newsletterRequirements`); duplicar uma linha dela aqui daria dois
-        sítios a decidir o mesmo código de erro. `since` é diferente porque é um
-        FORMATO que o cliente pode errar, independente da operação.
 
         ```json
         {"code": 400, "error": {"code": "invalid_since", "message": "since must be an RFC 3339 instant"}, "success": false}
         ```
-
-        **O código era `invalid_request`** — o genérico do estado, que só diz
-        "algo estava mal" — até esta validação passar pela taxonomia `apperr`
-        na migração para DTO de 2026-08-27. (E antes disso a recusa saía com
-        `error` em TEXTO em vez de objecto: era a F266, e já não existe.)
-      example: '2026-08-26T00:00:00Z'
     after:
       type: string
       nullable: false
       description: |
-        `server_id` a partir do qual avançar, como texto. Tem exactamente a
-        mesma semântica de `before` em `PedidoMensagensCanal`, incluindo o
-        `TrimSpace` e o **descarte silencioso** de texto não numérico, que vira
-        `0`. Ausente, `null` e `""` são indistinguíveis.
+        `server_id` da mensagem a partir da qual paginar — o cursor que a
+        forma corrigida (F265/LIB-03) realmente usa, no lugar de `since`.
+        Tem exactamente a mesma semântica de `before` em
+        `PedidoMensagensCanal`, incluindo o `TrimSpace` e o **descarte
+        silencioso** de texto não numérico, que vira `0`. Ausente, `null`
+        e `""` são indistinguíveis.
       example: '104'
 
 PedidoMarcarVistoCanal:

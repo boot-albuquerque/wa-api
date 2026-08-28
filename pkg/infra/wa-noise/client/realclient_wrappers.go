@@ -197,8 +197,8 @@ func (r RealClient) GetBlocklist(ctx context.Context) (*types.Blocklist, error) 
 	return v0, errmap.ClassifyIQ(err)
 }
 
-func (r RealClient) UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
-	v0, err := r.Client.UpdateBlocklist(ctx, jid, action)
+func (r RealClient) UpdateBlocklist(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	v0, err := r.Client.UpdateBlocklist(ctx, jid, pnJID, action)
 	return v0, errmap.ClassifyIQ(err)
 }
 

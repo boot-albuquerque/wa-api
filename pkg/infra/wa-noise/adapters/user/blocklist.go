@@ -55,7 +55,17 @@ func (a *UserAdapter) UpdateBlocklist(ctx context.Context, txtID string, target 
 		return domain.BlocklistUpdate{}, errmap.ClassifyIQ(err)
 	}
 
-	blocklist, err := client.UpdateBlocklist(ctx, resolved, action)
+	// LIB-02: block exige também `pn_jid` no stanza (ver UpdateBlocklist em
+	// internal/wa-noise). Zero-valor quando não há PN a oferecer — a
+	// biblioteca omite o atributo nesse caso, nunca pior que antes desta
+	// correção. unblock não usa pnJID; resolveBlocklistPN só é chamado
+	// quando block é o pedido, para não gastar um info query à toa.
+	var pnJID types.JID
+	if block {
+		pnJID = resolveBlocklistPN(ctx, client, requested)
+	}
+
+	blocklist, err := client.UpdateBlocklist(ctx, resolved, pnJID, action)
 	if err != nil {
 		// F204: medido em POST /user/block com número sem conta — o servidor
 		// respondia 400 bad-request e nós devolvíamos 500.
@@ -121,9 +131,10 @@ func normalizeBlocklistJID(jid types.JID) types.JID {
 //
 // Isto corrige `unblock` sempre que o LID (do parâmetro, ou resolvido a
 // partir do PN) estiver disponível: o stanza de unblock não leva `pn_jid`,
-// só `jid=…@lid`. NÃO corrige `block`: o WhatsApp exige um `pn_jid`
-// adicional nesse caso, que `internal/wa-noise` ainda não emite (LIB-02,
-// correção "completa" pendente — porta de whatsmeow `8d023aa973`).
+// só `jid=…@lid`. `block` foi completado em 2026-08-28 (F264, mesma
+// sessão): o `pn_jid` adicional que o WhatsApp exige nesse caso é
+// resolvido por `resolveBlocklistPN`, abaixo, e passado a
+// `UpdateBlocklist` (porta de whatsmeow `8d023aa973`).
 func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
 	jid = normalizeBlocklistJID(jid)
 	switch jid.Server {
@@ -137,6 +148,23 @@ func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid type
 	default:
 		return types.JID{}, fmt.Errorf("unsupported blocklist JID server %q", jid.Server)
 	}
+}
+
+// resolveBlocklistPN resolve o JID de telefone que vai no atributo
+// `pn_jid` de um pedido de block (LIB-02). Um PN já é a sua própria
+// resposta; um LID exige um mapeamento em cache. Sem mapeamento, devolve o
+// JID zero — o chamador (UpdateBlocklist) trata isso como "omitir o
+// atributo", nunca "enviar um pn_jid errado".
+func resolveBlocklistPN(ctx context.Context, client waclient.Client, jid types.JID) types.JID {
+	switch jid.Server {
+	case types.DefaultUserServer:
+		return jid
+	case types.HiddenUserServer:
+		if pn, err := getCachedPNForLID(ctx, client, jid); err == nil {
+			return pn
+		}
+	}
+	return types.JID{}
 }
 
 // getCachedLIDForPN é o par, no sentido PN→LID, de getCachedPNForLID

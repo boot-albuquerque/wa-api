@@ -99,7 +99,7 @@ func TestUserAdapter_GetLIDForPN_PropagatesError(t *testing.T) {
 // TestUserAdapter_UpdateBlocklist_PropagatesError.
 func TestUserAdapter_UpdateBlocklist_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("block fail")
-	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
 		return nil, sdkErr
 	}}
 	a := NewUserAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))

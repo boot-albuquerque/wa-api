@@ -50,47 +50,6 @@ func TestMessagesAttrsComPaginacao(t *testing.T) {
 	}
 }
 
-func TestMessageUpdatesAttrsSemParams(t *testing.T) {
-	attrs := messageUpdatesAttrs(nil)
-	if len(attrs) != 0 {
-		t.Fatalf("sem params o no de updates nao leva atributos, veio %v", attrs)
-	}
-}
-
-func TestMessageUpdatesAttrsCamposZeradosSaoOmitidos(t *testing.T) {
-	attrs := messageUpdatesAttrs(&GetUpdatesParams{})
-	if len(attrs) != 0 {
-		t.Fatalf("params zerado nao deveria gerar atributo, veio %v", attrs)
-	}
-}
-
-// Since vai para o wire como epoch em SEGUNDOS. Mandar em milissegundos (ou o
-// time.Time cru) faria o servidor devolver a janela errada de updates.
-func TestMessageUpdatesAttrsSinceVaiEmSegundos(t *testing.T) {
-	since := time.Date(2024, 5, 1, 12, 0, 0, 0, time.UTC)
-	attrs := messageUpdatesAttrs(&GetUpdatesParams{
-		Count: 20,
-		Since: since,
-		After: 555,
-	})
-	if attrs["count"] != 20 {
-		t.Errorf("count = %v, esperava 20", attrs["count"])
-	}
-	if attrs["since"] != since.Unix() {
-		t.Errorf("since = %v, esperava %d", attrs["since"], since.Unix())
-	}
-	if attrs["after"] != types.MessageServerID(555) {
-		t.Errorf("after = %v, esperava 555", attrs["after"])
-	}
-}
-
-func TestMessageUpdatesAttrsSinceZeradoEOmitido(t *testing.T) {
-	attrs := messageUpdatesAttrs(&GetUpdatesParams{Count: 5})
-	if _, ok := attrs["since"]; ok {
-		t.Error("time.Time zerado nao deveria virar since=-6795364578871")
-	}
-}
-
 // messagesNode monta uma resposta de <iq> com um <messages> dentro.
 func messagesNode() *waBinary.Node {
 	return &waBinary.Node{
@@ -160,21 +119,19 @@ func TestGetMessagesElementoAusente(t *testing.T) {
 	}
 }
 
-// O <iq> de updates vai para o JID DO CANAL (assimetria herdada do upstream) e
-// o <messages> vem aninhado dentro de <message_updates>.
-func TestGetMessageUpdatesEnviaParaOCanalELeAninhado(t *testing.T) {
+// TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages trava a causa
+// da F265/LIB-03, nao o sintoma: antes desta correcao, o IQ ia para o JID
+// do CANAL num no <message_updates>, e o servidor simplesmente nunca
+// respondia (silencio ate' o timeout de 30s, nao um erro). A forma nova e'
+// IDENTICA ao IQ de GetMessages — mesmo destino, mesmo no <messages> — que
+// ja' e' ✅ e responde com sucesso.
+func TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages(t *testing.T) {
 	f := newFakeTransport()
-	f.iqResp = &waBinary.Node{
-		Tag: "iq",
-		Content: []waBinary.Node{{
-			Tag:     messageUpdatesTag,
-			Content: []waBinary.Node{{Tag: messagesTag}},
-		}},
-	}
+	f.iqResp = messagesNode()
 	f.parsed = []*types.NewsletterMessage{{MessageServerID: 9}}
 
 	jid := testJID()
-	msgs, err := GetMessageUpdates(context.Background(), f, jid, &GetUpdatesParams{Count: 3})
+	msgs, err := GetMessageUpdates(context.Background(), f, jid, &GetUpdatesParams{Count: 3, After: 42})
 	if err != nil {
 		t.Fatalf("GetMessageUpdates: %v", err)
 	}
@@ -182,12 +139,36 @@ func TestGetMessageUpdatesEnviaParaOCanalELeAninhado(t *testing.T) {
 		t.Fatalf("esperava 1 mensagem, veio %d", len(msgs))
 	}
 	iq := f.iqs[0]
-	if iq.To != jid {
-		t.Errorf("to = %v, esperava %v (o IQ de updates vai para o canal)", iq.To, jid)
+	if iq.To != types.ServerJID {
+		t.Errorf("to = %v, esperava %v (o IQ de updates passa a ir para o servidor, como GetMessages)", iq.To, types.ServerJID)
 	}
 	nodes := iq.Content.([]waBinary.Node)
-	if nodes[0].Tag != messageUpdatesTag || nodes[0].Attrs["count"] != 3 {
-		t.Errorf("no = %+v", nodes[0])
+	if nodes[0].Tag != messagesTag {
+		t.Errorf("tag do no = %q, esperava %q (nao mais message_updates)", nodes[0].Tag, messagesTag)
+	}
+	if nodes[0].Attrs["count"] != 3 {
+		t.Errorf("count = %v, esperava 3", nodes[0].Attrs["count"])
+	}
+	if nodes[0].Attrs["before"] != types.MessageServerID(42) {
+		t.Errorf("before = %v, esperava 42 (After mapeado para before)", nodes[0].Attrs["before"])
+	}
+}
+
+// TestGetMessageUpdatesSinceEIgnorado trava que Since nao vai mais para o
+// fio: a forma nova so' entende `before` (ID de mensagem), nao tem
+// equivalente para filtro por tempo.
+func TestGetMessageUpdatesSinceEIgnorado(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = messagesNode()
+
+	since := time.Date(2024, 5, 1, 12, 0, 0, 0, time.UTC)
+	_, err := GetMessageUpdates(context.Background(), f, testJID(), &GetUpdatesParams{Count: 5, Since: since})
+	if err != nil {
+		t.Fatalf("GetMessageUpdates: %v", err)
+	}
+	nodes := f.iqs[0].Content.([]waBinary.Node)
+	if _, ok := nodes[0].Attrs["since"]; ok {
+		t.Errorf("no = %+v, since nao deveria aparecer no fio", nodes[0])
 	}
 }
 
@@ -201,14 +182,9 @@ func TestGetMessageUpdatesPropagaErroDoIQ(t *testing.T) {
 	}
 }
 
-// Sem o <messages> interno, o erro reporta a tag "messages" — nao
-// "message_updates". Assimetria herdada do upstream, travada aqui.
-func TestGetMessageUpdatesElementoAusenteReportaMessages(t *testing.T) {
+func TestGetMessageUpdatesElementoAusente(t *testing.T) {
 	f := newFakeTransport()
-	f.iqResp = &waBinary.Node{
-		Tag:     "iq",
-		Content: []waBinary.Node{{Tag: messageUpdatesTag}},
-	}
+	f.iqResp = &waBinary.Node{Tag: "iq"}
 
 	_, err := GetMessageUpdates(context.Background(), f, testJID(), nil)
 	var eme *elementMissingError

@@ -3432,30 +3432,29 @@ components:
       type: object
     PedidoAtualizacoesCanal:
       description: |
-        Pedido de ATUALIZAÇÕES de mensagens já conhecidas — edições, contagens de
-        reação, remoções. **Rota inoperante**: devolve `500` ao fim de 30 s em
-        todos os casos medidos (F265). Ver a descrição da rota.
+        Pedido de mensagens de um canal com os seus contadores (vistas,
+        reações). **CORRIGIDO em 2026-08-28** (F265/LIB-03) — a rota
+        respondia `500` ao fim de 30s em todos os casos medidos; agora usa a
+        mesma forma de IQ que `/newsletter/messages` já usava com sucesso. Ver
+        a descrição da rota.
       properties:
         after:
           description: |
-            `server_id` a partir do qual avançar, como texto. Tem exactamente a
-            mesma semântica de `before` em `PedidoMensagensCanal`, incluindo o
-            `TrimSpace` e o **descarte silencioso** de texto não numérico, que vira
-            `0`. Ausente, `null` e `""` são indistinguíveis.
+            `server_id` da mensagem a partir da qual paginar — o cursor que a
+            forma corrigida (F265/LIB-03) realmente usa, no lugar de `since`.
+            Tem exactamente a mesma semântica de `before` em
+            `PedidoMensagensCanal`, incluindo o `TrimSpace` e o **descarte
+            silencioso** de texto não numérico, que vira `0`. Ausente, `null`
+            e `""` são indistinguíveis.
           example: "104"
           nullable: false
           type: string
         count:
           description: |
-            Quantas atualizações trazer. Ausente, `null` e `0` são indistinguíveis
-            entre si e fazem o adaptador omitir o atributo do pedido.
-
-            **O efeito de `count` nesta rota não foi determinado com segurança**:
-            a rota devolve `500` com qualquer valor, incluindo `2`, logo não há
-            como distinguir a falha do campo da falha da rota. Em
-            `/newsletter/messages`, que partilha o mesmo mecanismo, `count`
-            ausente ou zero é o que causa o `500` — a hipótese razoável é que aqui
-            seja igual, mas **é hipótese, não medição**.
+            Quantas mensagens trazer. Ausente, `null` e `0` são indistinguíveis
+            entre si e fazem o adaptador omitir o atributo do pedido — o mesmo
+            comportamento de `count` em `/newsletter/messages`, que partilha o
+            mecanismo desde a correção de F265.
           example: 5
           nullable: false
           type: integer
@@ -3471,30 +3470,24 @@ components:
           description: |
             Instante mínimo, em RFC 3339.
 
+            **SEM EFEITO no pedido desde 2026-08-28 (F265/LIB-03).** A forma de
+            IQ corrigida só pagina por `after` (um `server_id`, não um
+            instante) — não há tradução possível entre os dois cursores. Um
+            `since` bem formado continua aceite e é simplesmente ignorado: a
+            resposta vem sem cursor nenhum, como se o campo não tivesse sido
+            enviado. Preferir `after` para paginar.
+
             | estado | aceite? | efeito |
             |---|---|---|
-            | ausente | sim | instante zero — sem limite inferior |
-            | `null` | sim | idem — indistinguível de ausente |
-            | `""` | sim | idem: só se tenta interpretar quando o valor é não-vazio (`dto/newsletter/request.go`) |
-            | mal formatado | **não** | `400 invalid_since` |
+            | ausente | sim | sem efeito (nunca teve, desde a correção) |
+            | `null` | sim | idem |
+            | `""` | sim | idem |
+            | mal formatado | **não** | `400 invalid_since` — a validação de formato continua a correr, mesmo sem o valor ser usado |
             | tipo não-texto | não | `400 could_not_decode_payload` |
-
-            **É o único campo das dezoito rotas validado no DTO DE PEDIDO, antes do
-            use case.** Tudo o resto que estas rotas exigem depende de QUAL
-            operação a rota carrega, e essa tabela vive no use case
-            (`newsletterRequirements`); duplicar uma linha dela aqui daria dois
-            sítios a decidir o mesmo código de erro. `since` é diferente porque é um
-            FORMATO que o cliente pode errar, independente da operação.
 
             ```json
             {"code": 400, "error": {"code": "invalid_since", "message": "since must be an RFC 3339 instant"}, "success": false}
             ```
-
-            **O código era `invalid_request`** — o genérico do estado, que só diz
-            "algo estava mal" — até esta validação passar pela taxonomia `apperr`
-            na migração para DTO de 2026-08-27. (E antes disso a recusa saía com
-            `error` em TEXTO em vez de objecto: era a F266, e já não existe.)
-          example: "2026-08-26T00:00:00Z"
           format: date-time
           nullable: false
           type: string
@@ -11189,7 +11182,7 @@ components:
       name: token
       type: apiKey
 info:
-  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## Campos que a API não conhece\n\nUm campo que o servidor não reconhece é **ignorado**, e o pedido segue sem\nele. Isto é herança do decodificador de JSON do Go e vale para toda a API.\n\n**É mais perigoso do que parece**, e foi medido: um nome mal escrito não\nproduz erro — produz o valor zero. Quando o valor zero significa alguma\ncoisa, o erro de digitação vira uma escolha silenciosa. O caso real:\n`{\"mute\": true, \"duration\": \"8h\"}` em `/chat/mute` devolve `200` e cala a\nconversa **para sempre**, porque o campo é `mute_duration` e a ausência\ndele significa \"para sempre\".\n\nDesde 2026-08-26 o servidor **regista** cada campo desconhecido:\n\n```\nWRN unknown field \"duration\" route=/chat/mute unknown_fields=[\"duration\"] req_id=…\n```\n\nE há um modo **estrito**, desligado por omissão, que os recusa:\n\n```\nWA_API_STRICT_UNKNOWN_FIELDS=true\nPOST /chat/mute {\"jid\":\"…\",\"mute\":true,\"duration\":\"8h\"}\n  -> 400 {\"error\":{\"code\":\"unknown_field\",\"message\":\"unknown field \\\"duration\\\"\"}}\n```\n\nEstá desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se\nintegra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata\nde apanhar um nome errado antes de ele chegar a produção.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 137 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-28, com as sessões reais `envia`/`recebe`: **129 ✅,\n4 \U0001F7E1, 4 ❌, 0 ⬜**. As 0 por testar fecham a campanha — todas as 137\nrotas foram executadas pelo menos uma vez. Os 4 \U0001F7E1 e os 4 ❌ que\nrestam têm causa determinada (não são \"nunca medidos\"): o detalhe\nrota a rota está em `docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
+  description: "API HTTP que expõe uma conta de WhatsApp como serviço: enviar e receber\nmensagens, gerir grupos, comunidades e canais, consultar contactos e\nadministrar sessões.\n\n## Como se autentica\n\nQuase todas as rotas usam um **token de sessão**, enviado no cabeçalho\n`token`. Cada token identifica uma sessão de WhatsApp já emparelhada — é\nele que diz *de que conta* a operação parte.\n\nAs rotas sob `/admin` usam outro segredo: o **token de administração**, no\ncabeçalho `Authorization`. Ele governa as sessões (criar, listar, apagar) e\nnão pertence a nenhuma conta de WhatsApp. É regerado a cada arranque e fica\nem `<datadir>/admin_token`.\n\nTrês rotas de sonda não pedem credencial nenhuma: `/livez`,\n`/health/live` e `/health/ready`.\n\nUse o botão **Authorize** aqui em cima para preencher os dois.\n\n## O envelope das respostas\n\nSucesso e erro têm forma fixa:\n\n```json\n{ \"code\": 200, \"data\": { }, \"success\": true }\n```\n\n```json\n{ \"code\": 400, \"error\": { \"code\": \"missing_chat\", \"message\": \"missing chat in payload\" }, \"success\": false }\n```\n\n`error.code` é estável e legível por máquina; `error.message` é para\nmostrar a uma pessoa.\n\n**Ressalva medida**: catorze pontos do código ainda respondem com\n`\"error\"` em texto simples em vez do objecto — as recusas de campo\nobrigatório das rotas de grupo, sobretudo. Está registado como F266 no\n`HOUSEKEEP.md`, e a documentação de cada rota afectada diz.\n\n## Campos que a API não conhece\n\nUm campo que o servidor não reconhece é **ignorado**, e o pedido segue sem\nele. Isto é herança do decodificador de JSON do Go e vale para toda a API.\n\n**É mais perigoso do que parece**, e foi medido: um nome mal escrito não\nproduz erro — produz o valor zero. Quando o valor zero significa alguma\ncoisa, o erro de digitação vira uma escolha silenciosa. O caso real:\n`{\"mute\": true, \"duration\": \"8h\"}` em `/chat/mute` devolve `200` e cala a\nconversa **para sempre**, porque o campo é `mute_duration` e a ausência\ndele significa \"para sempre\".\n\nDesde 2026-08-26 o servidor **regista** cada campo desconhecido:\n\n```\nWRN unknown field \"duration\" route=/chat/mute unknown_fields=[\"duration\"] req_id=…\n```\n\nE há um modo **estrito**, desligado por omissão, que os recusa:\n\n```\nWA_API_STRICT_UNKNOWN_FIELDS=true\nPOST /chat/mute {\"jid\":\"…\",\"mute\":true,\"duration\":\"8h\"}\n  -> 400 {\"error\":{\"code\":\"unknown_field\",\"message\":\"unknown field \\\"duration\\\"\"}}\n```\n\nEstá desligado porque ligá-lo recusaria pedidos que hoje funcionam. Se\nintegra com esta API, **ligue-o em desenvolvimento**: é a forma mais barata\nde apanhar um nome errado antes de ele chegar a produção.\n\n## O campo `chat`\n\nToda rota que recebe um destinatário aceita `\"chat\"` como nome universal do\ncampo. O nome antigo e específico da rota (`Phone`, `groupJID`, `jid`…)\ncontinua a funcionar e **ganha** quando os dois vierem no mesmo pedido.\n\n## Identificadores\n\n- **PN** — o número, em `554192421234@s.whatsapp.net`\n- **LID** — o identificador opaco, em `90937376170214@lid`\n- **grupo** — `120363411669320145@g.us`\n- **canal** — `120363411025775186@newsletter`\n\nOnde a distinção importa, a descrição da rota diz qual das formas é exigida.\n\n## O marcador no título de cada endpoint\n\nCada título começa com um símbolo que diz **quanta prova existe de que\naquela rota funciona** — não o quão bem está documentada. As 137 estão\ndocumentadas; o que varia é o que foi medido.\n\n| | significa |\n|---|---|\n| ✅ | chamada real **e** efeito confirmado por observador independente — segunda leitura, transição de estado medida, ou a mensagem vista no cliente |\n| \U0001F7E1 | chamada real com resposta de sucesso, **sem** forma de confirmar o efeito |\n| ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |\n| ⬜ | **não executada**, e a descrição diz porquê |\n\nMedição de 2026-08-28, com as sessões reais `envia`/`recebe`: **133 ✅,\n4 \U0001F7E1, 0 ❌, 0 ⬜**. As 0 por testar e os 0 que falham fecham a\ncampanha — os quatro `❌` medidos ao longo do projeto foram todos\ncorrigidos nesta sessão (F275, F264, F265). Os 4 \U0001F7E1 que restam têm\ncausa determinada (não são \"nunca medidos\"): o detalhe rota a rota\nestá em `docs/OPENAPI-EVIDENCIAS.md`.\n\n**Um \U0001F7E1 não é um ✅ mais fraco por descuido** — é a recusa deliberada de\nchamar confirmado aquilo que só devolveu `2xx`.\n\n## O que `200` significa, e o que não significa\n\nUm `200` diz que o WhatsApp aceitou o pedido. **Não** diz que a mensagem\nfoi desenhada no ecrã do destinatário, nem que a operação teve efeito\nvisível. As rotas em que essa diferença já foi medida trazem a ressalva na\ndescrição.\n"
   title: wa-api — API HTTP para WhatsApp
   version: 1.0.6
 openapi: 3.0.3
@@ -18434,21 +18427,27 @@ paths:
         **Regras**: `jid` e `server_ids` são obrigatórios; lista vazia é recusada
         com `400 missing_server_ids`. `data` traz `{"status": "sent"}` em sucesso.
 
-        **CORRECÇÃO a 2026-08-26**: esta descrição dizia que "não há forma de
-        confirmar o efeito por esta API". O observador **existe por desenho** —
-        a operação incrementa o contador de visualizações
-        (`internal/wa-noise/core/newsletter.go:52`), e esse contador é servido
-        por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`), que é
-        `POST /newsletters/updates`. O que acontece é que essa rota está
-        **inoperante** (F265: `500` ao fim de 30 s). Há uma segunda via, nunca
-        exercitada: `POST /newsletters/subscribe` entrega os mesmos dados como
-        evento `NewsletterLiveUpdate`, que chega ao webhook e a `/session/ws`
-        com `view_count` por mensagem.
+        **`200`, mas o efeito nunca foi observado — e agora sabemos que não é
+        por falta de tentar.** `NewsletterMarkViewed` incrementa o contador de
+        visualizações do lado da biblioteca (`internal/wa-noise/core/newsletter.go:52`),
+        e esse contador é servido por `POST /newsletters/updates`, que estava
+        **inoperante** até 2026-08-28 (F265/LIB-03: o servidor não respondia,
+        `500` ao fim de 30s) — já corrigida (ver a descrição de
+        `POST /newsletters/updates`).
 
-        **O que NÃO serve como observador**: o `view_count` de
-        `POST /newsletters/messages`. O campo existe e chega ao JSON, mas veio
-        `0` nas sessenta publicações medidas — um valor que nunca muda não
-        distingue caso nenhum. Ver `OBSERVADORES-AMBAR.md` §4.
+        **Mesmo com a via corrigida, o efeito continua invisível.** Medido em
+        2026-08-28 (F356, F366): (1) `POST /newsletters/subscribe` +
+        escuta em `/session/ws`, com um listener já provado capaz de receber
+        o evento `NewsletterLiveUpdate` de uma reação real — zero eventos
+        depois de `mark-viewed`, em janelas de até 90s; (2) `POST
+        /newsletters/updates`, já corrigido, devolveu a mensagem marcada com
+        `view_count:0` — o mesmo valor de antes. A conclusão: o contador
+        simplesmente não incrementa do lado do WhatsApp para uma marcação
+        feita por API, possivelmente por exigir renderização por um cliente
+        real (hipótese, não confirmável sem o código do servidor deles).
+        **Não há forma conhecida de confirmar o efeito desta rota.**
+
+        Ver `OBSERVADORES-AMBAR.md` §4 para o histórico da investigação.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -18878,26 +18877,28 @@ paths:
       description: |
         > **Substitui `POST /newsletter/updates`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
-        Deveria devolver as ALTERAÇÕES a mensagens já conhecidas — edições,
-        contagens de reação, remoções —, ao contrário de
-        `POST /newsletter/messages`, que devolve as mensagens em si.
+        Devolve as mensagens de um canal com os seus contadores (vistas,
+        reações) — a mesma forma de `POST /newsletter/messages`, com um
+        cursor de paginação diferente.
 
-        **Esta rota está inoperante.** Medida a 2026-08-26 e de novo nesta
-        sessão: responde **`500` ao fim de 30,0 segundos**, com
-        `error.code: newsletter_failed` e, no log,
-        `context deadline exceeded`. Os 30 s são exactamente o tempo limite por
-        pedido — o servidor do WhatsApp **não responde**, não é ele a recusar.
-        `POST /newsletter/messages` sobre o mesmo canal e no mesmo segundo
-        devolve `200`, logo a sessão, o canal e o transporte estão bons. Está
-        registado como F265 no `HOUSEKEEP.md`; a hipótese em aberto é um query
-        ID desactualizado, e um ID inexistente produz silêncio, não erro.
+        **CORRIGIDO em 2026-08-28 (F265/LIB-03).** Até então, o `<iq>` desta
+        rota ia endereçado ao JID do CANAL, num nó `<message_updates>` que o
+        servidor do WhatsApp deixou de atender — não recusava, simplesmente
+        não respondia, daí o `500` ao fim dos 30 s de timeout. A forma que o
+        WA Web usa hoje é **idêntica** à de `POST /newsletter/messages`:
+        destino o SERVIDOR, nó `<messages type='jid' jid=… count=… before=…>`.
+        Medido ao vivo num canal descartável com mensagem real: `200` em
+        ~0,15 s.
 
-        **Não use esta rota em produção.** Para acompanhar um canal, use
-        `POST /newsletter/messages` ou `POST /newsletter/subscribe`.
-
-        **Regras**: `jid` é obrigatório. `since` vai em RFC 3339 e é o único
-        campo destas dezoito rotas validado no DTO de pedido, antes do use case —
-        um instante malformado devolve `400 invalid_since`.
+        **`since` deixou de ter efeito — use `after` para paginar.** O campo
+        do pedido continua a chamar-se `after` (já existia); o que mudou é
+        que agora ele chega mesmo ao fio, como o atributo `before` do
+        `<messages>` acima. `since` (um instante) não tem tradução possível
+        para esse cursor (um ID de mensagem) e fica sem efeito — um pedido
+        que só preencha `since` continua a ser aceite (`400 invalid_since`
+        só dispara com um valor malformado), mas o filtro por tempo é
+        ignorado: a resposta vem sem cursor nenhum, como se `since` não
+        tivesse sido enviado.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -18916,7 +18917,14 @@ paths:
               example:
                 code: 200
                 data:
-                  messages: []
+                  messages:
+                    - message_id: 3EB0A553310BE6112D0EC6
+                      reactions: []
+                      server_id: 100
+                      text: Teste F265 - conserto do updates
+                      timestamp: "2026-08-28T21:03:37Z"
+                      type: text
+                      view_count: 0
                 success: true
               schema:
                 allOf:
@@ -18926,8 +18934,8 @@ paths:
                         $ref: '#/components/schemas/MensagensCanal'
                     type: object
           description: |
-            Nunca observado. Documentado por ser o que o código devolveria se o
-            servidor respondesse; a forma dos elementos não foi medida.
+            Medido em 2026-08-28, canal descartável com uma mensagem de
+            texto real publicada minutos antes.
         "400":
           content:
             application/json:
@@ -18971,22 +18979,10 @@ paths:
         "401":
           $ref: '#/components/responses/NaoAutorizado'
         "500":
-          content:
-            application/json:
-              example:
-                code: 500
-                error:
-                  code: newsletter_failed
-                  message: newsletter operation failed
-                success: false
-              schema:
-                $ref: '#/components/schemas/Erro'
-          description: |
-            **O que esta rota devolve hoje, sempre**, ao fim de 30 segundos de
-            espera pelo WhatsApp.
+          $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ❌ Buscar atualizações de mensagens de um canal (INOPERANTE)
+      summary: ✅ Buscar atualizações de mensagens de um canal
       tags:
         - Canais
   /polls/{poll_message_id}/votes:
@@ -20000,7 +19996,7 @@ paths:
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ❌ Desvincular o aparelho da conta de WhatsApp
+      summary: ✅ Desvincular o aparelho da conta de WhatsApp
       tags:
         - Sessões
   /session/pair/phone:
@@ -21221,20 +21217,21 @@ paths:
 
         Acrescenta um contacto à lista de bloqueados da conta.
 
-        **ESTA ROTA ESTÁ INOPERANTE HOJE.** Medida em 2026-08-26 em quatro
-        combinações — conta WhatsApp Business e conta pessoal, número real e
-        número inexistente, identificador em número e em LID — e as quatro
-        devolveram `422 upstream_rejected`. O log mostra o WhatsApp a responder
-        `info query returned status 400: bad-request`. Não é o número, não é a
-        forma do identificador e não é o tipo de conta: as quatro variáveis
-        foram isoladas. **A causa está por apurar** e está registada como F264
-        no `HOUSEKEEP.md`; a hipótese em aberto é a forma da consulta que
-        enviamos. `GET /user/blocklist` continua a funcionar — é só a escrita
-        que é recusada.
+        **CORRIGIDO em 2026-08-28 (F264/LIB-02).** Medida em 2026-08-26 em
+        quatro combinações — conta WhatsApp Business e conta pessoal, número
+        real e número inexistente, identificador em número e em LID — e as
+        quatro devolviam `422 upstream_rejected`, com
+        `info query returned status 400: bad-request` no log. Causa
+        determinada: o WhatsApp migrou a escrita da blocklist para
+        endereçamento por **LID**, e um `block` exige, além do `jid` em LID,
+        um segundo atributo `pn_jid` com o número de telefone — que a
+        biblioteca vendorizada não emitia (portado de whatsmeow `8d023aa973`
+        e Baileys `8ca9316a10`). Medido ao vivo depois da correção: `200`,
+        com o contacto a aparecer em `GET /user/blocklist` logo a seguir.
 
-        **Regras**, para quando voltar a funcionar: basta um de `jid` ou
-        `phone`, com `jid` a ganhar quando os dois vierem. A resolução é
-        LENIENTE por decisão registada (F203): um número nu é aceite.
+        **Regras**: basta um de `jid` ou `phone`, com `jid` a ganhar quando os
+        dois vierem. A resolução é LENIENTE por decisão registada (F203): um
+        número nu é aceite.
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -21299,16 +21296,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            **É o que esta rota devolve hoje, em todas as combinações medidas.**
             O pedido chegou ao WhatsApp e foi recusado; repeti-lo sem mudança
-            não ajuda. Ver F264.
+            não ajuda. Até 2026-08-28 (F264) era o que esta rota devolvia
+            SEMPRE — causa determinada (protocolo migrado para LID) e
+            corrigida nessa data, ver a descrição da rota acima.
         "429":
           $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ❌ Bloquear um contacto
+      summary: ✅ Bloquear um contacto
       tags:
         - Contactos e utilizadores
   /users/blocklist:
@@ -21333,9 +21331,10 @@ paths:
         `RespondJSON` como todas as outras, e o corpo abaixo é o de `data`. As
         duas chaves mudaram de nome junto — `blocklist` e `dhash`.
 
-        **Contraste com a escrita**: esta LEITURA funciona. As duas rotas que
-        alteram a lista (`POST /user/block` e `POST /user/unblock`) estão hoje
-        inoperantes — ver a descrição delas.
+        **Contraste com a escrita**: até 2026-08-27/28 esta LEITURA era a única
+        que funcionava — as duas rotas que alteram a lista (`POST /user/block`
+        e `POST /user/unblock`) estavam recusadas pelo servidor. As duas foram
+        corrigidas (F264, F278) — ver a descrição delas.
 
         **Autenticação**: token de sessão.
       responses:
@@ -22472,16 +22471,17 @@ paths:
 
         Retira um contacto da lista de bloqueados da conta.
 
-        **ESTA ROTA ESTÁ INOPERANTE HOJE**, exactamente como `POST /user/block`:
-        as mesmas quatro combinações medidas em 2026-08-26 devolveram `422
-        upstream_rejected`, com o mesmo `info query returned status 400:
-        bad-request` no log. As duas partilham o mesmo caminho de escrita da
-        lista, e por isso falham juntas. Causa por apurar — F264 no
-        `HOUSEKEEP.md`.
+        **CORRIGIDO em 2026-08-27 (F278/LIB-02)** — antes de `POST
+        /user/block`, e por um caminho mais simples: a forma nova de
+        `unblock` não leva `pn_jid`, só `jid` em LID, e o adaptador já
+        resolvia LID→PN em vez de PN→LID, invertido. Bastou corrigir o
+        sentido da resolução, sem tocar na biblioteca vendorizada. As mesmas
+        quatro combinações medidas em 2026-08-26 devolviam `422
+        upstream_rejected`; medido ao vivo depois da correção: `200`, com o
+        contacto a sair de `GET /user/blocklist` logo a seguir.
 
-        **Regras**, para quando voltar a funcionar: basta um de `jid` ou
-        `phone`, com `jid` a ganhar quando os dois vierem, e a resolução aceita
-        número nu (F203).
+        **Regras**: basta um de `jid` ou `phone`, com `jid` a ganhar quando os
+        dois vierem, e a resolução aceita número nu (F203).
 
         **Autenticação**: token de sessão.
       requestBody:
@@ -22545,15 +22545,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Erro'
           description: |
-            **É o que esta rota devolve hoje, em todas as combinações medidas.**
-            Ver F264.
+            O pedido chegou ao WhatsApp e foi recusado. Até 2026-08-27
+            (F278) era o que esta rota devolvia SEMPRE — causa determinada
+            (o adaptador resolvia LID→PN em vez de PN→LID) e corrigida
+            nessa data, ver a descrição da rota acima.
         "429":
           $ref: '#/components/responses/LimiteDeRitmo'
         "500":
           $ref: '#/components/responses/ErroInterno'
       security:
         - TokenSessao: []
-      summary: ❌ Desbloquear um contacto
+      summary: ✅ Desbloquear um contacto
       tags:
         - Contactos e utilizadores
   /webhook:

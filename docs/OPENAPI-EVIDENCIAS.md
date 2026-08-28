@@ -4,7 +4,7 @@
 HOUSEKEEP F344-F354) e de uma ronda de destrave ad hoc pedida pelo usuário
 no mesmo dia, usando as sessões reais `envia`/`recebe`.
 
-Contagem actual (137 rotas documentadas): **129 ✅, 4 🟡, 4 ❌, 0 ⬜.**
+Contagem actual (137 rotas documentadas): **133 ✅, 4 🟡, 0 ❌, 0 ⬜.**
 **Todas as 137 rotas já foram executadas pelo menos uma vez.**
 
 A campanha F239/F282 não mudou marca nenhuma — só adicionou evidência
@@ -75,9 +75,9 @@ Esquemas:                       165
 Propriedades com semântica:     694 de 694
 
 Validação:
-  OK  chamada real com efeito confirmado: 129
+  OK  chamada real com efeito confirmado: 133
   AMR sucesso sem observador independente: 4
-  ERR falhou, com o erro medido:          4
+  ERR falhou, com o erro medido:          0
   NT  não testada, com o motivo dito:     0
 ```
 
@@ -87,51 +87,74 @@ Validação:
 | Grupo | Operações | ✅ | 🟡 | ❌ | ⬜ |
 |---|---:|---:|---:|---:|---:|
 | Administração | 6 | 6 | 0 | 0 | 0 |
-| Canais | 18 | 16 | 1 | 1 | 0 |
+| Canais | 18 | 17 | 1 | 0 | 0 |
 | Comunidades | 4 | 4 | 0 | 0 | 0 |
-| Contactos e utilizadores | 14 | 12 | 0 | 2 | 0 |
+| Contactos e utilizadores | 14 | 14 | 0 | 0 | 0 |
 | Conversas | 13 | 12 | 1 | 0 | 0 |
 | Descarga de mídia | 1 | 1 | 0 | 0 | 0 |
 | Envio de mensagens | 16 | 16 | 0 | 0 | 0 |
 | Grupos | 18 | 18 | 0 | 0 | 0 |
 | Integrações e configuração | 19 | 19 | 0 | 0 | 0 |
 | Saúde | 4 | 4 | 0 | 0 | 0 |
-| Sessões | 21 | 20 | 0 | 1 | 0 |
+| Sessões | 21 | 21 | 0 | 0 | 0 |
 | Status | 3 | 1 | 2 | 0 | 0 |
-| **Total** | **137** | **129** | **4** | **4** | **0** |
+| **Total** | **137** | **133** | **4** | **0** | **0** |
 
-## As quatro que falharam
+## Consertos de código (2026-08-28)
 
-| Endpoint | Esperado | Obtido | Erro |
-|---|---|---|---|
-| `POST /users/block` | `200` | `422` | `upstream_rejected`; no log, `info query returned status 400: bad-request`. Medido nas duas contas, com número real e inexistente. Achado **F264**. |
-| `POST /users/unblock` | `200` | `422` | idem. `GET /users/blocklist` funciona — só a escrita é recusada. |
-| `POST /newsletters/updates` | `200` | `500` | `context deadline exceeded` ao fim de 30,0 s: o servidor do WhatsApp nunca responde. `POST /newsletters/messages` no mesmo canal e segundo devolve `200`. Achado **F265**. |
-| `POST /session/logout` | `200` | `500` | `{"error":"internal server error"}` numa sessão descartável LIGADA e nunca emparelhada; no log, `the store doesn't contain a device JID`. Sem transporte vivo a rota responde `409 session_not_connected`, que bate com a documentação — é o ramo do meio que não tem código próprio. Achado **F275**. |
+A pedido do usuário ("consertar o que for consertável no código"), três
+dos quatro ❌ anteriores foram fechados — dois deles CÓDIGO NOVO, não só
+re-medição:
 
-### As três de protocolo têm causa DETERMINADA (2026-08-26)
+- **`POST /session/logout`** (F275) — já estava corrigido em 2026-08-27,
+  um dia antes desta sessão de trabalho começar. A evidência ❌ estava
+  desatualizada, medindo o sintoma pré-conserto (`500`). Re-medido ao
+  vivo: `409 {code:"session_not_paired"}`, como o código já implementava.
+  Nenhum código tocado — só a documentação da evidência.
+- **`POST /users/unblock`** (F278/LIB-02) — também já corrigido antes
+  desta sessão, mas nunca re-medido: `200`, resolve para LID
+  corretamente.
+- **`POST /users/block`** (F264/LIB-02) — este SIM precisou de código
+  novo. O WhatsApp exige, além do `jid` em LID (já corrigido para
+  unblock), um atributo `pn_jid` adicional no block, que a biblioteca
+  vendorizada não emitia. Portado de whatsmeow (`8d023aa973`) para
+  `internal/wa-noise/capabilities/user/blocklist.go` (`UpdateBlocklist`
+  ganha o parâmetro `pnJID`, emitido só quando a ação é `block` e o valor
+  não é vazio) e `pkg/infra/wa-noise/adapters/user/blocklist.go`
+  (`resolveBlocklistPN`, resolve o PN do alvo — do próprio JID pedido, ou
+  via mapeamento LID→PN em cache). Sete testes novos (biblioteca +
+  adaptador), com controlo negativo EXECUTADO nas duas camadas — revertida
+  cada correção, o teste correspondente falhou com a mensagem exata
+  esperada, depois restaurada. Medido ao vivo, `envia`→`recebe`: `200
+  {jid:"90937376170214@lid", blocklist:["90937376170214@lid"]}` — era
+  `422`. Revertido com unblock ao final. Ver HOUSEKEEP F365.
 
-Continuam ❌ — nada foi corrigido, e a marca só muda quando a rota responder.
-Mas nenhuma é já "não funciona e não sabemos porquê": as duas investigações
-estão em `INVESTIGATION-block-unblock.md` e
-`INVESTIGATION-newsletter-updates.md`, e a matriz de capacidades com nível de
-evidência por afirmação em `WHATSAPP-CAPABILITIES.md`.
+## Nenhuma rota falha hoje
 
-| Endpoint | Classificação | Causa |
-|---|---|---|
-| `POST /users/block` | `PROTOCOL_CHANGED` | a escrita da blocklist migrou para endereçamento por **LID**: `<item jid='…@lid' action='block' pn_jid='…@s.whatsapp.net'/>`. Enviamos a forma anterior. Baileys migrou em 2026-04-24, whatsmeow em 2026-08-13 — 13 dias antes desta medição. |
-| `POST /users/unblock` | `PROTOCOL_CHANGED` | idem, com `jid`=LID e **sem** `pn_jid`. |
-| `POST /newsletters/updates` | `PROTOCOL_CHANGED` | o servidor deixou de atender `<message_updates>` endereçado ao JID do canal — ignora-o, daí o silêncio até ao timeout. O WA Web usa `<messages type='jid'>` para `s.whatsapp.net`, que é o que `/newsletters/messages` já envia com sucesso. |
+`POST /session/logout` (F275), `POST /users/block`, `POST /users/unblock`
+(F264) e `POST /newsletters/updates` (F265) — as quatro ❌ que a campanha
+de evidência tinha catalogado — foram todas corrigidas em 2026-08-28. Ver
+"Consertos de código" acima para F275/F264, e abaixo para F265.
 
-**Duas linhas da tabela acima estavam erradas e foram corrigidas**: a F264 dizia
-"testado em PN e em LID", mas o adaptador converte LID → PN antes de enviar, e
-as duas entradas produzem o mesmo stanza (F278). A F265 atribuía o silêncio a um
-query ID desactualizado, e essa rota não tem query ID nenhum (não é MEX), o que
-faz cair a hipótese.
-
-A quarta, `POST /session/logout`, não é de protocolo: é taxonomia de erro nossa
-(F275), e o caminho de `200` exige uma conta emparelhada — está em
-`HUMAN-LAST.md`.
+**`POST /newsletters/updates`** (F265/LIB-03) — a causa já estava
+determinada (2026-08-26): o servidor deixou de atender `<message_updates>`
+endereçado ao JID do canal, e ignora-o em silêncio até o timeout de 30s —
+não é um `400`, é ausência de resposta. A forma que o WA Web usa hoje é
+**idêntica** ao IQ de `/newsletters/messages`, que já funcionava: destino
+o SERVIDOR, filho `<messages type='jid' jid=… count=… before=…>` em vez
+de `<message_updates>`. Portado (mesma decisão do usuário: manter as duas
+rotas separadas, sem fundir contrato) em
+`internal/wa-noise/capabilities/newsletter/messages.go` —
+`GetMessageUpdates` reaproveita `messagesAttrs`/`messagesTag`, mapeando o
+cursor `After` (`types.MessageServerID`) para o atributo `before`; `Since`
+(`time.Time`) não tem equivalente na forma nova e fica sem efeito no
+pedido, documentado no código. Cinco testes novos, com controlo negativo
+EXECUTADO (revertido `To: types.ServerJID` para `To: jid`, o teste falhou
+exatamente como esperado). Medido ao vivo, canal descartável com mensagem
+real: `200` em ~0,15s — era `500` aos 30s. `view_count` continuou `0`
+mesmo por este caminho corrigido, o que CONFIRMA de forma independente a
+conclusão de F356: `mark-viewed` não é destravável, e nunca foi por causa
+desta rota. Ver HOUSEKEEP F366.
 
 ## As quatro 🟡, e o que realmente as bloqueia
 
@@ -294,13 +317,13 @@ A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido 
 | Canais | `POST` | `/newsletters/react` | `POST /newsletter/react` | ✅ | Reagir a uma mensagem de um canal | canal descartável, `recebe` reage com 👍 ao `server_id` real de uma mensagem de `envia`: `POST /newsletters/messages` (envia) passou de `reactions:[]` para `reactions:[{emoji:"👍",count:1}]`; removendo a reação (`reaction:""`) a mesma leitura voltou a `reactions:[]` — os três estados (antes/depois/removido) fecham a causalidade. |
 | Canais | `POST` | `/newsletters/subscribe` | `POST /newsletter/subscribe` | ✅ | Subscrever as atualizações ao vivo de um canal | `200 {status:"sent", duration_seconds:90}` — despacho de subscrição às atualizações ao vivo; não há efeito visível fora da janela de 90s declarada na própria resposta, e nenhuma atualização ao vivo ocorreu nesse canal descartável durante o teste, então fica como confirmação de protocolo (resposta bem formada, sem erro), não de efeito observado. |
 | Canais | `POST` | `/newsletters/unfollow` | `POST /newsletter/unfollow` | ✅ | Deixar de seguir um canal | `200 {status:"sent"}`; `GET /newsletters/list` (envia) deixou de incluir o `jid` do canal logo depois — confirmado também que um `admin`/`owner` NÃO pode se desinscrever (documentado): só foi possível depois do `demote` ter baixado envia a `subscriber`. |
-| Canais | `POST` | `/newsletters/updates` | `POST /newsletter/updates` | ❌ | Buscar atualizações de mensagens de um canal (INOPERANTE) | 500 ao fim de 30,0 s — context deadline exceeded; o servidor nunca responde (F265). |
+| Canais | `POST` | `/newsletters/updates` | `POST /newsletter/updates` | ✅ | Buscar atualizações de mensagens de um canal | CONSERTADO (F265/LIB-03): a forma antiga (`<message_updates>`, destino o CANAL) nunca era respondida pelo servidor — timeout de 30s. Portada a forma que o WA Web usa hoje (idêntica ao IQ de `/newsletters/messages`: destino o SERVIDOR, `<messages type='jid' jid=… count=… before=…>`) em `internal/wa-noise/capabilities/newsletter/messages.go`. Medido ao vivo, canal descartável com mensagem real: `200` em ~0,15s (era `500` aos 30s) — `{messages:[{server_id:100, text:\"...\", view_count:0, reactions:[]}]}`. `view_count` continua `0` mesmo por este caminho corrigido — confirma independentemente a conclusão de F356 (mark-viewed não é destravável, e não era por causa desta rota). |
 | Comunidades | `GET` | `/communities/{community_jid}/participants` | `POST /community/participants` | ✅ | Listar os participantes dos grupos de uma comunidade | comunidade descartável com um subgrupo linkado (2 membros): `200 {participants:["90937376170214@lid","29343770251463@lid"]}` — bateu com os JIDs (LID) de envia e recebe, os dois membros reais do subgrupo linkado. |
 | Comunidades | `GET` | `/communities/{community_jid}/subgroups` | `POST /community/subgroups` | ✅ | Listar os sub-grupos de uma comunidade | usado como segunda-rota de PUT/DELETE nesta mesma ronda: antes do link só o subgrupo-padrão da comunidade aparecia; depois do PUT (link) o subgrupo descartável passou a aparecer também; depois do DELETE (unlink) voltou a sumir. |
 | Comunidades | `DELETE` | `/communities/{community_jid}/subgroups/{group_jid}` | `POST /community/unlink` | ✅ | Desligar um grupo de uma comunidade | `200 {details:"Group unlinked from community successfully"}`; `GET /communities/{jid}/subgroups` confirmou — o subgrupo descartável, que tinha acabado de ser linkado nesta mesma ronda, deixou de aparecer na lista. |
 | Comunidades | `PUT` | `/communities/{community_jid}/subgroups/{group_jid}` | `POST /community/link` | ✅ | Ligar um grupo a uma comunidade | `200 {details:"Group linked to community successfully"}`; `GET /communities/{jid}/subgroups` confirmou — o subgrupo descartável (criado à parte, sem vínculo) passou a aparecer na lista da comunidade. |
 | Contactos e utilizadores | `POST` | `/users/avatar` | `POST /user/avatar` | ✅ | Obter a foto de perfil de um contacto | CORREÇÃO DE PREMISSA (F363): esta rota é LEITURA, não escrita — busca a foto de perfil de um contacto, não altera a conta chamadora; o `⬜` anterior ("proibido, alteraria o avatar da conta") vinha de uma premissa errada, não confirmada contra o código (`GetAvatarUseCase`, só leitura). Chamada com o número de `envia`: `200 {id:"214830039", url:...}` — o `id` bate exatamente com `avatar_id` de `GET /session/profile`, medido na mesma sessão. Chamada com o número de `recebe`: `403 forbidden` (foto escondida por privacidade) — comportamento documentado, confirmado ao vivo. Nenhuma conta foi alterada. |
-| Contactos e utilizadores | `POST` | `/users/block` | `POST /user/block` | ❌ | Bloquear um contacto | 422 upstream_rejected; WhatsApp devolve 400 bad-request. Medido nas duas contas, PN e LID (F264). |
+| Contactos e utilizadores | `POST` | `/users/block` | `POST /user/block` | ✅ | Bloquear um contacto | CONSERTADO (F264/LIB-02): o WhatsApp migrou a escrita da blocklist para endereçamento por LID, exigindo um `pn_jid` adicional no `block` (whatsmeow 8d023aa973, Baileys 8ca9316a10). Portado para `internal/wa-noise/capabilities/user/blocklist.go` (UpdateBlocklist emite `pn_jid` quando presente) e `pkg/infra/wa-noise/adapters/user/blocklist.go` (resolve o PN do alvo antes de chamar). Medido ao vivo, envia→recebe: `200 {details:"User blocked", jid:"90937376170214@lid", blocklist:["90937376170214@lid"]}` — era `422 upstream_rejected`. `GET /users/blocklist` confirmou a entrada. Revertido com unblock ao final. |
 | Contactos e utilizadores | `GET` | `/users/blocklist` | `GET /user/blocklist` | ✅ | Listar os contactos bloqueados | `200 {blocklist:[], dhash:"1787924842884699"}` — lista vazia bate com o estado real (nenhum contacto bloqueado nesta sessão); bloqueio/desbloqueio em si já foi remedido no F278 em fase anterior. |
 | Contactos e utilizadores | `POST` | `/users/check` | `POST /user/check` | ✅ | Verificar se números têm WhatsApp | `{phone:["554192421234"]}` (número de `recebe`) devolveu `200`, `is_in_whatsapp:true`, `jid:554192421234@s.whatsapp.net` — bate com a sessão real e pareada de `recebe`. |
 | Contactos e utilizadores | `GET` | `/users/contacts` | `GET /user/contacts` | ✅ | Listar o roster inteiro da conta | `200`, roster com 2 chaves — bate com o número de contactos reais conhecidos por `envia` neste ambiente de teste (poucas sessões pareadas, sem roster grande importado). |
@@ -312,7 +335,7 @@ A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido 
 | Contactos e utilizadores | `GET` | `/users/privacy` | `GET /user/privacy` | ✅ | Ler as definições de privacidade da conta | `200` com as 10 definições de privacidade da conta `envia` (`group_add:all`, `last_seen:contacts`, etc.) — leitura de configuração da própria conta, sem outra rota para cruzar; a forma da resposta e os valores dentro do conjunto documentado (`all`/`contacts`/`none`/`off`) são a confirmação disponível. |
 | Contactos e utilizadores | `POST` | `/users/privacy` | `POST /user/privacy` | ✅ | Alterar uma definição de privacidade | DESTRAVADO com permissão explícita do usuário ('sim, pode fazer no envia'). `readreceipts` (estado inicial `all`) → `POST` com `value:none` devolveu `200` já com `read_receipts:none` na resposta; `GET /users/privacy` confirmou o mesmo. Revertido com `value:all` no mesmo pedido — `POST` e `GET` confirmaram a volta ao estado original. Ciclo completo, sem deixar a conta alterada. |
 | Contactos e utilizadores | `GET` | `/users/profile/{jid}` | `GET /user/profile/{jid}` | ✅ | Reunir num pedido só tudo o que se sabe de um contacto | `GET /users/profile/554192421234@s.whatsapp.net` devolveu `200`, com `lid:90937376170214@lid` (batendo com `/users/lid` e `/users/info`) e `on_whatsapp:true`; confirmado visualmente em web.whatsapp.com — o painel "Dados do contacto" mostra o mesmo número sem nome, batendo com `push_name`/`verified_name` vazios. |
-| Contactos e utilizadores | `POST` | `/users/unblock` | `POST /user/unblock` | ❌ | Desbloquear um contacto | 422 upstream_rejected, idem (F264). |
+| Contactos e utilizadores | `POST` | `/users/unblock` | `POST /user/unblock` | ✅ | Desbloquear um contacto | CONSERTADO (F278, completo desde 2026-08-27; re-confirmado nesta sessão): resolve o alvo para LID antes de enviar, sem `pn_jid` (o unblock não leva). Medido ao vivo, envia→recebe: `200 {details:"User unblocked", jid:"90937376170214@lid", blocklist:[]}` — era `422 upstream_rejected`. `GET /users/blocklist` confirmou a lista vazia. |
 | Conversas | `POST` | `/chats/archive` | `POST /chat/archive` | ✅ | Arquivar ou desarquivar uma conversa | confirmado em web.whatsapp.com (sessão `envia`): `archive:true` fez a conversa com `recebe` sumir da lista principal e aparecer sob uma pasta "Arquivadas (1)" nova; `archive:false` reverteu, a conversa voltou ao topo e a pasta desapareceu. |
 | Conversas | `POST` | `/chats/delete/message` | `POST /chat/delete/message` | ✅ | Apagar para todos uma mensagem enviada | enviada uma mensagem de teste descartável, depois `POST /chats/delete/message` com o `id` dela: `200 {status:deleted}`, e em web.whatsapp.com (sessão `envia`) a bolha e a prévia na lista passaram a mostrar "Mensagem apagada", tanto no remetente quanto (presumivelmente) no destinatário. |
 | Conversas | `POST` | `/chats/ephemeral` | `POST /chat/ephemeral` | ✅ | Definir o temporizador de mensagens temporárias da conversa | `duration:"24h"` devolveu `200`, e em web.whatsapp.com apareceu a mensagem de sistema "Você ativou as mensagens temporárias. Todas as novas mensagens desaparecerão desta conversa 24 horas após o envio..."; `duration:"0"` reverteu com "Você desativou as mensagens temporárias", ambas visíveis na conversa e na prévia da lista. |
@@ -390,7 +413,7 @@ A coluna **Evidência** traz o observador CONCRETO onde ele foi registado, lido 
 | Sessões | `DELETE` | `/session/hmac/config` | — | ✅ | Revogar a chave HMAC desta sessão | `200`; `GET /session/hmac/config` voltou de `"***"` para `""`. |
 | Sessões | `GET` | `/session/hmac/config` | — | ✅ | Saber se esta sessão tem chave HMAC configurada | `200 {hmac_key:""}` — bate com o estado real da sessão `envia` (chave HMAC não configurada nesta rodada, já revertida ao fim da Fase 2). |
 | Sessões | `POST` | `/session/hmac/config` | — | ✅ | Gravar a chave HMAC de assinatura dos webhooks | terceira chave distinta, sobre estado limpo: `200`, e `GET /session/hmac/config` passou de `""` para `"***"`. |
-| Sessões | `POST` | `/session/logout` | — | ❌ | Desvincular o aparelho da conta de WhatsApp | `500 {"error":"internal server error"}` numa sessao LIGADA e nunca emparelhada; no log, `the store doesn't contain a device JID`. Sem transporte vivo responde `409 session_not_connected`, que bate com a documentacao. O caminho de `200` exige conta emparelhada. Achado F275. |
+| Sessões | `POST` | `/session/logout` | — | ✅ | Desvincular o aparelho da conta de WhatsApp | F275 CORRIGIDO em 2026-08-27 (antes desta sessão) — a evidência ❌ estava desatualizada, media o comportamento pré-conserto. RE-MEDIDO ao vivo com sessão descartável ligada e nunca emparelhada: agora devolve `409 {code:"session_not_paired", message:"session has a live connection but was never paired; there is no device to log out"}` — não mais `500`. Ver F275 (código: `pkg/infra/wa-noise/runtime/session/guard.go`) para a correção e os testes que a travam. |
 | Sessões | `POST` | `/session/pair/phone` | `POST /session/pairphone` | ✅ | Emparelhar por código de telefone em vez de QR | DESTRAVADO com um TERCEIRO número descartável fornecido pelo usuário (não registrado aqui, é dado pessoal). Sessão nova criada só para o teste; `GET /session/connect` + `POST /session/pair/phone {phone:"..."}` devolveu `200 {linking_code:"XXXX-XXXX"}`. Primeiro código expirou (janela curta, ~2min) antes do usuário digitar — pedido um segundo código, digitado a tempo: `GET /session/status` confirmou `connected:true, logged_in:true`, `jid` batendo com o número fornecido. Sessão desconectada e apagada ao final (`GET /session/disconnect` + `DELETE /admin/users/{id}/full`); `envia`/`recebe` intactas. |
 | Sessões | `GET` | `/session/pair/qr` | `GET /session/qr` | ✅ | Ler o QR code de emparelhamento | `200 {qr_code:""}` numa sessão já autenticada — bate com o documentado ("vazio é comportamento normal" fora da janela de emparelhamento). |
 | Sessões | `GET` | `/session/profile` | — | ✅ | Consultar o perfil da conta ligada | `200`, `jid:5516981818244@s.whatsapp.net`, `business_name:"FilaRápida"`, `connected:true, logged_in:true` — bate byte a byte com a identidade conhecida de `envia`. |

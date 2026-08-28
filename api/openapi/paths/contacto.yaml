@@ -634,9 +634,10 @@
       `RespondJSON` como todas as outras, e o corpo abaixo é o de `data`. As
       duas chaves mudaram de nome junto — `blocklist` e `dhash`.
 
-      **Contraste com a escrita**: esta LEITURA funciona. As duas rotas que
-      alteram a lista (`POST /user/block` e `POST /user/unblock`) estão hoje
-      inoperantes — ver a descrição delas.
+      **Contraste com a escrita**: até 2026-08-27/28 esta LEITURA era a única
+      que funcionava — as duas rotas que alteram a lista (`POST /user/block`
+      e `POST /user/unblock`) estavam recusadas pelo servidor. As duas foram
+      corrigidas (F264, F278) — ver a descrição delas.
 
       **Autenticação**: token de sessão.
     security:
@@ -675,20 +676,21 @@
     description: |
       Acrescenta um contacto à lista de bloqueados da conta.
 
-      **ESTA ROTA ESTÁ INOPERANTE HOJE.** Medida em 2026-08-26 em quatro
-      combinações — conta WhatsApp Business e conta pessoal, número real e
-      número inexistente, identificador em número e em LID — e as quatro
-      devolveram `422 upstream_rejected`. O log mostra o WhatsApp a responder
-      `info query returned status 400: bad-request`. Não é o número, não é a
-      forma do identificador e não é o tipo de conta: as quatro variáveis
-      foram isoladas. **A causa está por apurar** e está registada como F264
-      no `HOUSEKEEP.md`; a hipótese em aberto é a forma da consulta que
-      enviamos. `GET /user/blocklist` continua a funcionar — é só a escrita
-      que é recusada.
+      **CORRIGIDO em 2026-08-28 (F264/LIB-02).** Medida em 2026-08-26 em
+      quatro combinações — conta WhatsApp Business e conta pessoal, número
+      real e número inexistente, identificador em número e em LID — e as
+      quatro devolviam `422 upstream_rejected`, com
+      `info query returned status 400: bad-request` no log. Causa
+      determinada: o WhatsApp migrou a escrita da blocklist para
+      endereçamento por **LID**, e um `block` exige, além do `jid` em LID,
+      um segundo atributo `pn_jid` com o número de telefone — que a
+      biblioteca vendorizada não emitia (portado de whatsmeow `8d023aa973`
+      e Baileys `8ca9316a10`). Medido ao vivo depois da correção: `200`,
+      com o contacto a aparecer em `GET /user/blocklist` logo a seguir.
 
-      **Regras**, para quando voltar a funcionar: basta um de `jid` ou
-      `phone`, com `jid` a ganhar quando os dois vierem. A resolução é
-      LENIENTE por decisão registada (F203): um número nu é aceite.
+      **Regras**: basta um de `jid` ou `phone`, com `jid` a ganhar quando os
+      dois vierem. A resolução é LENIENTE por decisão registada (F203): um
+      número nu é aceite.
 
       **Autenticação**: token de sessão.
     security:
@@ -744,9 +746,10 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         description: |
-          **É o que esta rota devolve hoje, em todas as combinações medidas.**
           O pedido chegou ao WhatsApp e foi recusado; repeti-lo sem mudança
-          não ajuda. Ver F264.
+          não ajuda. Até 2026-08-28 (F264) era o que esta rota devolvia
+          SEMPRE — causa determinada (protocolo migrado para LID) e
+          corrigida nessa data, ver a descrição da rota acima.
         content:
           application/json:
             schema:
@@ -769,16 +772,17 @@
     description: |
       Retira um contacto da lista de bloqueados da conta.
 
-      **ESTA ROTA ESTÁ INOPERANTE HOJE**, exactamente como `POST /user/block`:
-      as mesmas quatro combinações medidas em 2026-08-26 devolveram `422
-      upstream_rejected`, com o mesmo `info query returned status 400:
-      bad-request` no log. As duas partilham o mesmo caminho de escrita da
-      lista, e por isso falham juntas. Causa por apurar — F264 no
-      `HOUSEKEEP.md`.
+      **CORRIGIDO em 2026-08-27 (F278/LIB-02)** — antes de `POST
+      /user/block`, e por um caminho mais simples: a forma nova de
+      `unblock` não leva `pn_jid`, só `jid` em LID, e o adaptador já
+      resolvia LID→PN em vez de PN→LID, invertido. Bastou corrigir o
+      sentido da resolução, sem tocar na biblioteca vendorizada. As mesmas
+      quatro combinações medidas em 2026-08-26 devolviam `422
+      upstream_rejected`; medido ao vivo depois da correção: `200`, com o
+      contacto a sair de `GET /user/blocklist` logo a seguir.
 
-      **Regras**, para quando voltar a funcionar: basta um de `jid` ou
-      `phone`, com `jid` a ganhar quando os dois vierem, e a resolução aceita
-      número nu (F203).
+      **Regras**: basta um de `jid` ou `phone`, com `jid` a ganhar quando os
+      dois vierem, e a resolução aceita número nu (F203).
 
       **Autenticação**: token de sessão.
     security:
@@ -834,8 +838,10 @@
         $ref: '#/components/responses/NaoAutorizado'
       '422':
         description: |
-          **É o que esta rota devolve hoje, em todas as combinações medidas.**
-          Ver F264.
+          O pedido chegou ao WhatsApp e foi recusado. Até 2026-08-27
+          (F278) era o que esta rota devolvia SEMPRE — causa determinada
+          (o adaptador resolvia LID→PN em vez de PN→LID) e corrigida
+          nessa data, ver a descrição da rota acima.
         content:
           application/json:
             schema:
