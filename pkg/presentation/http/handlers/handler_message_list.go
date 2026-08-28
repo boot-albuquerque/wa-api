@@ -33,7 +33,7 @@ func NewSendListHandler(uc *message.SendListUseCase) *SendListHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/list.
 func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/list"
+	const route = "/chats/send/list"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {

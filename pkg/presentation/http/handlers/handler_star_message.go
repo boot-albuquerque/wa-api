@@ -19,7 +19,7 @@ func NewStarMessageHandler(uc *chat.StarMessageUseCase) *StarMessageHandler {
 }
 
 func (h *StarMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/message/star"
+	const route = "/messages/star"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

@@ -34222,12 +34222,12 @@ as mudanças da sessão não tocam o arquivo, e mesmo quando `go build`,
 é literalmente uma linha em branco. Trivial, mas o CLAUDE.md proíbe corrigir
 de graça fora do âmbito sem perguntar, e este arquivo é de outra tarefa.
 
-**Status**: não corrigido. Nesta sessão, `fmt-gate` foi verificado
-manualmente restrito aos arquivos tocados por F289/F290/F308
-(`gofmt -l <arquivos-da-sessão>` limpo) em vez de `make fmt-gate` completo,
-para não misturar uma correção de formatação alheia com o diff desta sessão.
+**Status**: corrigido — `gofmt -w pkg/bootstrap/caminhos_canonicos_test.go`
+aplicado (uma linha em branco). `gofmt -l pkg cmd` limpo. A restrição
+inicial (verificar `fmt-gate` só nos arquivos da sessão) deixou de ser
+necessária.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F340 — `handler-route` acusa `/message/star` (constante `route`) como não-registrado: singular vs `/messages/star` (plural) registrado
 
@@ -34264,7 +34264,45 @@ e — mais imediato — bloqueia `handler-route`, um dos alvos finais de
 registrado. Não é registrar rota nova — é alinhar o carimbo à rota que já
 existe.
 
-**Status**: não corrigido. Fora do âmbito das tarefas desta sessão, e o
-CLAUDE.md proíbe corrigir de graça sem perguntar.
+**Actualização (2026-08-27, mesmo dia)**: corrigido `/message/star`, e ao
+correr `make handler-route` de novo para confirmar, apareceram **mais
+DEZASSETE** constantes com o mesmo defeito — a pluralização desta sessão
+(`chat` → `chats`, `user` → `users`) alterou as rotas REGISTADAS mas não
+tocou os carimbos `route` internos, usados só para log, em nenhum dos
+handlers que não fizeram parte de uma migração DTO explícita. Lista
+completa (ficheiro:linha, antes → depois):
 
-<!-- f-status: aberto -->
+| ficheiro:linha | antes | depois |
+|---|---|---|
+| `handler_disappearing.go:25` | `/chat/ephemeral` | `/chats/ephemeral` |
+| `handler_disappearing.go:71` | `/chat/ephemeral/default` | `/chats/ephemeral/default` |
+| `handler_interactive.go:28` | `/chat/send/contact` | `/chats/send/contact` |
+| `handler_interactive.go:76` | `/chat/send/location` | `/chats/send/location` |
+| `handler_interactive.go:124` | `/chat/send/poll` | `/chats/send/poll` |
+| `handler_message_buttons.go:34` | `/chat/send/buttons` | `/chats/send/buttons` |
+| `handler_message_carousel.go:39` | `/chat/send/carousel` | `/chats/send/carousel` |
+| `handler_message_list.go:36` | `/chat/send/list` | `/chats/send/list` |
+| `handler_misc.go:170` | `/user/privacy` | `/users/privacy` |
+| `handler_misc.go:211` | `/chat/request-unavailable-message` | `/chats/request-unavailable-message` |
+| `handler_misc.go:242` | `/chat/mute` | `/chats/mute` |
+| `handler_misc.go:273` | `/chat/archive` | `/chats/archive` |
+| `handler_misc.go:304` | `/chat/pin` | `/chats/pin` |
+| `handler_presence.go:20` | `/user/presence` | `/users/presence` |
+| `handler_presence.go:51` | `/user/presence/subscribe` | `/users/presence/subscribe` |
+| `handler_presence.go:80` | `/chat/presence` | `/chats/presence` |
+| `handler_reaction.go:20` | `/chat/react` | `/chats/react` |
+| `handler_send_forward.go:28` | `/chat/send/forward` | `/chats/send/forward` |
+
+Cada valor "depois" foi conferido contra `go run ./cmd/listroutes` antes de
+aplicar — nenhum foi adivinhado. São só o CARIMBO usado em mensagens de log
+(`hlog...Str("route", route)`); a rota efectivamente registada já estava
+correcta em todos os dezoito casos, então não há mudança de comportamento
+de rota nenhuma, só de texto de log.
+
+**Status**: corrigido — as dezoito constantes (`/message/star` incluído)
+alinhadas com `go run ./cmd/listroutes`. `make handler-route` confirma:
+"23 constantes route conferidas contra 120 rotas registradas; todas
+existem." `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd` e
+`go test ./pkg/... ./cmd/...` limpos.
+
+<!-- f-status: corrigido -->

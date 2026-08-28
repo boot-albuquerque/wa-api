@@ -31,7 +31,7 @@ func NewSendButtonsHandler(uc *message.SendButtonsUseCase) *SendButtonsHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/buttons.
 func (h *SendButtonsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/buttons"
+	const route = "/chats/send/buttons"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {

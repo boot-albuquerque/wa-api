@@ -167,7 +167,7 @@ func NewSetPrivacySettingHandler(uc *user.SetPrivacySettingUseCase) *SetPrivacyS
 	return &SetPrivacySettingHandler{uc}
 }
 func (h *SetPrivacySettingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/user/privacy"
+	const route = "/users/privacy"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -208,7 +208,7 @@ func NewRequestUnavailableMessageHandler(uc *chat.RequestUnavailableMessageUseCa
 	return &RequestUnavailableMessageHandler{uc}
 }
 func (h *RequestUnavailableMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/request-unavailable-message"
+	const route = "/chats/request-unavailable-message"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -239,7 +239,7 @@ func NewMuteChatHandler(uc *chat.MuteChatUseCase) *MuteChatHandler {
 	return &MuteChatHandler{uc}
 }
 func (h *MuteChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/mute"
+	const route = "/chats/mute"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -270,7 +270,7 @@ func NewArchiveChatHandler(uc *chat.ArchiveChatUseCase) *ArchiveChatHandler {
 	return &ArchiveChatHandler{uc}
 }
 func (h *ArchiveChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/archive"
+	const route = "/chats/archive"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -301,7 +301,7 @@ func NewPinChatHandler(uc *chat.PinChatUseCase) *PinChatHandler {
 	return &PinChatHandler{uc}
 }
 func (h *PinChatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/pin"
+	const route = "/chats/pin"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

@@ -22,7 +22,7 @@ func NewSetDisappearingTimerHandler(uc *chat.SetDisappearingTimerUseCase) *SetDi
 }
 
 func (h *SetDisappearingTimerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/ephemeral"
+	const route = "/chats/ephemeral"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -68,7 +68,7 @@ func NewSetDefaultDisappearingTimerHandler(uc *chat.SetDefaultDisappearingTimerU
 }
 
 func (h *SetDefaultDisappearingTimerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/ephemeral/default"
+	const route = "/chats/ephemeral/default"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

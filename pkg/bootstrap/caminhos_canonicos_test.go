@@ -89,6 +89,7 @@ func TestRotaLegadaResponde404(t *testing.T) {
 		})
 	}
 }
+
 // TestNenhumaFamiliaDeColeccaoFicouNoSingular é o teste que impede a
 // padronização de ficar a meio: se alguém acrescentar `/group/coisa-nova` sem
 // linha na tabela, isto acusa.

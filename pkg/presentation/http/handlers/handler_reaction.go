@@ -17,7 +17,7 @@ func NewReactHandler(uc *message.ReactUseCase) *ReactHandler {
 	return &ReactHandler{uc: uc}
 }
 func (h *ReactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/react"
+	const route = "/chats/react"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

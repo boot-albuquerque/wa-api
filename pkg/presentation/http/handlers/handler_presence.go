@@ -17,7 +17,7 @@ func NewSendPresenceHandler(uc *message.SendPresenceUseCase) *SendPresenceHandle
 	return &SendPresenceHandler{uc: uc}
 }
 func (h *SendPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/user/presence"
+	const route = "/users/presence"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -48,7 +48,7 @@ func NewSubscribePresenceHandler(uc *message.SubscribePresenceUseCase) *Subscrib
 	return &SubscribePresenceHandler{uc: uc}
 }
 func (h *SubscribePresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/user/presence/subscribe"
+	const route = "/users/presence/subscribe"
 
 	id, ok := sessionUser(w, r)
 	if !ok {
@@ -77,7 +77,7 @@ func NewChatPresenceHandler(uc *message.ChatPresenceUseCase) *ChatPresenceHandle
 	return &ChatPresenceHandler{uc: uc}
 }
 func (h *ChatPresenceHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/presence"
+	const route = "/chats/presence"
 
 	id, ok := sessionUser(w, r)
 	if !ok {

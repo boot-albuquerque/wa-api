@@ -25,7 +25,7 @@ func NewSendContactHandler(uc *message.SendContactUseCase) *SendContactHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/contact.
 func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/contact"
+	const route = "/chats/send/contact"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -73,7 +73,7 @@ func NewSendLocationHandler(uc *message.SendLocationUseCase) *SendLocationHandle
 
 // ServeHTTP implementa http.Handler para POST /chat/send/location.
 func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/location"
+	const route = "/chats/send/location"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -121,7 +121,7 @@ func NewSendPollHandler(uc *message.SendPollUseCase) *SendPollHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/poll.
 func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/poll"
+	const route = "/chats/send/poll"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {

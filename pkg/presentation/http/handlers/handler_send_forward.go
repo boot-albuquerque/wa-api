@@ -25,7 +25,7 @@ func NewSendForwardHandler(uc *message.SendForwardUseCase) *SendForwardHandler {
 
 // ServeHTTP implements http.Handler for POST /chat/send/forward.
 func (h *SendForwardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/forward"
+	const route = "/chats/send/forward"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {

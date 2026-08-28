@@ -36,7 +36,7 @@ func NewSendCarouselHandler(uc *message.SendCarouselUseCase) *SendCarouselHandle
 
 // ServeHTTP implements http.Handler for POST /chat/send/carousel.
 func (h *SendCarouselHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/carousel"
+	const route = "/chats/send/carousel"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
