@@ -31731,11 +31731,13 @@ não.
 `errmap.ClassifyIQ`, como os restantes; e, separadamente, perceber por que
 `pkg/infra/wa-noise/client` está fora da lista do alvo `test`.
 
-**Status**: NÃO corrigido. Fora do âmbito desta tarefa, e o `CLAUDE.md` proíbe
-corrigir defeito pré-existente fora de âmbito sem perguntar. Pergunta em
-aberto: corrigir agora ou deixar pendente?
+**Status**: corrigido — ver F334, que escreveu os sete wrappers depois de o
+utilizador ter pedido explicitamente para fechar este achado. A pergunta
+sobre o pacote estar fora da lista do alvo `test` continua sem resposta,
+mas deixou de bloquear: o gate (`TestTodoMetodoComErroTemWrapper`) já não
+tem defeito nenhum para esconder.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F301 — o corte a seco não alcança o nome de PEDIDO quando ele só difere na caixa
 
@@ -32427,9 +32429,13 @@ e `schemas/grupo.yaml` — renomear campos de pedido e resposta, reescrever cada
 `example`, e correr `go run ./cmd/openapidoc` seguido de `go build` e do `cmp`
 que o `CLAUDE.md` exige. Deixar `/group/info` como está.
 
-**Status**: NÃO corrigido, fora do âmbito declarado da tarefa.
+**Status**: corrigido — ver F336 (worker de infra/contactos/grupo/canal),
+que fez exactamente esta passagem por rota como parte do fecho de F332.
+Verificado nesta revisão: `TestOpenAPISchemaPropertyNamesAreCanonical` e
+`TestOpenAPIExampleKeysAreCanonical` não acusam nenhuma violação em
+`grupo.yaml`.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F313 — o `/group/info` ficou a aceitar `groupJID` enquanto as outras 19 rotas da família passaram a `group_jid`
 
@@ -32451,10 +32457,14 @@ mesmo dado com dois nomes conforme a rota.
 serve —, e actualizar o teste de contrato da fundação. É uma mudança de
 contrato, portanto deve sair na mesma leva que a nota de F312 no OpenAPI.
 
-**Status**: NÃO corrigido. A tarefa desta sessão diz explicitamente para não
-refazer o trabalho da fundação em `/group/info`.
+**Status**: corrigido — ver F316, que fez exactamente isto (moveu para
+`dtogroup.GetGroupInfoRequest` com `json:"group_jid"`) como fecho da mesma
+migração. A restrição original ("não refazer o trabalho da fundação") caiu
+quando a directiva de corte a hard substituiu `/group/info` por
+`GET /groups/{group_jid}` (worktree `http-dto-paths`, F326) — nesse ponto já
+não havia "trabalho da fundação" a preservar.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F314 — tipos de domínio MORTOS da família de grupo carregavam etiquetas `json` erradas há meses
 
@@ -32704,12 +32714,13 @@ quatro blocos de propriedade que têm de virar UM, e as prosas de
 `go run ./cmd/openapidoc` e `go build` — a especificação é EMBUTIDA no binário
 (ARMADILHAS #27).
 
-**Status**: NÃO corrigido. Não é omissão: é uma unidade de trabalho separável e
-sobretudo de PROSA, e fazê-la mecanicamente produziria um documento com quatro
-chaves `row_id` iguais e três descrições a contradizerem-se. Deixá-la para uma
-sessão que a faça inteira é melhor que meia.
+**Status**: corrigido — ver F337 (worker de mensagens/chats), que fez essa
+passagem de prosa inteira (237 propriedades/chaves reescritas em
+`envio.yaml`/`conversa.yaml`) como fecho de F332. Verificado nesta revisão:
+as duas suítes do gate de nomenclatura não acusam violação nenhuma nesses
+ficheiros.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F321 — a validação da família mensagens continua no use case, e não no DTO de pedido
 
@@ -33408,8 +33419,13 @@ O dicionário-por-JID/emoji fica como pergunta em aberto para quem for dono
 dos esquemas `Roster`, `InfoUtilizadores` e `MensagemCanal`.
 
 **Status**: o MECANISMO está corrigido/construído nesta sessão (compila,
-corre, não foi enfraquecido para passar). Os ACHADOS que ele reporta
-continuam abertos, de propósito — ver tabela acima.
+corre, não foi enfraquecido para passar). Actualização (revisão pós-F338):
+os compostos concatenados (`inviteinfo`, `invitelink`, `markread`,
+`pollvote`, os cinco `download*`) foram corrigidos — ver F326/F328 — e
+`TestPathSegmentsAreNotConcatenatedCompounds` está verde. O dicionário por
+JID/emoji dos esquemas `Roster`/`InfoUtilizadores`/`MensagemCanal` continua
+uma pergunta em aberto, sem dono declarado — é essa a parte que mantém esta
+entrada `aberto`.
 
 <!-- f-status: aberto -->
 
@@ -33485,12 +33501,14 @@ família, cada uma o seu próprio commit, seguindo os apontadores já deixados
 em F298/F300/F313. É trabalho de prosa, não de código — não é âmbito desta
 integração.
 
-**Status**: NÃO corrigido, de propósito — é o mesmo gap já registado em três
-entradas anteriores, agora com o gate permanente (F330) a impedi-lo de
-regredir mais e a torná-lo visível a quem rodar `go test ./...` sem ler o
-HOUSEKEEP inteiro primeiro.
+**Status**: corrigido — ver F335 (sessão), F336 (infra/contactos/grupo/canal),
+F337 (mensagens/chats) e F338 (fecho agregado: um defeito de código real em
+`domain.DownloadRequest`, mais três esquemas órfãos que nenhum dos três
+workers cobria, mais uma excepção nomeada no gate para os dois gaps de
+código que continuam deliberadamente adiados). `go test ./pkg/... ./cmd/...`
+está 100% verde desde F338 — zero pacotes vermelhos.
 
-<!-- f-status: aberto -->
+<!-- f-status: corrigido -->
 
 ## F333 — `POST /call/reject` servia `Details`/`CallID` em PascalCase real, vivo, sem gate nenhum a apanhar
 
