@@ -30,6 +30,15 @@ const (
 	// Constante nomeada, e não literal repetido, porque o teste de contrato o
 	// afirma e o cliente o lê (ADR-0004).
 	noFieldsToUpdateCode = "no_fields_to_update"
+
+	// engineHeadlessUnavailableCode identifica um pedido de sessão em
+	// domain.EngineWaHeadless num servidor sem o Chrome do headless
+	// configurado. Recusar aqui é a mesma regra de "sem fallback silencioso"
+	// da decisão 94 (pkg/bootstrap/engine_routing.go): pedir um engine que o
+	// processo não pode servir tem de FALHAR, nunca cair para o socket em
+	// silêncio.
+	engineHeadlessUnavailableCode = "engine_headless_unavailable"
+	engineHeadlessUnavailableMsg  = "headless engine is not configured on this server"
 )
 
 // AddUserUseCase adiciona um novo usuário
@@ -38,6 +47,13 @@ type AddUserUseCase struct {
 	encryptor appport.HmacKeyEncryptor
 	s3Cipher  appport.S3SecretCipher
 	logger    appport.Logger
+
+	// headlessAvailable diz se este processo tem o Chrome do headless
+	// configurado (s.Headless.ChromePath != "" no bootstrap). Substitui a
+	// checagem estática que a decisão 94 fazia no arranque: agora é
+	// checagem por REQUISIÇÃO, porque a escolha do engine também passou a
+	// ser por requisição.
+	headlessAvailable bool
 }
 
 // NewAddUserUseCase cria uma nova instância.
@@ -48,8 +64,11 @@ type AddUserUseCase struct {
 // for. Each port matches a column writer: encryptor → users.hmac_key
 // (F158), s3Cipher → users.s3_secret_key (F163). Separate ports because
 // the two columns have different stored types (BYTEA vs TEXT envelope).
-func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, s3Cipher appport.S3SecretCipher, logger appport.Logger) *AddUserUseCase {
-	return &AddUserUseCase{users: users, encryptor: encryptor, s3Cipher: s3Cipher, logger: logger}
+//
+// headlessAvailable is whether this server has the headless engine
+// configured at all — see the field comment on AddUserUseCase.
+func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, s3Cipher appport.S3SecretCipher, logger appport.Logger, headlessAvailable bool) *AddUserUseCase {
+	return &AddUserUseCase{users: users, encryptor: encryptor, s3Cipher: s3Cipher, logger: logger, headlessAvailable: headlessAvailable}
 }
 
 // Execute adiciona um novo usuário
@@ -58,6 +77,20 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserInput) 
 	if req.Name == "" || req.Token == "" {
 		return nil, apperr.New("missing_name_or_token", apperr.CategoryValidation, "name and token are required", false, nil)
 	}
+
+	// Engine: vazio vira domain.EngineNoise (o DTO já faz esse default,
+	// mas o use case não confia no chamador — outros pontos de entrada além
+	// do HTTP podem construir AddUserInput diretamente).
+	engine, ok := domain.EngineValido(req.Engine, domain.EngineNoise)
+	if !ok {
+		return nil, apperr.New("invalid_engine", apperr.CategoryValidation,
+			"engine must be \""+domain.EngineNoise+"\" or \""+domain.EngineWaHeadless+"\"", false, nil)
+	}
+	if engine == domain.EngineWaHeadless && !uc.headlessAvailable {
+		return nil, apperr.New(engineHeadlessUnavailableCode, apperr.CategoryValidation,
+			engineHeadlessUnavailableMsg, false, nil)
+	}
+	req.Engine = engine
 
 	// Set defaults
 	if req.ProxyConfig == nil {
@@ -148,6 +181,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserInput) 
 		S3:              s3ForRecord,
 		HmacKey:         encryptedHmacKey,
 		History:         req.History,
+		Engine:          req.Engine,
 	})
 	if err != nil {
 		if errors.Is(err, ErrDuplicateToken) {
@@ -187,6 +221,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserInput) 
 		Expiration:     int64(req.Expiration),
 		Events:         req.Events,
 		HmacConfigured: req.HmacKey != "",
+		Engine:         req.Engine,
 		Proxy: domain.UserProxySettings{
 			Enabled:         req.ProxyConfig.ProxyURL != "",
 			URL:             req.ProxyConfig.ProxyURL,

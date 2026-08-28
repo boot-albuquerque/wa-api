@@ -37,6 +37,8 @@ func PresentUser(u domain.UserAccount) UserResponse {
 
 		HmacConfigured: u.HmacConfigured,
 
+		Engine: u.Engine,
+
 		ProxyConfig: UserProxyConfigResponse{
 			Enabled:         u.Proxy.Enabled,
 			ProxyURL:        u.Proxy.URL,

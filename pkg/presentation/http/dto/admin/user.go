@@ -82,6 +82,10 @@ type UserResponse struct {
 
 	HmacConfigured bool `json:"hmac_configured"`
 
+	// Engine is the transport this session was created with
+	// (domain.EngineNoise or domain.EngineWaHeadless).
+	Engine string `json:"engine"`
+
 	ProxyConfig UserProxyConfigResponse `json:"proxy_config"`
 	S3Config    UserS3ConfigResponse    `json:"s3_config"`
 }

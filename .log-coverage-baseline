@@ -1297,7 +1297,8 @@ rules_frozen=true
 # INTEGRACAO com http-dto-paths (2026-08-27): func_coverage SOBE 592->596 (novos handlers de rota). Ratchet-UP.
 # INTEGRACAO com http-dto-download-paths (2026-08-27): func_coverage CAI 596->594 (5 handlers/rotas legadas de download removidas, F328). Ratchet-DOWN justificado: deletar codigo nao e regressao.
 # INTEGRACAO com housekeep-session (2026-08-27): func_coverage CAI 594->591 apos merge (F273-F276 acrescentaram funcoes elegiveis novas, algumas sem log directo por serem so orquestracao). Ratchet-DOWN medido, nao regressao de codigo que ja logava.
-min_func_coverage=591
+# INTEGRACAO com engine-decisao-94 (2026-08-28): func_coverage SOBE 591->593. Remocao da selecao estatica de engine (WA_API_ENGINE/WA_API_ENGINE_HEADLESS_SESSIONS) tirou 6 funcoes elegiveis de pkg/bootstrap sem log direto (EngineSelection.Default/EngineFor/SessoesEmHeadless/UsaHeadless, engineSelectionConfigurada, engineValido) e acrescentou 1 (domain.EngineValido, excluida do elegivel). Ratchet-UP.
+min_func_coverage=593
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1553,7 +1554,8 @@ min_func_coverage=591
 # INTEGRACAO com /admin (2026-08-27): errpath_coverage SOBE 778->779. Ratchet-UP.
 # INTEGRACAO com http-dto-download-paths (2026-08-27): errpath_coverage CAI 779->777 (mesma remocao). Ratchet-DOWN justificado.
 # INTEGRACAO com housekeep-session (2026-08-27): errpath_coverage CAI 777->776.
-min_errpath_coverage=776
+# INTEGRACAO com engine-decisao-94 + F278 + F280 (2026-08-28): errpath_coverage SOBE 776->777. Ratchet-UP.
+min_errpath_coverage=777
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1620,7 +1622,8 @@ min_errpath_coverage=776
 # nao muda: a funcao nasce sem log proprio, so' o Warn ja existente reusado.
 # INTEGRACAO com housekeep-session (2026-08-27): min_eligible SOBE 1001->1006 (+5, ratchet-UP honesto: F273-F276 acrescentaram funcoes novas de orquestracao/guard).
 # INTEGRACAO com housekeep-messages2 (2026-08-27): min_eligible SOBE 1006->1007 (+1, ratchet-UP honesto: presentProfileFull, F302).
-min_eligible=1007
+# INTEGRACAO com engine-decisao-94 (2026-08-28): min_eligible CAI 1007->1003 (-6+1+1=-4). Remocao da selecao estatica de engine apaga 6 funcoes elegiveis de pkg/bootstrap (EngineSelection.Default/EngineFor/SessoesEmHeadless/UsaHeadless, engineSelectionConfigurada, engineValido) e acrescenta domain.EngineValido (EXCLUIDA, pacote domain fora do universo de pkg/bootstrap+usecase que o gate mede como elegivel-com-log) e user.AddUserUseCase.headlessAvailable nao cria funcao nova. Ratchet-DOWN justificado: deletar codigo morto (decisao 94 nunca esteve ligada ao caminho de requisicao real) nao e regressao.
+min_eligible=1003
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage

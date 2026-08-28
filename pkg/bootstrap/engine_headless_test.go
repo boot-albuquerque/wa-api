@@ -22,40 +22,45 @@ func chromeFalso(t *testing.T) string {
 	return p
 }
 
-// A metade que protege quem já roda: um processo todo no socket não tem Chrome
-// nenhum a apontar, e exigir configuração dele quebraria toda instalação
-// existente por uma capacidade que ninguém pediu.
-func TestConfiguracaoHeadlessNaoEExigidaQuandoNinguemAUsa(t *testing.T) {
+// Nenhuma das duas variáveis presentes: a configuração fica zero, sem erro.
+// Um processo sem Chrome apontado não pode falhar no arranque por uma
+// capacidade que ninguém configurou — quem recusa um pedido de sessão em
+// headless é AddUserUseCase, na hora do pedido (decisão 94 removida).
+func TestConfiguracaoHeadlessNaoEExigidaQuandoNinguemAConfigurou(t *testing.T) {
 	t.Setenv(envHeadlessChrome, "")
 	t.Setenv(envHeadlessProfiles, "")
-	if _, err := headlessConfigConfigurada(false); err != nil {
-		t.Fatalf("configuração ausente virou erro sem ninguém usar headless: %v", err)
+	cfg, err := headlessConfigConfigurada()
+	if err != nil {
+		t.Fatalf("configuração ausente virou erro sem nada configurado: %v", err)
+	}
+	if cfg.ChromePath != "" {
+		t.Fatalf("ChromePath = %q, queria vazio", cfg.ChromePath)
 	}
 }
 
-// A metade que importa: descobrir na primeira chamada seria descobrir com um
-// pedido de cliente na mão.
-func TestConfiguracaoAUSENTEComHeadlessEscolhidoNaoArranca(t *testing.T) {
+// Uma das duas variáveis presente sem a outra é configuração PARCIAL, e
+// continua fatal: quem configurou uma pretendia configurar o headless.
+func TestConfiguracaoParcialERecusada(t *testing.T) {
 	t.Setenv(envHeadlessChrome, "")
 	t.Setenv(envHeadlessProfiles, "/tmp/perfis")
-	if _, err := headlessConfigConfigurada(true); err == nil {
-		t.Fatal("headless escolhido sem Chrome configurado arrancou")
+	if _, err := headlessConfigConfigurada(); err == nil {
+		t.Fatal("perfis configurado sem Chrome passou")
 	}
 	t.Setenv(envHeadlessChrome, chromeFalso(t))
 	t.Setenv(envHeadlessProfiles, "")
-	if _, err := headlessConfigConfigurada(true); err == nil {
-		t.Fatal("headless escolhido sem raiz de perfis arrancou")
+	if _, err := headlessConfigConfigurada(); err == nil {
+		t.Fatal("Chrome configurado sem raiz de perfis passou")
 	}
 }
 
 func TestCaminhoDeChromeQuebradoERecusadoNoArranque(t *testing.T) {
 	t.Setenv(envHeadlessProfiles, t.TempDir())
 	t.Setenv(envHeadlessChrome, filepath.Join(t.TempDir(), "nao-existe"))
-	if _, err := headlessConfigConfigurada(true); err == nil {
+	if _, err := headlessConfigConfigurada(); err == nil {
 		t.Fatal("um caminho de Chrome inexistente passou")
 	}
 	t.Setenv(envHeadlessChrome, t.TempDir())
-	if _, err := headlessConfigConfigurada(true); err == nil {
+	if _, err := headlessConfigConfigurada(); err == nil {
 		t.Fatal("um DIRETÓRIO passou por executável")
 	}
 }
@@ -65,7 +70,7 @@ func TestPadroesSaoOsMedidos(t *testing.T) {
 	t.Setenv(envHeadlessProfiles, t.TempDir())
 	t.Setenv(envHeadlessMaxSessions, "")
 	t.Setenv(envHeadlessUserAgent, "")
-	cfg, err := headlessConfigConfigurada(true)
+	cfg, err := headlessConfigConfigurada()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +87,7 @@ func TestTetoDeSessoesInvalidoERecusado(t *testing.T) {
 	t.Setenv(envHeadlessProfiles, t.TempDir())
 	for _, mau := range []string{"0", "-1", "quatro", "1.5"} {
 		t.Setenv(envHeadlessMaxSessions, mau)
-		if _, err := headlessConfigConfigurada(true); err == nil {
+		if _, err := headlessConfigConfigurada(); err == nil {
 			t.Errorf("%s=%q foi aceito", envHeadlessMaxSessions, mau)
 		}
 	}
@@ -136,33 +141,6 @@ func TestDoisTxtIDDiferentesNuncaVaoParaOMesmoPerfil(t *testing.T) {
 			t.Fatalf("txtID %q e %q foram para o MESMO perfil %q", anterior, id, sc.ProfileDir)
 		}
 		vistos[sc.ProfileDir] = id
-	}
-}
-
-// A exigência vem da SELEÇÃO, e não de uma segunda chave. O estado que isto
-// impede é "alguma sessão em headless e ninguém pediu o Chrome".
-func TestExigenciaVemDaSelecaoENaoDeOutraChave(t *testing.T) {
-	casos := []struct {
-		nome    string
-		padrao  string
-		lista   string
-		exigida bool
-	}{
-		{"tudo no socket", "", "", false},
-		{"padrão headless", EngineWaHeadless, "", true},
-		{"uma sessão listada", "", "s1", true},
-		{"padrão socket e lista vazia", EngineWaNoise, "", false},
-	}
-	for _, c := range casos {
-		t.Setenv(envEngineDefault, c.padrao)
-		t.Setenv(envEngineSessions, c.lista)
-		sel, err := engineSelectionConfigurada()
-		if err != nil {
-			t.Fatalf("%s: %v", c.nome, err)
-		}
-		if got := sel.UsaHeadless(); got != c.exigida {
-			t.Errorf("%s: UsaHeadless = %v, queria %v", c.nome, got, c.exigida)
-		}
 	}
 }
 

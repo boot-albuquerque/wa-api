@@ -182,7 +182,9 @@ type NewsletterReader interface {
 	DeleteNewsletter(ctx context.Context, txtID string, channelJID domain.JID) error
 
 	// F233(b) — admin invite management.
-	CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	// F261: devolve o ID e a expiração que o servidor confirma para o
+	// convite, em vez de só erro.
+	CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error)
 	AcceptNewsletterAdminInvite(ctx context.Context, txtID string, channelJID domain.JID) error
 	RevokeNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
 }

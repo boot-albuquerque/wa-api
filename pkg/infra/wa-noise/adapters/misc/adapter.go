@@ -455,19 +455,23 @@ func (a *MiscAdapter) DeleteNewsletter(ctx context.Context, txtID string, channe
 }
 
 // CreateNewsletterAdminInvite sends an admin invite to a user.
-func (a *MiscAdapter) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+func (a *MiscAdapter) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error) {
 	client, parsedChannel, err := a.clientAndJID(txtID, channelJID)
 	if err != nil {
-		return err
+		return domain.NewsletterAdminInvite{}, err
 	}
 	parsedUser, err := wajid.ToJID(userJID)
 	if err != nil {
-		return err
+		return domain.NewsletterAdminInvite{}, err
 	}
 	parsedUser = resolveToLID(ctx, client, parsedUser, "admin_invite")
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
-	return client.NewsletterCreateAdminInvite(ctxWithTimeout, parsedChannel, parsedUser)
+	invite, err := client.NewsletterCreateAdminInvite(ctxWithTimeout, parsedChannel, parsedUser)
+	if err != nil {
+		return domain.NewsletterAdminInvite{}, err
+	}
+	return domain.NewsletterAdminInvite{ID: invite.ID, ExpirationTime: invite.ExpirationTime}, nil
 }
 
 // AcceptNewsletterAdminInvite accepts a pending admin invite.

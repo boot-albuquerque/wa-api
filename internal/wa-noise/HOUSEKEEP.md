@@ -3178,10 +3178,18 @@ tocar na biblioteca**.
 e o `pn_jid` só no `block`), teste da DIRECÇÃO da resolução, e controlo
 negativo EXECUTADO repondo `"jid": jid` — com a saída da falha colada aqui.
 
-**Status**: não corrigido. Causa determinada. Não aplicado porque a
-classificação não é `BUG_LOCAL` e a confirmação em campo exige conta
-emparelhada — ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md` (E.1,
-E.2).
+**Status**: não corrigido AQUI — a biblioteca vendorizada continua a montar o
+`<item>` sem `pn_jid`, e `block` continua a falhar (`422`, `400 bad-request`),
+confirmado ao vivo em 2026-08-28 com sessão real pareada.
+
+O sub-caso barato ("para `unblock` a forma nova é `<item jid='…@lid'
+action='unblock'/>` — sem `pn_jid`. Se o adaptador parar de degradar
+LID→PN... esta função já emite o stanza correto sem tocar na biblioteca")
+**foi aplicado e confirmado** — do lado da aplicação, sem tocar nesta
+biblioteca — ver `HOUSEKEEP.md` (raiz), F278. `unblock` funciona hoje,
+`block` não: ver `INVESTIGATION-block-unblock.md` e `HUMAN-LAST.md` (E.1,
+E.2) para o resto — a correção "completa" (`pn_jid` no `block`, porta de
+whatsmeow `8d023aa973`) continua pendente e É desta biblioteca.
 
 <!-- f-status: aberto -->
 
@@ -3255,9 +3263,11 @@ da resposta, e fundir ou manter é escolha de contrato.
 controlo negativo EXECUTADO repondo `To: jid` — confirmando que a mutação
 COMPILA e falha com mensagem.
 
-**Status**: não corrigido. Causa determinada. Ver
-`INVESTIGATION-newsletter-updates.md` e `HUMAN-LAST.md` (B.4) — a confirmação
-exige um canal COM mensagens, e o canal de teste estava vazio.
+**Status**: não corrigido. Causa determinada. A confirmação que faltava (um
+canal COM mensagens) foi feita em 2026-08-28 — ver `HOUSEKEEP.md` (raiz),
+F265: mesmo sintoma exato (`500` aos 30,01s) com conteúdo real no canal,
+eliminando "canal vazio" como variável. Ver `INVESTIGATION-newsletter-updates.md`
+e `HUMAN-LAST.md` (B.4) para o resto.
 
 <!-- f-status: aberto -->
 

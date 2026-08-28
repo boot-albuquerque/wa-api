@@ -138,6 +138,12 @@ var migrations = []Migration{
 		UpSQL:   addLabelsSQL,
 		DownSQL: addLabelsDownSQL,
 	},
+	{
+		ID:      migrationIDEngine,
+		Name:    "add_engine",
+		UpSQL:   addEngineSQL,
+		DownSQL: addEngineDownSQL,
+	},
 }
 
 // migrationIDBlankPlaintextToken apaga o token em texto claro das linhas
@@ -156,6 +162,11 @@ const migrationIDLabels = 18
 // migrationIDWebhookOutbox identifica a migração do outbox de webhook, pelo
 // mesmo motivo da constante acima: três lugares a referenciam.
 const migrationIDWebhookOutbox = 15
+
+// migrationIDEngine acrescenta a coluna que guarda a escolha de engine por
+// sessão (noise/headless), substituindo a decisão 94 (seleção estática por
+// variável de ambiente, removida). Ver HOUSEKEEP.md.
+const migrationIDEngine = 19
 
 // addWebhookOutboxSQL cria o outbox de entrega de webhook (ADR-0005, D3).
 //
@@ -399,6 +410,19 @@ ALTER TABLE session_leases ADD COLUMN owner_addr TEXT NOT NULL DEFAULT '';
 
 const addLeaseOwnerAddrDownSQL = `
 ALTER TABLE session_leases DROP COLUMN owner_addr;
+`
+
+// addEngineSQL acrescenta a coluna que guarda a engine escolhida por sessão
+// (noise/headless). Substitui a decisão 94 (WA_API_ENGINE /
+// WA_API_ENGINE_HEADLESS_SESSIONS, seleção estática por variável de
+// ambiente): a escolha agora é feita pelo usuário na criação da sessão e
+// persistida por linha, não inferida no arranque do processo.
+const addEngineSQL = `
+ALTER TABLE users ADD COLUMN engine TEXT NOT NULL DEFAULT 'noise';
+`
+
+const addEngineDownSQL = `
+ALTER TABLE users DROP COLUMN engine;
 `
 
 // renameMessageSecretsIndexSQL acompanha a renomeação das tabelas do módulo de

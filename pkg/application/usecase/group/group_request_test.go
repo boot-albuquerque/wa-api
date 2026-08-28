@@ -225,8 +225,8 @@ func TestGroupRequest_ExecuteUpdateGroupRequestParticipants(t *testing.T) {
 			name: "porta falha",
 			req:  base,
 			arrange: func(f *reqFakes) {
-				f.reqs.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) error {
-					return boom
+				f.reqs.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) (domain.ParticipantsUpdate, error) {
+					return domain.ParticipantsUpdate{}, boom
 				}
 			},
 			wantErr: true,

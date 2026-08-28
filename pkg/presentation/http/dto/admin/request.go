@@ -28,6 +28,10 @@ const (
 	// branches on.
 	missingNameOrTokenCode = "missing_name_or_token"
 	missingNameOrTokenMsg  = "name and token are required"
+
+	// invalidEngineCode is returned when `engine` is neither empty nor one
+	// of domain.EngineNoise / domain.EngineWaHeadless.
+	invalidEngineCode = "invalid_engine"
 )
 
 // ProxyConfigRequest is the `proxy_config` object of a create/edit body.
@@ -100,6 +104,13 @@ type AddUserRequest struct {
 	HmacKey    string `json:"hmac_key"`
 	History    int    `json:"history"`
 
+	// Engine is the transport chosen for this session:
+	// domain.EngineNoise or domain.EngineWaHeadless. Empty defaults to
+	// domain.EngineNoise. Replaces decisão 94's startup-time, env-var
+	// driven selection — the choice is now per-session and made by the
+	// caller before the session (or its QR code) is created.
+	Engine string `json:"engine"`
+
 	ProxyConfig *ProxyConfigRequest `json:"proxy_config"`
 	S3Config    *S3ConfigRequest    `json:"s3_config"`
 }
@@ -112,11 +123,16 @@ func (r AddUserRequest) Validate() error {
 		return apperr.New(missingNameOrTokenCode, apperr.CategoryValidation,
 			missingNameOrTokenMsg, false, nil)
 	}
+	if _, ok := domain.EngineValido(r.Engine, domain.EngineNoise); !ok {
+		return apperr.New(invalidEngineCode, apperr.CategoryValidation,
+			"engine must be \""+domain.EngineNoise+"\" or \""+domain.EngineWaHeadless+"\"", false, nil)
+	}
 	return nil
 }
 
 // ToDomain produces the use case input. Only called after Validate.
 func (r AddUserRequest) ToDomain() domain.AddUserInput {
+	engine, _ := domain.EngineValido(r.Engine, domain.EngineNoise)
 	return domain.AddUserInput{
 		Name:        r.Name,
 		Token:       r.Token,
@@ -125,6 +141,7 @@ func (r AddUserRequest) ToDomain() domain.AddUserInput {
 		Events:      r.Events,
 		HmacKey:     r.HmacKey,
 		History:     r.History,
+		Engine:      engine,
 		ProxyConfig: r.ProxyConfig.ToDomain(),
 		S3Config:    r.S3Config.ToDomain(),
 	}

@@ -130,19 +130,37 @@ func TestGroupAdapter_GetRequestParticipants_NoSession(t *testing.T) {
 	}
 }
 
-// TestGroupAdapter_UpdateRequestParticipants_Approve.
+// TestGroupAdapter_UpdateRequestParticipants_Approve trava a F280: o
+// resultado por solicitante que o protocolo devolve (JID + Error) sai no
+// ParticipantsUpdate, não é descartado.
 func TestGroupAdapter_UpdateRequestParticipants_Approve(t *testing.T) {
 	var seen wanoise.ParticipantRequestChange
 	fake := &testkit.Fake{UpdateGroupRequestParticipantsFn: func(ctx context.Context, jid types.JID, p []types.JID, action wanoise.ParticipantRequestChange) ([]types.GroupParticipant, error) {
 		seen = action
-		return nil, nil
+		return []types.GroupParticipant{
+			{JID: types.NewJID("aprovado", types.DefaultUserServer)},
+			{JID: types.NewJID("recusado", types.DefaultUserServer), Error: 409},
+		}, nil
 	}}
 	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	if err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove); err != nil {
+	got, err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove)
+	if err != nil {
 		t.Fatalf("UpdateRequestParticipants approve = %v", err)
 	}
 	if seen != wanoise.ParticipantChangeApprove {
 		t.Errorf("action = %v, want approve", seen)
+	}
+	if !got.Confirmed {
+		t.Error("Confirmed = false, queria true: o transporte leu o resultado na mesma chamada")
+	}
+	if len(got.Participants) != 2 {
+		t.Fatalf("Participants = %d, queria 2 (um sucesso, um parcial)", len(got.Participants))
+	}
+	if got.Participants[0].Error != 0 {
+		t.Errorf("Participants[0].Error = %d, queria 0 (aprovado)", got.Participants[0].Error)
+	}
+	if got.Participants[1].Error != 409 {
+		t.Errorf("Participants[1].Error = %d, queria 409 (sucesso parcial, não silenciado)", got.Participants[1].Error)
 	}
 }
 
@@ -154,7 +172,7 @@ func TestGroupAdapter_UpdateRequestParticipants_Reject(t *testing.T) {
 		return nil, nil
 	}}
 	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))
-	if err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestReject); err != nil {
+	if _, err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestReject); err != nil {
 		t.Fatalf("UpdateRequestParticipants reject = %v", err)
 	}
 	if seen != wanoise.ParticipantChangeReject {
@@ -165,7 +183,7 @@ func TestGroupAdapter_UpdateRequestParticipants_Reject(t *testing.T) {
 // TestGroupAdapter_UpdateRequestParticipants_Unknown.
 func TestGroupAdapter_UpdateRequestParticipants_Unknown(t *testing.T) {
 	a := NewGroupAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": &testkit.Fake{}}))
-	err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", nil, domain.RequestAction("weird"))
+	_, err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", nil, domain.RequestAction("weird"))
 	if err == nil {
 		t.Fatal("UpdateRequestParticipants com ação inválida = nil")
 	}
@@ -174,7 +192,7 @@ func TestGroupAdapter_UpdateRequestParticipants_Unknown(t *testing.T) {
 // TestGroupAdapter_UpdateRequestParticipants_NoSession.
 func TestGroupAdapter_UpdateRequestParticipants_NoSession(t *testing.T) {
 	a := NewGroupAdapter(testkit.GetterWith(nil))
-	err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", nil, domain.RequestApprove)
+	_, err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", nil, domain.RequestApprove)
 	if testkit.AppErrCode(err) != "no_session" {
 		t.Errorf("UpdateRequestParticipants code = %q", testkit.AppErrCode(err))
 	}

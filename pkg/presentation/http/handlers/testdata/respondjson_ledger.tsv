@@ -40,7 +40,7 @@ handler_group.go	*ListGroupsHandler.ServeHTTP	dtogroup.PresentListGroups(…)	dt
 handler_group.go	*ListGroupsHandler.ServeHTTP	nil	nil	1
 handler_group.go	*SetGroupJoinApprovalModeHandler.ServeHTTP	dtogroup.PresentAcknowledgement(…)	dto	1
 handler_group.go	*SetGroupJoinApprovalModeHandler.ServeHTTP	nil	nil	2
-handler_group.go	*UpdateGroupRequestParticipantsHandler.ServeHTTP	dtogroup.PresentAcknowledgement(…)	dto	1
+handler_group.go	*UpdateGroupRequestParticipantsHandler.ServeHTTP	dtogroup.PresentParticipantsUpdate(…)	dto	1
 handler_group.go	*UpdateGroupRequestParticipantsHandler.ServeHTTP	nil	nil	2
 handler_group_mgmt.go	decodeAndRespond	nil	nil	1
 handler_group_mgmt.go	handleCreateGroup	dtogroup.PresentCreatedGroup(…)	dto	1
@@ -125,6 +125,7 @@ handler_misc.go	*SetPrivacySettingHandler.ServeHTTP	dtouser.PresentPrivacySettin
 handler_misc.go	*SetPrivacySettingHandler.ServeHTTP	nil	nil	3
 handler_newsletter.go	*newsletterOpHandler.ServeHTTP	nil	nil	2
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterAck(…)	dto	2
+handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterAdminInvite(…)	dto	1
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterInfo(…)	dto	1
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterMessages(…)	dto	1
 handler_newsletter.go	*newsletterOpHandler.respond	dtonewsletter.PresentNewsletterSubscribe(…)	dto	1

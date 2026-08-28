@@ -70,7 +70,7 @@ func (f *uhFakes) failSession(err error) {
 func (f *uhFakes) handlers() *UserHandlers {
 	return NewUserHandlers(
 		user.NewListUsersUseCase(f.users, f.logger, f.sessions),
-		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger),
+		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger, true),
 		user.NewEditUserUseCase(f.users, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, f.logger),
 		user.NewDeleteUserUseCase(f.users, &contractsfake.UserInfoRepublisher{}, f.logger),
 		user.NewCheckUserUseCase(f.contacts, f.logger),

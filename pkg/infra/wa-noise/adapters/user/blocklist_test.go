@@ -126,15 +126,63 @@ func TestNormalizeBlocklistJID_DefaultPreserved(t *testing.T) {
 	}
 }
 
-// TestResolveBlocklistPNJID_DefaultUserServer devolve como está.
-func TestResolveBlocklistPNJID_DefaultUserServer(t *testing.T) {
+// TestResolveBlocklistPNJID_DefaultUserServer_SemLIDEmCacheDevolveOPN: sem
+// mapeamento PN→LID em cache, cai para o PN tal como veio — pior que a
+// forma correta, mas nunca pior que o comportamento anterior a esta
+// correção (que nem tentava resolver).
+func TestResolveBlocklistPNJID_DefaultUserServer_SemLIDEmCacheDevolveOPN(t *testing.T) {
 	jid := types.NewJID("5511", types.DefaultUserServer)
 	got, err := resolveBlocklistPNJID(context.Background(), &testkit.Fake{}, jid)
 	if err != nil {
 		t.Fatalf("resolveBlocklistPNJID = %v", err)
 	}
-	if got.User != "5511" {
-		t.Errorf("resolveBlocklistPNJID.User = %q", got.User)
+	if got.Server != types.DefaultUserServer || got.User != "5511" {
+		t.Errorf("resolveBlocklistPNJID = %v, queria o PN inalterado", got)
+	}
+}
+
+// TestResolveBlocklistPNJID_DefaultUserServer_ComLIDEmCacheResolveParaLID
+// é o caso mais comum na prática: quem chama a API manda telefone, não
+// LID. Sem esta resolução, `POST /users/unblock {"phone": "..."}` envia o
+// `<item>` em `@s.whatsapp.net` — a forma que a F278/LIB-02 documentou
+// como recusada pelo WhatsApp — mesmo depois da correção do sentido
+// LID→PN, porque um PN nunca passava pelo ramo que essa correção mudou.
+func TestResolveBlocklistPNJID_DefaultUserServer_ComLIDEmCacheResolveParaLID(t *testing.T) {
+	pn := types.NewJID("5511", types.DefaultUserServer)
+	lid := types.NewJID("999888", types.HiddenUserServer)
+	fake := &testkit.Fake{StoreFn: func() *store.Device {
+		return storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{lid: pn}}, nil)
+	}}
+	got, err := resolveBlocklistPNJID(context.Background(), fake, pn)
+	if err != nil {
+		t.Fatalf("resolveBlocklistPNJID = %v", err)
+	}
+	if got.Server != types.HiddenUserServer || got.User != "999888" {
+		t.Errorf("resolveBlocklistPNJID = %v, queria o LID em cache %v", got, lid)
+	}
+}
+
+// TestResolveBlocklistPNJID_HiddenUserServer_DevolveOMesmoLID trava a CAUSA
+// da F278/LIB-02, não o sintoma: um LID que chega aqui já é a forma que o
+// protocolo exige para escrever a blocklist, e não deve ser traduzido para
+// PN. Antes desta correção, esta função chamava getCachedPNForLID e
+// devolvia o PN — a forma pré-migração, que o WhatsApp recusa com `400
+// bad-request` em UpdateBlocklist.
+func TestResolveBlocklistPNJID_HiddenUserServer_DevolveOMesmoLID(t *testing.T) {
+	jid := types.NewJID("123456", types.HiddenUserServer)
+	// &testkit.Fake{} não implementa StoreFn: se resolveBlocklistPNJID ainda
+	// chamasse getCachedPNForLID, o Store() nil faria este teste falhar por
+	// erro, não silenciosamente — o que também prova que a chamada não
+	// acontece mais.
+	got, err := resolveBlocklistPNJID(context.Background(), &testkit.Fake{}, jid)
+	if err != nil {
+		t.Fatalf("resolveBlocklistPNJID(LID) = %v, queria nil (sem resolver PN)", err)
+	}
+	if got.Server != types.HiddenUserServer {
+		t.Errorf("resolveBlocklistPNJID(LID).Server = %v, queria %v (permanecer @lid)", got.Server, types.HiddenUserServer)
+	}
+	if got.User != "123456" {
+		t.Errorf("resolveBlocklistPNJID(LID).User = %q, queria %q (o mesmo LID)", got.User, "123456")
 	}
 }
 

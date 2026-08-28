@@ -10,40 +10,48 @@ import (
 	"testing"
 )
 
-// Este ficheiro RECONCILIA as quatro fontes que contam evidência.
+// Este ficheiro RECONCILIA as fontes que contam evidência e que
+// `cmd/openapidoc` NÃO gera a partir de `evidencias.tsv`.
 //
 // POR QUE ELE EXISTE. Os gates que já cá estavam verificam que cada operação
 // TEM marca (TestOpenAPISummariesTrazemMarcaDeEvidencia) e que o documento
 // embutido está em dia com as fontes (TestOpenAPIGeradoEstaAtualizado). Nenhum
-// verifica que os NÚMEROS batem entre si — e foi por aí que a divergência
+// verificava que os NÚMEROS batem entre si — e foi por aí que a divergência
 // passou: em 2d96535, com as formas antigas ainda no contrato, o
 // `evidencias.tsv` e o relatório diziam 232 operações (178/13/6/35) enquanto a
 // legenda de `info.description`, servida a toda a gente em /docs, continuava a
 // dizer "As 141 estão documentadas" e "98 ✅, 8 🟡, 3 ❌, 32 ⬜". Toda a suíte
 // passava.
 //
-// Desde 3a0b48b4 o contrato voltou a 141 operações, agora com um nome só por
-// capacidade. O gate não conhece nenhum desses números: ele lê a fonte única e
-// exige que as outras três a espelhem, pelo que sobrevive ao próximo lote de
-// promoções sem ser tocado.
+// F239/F282 (2026-08-28) removeram DUAS das quatro fontes que este ficheiro
+// reconciliava: `docs/OPENAPI-EVIDENCIAS.md` passou a ser GERADO por
+// `cmd/openapidoc` a partir da própria `evidencias.tsv`
+// (evidence_report.go), então "a tabela por grupo e o total do relatório
+// batem com a fonte única" deixou de ser uma pergunta que um teste precisa
+// de fazer — é verdade por construção, e `TestOpenAPIGeradoEstaAtualizado`
+// já recusa um relatório desactualizado (o mesmo `-check` que já cobria
+// `openapi.yaml`). Os `TestEvidenceReportMatchesSpec` e
+// `TestEvidenceReportSummaryMatchesTable` que viviam aqui foram removidos —
+// não porque a garantia deixou de importar, mas porque ela passou a viver
+// num sítio mais forte (a geração em si, não uma reconciliação a posteriori).
 //
-// A causa é estrutural, não distracção: a marca de cada rota é GERADA da
-// tabela, mas o RESUMO da legenda e o relatório são escritos à mão. Um número
-// escrito à mão ao lado de um número gerado diverge no primeiro dia em que
-// alguém acrescenta uma rota. Este gate liga os dois.
+// O que sobra é a fonte que CONTINUA hand-maintained e que `cmd/openapidoc`
+// não toca por desenho: a legenda em `info.description` (api/openapi/base.yaml).
 //
-// As quatro fontes:
+// As duas fontes que restam:
 //   1. api/openapi/evidencias.tsv          — a fonte única declarada
 //   2. a especificação EMBUTIDA            — marca no summary de cada operação
-//   3. info.description da especificação   — a legenda com os totais
-//   4. docs/OPENAPI-EVIDENCIAS.md          — resumo, tabela por grupo, total
+//   3. info.description da especificação   — a legenda com os totais, à mão
 
 const (
-	evidenceTableFile  = "evidencias.tsv"
-	evidenceReportFile = "../../docs/OPENAPI-EVIDENCIAS.md"
+	evidenceTableFile = "evidencias.tsv"
 
-	// evidenceTableColumns é a forma de uma linha: método, caminho, marca.
-	evidenceTableColumns = 3
+	// evidenceTableColumns é a forma de uma linha desde F239/F282: método,
+	// caminho, marca, data, observador, evidência. Só os três primeiros
+	// interessam a este ficheiro (a marca é o que a legenda soma); os
+	// últimos três existem para a campanha de medição, não para a
+	// reconciliação de contagens.
+	evidenceTableColumns = 6
 )
 
 // As quatro marcas, nomeadas. Um símbolo solto repetido em cinco sítios é o
@@ -55,8 +63,7 @@ const (
 	markUntested   = "⬜"
 )
 
-// orderedMarks fixa a ordem em que os totais aparecem na legenda e no
-// relatório: ✅, 🟡, ❌, ⬜.
+// orderedMarks fixa a ordem em que os totais aparecem na legenda: ✅, 🟡, ❌, ⬜.
 var orderedMarks = []string{markConfirmed, markUnobserved, markFailed, markUntested}
 
 // TestEvidenceMarkConstantsMatchGenerator amarra as constantes acima à lista
@@ -100,6 +107,14 @@ func (c markCounts) format() string {
 }
 
 // marksFromTable lê a fonte única e devolve marca por rota.
+//
+// TrimRight(line, "\r"), não TrimSpace: desde F239/F282 cada linha tem TRÊS
+// colunas finais opcionais (data, observador, evidência), vazias na maioria
+// das rotas ainda por remedir. TrimSpace trata tabulação como espaço e comeria
+// esses campos vazios do fim da linha — "GET\t/x\t✅\t\t\t" viraria
+// "GET\t/x\t✅" e a leitura pareceria ter 3 colunas em vez de 6, certo por
+// acidente numa linha e errado (por excesso de colunas noutras) — é o mesmo
+// defeito que mordeu a primeira versão do gerador (ver evidence_report.go).
 func marksFromTable(t *testing.T) map[string]string {
 	t.Helper()
 	path := filepath.Join(openapiSpecRoot, evidenceTableFile)
@@ -108,9 +123,10 @@ func marksFromTable(t *testing.T) map[string]string {
 		t.Fatalf("tabela de evidência: %v", err)
 	}
 	marks := map[string]string{}
-	for lineNo, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+	for lineNo, rawLine := range strings.Split(string(raw), "\n") {
+		line := strings.TrimRight(rawLine, "\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 		fields := strings.Split(line, "\t")
@@ -280,217 +296,5 @@ func TestEvidenceLegendMatchesTable(t *testing.T) {
 	} else if got := mustAtoi(t, m[1]); got != counts[markUntested] {
 		t.Errorf("legenda diz \"As %d por testar\", mas %s tem %d %s",
 			got, evidenceTableFile, counts[markUntested], markUntested)
-	}
-}
-
-// reportRow é uma linha da tabela "Por grupo": o nome e as cinco contagens.
-type reportRow struct {
-	group      string
-	operations int
-	byMark     markCounts
-}
-
-// stripEmphasis tira o negrito de markdown de uma célula: "**141**" -> "141".
-func stripEmphasis(cell string) string {
-	return strings.TrimSpace(strings.Trim(strings.TrimSpace(cell), "*"))
-}
-
-// parseGroupTable lê a tabela sob "## Por grupo" do relatório.
-//
-// Devolve as linhas de grupo e a linha de Total em separado, porque o Total é
-// uma afirmação sobre a soma e tem de ser conferido CONTRA a soma — aceitá-lo
-// como mais uma linha deixaria passar um total que não fecha com as parcelas.
-func parseGroupTable(t *testing.T) (groups []reportRow, total reportRow) {
-	t.Helper()
-	raw, err := os.ReadFile(evidenceReportFile)
-	if err != nil {
-		t.Fatalf("relatório de evidência: %v", err)
-	}
-
-	const groupHeading = "## Por grupo"
-	inSection := false
-	var found bool
-	for _, line := range strings.Split(string(raw), "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "## ") {
-			inSection = trimmed == groupHeading
-			if inSection {
-				found = true
-			}
-			continue
-		}
-		if !inSection || !strings.HasPrefix(trimmed, "|") {
-			continue
-		}
-		cells := strings.Split(strings.Trim(trimmed, "|"), "|")
-		// Grupo + operações + quatro marcas.
-		if len(cells) != 2+len(orderedMarks) {
-			continue
-		}
-		name := stripEmphasis(cells[0])
-		// Salta o cabeçalho e a linha de separação.
-		if name == "" || name == "Grupo" || strings.HasPrefix(name, "-") {
-			continue
-		}
-		operations, err := strconv.Atoi(stripEmphasis(cells[1]))
-		if err != nil {
-			continue
-		}
-		row := reportRow{group: name, operations: operations, byMark: markCounts{}}
-		for i, mark := range orderedMarks {
-			row.byMark[mark] = mustAtoi(t, stripEmphasis(cells[2+i]))
-		}
-		if name == "Total" {
-			total = row
-			continue
-		}
-		groups = append(groups, row)
-	}
-	if !found {
-		t.Fatalf("%s não tem secção %q", evidenceReportFile, groupHeading)
-	}
-	return groups, total
-}
-
-// specGroupCounts agrupa as operações da especificação pela primeira etiqueta,
-// que é o "grupo" com que o relatório as apresenta.
-func specGroupCounts(t *testing.T) map[string]markCounts {
-	t.Helper()
-	byGroup := map[string]markCounts{}
-	for key, op := range operacoesDaEspecificacao(t, carregarEspecificacao(t)) {
-		if len(op.tags) == 0 {
-			t.Errorf("%s não tem etiqueta — o relatório agrupa por etiqueta", key)
-			continue
-		}
-		group := op.tags[0]
-		if byGroup[group] == nil {
-			byGroup[group] = markCounts{}
-		}
-		byGroup[group][markOfSummary(op.resumo)]++
-	}
-	return byGroup
-}
-
-// TestEvidenceReportMatchesSpec confronta o relatório com a especificação,
-// grupo a grupo — e não só no total.
-//
-// O total é a afirmação agregada: fecha mesmo quando dois grupos erram em
-// sentidos opostos. É a tabela por grupo que diz onde.
-func TestEvidenceReportMatchesSpec(t *testing.T) {
-	groups, total := parseGroupTable(t)
-	fromSpec := specGroupCounts(t)
-
-	seen := map[string]bool{}
-	summed := markCounts{}
-	summedOperations := 0
-
-	for _, row := range groups {
-		seen[row.group] = true
-		summedOperations += row.operations
-		for _, mark := range orderedMarks {
-			summed[mark] += row.byMark[mark]
-		}
-
-		actual, present := fromSpec[row.group]
-		if !present {
-			t.Errorf("relatório tem o grupo %q, que não existe como etiqueta na especificação", row.group)
-			continue
-		}
-		for _, mark := range orderedMarks {
-			if row.byMark[mark] != actual[mark] {
-				t.Errorf("grupo %q: relatório diz %d %s, especificação tem %d",
-					row.group, row.byMark[mark], mark, actual[mark])
-			}
-		}
-		if row.operations != actual.total() {
-			t.Errorf("grupo %q: relatório diz %d operações, especificação tem %d",
-				row.group, row.operations, actual.total())
-		}
-	}
-
-	var missing []string
-	for group := range fromSpec {
-		if !seen[group] {
-			missing = append(missing, group)
-		}
-	}
-	sort.Strings(missing)
-	for _, group := range missing {
-		t.Errorf("etiqueta %q existe na especificação e não tem linha na tabela por grupo do relatório", group)
-	}
-
-	// A linha de Total tem de fechar com a soma das parcelas...
-	for _, mark := range orderedMarks {
-		if total.byMark[mark] != summed[mark] {
-			t.Errorf("linha Total diz %d %s, mas as parcelas somam %d",
-				total.byMark[mark], mark, summed[mark])
-		}
-	}
-	if total.operations != summedOperations {
-		t.Errorf("linha Total diz %d operações, mas as parcelas somam %d",
-			total.operations, summedOperations)
-	}
-	// ...e com a fonte única.
-	tableCounts := countMarks(marksFromTable(t))
-	for _, mark := range orderedMarks {
-		if total.byMark[mark] != tableCounts[mark] {
-			t.Errorf("linha Total diz %d %s, mas %s tem %d",
-				total.byMark[mark], mark, evidenceTableFile, tableCounts[mark])
-		}
-	}
-	if total.operations != tableCounts.total() {
-		t.Errorf("linha Total diz %d operações, mas %s classifica %d",
-			total.operations, evidenceTableFile, tableCounts.total())
-	}
-}
-
-// reportValidationLine apanha as quatro linhas do bloco "Validação:" do resumo
-// quantitativo, na ordem OK / AMR / ERR / NT.
-var reportValidationLine = regexp.MustCompile(`(?m)^\s*(OK|AMR|ERR|NT)\s+.*?:\s*(\d+)\s*$`)
-
-// validationPrefixToMark liga o rótulo do resumo quantitativo à marca. O
-// resumo usa rótulos ASCII porque vive dentro de um bloco de código.
-var validationPrefixToMark = map[string]string{
-	"OK":  markConfirmed,
-	"AMR": markUnobserved,
-	"ERR": markFailed,
-	"NT":  markUntested,
-}
-
-// reportDocumented apanha "Operações documentadas: 141".
-var reportDocumented = regexp.MustCompile(`(?m)^\s*Operações documentadas:\s*(\d+)\s*$`)
-
-// TestEvidenceReportSummaryMatchesTable confere o bloco de resumo do
-// relatório, que é a parte que as pessoas leem e a que ninguém recalcula.
-func TestEvidenceReportSummaryMatchesTable(t *testing.T) {
-	raw, err := os.ReadFile(evidenceReportFile)
-	if err != nil {
-		t.Fatalf("relatório de evidência: %v", err)
-	}
-	report := string(raw)
-	counts := countMarks(marksFromTable(t))
-
-	matches := reportValidationLine.FindAllStringSubmatch(report, -1)
-	if len(matches) != len(orderedMarks) {
-		t.Fatalf("bloco \"Validação:\" tem %d linhas reconhecidas, esperava %d — "+
-			"se os rótulos mudaram, actualize reportValidationLine", len(matches), len(orderedMarks))
-	}
-	for _, m := range matches {
-		mark, known := validationPrefixToMark[m[1]]
-		if !known {
-			t.Errorf("rótulo %q sem marca correspondente", m[1])
-			continue
-		}
-		if got := mustAtoi(t, m[2]); got != counts[mark] {
-			t.Errorf("resumo diz %s %d, mas %s tem %d %s",
-				m[1], got, evidenceTableFile, counts[mark], mark)
-		}
-	}
-
-	if m := reportDocumented.FindStringSubmatch(report); m == nil {
-		t.Errorf("resumo não traz \"Operações documentadas: N\"")
-	} else if got := mustAtoi(t, m[1]); got != counts.total() {
-		t.Errorf("resumo diz \"Operações documentadas: %d\", mas %s classifica %d",
-			got, evidenceTableFile, counts.total())
 	}
 }

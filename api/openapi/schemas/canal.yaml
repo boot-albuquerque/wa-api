@@ -1149,7 +1149,8 @@ ReconhecimentoCanal:
   description: |
     Resposta das rotas de canal que mudam alguma coisa e não devolvem carga:
     `follow`, `unfollow`, `mute`, `mark-viewed`, `react`, `demote`,
-    `change-owner`, `delete` e as três de `admin-invite`.
+    `change-owner`, `delete`, `admin-invite/accept` e `admin-invite/revoke`.
+    `admin-invite` (criação) é a exceção — ver `ConviteAdminCanal`.
 
     **Estas rotas respondiam `data: null`**, pela mesma causa da subscrição.
     `null` não se distingue de uma rota que falhou a encher a carga, e um
@@ -1161,6 +1162,34 @@ ReconhecimentoCanal:
       nullable: false
       description: '`sent` quando a operação chegou ao WhatsApp. Nunca `null`.'
       example: sent
+
+ConviteAdminCanal:
+  type: object
+  description: |
+    Resposta de `POST /newsletter/admin-invite`.
+
+    **F261 (2026-08-28)**: até esta correção a rota respondia `data: null`
+    mesmo em sucesso — o servidor confirma o `id` do convite e o
+    `invite_expiration_time` (sete dias, medido), e esses dois valores eram
+    lidos e descartados. Agora saem aqui.
+  required: [id, expiration_at]
+  properties:
+    id:
+      type: string
+      nullable: false
+      description: |
+        Identificador do convite, na forma `<numero>@newsletter`. **Sempre
+        presente**, nunca `null` num `200`.
+      example: 120363411706831441@newsletter
+    expiration_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: |
+        Instante em que o convite deixa de valer, em RFC 3339 UTC. `null`
+        só se o servidor responder sem `invite_expiration_time` — não
+        observado em campo; medido sempre sete dias à frente da criação.
+      example: '2026-09-04T18:11:03Z'
 
 # --- Comunidades ------------------------------------------------------------
 

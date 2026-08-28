@@ -99,8 +99,8 @@ func grpReadCases() []grpReadCase {
 				return NewUpdateGroupRequestParticipantsHandler(group.NewGroupRequestUseCase(f.requests, f.jids, f.logger))
 			},
 			failOp: func(f *grpFakes, err error) {
-				f.requests.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) error {
-					return err
+				f.requests.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) (domain.ParticipantsUpdate, error) {
+					return domain.ParticipantsUpdate{}, err
 				}
 			},
 		},

@@ -1,6 +1,10 @@
 package bootstrap
 
-import "fmt"
+import (
+	"fmt"
+
+	"wa-api/pkg/domain"
+)
 
 // A regra de roteamento por engine (decisão 94), isolada do roteador para
 // poder ser exercitada sem port nenhum.
@@ -39,7 +43,7 @@ func (e ErrEngineSemPort) Error() string {
 // `temHeadless` é a presença da implementação headless daquele port — nil
 // significa "este engine não serve isto", e nunca "use o outro".
 func rotaDeEngine(engine string, temHeadless bool) (usarHeadless bool, recusar bool) {
-	if engine != EngineWaHeadless {
+	if engine != domain.EngineWaHeadless {
 		return false, false
 	}
 	if !temHeadless {

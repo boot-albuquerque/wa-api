@@ -194,7 +194,13 @@ type GroupRequests interface {
 	GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error)
 
 	// UpdateRequestParticipants aprova ou rejeita solicitações.
-	UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error
+	//
+	// F280: o resultado por solicitante que o protocolo devolve (aprovado
+	// ou não, e o motivo quando não) já não é descartado — sai em
+	// domain.ParticipantsUpdate, no mesmo formato que UpdateGroupParticipants
+	// já usa para adicionar/remover membros. Um sucesso parcial passa a ser
+	// distinguível de sucesso total.
+	UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) (domain.ParticipantsUpdate, error)
 
 	// SetJoinApprovalMode liga/desliga a exigência de aprovação.
 	SetJoinApprovalMode(ctx context.Context, txtID string, group domain.JID, mode bool) error

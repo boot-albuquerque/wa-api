@@ -30,10 +30,16 @@
     <p class="ajuda">Cria o utilizador na API já inscrito em todos os eventos. O token é
       gerado aqui e guardado neste navegador — a API só o devolve na criação.</p>
     <label class="campo"><span>nome</span><input id="nova-nome" autocomplete="off" required></label>
+    <label class="campo"><span>engine</span>
+      <select id="nova-engine">
+        <option value="noise" selected>noise (socket — padrão, define os contratos do projeto)</option>
+        <option value="headless">headless (SPA por navegador — cobre 17 de 25 rotas hoje)</option>
+      </select>
+    </label>
     <label class="campo"><span>token da sessão (gerado)</span>
       <input id="nova-token" autocomplete="off" spellcheck="false" readonly></label>
     <div class="rodape">
-      <button value="cancel">Cancelar</button>
+      <button value="cancel" formnovalidate>Cancelar</button>
       <button type="button" class="primary" id="nova-criar">Criar</button>
     </div>
     <div class="resposta" id="nova-resposta" hidden></div>

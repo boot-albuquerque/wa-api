@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -434,10 +435,47 @@ func TestNewsletter_AdminInviteAcceptSemJID_E400(t *testing.T) {
 	}
 }
 
+// TestNewsletter_AdminInviteDevolveIDEExpiracao trava a F261: até
+// 2026-08-28 esta rota respondia `data:null` mesmo em sucesso — o servidor
+// confirma o `id` do convite e `invite_expiration_time`, e o adaptador
+// descartava os dois. Controle negativo: reverter o handler para
+// `dtonewsletter.PresentNewsletterAck(rsp.Status)` faz este teste falhar,
+// porque `data` volta a não ter `id`.
+func TestNewsletter_AdminInviteDevolveIDEExpiracao(t *testing.T) {
+	quando := time.Date(2026, 12, 31, 12, 0, 0, 0, time.UTC)
+	nr := &contractsfake.NewsletterReader{
+		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) (domain.NewsletterAdminInvite, error) {
+			return domain.NewsletterAdminInvite{ID: "120363411706831441@newsletter", ExpirationTime: quando}, nil
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Data struct {
+			ID           string  `json:"id"`
+			ExpirationAt *string `json:"expiration_at"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if env.Data.ID != "120363411706831441@newsletter" {
+		t.Errorf("data.id = %q, want the invite ID (F261: era descartado, respondia data:null)", env.Data.ID)
+	}
+	if env.Data.ExpirationAt == nil || *env.Data.ExpirationAt != "2026-12-31T12:00:00Z" {
+		t.Errorf("data.expiration_at = %v, want 2026-12-31T12:00:00Z", env.Data.ExpirationAt)
+	}
+}
+
 func TestNewsletter_AdminInviteFalhaDaPortaE500(t *testing.T) {
 	nr := &contractsfake.NewsletterReader{
-		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) error {
-			return errors.New("server down")
+		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) (domain.NewsletterAdminInvite, error) {
+			return domain.NewsletterAdminInvite{}, errors.New("server down")
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",

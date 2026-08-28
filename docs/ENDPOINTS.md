@@ -581,7 +581,15 @@ respondem** (404) — a tabela abaixo é agora um **registo histórico**, para
 quem chegar com o nome antigo (visto em logs, exemplos velhos) encontrar a
 forma actual.
 
-### As nove que mudaram de forma, não só de número
+### As doze que mudaram de forma, não só de número
+
+F286 (2026-08-28): o título dizia "nove" enquanto a tabela abaixo sempre
+listou doze — as doze foram re-medidas ao vivo, uma por uma, com sessões
+reais pareadas; nove responderam `200` diretamente e as outras três (link
+de comunidade, remoção de foto de grupo com imagem real, desvincular
+subgrupo) tiveram a rota e a injeção do path param confirmadas, com a
+recusa vindo do próprio WhatsApp (código de erro específico do protocolo,
+não `400`/`404` de rota mal formada). Ver `HOUSEKEEP.md`.
 
 Nestas o identificador sai do corpo e vai para o caminho, e o método passa a
 dizer a operação:

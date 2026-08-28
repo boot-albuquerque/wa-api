@@ -24,6 +24,7 @@ type UserRecord struct {
 	S3              S3Config
 	HmacKey         []byte
 	History         int
+	Engine          string
 }
 
 // UserUpdate descreve uma alteração parcial de usuário. Campo nil é campo
@@ -66,4 +67,9 @@ type UserListEntry struct {
 	// reached this struct, so GetStatus answered with a hardcoded "0" for
 	// everyone (F219). Reading it here is what makes the API tell the truth.
 	History int
+
+	// Engine is the transport chosen for this session at creation time
+	// (EngineNoise or EngineWaHeadless). Replaces decisão 94's static,
+	// startup-time env-var selection.
+	Engine string
 }

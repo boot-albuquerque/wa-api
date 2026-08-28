@@ -922,7 +922,7 @@ ParticipanteGrupoCanonico:
     **Todas as propriedades aparecem SEMPRE**: o DTO não usa `omitempty` em
     campo nenhum, de propósito. Ler este objecto nunca exige verificar
     ausência — exige verificar VAZIO.
-  required: [jid, phone_number, lid, display_name, is_admin, is_super_admin]
+  required: [jid, phone_number, lid, display_name, is_admin, is_super_admin, error]
   properties:
     jid:
       type: string
@@ -963,6 +963,21 @@ ParticipanteGrupoCanonico:
       nullable: false
       description: Criador do grupo. Um super-administrador é também administrador.
       example: false
+    error:
+      type: integer
+      nullable: false
+      description: |
+        F280 (2026-08-28): o código de erro que o protocolo devolve para
+        ESTE participante, dentro de um lote com sucesso parcial — uma
+        adição ou um pedido de entrada em que alguns passaram e outros não.
+        `0` é o normal: participante sem erro reportado, incluindo toda
+        leitura de roster (`GET /groups/{group_jid}`, `POST /group/info`),
+        onde este campo é sempre `0`.
+
+        Antes desta correção o valor existia no protocolo e era descartado —
+        um sucesso parcial ficava indistinguível de sucesso total (F280,
+        `HOUSEKEEP.md`).
+      example: 0
 
 InfoGrupoCanonico:
   type: object
@@ -1225,10 +1240,11 @@ ResultadoAtualizarParticipantes:
       nullable: false
       description: |
         A lista de participantes que o WhatsApp devolveu na MESMA resposta, na
-        forma canónica. Um `is_admin`/`is_super_admin` inesperado numa entrada
-        diz que aquele participante falhou enquanto os outros passaram — o
-        `Error` numérico do protocolo não é mais exposto (ver
-        `InfoGrupoCanonico`).
+        forma canónica. `error` diferente de zero numa entrada diz que
+        aquele participante falhou enquanto os outros passaram (F280,
+        2026-08-28) — antes disso o `Error` numérico do protocolo era
+        descartado, e só `is_admin`/`is_super_admin` inesperados davam uma
+        pista indirecta.
 
         **Sempre um array, nunca `null`**: `make([]GroupParticipantResponse,
         0, ...)` antes do laço (`presenter_group.go`).

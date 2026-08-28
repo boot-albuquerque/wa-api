@@ -29,8 +29,15 @@ type UpdateGroupRequestParticipantsRequest struct {
 }
 
 // UpdateGroupRequestParticipantsResult is the outcome of deciding join requests.
+//
+// F280: ParticipantsUpdate embutido, e não só Details — o mesmo formato que
+// UpdateGroupParticipants (add/remove) já usa. Até 2026-08-28 esta struct só
+// tinha Details, uma frase fixa, e o resultado por solicitante que o
+// protocolo devolve (aprovado ou não, por quê) era descartado no adaptador —
+// um sucesso parcial era indistinguível de sucesso total.
 type UpdateGroupRequestParticipantsResult struct {
 	Details string
+	ParticipantsUpdate
 }
 
 // SetGroupJoinApprovalModeRequest is the input of the join-approval-mode use case.

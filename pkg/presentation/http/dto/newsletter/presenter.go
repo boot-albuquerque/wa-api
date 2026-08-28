@@ -155,6 +155,18 @@ func PresentNewsletterAck(status string) NewsletterAckResponse {
 	return NewsletterAckResponse{Status: status}
 }
 
+// PresentNewsletterAdminInvite maps the server's confirmation of an
+// admin-invite creation. F261.
+func PresentNewsletterAdminInvite(i *domain.NewsletterAdminInvite) NewsletterAdminInviteResponse {
+	if i == nil {
+		return NewsletterAdminInviteResponse{}
+	}
+	return NewsletterAdminInviteResponse{
+		ID:           i.ID,
+		ExpirationAt: presentTime(i.ExpirationTime),
+	}
+}
+
 // presentTime renders a timestamp as RFC 3339 in UTC, or null when the domain
 // has no value for it.
 //

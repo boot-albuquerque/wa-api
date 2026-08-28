@@ -72,4 +72,11 @@ type GroupParticipant struct {
 
 	IsAdmin      bool
 	IsSuperAdmin bool
+
+	// Error is non-zero when the protocol reports THIS participant's
+	// operation failed — added to a group, or approved/rejected as a join
+	// request — while the rest of the batch succeeded. Zero means no error
+	// reported, which is also what a caller that never populates this field
+	// (a roster read, not an update) leaves it at.
+	Error int
 }

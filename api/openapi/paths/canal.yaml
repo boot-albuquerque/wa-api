@@ -985,14 +985,13 @@
 
       **Não é enviada mensagem nenhuma.** É uma mutação pura do protocolo: o
       convidado só fica a saber pelo cliente dele. Procurar o convite no chat
-      de quem convida é procurar no sítio errado (F261).
+      de quem convida é procurar no sítio errado.
 
-      **Ressalva medida**: a resposta traz apenas `data.status`. O servidor
-      devolve um `invite_expiration_time` (sete dias) que a API deita fora
-      (F261) — a porta não o carrega, logo a migração para DTO não o pôde
-      recuperar como recuperou a duração da subscrição. Um `200` aqui significa
-      "convite criado"; a validade **não é devolvida**, e não há como
-      consultá-la por esta API.
+      **F261 (2026-08-28), corrigido**: a resposta passou a trazer `id` e
+      `expiration_at`. Até esta correção `data` vinha `null` mesmo em
+      sucesso — o servidor devolve um `invite_expiration_time` (sete dias,
+      medido) que era lido e descartado; um `200` só dizia "convite criado",
+      sem validade nenhuma consultável.
 
       **Regras**: `jid` e `user_jid` são obrigatórios. `user_jid` pode ir em PN
       ou LID; a resolução PN→LID acontece antes do envio (F233c).
@@ -1011,9 +1010,7 @@
             user_jid: 90937376170214@lid
     responses:
       '200':
-        description: |
-          Convite criado. `data` é `null` e o prazo de validade não é
-          devolvido — ver a ressalva acima.
+        description: Convite criado, com o id e o prazo de validade que o servidor confirmou.
         content:
           application/json:
             schema:
@@ -1022,11 +1019,12 @@
                 - type: object
                   properties:
                     data:
-                      $ref: '#/components/schemas/ReconhecimentoCanal'
+                      $ref: '#/components/schemas/ConviteAdminCanal'
             example:
               code: 200
               data:
-                status: sent
+                id: 120363411706831441@newsletter
+                expiration_at: '2026-09-04T18:11:03Z'
               success: true
       '400':
         description: Falta o `jid` ou o `user_jid`.

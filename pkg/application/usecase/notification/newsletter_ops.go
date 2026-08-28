@@ -101,6 +101,8 @@ type NewsletterResult struct {
 	// atualizações ao vivo valem, e vem do servidor.
 	Duration time.Duration
 	Status   string
+	// AdminInvite é preenchido só por admin_invite. F261.
+	AdminInvite *domain.NewsletterAdminInvite
 }
 
 // NewsletterOpsUseCase executa as onze operações.
@@ -200,8 +202,8 @@ func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req
 		err := n.DeleteNewsletter(ctx, userID, req.JID)
 		return NewsletterResult{}, err
 	case NewsletterOpAdminInvite:
-		err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
-		return NewsletterResult{}, err
+		invite, err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		return NewsletterResult{AdminInvite: &invite}, err
 	case NewsletterOpAdminInviteAccept:
 		err := n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
 		return NewsletterResult{}, err

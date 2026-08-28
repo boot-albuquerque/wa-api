@@ -50,6 +50,7 @@ func (uc *ListUsersUseCase) Execute(ctx context.Context, req domain.ListUsersInp
 			LoggedIn:   isLoggedIn,
 			Expiration: entry.Expiration,
 			Events:     entry.Events,
+			Engine:     entry.Engine,
 			Proxy: domain.UserProxySettings{
 				Enabled:         entry.HasProxyURL,
 				URL:             entry.ProxyURL,

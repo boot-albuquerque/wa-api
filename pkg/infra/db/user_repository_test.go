@@ -53,7 +53,7 @@ func newUserTestDB(t *testing.T) *sqlx.DB {
 
 func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 	ctx := context.Background()
 
 	if _, err := uc.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "shared"}); err != nil {
@@ -79,7 +79,7 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 // requisições simultâneas com o mesmo token passavam ambas pela checagem.
 func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
 	const attempts = 8
 	var wg sync.WaitGroup
@@ -116,7 +116,7 @@ func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 
 func TestAddUserPersistsTokenHash(t *testing.T) {
 	db := newUserTestDB(t)
-	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
+	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
 	resp, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok"})
 	if err != nil {
@@ -135,7 +135,7 @@ func TestAddUserPersistsTokenHash(t *testing.T) {
 func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
-	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
+	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
 	if _, err := add.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "alice-token"}); err != nil {
 		t.Fatalf("add alice: %v", err)
@@ -167,7 +167,7 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
 
-	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
+	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true).
 		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "old-token"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
@@ -191,7 +191,7 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
 
-	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}).
+	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true).
 		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "secret-token"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 func TestListUsersReportsS3AccessKeyConfigured(t *testing.T) {
 	db := newUserTestDB(t)
 	ctx := context.Background()
-	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{})
+	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
 	withKey, err := add.Execute(ctx, domain.AddUserInput{
 		Name: "with-key", Token: "tok-with-key",

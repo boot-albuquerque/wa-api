@@ -122,3 +122,13 @@ type NewsletterMessage struct {
 type NewsletterCollection struct {
 	Newsletters []NewsletterMetadata
 }
+
+// NewsletterAdminInvite is the server's confirmation of an admin-invite
+// creation: the invite's own ID and until when it is valid. F261 — until
+// 2026-08-28 this value was read from the protocol response and discarded,
+// so POST /newsletter/admin-invite answered `data:null`, indistinguishable
+// from "nothing happened".
+type NewsletterAdminInvite struct {
+	ID             string
+	ExpirationTime time.Time
+}

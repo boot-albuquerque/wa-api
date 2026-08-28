@@ -5,6 +5,36 @@ import (
 	"time"
 )
 
+// Engine é o transporte que serve uma sessão: o socket (wa-noise) ou a SPA
+// dirigida por navegador (wa-headless). Até a remoção da decisão 94, a
+// escolha era estática e vinda de variável de ambiente lida no arranque; ela
+// passa a ser por sessão, escolhida pelo usuário na criação e persistida na
+// coluna `engine` (migração 19).
+//
+// O headless hoje serve 17 dos 25 ports que o noise serve — gap medido e
+// deliberadamente fora do escopo desta mudança, tratado como trabalho futuro
+// em paralelo. O noise continua sendo o engine que define os contratos
+// canônicos do projeto.
+const (
+	// EngineNoise é o transporte de socket. É o padrão.
+	EngineNoise = "noise"
+	// EngineWaHeadless é a SPA dirigida por navegador.
+	EngineWaHeadless = "headless"
+)
+
+// EngineValido aceita o vazio como o padrão dado e recusa qualquer valor que
+// não seja um engine conhecido.
+func EngineValido(bruto, padrao string) (string, bool) {
+	switch bruto {
+	case "":
+		return padrao, true
+	case EngineNoise, EngineWaHeadless:
+		return bruto, true
+	default:
+		return "", false
+	}
+}
+
 // ListUsersInput is the use case input for listing users. Empty UserID means
 // "every user"; a non-empty one narrows the listing to a single user.
 //
@@ -34,6 +64,11 @@ type AddUserInput struct {
 	S3Config    *S3Config
 	HmacKey     string
 	History     int
+
+	// Engine is the transport the caller chose for this session
+	// (EngineNoise or EngineWaHeadless). Empty means "not informed" — the
+	// DTO defaults it to EngineNoise before this reaches the use case.
+	Engine string
 }
 
 // EditUserInput is the use case input for a partial user update.
@@ -150,6 +185,10 @@ type UserAccount struct {
 	// HmacConfigured reports that a per-user webhook signing key exists. The
 	// key itself never leaves the database in cleartext (F158).
 	HmacConfigured bool
+
+	// Engine is the transport this session was created with (EngineNoise
+	// or EngineWaHeadless).
+	Engine string
 
 	Proxy UserProxySettings
 	S3    UserS3Settings

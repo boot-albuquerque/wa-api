@@ -327,10 +327,27 @@ func TestOpenAPIGeradoEstaAtualizado(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("go", "run", openapiCmdPackage, "-root", raiz, "-out", saida, "-check")
+	// -evidence-out e -evidence-prosa também vão absolutos: este teste corre
+	// com o cwd em pkg/bootstrap (Go testa cada pacote a partir do seu
+	// próprio directório), e os valores por omissão de cmd/openapidoc
+	// ("docs/OPENAPI-EVIDENCIAS.md" etc.) são relativos à raiz do repositório
+	// — sem isto o processo filho escreveria (ou leria, no -check) dentro de
+	// pkg/bootstrap/docs/, que não existe.
+	relatorio, err := filepath.Abs("../../docs/OPENAPI-EVIDENCIAS.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prosa, err := filepath.Abs("../../docs/openapi-evidencias-prosa.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "run", openapiCmdPackage,
+		"-root", raiz, "-out", saida,
+		"-evidence-out", relatorio, "-evidence-prosa", prosa,
+		"-check")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Errorf("o documento embutido está desatualizado face às fontes.\n"+
+		t.Errorf("o documento embutido ou o relatório de evidência estão desatualizados face às fontes.\n"+
 			"Corra `go run ./cmd/openapidoc` e commite o resultado.\n%s", out)
 	}
 }

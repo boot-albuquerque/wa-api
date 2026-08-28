@@ -85,18 +85,25 @@ func (a *GroupAdapter) GetRequestParticipants(ctx context.Context, txtID string,
 }
 
 // UpdateRequestParticipants aprova ou rejeita solicitações de entrada.
-func (a *GroupAdapter) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error {
+//
+// F280: `client.UpdateGroupRequestParticipants` devolve, por solicitante, o
+// JID resolvido e um `Error` diferente de zero quando aquele solicitante
+// falhou — a mesma forma que `UpdateGroupParticipants` (acima) já lê e
+// devolve para add/remove. Até 2026-08-28 esta função descartava o
+// resultado (`_, err := …`) e a rota respondia uma frase fixa; um sucesso
+// parcial (aprovar três, um falhar) era indistinguível de sucesso total.
+func (a *GroupAdapter) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) (domain.ParticipantsUpdate, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
-		return err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jid, err := wajid.ToJID(group)
 	if err != nil {
-		return err
+		return domain.ParticipantsUpdate{}, err
 	}
 	jids, err := wajid.ToJIDs(participants)
 	if err != nil {
-		return err
+		return domain.ParticipantsUpdate{}, err
 	}
 
 	var change wa.ParticipantRequestChange
@@ -106,9 +113,16 @@ func (a *GroupAdapter) UpdateRequestParticipants(ctx context.Context, txtID stri
 	case domain.RequestReject:
 		change = wa.ParticipantChangeReject
 	default:
-		return fmt.Errorf("wanoise: unknown request action %q", string(action))
+		return domain.ParticipantsUpdate{}, fmt.Errorf("wanoise: unknown request action %q", string(action))
 	}
 
-	_, err = client.UpdateGroupRequestParticipants(ctx, jid, jids, change)
-	return err
+	res, err := client.UpdateGroupRequestParticipants(ctx, jid, jids, change)
+	if err != nil {
+		return domain.ParticipantsUpdate{}, err
+	}
+	out := make([]domain.GroupParticipant, 0, len(res))
+	for _, p := range res {
+		out = append(out, toDomainGroupParticipant(p))
+	}
+	return domain.ParticipantsUpdate{Participants: out, Confirmed: true}, nil
 }

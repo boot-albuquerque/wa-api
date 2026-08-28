@@ -110,11 +110,11 @@ func (f *Fake) NewsletterDelete(ctx context.Context, channelJID types.JID) error
 	return nil
 }
 
-func (f *Fake) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+func (f *Fake) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) (wanoise.NewsletterAdminInvite, error) {
 	if f.NewsletterCreateAdminInviteFn != nil {
 		return f.NewsletterCreateAdminInviteFn(ctx, channelJID, userJID)
 	}
-	return nil
+	return wanoise.NewsletterAdminInvite{}, nil
 }
 
 func (f *Fake) NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error {

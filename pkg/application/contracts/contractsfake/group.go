@@ -382,7 +382,7 @@ type GroupRequests struct {
 	GetRequestParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error)
 	GetRequestParticipantsCalls []GroupRequestsGetRequestParticipantsCall
 
-	UpdateRequestParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error
+	UpdateRequestParticipantsFunc  func(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) (domain.ParticipantsUpdate, error)
 	UpdateRequestParticipantsCalls []GroupRequestsUpdateRequestParticipantsCall
 
 	SetJoinApprovalModeFunc  func(ctx context.Context, txtID string, group domain.JID, mode bool) error
@@ -403,12 +403,12 @@ func (f *GroupRequests) GetRequestParticipants(ctx context.Context, txtID string
 }
 
 // UpdateRequestParticipants implementa port.GroupRequests.
-func (f *GroupRequests) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error {
+func (f *GroupRequests) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) (domain.ParticipantsUpdate, error) {
 	f.UpdateRequestParticipantsCalls = append(f.UpdateRequestParticipantsCalls, GroupRequestsUpdateRequestParticipantsCall{Ctx: ctx, TxtID: txtID, Group: group, Participants: participants, Action: action})
 	if f.UpdateRequestParticipantsFunc != nil {
 		return f.UpdateRequestParticipantsFunc(ctx, txtID, group, participants, action)
 	}
-	return nil
+	return domain.ParticipantsUpdate{Confirmed: true}, nil
 }
 
 // SetJoinApprovalMode implementa port.GroupRequests.

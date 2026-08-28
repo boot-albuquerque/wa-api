@@ -1022,6 +1022,35 @@ components:
         - stanza_id
         - participant
       type: object
+    ConviteAdminCanal:
+      description: |
+        Resposta de `POST /newsletter/admin-invite`.
+
+        **F261 (2026-08-28)**: até esta correção a rota respondia `data: null`
+        mesmo em sucesso — o servidor confirma o `id` do convite e o
+        `invite_expiration_time` (sete dias, medido), e esses dois valores eram
+        lidos e descartados. Agora saem aqui.
+      properties:
+        expiration_at:
+          description: |
+            Instante em que o convite deixa de valer, em RFC 3339 UTC. `null`
+            só se o servidor responder sem `invite_expiration_time` — não
+            observado em campo; medido sempre sete dias à frente da criação.
+          example: "2026-09-04T18:11:03Z"
+          format: date-time
+          nullable: true
+          type: string
+        id:
+          description: |
+            Identificador do convite, na forma `<numero>@newsletter`. **Sempre
+            presente**, nunca `null` num `200`.
+          example: 120363411706831441@newsletter
+          nullable: false
+          type: string
+      required:
+        - id
+        - expiration_at
+      type: object
     DadosUtilizadorApagado:
       description: |
         Identificação da sessão removida por `DELETE /admin/users/{id}/full`, para
@@ -3068,6 +3097,21 @@ components:
           example: ""
           nullable: false
           type: string
+        error:
+          description: |
+            F280 (2026-08-28): o código de erro que o protocolo devolve para
+            ESTE participante, dentro de um lote com sucesso parcial — uma
+            adição ou um pedido de entrada em que alguns passaram e outros não.
+            `0` é o normal: participante sem erro reportado, incluindo toda
+            leitura de roster (`GET /groups/{group_jid}`, `POST /group/info`),
+            onde este campo é sempre `0`.
+
+            Antes desta correção o valor existia no protocolo e era descartado —
+            um sucesso parcial ficava indistinguível de sucesso total (F280,
+            `HOUSEKEEP.md`).
+          example: 0
+          nullable: false
+          type: integer
         is_admin:
           description: |
             Administrador do grupo. `false` significa "não é administrador", e não
@@ -3107,6 +3151,7 @@ components:
         - display_name
         - is_admin
         - is_super_admin
+        - error
       type: object
     ParticipantesComunidade:
       description: |
@@ -4396,6 +4441,28 @@ components:
         o servidor regista `unknown field "<nome>"`, e com
         `WA_API_STRICT_UNKNOWN_FIELDS=true` recusa-o com `400 unknown_field`.
       properties:
+        engine:
+          default: noise
+          description: |
+            Transporte a usar nesta sessão. **Opcional**: ausente, `null` e `""`
+            são indistinguíveis e valem `noise` — o socket, que é o engine
+            canónico do projeto e define os contratos.
+
+            `headless` (a SPA dirigida por navegador) só é aceite quando este
+            servidor tem `WA_API_HEADLESS_CHROME`/`WA_API_HEADLESS_PROFILES`
+            configurados; sem isso, `400 engine_headless_unavailable`. Um valor
+            fora do enum (`400 invalid_engine`) — desconhecido ou mal escrito —
+            também é recusado, nunca aceite silenciosamente como o padrão.
+
+            `headless` hoje serve 17 dos 25 "ports" que `noise` serve — uma
+            chamada que ele não cobre recusa dizendo qual port, em vez de cair
+            para `noise` em silêncio.
+          enum:
+            - noise
+            - headless
+          example: noise
+          nullable: false
+          type: string
         events:
           description: |
             Eventos subscritos, **numa única string separada por vírgulas** — não
@@ -8981,7 +9048,8 @@ components:
       description: |
         Resposta das rotas de canal que mudam alguma coisa e não devolvem carga:
         `follow`, `unfollow`, `mute`, `mark-viewed`, `react`, `demote`,
-        `change-owner`, `delete` e as três de `admin-invite`.
+        `change-owner`, `delete`, `admin-invite/accept` e `admin-invite/revoke`.
+        `admin-invite` (criação) é a exceção — ver `ConviteAdminCanal`.
 
         **Estas rotas respondiam `data: null`**, pela mesma causa da subscrição.
         `null` não se distingue de uma rota que falhou a encher a carga, e um
@@ -9195,10 +9263,11 @@ components:
         participants:
           description: |
             A lista de participantes que o WhatsApp devolveu na MESMA resposta, na
-            forma canónica. Um `is_admin`/`is_super_admin` inesperado numa entrada
-            diz que aquele participante falhou enquanto os outros passaram — o
-            `Error` numérico do protocolo não é mais exposto (ver
-            `InfoGrupoCanonico`).
+            forma canónica. `error` diferente de zero numa entrada diz que
+            aquele participante falhou enquanto os outros passaram (F280,
+            2026-08-28) — antes disso o `Error` numérico do protocolo era
+            descartado, e só `is_admin`/`is_super_admin` inesperados davam uma
+            pista indirecta.
 
             **Sempre um array, nunca `null`**: `make([]GroupParticipantResponse,
             0, ...)` antes do laço (`presenter_group.go`).
@@ -10687,6 +10756,32 @@ components:
           nullable: false
           readOnly: true
           type: boolean
+        engine:
+          description: |
+            Transporte que serve esta sessão: `noise` (o socket, canónico) ou
+            `headless` (a SPA dirigida por navegador). **Sempre presente**, nunca
+            `null`.
+
+            Escolhido pelo chamador no corpo de criação (`PedidoCriarUtilizador.engine`)
+            e gravado por sessão — não é mais inferido no arranque do processo por
+            variável de ambiente. Essa seleção estática (`WA_API_ENGINE`,
+            `WA_API_ENGINE_HEADLESS_SESSIONS`) foi removida.
+
+            `headless` hoje serve 17 dos 25 "ports" que `noise` serve; uma
+            chamada que o headless não cobre recusa com um erro dizendo qual port
+            e por quê — nunca cai para `noise` em silêncio.
+
+            Este campo é sempre um dos dois valores listados: é gravado pelo
+            servidor a partir de `PedidoCriarUtilizador.engine`, que já recusa
+            qualquer valor fora do enum (`400 invalid_engine`) antes de a linha
+            ser criada.
+          enum:
+            - noise
+            - headless
+          example: noise
+          nullable: false
+          readOnly: true
+          type: string
         events:
           description: |
             Eventos subscritos, separados por vírgulas. `All` recebe todos.
@@ -15628,12 +15723,12 @@ paths:
         `invalid_group_jid`, `invalid_phone`, `invalid_action`, `no_session` —
         todos no envelope NOVO. Esta rota não passa por `rejectMissingField`.
 
-        **Desfecho parcial**: o adaptador faz uma chamada por solicitante. Se
-        algum falhar, a rota devolve erro — não há corpo que relate quais
-        passaram. **E não é por o WhatsApp não dizer**: ele devolve
-        `[]types.GroupParticipant` com um `Error` por solicitante, e o adaptador
-        descarta esse valor (`adapters/group/participants.go:81`). A rota irmã
-        `POST /groups/{group_jid}/participants` expõe a mesma lista. É a F280.
+        **Desfecho parcial** (corrigido em 2026-08-28, F280): o WhatsApp
+        devolve `[]types.GroupParticipant` com um `Error` por solicitante, e
+        até então o adaptador descartava esse valor — a rota respondia uma
+        frase fixa, e um sucesso parcial era indistinguível de sucesso total.
+        Agora `participants` sai na resposta, no mesmo formato que a rota irmã
+        `POST /group/updateparticipants` já usava.
 
         **Como se observa o efeito**: por `GET /groups/{group_jid}/join-requests`, lido
         **antes e depois** — a decisão retira o solicitante da fila —, e por
@@ -15670,16 +15765,35 @@ paths:
               example:
                 code: 200
                 data:
+                  confirmed: true
                   details: Group request participants updated successfully
+                  participants:
+                    - display_name: ""
+                      error: 0
+                      is_admin: false
+                      is_super_admin: false
+                      jid: 554192421234@s.whatsapp.net
+                      lid: ""
+                      phone_number: 554192421234@s.whatsapp.net
+                  reason: ""
                 success: true
               schema:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - properties:
                       data:
-                        $ref: '#/components/schemas/Detalhes'
+                        $ref: '#/components/schemas/ResultadoAtualizarParticipantes'
                     type: object
-          description: Os pedidos foram decididos.
+          description: |
+            Os pedidos foram decididos. **F280 (2026-08-28)**: a resposta
+            deixou de ser só `details` — agora traz `participants`, no mesmo
+            formato de `ResultadoAtualizarParticipantes`
+            (`POST /group/updateparticipants`), com o resultado por
+            solicitante que o WhatsApp devolve. Um `error` diferente de zero
+            numa entrada diz que aquele solicitante específico falhou
+            enquanto os outros passaram — antes disso a rota respondia uma
+            frase fixa e um sucesso parcial era indistinguível de sucesso
+            total.
         "400":
           content:
             application/json:
@@ -17444,14 +17558,13 @@ paths:
 
         **Não é enviada mensagem nenhuma.** É uma mutação pura do protocolo: o
         convidado só fica a saber pelo cliente dele. Procurar o convite no chat
-        de quem convida é procurar no sítio errado (F261).
+        de quem convida é procurar no sítio errado.
 
-        **Ressalva medida**: a resposta traz apenas `data.status`. O servidor
-        devolve um `invite_expiration_time` (sete dias) que a API deita fora
-        (F261) — a porta não o carrega, logo a migração para DTO não o pôde
-        recuperar como recuperou a duração da subscrição. Um `200` aqui significa
-        "convite criado"; a validade **não é devolvida**, e não há como
-        consultá-la por esta API.
+        **F261 (2026-08-28), corrigido**: a resposta passou a trazer `id` e
+        `expiration_at`. Até esta correção `data` vinha `null` mesmo em
+        sucesso — o servidor devolve um `invite_expiration_time` (sete dias,
+        medido) que era lido e descartado; um `200` só dizia "convite criado",
+        sem validade nenhuma consultável.
 
         **Regras**: `jid` e `user_jid` são obrigatórios. `user_jid` pode ir em PN
         ou LID; a resolução PN→LID acontece antes do envio (F233c).
@@ -17473,18 +17586,17 @@ paths:
               example:
                 code: 200
                 data:
-                  status: sent
+                  expiration_at: "2026-09-04T18:11:03Z"
+                  id: 120363411706831441@newsletter
                 success: true
               schema:
                 allOf:
                   - $ref: '#/components/schemas/Envelope'
                   - properties:
                       data:
-                        $ref: '#/components/schemas/ReconhecimentoCanal'
+                        $ref: '#/components/schemas/ConviteAdminCanal'
                     type: object
-          description: |
-            Convite criado. `data` é `null` e o prazo de validade não é
-            devolvido — ver a ressalva acima.
+          description: Convite criado, com o id e o prazo de validade que o servidor confirmou.
         "400":
           content:
             application/json:

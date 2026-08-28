@@ -104,7 +104,7 @@ func (h *UpdateGroupRequestParticipantsHandler) ServeHTTP(w http.ResponseWriter,
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, dtogroup.PresentAcknowledgement(rsp.Details), nil)
+	customhttp.RespondJSON(w, 200, dtogroup.PresentParticipantsUpdate(rsp.ParticipantsUpdate, rsp.Details), nil)
 }
 
 // SetGroupJoinApprovalModeHandler toggles join approval requirement

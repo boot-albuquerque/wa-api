@@ -58,8 +58,8 @@ func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) 
 	res, err := r.db.ExecContext(ctx,
 		`INSERT INTO users (id, name, token, token_hash, webhook, expiration, events, jid, qrcode, proxy_url,
 		 webhook_use_proxy, s3_enabled, s3_endpoint, s3_region, s3_bucket, s3_access_key, s3_secret_key,
-		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+		 s3_path_style, s3_public_url, media_delivery, s3_retention_days, hmac_key, history, engine)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		 ON CONFLICT DO NOTHING`,
 		// A coluna `token` recebe VAZIO: o texto claro deixa de ser gravado
 		// (F97 etapa 1). Ela continua existindo porque e NOT NULL e porque as
@@ -74,7 +74,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, rec domain.UserRecord) 
 		rec.ProxyURL, rec.WebhookUseProxy,
 		rec.S3.Enabled, rec.S3.Endpoint, rec.S3.Region, rec.S3.Bucket,
 		rec.S3.AccessKey, rec.S3.SecretKey, rec.S3.PathStyle, rec.S3.PublicURL,
-		rec.S3.MediaDelivery, rec.S3.RetentionDays, rec.HmacKey, rec.History)
+		rec.S3.MediaDelivery, rec.S3.RetentionDays, rec.HmacKey, rec.History, rec.Engine)
 
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -193,7 +193,7 @@ func (r *UserRepository) UpdateUser(ctx context.Context, id string, upd domain.U
 // ListUsers devolve todos os usuários, ou apenas o de id informado.
 func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.UserListEntry, error) {
 	const base = `SELECT id, name, webhook, jid, qrcode, connected, expiration, proxy_url,
-				 COALESCE(webhook_use_proxy, true) AS webhook_use_proxy, events, history
+				 COALESCE(webhook_use_proxy, true) AS webhook_use_proxy, events, history, engine
 				 FROM users`
 
 	query := base
@@ -232,6 +232,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			WebhookUseProxy bool           `db:"webhook_use_proxy"`
 			Events          string         `db:"events"`
 			History         sql.NullInt64  `db:"history"`
+			Engine          string         `db:"engine"`
 		}
 		if err := rows.StructScan(&row); err != nil {
 			log.Error().Err(err).Str("table", "users").Str("query", "list_users").
@@ -251,6 +252,7 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 			WebhookUseProxy: row.WebhookUseProxy,
 			Events:          row.Events,
 			History:         int(row.History.Int64),
+			Engine:          row.Engine,
 		}
 
 		// A configuração de S3 vem numa segunda consulta, como antes. Falha

@@ -296,8 +296,9 @@ func (r RealClient) NewsletterChangeOwner(ctx context.Context, channelJID, newOw
 	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterChangeOwner(ctx, channelJID, newOwnerJID)), errmap.OpNewsletterChangeOwner)
 }
 
-func (r RealClient) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
-	return errmap.ClassifyIQ(r.Client.NewsletterCreateAdminInvite(ctx, channelJID, userJID))
+func (r RealClient) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) (wanoise.NewsletterAdminInvite, error) {
+	invite, err := r.Client.NewsletterCreateAdminInvite(ctx, channelJID, userJID)
+	return invite, errmap.ClassifyIQ(err)
 }
 
 func (r RealClient) NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error {

@@ -159,8 +159,10 @@ type NewsletterSubscribeResponse struct {
 }
 
 // NewsletterAckResponse is the `data` of every channel route that changes
-// something and returns no payload: follow, unfollow, mute, mark-viewed, react,
-// demote, change-owner, delete and the three admin-invite routes.
+// something and returns no payload: follow, unfollow, mute, mark-viewed,
+// react, demote, change-owner, delete, admin-invite accept and admin-invite
+// revoke. admin-invite CREATE is the exception — see
+// NewsletterAdminInviteResponse.
 //
 // Those routes answered `data: null`, for the same reason subscribe lost its
 // duration: the status the use case sets never reached the handler's argument.
@@ -168,4 +170,18 @@ type NewsletterSubscribeResponse struct {
 // caller checking `data` for a sign of success found none.
 type NewsletterAckResponse struct {
 	Status string `json:"status"`
+}
+
+// NewsletterAdminInviteResponse is the `data` of POST /newsletter/admin-invite.
+//
+// F261 (2026-08-28): the route used to answer `data: null` — the server's
+// own confirmation (the invite's ID and how long it is valid for) was read
+// and discarded. Measured, the WhatsApp response is
+// `{"id":"...@newsletter","invite_expiration_time":"<unix seconds>"}`.
+type NewsletterAdminInviteResponse struct {
+	ID string `json:"id"`
+	// ExpirationAt is null only when the server answered without an
+	// expiration — never "0001-01-01T00:00:00Z", which would read as a
+	// real, wrong instant. See presentTime.
+	ExpirationAt *string `json:"expiration_at"`
 }

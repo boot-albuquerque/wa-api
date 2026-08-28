@@ -765,7 +765,7 @@ func TestGroupRequests(t *testing.T) {
 	if v, err := f.GetRequestParticipants(ctx, "u1", "g@g.us"); v == nil || len(v) != 0 || err != nil {
 		t.Errorf("GetRequestParticipants zero-value = %#v, %v", v, err)
 	}
-	if err := f.UpdateRequestParticipants(ctx, "u1", "g@g.us", parts, domain.RequestApprove); err != nil {
+	if _, err := f.UpdateRequestParticipants(ctx, "u1", "g@g.us", parts, domain.RequestApprove); err != nil {
 		t.Errorf("UpdateRequestParticipants = %v", err)
 	}
 	if err := f.SetJoinApprovalMode(ctx, "u1", "g@g.us", true); err != nil {
@@ -785,14 +785,14 @@ func TestGroupRequests(t *testing.T) {
 	f.GetRequestParticipantsFunc = func(context.Context, string, domain.JID) ([]domain.GroupJoinRequest, error) {
 		return nil, errBoom
 	}
-	f.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) error {
-		return errBoom
+	f.UpdateRequestParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.RequestAction) (domain.ParticipantsUpdate, error) {
+		return domain.ParticipantsUpdate{}, errBoom
 	}
 	f.SetJoinApprovalModeFunc = func(context.Context, string, domain.JID, bool) error { return errBoom }
 	if _, err := f.GetRequestParticipants(ctx, "u1", ""); !errors.Is(err, errBoom) {
 		t.Errorf("GetRequestParticipantsFunc = %v", err)
 	}
-	if err := f.UpdateRequestParticipants(ctx, "u1", "", nil, domain.RequestReject); !errors.Is(err, errBoom) {
+	if _, err := f.UpdateRequestParticipants(ctx, "u1", "", nil, domain.RequestReject); !errors.Is(err, errBoom) {
 		t.Errorf("UpdateRequestParticipantsFunc = %v", err)
 	}
 	if err := f.SetJoinApprovalMode(ctx, "u1", "", false); !errors.Is(err, errBoom) {

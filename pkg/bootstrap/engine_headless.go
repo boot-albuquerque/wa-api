@@ -13,18 +13,28 @@ import (
 	"wa-api/pkg/infra/wa-headless/registry"
 )
 
-// Configuração do lado headless (decisão 94).
+// Configuração do lado headless.
 //
-// # Quando ela é exigida, e por que não sempre
+// # Por que a leitura passou a ser sempre tentada, nunca exigida
 //
-// Um processo cujas sessões estão todas no socket não tem Chrome nenhum a
-// apontar, e exigir configuração dele quebraria toda instalação existente por
-// causa de uma capacidade que ninguém pediu. Então: **exigida se e somente se
-// algum caminho de execução puder escolher headless**.
+// Até a remoção da decisão 94, esta configuração era exigida no arranque
+// SOMENTE quando a seleção estática de engine (WA_API_ENGINE /
+// WA_API_ENGINE_HEADLESS_SESSIONS) apontava para headless. Essa seleção não
+// existe mais: o engine agora é escolhido por sessão, em tempo de requisição
+// (POST /admin/users), então o arranque não pode mais saber se headless VAI
+// ser pedido.
 //
-// O contrário também vale, e é a metade que importa: quando headless PODE ser
-// escolhido e a configuração falta, o processo não arranca. Descobrir na
-// primeira chamada significaria descobrir com um pedido de cliente na mão.
+// A leitura passa a ser sempre tentada e nunca fatal por ausência: variáveis
+// ausentes devolvem a configuração zero, silenciosamente. Quem recusa um
+// pedido de sessão em headless sem Chrome configurado é
+// user.AddUserUseCase, na hora do pedido — não o arranque, adivinhando. Isso
+// preserva a regra de "sem fallback silencioso": o pedido FALHA com um erro
+// dizendo por quê, em vez de cair para o socket sem avisar.
+//
+// Uma variável PRESENTE mas inválida (caminho que não existe, diretório no
+// lugar de executável, número inválido) continua fatal: quem configurou
+// pretendia usar headless, e um erro de digitação não deve virar "headless
+// desligado" em silêncio.
 
 const (
 	envHeadlessChrome      = "WA_API_HEADLESS_CHROME"
@@ -109,24 +119,26 @@ func nomeDePerfilSeguro(txtID string) (string, error) {
 	return "", fmt.Errorf("headless: txtID recusado como diretorio de perfil: %s", motivo)
 }
 
-// headlessConfigConfigurada lê a configuração, exigindo-a só quando precisa.
+// headlessConfigConfigurada lê a configuração do headless SE ela existir.
 //
-// `exigida` vem da seleção de engine: é verdadeira quando o padrão é headless
-// ou quando alguma sessão está listada nele. Falso dispensa tudo e devolve a
-// configuração zero, que nenhum caminho de execução vai consultar.
-func headlessConfigConfigurada(exigida bool) (HeadlessConfig, error) {
+// Nenhuma das duas variáveis presentes: devolve a configuração zero, sem
+// erro — headless simplesmente não está disponível neste processo, e
+// AddUserUseCase recusa quem pedir esse engine (engineHeadlessUnavailableCode).
+// Uma das duas presente sem a outra, ou presente e inválida: erro fatal, pela
+// razão no comentário do pacote acima.
+func headlessConfigConfigurada() (HeadlessConfig, error) {
 	chrome := strings.TrimSpace(os.Getenv(envHeadlessChrome))
 	perfis := strings.TrimSpace(os.Getenv(envHeadlessProfiles))
-	if !exigida {
+	if chrome == "" && perfis == "" {
 		return HeadlessConfig{}, nil
 	}
 	if chrome == "" {
-		return HeadlessConfig{}, fmt.Errorf("%s e' obrigatorio quando alguma sessao usa o engine %q",
-			envHeadlessChrome, EngineWaHeadless)
+		return HeadlessConfig{}, fmt.Errorf("%s e' obrigatorio quando %s esta configurado",
+			envHeadlessChrome, envHeadlessProfiles)
 	}
 	if perfis == "" {
-		return HeadlessConfig{}, fmt.Errorf("%s e' obrigatorio quando alguma sessao usa o engine %q",
-			envHeadlessProfiles, EngineWaHeadless)
+		return HeadlessConfig{}, fmt.Errorf("%s e' obrigatorio quando %s esta configurado",
+			envHeadlessProfiles, envHeadlessChrome)
 	}
 	// O binário é conferido AGORA, e não na primeira sessão: um caminho errado
 	// descoberto no arranque custa uma linha de log, e descoberto na primeira

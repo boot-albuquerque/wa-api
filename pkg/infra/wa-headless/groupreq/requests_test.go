@@ -91,7 +91,7 @@ func TestRecusaParcialNaoPassaPorSucesso(t *testing.T) {
 	d := &duploPedidos{resultados: []waheadless.GroupRequestAction{
 		ok("a@lid"), recusado("b@lid", 403), ok("c@lid"),
 	}}
-	err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
+	_, err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
 		[]domain.JID{"a@lid", "b@lid", "c@lid"}, domain.RequestApprove)
 	if err == nil {
 		t.Fatal("uma recusa da página passou por aprovação bem-sucedida")
@@ -109,7 +109,7 @@ func TestRecusaParcialNaoPassaPorSucesso(t *testing.T) {
 // aprovado.
 func TestSolicitanteSemRespostaNaoContaComoAprovado(t *testing.T) {
 	d := &duploPedidos{resultados: []waheadless.GroupRequestAction{ok("a@lid")}}
-	err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
+	_, err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
 		[]domain.JID{"a@lid", "b@lid"}, domain.RequestApprove)
 	if err == nil {
 		t.Fatal("um solicitante sem resposta passou por aprovado")
@@ -121,7 +121,7 @@ func TestSolicitanteSemRespostaNaoContaComoAprovado(t *testing.T) {
 
 func TestTodosAprovadosNaoEErro(t *testing.T) {
 	d := &duploPedidos{resultados: []waheadless.GroupRequestAction{ok("a@lid"), ok("b@lid")}}
-	if err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
+	if _, err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
 		[]domain.JID{"a@lid", "b@lid"}, domain.RequestApprove); err != nil {
 		t.Fatalf("duas aprovações boas viraram erro: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestTodosAprovadosNaoEErro(t *testing.T) {
 
 func TestAprovarERejeitarNaoSaoAMesmaChamada(t *testing.T) {
 	d := &duploPedidos{resultados: []waheadless.GroupRequestAction{ok("a@lid")}}
-	if err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
+	if _, err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
 		[]domain.JID{"a@lid"}, domain.RequestReject); err != nil {
 		t.Fatalf("rejeição: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestAprovarERejeitarNaoSaoAMesmaChamada(t *testing.T) {
 
 func TestVereditoDesconhecidoERecusado(t *testing.T) {
 	d := &duploPedidos{resultados: []waheadless.GroupRequestAction{ok("a@lid")}}
-	if err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
+	if _, err := com(d, nil).UpdateRequestParticipants(context.Background(), "s1", grupo,
 		[]domain.JID{"a@lid"}, domain.RequestAction("talvez")); err == nil {
 		t.Fatal("um veredito desconhecido foi aceito")
 	}
@@ -206,7 +206,7 @@ func TestEntradasInvalidasSaoRecusadas(t *testing.T) {
 	if _, err := m.GetRequestParticipants(ctx, "s1", domain.JID("status@broadcast")); err == nil {
 		t.Fatal("um broadcast foi aceito como grupo")
 	}
-	if err := m.UpdateRequestParticipants(ctx, "s1", grupo, nil, domain.RequestApprove); err == nil {
+	if _, err := m.UpdateRequestParticipants(ctx, "s1", grupo, nil, domain.RequestApprove); err == nil {
 		t.Fatal("uma lista vazia de solicitantes foi aceita")
 	}
 	if err := m.SetJoinApprovalMode(ctx, "s1", domain.JID("status@broadcast"), true); err == nil {
@@ -248,7 +248,7 @@ func TestFalhaDaCapabilityPropaga(t *testing.T) {
 		GetRequestParticipants(ctx, "s1", grupo); err == nil {
 		t.Fatal("a falha virou leitura bem-sucedida")
 	}
-	if err := com(&duploPedidos{err: errors.New("a página recusou")}, nil).
+	if _, err := com(&duploPedidos{err: errors.New("a página recusou")}, nil).
 		UpdateRequestParticipants(ctx, "s1", grupo, []domain.JID{"a@lid"}, domain.RequestApprove); err == nil {
 		t.Fatal("a falha virou aprovação bem-sucedida")
 	}

@@ -304,6 +304,30 @@ UtilizadorAdmin:
 
         Nas leituras vem sempre `false`: elas não consultam a coluna.
       example: true
+    engine:
+      type: string
+      nullable: false
+      readOnly: true
+      enum: [noise, headless]
+      description: |
+        Transporte que serve esta sessão: `noise` (o socket, canónico) ou
+        `headless` (a SPA dirigida por navegador). **Sempre presente**, nunca
+        `null`.
+
+        Escolhido pelo chamador no corpo de criação (`PedidoCriarUtilizador.engine`)
+        e gravado por sessão — não é mais inferido no arranque do processo por
+        variável de ambiente. Essa seleção estática (`WA_API_ENGINE`,
+        `WA_API_ENGINE_HEADLESS_SESSIONS`) foi removida.
+
+        `headless` hoje serve 17 dos 25 "ports" que `noise` serve; uma
+        chamada que o headless não cobre recusa com um erro dizendo qual port
+        e por quê — nunca cai para `noise` em silêncio.
+
+        Este campo é sempre um dos dois valores listados: é gravado pelo
+        servidor a partir de `PedidoCriarUtilizador.engine`, que já recusa
+        qualquer valor fora do enum (`400 invalid_engine`) antes de a linha
+        ser criada.
+      example: noise
 
 PedidoCriarUtilizador:
   type: object
@@ -424,6 +448,26 @@ PedidoCriarUtilizador:
         Guardada cifrada; **nunca é devolvida** por rota nenhuma. A criação
         confirma apenas a presença, em `hmac_configured: true`.
       example: chave-de-assinatura-com-32-carac
+    engine:
+      type: string
+      nullable: false
+      enum: [noise, headless]
+      default: noise
+      description: |
+        Transporte a usar nesta sessão. **Opcional**: ausente, `null` e `""`
+        são indistinguíveis e valem `noise` — o socket, que é o engine
+        canónico do projeto e define os contratos.
+
+        `headless` (a SPA dirigida por navegador) só é aceite quando este
+        servidor tem `WA_API_HEADLESS_CHROME`/`WA_API_HEADLESS_PROFILES`
+        configurados; sem isso, `400 engine_headless_unavailable`. Um valor
+        fora do enum (`400 invalid_engine`) — desconhecido ou mal escrito —
+        também é recusado, nunca aceite silenciosamente como o padrão.
+
+        `headless` hoje serve 17 dos 25 "ports" que `noise` serve — uma
+        chamada que ele não cobre recusa dizendo qual port, em vez de cair
+        para `noise` em silêncio.
+      example: noise
     proxy_config:
       allOf: [$ref: '#/components/schemas/ConfiguracaoProxyUtilizador']
       nullable: true

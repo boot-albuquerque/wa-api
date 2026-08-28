@@ -2636,7 +2636,7 @@ pkg/application/usecase/notification.NewGetHealthUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewListNewsletterUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewNewsletterOpsUseCase	EXCLUDED	X1
 pkg/application/usecase/notification.NewsletterOpsUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/notification.NewsletterOpsUseCase.dispatch	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:215)
+pkg/application/usecase/notification.NewsletterOpsUseCase.dispatch	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:217)
 pkg/application/usecase/notification.newsletterRequirements.func1	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func2	EXCLUDED	X6
 pkg/application/usecase/notification.newsletterRequirements.func3	EXCLUDED	X6
@@ -2649,7 +2649,7 @@ pkg/application/usecase/notification.newsletterRequirements.func9	EXCLUDED	X6
 pkg/application/usecase/notification.requireJID.func1	EXCLUDED	X6
 pkg/application/usecase/notification.requireNewsletterServer.func1	EXCLUDED	X6
 pkg/application/usecase/notification.requireValidUserJID.func1	EXCLUDED	X6
-pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:362);uncovered:L2(S-ret,newsletter_ops.go:367)
+pkg/application/usecase/notification.validateNewsletter	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,newsletter_ops.go:364);uncovered:L2(S-ret,newsletter_ops.go:369)
 pkg/application/usecase/profile.GetProfileFullUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherPrivacidade	ELIGIBLE	covered
 pkg/application/usecase/profile.GetProfileFullUseCase.preencherUserInfo	ELIGIBLE	covered
@@ -2718,7 +2718,7 @@ pkg/application/usecase/storage.SetProxyUseCase.disable	ELIGIBLE	covered
 pkg/application/usecase/storage.SetProxyUseCase.enable	ELIGIBLE	covered
 pkg/application/usecase/storage.SetProxyUseCase.resolveWebhookUseProxy	ELIGIBLE	covered
 pkg/application/usecase/storage.TestS3ConnectionUseCase.Execute	ELIGIBLE	covered
-pkg/application/usecase/user.AddUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,add_user.go:59);uncovered:L2(S-ret,add_user.go:85);uncovered:L2(S-ret,add_user.go:122)
+pkg/application/usecase/user.AddUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,add_user.go:78);uncovered:L2(S-ret,add_user.go:86);uncovered:L2(S-ret,add_user.go:90);uncovered:L2(S-ret,add_user.go:118);uncovered:L2(S-ret,add_user.go:155)
 pkg/application/usecase/user.BlockUserUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,block_user.go:47)
 pkg/application/usecase/user.CheckUserUseCase.Execute	ELIGIBLE	covered
 pkg/application/usecase/user.DeleteUserCompleteUseCase.Execute	ELIGIBLE	uncovered:L2(S-ret,delete_user_complete.go:49);uncovered:L2(S-ret,delete_user_complete.go:60)
@@ -2772,10 +2772,6 @@ pkg/application/usecase/user.ordenar	EXCLUDED	X1
 pkg/application/usecase/user.ordenar.func1	EXCLUDED	X6
 pkg/application/usecase/user.soNumero	EXCLUDED	X1
 pkg/bootstrap.CaminhosCanonicos	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,caminhos_canonicos.go:29)
-pkg/bootstrap.EngineSelection.Default	EXCLUDED	X1
-pkg/bootstrap.EngineSelection.EngineFor	EXCLUDED	X1
-pkg/bootstrap.EngineSelection.SessoesEmHeadless	ELIGIBLE	uncovered:L1
-pkg/bootstrap.EngineSelection.UsaHeadless	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ErrEngineSemPort.Error	EXCLUDED	X4
 pkg/bootstrap.HeadlessConfig.StartConfigFor	ELIGIBLE	uncovered:L1
 pkg/bootstrap.InitPrivateIPBlocks	ELIGIBLE	covered
@@ -2785,7 +2781,7 @@ pkg/bootstrap.KillChannel.Delete	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Get	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Set	ELIGIBLE	uncovered:L1
 pkg/bootstrap.KillChannel.Signal	ELIGIBLE	uncovered:L1
-pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:311)
+pkg/bootstrap.Main	ELIGIBLE	uncovered:L3(zerolog,main.go:308)
 pkg/bootstrap.Main.func1	EXCLUDED	X6
 pkg/bootstrap.Main.func2	ELIGIBLE	covered
 pkg/bootstrap.MetricasRetry	EXCLUDED	X1
@@ -2918,8 +2914,6 @@ pkg/bootstrap.editedText	EXCLUDED	X1
 pkg/bootstrap.emptyCustomHandlers	EXCLUDED	X1
 pkg/bootstrap.encryptHMACKey	ELIGIBLE	uncovered:L1
 pkg/bootstrap.encryptionKeySource.String	EXCLUDED	X4
-pkg/bootstrap.engineSelectionConfigurada	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_selection.go:118);uncovered:L2(S-ret,engine_selection.go:122)
-pkg/bootstrap.engineValido	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_selection.go:140)
 pkg/bootstrap.enqueueSessionEvent	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
 pkg/bootstrap.ensureUserInfoCached	ELIGIBLE	covered
@@ -2930,7 +2924,7 @@ pkg/bootstrap.generateSecret	ELIGIBLE	covered
 pkg/bootstrap.getKillChannel	EXCLUDED	X1
 pkg/bootstrap.getUserWebhookUrl	ELIGIBLE	covered
 pkg/bootstrap.hasLiveSessionLocally	EXCLUDED	X1
-pkg/bootstrap.headlessConfigConfigurada	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_headless.go:124);uncovered:L2(S-ret,engine_headless.go:128);uncovered:L2(S-ret,engine_headless.go:137);uncovered:L2(S-ret,engine_headless.go:148)
+pkg/bootstrap.headlessConfigConfigurada	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,engine_headless.go:136);uncovered:L2(S-ret,engine_headless.go:140);uncovered:L2(S-ret,engine_headless.go:149);uncovered:L2(S-ret,engine_headless.go:160)
 pkg/bootstrap.historyLimitForUser	ELIGIBLE	uncovered:L1
 pkg/bootstrap.hmacKeyEncryptor.EncryptHmacKey	EXCLUDED	X7
 pkg/bootstrap.hmacKeySource.String	EXCLUDED	X4
@@ -3008,7 +3002,7 @@ pkg/bootstrap.reportPanic	ELIGIBLE	uncovered:L1;uncovered:L2(S-http,router.go:22
 pkg/bootstrap.resolveAdminToken	ELIGIBLE	covered
 pkg/bootstrap.resolveGlobalEncryptionKey	ELIGIBLE	uncovered:L2(S-ret,startup_secrets.go:183)
 pkg/bootstrap.resolveGlobalHMACKey	ELIGIBLE	uncovered:L2(S-ret,global_hmac_key.go:131)
-pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:87)
+pkg/bootstrap.resolveLogLevel	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,main.go:84)
 pkg/bootstrap.resolveTokenCacheTTL	ELIGIBLE	uncovered:L1
 pkg/bootstrap.resolverChaveHMAC	ELIGIBLE	covered
 pkg/bootstrap.rotaDeEngine	ELIGIBLE	uncovered:L1
@@ -3051,7 +3045,7 @@ pkg/bootstrap.setupWebhookOutbox	ELIGIBLE	covered
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:480);uncovered:L3(zerolog,main.go:497)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:477);uncovered:L3(zerolog,main.go:494)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
 pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
@@ -3060,7 +3054,7 @@ pkg/bootstrap.startOutboxSweeper	EXCLUDED	X1
 pkg/bootstrap.startOutboxSweeper.func1	EXCLUDED	X6
 pkg/bootstrap.startSessionEventQueue	ELIGIBLE	uncovered:L1
 pkg/bootstrap.startSessionEventQueue.func1	EXCLUDED	X6
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:533)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:530)
 pkg/bootstrap.stopSessionEventQueue	ELIGIBLE	covered
 pkg/bootstrap.stopSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.sweepOutboxOnce	ELIGIBLE	covered
@@ -3094,6 +3088,7 @@ pkg/domain.DecodeRequest	ELIGIBLE	uncovered:L1
 pkg/domain.DecodeRequestWithUnknownFields	ELIGIBLE	uncovered:L1
 pkg/domain.DeleteMessageRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.DownloadRequest.Descriptor	EXCLUDED	X1
+pkg/domain.EngineValido	EXCLUDED	X1
 pkg/domain.GetGroupInfoRequest.ResolveChat	EXCLUDED	X1
 pkg/domain.HashToken	EXCLUDED	X1
 pkg/domain.IsSupportedProxyScheme	EXCLUDED	X1
@@ -3427,13 +3422,13 @@ pkg/infra/wa-headless/groupmembers.Manager.members	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupmembers.NewManager	EXCLUDED	X1
 pkg/infra/wa-headless/groupreq.Manager.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/groupreq.Manager.GetRequestParticipants	ELIGIBLE	uncovered:L1
-pkg/infra/wa-headless/groupreq.Manager.SetJoinApprovalMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:180)
-pkg/infra/wa-headless/groupreq.Manager.UpdateRequestParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:101);uncovered:L2(S-ret,requests.go:128);uncovered:L2(S-ret,requests.go:133)
+pkg/infra/wa-headless/groupreq.Manager.SetJoinApprovalMode	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:192)
+pkg/infra/wa-headless/groupreq.Manager.UpdateRequestParticipants	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:106);uncovered:L2(S-ret,requests.go:133)
 pkg/infra/wa-headless/groupreq.Manager.policy	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupreq.Manager.requests	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/groupreq.NewManager	EXCLUDED	X1
-pkg/infra/wa-headless/groupreq.partialFailure	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:156)
-pkg/infra/wa-headless/groupreq.unverified	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:189)
+pkg/infra/wa-headless/groupreq.partialFailure	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:168)
+pkg/infra/wa-headless/groupreq.unverified	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,requests.go:201)
 pkg/infra/wa-headless/groupset.Manager.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/groupset.Manager.SetGroupAnnounce	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:82)
 pkg/infra/wa-headless/groupset.Manager.SetGroupLocked	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,settings.go:87)
@@ -3654,6 +3649,7 @@ pkg/infra/wa-noise/adapters/user.UserAdapter.GetUserInfo	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.UserAdapter.IsOnWhatsApp	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.UserAdapter.SetPrivacySetting	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.UserAdapter.UpdateBlocklist	EXCLUDED	X5
+pkg/infra/wa-noise/adapters/user.getCachedLIDForPN	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.getCachedPNForLID	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.mapPrivacySettings	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/user.normalizeBlocklistJID	EXCLUDED	X5
@@ -4096,6 +4092,7 @@ pkg/presentation/http/dto/newsletter.NewsletterRequest.Validate	EXCLUDED	X5
 pkg/presentation/http/dto/newsletter.PresentListNewsletters	EXCLUDED	X5
 pkg/presentation/http/dto/newsletter.PresentNewsletter	EXCLUDED	X5
 pkg/presentation/http/dto/newsletter.PresentNewsletterAck	EXCLUDED	X5
+pkg/presentation/http/dto/newsletter.PresentNewsletterAdminInvite	EXCLUDED	X5
 pkg/presentation/http/dto/newsletter.PresentNewsletterInfo	EXCLUDED	X5
 pkg/presentation/http/dto/newsletter.PresentNewsletterMessage	EXCLUDED	X5
 pkg/presentation/http/dto/newsletter.PresentNewsletterMessage.func1	EXCLUDED	X6

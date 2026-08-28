@@ -39,7 +39,7 @@ func TestAddUserUseCase_Execute_Rejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err == nil {
@@ -80,7 +80,7 @@ func TestAddUserUseCase_Execute_DuplicateToken(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{CreateUserFunc: tt.fn}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			_, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok"})
 			if !errors.Is(err, user.ErrDuplicateToken) {
@@ -98,7 +98,7 @@ func TestAddUserUseCase_Execute_RepositoryError(t *testing.T) {
 		CreateUserFunc: func(context.Context, domain.UserRecord) (bool, error) { return false, boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, logger)
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, logger, true)
 
 	_, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok"})
 	if !errors.Is(err, boom) {
@@ -171,7 +171,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			resp, err := uc.Execute(context.Background(), tt.req)
 			if err != nil {
@@ -245,7 +245,7 @@ func TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario(t *testing.T) {
 		EncryptHmacKeyFunc: func(string) ([]byte, error) { return nil, boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, logger)
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, logger, true)
 
 	resp, err := uc.Execute(context.Background(),
 		domain.AddUserInput{Name: "alice", Token: "tok", HmacKey: hmacKey32})
@@ -275,7 +275,7 @@ func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
 
 	repo := &contractsfake.UserRepository{}
 	encryptor := &contractsfake.HmacKeyEncryptor{}
-	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 	_, err := uc.Execute(context.Background(),
 		domain.AddUserInput{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1]})
@@ -315,7 +315,7 @@ func TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			resp, err := uc.Execute(context.Background(),
 				domain.AddUserInput{Name: "alice", Token: "tok", Events: tt.events})
@@ -353,7 +353,7 @@ func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}
-			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{})
+			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			resp, err := uc.Execute(context.Background(),
 				domain.AddUserInput{Name: "alice", Token: "tok", Events: tt.events})
@@ -385,7 +385,7 @@ func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
 		EncryptS3SecretFunc: func(string) (string, error) { return "", boom },
 	}
 	logger := &contractsfake.Logger{}
-	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, s3Cipher, logger)
+	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, s3Cipher, logger, true)
 
 	resp, err := uc.Execute(context.Background(),
 		domain.AddUserInput{

@@ -63,6 +63,7 @@ func toDomainGroupParticipant(p types.GroupParticipant) domain.GroupParticipant 
 		DisplayName:  p.DisplayName,
 		IsAdmin:      p.IsAdmin,
 		IsSuperAdmin: p.IsSuperAdmin,
+		Error:        p.Error,
 	}
 }
 

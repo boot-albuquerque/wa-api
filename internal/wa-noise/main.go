@@ -91,6 +91,10 @@ type (
 	CreateNewsletterParams      = core.CreateNewsletterParams
 	GetNewsletterMessagesParams = core.GetNewsletterMessagesParams
 	GetNewsletterUpdatesParams  = core.GetNewsletterUpdatesParams
+	// NewsletterAdminInvite is F261's answer to admin-invite creation: the
+	// invite's own ID and expiration, read from the server's response
+	// instead of discarded.
+	NewsletterAdminInvite = core.NewsletterAdminInvite
 )
 
 // Perfil e midia.

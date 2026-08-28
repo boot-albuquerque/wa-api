@@ -14,6 +14,11 @@ type GroupParticipantResponse struct {
 	DisplayName  string `json:"display_name"`
 	IsAdmin      bool   `json:"is_admin"`
 	IsSuperAdmin bool   `json:"is_super_admin"`
+	// Error is non-zero when the protocol reports THIS participant's
+	// operation failed while the rest of the batch succeeded — a partial
+	// outcome on an add, or on a join-request approve/reject. Zero is also
+	// what a plain roster read (not an update) always carries here.
+	Error int `json:"error"`
 }
 
 // GroupInfoResponse is a group's metadata, as served.

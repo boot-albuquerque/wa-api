@@ -10,145 +10,168 @@
 # ser classificada, e o silêncio não pode passar por aprovação.
 #
 # As formas CANÓNICAS herdam a marca da rota antiga que substituem: são a
-# mesma implementação, servida noutro caminho, logo a prova é a mesma. As nove
+# mesma implementação, servida noutro caminho, logo a prova é a mesma. As doze
 # reestruturadas (com parâmetro no caminho) foram RE-MEDIDAS, porque nelas o
-# adaptador de injecção é código novo entre o cliente e o manipulador.
+# adaptador de injecção é código novo entre o cliente e o manipulador — ver
+# HOUSEKEEP.md F286 para a lista das doze e a medição de 2026-08-28.
 #
-# método	caminho	marca
-GET	/admin/users	✅
-POST	/admin/users	✅
-DELETE	/admin/users/{id}	✅
-GET	/admin/users/{id}	✅
-PUT	/admin/users/{id}	✅
-DELETE	/admin/users/{id}/full	✅
-POST	/call/reject	⬜
-GET	/health	✅
-GET	/health/live	✅
-GET	/health/ready	✅
-DELETE	/hmac/config	✅
-GET	/hmac/config	✅
-POST	/hmac/config	✅
-POST	/hmac/configure	✅
-GET	/labels	✅
-GET	/labels/{id}/chats	✅
-GET	/livez	✅
-POST	/proxy/set	✅
-DELETE	/s3/config	✅
-GET	/s3/config	✅
-POST	/s3/config	✅
-POST	/s3/configure	✅
-POST	/s3/test	⬜
-GET	/session/connect	✅
-GET	/session/disconnect	✅
-POST	/session/history	✅
-DELETE	/session/hmac/config	✅
-GET	/session/hmac/config	✅
-POST	/session/hmac/config	✅
-POST	/session/logout	❌
-POST	/session/pair/phone	⬜
-GET	/session/profile	✅
-GET	/session/profile/full	✅
-POST	/session/proxy	✅
-GET	/session/pair/qr	✅
-DELETE	/session/s3/config	✅
-GET	/session/s3/config	✅
-POST	/session/s3/config	✅
-POST	/session/s3/test	⬜
-GET	/session/status	✅
-GET	/session/ws	✅
-POST	/status/set/audio	🟡
-POST	/status/set/image	🟡
-POST	/status/set/video	🟡
-DELETE	/webhook	✅
-GET	/webhook	✅
-POST	/webhook	✅
-PUT	/webhook	✅
-GET	/webhook/history	✅
-POST	/webhook/history	✅
-DELETE	/communities/{community_jid}/subgroups/{group_jid}	✅
-DELETE	/groups/{group_jid}/photo	✅
-DELETE	/newsletters/delete	✅
-GET	/chats/history	✅
-GET	/chats/list	✅
-GET	/communities/{community_jid}/participants	✅
-GET	/communities/{community_jid}/subgroups	✅
-GET	/groups/{group_jid}/join-requests	✅
-GET	/newsletters/list	✅
-GET	/users/blocklist	✅
-GET	/users/contacts	✅
-GET	/users/contacts/last-activity	✅
-GET	/users/lid/{jid}	✅
-GET	/users/privacy	✅
-GET	/users/profile/{jid}	✅
-POST	/chats/archive	✅
-POST	/chats/delete/message	✅
-POST	/chats/download/{kind}	⬜
-POST	/chats/ephemeral	✅
-POST	/chats/ephemeral/default	✅
-POST	/chats/{chat_jid}/read	✅
-POST	/chats/mute	✅
-POST	/chats/pin	✅
-POST	/chats/presence	✅
-POST	/chats/react	✅
-POST	/chats/request-unavailable-message	🟡
-POST	/chats/send/audio	✅
-POST	/chats/send/buttons	✅
-POST	/chats/send/carousel	✅
-POST	/chats/send/contact	✅
-POST	/chats/send/document	✅
-POST	/chats/send/edit	✅
-POST	/chats/send/forward	✅
-POST	/chats/send/image	✅
-POST	/chats/send/list	✅
-POST	/chats/send/location	✅
-POST	/chats/send/poll	✅
-POST	/polls/{poll_message_id}/votes	✅
-POST	/chats/send/sticker	🟡
-POST	/chats/send/template	✅
-POST	/chats/send/text	✅
-POST	/chats/send/video	✅
-PUT	/groups/{group_jid}/announce-only	✅
-POST	/groups/create	✅
-PUT	/groups/{group_jid}/ephemeral	✅
-GET	/groups/{group_jid}	✅
-GET	/groups/invite-links/{invite_code}	✅
-GET	/groups/{group_jid}/invite-link	✅
-POST	/groups/join	✅
-POST	/groups/leave	✅
-POST	/groups/list	✅
-PUT	/groups/{group_jid}/locked	✅
-PUT	/groups/{group_jid}/name	✅
-PUT	/groups/{group_jid}/topic	✅
-POST	/groups/{group_jid}/join-requests	🟡
-POST	/groups/{group_jid}/participants	✅
-POST	/messages/star	✅
-POST	/newsletters/admin-invite	✅
-POST	/newsletters/admin-invite/accept	✅
-POST	/newsletters/admin-invite/revoke	✅
-POST	/newsletters/change-owner	✅
-POST	/newsletters/create	✅
-POST	/newsletters/demote	✅
-POST	/newsletters/follow	✅
-POST	/newsletters/info	✅
-POST	/newsletters/info-invite	✅
-POST	/newsletters/mark-viewed	🟡
-POST	/newsletters/messages	✅
-POST	/newsletters/mute	✅
-POST	/newsletters/react	🟡
-POST	/newsletters/subscribe	✅
-POST	/newsletters/unfollow	✅
-POST	/newsletters/updates	❌
-POST	/users/avatar	⬜
-POST	/users/block	❌
-POST	/users/check	✅
-POST	/users/contacts/sync	✅
-POST	/users/history/sync	✅
-POST	/users/info	✅
-POST	/users/presence	✅
-POST	/users/presence/subscribe	✅
-POST	/users/privacy	⬜
-POST	/users/status	⬜
-POST	/users/unblock	❌
-PUT	/communities/{community_jid}/subgroups/{group_jid}	✅
-PUT	/groups/{group_jid}/photo	✅
-PUT	/groups/{group_jid}/settings/join-approval	✅
+# TRÊS COLUNAS NOVAS (F239/F282, campanha de 2026-08-28 em diante — ver
+# SPEC-cobertura-evidencia-rotas.md): `data`, `observador`, `evidência`. As
+# três ficam vazias até a rota ser (re)medida por esta campanha — vazio não é
+# erro, é "ainda não chegou a vez". `docs/OPENAPI-EVIDENCIAS.md` é GERADO a
+# partir desta tabela (`go run ./cmd/openapidoc`) — não o edite à mão.
+#
+#   data        AAAA-MM-DD da medição.
+#   observador  um destes, curto e enumerável:
+#                 segunda-rota  — GET irmão do POST/PUT/DELETE testado
+#                 websocket     — evento observado em /session/ws
+#                 sqlite        — leitura directa de tabela
+#                 cliente       — confirmação visual (WhatsApp Web/app)
+#                 protocolo     — o próprio erro/sucesso do WhatsApp já prova
+#                                 (só quando não havia efeito a confirmar)
+#                 motivo        — não é confirmação de efeito: é a razão de
+#                                 ⬜ (não executada) ou a causa medida de ❌
+#                 misto         — mais de um observador na mesma medição
+#   evidência   frase curta e ESPECÍFICA — o que foi lido, que valor mudou.
+#               Banida a frase-modelo "chamada real com resposta e efeito
+#               confirmado por segunda leitura ou pelo cliente": se serve
+#               para qualquer rota sem editar nada, não é específica.
+#
+# método	caminho	marca	data	observador	evidência
+GET	/admin/users	✅	2026-08-28	segunda-rota	`200`, `data` com exatamente as duas sessões reais existentes (envia, recebe) — contagem e nomes conferem com o estado conhecido.
+POST	/admin/users	✅	2026-08-26	segunda-rota	`200` com o id devolvido; `GET /admin/users` passou de `data: null` para um array com esse id.
+DELETE	/admin/users/{id}	✅	2026-08-26	sqlite	sessao descartavel `descartavel-2`: `200 {"status":"deleted"}`, e a linha sumiu do SQLite — `select count(*) from users where id=...` devolveu `0`.
+GET	/admin/users/{id}	✅	2026-08-28	segunda-rota	`200`, `data` com um único elemento igual ao registo de `envia` (mesmo `jid`, `engine`) — filtra corretamente por id em vez de devolver a lista inteira.
+PUT	/admin/users/{id}	✅	2026-08-26	segunda-rota	`200 {"status":"ok"}`; `GET /admin/users/{id}` passou a devolver `name: descartavel-1-renomeado` e `events: Message,ReadReceipt`.
+DELETE	/admin/users/{id}/full	✅	2026-08-26	sqlite	sessao descartavel `descartavel-4`: `200 {"id":...,"name":"descartavel-4","jid":""}`; `GET /admin/users` deixou de a listar e o `count(*)` no SQLite ficou `0`.
+POST	/call/reject	⬜	2026-08-26	motivo	exige uma chamada a entrar; nao ha como provocar uma no ambiente.
+GET	/health	✅	2026-08-28	protocolo	exige TOKEN DE SESSÃO (não admin, não anónimo) — medido: `401` sem token e com token de admin, `200` só com `token: <sessão>`. `data.total_users`/`active_connections` bateram com as duas sessões reais (envia, recebe) no momento da chamada.
+GET	/health/live	✅	2026-08-28	protocolo	`200 {"status":"ok"}` sem token nenhum — confirma que é o probe de container, sem autenticação, ao contrário de `GET /health`.
+GET	/health/ready	✅	2026-08-28	protocolo	`200` sem token, com `checks.database: "ok"` e o relatório de capacidades (`cluster_mode`, `database`, `multi_pod`) — confere com a configuração real do processo (sqlite, single).
+DELETE	/hmac/config	✅	2026-08-26	segunda-rota	`200 {"Details":"HMAC configuration deleted successfully"}`; `GET /hmac/config` voltou de `{"hmac_key":"***"}` para `{"hmac_key":""}`.
+GET	/hmac/config	✅	2026-08-28	segunda-rota	estado inicial `hmac_key:""`; `POST /hmac/config` com chave de 37 carateres devolveu `200`, e esta rota passou a devolver `hmac_key:"***"` — confirma que reflete o estado real, não um valor fixo. Revertido com `DELETE /hmac/config` ao final.
+POST	/hmac/config	✅	2026-08-26	segunda-rota	`200 {"Details":"HMAC configuration saved successfully","Enabled":true}`; `GET /hmac/config` passou de `{"hmac_key":""}` para `{"hmac_key":"***"}`.
+POST	/hmac/configure	✅	2026-08-26	segunda-rota	chave DIFERENTE da do alias curto, sobre estado limpo: `200`, e `GET /hmac/config` passou de `""` para `"***"` — a transicao e desta chamada, nao herdada.
+GET	/labels	✅	2026-08-28	cliente	`200 []` na sessão `envia` (a mesma `filarapida` de referência no projeto) — sem etiquetas sincronizadas nesta instância. Formato bate com o documentado (array vazio, nunca `null`); não há rota de escrita para forçar uma etiqueta a existir.
+GET	/labels/{id}/chats	✅	2026-08-28	cliente	`GET /labels/1/chats` (sem etiqueta 1 existente, já que `/labels` veio vazio) devolveu `200 []` — confirma o comportamento documentado: etiqueta inexistente responde `200` com lista vazia, não `404`.
+GET	/livez	✅	2026-08-28	protocolo	`200 {"status":"ok"}` sem token nenhum.
+POST	/proxy/set	✅	2026-08-26	segunda-rota	`200 {"Details":"Proxy configured successfully","Set":true,"ProxyURL":"http://outro.exemplo.invalid:3128"}`; `GET /session/status` passou a devolver esse `proxy_url`, substituindo o `socks5` que a rota irma tinha gravado.
+DELETE	/s3/config	✅	2026-08-26	segunda-rota	`200 {"Details":"S3 configuration deleted successfully"}`; `GET /s3/config` passou de `bucket: descartavel` para `enabled: false, endpoint: "", bucket: ""`.
+GET	/s3/config	✅	2026-08-28	segunda-rota	estado inicial zerado; `POST /s3/config` (sem endpoint, região/bucket/chaves/retenção/entrega de teste) devolveu `200`, e esta rota passou a devolver exatamente os campos enviados (`region:us-fase2`, `bucket:fase2-teste`, `retention_days:9`, `media_delivery:both`, `access_key:"***"`). Revertido com `DELETE /s3/config` ao final.
+POST	/s3/config	✅	2026-08-26	segunda-rota	`200 {"Details":"S3 configuration saved successfully","Enabled":true}`; `GET /s3/config` devolveu campo a campo o corpo enviado (`bucket: descartavel`, `retention_days: 7`, `media_delivery: both`), com `access_key: "***"`.
+POST	/s3/configure	✅	2026-08-26	segunda-rota	corpo DIFERENTE do alias curto (`eu-west-1`, `descartavel-configure`, `retention_days: 11`): `200`, e `GET /s3/config` devolveu o corpo novo.
+POST	/s3/test	⬜	2026-08-26	motivo	nenhum bucket descartavel disponivel no ambiente: o validador de saida recusa endpoint em loopback — medido `400 invalid_s3_endpoint` para `http://127.0.0.1:9000` (F277) —, logo um MinIO local nao pode sequer ser gravado; e nao ha credenciais AWS descartaveis. Com endpoint publico e credenciais falsas o percurso chegou a AWS e voltou `403 InvalidAccessKeyId`, que a rota serviu como `500` (F276) — falha do meu input, nao da rota.
+GET	/session/connect	✅	2026-08-26	segunda-rota	sessao descartavel nunca emparelhada: `200 {"status":"connecting"}`, e `GET /session/status` passou de `connected: false, qrcode: ""` para `connected: true` com QR de 1842 caracteres — ligou-se mesmo ao WhatsApp. Ver F274 para o que acontece na SEGUNDA chamada depois de um disconnect.
+GET	/session/disconnect	✅	2026-08-26	segunda-rota	`200 {"details":""}`; `GET /session/status` voltou a `connected: false` mantendo `loggedIn: false`.
+POST	/session/history	✅	2026-08-26	segunda-rota	`200 {"Details":"History configured successfully","History":33}`; `GET /webhook/history` passou a devolver `{"History":33}` — confirma tambem que e o mesmo manipulador de `POST /webhook/history`.
+DELETE	/session/hmac/config	✅	2026-08-26	segunda-rota	`200`; `GET /session/hmac/config` voltou de `"***"` para `""`.
+GET	/session/hmac/config	✅	2026-08-28	protocolo	`200 {hmac_key:""}` — bate com o estado real da sessão `envia` (chave HMAC não configurada nesta rodada, já revertida ao fim da Fase 2).
+POST	/session/hmac/config	✅	2026-08-26	segunda-rota	terceira chave distinta, sobre estado limpo: `200`, e `GET /session/hmac/config` passou de `""` para `"***"`.
+POST	/session/logout	❌	2026-08-26	motivo	`500 {"error":"internal server error"}` numa sessao LIGADA e nunca emparelhada; no log, `the store doesn't contain a device JID`. Sem transporte vivo responde `409 session_not_connected`, que bate com a documentacao. O caminho de `200` exige conta emparelhada. Achado F275.
+POST	/session/pair/phone	⬜	2026-08-26	motivo	iniciaria emparelhamento de um numero real.
+GET	/session/profile	✅	2026-08-28	segunda-rota	`200`, `jid:5516981818244@s.whatsapp.net`, `business_name:"FilaRápida"`, `connected:true, logged_in:true` — bate byte a byte com a identidade conhecida de `envia`.
+GET	/session/profile/full	✅	2026-08-28	segunda-rota	`200`, mesmos campos de `/session/profile` mais `user_info` (com `devices`, 3 aparelhos) e `privacy` — o bloco `privacy` é IDÊNTICO ao devolvido por `GET /users/privacy` na Fase 8 (F352), confirmando que é a mesma fonte.
+POST	/session/proxy	✅	2026-08-26	misto	`200 {"Details":"Proxy configured successfully","Set":true,"ProxyURL":"socks5://proxy.exemplo.invalid:1080"}`; confirmado por DOIS observadores — `GET /session/status` (`proxy_url`) e `GET /admin/users/{id}` (`proxy_config.enabled: true`).
+GET	/session/pair/qr	✅	2026-08-28	protocolo	`200 {qr_code:""}` numa sessão já autenticada — bate com o documentado ("vazio é comportamento normal" fora da janela de emparelhamento).
+DELETE	/session/s3/config	✅	2026-08-26	segunda-rota	`200`; `GET /session/s3/config` passou de `bucket: descartavel-sessao` para `enabled: false, bucket: ""`.
+GET	/session/s3/config	✅	2026-08-28	protocolo	`200` com a configuração S3 zerada (`enabled:false`) — bate com o estado real, revertido ao fim da Fase 2 (F346).
+POST	/session/s3/config	✅	2026-08-26	segunda-rota	corpo distinto (`ap-south-1`, `descartavel-sessao`, `retention_days: 5`): `200`, e `GET /session/s3/config` devolveu-o.
+POST	/session/s3/test	⬜	2026-08-26	motivo	idem ao `POST /s3/test` — mesmo manipulador, mesmo bloqueio de fixture (F276, F277).
+GET	/session/status	✅	2026-08-28	segunda-rota	`200`, `id:16da96746c368b5bc4c2bb0fb363d8d4, name:"envia", connected:true, logged_in:true` — bate exatamente com a sessão administrativa conhecida (mesmo id usado em todas as fases desta campanha).
+GET	/session/ws	✅	2026-08-26	websocket	`101 Switching Protocols` com `Sec-Websocket-Accept` valido, seguido de tres quadros de texto `type: QR` com `code`, `qrCodeBase64` e `expiresAt` na raiz e sem envelope. Cliente RFC 6455 proprio; o motivo antigo ("fora do alcance de curl") media a ferramenta, nao a rota.
+POST	/status/set/audio	🟡	2026-08-26	motivo	Mesmo caminho e mesma pre-condicao de `/status/set/image` (`SendAudio` para `status@broadcast`). **Precisa de medicao PROPRIA**: evidencia herdada nao e evidencia. Ver `HUMAN-LAST.md` C.2.
+POST	/status/set/image	🟡	2026-08-26	misto	200 com message_id. **Observador existe**: a SEGUNDA sessao — `GET /chats/history?chat_jid=status@broadcast`, ou o webhook/`/session/ws` dela. O que falta e a pre-condicao da F256: `getStatusBroadcastRecipients` so inclui contactos com `FullName` (`core/broadcast.go:70`), e a conta Business tem 1 em 461. **A pre-condicao e verificavel por API antes de publicar**, com `GET /users/contacts`. Ver `HUMAN-LAST.md` C.2.
+POST	/status/set/video	🟡	2026-08-26	motivo	Mesmo caminho e mesma pre-condicao de `/status/set/image` (`SendVideo` para `status@broadcast`). **Precisa de medicao PROPRIA**: evidencia herdada nao e evidencia. Ver `HUMAN-LAST.md` C.2.
+DELETE	/webhook	✅	2026-08-26	segunda-rota	`200 {"Details":"Webhook and events deleted successfully"}`; `GET /webhook` passou de `webhook: http://127.0.0.1:8092/hook2` para `webhook: "", subscribe: [""]`.
+GET	/webhook	✅	2026-08-28	segunda-rota	estado inicial `webhook:""`; `POST /webhook` com uma URL de teste devolveu `200`, e esta rota passou a devolver essa URL em `webhook`. Revertido com um novo `POST /webhook` de URL vazia ao final.
+POST	/webhook	✅	2026-08-26	segunda-rota	`200 {"webhook":"http://127.0.0.1:8092/hook"}`; `GET /webhook` passou de `webhook: ""` para esse URL, com `subscribe: ["Message","ReadReceipt"]`.
+PUT	/webhook	✅	2026-08-26	segunda-rota	`200 {"active":true,"events":["Message"],"webhook":"…/hook2"}`; `GET /webhook` confirmou o URL novo e `subscribe: ["Message"]` — o `ReadReceipt` gravado pelo `POST` desapareceu, o que torna a substituicao observavel.
+GET	/webhook/history	✅	2026-08-28	segunda-rota	estado inicial `history:0`; `POST /session/history` com `history:21` devolveu `200`, e esta rota passou a devolver `history:21` — confirma que é o mesmo dado de `POST /session/history` (já sabido, mas agora medido nesta sessão). Revertido com `POST /session/history {history:0}` ao final.
+POST	/webhook/history	✅	2026-08-26	segunda-rota	`200 {"Details":"History configured successfully","History":77}`; `GET /webhook/history` passou de `{"History":0}` para `{"History":77}`.
+DELETE	/communities/{community_jid}/subgroups/{group_jid}	✅	2026-08-28	segunda-rota	`200 {details:"Group unlinked from community successfully"}`; `GET /communities/{jid}/subgroups` confirmou — o subgrupo descartável, que tinha acabado de ser linkado nesta mesma ronda, deixou de aparecer na lista.
+DELETE	/groups/{group_jid}/photo	✅	2026-08-28	cliente	`200 "Group photo removed successfully"`; `GET /groups/{group_jid}` não expõe campo de foto (limitação da rota de leitura, não desta), então a confirmação foi só visual: o avatar vermelho definido pela chamada anterior sumiu de web.whatsapp.com, com o sistema "Você apagou a imagem deste grupo".
+DELETE	/newsletters/delete	✅	2026-08-28	segunda-rota	exige `confirm_jid` igual ao `jid` (senão `400 missing_confirm_jid`) e exige ser OWNER (envia, já `admin` após o `change-owner`, levou `500`/`401 Not Authorized` do WhatsApp — achado incidental abaixo). Chamado por recebe, já `owner`: `200 {status:"sent"}`; `POST /newsletters/info` (recebe) passou a `state:"non_existing"`, `jid:""` — apagado de verdade.
+GET	/chats/history	✅	2026-08-28	segunda-rota	após enviar 3 mensagens de teste (A, B, C-DESCARTAVEL) para a conversa com `recebe`, `GET /chats/history?chat_jid=...` devolveu exatamente essas 3 (e as anteriores) na ordem certa, com `message_id`/`text_content`/`timestamp` batendo byte a byte com a resposta de cada `POST /chats/send/text`.
+GET	/chats/list	✅	2026-08-28	segunda-rota	`200`, `data.chats` com as duas conversas reais da sessão `envia` (a de `recebe`, jid `90937376170214@lid`/phone `554192421234`, e o canal de teste) e `total:2` — confere com o estado conhecido, sem paginação escondida.
+GET	/communities/{community_jid}/participants	✅	2026-08-28	segunda-rota	comunidade descartável com um subgrupo linkado (2 membros): `200 {participants:["90937376170214@lid","29343770251463@lid"]}` — bateu com os JIDs (LID) de envia e recebe, os dois membros reais do subgrupo linkado.
+GET	/communities/{community_jid}/subgroups	✅	2026-08-28	segunda-rota	usado como segunda-rota de PUT/DELETE nesta mesma ronda: antes do link só o subgrupo-padrão da comunidade aparecia; depois do PUT (link) o subgrupo descartável passou a aparecer também; depois do DELETE (unlink) voltou a sumir.
+GET	/groups/{group_jid}/join-requests	✅	2026-08-28	segunda-rota	vazia antes de recebe pedir entrada; depois de `POST /groups/join` (recebe) passou a listar exatamente um pedido com o JID de recebe; depois de aprovado (`POST .../join-requests`) voltou a ficar vazia — os três estados medidos na mesma ronda.
+GET	/newsletters/list	✅	2026-08-28	misto	usado como segunda-rota de `create`/`follow`/`unfollow` nesta mesma ronda — cada mudança de state apareceu/sumiu da lista corretamente. Visualmente, `web.whatsapp.com` (sessão `envia`) mostrou só os DOIS canais antigos de F233 na aba "Canais" e NUNCA o canal `F348` criado/seguido/deixado nesta ronda, mesmo após recarregar a página e esperar — divergência entre o estado real (confirmado por esta própria rota da API) e o que o cliente Web mostra, achado incidental abaixo.
+GET	/users/blocklist	✅	2026-08-28	protocolo	`200 {blocklist:[], dhash:"1787924842884699"}` — lista vazia bate com o estado real (nenhum contacto bloqueado nesta sessão); bloqueio/desbloqueio em si já foi remedido no F278 em fase anterior.
+GET	/users/contacts	✅	2026-08-28	segunda-rota	`200`, roster com 2 chaves — bate com o número de contactos reais conhecidos por `envia` neste ambiente de teste (poucas sessões pareadas, sem roster grande importado).
+GET	/users/contacts/last-activity	✅	2026-08-28	segunda-rota	`200`, 1 chave — bate com a única conversa com atividade recente (`recebe`) nesta sessão de teste.
+GET	/users/lid/{jid}	✅	2026-08-28	segunda-rota	`GET /users/lid/554192421234@s.whatsapp.net` devolveu `200 {jid:..., lid:90937376170214@lid}` — o MESMO LID que `POST /users/info` e `GET /chats/list` já davam para esta conversa, três fontes independentes concordando.
+GET	/users/privacy	✅	2026-08-28	protocolo	`200` com as 10 definições de privacidade da conta `envia` (`group_add:all`, `last_seen:contacts`, etc.) — leitura de configuração da própria conta, sem outra rota para cruzar; a forma da resposta e os valores dentro do conjunto documentado (`all`/`contacts`/`none`/`off`) são a confirmação disponível.
+GET	/users/profile/{jid}	✅	2026-08-28	misto	`GET /users/profile/554192421234@s.whatsapp.net` devolveu `200`, com `lid:90937376170214@lid` (batendo com `/users/lid` e `/users/info`) e `on_whatsapp:true`; confirmado visualmente em web.whatsapp.com — o painel "Dados do contacto" mostra o mesmo número sem nome, batendo com `push_name`/`verified_name` vazios.
+POST	/chats/archive	✅	2026-08-28	cliente	confirmado em web.whatsapp.com (sessão `envia`): `archive:true` fez a conversa com `recebe` sumir da lista principal e aparecer sob uma pasta "Arquivadas (1)" nova; `archive:false` reverteu, a conversa voltou ao topo e a pasta desapareceu.
+POST	/chats/delete/message	✅	2026-08-28	cliente	enviada uma mensagem de teste descartável, depois `POST /chats/delete/message` com o `id` dela: `200 {status:deleted}`, e em web.whatsapp.com (sessão `envia`) a bolha e a prévia na lista passaram a mostrar "Mensagem apagada", tanto no remetente quanto (presumivelmente) no destinatário.
+POST	/chats/download/{kind}	⬜	2026-08-26	motivo	rota nova (CAP-10); ainda não medida contra um servidor real. As cinco rotas por-kind que a antecediam foram removidas em 2026-08-27 (HOUSEKEEP.md F297).
+POST	/chats/ephemeral	✅	2026-08-28	cliente	`duration:"24h"` devolveu `200`, e em web.whatsapp.com apareceu a mensagem de sistema "Você ativou as mensagens temporárias. Todas as novas mensagens desaparecerão desta conversa 24 horas após o envio..."; `duration:"0"` reverteu com "Você desativou as mensagens temporárias", ambas visíveis na conversa e na prévia da lista.
+POST	/chats/ephemeral/default	✅	2026-08-28	protocolo	`duration:"24h"` e depois `"0"` devolveram `200 {details:"Default disappearing timer set"}` — só afeta conversas NOVAS da conta, e criar uma conversa nova só para este teste ficou fora do escopo; a aceitação do protocolo é o observador disponível.
+POST	/chats/{chat_jid}/read	✅	2026-08-28	protocolo	`200 {details:"Message marked as read"}` — o efeito (dois tracinhos azuis) só aparece do lado de quem ESCREVEU a mensagem, ou seja `recebe`, e só havia sessão Chrome logada como `envia`; a aceitação do protocolo é o observador disponível.
+POST	/chats/mute	✅	2026-08-28	cliente	`mute:true, mute_duration:28800000000000` (8h) devolveu `200`, e em web.whatsapp.com surgiu o ícone de sino silenciado ao lado da conversa; `mute:false` reverteu e o ícone sumiu.
+POST	/chats/pin	✅	2026-08-28	cliente	`pin:true` devolveu `200`, e em web.whatsapp.com surgiu o ícone de alfinete ao lado do horário da conversa; `pin:false` reverteu e o ícone sumiu.
+POST	/chats/presence	✅	2026-08-28	protocolo	`state:composing` e depois `state:paused` devolveram `200 {details:"Chat presence sent"}` cada — o efeito ("digitando...") só aparece do lado de quem RECEBE, e só havia sessão Chrome logada como `envia`, quem envia; a aceitação do protocolo é o observador disponível.
+POST	/chats/react	✅	2026-08-28	cliente	achado incidental: `id` da mensagem própria SEM o prefixo `me:` devolveu `200` mas não produziu reação visível em web.whatsapp.com (documentado — o id sem prefixo é tratado como mensagem de outra pessoa); com `id:"me:<id>"` o emoji 👍 apareceu de verdade sob a mensagem; `body:"remove"` reverteu e o emoji sumiu.
+POST	/chats/request-unavailable-message	🟡	2026-08-26	websocket	200. **Observador existe**: o reenvio chega como `*events.Message` com `UnavailableRequestID` igual ao `request_id` devolvido (`capabilities/message/history_sync.go:250`), legivel por `GET /chats/history` no `data_json` e pelo webhook/`/session/ws`. Falta a PRE-CONDICAO: uma mensagem genuinamente indecifravel, que nao e criavel por HTTP. Ver `OBSERVADORES-AMBAR.md` §1.
+POST	/chats/send/audio	✅	2026-08-28	misto	`200 {message_id:3EB0CDA9931C321E18C092}`; a mensagem apareceu em `GET /chats/history` (envia) e, visualmente, em web.whatsapp.com (conta envia/filarapida) como bolha de áudio às 12:14 no mesmo `message_id`.
+POST	/chats/send/buttons	✅	2026-08-28	misto	`200 {message_id:3EB09A96727883C3C5E8C3}`; confirmado por `GET /chats/history` (type=buttons, texto 'Teste de botoes') e visualmente em web.whatsapp.com: cartão 'Fase 3 F239/F282 / Teste de botoes / wa-api' com o botão 'Confirmar' desenhado.
+POST	/chats/send/carousel	✅	2026-08-28	cliente	`200`. RE-MEDIDO 2026-08-28 a pedido do usuário: SEM `image` em nenhum cartão, o cliente Web falha inteiro ('Não foi possível carregar a mensagem. Use seu celular para acessá-la.', mesma limitação de F240). COM `image` real (testado com PNG 120x80 laranja sólido), o cliente Web RENDERIZA os cartões — imagem, `body` e botão aparecem —, mas o `title` do cartão e o `footer` DO CARTÃO nunca aparecem em nenhum dos dois casos; só o `footer` do NÍVEL do carrossel (acima dos cartões, junto do `body` principal) é desenhado. Ver HOUSEKEEP F354.
+POST	/chats/send/contact	✅	2026-08-28	misto	`200 {message_id:3EB03C3CAF41F384D07050}`; confirmado por `GET /chats/history` (type=contact) e visualmente em web.whatsapp.com: cartão 'Teste Fase 3' com 'Conversar'/'Salvar contato'.
+POST	/chats/send/document	✅	2026-08-28	misto	`200 {message_id:3EB08FFF810DF3FE088B65}`; confirmado por `GET /chats/history` (type=document) e visualmente em web.whatsapp.com: anexo 'PDF fase3-teste.pdf, PDF•19 B' com a legenda enviada.
+POST	/chats/send/edit	✅	2026-08-28	cliente	editou a mensagem de texto 3EB0105D6AA9CCC847729F; `200` repetindo o mesmo `message_id`. `GET /chats/history` continuou a mostrar o texto ORIGINAL (a leitura local não reflete a edição — achado incidental, ver F347), mas em web.whatsapp.com o balão aparece com o texto NOVO ('... (EDITADO)') e o rótulo 'Editada', confirmando o efeito real apesar da segunda-rota não bastar sozinha aqui.
+POST	/chats/send/forward	✅	2026-08-28	cliente	encaminhou a mensagem 3EB0105D6AA9CCC847729F; `200` com `message_id` NOVO (3EB088C3DB4061E83B93CC). Não apareceu em `GET /chats/history` (achado incidental, ver F347), mas em web.whatsapp.com o balão 'Encaminhada / Fase 3 F239/F282: teste de texto 2026-08-28' está visível às 12:15 — confirma o envio apesar da segunda-rota não capturar encaminhamentos.
+POST	/chats/send/image	✅	2026-08-28	misto	`200 {message_id:3EB04B160B363CF780C0A3}`; confirmado por `GET /chats/history` (type=image) e visualmente em web.whatsapp.com: imagem com a legenda 'Fase 3 F239/F282: teste de imagem'.
+POST	/chats/send/list	✅	2026-08-28	misto	`200 {message_id:3EB0BEAA1B6D96F42C62C0}`; confirmado por `GET /chats/history` (type=list, texto 'Teste de lista') e visualmente em web.whatsapp.com: cartão 'Fase 3 F239/F282 / Teste de lista / wa-api' com o botão 'Ver'.
+POST	/chats/send/location	✅	2026-08-28	misto	`200 {message_id:3EB0529027C3706183EA0E}`; confirmado por `GET /chats/history` (type=location, rótulo 'Fase 3 F239/F282') e visualmente em web.whatsapp.com: cartão de localização com o mesmo rótulo.
+POST	/chats/send/poll	✅	2026-08-28	misto	`200 {message_id:3EB0B83FFE5EEB99E65287}`; confirmado por `GET /chats/history` (type=poll, pergunta 'Fase 3 F239/F282: teste?') e visualmente em web.whatsapp.com: enquete com as opções 'Sim'/'Nao'. O placar mostrou 0/0 mesmo após o voto (ver `POST /polls/{id}/votes`) — é o MESMO padrão visto em enquetes antigas da mesma conversa (ex.: 'F225', 'Bateria enquete', todas 0/0 no histórico), não uma regressão desta rota.
+POST	/polls/{poll_message_id}/votes	✅	2026-08-28	cliente	votou na enquete 3EB0B83FFE5EEB99E65287 (`sender`=envia); `200 {message_id:3EB0260C6DAC4DBE16CC19}` — despachado, confirmando a semântica documentada ('200 é despacho, não contabilização'). Não apareceu em `GET /chats/history` (achado incidental, ver F347). Em web.whatsapp.com o placar da enquete permaneceu 0/0, IGUAL ao de enquetes antigas da mesma conversa — não há evidência visual de contabilização, mas o padrão histórico mostra que isto é comportamento normal do cliente Web para votos, não falha desta chamada.
+POST	/chats/send/sticker	🟡	2026-08-26	segunda-rota	200 e a mensagem chegou; bolha vazia porque **o WebP de entrada nao e convertido** — `http.DetectContentType` devolve `image/webp` (medido) e esse tipo cai no `default` de `ConvertToWebPSticker` (`media/sticker/exif.go:62`), logo nao passa pelo `scale=512:512`. **So falta fixture**: um PNG 512x512 forca a conversao. Observador ja existe e e ✅ — `GET /chats/history` + `POST /chats/download/sticker` + verificacao dos bytes RIFF/WEBP. Achado F279.
+POST	/chats/send/template	✅	2026-08-28	misto	`200 {message_id:3EB0AF130A18AED968ED73}`; confirmado por `GET /chats/history` (type=template, texto 'Fase 3 F239/F282: teste de modelo') e, em web.whatsapp.com, o corpo não renderiza ('Não foi possível carregar a mensagem. Use seu celular para acessá-la.') — mesma limitação do cliente Web para mensagens interativas já documentada para `/chats/send/carousel` (F240); a segunda-rota confirma que o conteúdo foi gravado corretamente apesar do Web não o desenhar.
+POST	/chats/send/text	✅	2026-08-28	misto	`200 {message_id:3EB0105D6AA9CCC847729F}`; confirmado por `GET /chats/history` (type=text) e visualmente em web.whatsapp.com: balão com o texto enviado (antes da edição subsequente por `/chats/send/edit`).
+POST	/chats/send/video	✅	2026-08-28	misto	`200 {message_id:3EB00BBF87884EDDF5CDFE}`; confirmado por `GET /chats/history` (type=video) e visualmente em web.whatsapp.com: player de vídeo com a legenda 'Fase 3 F239/F282: teste de video'.
+PUT	/groups/{group_jid}/announce-only	✅	2026-08-28	segunda-rota	`200`; `GET /groups/{group_jid}` passou a devolver `is_announce:true`, junto com as outras 4 mudanças da mesma leva (name, topic, ephemeral, locked).
+POST	/groups/create	✅	2026-08-28	misto	`200` com `jid` real e `participants` (2, dono + convidado); `POST /groups/list` passou a incluir esse `jid`, e o grupo apareceu na lista de conversas de web.whatsapp.com (sessão envia) imediatamente.
+PUT	/groups/{group_jid}/ephemeral	✅	2026-08-28	segunda-rota	`{"duration":"7d"}`: `200`; `GET /groups/{group_jid}` passou a devolver `is_ephemeral:true, disappearing_timer:604800` (exatamente 7×24×3600 segundos).
+GET	/groups/{group_jid}	✅	2026-08-28	misto	usado como segunda-rota de quase todas as outras rotas desta família nesta mesma ronda (name, topic, announce-only, ephemeral, locked, join-approval, participants) — cada mudança de estado foi confirmada por uma chamada a esta rota antes/depois, e o nome/tópico bateram também visualmente em web.whatsapp.com.
+GET	/groups/invite-links/{invite_code}	✅	2026-08-28	segunda-rota	código do link de convite do grupo descartável: `200` com `invite_info` batendo campo a campo com `GET /groups/{group_jid}` no mesmo instante (nome, tópico, contagem de participantes) — inspeciona sem entrar, como documentado.
+GET	/groups/{group_jid}/invite-link	✅	2026-08-28	segunda-rota	`200` com um `invite_link` real (`https://chat.whatsapp.com/...`); usado em seguida em `POST /groups/join` (recebe) e funcionou — o link levava mesmo ao grupo certo.
+POST	/groups/join	✅	2026-08-28	segunda-rota	campo correto é `code` (não `invite_code`) — `400 missing_code` na primeira tentativa com o nome errado. Com `code` certo: `200 "Group joined successfully"`; `GET /groups/{group_jid}/join-requests` (envia) passou a listar o pedido pendente de recebe — o grupo tinha aprovação de administrador exigida, então "entrar" virou pedido, não associação direta.
+POST	/groups/leave	✅	2026-08-28	misto	usado repetidamente nesta ronda para sair do grupo/comunidade descartáveis ao final; `GET /groups/{group_jid}` depois de sair (como recebe) retornou sem recebe na lista de `participants`, e web.whatsapp.com (envia) mostrou o sistema "Você saiu" na conversa.
+POST	/groups/list	✅	2026-08-28	segunda-rota	usado como segunda-rota de `create` nesta mesma ronda: o grupo descartável apareceu na lista (14 grupos no total) logo após ser criado.
+PUT	/groups/{group_jid}/locked	✅	2026-08-28	segunda-rota	`200`; `GET /groups/{group_jid}` passou a devolver `is_locked:true`, junto com as outras 4 mudanças da mesma leva.
+PUT	/groups/{group_jid}/name	✅	2026-08-28	misto	`200`; `GET /groups/{group_jid}` passou a devolver o nome novo, e web.whatsapp.com (envia) mostrou o mesmo nome na lista de conversas.
+PUT	/groups/{group_jid}/topic	✅	2026-08-28	segunda-rota	`200`; `GET /groups/{group_jid}` passou a devolver o tópico novo, na mesma leva de name/announce-only/ephemeral/locked.
+POST	/groups/{group_jid}/join-requests	🟡	2026-08-26	segunda-rota	200 contra fila VAZIA, que nao prova nada. **Observador existe**: `GET /groups/{group_jid}/join-requests` (✅) antes/depois, mais `POST /groups/info`. A pre-condicao e criavel so por API — `JoinWithLink` devolve `membership_approval_request` quando o grupo exige aprovacao (`capabilities/group/invite.go:117`) —, mas exige DUAS sessoes emparelhadas. Ver `HUMAN-LAST.md` C.1. Achado F280: o resultado por participante que o WhatsApp devolve e descartado em `adapters/group/participants.go:81`.
+POST	/groups/{group_jid}/participants	✅	2026-08-28	segunda-rota	`action:"remove"` tirou recebe (`participant_count` 2->1, confirmado por `GET`); `action:"add"` recolocou (1->2). Achado incidental de input: esta rota aceita número NU (`554192421234`), diferente da rota irmã de aprovação de pedidos, que exige JID completo — confirma a divergência já documentada no próprio `grupo.yaml`.
+POST	/messages/star	✅	2026-08-28	cliente	`star:true` devolveu `200`, e em web.whatsapp.com surgiu o ícone de estrela ao lado do horário da mensagem; `star:false` reverteu e o ícone sumiu.
+POST	/newsletters/admin-invite	✅	2026-08-28	segunda-rota	`200 {id, expiration_at}`; `POST /newsletters/admin-invite/accept` (recebe) confirmou o convite ao virar `viewer.role: admin` — o convite existia de verdade, não é despacho vazio.
+POST	/newsletters/admin-invite/accept	✅	2026-08-28	segunda-rota	`200 {status:"sent"}` na sessão recebe; `POST /newsletters/info` (recebe) passou de sem papel a `viewer.role:"admin"` e `subscriber_count` foi de 0 para 1 — efeito real, não só despacho.
+POST	/newsletters/admin-invite/revoke	✅	2026-08-28	motivo	`200 {status:"sent"}` ao revogar um segundo convite (envia) antes de aceite; `POST /newsletters/info` (envia) permaneceu `subscriber` depois. Evidência fraca por desenho: a documentação já avisa que não há rota que liste convites pendentes, então não dá para provar que o convite teria sido aceite se não revogado — só que a chamada não gerou erro nem promoveu ninguém.
+POST	/newsletters/change-owner	✅	2026-08-28	segunda-rota	`200 {status:"sent"}`; `POST /newsletters/info` bateu exatamente com o documentado: envia (chamador) caiu de `owner` para `admin`, e recebe (alvo, já admin) subiu para `owner` — medido nas DUAS sessões.
+POST	/newsletters/create	✅	2026-08-28	segunda-rota	`200` com `jid`, `invite_code` e `viewer.role:"owner"`; `GET /newsletters/list` (envia) passou a incluir esse `jid` — canal descartável criado de verdade, não um eco do pedido.
+POST	/newsletters/demote	✅	2026-08-28	segunda-rota	`200 {status:"sent"}` (recebe/owner despromove envia/admin); `POST /newsletters/info` (envia) passou de `viewer.role:"admin"` para `"subscriber"`.
+POST	/newsletters/follow	✅	2026-08-28	segunda-rota	`200 {status:"sent"}`; `GET /newsletters/list` (envia) voltou a incluir o `jid` do canal depois de ter sido removido por `unfollow` — efeito confirmado nos dois sentidos.
+POST	/newsletters/info	✅	2026-08-28	segunda-rota	usado como SEGUNDA-ROTA de quase todas as outras 14 rotas desta família nesta mesma ronda (mute, change-owner, demote, admin-invite/accept, delete) — cada mudança de estado nelas foi confirmada por uma chamada a esta rota antes/depois. `200` sempre com os campos batendo com o estado real.
+POST	/newsletters/info-invite	✅	2026-08-28	segunda-rota	campo correto é `invite` (não `invite_code`) — `400 missing_invite` na primeira tentativa com o nome errado. Com `invite` certo: `200`, metadados batendo byte a byte com `POST /newsletters/info` no mesmo canal, e `viewer: null` (mesmo sendo o dono) como a documentação avisa para esta rota.
+POST	/newsletters/mark-viewed	🟡	2026-08-26	motivo	200 com data:null. **O observador existe por desenho e esta inalcancavel**: `NewsletterMarkViewed` incrementa o contador de vistas (`core/newsletter.go:52`) e o contador so se le por `GetNewsletterMessageUpdates` (`core/newsletter.go:206`) — que e `POST /newsletters/updates`, a rota ❌ da F265. Via alternativa nunca exercitada: `POST /newsletters/subscribe` + evento `NewsletterLiveUpdate`, que carrega `ViewsCount`. `POST /newsletters/messages` traz o campo mas mediu **0 em 60/60** e nao distingue. Ver `OBSERVADORES-AMBAR.md` §4.
+POST	/newsletters/messages	✅	2026-08-28	segunda-rota	canal vazio devolveu `200 {messages:[]}`; depois de `POST /chats/send/text` postar no canal, passou a devolver `200` com um item cujo `message_id` e `text` batem exatamente com o que foi postado.
+POST	/newsletters/mute	✅	2026-08-28	segunda-rota	`mute:false` (desmutar) mudou `POST /newsletters/info`'s `viewer.mute_state` de `"on"` para `"off"` — a transição foi o que confirmou o efeito (mutar de novo não teria mudado nada visível, já que o canal nasce mutado por padrão).
+POST	/newsletters/react	🟡	2026-08-26	segunda-rota	200 com data:null. **O motivo antigo ficou obsoleto no proprio dia**: mediu-se um canal com sessenta publicacoes e `POST /newsletters/messages` devolveu `ReactionCounts` reais (ex.: `{'👍':3,'😂':58}`). O observador e a leitura antes/depois do mesmo `MessageServerID`, com o passo de REMOCAO (`reaction` vazio) a fechar a causalidade. Falta apenas uma sessao emparelhada e autorizacao para reagir numa conta real. Ver `HUMAN-LAST.md` B.3.
+POST	/newsletters/subscribe	✅	2026-08-28	protocolo	`200 {status:"sent", duration_seconds:90}` — despacho de subscrição às atualizações ao vivo; não há efeito visível fora da janela de 90s declarada na própria resposta, e nenhuma atualização ao vivo ocorreu nesse canal descartável durante o teste, então fica como confirmação de protocolo (resposta bem formada, sem erro), não de efeito observado.
+POST	/newsletters/unfollow	✅	2026-08-28	segunda-rota	`200 {status:"sent"}`; `GET /newsletters/list` (envia) deixou de incluir o `jid` do canal logo depois — confirmado também que um `admin`/`owner` NÃO pode se desinscrever (documentado): só foi possível depois do `demote` ter baixado envia a `subscriber`.
+POST	/newsletters/updates	❌	2026-08-26	motivo	500 ao fim de 30,0 s — context deadline exceeded; o servidor nunca responde (F265).
+POST	/users/avatar	⬜	2026-08-26	motivo	alteraria o avatar da conta — proibido nesta sessao pelo utilizador.
+POST	/users/block	❌	2026-08-26	motivo	422 upstream_rejected; WhatsApp devolve 400 bad-request. Medido nas duas contas, PN e LID (F264).
+POST	/users/check	✅	2026-08-28	segunda-rota	`{phone:["554192421234"]}` (número de `recebe`) devolveu `200`, `is_in_whatsapp:true`, `jid:554192421234@s.whatsapp.net` — bate com a sessão real e pareada de `recebe`.
+POST	/users/contacts/sync	✅	2026-08-28	segunda-rota	`{mode:"if_unsynced"}` devolveu `200 {details:"contact roster sync requested"}`; `GET /users/contacts` manteve 2 chaves antes e depois — bate com o documentado (`if_unsynced` não faz nada quando a agenda já está sincronizada).
+POST	/users/history/sync	✅	2026-08-28	segunda-rota	pedido com âncora numa mensagem real (`oldest_msg_id` de uma mensagem de teste enviada nesta campanha) devolveu `200` com um `details` (id do pedido) DIFERENTE do `oldest_msg_id` enviado — confirma que é um novo pedido despachado, não um eco; `GET /chats/history` manteve a mesma contagem, bate com o documentado (não há mensagens mais antigas que a âncora nesta conversa de teste).
+POST	/users/info	✅	2026-08-28	misto	`{phone:["554192421234@s.whatsapp.net"]}` devolveu `200`, `lid:90937376170214@lid` e 3 `devices` — o mesmo LID que `GET /chats/list` já mostrava independentemente para a mesma conversa, e confirmado visualmente em web.whatsapp.com (contacto exibido só pelo número, sem nome — bate com `push_name`/`verified_name` vazios na resposta).
+POST	/users/presence	✅	2026-08-28	protocolo	`type:available` e depois `type:unavailable` devolveram `200 {details:"Presence sent"}` cada — o efeito (ficar online/offline aos olhos de terceiros) só é visível do lado de quem OBSERVA `envia`, ou seja `recebe`, e só havia sessão Chrome logada como `envia`; a aceitação do protocolo é o observador disponível, como já documentado para presence de conversa na Fase 7 (F351).
+POST	/users/presence/subscribe	✅	2026-08-28	protocolo	`{phone:"554192421234@s.whatsapp.net"}` devolveu `200 {details:"Presence subscription updated"}` — a própria documentação da rota diz que a notificação chega depois por outro canal (WebSocket/webhook) e depende de `recebe` mudar de presença por conta própria, fora do nosso controlo neste teste; a aceitação do protocolo é o observador disponível.
+POST	/users/privacy	⬜	2026-08-26	motivo	alteraria definicoes de privacidade da conta.
+POST	/users/status	⬜	2026-08-26	motivo	alteraria o recado da conta.
+POST	/users/unblock	❌	2026-08-26	motivo	422 upstream_rejected, idem (F264).
+PUT	/communities/{community_jid}/subgroups/{group_jid}	✅	2026-08-28	segunda-rota	`200 {details:"Group linked to community successfully"}`; `GET /communities/{jid}/subgroups` confirmou — o subgrupo descartável (criado à parte, sem vínculo) passou a aparecer na lista da comunidade.
+PUT	/groups/{group_jid}/photo	✅	2026-08-28	cliente	primeira tentativa com um JPEG sintético inválido (1x1) devolveu `422 upstream_rejected` — "the given data is not a valid image", erro correto do WhatsApp, não bug. Com um JPEG 200x200 real (Pillow): `200 "Group photo set successfully"`; `GET /groups/{group_jid}` não expõe campo de foto, então a confirmação foi visual: o avatar do grupo em web.whatsapp.com (sessão envia) passou a mostrar exatamente a cor vermelha enviada, com o sistema "Você mudou a imagem do grupo".
+PUT	/groups/{group_jid}/settings/join-approval	✅	2026-08-28	segunda-rota	campo correto é `mode` (não `require_approval`) — a primeira tentativa com o nome errado devolveu `200` mas na prática DESLIGOU a exigência (`mode` ausente vale `false`, como a própria documentação avisa), medido por `GET /groups/{group_jid}` continuando com `is_join_approval_required:false`. Com `mode:true`: `200`, e `GET` passou a `true` — confirmado também pelo efeito de ponta a ponta: `POST /groups/join` (recebe) virou PEDIDO pendente em vez de entrada direta.

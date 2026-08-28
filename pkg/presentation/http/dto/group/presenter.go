@@ -23,6 +23,7 @@ func PresentGroupParticipant(p domain.GroupParticipant) GroupParticipantResponse
 		DisplayName:  p.DisplayName,
 		IsAdmin:      p.IsAdmin,
 		IsSuperAdmin: p.IsSuperAdmin,
+		Error:        p.Error,
 	}
 }
 

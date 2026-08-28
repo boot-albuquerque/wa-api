@@ -522,7 +522,7 @@ type NewsletterReader struct {
 	ChangeOwnerFunc func(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error
 	DeleteFunc      func(ctx context.Context, txtID string, channelJID domain.JID) error
 
-	CreateAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	CreateAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error)
 	AcceptAdminInviteFunc func(ctx context.Context, txtID string, channelJID domain.JID) error
 	RevokeAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
 
@@ -728,12 +728,12 @@ func (f *NewsletterReader) DeleteNewsletter(ctx context.Context, txtID string, c
 }
 
 // CreateNewsletterAdminInvite implementa port.NewsletterReader.
-func (f *NewsletterReader) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+func (f *NewsletterReader) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error) {
 	f.record("CreateNewsletterAdminInvite", txtID, channelJID, string(userJID))
 	if f.CreateAdminInviteFunc != nil {
 		return f.CreateAdminInviteFunc(ctx, txtID, channelJID, userJID)
 	}
-	return nil
+	return domain.NewsletterAdminInvite{}, nil
 }
 
 // AcceptNewsletterAdminInvite implementa port.NewsletterReader.

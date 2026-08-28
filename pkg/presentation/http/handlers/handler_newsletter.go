@@ -126,6 +126,8 @@ func (h *newsletterOpHandler) respond(w http.ResponseWriter, rsp *notification.N
 		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterMessages(rsp.Messages), nil)
 	case notification.NewsletterOpSubscribe:
 		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterSubscribe(rsp.Status, rsp.Duration), nil)
+	case notification.NewsletterOpAdminInvite:
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterAdminInvite(rsp.AdminInvite), nil)
 	default:
 		// The acknowledgement is the right answer for every operation that
 		// changes something and reports no payload, which is what a newly added

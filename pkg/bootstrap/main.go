@@ -51,14 +51,11 @@ type server struct {
 	// exclusividade. Ver buildLeaseManager.
 	Leases *leaseManager
 
-	// Engines diz qual transporte serve cada sessao (decisao 94). Nunca e'
-	// zero depois do arranque: setupEngineSelection ou a preenche ou mata o
-	// processo, porque servir pelo transporte errado em silencio e' pior que
-	// nao arrancar.
-	Engines EngineSelection
-
-	// Headless e' a configuracao zero quando nenhuma sessao usa esse engine, e
-	// nesse caso nenhum caminho de execucao a consulta. Ver
+	// Headless e' a configuracao zero quando o processo nao tem Chrome
+	// apontado (WA_API_HEADLESS_CHROME/WA_API_HEADLESS_PROFILES ausentes).
+	// A escolha de engine e' por sessao, feita em POST /admin/users; um
+	// pedido de sessao em headless com esta configuracao zero e recusado
+	// por user.AddUserUseCase, nao pelo arranque (decisao 94 removida). Ver
 	// headlessConfigConfigurada.
 	Headless HeadlessConfig
 }

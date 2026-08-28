@@ -73,7 +73,7 @@ func newAdminFixture(t *testing.T) *adminFixture {
 
 	userHandlers := handlers.NewUserHandlers(
 		user.NewListUsersUseCase(repo, logger, sessions),
-		user.NewAddUserUseCase(repo, hmacKeyEncryptor{}, s3SecretCipher{}, logger),
+		user.NewAddUserUseCase(repo, hmacKeyEncryptor{}, s3SecretCipher{}, logger, true),
 		user.NewEditUserUseCase(repo, s3SecretCipher{}, userInfoRepublisher{db: database}, logger),
 		user.NewDeleteUserUseCase(repo, userInfoRepublisher{db: database}, logger),
 		nil, nil, nil, nil, nil, nil, nil,

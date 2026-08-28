@@ -103,13 +103,15 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 		return nil, apperr.New("invalid_action", apperr.CategoryValidation, "invalid Action in payload (must be approve or reject)", false, nil)
 	}
 
-	if err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action); err != nil {
+	update, err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action)
+	if err != nil {
 		uc.logger.Error(ctx, "failed to update group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
 		return nil, fmt.Errorf("failed to update group request participants: %w", err)
 	}
 
 	return &domain.UpdateGroupRequestParticipantsResult{
-		Details: "Group request participants updated successfully",
+		Details:            "Group request participants updated successfully",
+		ParticipantsUpdate: update,
 	}, nil
 }
 
