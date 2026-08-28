@@ -79,10 +79,17 @@ var inventarioFase3 = map[string]portStatus{
 	"NewsletterReader":      {satisfeito: true},
 	"SessionDisconnector":   {satisfeito: true},
 	"ProfileAccessProvider": {satisfeito: true},
-	"AppStateSyncer":        {satisfeito: true},
-	"ChatMessenger":         {satisfeito: true},
-	"GroupDirectory":        {satisfeito: true},
-	"GroupLifecycle":        {satisfeito: true},
+
+	// AccountTypeDetector (worktree feature/account-type-detection, itens
+	// 33-35): satisfeito por pkg/infra/wa-headless/accounttype, que le
+	// Conn.canSetMyPushname() (WAWebConnModel), o mesmo getter que
+	// capabilities/profile ja mediu ao vivo (HOUSEKEEP.md — a conta de
+	// laboratorio e Business porque canSetMyPushname() = false).
+	"AccountTypeDetector": {satisfeito: true},
+	"AppStateSyncer":      {satisfeito: true},
+	"ChatMessenger":       {satisfeito: true},
+	"GroupDirectory":      {satisfeito: true},
+	"GroupLifecycle":      {satisfeito: true},
 
 	"SessionLogouter": {motivo: "RECUSADO POR POLÍTICA, e não por incapacidade. A H122 " +
 		"mediu que Socket.logout EXISTE e funciona neste build — mas chamá-lo " +

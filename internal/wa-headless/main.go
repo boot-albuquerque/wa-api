@@ -33,6 +33,7 @@ package waheadless
 import (
 	"context"
 
+	"wa-api/internal/wa-headless/capabilities/accounttype"
 	"wa-api/internal/wa-headless/capabilities/avatar"
 	"wa-api/internal/wa-headless/capabilities/block"
 	"wa-api/internal/wa-headless/capabilities/channel"
@@ -286,6 +287,25 @@ type (
 // not exist at all, and the measurement discarded them.
 func RefreshOwnIdentity(ctx context.Context, runner *Runner, eval Evaluator, label string) (OwnIdentity, error) {
 	return owner.Refresh(ctx, runner, eval, label)
+}
+
+// The account's own type: personal or Business.
+type (
+	// AccountKind is this session's own answer to "is this account Business
+	// or personal". See capabilities/accounttype for the signal and why it is
+	// reliable.
+	AccountKind = accounttype.Kind
+)
+
+const (
+	AccountKindUnknown  = accounttype.KindUnknown
+	AccountKindPersonal = accounttype.KindPersonal
+	AccountKindBusiness = accounttype.KindBusiness
+)
+
+// DetectAccountKind asks the page whether this session's account is Business.
+func DetectAccountKind(ctx context.Context, runner *Runner, eval Evaluator, label string) (AccountKind, error) {
+	return accounttype.Detect(ctx, runner, eval, label)
 }
 
 // Priming the roster: asking the page to refresh what it knows about contacts.

@@ -1298,7 +1298,19 @@ rules_frozen=true
 # INTEGRACAO com http-dto-download-paths (2026-08-27): func_coverage CAI 596->594 (5 handlers/rotas legadas de download removidas, F328). Ratchet-DOWN justificado: deletar codigo nao e regressao.
 # INTEGRACAO com housekeep-session (2026-08-27): func_coverage CAI 594->591 apos merge (F273-F276 acrescentaram funcoes elegiveis novas, algumas sem log directo por serem so orquestracao). Ratchet-DOWN medido, nao regressao de codigo que ja logava.
 # INTEGRACAO com engine-decisao-94 (2026-08-28): func_coverage SOBE 591->593. Remocao da selecao estatica de engine (WA_API_ENGINE/WA_API_ENGINE_HEADLESS_SESSIONS) tirou 6 funcoes elegiveis de pkg/bootstrap sem log direto (EngineSelection.Default/EngineFor/SessoesEmHeadless/UsaHeadless, engineSelectionConfigurada, engineValido) e acrescentou 1 (domain.EngineValido, excluida do elegivel). Ratchet-UP.
-min_func_coverage=593
+# PORTE capability-registry (2026-08-28): func_coverage SOBE 593->596. Porte
+# adaptado de feature/macbook-lucas (commits d19dd491+4462065c) para
+# feature/wa-noise, trocando o tipo domain.Engine (que nao existe aqui) por
+# string simples, usando as consts EngineNoise/EngineWaHeadless ja
+# existentes em pkg/domain/user.go. Seis funcoes elegiveis novas com log
+# direto: CapabilityRegistry.Decide, CapabilityRegistry.Provider,
+# NewDefaultMatrix, matrix.capabilitiesForEngine, matrix.decide,
+# matrix.expand. Ratchet-UP honesto.
+# PORTE f66a9c0e/account-type (2026-08-28): a versao de macbook-lucas deste
+# baseline (min_func_coverage=595, via a integracao da onda 2) descreve uma
+# arvore diferente da nossa — recalculado abaixo apos aplicar o porte
+# completo, nao herdado.
+min_func_coverage=596
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1623,7 +1635,19 @@ min_errpath_coverage=777
 # INTEGRACAO com housekeep-session (2026-08-27): min_eligible SOBE 1001->1006 (+5, ratchet-UP honesto: F273-F276 acrescentaram funcoes novas de orquestracao/guard).
 # INTEGRACAO com housekeep-messages2 (2026-08-27): min_eligible SOBE 1006->1007 (+1, ratchet-UP honesto: presentProfileFull, F302).
 # INTEGRACAO com engine-decisao-94 (2026-08-28): min_eligible CAI 1007->1003 (-6+1+1=-4). Remocao da selecao estatica de engine apaga 6 funcoes elegiveis de pkg/bootstrap (EngineSelection.Default/EngineFor/SessoesEmHeadless/UsaHeadless, engineSelectionConfigurada, engineValido) e acrescenta domain.EngineValido (EXCLUIDA, pacote domain fora do universo de pkg/bootstrap+usecase que o gate mede como elegivel-com-log) e user.AddUserUseCase.headlessAvailable nao cria funcao nova. Ratchet-DOWN justificado: deletar codigo morto (decisao 94 nunca esteve ligada ao caminho de requisicao real) nao e regressao.
-min_eligible=1003
+# PORTE capability-registry (2026-08-28): min_eligible SOBE 1003->1009 (+6,
+# ratchet-UP honesto). ENTRAM (6): CapabilityRegistry.Decide,
+# CapabilityRegistry.Provider, NewDefaultMatrix,
+# matrix.capabilitiesForEngine, matrix.decide, matrix.expand — ver
+# justificativa de min_func_coverage acima para o detalhe do porte.
+# PORTE f66a9c0e/account-type (2026-08-28): a versao de macbook-lucas deste
+# baseline (min_eligible=1007) descreve uma arvore diferente da nossa —
+# recalculado abaixo apos aplicar o porte completo, nao herdado.
+# min_eligible SOBE 1009->1013 (+4, ratchet-UP honesto): as funcoes elegiveis
+# novas de deteccao de account_type (SetUserAccountType, GetUserAccountType
+# em pkg/infra/db, e as dos adapters accounttype), medido com
+# `go run ./cmd/logcov -json ./pkg` apos o porte de f66a9c0e.
+min_eligible=1013
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
