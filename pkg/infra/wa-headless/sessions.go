@@ -5,8 +5,39 @@ import (
 	"fmt"
 
 	waheadless "wa-api/internal/wa-headless"
+	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
+
+// ErrNoSession is the typed error every port-boundary method on Sessions
+// returns for a txtID this process does not hold — the SAME shape
+// pkg/infra/wa-noise/runtime/session.ErrNoSession already returns for the
+// identical condition, kept as its own local constructor (not a shared
+// import) because the two engine packages must not need to import each
+// other for a four-line error constructor.
+//
+// # Why this exists (HOUSEKEEP F379)
+//
+// Until this fix, EnsureSession returned a bare
+// fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID) — not an
+// *apperr.AppError. RespondJSON (pkg/presentation/http/response.go) only
+// derives the HTTP status from errors.As(err, *apperr.AppError); anything
+// else falls back to the literal status the handler passed in, which every
+// /session/* handler hardcodes to 500. MEASURED live: a wa_headless session
+// that never connected got 500 internal_error from GET /session/hmac/config
+// and POST /session/history, while the IDENTICAL scenario on a wa_noise
+// session — same handler, same use case, only the engine differs — got the
+// correct 400 no_session. This one error shape being untyped broke the
+// error contract for every use case that goes through EnsureSession for
+// wa_headless: HOUSEKEEP F273/F281's own comment lists eleven of them
+// (S3/HMAC/proxy/history config, ListUsers, DeleteUserComplete, and the
+// three SessionController methods), not only pairing.
+func ErrNoSession(txtID string, cause error) *apperr.AppError {
+	if cause == nil {
+		cause = fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
+	}
+	return apperr.New("no_session", apperr.CategoryValidation, "no session", false, cause)
+}
 
 // Sessions is the seam every adapter goes through to reach a page (decision 83).
 //
@@ -52,9 +83,13 @@ func (s *Sessions) Runner() *waheadless.Runner { return s.runner }
 func (s *Sessions) Holds(txtID string) bool { return s.registry.Holds(txtID) }
 
 // EnsureSession is the SessionGuard half every transport port embeds.
+//
+// Returns ErrNoSession (an *apperr.AppError), not the bare registry
+// sentinel — see ErrNoSession's own doc comment (HOUSEKEEP F379) for why
+// that distinction is the whole fix.
 func (s *Sessions) EnsureSession(_ context.Context, txtID string) error {
 	if !s.registry.Holds(txtID) {
-		return fmt.Errorf("%w: %q", registry.ErrUnknownSession, txtID)
+		return ErrNoSession(txtID, nil)
 	}
 	return nil
 }
@@ -64,8 +99,20 @@ func (s *Sessions) EnsureSession(_ context.Context, txtID string) error {
 // A dirty stop still frees the slot: a holder that failed to go down cleanly is
 // gone as far as this process is concerned, and keeping its slot would leak
 // capacity on exactly the failures that need capacity most.
+//
+// The error path is ONLY "txtID is not held" — registry.Registry.Release's
+// own doc comment confirms the actual stop outcome travels in StopVia, never
+// as an error — so wrapping it unconditionally in ErrNoSession here is safe:
+// there is no OTHER failure this could be masking (HOUSEKEEP F379, same fix
+// as EnsureSession above). Before this fix, GET /session/disconnect on a
+// wa_headless session nobody had connected answered 500 internal_error;
+// the identical scenario on wa_noise already answered 400 no_session.
 func (s *Sessions) Release(ctx context.Context, txtID string) (waheadless.StopVia, error) {
-	return s.registry.Release(ctx, txtID)
+	via, err := s.registry.Release(ctx, txtID)
+	if err != nil {
+		return via, ErrNoSession(txtID, err)
+	}
+	return via, nil
 }
 
 // Evaluator resolves txtID into a way to reach its page.

@@ -80,22 +80,27 @@ var _ appport.SessionStarter = (*waNoiseSessionStarter)(nil)
 // buildPairingRegistry wires the pairing surface: which provider serves which
 // engine, for QR, phone code and connect.
 //
-// # wa_headless: QR and connect are wired, phone-code is not (HOUSEKEEP F370)
+// # wa_headless: all three pairing ports are wired (HOUSEKEEP F370/F380)
 //
 // Until 2026-08-29 (H145) wa_headless had an entry with three nil ports on
 // purpose: no PairingQRReader, PhonePairer or SessionStarter implementation
 // existed anywhere in the tree, and nothing under pkg/infra/wa-headless was
-// even constructed in pkg/bootstrap. That changed for QR/connect only —
+// even constructed in pkg/bootstrap. QR/connect were wired first —
 // pkg/infra/wa-headless/pairing.QRReader/Starter, built over
 // core.StartPairingSession (a new boot primitive; core.StartSession itself
 // stays restoration-only) and the wwebjs-derived QR construction MEASURED
-// against this build (internal/wa-headless/capabilities/qr, H145). PhonePairer
-// is still nil: the capability matrix still marks request_pairing_code
-// unknown for wa_headless, and nothing has measured whether it needs the
-// same UNPAIRED-state gate H122 found for wa_noise's own phone pairing.
+// against this build (internal/wa-headless/capabilities/qr, H145).
+// PhonePairer followed the same day (F380): the same UNPAIRED-state gate
+// H122 found for wa_noise's own phone pairing was measured against a
+// genuinely unpaired session this time — H122 had only probed presence
+// against an already-paired one, where the reference's own gate stops it
+// before anything runs — and the call sequence
+// (internal/wa-headless/capabilities/phonepair) reached WhatsApp's real
+// server (a structured IQErrorBadRequest for a fake test number, not a
+// crash).
 //
-// A nil PhonePairer on an otherwise-populated Provider is still the same
-// deliberate signal the original design chose over a missing entry
+// If a future engine still leaves this nil, that stays the same deliberate
+// signal the original design chose over a missing entry
 // (capability_not_supported vs engine_unavailable) — see
 // pairing.Registry.ResolvePhonePairer.
 func buildPairingRegistry(s *server, users appport.UserRepository, getClient waclient.Getter, caps *capabilityregistry.CapabilityRegistry, headlessSessions *headlessadapter.Sessions) *pairing.Registry {
@@ -110,7 +115,8 @@ func buildPairingRegistry(s *server, users appport.UserRepository, getClient wac
 	if headlessSessions != nil {
 		waHeadless.QRReader = headlesspairing.NewQRReader(headlessSessions)
 		waHeadless.Starter = headlesspairing.NewStarter(headlessSessions)
-		headlessPorts = 2
+		waHeadless.PhonePairer = headlesspairing.NewPhonePairer(headlessSessions)
+		headlessPorts = 3
 	}
 	// Logged with the per-engine port counts rather than a bare "built": the
 	// question an operator asks of this line is "does THIS process serve

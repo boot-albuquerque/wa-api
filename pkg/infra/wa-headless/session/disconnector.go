@@ -1,25 +1,24 @@
 // Package session adapts session lifecycle to the application's ports.
 //
-// # Why this satisfies SessionDisconnector, and SessionLogouter is still open
+// # Why this satisfies SessionLogouter now (HOUSEKEEP F381, reopening H122)
 //
-// The two look symmetric and are not. Disconnecting drops the transport: the
-// session can come back on its own. Logging out DEAUTHENTICATES — and on a page
-// transport that unpairs the account, which needs a human holding the phone to
-// restore.
+// Disconnecting drops the transport: the session can come back on its own.
+// Logging out DEAUTHENTICATES — and on a page transport that unpairs the
+// account, which needs a human holding the phone to restore. H122
+// (internal/wa-headless/HOUSEKEEP.md) measured that Socket.logout EXISTS
+// and is a function, but refused to CALL it: an untested call that unpairs
+// a real account was not something to satisfy the compiler with, on policy
+// grounds — not a technical block.
 //
-// H122 (internal/wa-headless/HOUSEKEEP.md) measured that Socket.logout EXISTS
-// and works in this build, but never called it — only presence was probed. This
-// package's own earlier revision refused SessionLogouter on policy grounds
-// (an untested call that unpairs a real account is not something to satisfy
-// the compiler with). That policy decision has since been revisited on request
-// (same risk wa_noise's own Logout already carries), but Logout is NOT
-// implemented here yet: the JS invocation sequence for Socket.logout is
-// unmeasured, and this repository's own rule is measurement before design —
-// see internal/wa-headless/HOUSEKEEP.md and CLAUDE.md's anti-regression policy.
-// Implementing it against a guess would risk deauthenticating a real account
-// on a call shape nobody verified. See the paridade plan (session dispatch /
-// pairing work) for the pending measurement step against a disposable
-// .lab/ profile.
+// That call was finally MEASURED (F381, TestProbeSocketLogout,
+// internal/wa-headless/probe_logout_test.go), against a genuinely paired,
+// disposable profile re-paired specifically for this: Socket.logout()
+// returns without throwing, and within ~18s the page settles from
+// CONNECTED to UNPAIRED with a fresh, working QR showing — the same
+// clean "logged out, ready to re-pair" state a phone-initiated logout
+// produces, never a crash or a stuck page. See
+// internal/wa-headless/capabilities/logout for the call itself and where
+// its shape comes from (whatsapp-web.js, measured, not guessed).
 package session
 
 import (
@@ -27,7 +26,9 @@ import (
 	"sync"
 
 	waheadless "wa-api/internal/wa-headless"
+	"wa-api/internal/wa-headless/capabilities/logout"
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain/apperr"
 	adapter "wa-api/pkg/infra/wa-headless"
 
 	"github.com/rs/zerolog/log"
@@ -172,6 +173,47 @@ func (d *Disconnector) Disconnect(ctx context.Context, txtID string) error {
 	return err
 }
 
-// Compile-time proof: this adapter satisfies the disconnecting half, and ONLY
-// it. The line that is absent is the point — see the package doc.
-var _ appport.SessionDisconnector = (*Disconnector)(nil)
+// Logout deauthenticates the session — see this package's own doc comment
+// (F381, reopening H122) for what was measured and where the call comes
+// from.
+//
+// Two refusals mirror wa_noise's own SessionGuardAdapter.Logout
+// (pkg/infra/wa-noise/runtime/session/guard.go) exactly — same codes, same
+// categories, same reasoning:
+//
+//   - Evaluator unreachable (page cannot be reached at all) →
+//     apperr.CodeSessionNotConnected, 409. This is the code
+//     LogoutUseCase's own Execute checks for to call detacher.Detach even
+//     on failure (F80) — a session whose transport is gone needs its LOCAL
+//     state to stop lying, regardless of engine.
+//   - Reachable but no owner identity (never paired, or already logged out)
+//     → apperr.CodeSessionNotPaired, 409: there is no device to log out.
+//
+// Only once both pass does this call Socket.logout() for real.
+func (d *Disconnector) Logout(ctx context.Context, txtID string) error {
+	eval, err := d.sessions.Evaluator(ctx, txtID)
+	if err != nil {
+		return apperr.New(
+			apperr.CodeSessionNotConnected,
+			apperr.CategoryConflict,
+			"session has no live connection; call /session/connect before logging out",
+			false,
+			err,
+		)
+	}
+	identity, err := waheadless.RefreshOwnIdentity(ctx, d.sessions.Runner(), eval, statusLabel)
+	if err != nil || !identity.Present() {
+		return apperr.New(
+			apperr.CodeSessionNotPaired,
+			apperr.CategoryConflict,
+			"session has a live connection but was never paired; there is no device to log out",
+			false,
+			err,
+		)
+	}
+	return logout.Do(ctx, d.sessions.Runner(), eval, statusLabel)
+}
+
+// Compile-time proof: this adapter satisfies the full controller, not only
+// the disconnecting half — SessionLogouter joined it in F381.
+var _ appport.SessionController = (*Disconnector)(nil)

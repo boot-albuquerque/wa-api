@@ -1329,7 +1329,19 @@ rules_frozen=true
 # txtID. Mesmo criterio das entradas F373/F374/F377 acima: helpers puros ou
 # de mapa em memoria, sem caminho de erro que justifique log por L1. Medido
 # com `go run ./cmd/logcov -json` apos a correcao completa, nao inferido.
-min_func_coverage=601
+#
+# F379 (2026-08-29, mesmo dia): func_coverage CAI 601->600 (-1). ENTRA:
+# pkg/infra/wa-headless.ErrNoSession — o construtor que faz EnsureSession/
+# Release devolverem *apperr.AppError (code=no_session) em vez de um erro
+# cru, corrigindo GET /session/hmac|s3/config, POST /session/history e GET
+# /session/disconnect devolvendo 500 internal_error para wa_headless onde
+# wa_noise ja' devolvia 400 no_session para a mesma condicao. Nao loga —
+# mesmo padrao do seu equivalente ja' existente,
+# pkg/infra/wa-noise/runtime/session.ErrNoSession (tambem uncovered no
+# golden, ha' muito tempo — nao e' regressao nova, e' o mesmo criterio se
+# repetindo). Medido com `go run ./cmd/logcov -json` apos a correcao
+# completa, nao inferido.
+min_func_coverage=600
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): func_coverage 601 -> 604
 # (+3, ratchet-UP). Medido apos o merge completo, com todos os conflitos
@@ -1691,7 +1703,36 @@ min_func_coverage=601
 # `return f(...)` direto — mesma regra citada na entrada de F279 acima).
 # Medido com `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao
 # inferido.
-min_errpath_coverage=783
+#
+# F379 (2026-08-29, mesmo dia): errpath_coverage CAI 783->782 (-1). O NOVO
+# ramo `if err != nil { return via, ErrNoSession(txtID, err) }` em
+# Sessions.Release soma um S-ret novo — nao coberto por log nem por
+# `err := f(...); return err`, ja' que devolve um valor CONSTRUIDO
+# (ErrNoSession(...)), nao o `err` recebido. Mesmo criterio ja' aceito para
+# EnsureSession (que tem a mesma forma e ja' nao contava para esta metrica
+# antes desta sessao, por ja' ser trivial demais para ser elegivel). Queda
+# legitima: o caminho de saida e' NOVO (o `if` nao existia), nao uma
+# cobertura perdida. Medido com `go run ./cmd/logcov -json` apos a correcao
+# completa, nao inferido.
+#
+# F380 (2026-08-29, mesmo dia): errpath_coverage CAI 782->781 (-1).
+# PhonePairer.IsPaired ganha um S-consume novo (o `if err != nil { return
+# false, nil }` que trata falha de leitura de identidade como "ainda nao
+# confirmado pareado", mesmo padrao tolerante de PairingQR.promoteIfPaired)
+# — nao coberto por log nem por propagacao de causa, porque o erro e'
+# deliberadamente DESCARTADO (devolve nil, nao o err). Queda legitima: o
+# caminho e' NOVO, nao cobertura perdida. Medido com `go run ./cmd/logcov
+# -json` apos a correcao completa, nao inferido.
+#
+# F381 (2026-08-29, mesmo dia): errpath_coverage CAI 781->780 (-1).
+# Disconnector.Logout ganha um S-ret novo (`return logout.Do(...)`, a
+# chamada final que devolve o resultado de Socket.logout() direto) — nao
+# coberto por log nem por `err := f(...); return err` (e' `return f(...)`
+# direto, que a regra L2(b) nao conta — mesma ressalva ja citada nas
+# entradas F279/F370 acima). Queda legitima: caminho novo, nao cobertura
+# perdida. Medido com `go run ./cmd/logcov -json` apos a correcao
+# completa, nao inferido.
+min_errpath_coverage=780
 # INTEGRACAO (2026-08-27): apos mesclar fundacao + sessao + utilizadores +
 # canais/newsletters, re-medido: errpath_coverage SOBE 777->778. Ratchet-UP.
 #
@@ -1836,7 +1877,34 @@ min_errpath_coverage=783
 # criterio das entradas acima. func_coverage cai para 601 (ver anotacao
 # correspondente); errpath_coverage permanece 783. Medido com `go run
 # ./cmd/logcov -json` e golden com `-golden` no mesmo commit. Nao inferido.
-min_eligible=1069
+#
+# F379 (2026-08-29, mesmo dia): min_eligible SOBE 1069->1071 (+2). ENTRAM:
+# pkg/infra/wa-headless.ErrNoSession (nova) e Sessions.Release (mudou de
+# EXCLUDED — corpo trivial de uma linha — para ELIGIBLE, porque ganhou um
+# `if`). func_coverage/errpath_coverage: ver anotacoes correspondentes
+# acima (600/782). Medido com `go run ./cmd/logcov -json` e golden com
+# `-golden` no mesmo commit. Nao inferido.
+#
+# F380 (2026-08-29, mesmo dia): min_eligible SOBE 1071->1075 (+4). ENTRAM:
+# phonepair.Reader.Request/parked (nova capacidade — pedido de codigo de
+# pareamento por telefone para wa_headless, sequencia de chamadas MEDIDA
+# contra whatsapp-web.js e contra uma sessao real desemparelhada) e
+# PhonePairer.IsPaired/RequestPairingCode (o adapter que a expoe).
+# func_coverage permanece 600 (Request/parked entram cobertos por
+# propagacao de erro — L2(b) — mesmo sem log direto; IsPaired/
+# RequestPairingCode entram descobertas, ver anotacao de
+# min_errpath_coverage acima para a primeira). Medido com `go run
+# ./cmd/logcov -json` e golden com `-golden` no mesmo commit. Nao inferido.
+#
+# F381 (2026-08-29, mesmo dia): min_eligible SOBE 1075->1077 (+2). ENTRAM:
+# logout.Do (a chamada MEDIDA de Socket.logout() contra uma sessao real
+# pareada, reabrindo a recusa por politica da H122) e Disconnector.Logout
+# (o adapter que a expoe, agora satisfazendo appport.SessionController por
+# inteiro). func_coverage permanece 600 (logout.Do entra coberto por
+# propagacao — L2(b); Disconnector.Logout entra descoberto, ver anotacao
+# de min_errpath_coverage acima). Medido com `go run ./cmd/logcov -json` e
+# golden com `-golden` no mesmo commit. Nao inferido.
+min_eligible=1077
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
 # (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de

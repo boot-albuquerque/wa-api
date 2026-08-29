@@ -121,13 +121,16 @@ func TestResolve_MismatchIsAnsweredBeforeTheCapabilityDecision(t *testing.T) {
 // provider desse engine esteja registado e completo. Se a ordem se invertesse,
 // um provider ligado por engano passaria a servir a operação.
 //
-// domain.CapRequestPairingCode (não domain.CapGetPairingQR) pela mesma razão
-// de TestResolve_NeverFallsBackToTheOtherEngine: desde H145 (2026-08-29)
-// get_pairing_qr é Supported para wa_headless na matriz de produção.
+// domain.CapCheckPairingStatus (não domain.CapGetPairingQR nem
+// domain.CapRequestPairingCode) pela mesma razão de
+// TestResolve_NeverFallsBackToTheOtherEngine: desde H145 (2026-08-29)
+// get_pairing_qr é Supported para wa_headless, e desde F380 (mesmo dia)
+// request_pairing_code também passou a Supported — as duas na matriz de
+// produção. check_pairing_status continua unknown.
 func TestResolve_CapabilityIsAnsweredBeforeTheProviderLookup(t *testing.T) {
 	r := registryWith(newReader(), bothEnginesWired()...)
 
-	_, err := r.Resolve(context.Background(), headlessID, domain.EngineWaHeadless.String(), domain.CapRequestPairingCode)
+	_, err := r.Resolve(context.Background(), headlessID, domain.EngineWaHeadless.String(), domain.CapCheckPairingStatus)
 
 	assertCode(t, err, CodeCapabilityNotSupported)
 }
@@ -217,12 +220,13 @@ func TestTargetEngine_LegacyUnknownReadsAsWaNoise(t *testing.T) {
 // uma capacidade que a matriz ainda não marca como suportada, um pedido
 // wa_headless legítimo é RECUSADO, nunca servido pelo outro.
 //
-// domain.CapRequestPairingCode (não domain.CapGetPairingQR) é a capacidade
-// usada aqui de propósito: desde H145 (2026-08-29) get_pairing_qr passou a
-// Supported para wa_headless na matriz de produção — o próprio ponto deste
-// worktree —, então usá-la testaria a matriz, não o "nunca cai para o outro
-// engine" que este teste existe para travar. request_pairing_code continua
-// unknown para wa_headless.
+// domain.CapCheckPairingStatus (não domain.CapGetPairingQR nem
+// domain.CapRequestPairingCode) é a capacidade usada aqui de propósito:
+// desde H145 (2026-08-29) get_pairing_qr passou a Supported para
+// wa_headless na matriz de produção, e desde F380 (mesmo dia)
+// request_pairing_code também — as duas testariam a matriz, não o "nunca
+// cai para o outro engine" que este teste existe para travar.
+// check_pairing_status continua unknown para wa_headless.
 //
 // A asserção é sobre a IDENTIDADE do provider devolvido, e não sobre o status:
 // um Resolve que devolvesse o provider errado com nil de erro passaria em
@@ -231,7 +235,7 @@ func TestResolve_NeverFallsBackToTheOtherEngine(t *testing.T) {
 	waNoise := &Provider{Engine: domain.EngineWaNoise}
 	r := registryWith(newReader(), waNoise, &Provider{Engine: domain.EngineWaHeadless})
 
-	got, err := r.Resolve(context.Background(), headlessID, domain.EngineWaHeadless.String(), domain.CapRequestPairingCode)
+	got, err := r.Resolve(context.Background(), headlessID, domain.EngineWaHeadless.String(), domain.CapCheckPairingStatus)
 	if err == nil {
 		t.Fatalf("Resolve devolveu o provider %q sem erro para um engine que não serve esta capacidade", got.Engine)
 	}
@@ -241,7 +245,7 @@ func TestResolve_NeverFallsBackToTheOtherEngine(t *testing.T) {
 
 	// E a metade positiva, para que o teste não passe por o Resolve recusar
 	// tudo: o mesmo registry serve o wa_noise.
-	served, err := r.Resolve(context.Background(), noiseID, domain.EngineWaNoise.String(), domain.CapRequestPairingCode)
+	served, err := r.Resolve(context.Background(), noiseID, domain.EngineWaNoise.String(), domain.CapCheckPairingStatus)
 	if err != nil {
 		t.Fatalf("o pedido wa_noise legítimo foi recusado: %v", err)
 	}

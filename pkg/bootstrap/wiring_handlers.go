@@ -180,14 +180,21 @@ func initCustomHandlers(s *server) {
 	// also needs it, for the Starter/QRReader pair.
 	var headlessSessions *headlessadapter.Sessions
 	var headlessDisconnector appport.SessionDisconnector
+	// headlessLogouter is the SAME *Disconnector instance as
+	// headlessDisconnector above, typed down to the narrower port —
+	// Disconnector implements the full appport.SessionController since
+	// F381 (Socket.logout MEASURED, reopening H122). Kept as two variables,
+	// not one appport.SessionController, because sessionEngineGuard's
+	// constructor takes the two ports separately (mirrors how wa_noise's
+	// own single adapter is passed to both parameters too).
+	var headlessLogouter appport.SessionLogouter
 	if s.Headless.ChromePath != "" {
 		headlessRegistry := headlessregistry.New(s.Headless.MaxSessions)
 		headlessSessions = headlessadapter.NewSessions(headlessRegistry, s.Headless.StartConfigFor)
-		headlessDisconnector = headlesssession.NewDisconnector(headlessSessions)
+		headlessController := headlesssession.NewDisconnector(headlessSessions)
+		headlessDisconnector = headlessController
+		headlessLogouter = headlessController
 	}
-	// headlessLogouter stays nil until Socket.logout is measured — see
-	// pkg/infra/wa-headless/session/disconnector.go's package doc.
-	var headlessLogouter appport.SessionLogouter
 	capabilities := capabilityregistry.NewCapabilityRegistry()
 	sessionGuard := newSessionEngineGuard(userRepo, capabilities, waNoiseSessionGuard, headlessDisconnector, headlessLogouter)
 

@@ -7,6 +7,7 @@ import (
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain/apperr"
 	adapter "wa-api/pkg/infra/wa-headless"
 	"wa-api/pkg/infra/wa-headless/registry"
 )
@@ -15,26 +16,51 @@ func cfgFor(string) (waheadless.StartConfig, error) {
 	return waheadless.StartConfig{BinaryPath: "/nonexistent", ProfileDir: "/tmp/nao-usado"}, nil
 }
 
-// TestDesconectaMasNaoSAI trava a recusa por POLÍTICA, que é diferente das
-// outras quatro categorias: aqui a capacidade FUNCIONA.
-//
-// A H122 mediu que Socket.logout existe e funciona neste build. Chamá-lo
-// desempareia a conta, e restaurar exige um humano com o telefone. Implementar
-// a porta para satisfazer o compilador significaria chamar a operação que
-// funciona — apagando um pareamento que ninguém pediu para apagar.
-func TestDesconectaMasNaoSAI(t *testing.T) {
+// TestDisconnectorSatisfazOControladorInteiro é o mirror de
+// TestDesconectaMasNaoSAI (o nome antigo, que travava a RECUSA por
+// política) — desde F381 (Socket.logout MEASURED, reopening H122) a
+// recusa deixou de ser deliberada: Disconnector agora satisfaz
+// appport.SessionController por inteiro, e um teste que ainda esperasse a
+// recusa passaria a falhar exatamente como este passou a falhar quando o
+// logout foi implementado — o sinal de que a medição mudou de fato, não
+// uma regressão a mascarar.
+func TestDisconnectorSatisfazOControladorInteiro(t *testing.T) {
 	var d any = NewDisconnector(adapter.NewSessions(registry.New(1), cfgFor))
 
 	if _, ok := d.(appport.SessionDisconnector); !ok {
-		t.Fatal("não satisfaz SessionDisconnector, que é o que ele existe para fazer")
+		t.Fatal("não satisfaz SessionDisconnector")
 	}
-	if _, ok := d.(appport.SessionLogouter); ok {
-		t.Fatal("passou a satisfazer SessionLogouter: alguém implementou o logout, " +
-			"que DESEMPAREIA a conta e exige um humano com o telefone para " +
-			"restaurar — se isso foi deliberado, a H122 precisa de ser revista antes")
+	if _, ok := d.(appport.SessionLogouter); !ok {
+		t.Fatal("não satisfaz SessionLogouter — F381 devia ter fechado essa lacuna")
 	}
-	if _, ok := d.(appport.SessionController); ok {
-		t.Fatal("satisfaz a composição inteira; ver acima")
+	if _, ok := d.(appport.SessionController); !ok {
+		t.Fatal("não satisfaz a composição inteira; ver acima")
+	}
+}
+
+// TestLogout_EvaluatorInalcancavelDevolveSessionNotConnected: mesmo
+// gatilho de TestSessionStatusDetidaMasIlegivelNaoAdivinha (cfgFor aponta
+// para um binário inexistente — o mesmo caso de "página inalcançável" que
+// um Chrome real produziria). Logout tem de recusar com o MESMO código que
+// pkg/infra/wa-noise/runtime/session/guard.go já usa para a condição
+// idêntica (`!client.IsConnected()`): apperr.CodeSessionNotConnected, 409
+// — é o código que LogoutUseCase.Execute verifica para chamar
+// detacher.Detach mesmo em falha (F80), então divergir aqui quebraria essa
+// limpeza de estado local para wa_headless especificamente.
+func TestLogout_EvaluatorInalcancavelDevolveSessionNotConnected(t *testing.T) {
+	reg := registry.New(1)
+	d := NewDisconnector(adapter.NewSessions(reg, cfgFor))
+
+	if _, err := reg.Acquire("s1", waheadless.StartConfig{}, registry.KindOperational); err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	err := d.Logout(context.Background(), "s1")
+	var appErr *apperr.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("Logout devolveu %v (%T), quer um *apperr.AppError", err, err)
+	}
+	if appErr.Code != apperr.CodeSessionNotConnected {
+		t.Fatalf("appErr.Code = %q, quer %q", appErr.Code, apperr.CodeSessionNotConnected)
 	}
 }
 

@@ -147,19 +147,34 @@ func TestPairingPhone_WaNoise_CallsOnlyNoiseProvider(t *testing.T) {
 	h.assertOnlyNoiseCalled(t)
 }
 
-// TestPairingPhone_WaHeadless_CapabilityNotSupported: mesma medição que o QR.
-// A linha request_pairing_code da matriz marca wa_headless como `unknown`
-// (pkg/capabilityregistry/matrix.go), e unknown NUNCA é Supported — a ausência
-// de evidência é propagada, não engolida. 422, zero providers tocados.
-func TestPairingPhone_WaHeadless_CapabilityNotSupported(t *testing.T) {
+// TestPairingPhone_WaHeadless_CallsOnlyHeadlessProvider é o caso REAL medido.
+//
+// Medição (2026-08-29, HOUSEKEEP F380): pkg/infra/wa-headless/pairing.
+// PhonePairer existe, é construído em pkg/bootstrap (buildPairingRegistry)
+// quando s.Headless.ChromePath está configurado, e request_pairing_code é
+// Supported para wa_headless na matriz real — o sequência de chamadas
+// (WAWebAltDeviceLinkingApi.setPairingType/initializeAltDeviceLinking/
+// startAltLinkingFlow) foi MEDIDA contra uma sessão real e desemparelhada,
+// alcançando o servidor do WhatsApp. Um pedido wa_headless legítimo é
+// servido — pelo provider wa_headless, nunca pelo outro — não mais
+// recusado.
+//
+// Até 2026-08-29 (mesmo dia, antes da F380) este teste esperava 422
+// capability_not_supported; a substituição não é um relaxamento de
+// asserção, é a medição mudando de fato porque o adapter passou a existir
+// — mesmo padrão de TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider.
+func TestPairingPhone_WaHeadless_CallsOnlyHeadlessProvider(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{headlessSession, domain.EngineWaHeadless})
 	rec := servePairing(t, pairingRouter(t, h, headlessSession), http.MethodPost, "/session/pairphone",
 		`{"engine":"wa_headless","phone":"5511999999999"}`)
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, quero 422 (corpo %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	h.assertNoProviderCalled(t)
+	if !strings.Contains(rec.Body.String(), "HEADLESS-CODE") {
+		t.Errorf("corpo = %s, quero o código do provider wa_headless", rec.Body.String())
+	}
+	h.assertOnlyHeadlessCalled(t)
 }
 
 // --- 6, 7, 8: engine ausente ou inválido ---------------------------------

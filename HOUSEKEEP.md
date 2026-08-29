@@ -39434,3 +39434,300 @@ valor que os dois campos já documentados carregam.
 **Status**: corrigido nesta sessão.
 
 <!-- f-status: corrigido -->
+
+## F379 — `EnsureSession`/`Release` do `wa_headless` devolviam erro cru; toda rota `/session/*` que dependesse deles dava 500 em vez do 400 que `wa_noise` já dava
+
+**Data**: 2026-08-29. **Contexto**: pedido do usuário — "trabalhe para que
+todas as outras rotas '/sessions' sejam compatíveis com 'headless' assim
+como são para 'noise'". Levantamento inicial ao vivo (curl, sessão
+`wa_headless` recém-criada, nunca conectada) contra cada rota `/session/*`.
+
+**Achado, medido**: comparando a MESMA condição (sessão nunca conectada)
+nos dois engines:
+
+| rota | `wa_noise` | `wa_headless` (antes) |
+|---|---|---|
+| `POST /session/history` | `400 no_session` | `500 internal_error` |
+| `GET /session/hmac/config` | `400 no_session` | `500 internal_error` |
+| `GET /session/disconnect` | `400 no_session` | `500 internal_error` |
+| `GET /session/s3/config` | `400 no_session` | `500 internal_error` |
+
+**Onde**: `pkg/infra/wa-headless/sessions.go` — `Sessions.EnsureSession` e
+`Sessions.Release` devolviam o erro do registry (`registry.ErrUnknownSession`,
+envolvido só por `fmt.Errorf`) diretamente ao chamador. `RespondJSON`
+(`pkg/presentation/http/response.go:107-120`) só deriva o status HTTP certo
+quando `errors.As(err, *apperr.AppError)` — qualquer outro erro cai no
+status LITERAL que o handler passou, que todo handler de `/session/*` fixa
+em `500`. `wa_noise` já tinha essa lição aprendida:
+`pkg/infra/wa-noise/runtime/session/guard.go` tem um `ErrNoSession(txtID,
+cause) *apperr.AppError` dedicado desde antes desta sessão — o `wa_headless`
+nunca teve o equivalente.
+
+**Alcance**: `EnsureSession`/`Release` são o SessionGuard que
+`sessionEngineGuard` (F370 Fase 0) despacha para os dois engines — o mesmo
+comentário do arquivo já registava que 11 use cases passam por ele
+(S3/HMAC/proxy/history config, `ListUsers`, `DeleteUserComplete`, e os três
+métodos de `SessionController`). O defeito não era de UMA rota — era do
+PONTO ÚNICO por onde todas elas passam.
+
+**Correção**: `pkg/infra/wa-headless.ErrNoSession(txtID, cause)
+*apperr.AppError` — mesma forma exata do equivalente de `wa_noise`
+(`code="no_session"`, `apperr.CategoryValidation`, mensagem `"no session"`),
+preservando a cadeia de causa via `Unwrap()` (`errors.Is` contra
+`registry.ErrUnknownSession` continua funcionando, testes pré-existentes
+não precisaram mudar). `EnsureSession` e `Release` passam a devolvê-lo.
+
+**Fora do escopo desta entrada, registrado à parte para decisão futura**:
+`Sessions.Evaluator` (o outro método de fronteira, usado por praticamente
+TODOS os outros adaptadores `wa_headless` — mensagens, grupos, perfil,
+avatar, presença, etc., não só `/session/*`) tem o MESMO padrão de erro cru
+em alguns dos seus caminhos de saída. Não apliquei a mesma correção ali
+porque a distinção é mais delicada: `Evaluator` FAZ boot automático (não só
+verifica posse), e os erros que devolve vêm de três causas genuinamente
+diferentes — configuração ausente, pool de capacidade cheio
+(`registry.ErrAtCapacity`, que já é tipado corretamente hoje), e falha real
+de boot do Chrome. Embrulhar tudo em `ErrNoSession` esconderia um "pool
+cheio" ou uma falha de infraestrutura real atrás de um 400 que sugere
+"você não conectou ainda" — precisa de medição própria para mapear cada
+causa pro código certo, não uma correção incidental desta sessão.
+
+**Testes** (controle negativo EXECUTADO nos dois): `TestEnsureSession_
+ErroENoSessionTipado` e `TestRelease_SessaoDesconhecidaDevolveNoSessionTipado`
+— confirmam `*apperr.AppError`, `code="no_session"`, `HTTPStatus()==400`, e
+`errors.Is` contra o sentinel do registry preservado. Controle negativo:
+reverti cada método pra devolver o erro cru de novo; os dois testes
+falharam com a mensagem exata do achado; revertido, voltaram a passar.
+
+**Quase-incidente no próprio HOUSEKEEP durante esta entrada**: ao atualizar
+`.log-coverage-baseline`, dupliquei `min_eligible=` e `min_errpath_coverage=`
+(editei adicionando uma linha nova em vez de substituir a existente) — a
+exata armadilha que o cabeçalho do próprio arquivo cita (F129: chave
+duplicada desativa o gate em silêncio). `go test ./cmd/logcov/...` pegou na
+hora (`TestBaselineBateComAMedicao` recusa por chave duplicada, fail-closed
+por desenho). Corrigido antes de prosseguir — registrado aqui só porque é
+exatamente o tipo de erro que a proteção do F129 existe para pegar, e
+funcionou.
+
+**Gates**: `go build`, `go vet`, `gofmt`, `go test ./pkg/infra/wa-headless/...`,
+`go test ./cmd/logcov/...` (baseline/golden regenerados: `min_func_coverage`
+601→600, `min_errpath_coverage` 783→782, `min_eligible` 1069→1071) — todos
+verdes. Verificado ao vivo: as quatro rotas da tabela acima voltam `400
+no_session` depois da correção, rebuild e restart do servidor de teste.
+
+**Status**: corrigido nesta sessão (EnsureSession/Release, o escopo do
+título). O achado do `Evaluator`, descrito acima, é uma questão DISTINTA
+que ficou fora do escopo — se o usuário quiser, vira uma entrada própria
+quando for medida.
+
+<!-- f-status: corrigido -->
+
+## F380 — `POST /session/pair/phone` implementado para `wa_headless` (Fase 2 do plano de paridade)
+
+**Data**: 2026-08-29. **Contexto**: continuação do pedido "trabalhe para
+que todas as outras rotas '/sessions' sejam compatíveis com 'headless'
+assim como são para 'noise'" — a Fase 2 do plano de paridade original
+(pareamento por telefone), pendente desde a Fase 1 (F370).
+
+**Onde H122 parou**: `internal/wa-headless/HOUSEKEEP.md` H122 (2026-08-22)
+mediu que `WAWebAltDeviceLinkingApi.setPairingType/initializeAltDeviceLinking/
+startAltLinkingFlow` EXISTEM neste build, mas nunca chamou nenhuma — só
+provou presença, contra uma sessão JÁ PAREADA (socket `CONNECTED`), onde o
+próprio laço da referência para antes de tentar. `BLOCKED` por estado, não
+por falta de máquina.
+
+**O que mudou aqui**: consultado o wwebjs real
+(`github.com/pedroslopez/whatsapp-web.js`, `src/Client.js`,
+`requestPairingCode`) para o formato exato da chamada:
+
+```js
+window.require('WAWebAltDeviceLinkingApi').setPairingType('ALT_DEVICE_LINKING');
+await window.require('WAWebAltDeviceLinkingApi').initializeAltDeviceLinking();
+return window.require('WAWebAltDeviceLinkingApi').startAltLinkingFlow(phoneNumber, showNotification);
+```
+
+Medido contra uma sessão GENUINAMENTE desemparelhada
+(`.lab/test-account-profile`, socket `UNPAIRED` confirmado antes da
+chamada — `TestProbeRequestPairingCode`, `internal/wa-headless/
+probe_pairphone_test.go): a sequência completa executa sem erro de
+JavaScript e alcança o servidor real do WhatsApp. Com um número de teste
+falso (`15550101234` — `555` é reservado para ficção), a resposta foi um
+erro ESTRUTURADO (`CompanionHelloError`, `type.name=IQErrorBadRequest`),
+não uma falha de função ausente — a prova de que o mecanismo funciona de
+ponta a ponta; só faltou um telefone real para completar o pareamento.
+
+**Taxonomia do erro**: `IQErrorBadRequest` não é documentado pelo próprio
+wwebjs (que só invoca a chamada, nunca inspeciona o tipo da recusa) —
+encontrado em `oxidezap/whatsapp-rust` (`wacore/src/pair_code.rs`), uma
+reimplementação do protocolo que documenta o enum `CompanionHelloError`
+completo: `RateOverlimit=429`, `FeatureNotAvailable=452`, `BadRequest`
+ambíguo entre "conteúdo inválido" e "throttling do lado do servidor". Não
+implementado um enum fechado sem medir cada variante — o tipo bruto viaja
+na mensagem de erro, não uma tradução inventada.
+
+**O que foi construído**:
+- `internal/wa-headless/capabilities/phonepair` (novo): `Reader.Request`,
+  mesmo idioma kick-and-park de `capabilities/qr`.
+- `pkg/infra/wa-headless/pairing/phonepairer.go` (novo): `PhonePairer`
+  implementa `appport.PhonePairer` — `IsPaired` reaproveita
+  `waheadless.RefreshOwnIdentity` (mesma leitura de `QRReader.
+  promoteIfPaired`); `RequestPairingCode` embrulha o erro em
+  `apperr.New("pair_phone_failed", CategoryValidation, ...)` — o MESMO
+  código e categoria que `pkg/infra/wa-noise/adapters/pairing/adapter.go`
+  já usa para a condição idêntica (F152: "contract fidelity deliberada",
+  400 para toda falha de pareamento por telefone, seja número mal formado
+  ou recusa do servidor).
+- `pkg/bootstrap/pairing_providers.go`: `waHeadless.PhonePairer` ligado.
+- `pkg/capabilityregistry/matrix.go`: `request_pairing_code` passa de
+  `unknown` para `Supported`/`EvidenceProbable` em `wa_headless`.
+
+**Testes corrigidos** (não relaxados — a medição mudou de fato, mesmo
+padrão já usado quando `get_pairing_qr` passou a suportado na F370):
+- `pkg/pairing/registry_test.go`: `TestResolve_
+  CapabilityIsAnsweredBeforeTheProviderLookup` e `TestResolve_
+  NeverFallsBackToTheOtherEngine` usavam `domain.CapRequestPairingCode`
+  como exemplo de "capacidade ainda não suportada" — trocado para
+  `domain.CapCheckPairingStatus` (que continua `unknown`), preservando a
+  invariante geral que os dois testes travam.
+- `pkg/presentation/http/handlers/handler_pairing_engine_test.go`:
+  `TestPairingPhone_WaHeadless_CapabilityNotSupported` (esperava 422)
+  substituído por `TestPairingPhone_WaHeadless_CallsOnlyHeadlessProvider`
+  (espera 200 e confere que só o provider `wa_headless` foi tocado) —
+  mesmo padrão de `TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider`.
+
+**Testes novos** (controle negativo EXECUTADO): `internal/wa-headless/
+capabilities/phonepair/phonepair_test.go` — sucesso devolve o código,
+recusa estruturada cita o tipo (`IQErrorBadRequest`), código vazio com
+`ok=true` não é aceito como sucesso. Controle negativo: removi a citação
+do tipo no erro devolvido; `TestRequest_RecusaDoWhatsappNomeiaOTipo`
+falhou citando a mensagem exata; revertido, voltou a passar.
+
+**Verificado ao vivo, fim a fim, pela rota HTTP real** (não só pelo
+probe): `POST /session/pair/phone` contra uma sessão `wa_headless`
+conectada, com o mesmo número de teste falso — respondeu `400
+pair_phone_failed`, com a mesma mensagem `CompanionHelloError
+(IQErrorBadRequest)` do probe. Idêntico em forma ao que `wa_noise` já
+devolve para um número inválido.
+
+**Não completado, e por quê**: um pareamento REAL, de ponta a ponta (um
+código gerado, digitado num telefone de verdade), não foi tentado — exigia
+um número de telefone real disponível para o teste, que esta sessão não
+tinha. O que foi medido é suficiente para confiar na integração (o
+mecanismo alcança o WhatsApp real e responde de forma estruturada), mas a
+confirmação final ("o código realmente pareia") fica para quando houver um
+telefone disponível.
+
+**Gates**: `go build`, `go vet`, `gofmt`, `go test -race ./pkg/...
+./internal/wa-headless/capabilities/phonepair/...`, `go test
+./cmd/logcov/...` (baseline/golden regenerados: `min_errpath_coverage`
+782→781, `min_eligible` 1071→1075) — todos verdes. `go run
+./cmd/openapidoc` não produziu diff — o contrato HTTP já documentava a
+forma que os dois engines agora respeitam igualmente.
+
+**Status**: corrigido nesta sessão (mecanismo completo e verificado
+end-to-end contra o WhatsApp real; só a confirmação de pareamento
+completo com telefone real fica pendente, por falta de telefone
+disponível, não por lacuna de código).
+
+<!-- f-status: corrigido -->
+
+## F381 — `POST /session/logout` implementado para `wa_headless` (Fase 3 do plano de paridade, reabre e fecha a H122)
+
+**Data**: 2026-08-29. **Contexto**: conclusão do pedido "trabalhe para que
+todas as outras rotas '/sessions' sejam compatíveis com 'headless' assim
+como são para 'noise'" — a Fase 3 (logout), a última pendência de
+capacidade real do plano de paridade original.
+
+**Onde H122 parou**: `internal/wa-headless/HOUSEKEEP.md` H122 (2026-08-22)
+mediu que `Socket.logout` EXISTE e é função neste build, mas **recusou
+chamá-la deliberadamente**: desemparelha a conta de verdade, e restaurar
+exige um humano com o telefone. Bloqueio de POLÍTICA, não técnico.
+
+**Medição que reabriu a recusa**: com autorização explícita do usuário
+para desautenticar a conta de teste de propósito, medido ao vivo contra um
+perfil descartável REPAREADO na hora para este teste especificamente
+(`TestProbeSocketLogout`, `internal/wa-headless/probe_logout_test.go`):
+
+```
+BEFORE: {"socket":"CONNECTED","hasOwner":true}
+Socket.logout() returned: "called"
+AFTER (t+18s): {"socket":"UNPAIRED","hasQR":true,"testids":[...landing page...]}
+```
+
+A chamada (`window.require('WAWebSocketModel').Socket.logout()`, zero
+argumentos — formato confirmado no wwebjs real,
+`github.com/pedroslopez/whatsapp-web.js`, `src/Client.js`, `Client.logout`)
+não lançou exceção, e a página se recuperou sozinha para uma tela de
+pareamento limpa e funcional em ~18s — o mesmo estado "desconectada,
+pronta pra reparear" que um logout iniciado pelo celular produz. Duas
+contas descartáveis (`conta-A`, `conta-B`) já estavam desautenticadas
+antes desta sessão (achado incidental, não causado por este trabalho — ver
+nota abaixo); o usuário reparou uma delas ao vivo, via QR do devui, para
+que a medição pudesse ocorrer contra uma sessão genuinamente pareada.
+
+**O que foi construído**:
+- `internal/wa-headless/capabilities/logout` (novo): `Do(ctx, runner, eval,
+  label) error` — chama `Socket.logout()`, reporta se a página aceitou a
+  chamada. Não espera a transição completar (invariante 6: nenhum
+  script decide por quanto tempo esperar) — o chamador observa o novo
+  estado no próximo poll de status, do mesmo jeito que já observa qualquer
+  outra mudança assíncrona.
+- `pkg/infra/wa-headless/session/disconnector.go`: `Disconnector.Logout`
+  — dois caminhos de recusa espelham `pkg/infra/wa-noise/runtime/session/
+  guard.go` EXATAMENTE (mesmo código, mesma categoria): `Evaluator`
+  inalcançável → `apperr.CodeSessionNotConnected` (409, o código que
+  `LogoutUseCase.Execute` verifica para chamar `detacher.Detach` mesmo em
+  falha — F80); alcançável mas sem identidade → `apperr.CodeSessionNotPaired`
+  (409). Só então chama `logout.Do`.
+- `pkg/bootstrap/wiring_handlers.go`: `headlessLogouter` deixa de ser
+  `nil` — é a MESMA instância de `Disconnector` já usada como
+  `headlessDisconnector`, tipada para a porta mais estreita.
+- `pkg/capabilityregistry/matrix.go`: `logout_session` passa de `unknown`
+  para `Supported`/`EvidenceConfirmed` em `wa_headless`.
+
+**Testes** (controle negativo EXECUTADO nos dois pacotes): `internal/wa-
+headless/capabilities/logout/logout_test.go` — sucesso não erra, recusa
+cita o motivo da página. `pkg/infra/wa-headless/session/disconnector_test.go`
+— `TestDisconectaMasNaoSAI` (que travava a RECUSA deliberada) substituído
+por `TestDisconnectorSatisfazOControladorInteiro` (mesmo padrão de
+substituição que F373/F380 já usaram quando uma medição muda de fato, não
+um relaxamento de asserção) e `TestLogout_EvaluatorInalcancavelDevolveSessionNotConnected`
+(o único dos três ramos de `Logout` alcançável sem Chrome real — os outros
+dois foram provados pela medição ao vivo acima, mesma limitação já aceita
+para `classifyIdentity`/F378). Dois controles negativos executados:
+reverti `Logout` para devolver `CodeSessionNotPaired` no ramo errado —
+falhou citando o código esperado; revertido. Reverti `logout.Do` para
+engolir o motivo da recusa — falhou citando a mensagem; revertido.
+
+**Verificado ao vivo, pela rota HTTP real**, os dois caminhos de recusa —
+comparados byte a byte com `wa_noise` na MESMA condição:
+
+| condição | `wa_noise` | `wa_headless` |
+|---|---|---|
+| nunca conectou | `400 no_session` | `400 no_session` |
+| conectada, nunca pareada | `409 session_not_paired` | `409 session_not_paired` |
+
+Idênticos. O caminho de sucesso (chamar `Socket.logout()` de verdade) foi
+medido diretamente pelo probe contra a sessão reparada — repetir pela rota
+HTTP exerceria exatamente o mesmo `logout.Do` já coberto pelo probe e pelo
+teste de unidade, então não foi pedido ao usuário escanear uma segunda vez.
+
+**Achado incidental, registrado à parte**: as duas contas descartáveis
+(`.lab/conta-A`, `.lab/conta-B`) já estavam desautenticadas ANTES desta
+sessão tocar nelas — nenhum código deste repositório fez isso; é um fato
+do ambiente (provavelmente logout remoto anterior, ou expiração). Não é um
+defeito de código, então não vira uma entrada própria — só o registro de
+que o estado dos dois slots mudou por fora do controle desta sessão.
+
+**Gates**: `go build`, `go vet`, `gofmt`, `go test -race ./pkg/...
+./internal/wa-headless/capabilities/logout/...
+./internal/wa-headless/capabilities/phonepair/...`, `go test
+./cmd/logcov/...` (baseline/golden regenerados: `min_errpath_coverage`
+781→780, `min_eligible` 1075→1077) — todos verdes. `go run
+./cmd/openapidoc` não produziu diff.
+
+**Status**: corrigido nesta sessão. Com F380 (pairphone) e F381 (logout),
+o plano de paridade `/session/*` original (F370) está completo: todas as
+rotas de sessão que o `wa_noise` serve, o `wa_headless` agora serve
+também, com o mesmo contrato de erro.
+
+<!-- f-status: corrigido -->
