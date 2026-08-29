@@ -24,7 +24,7 @@ func NewRequestUnavailableMessageUseCase(co appport.UnavailableMessageRequester,
 // Execute requests an unavailable message
 func (uc *RequestUnavailableMessageUseCase) Execute(ctx context.Context, userID string, req domain.RequestUnavailableMessageRequest) (*domain.RequestUnavailableMessageResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

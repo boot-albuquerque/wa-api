@@ -9,13 +9,13 @@ import (
 	wahistory "wa-api/pkg/infra/history"
 	"wa-api/pkg/infra/media"
 	"wa-api/pkg/infra/messaging"
+	intnoise "wa-api/pkg/infra/noise/registry"
 	stdiopkg "wa-api/pkg/infra/stdio"
 	"wa-api/pkg/infra/storage"
-	intwanoise "wa-api/pkg/infra/wa-noise/registry"
 	mwpkg "wa-api/pkg/presentation/http/middleware"
 
-	wanoise "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/noise"
+	"wa-api/internal/noise/protocol/types"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
@@ -40,9 +40,9 @@ var authAdmin = mwpkg.AuthAdmin
 var authAlice = mwpkg.AuthAlice
 
 // ── Clients ──
-type ClientManager = intwanoise.ClientManager
+type ClientManager = intnoise.ClientManager
 
-var NewClientManager = intwanoise.NewClientManager
+var NewClientManager = intnoise.NewClientManager
 
 // ── Media ──
 const (
@@ -60,8 +60,8 @@ type mediaS3Config struct {
 
 // GetUserID / GetWAClient make *UserEventHandler satisfy media.UserClient (= wa-noise.UserEventHandler),
 // the interface pkg/infra/media.ProcessMedia consumes.
-func (evh *UserEventHandler) GetUserID() string            { return evh.UserID }
-func (evh *UserEventHandler) GetWAClient() *wanoise.Client { return evh.WAClient }
+func (evh *UserEventHandler) GetUserID() string          { return evh.UserID }
+func (evh *UserEventHandler) GetWAClient() *noise.Client { return evh.WAClient }
 
 var _ media.UserClient = (*UserEventHandler)(nil)
 
@@ -86,7 +86,7 @@ func init() {
 }
 
 func (evh *UserEventHandler) processMedia(
-	msg wanoise.DownloadableMessage, mimeType, fallbackExt string, timeout time.Duration,
+	msg noise.DownloadableMessage, mimeType, fallbackExt string, timeout time.Duration,
 	isIncoming bool, chatJID, messageID string, s3cfg mediaS3Config,
 	postmap map[string]interface{}, extraKeys map[string]interface{},
 ) {
@@ -130,7 +130,7 @@ func (s *server) SendNotification(method string, params map[string]interface{}) 
 // ── History ──
 func syncHistoryForChat(ctx context.Context, db *sqlx.DB, userID string, chatJID types.JID, count int) error {
 	return wahistory.SyncHistoryForChat(ctx, db, wahistory.SyncDeps{
-		GetWA: func(uid string) interface{} { return clientManager.GetWaNoiseClient(uid) },
+		GetWA: func(uid string) interface{} { return clientManager.GetNoiseClient(uid) },
 		GetMC: func(uid string) wahistory.UserClientGetter { return clientManager.GetUserClient(uid) },
 	}, userID, chatJID, count)
 }

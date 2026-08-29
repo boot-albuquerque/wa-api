@@ -6,7 +6,7 @@ página tem URL verificado; o que **não** foi verificado está dito como tal.
 ## Por que este documento existe
 
 O `wa-api` **não** usa a API oficial da Meta. Ele fala o protocolo do WhatsApp
-Web directamente, através do fork em `internal/wa-noise`. São duas coisas
+Web directamente, através do fork em `internal/noise`. São duas coisas
 diferentes, e confundi-las custa caro:
 
 | | wa-api (este projecto) | Cloud API (Meta) |
@@ -189,7 +189,7 @@ não tem:
 
 | folha | o que falta |
 |---|---|
-| `send_single_product` · `send_multi_product` · `send_catalog` | um **catálogo** associado à conta, com produtos de ID conhecido. O `wa-noise` tem a capability `catalog`, e ela **não está ligada** a rota nenhuma — é uma das 62 da F237 |
+| `send_single_product` · `send_multi_product` · `send_catalog` | um **catálogo** associado à conta, com produtos de ID conhecido. O `noise` tem a capability `catalog`, e ela **não está ligada** a rota nenhuma — é uma das 62 da F237 |
 | `send_flow` · `send_flow_template` | **WhatsApp Flows** é recurso da plataforma Meta, definido e publicado no painel dela. Atenção ao falso positivo: há 59 ocorrências de `Flow` em `pkg/`, e são **todas** `NativeFlowButton` — o mecanismo interno dos botões, sem relação com Flows |
 | `send_catalog_template` | template aprovado **e** catálogo. Depende dos dois anteriores |
 | `send_order_status` | não há construtor, e o fluxo de encomenda pressupõe catálogo |
@@ -364,7 +364,7 @@ integração futura interessante em vez de redundante: não é escolher uma, é
 usar cada uma onde ela tem alcance.
 
 **O que fica por determinar**: se o protocolo do WhatsApp Web permite enviar
-produto, catálogo e encomenda de todo. A capability `catalog` do `wa-noise`
+produto, catálogo e encomenda de todo. A capability `catalog` do `noise`
 sugere que a leitura é possível; **o envio não foi investigado**. Antes de
 planear qualquer uma das seis, é essa a medição a fazer — e as três
 referências do `CLAUDE.md` (Baileys, Evolution, whatsapp-web.js) são onde
@@ -372,14 +372,14 @@ procurar, porque uma resposta negativa delas também é informação.
 
 ## Matriz de capacidades por motor
 
-O projecto tem **dois** motores — `wa-noise` (protocolo WhatsApp Web, o que
-serve hoje) e `wa-headless` (dirige a SPA) — e a Cloud API seria um terceiro.
+O projecto tem **dois** motores — `noise` (protocolo WhatsApp Web, o que
+serve hoje) e `headless` (dirige a SPA) — e a Cloud API seria um terceiro.
 A coluna certa para cada capacidade não é a mesma.
 
-`wa-noise` medido nesta série. `wa-headless` **não medido** — está fora do
+`noise` medido nesta série. `headless` **não medido** — está fora do
 âmbito por instrução, e um `?` é mais honesto que uma suposição.
 
-| capacidade | wa-noise | wa-headless | meta_cloud |
+| capacidade | noise | headless | meta_cloud |
 |---|---|---|---|
 | `send_text` | ✅ | ? | ✅ |
 | `send_image` · `send_video` · `send_document` | ✅ | ? | ✅ |
@@ -467,7 +467,7 @@ Registado para não se redescobrir:
 3. **Custo.** Enviar passa a ter preço por conversa. Qualquer rota que hoje se
    chama em laço deixa de ser gratuita.
 4. **Webhooks.** Os dois lados entregam eventos, com formas diferentes. O
-   `pkg/infra/wa-noise/registry/webhook` teria de ganhar um segundo formato,
+   `pkg/infra/noise/registry/webhook` teria de ganhar um segundo formato,
    ou um adaptador.
 5. **O que simplesmente não existe do outro lado.** Grupos, comunidades,
    canais e status são cerca de **60 das 141 rotas** deste projecto. Uma

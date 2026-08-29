@@ -61,7 +61,7 @@ func NewSyncContactRosterUseCase(as appport.AppStateSyncer, l appport.Logger) *S
 // o pull da agenda de contatos.
 func (uc *SyncContactRosterUseCase) Execute(ctx context.Context, txtID string, req domain.SyncContactRosterRequest) (*domain.SyncContactRosterResult, error) {
 	if err := uc.appState.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

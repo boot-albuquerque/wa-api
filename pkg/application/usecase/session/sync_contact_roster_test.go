@@ -68,7 +68,7 @@ func TestSyncContactRoster_SemSessao_NaoChamaSyncENaoValidaModo(t *testing.T) {
 		t.Errorf("SyncContactRoster foi chamada apesar da sessao recusada: %+v", as.SyncContactRosterCalls)
 	}
 
-	rec, found := log.FindLevel(contractsfake.LevelWarn, "no wanoise session")
+	rec, found := log.FindLevel(contractsfake.LevelWarn, "no noise session")
 	if !found {
 		t.Fatalf("recusa de sessao nao foi logada em nivel warn (F72): %v", log.Messages())
 	}

@@ -46,7 +46,7 @@ const dataAudioPrefix = "data:audio/"
 // SendAudioUseCase envia um áudio de verdade: obtém os bytes (por URL
 // externa via infra SSRF-safe, ou por decode local de data URI), resolve
 // PTT e MIME pela precedência histórica, sobe o anexo e envia a mensagem
-// pelo wa-noise. Só devolve domain.StatusSent depois que o envio retorna
+// pelo noise. Só devolve domain.StatusSent depois que o envio retorna
 // sucesso — mesma disciplina de SendImageUseCase/SendDocumentUseCase.
 type SendAudioUseCase struct {
 	media   appport.MediaMessenger
@@ -86,7 +86,7 @@ func (uc *SendAudioUseCase) Execute(ctx context.Context, txtID string, req domai
 	}
 
 	if err := uc.media.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

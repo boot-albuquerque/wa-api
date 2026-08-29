@@ -13,8 +13,8 @@ func TestEngineIsValidForCreate(t *testing.T) {
 		engine Engine
 		want   bool
 	}{
-		{EngineWaNoise, true},
-		{EngineWaHeadless, true},
+		{EngineNoise, true},
+		{EngineHeadless, true},
 		{EngineLegacyUnknown, false},
 		{Engine("foobar"), false},
 		{Engine(""), false},
@@ -40,8 +40,8 @@ func TestEngineIsKnown(t *testing.T) {
 		engine Engine
 		want   bool
 	}{
-		{EngineWaNoise, true},
-		{EngineWaHeadless, true},
+		{EngineNoise, true},
+		{EngineHeadless, true},
 		{EngineLegacyUnknown, true},
 		{Engine("foobar"), false},
 		{Engine(""), false},
@@ -57,11 +57,11 @@ func TestEngineIsKnown(t *testing.T) {
 // renomear uma constante mudaria o que está gravado no banco sem que nenhum
 // teste morresse.
 func TestEngineValuesAreSnakeCase(t *testing.T) {
-	if EngineWaNoise.String() != "wa_noise" {
-		t.Errorf("EngineWaNoise = %q, want %q", EngineWaNoise, "wa_noise")
+	if EngineNoise.String() != "wa_noise" {
+		t.Errorf("EngineNoise = %q, want %q", EngineNoise, "wa_noise")
 	}
-	if EngineWaHeadless.String() != "wa_headless" {
-		t.Errorf("EngineWaHeadless = %q, want %q", EngineWaHeadless, "wa_headless")
+	if EngineHeadless.String() != "wa_headless" {
+		t.Errorf("EngineHeadless = %q, want %q", EngineHeadless, "wa_headless")
 	}
 	if EngineLegacyUnknown.String() != "legacy_unknown" {
 		t.Errorf("EngineLegacyUnknown = %q, want %q", EngineLegacyUnknown, "legacy_unknown")
@@ -79,7 +79,7 @@ func TestParseEngine(t *testing.T) {
 		}
 	}
 
-	for _, raw := range []string{"legacy_unknown", "", "foobar", "wanoise", "headless"} {
+	for _, raw := range []string{"legacy_unknown", "", "foobar", "noise", "headless"} {
 		got, err := ParseEngine(raw)
 		if !errors.Is(err, ErrInvalidEngine) {
 			t.Errorf("ParseEngine(%q) err = %v, want ErrInvalidEngine", raw, err)

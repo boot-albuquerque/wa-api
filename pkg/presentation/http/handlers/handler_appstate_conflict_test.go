@@ -15,7 +15,7 @@ import (
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
-	"wa-api/pkg/infra/wa-noise/errmap"
+	"wa-api/pkg/infra/noise/errmap"
 )
 
 // F223 — app-state conflict (409 from the server) was surfacing as 500 from

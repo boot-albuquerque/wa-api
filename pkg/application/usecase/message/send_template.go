@@ -10,7 +10,7 @@ import (
 
 // SendTemplateUseCase envia um template hidratado de verdade: monta o payload
 // a partir dos campos escalares do request (sem upload, sem fetch, sem
-// conversão) e o envia pelo wa-noise. Só devolve domain.StatusSent depois que
+// conversão) e o envia pelo noise. Só devolve domain.StatusSent depois que
 // o envio retorna sucesso — nunca antes (mesma disciplina de
 // SendMessageUseCase, CAP-01, e de SendPollUseCase, CAP-14).
 //
@@ -68,7 +68,7 @@ func (uc *SendTemplateUseCase) Execute(ctx context.Context, txtID string, req do
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

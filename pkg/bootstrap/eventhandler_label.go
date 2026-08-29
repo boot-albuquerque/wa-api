@@ -6,7 +6,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/types/events"
 	"wa-api/pkg/infra/db"
 )
 

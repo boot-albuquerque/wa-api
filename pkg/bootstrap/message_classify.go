@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
 )
 
 // A classificação de mensagem recebida, UMA vez, para os dois caminhos de

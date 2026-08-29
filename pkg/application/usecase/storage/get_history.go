@@ -46,7 +46,7 @@ func NewGetHistoryUseCase(sg appport.SessionGuard, store appport.HistoryConfigSt
 // answer of this route.
 func (uc *GetHistoryUseCase) Execute(ctx context.Context, txtID string) (*domain.WebhookHistoryResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

@@ -11,7 +11,7 @@ import (
 
 // SendEditMessageUseCase edita uma mensagem própria de verdade: valida os
 // campos obrigatórios, resolve o destinatário e manda a edição pelo
-// wa-noise. Só devolve domain.StatusSent DEPOIS que o envio retorna
+// noise. Só devolve domain.StatusSent DEPOIS que o envio retorna
 // sucesso — nunca antes. Até o CAP-10 este usecase devolvia
 // Status="validated" sem editar nada.
 type SendEditMessageUseCase struct {
@@ -49,7 +49,7 @@ func (uc *SendEditMessageUseCase) Execute(ctx context.Context, txtID string, req
 	}
 
 	if err := uc.chats.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

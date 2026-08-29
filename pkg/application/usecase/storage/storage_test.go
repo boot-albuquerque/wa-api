@@ -11,7 +11,7 @@
 //  2. as validações próprias de cada use case (media_delivery, history < 0,
 //     campos obrigatórios de S3, URL de proxy/endpoint), medidas pelo
 //     resultado observável: erro não-nil e resultado nil.
-//  3. o log: caminho de recusa emite "no wa-noise session" em nível error
+//  3. o log: caminho de recusa emite "no noise session" em nível error
 //     carregando txtID e error; caminho feliz emite um Info.
 package storage_test
 
@@ -31,7 +31,7 @@ import (
 
 // errNoSession é a sentinela que a porta devolve quando não há cliente. É o
 // erro tipado que a migração da F11 passou a propagar intacto.
-var errNoSession = errors.New("porta: sem sessao wanoise")
+var errNoSession = errors.New("porta: sem sessao noise")
 
 const txtID = "user-1"
 
@@ -119,7 +119,7 @@ func TestUseCases_SemSessao_PropagamACausaEnaoATraduzem(t *testing.T) {
 				t.Errorf("EnsureSession recebeu txtID %q, quero %q", sg.EnsureSessionCalls[0].TxtID, txtID)
 			}
 
-			rec, found := log.FindLevel(contractsfake.LevelWarn, "no wanoise session")
+			rec, found := log.FindLevel(contractsfake.LevelWarn, "no noise session")
 			if !found {
 				t.Fatalf("recusa de sessao nao foi logada em nivel warn (F72): %v", log.Records())
 			}

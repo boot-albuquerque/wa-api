@@ -25,7 +25,7 @@
 #   `200`. Um erro de escrita no nome de um campo não dá erro: dá o valor zero.
 #
 # `InfoGrupo` e `ParticipanteGrupo` (sem sufixo) existiram aqui como registo do
-# formato ANTERIOR — a struct de protocolo do wa-noise servida directamente,
+# formato ANTERIOR — a struct de protocolo do noise servida directamente,
 # sem DTO, PascalCase no fio — e foram REMOVIDOS nesta sessão (F335): eram
 # schemas ÓRFÃOS, sem `$ref` algum no documento (confirmado por grep antes da
 # remoção), e a sua presença só servia para o gate de nomenclatura (F330)
@@ -280,7 +280,7 @@ PedidoEntrarGrupo:
         | código válido | sim | — |
 
         O URL completo também passa, porque a biblioteca corta o prefixo
-        (`internal/wa-noise/capabilities/group/invite.go:105`), mas isso não
+        (`internal/noise/capabilities/group/invite.go:105`), mas isso não
         foi medido nesta rota e o nome do campo continua a ser `code`.
 
         Repare que `POST /group/invitelink` devolve o **link inteiro**, e não
@@ -314,7 +314,7 @@ PedidoInfoConvite:
         | `"   "` | **passa a guarda** | **medido: `500 internal server error`**, não `400`. Não há `trim`, e o valor segue para o WhatsApp |
         | código inexistente | não | **medido: `500`** — o use case embrulha o erro com `fmt.Errorf` e a recusa perde a taxonomia (`get_group_invite_info.go:44`) |
         | `IVccRoDVSbpHKNkgNxyZx4` | sim | — |
-        | `https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4` | **sim** | medido `200`; a biblioteca corta o prefixo (`internal/wa-noise/capabilities/group/invite.go:83`) |
+        | `https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4` | **sim** | medido `200`; a biblioteca corta o prefixo (`internal/noise/capabilities/group/invite.go:83`) |
       example: IVccRoDVSbpHKNkgNxyZx4
 
 PedidoNomeGrupo:
@@ -698,12 +698,12 @@ PedidoAtualizarParticipantes:
 
         `promote` e `demote` foram corrigidos em F263: a biblioteca por baixo
         já sabia promover e despromover há anos
-        (`internal/wa-noise/capabilities/group/participants.go:18-19`); só a
+        (`internal/noise/capabilities/group/participants.go:18-19`); só a
         rota não os expunha. `pkg/domain/group.go` ganhou
         `ParticipantPromote`/`ParticipantDemote`, o use case
         (`pkg/application/usecase/group/group_management.go`) passou a aceitar
         os dois valores, e o adaptador
-        (`pkg/infra/wa-noise/adapters/group/participants.go`) trocou o
+        (`pkg/infra/noise/adapters/group/participants.go`) trocou o
         mapeamento binário add/remove por um `switch` exaustivo sobre as
         quatro ações.
       example: add
@@ -988,8 +988,8 @@ InfoGrupoCanonico:
     `domain.GroupInfo`.
 
     **O que mudou face a `InfoGrupo`**, e porquê: `InfoGrupo` descrevia a
-    struct de protocolo do wa-noise serializada DIRECTAMENTE, sem etiquetas
-    `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `wa-headless`
+    struct de protocolo do noise serializada DIRECTAMENTE, sem etiquetas
+    `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `headless`
     servia OUTRA struct na mesma chave, então a forma do corpo dependia de que
     motor tinha a sessão. Hoje os dois motores normalizam para
     `domain.GroupInfo`, e esta é a única forma servida.
@@ -1004,7 +1004,7 @@ InfoGrupoCanonico:
     As três datas são `null` quando o motor não as conhece — e não
     `"0001-01-01T00:00:00Z"`, que seria uma data real no fio.
 
-    **O que o motor headless não vê**: uma sessão servida por `wa-headless` só
+    **O que o motor headless não vê**: uma sessão servida por `headless` só
     consegue `jid`, `name` e `is_announce`; o resto vem no zero, e
     `participants` vem `[]`. Isso é visível, e é de propósito — preencher com
     palpite tornaria "não vejo" indistinguível de "o grupo é assim".
@@ -1258,7 +1258,7 @@ ResultadoAtualizarParticipantes:
 
         **Sempre presente**, nunca `null`. Neste transporte é sempre `true`,
         porque o protocolo devolve a lista resultante na própria resposta
-        (`pkg/infra/wa-noise/adapters/group/participants.go:37`). O campo
+        (`pkg/infra/noise/adapters/group/participants.go:37`). O campo
         existe porque nem todo transporte consegue confirmar, e um sucesso que
         ninguém verificou não pode ser calado (`pkg/domain/group.go:236`).
 

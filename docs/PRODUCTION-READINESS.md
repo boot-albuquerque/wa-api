@@ -87,7 +87,7 @@ imprópria para escala — é o caso aqui, e os ❌ do estágio 6 dizem porquê.
 | Controlo negativo em cada gate novo | ✅ | executado e colado nos commits. Duas vezes o primeiro não valeu por partir o build — refeito com mutação que compila (ARMADILHAS #4) |
 | Suite passa | ✅ | 116 pacotes verdes |
 | Caminho de SUCESSO coberto por contract test | 🟡 | os contract tests exercitam a **recusa** — é o único caminho percorrível sem conta ligada. Está dito no comentário do ficheiro em vez de implícito |
-| `make check` totalmente verde | ❌ | uma falha, `internal/wa-headless`, **herdada** e anterior a esta série. Fora do âmbito por instrução |
+| `make check` totalmente verde | ❌ | uma falha, `internal/headless`, **herdada** e anterior a esta série. Fora do âmbito por instrução |
 
 ## 4. Evidência
 
@@ -181,7 +181,7 @@ O alvo — 23 folhas, de `send_text` a `send_order_status` — está em
 As seis em falta são **catálogo, produtos, encomendas e Flows** — e não são
 "uma rota a mais": dependem de um catálogo associado à conta e, no caso dos
 Flows, de um recurso definido no painel da Meta. A capability `catalog` do
-`wa-noise` existe e **não está ligada** a rota nenhuma.
+`noise` existe e **não está ligada** a rota nenhuma.
 
 **Não conta como lacuna deste scorecard** porque não é prontidão operacional —
 é alcance de produto. Está aqui para que os dois não se confundam.

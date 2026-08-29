@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/proto/waHistorySync"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 
 	"github.com/rs/zerolog/log"
 )

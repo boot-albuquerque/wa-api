@@ -9,8 +9,8 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	waheadless "wa-api/internal/wa-headless"
-	"wa-api/pkg/infra/wa-headless/registry"
+	"wa-api/internal/headless"
+	"wa-api/pkg/infra/headless/registry"
 )
 
 // Configuração do lado headless.
@@ -71,12 +71,12 @@ type HeadlessConfig struct {
 // apontaria para qualquer lugar do disco. Um perfil é credencial de sessão, e
 // a travessia aqui não seria um bug de caminho — seria escolher qual conta
 // restaurar.
-func (c HeadlessConfig) StartConfigFor(txtID string) (waheadless.StartConfig, error) {
+func (c HeadlessConfig) StartConfigFor(txtID string) (headless.StartConfig, error) {
 	nome, err := nomeDePerfilSeguro(txtID)
 	if err != nil {
-		return waheadless.StartConfig{}, err
+		return headless.StartConfig{}, err
 	}
-	return waheadless.StartConfig{
+	return headless.StartConfig{
 		BinaryPath:  c.ChromePath,
 		ProfileDir:  filepath.Join(c.ProfileRoot, nome),
 		UserAgent:   c.UserAgent,

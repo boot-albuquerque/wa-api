@@ -29,7 +29,7 @@ const dataStickerPrefix = "data"
 // appport.StickerProcessor (que envolve pkg/infra/media/sticker —
 // ProcessStickerData, byte a byte igual ao processStickerData histórico:
 // conversão para WebP via ffmpeg + injeção de EXIF de pacote), sobe o
-// resultado CONVERTIDO e envia a mensagem pelo wa-noise. Só devolve
+// resultado CONVERTIDO e envia a mensagem pelo noise. Só devolve
 // domain.StatusSent depois que o envio (não o upload, não a conversão)
 // retorna sucesso — mesma disciplina de SendImageUseCase/SendVideoUseCase.
 type SendStickerUseCase struct {
@@ -64,7 +64,7 @@ func (uc *SendStickerUseCase) Execute(ctx context.Context, txtID string, req dom
 	}
 
 	if err := uc.media.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

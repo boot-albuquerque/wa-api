@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 	"wa-api/pkg/domain"
 )
 

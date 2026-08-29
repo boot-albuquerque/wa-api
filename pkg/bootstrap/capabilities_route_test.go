@@ -26,11 +26,11 @@ import (
 // authAlice/authAdmin de produção — não o handler cru.
 
 const (
-	capRouteTokenWaNoise    = "token-cap-wa-noise"
-	capRouteUserWaNoise     = "user-cap-wa-noise"
-	capRouteTokenWaHeadless = "token-cap-wa-headless"
-	capRouteUserWaHeadless  = "user-cap-wa-headless"
-	capRouteAdminToken      = "admin-token-cap"
+	capRouteTokenNoise    = "token-cap-wa-noise"
+	capRouteUserNoise     = "user-cap-wa-noise"
+	capRouteTokenHeadless = "token-cap-wa-headless"
+	capRouteUserHeadless  = "user-cap-wa-headless"
+	capRouteAdminToken    = "admin-token-cap"
 )
 
 // capabilitiesFixture monta as duas famílias de rota (session autenticada
@@ -98,7 +98,7 @@ func TestCapabilitiesRoute_Session_SemAuth401(t *testing.T) {
 func TestCapabilitiesRoute_Session_RefleteAEngineDaSessao(t *testing.T) {
 	f := newCapabilitiesFixtureReal(t)
 
-	recNoise := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenWaNoise)
+	recNoise := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenNoise)
 	if recNoise.Code != http.StatusOK {
 		t.Fatalf("wa_noise: status = %d, quero 200 (corpo: %s)", recNoise.Code, recNoise.Body.String())
 	}
@@ -113,7 +113,7 @@ func TestCapabilitiesRoute_Session_RefleteAEngineDaSessao(t *testing.T) {
 		t.Errorf("wa_noise send_carousel = %q, quero %q (F216)", got, domain.StatusSupported.String())
 	}
 
-	recHeadless := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenWaHeadless)
+	recHeadless := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenHeadless)
 	if recHeadless.Code != http.StatusOK {
 		t.Fatalf("wa_headless: status = %d, quero 200 (corpo: %s)", recHeadless.Code, recHeadless.Body.String())
 	}
@@ -139,7 +139,7 @@ func TestCapabilitiesRoute_Session_RefleteAEngineDaSessao(t *testing.T) {
 // unknown é o caso mais comum hoje (~40 capabilities no wa_headless).
 func TestCapabilitiesRoute_Session_StatusUnknownNaoPanica(t *testing.T) {
 	f := newCapabilitiesFixtureReal(t)
-	rec := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenWaHeadless)
+	rec := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenHeadless)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
@@ -233,7 +233,7 @@ func TestCapabilitiesRoute_Admin_ComAuthContemAMatrizCompleta(t *testing.T) {
 		if row.AccountType != domain.AccountTypeUnknown.String() {
 			continue
 		}
-		if row.Capability == domain.CapSendCarousel.String() && row.Engine == domain.EngineWaNoise.String() {
+		if row.Capability == domain.CapSendCarousel.String() && row.Engine == domain.EngineNoise.String() {
 			if row.Status != domain.StatusSupported.String() || row.Evidence != domain.EvidenceConfirmed.String() {
 				t.Errorf("send_carousel/wa_noise/unknown = status=%q evidence=%q, quero supported/confirmed (F216)", row.Status, row.Evidence)
 			}
@@ -242,7 +242,7 @@ func TestCapabilitiesRoute_Admin_ComAuthContemAMatrizCompleta(t *testing.T) {
 			}
 			foundConfirmedSupported = true
 		}
-		if row.Capability == domain.CapSetGroupPhoto.String() && row.Engine == domain.EngineWaHeadless.String() {
+		if row.Capability == domain.CapSetGroupPhoto.String() && row.Engine == domain.EngineHeadless.String() {
 			if row.Status != domain.StatusEngineUnsupported.String() || row.Evidence != domain.EvidenceConfirmed.String() {
 				t.Errorf("set_group_photo/wa_headless/unknown = status=%q evidence=%q, quero engine_unsupported/confirmed (H140)", row.Status, row.Evidence)
 			}
@@ -313,7 +313,7 @@ func newCapabilitiesFixtureReal(t *testing.T) *capabilitiesFixture {
 	registerCustomRoutes(router, alice.New(authAlice(database.DB, userinfocache, nil)), ch)
 
 	f := &capabilitiesFixture{db: database, router: router}
-	f.seedUser(t, capRouteUserWaNoise, capRouteTokenWaNoise, domain.EngineWaNoise)
-	f.seedUser(t, capRouteUserWaHeadless, capRouteTokenWaHeadless, domain.EngineWaHeadless)
+	f.seedUser(t, capRouteUserNoise, capRouteTokenNoise, domain.EngineNoise)
+	f.seedUser(t, capRouteUserHeadless, capRouteTokenHeadless, domain.EngineHeadless)
 	return f
 }

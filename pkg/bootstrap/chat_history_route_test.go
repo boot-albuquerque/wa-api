@@ -23,7 +23,7 @@ import (
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/infra/db"
-	"wa-api/pkg/infra/wa-noise/observability/applog"
+	"wa-api/pkg/infra/noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 )

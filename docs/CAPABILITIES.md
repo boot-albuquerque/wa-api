@@ -7,7 +7,7 @@ se uma capacidade de negócio é servida por um engine e tipo de conta.
 ## Os quatro conceitos
 
 - **Engine** (`domain.Engine`, já existia antes desta worktree): o transporte
-  que serve a sessão — `wa_noise` (socket) ou `wa_headless` (SPA).
+  que serve a sessão — `noise` (socket) ou `headless` (SPA).
 - **AccountType** (`domain.AccountType`, novo aqui): `personal`, `business`,
   `unknown`. **Não há lógica de detecção** — é um enum simples que um chamador
   futuro preenche quando souber. `unknown` é estado legítimo, não erro.
@@ -66,8 +66,8 @@ Duas células podem ter o mesmo `Status` e discordar em `Evidence`:
 
 **Fez**: infraestrutura completa (`CapabilityProvider`, `CapabilityRegistry`,
 taxonomia, `CapabilityDecision`, matriz) e populou toda a matriz por LEITURA
-de código — grep pelo nome do método do port sob `pkg/infra/wa-noise/...` e
-`pkg/infra/wa-headless/...`, confirmando que o hit tem lógica real (não um
+de código — grep pelo nome do método do port sob `pkg/infra/noise/...` e
+`pkg/infra/headless/...`, confirmando que o hit tem lógica real (não um
 stub) antes de marcar `supported`.
 
 **Não fez**: verificação de campo da matriz inteira (isso é o trabalho de

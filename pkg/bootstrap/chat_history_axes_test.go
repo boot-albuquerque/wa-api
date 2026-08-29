@@ -19,7 +19,7 @@ import (
 	"wa-api/pkg/application/usecase/chat"
 	"wa-api/pkg/application/usecase/storage"
 	"wa-api/pkg/infra/db"
-	"wa-api/pkg/infra/wa-noise/observability/applog"
+	"wa-api/pkg/infra/noise/observability/applog"
 	"wa-api/pkg/presentation/http/handlers"
 )
 

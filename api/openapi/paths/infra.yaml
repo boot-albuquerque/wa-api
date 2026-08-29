@@ -59,7 +59,7 @@
                 - id: 918e37366f27e1125ee0482a793267e1
                   name: filarapida
                   token: ''
-                  engine: wa_noise
+                  engine: noise
                   webhook: ''
                   jid: 5516981818244:25@s.whatsapp.net
                   qrcode: ''
@@ -103,7 +103,7 @@
 
       - `name` e `token` são **obrigatórios**; a falta de qualquer um deles dá
         `400 missing_name_or_token`.
-      - `engine` é **obrigatório**: `wa_noise` ou `wa_headless`. Ausente,
+      - `engine` é **obrigatório**: `noise` ou `headless`. Ausente,
         `null`, `""` ou outro valor (incluindo `legacy_unknown`) dá
         `400 invalid_engine`. É definido aqui e **não pode ser alterado**
         depois — `PUT /admin/users/{id}` recusa a mudança com
@@ -138,7 +138,7 @@
           example:
             name: filarapida
             token: tk_EXEMPLO_NAO_USE_gere_o_seu
-            engine: wa_noise
+            engine: noise
             events: Message,Receipt,Connected
             history: 100
             proxy_config: {enabled: false, proxy_url: ''}
@@ -163,7 +163,7 @@
                 id: 918e37366f27e1125ee0482a793267e1
                 name: filarapida
                 token: tk_EXEMPLO_NAO_USE_gere_o_seu
-                engine: wa_noise
+                engine: noise
                 webhook: ''
                 jid: ''
                 qrcode: ''
@@ -197,7 +197,7 @@
               code: 400
               error:
                 code: invalid_engine
-                message: engine é obrigatório e deve ser "wa_noise" ou "wa_headless"
+                message: engine é obrigatório e deve ser "noise" ou "headless"
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -266,7 +266,7 @@
                 - id: 918e37366f27e1125ee0482a793267e1
                   name: filarapida
                   token: ''
-                  engine: wa_noise
+                  engine: noise
                   webhook: ''
                   jid: 5516981818244:25@s.whatsapp.net
                   qrcode: ''

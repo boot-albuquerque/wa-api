@@ -74,7 +74,7 @@ type UserProfileResult struct {
 // Execute resolve o identificador e monta o perfil.
 func (uc *GetUserProfileUseCase) Execute(ctx context.Context, userID string, alvo string) (*UserProfileResult, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

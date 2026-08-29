@@ -4,8 +4,8 @@ Achados incidentais do **wa-api como um todo**: a aplicação em `pkg/`, o
 build, os gates, a configuração e as rotas HTTP.
 
 Achados da biblioteca vendorizada moram noutro arquivo:
-`internal/wa-noise/HOUSEKEEP.md`. A separação não é organizacional — os dois
-têm ciclos de vida diferentes. O que está em `internal/wa-noise/` acompanha o
+`internal/noise/HOUSEKEEP.md`. A separação não é organizacional — os dois
+têm ciclos de vida diferentes. O que está em `internal/noise/` acompanha o
 upstream e é candidato a virar patch ou a sumir num rebase; o que está aqui é
 nosso e só nós corrigimos.
 
@@ -16,7 +16,7 @@ O formato de cada entrada, e a política anti-regressão que rege a passagem
 para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
 
 > **Nota de procedência (2026-08-08):** este arquivo nasceu da divisão do
-> antigo `internal/wa-noise/HOUSEKEEP.md`, que registrava o repositório
+> antigo `internal/noise/HOUSEKEEP.md`, que registrava o repositório
 > inteiro. O índice que ele mantinha no topo foi descartado na divisão — ele
 > já trazia uma correção admitindo estar desatualizado em relação às próprias
 > entradas, e um índice que mente é pior que a ausência dele. As entradas
@@ -175,8 +175,8 @@ baseline (fora do escopo deste fix).
 
 ## 2026-08-06 — `.coverage-baseline` `min_coverage=822` estava incorreto/não-reprodutível
 
-**Encontrado durante**: implementação do plano de vendoring do wa-noise
-(branch `feature/vendor-wa-noise`, `.omc/plans/vendor-wa-noise-native-fork.md`).
+**Encontrado durante**: implementação do plano de vendoring do noise
+(branch `feature/vendor-wa-noise`, `.omc/plans/vendor-noise-native-fork.md`).
 
 **Onde**: `.coverage-baseline:40` (na branch-base `feature/native-multisession-architecture`,
 commit `31287b9`).
@@ -210,7 +210,7 @@ mergeada em `develop` no momento deste registro).
 
 ## 2026-08-06 — `.log-coverage-baseline` tinha `min_func_coverage=`/`min_errpath_coverage=` duplicados
 
-**Encontrado durante**: mesma implementação acima (vendoring do wa-noise).
+**Encontrado durante**: mesma implementação acima (vendoring do noise).
 
 **Onde**: `.log-coverage-baseline`, herdado do commit `ace7770`
 (`feat(contacts): expõe GET /user/contacts/last-activity`, de uma sessão
@@ -240,9 +240,9 @@ o arquivo do mesmo jeito.
 
 ---
 
-## 2026-08-06 — `internal/waclient/` (vendored wa-noise) sem bridge de log para o padrão do projeto
+## 2026-08-06 — `internal/waclient/` (vendored noise) sem bridge de log para o padrão do projeto
 
-**Encontrado durante**: revisão de arquitetura pós-vendoring do wa-noise
+**Encontrado durante**: revisão de arquitetura pós-vendoring do noise
 (branch `feature/vendor-wa-noise`), solicitada explicitamente para
 avaliar se `internal/waclient/` segue os padrões de log/erro já
 estabelecidos no resto do projeto (via agente `architect`).
@@ -250,8 +250,8 @@ estabelecidos no resto do projeto (via agente `architect`).
 **Onde**:
 
 - `internal/waclient/util/log/log.go:17-23` — interface `waLog.Logger`
-  (`Warnf/Errorf/Infof/Debugf/Sub`) que o wa-noise espera receber.
-- `pkg/infra/wa-noise/logger.go:12` — `ZerologAdapter`, que implementa
+  (`Warnf/Errorf/Infof/Debugf/Sub`) que o noise espera receber.
+- `pkg/infra/noise/logger.go:12` — `ZerologAdapter`, que implementa
   `appport.Logger` (`Info/Warn/Error(ctx, msg, keyvals...)`), uma
   interface **diferente** — não satisfaz `waLog.Logger`.
 - `pkg/bootstrap/main.go:327-329` e
@@ -275,12 +275,12 @@ estabelecidos no resto do projeto (via agente `architect`).
    `req_id`/`role`/correlação com o resto dos logs da app.
 
 **Achado secundário (severidade média)**: adoção de `apperr` na fronteira
-do port é parcial — `pkg/infra/wa-noise/user_adapters.go:40,44,67,71,80`
+do port é parcial — `pkg/infra/noise/user_adapters.go:40,44,67,71,80`
 repassa `err` cru vindo do waclient sem `apperr.New(...)`, então esses
 erros chegam no HTTP boundary sem `Code`/`Category`/`Retryable`. Os
 demais pontos da fronteira (`session_provider_adapter.go`,
 `session_guard_adapter.go`, `misc_adapters.go`) já fazem a tradução
-correta com `errors.Is` contra sentinels do wa-noise — nenhum
+correta com `errors.Is` contra sentinels do noise — nenhum
 string-matching encontrado no repo.
 
 **Confirmado como correto (sem ação necessária)**: `.logcov-exclude`
@@ -307,10 +307,10 @@ em andamento na mesma sessão.
 ## 2026-08-06 — `user_info_failed` classificado como `CategoryInternal` sendo erro de entrada
 
 **Contexto**: execução da Fase 3 (apperr) do plano
-`.omc/plans/wa-noise-clean-arch-walog-bridge.md`, que fixa código e
+`.omc/plans/noise-clean-arch-walog-bridge.md`, que fixa código e
 categoria dos 5 sites em tabela.
 
-**Onde**: `pkg/infra/wa-noise/user_adapters.go:63-66` (era
+**Onde**: `pkg/infra/noise/user_adapters.go:63-66` (era
 `user_adapters.go:71` antes dos splits das Fases 0):
 
 ```go
@@ -345,20 +345,20 @@ aqui seria divergir do que foi revisado. Pendente de decisão do usuário.
 
 ---
 
-## 2026-08-06 — data race real em `pkg/infra/wa-noise/safe_go_test.go`
+## 2026-08-06 — data race real em `pkg/infra/noise/safe_go_test.go`
 
-**Contexto**: quebra de `pkg/infra/wa-noise/` em subpacotes por domínio. Ao
+**Contexto**: quebra de `pkg/infra/noise/` em subpacotes por domínio. Ao
 incluir os subpacotes novos em `TEST_PKGS` (que roda com `-race`), o gate
 passou a expor uma corrida que o `Makefile` já conhecia mas mantinha
 mascarada por uma exclusão.
 
-**Onde**: `pkg/infra/wa-noise/safe_go_test.go:10-19` (hoje
-`pkg/infra/wa-noise/safego/safego_test.go`) e `Makefile:21`
-(`TEST_PKGS := ... | grep -v '^wa-api/pkg/infra/wa-noise$'`).
+**Onde**: `pkg/infra/noise/safe_go_test.go:10-19` (hoje
+`pkg/infra/noise/safego/safego_test.go`) e `Makefile:21`
+(`TEST_PKGS := ... | grep -v '^wa-api/pkg/infra/noise$'`).
 
 **Problema**: `TestSafeGo_NormalExec` escrevia `called = true` dentro da
 goroutine de `SafeGo` e lia a mesma variável na goroutine de teste, sem
-sincronização — `go test -race ./pkg/infra/wa-noise/` falhava com
+sincronização — `go test -race ./pkg/infra/noise/` falhava com
 `WARNING: DATA RACE`. Pior: quando a leitura acontecia antes da escrita (o
 caso comum), o teste chamava `t.Skip` e passava sem verificar nada. A
 reação anterior tinha sido tirar o pacote inteiro de `TEST_PKGS` — uma
@@ -375,18 +375,18 @@ compartilhada, e remover a exclusão do `Makefile`.
 ## F59 — `ClientLookup` é interface morta: nenhuma referência no repositório
 
 **Data**: 2026-08-07.
-**Contexto**: reorganização de `pkg/infra/wa-noise/` por responsabilidade.
+**Contexto**: reorganização de `pkg/infra/noise/` por responsabilidade.
 Ao mover `registry/session_counter.go` para `adapters/sessioncount/adapter.go`,
 o arquivo levou junto duas interfaces; só uma é usada.
 
-**Onde**: `pkg/infra/wa-noise/adapters/sessioncount/adapter.go` (era
+**Onde**: `pkg/infra/noise/adapters/sessioncount/adapter.go` (era
 `registry/session_counter.go:16`).
 
 ```go
 // ClientLookup is the subset of ClientManager methods needed by adapters
 // that look up WhatsApp clients by user ID. [...]
 type ClientLookup interface {
-	GetWaNoiseClient(id string) *wanoise.Client
+	GetNoiseClient(id string) *noise.Client
 }
 ```
 
@@ -394,7 +394,7 @@ type ClientLookup interface {
 declaração. Nenhum tipo a implementa por nome, nenhuma função a recebe,
 nenhum teste a exercita. O papel que o comentário descreve — "quebrar a
 dependência de tipo concreto entre root main e internal/" — hoje é cumprido
-por `waclient.Getter` (`pkg/infra/wa-noise/client/`), que é o que
+por `waclient.Getter` (`pkg/infra/noise/client/`), que é o que
 `wiring_handlers.go:102` de fato usa (`waclient.ClientForGetter`).
 
 A interface irmã no mesmo arquivo, `ClientHealthProvider`, é usada de verdade
@@ -415,50 +415,50 @@ mover código, não apagá-lo. Registrado para decisão.
 **Contexto**: mesma reorganização. Apareceu ao verificar quem referenciava
 `registry.ClientManager`.
 
-**Onde**: `pkg/infra/wa-noise/client/testkit/helpers.go:18`.
+**Onde**: `pkg/infra/noise/client/testkit/helpers.go:18`.
 
 ```go
-// o comportamento de registry.ClientManager.Getwa-noiseClient).
+// o comportamento de registry.ClientManager.GetnoiseClient).
 ```
 
-**Problema**: `Getwa-noiseClient` não existe e não é um identificador Go
-válido. É resíduo de uma substituição em massa `whatsmeow` -> `wa-noise` que
+**Problema**: `GetnoiseClient` não existe e não é um identificador Go
+válido. É resíduo de uma substituição em massa `whatsmeow` -> `noise` que
 alcançou o interior de um nome em CamelCase: o método real é
-`GetWaNoiseClient`. Comentário, então não quebra build — mas é exatamente o
+`GetNoiseClient`. Comentário, então não quebra build — mas é exatamente o
 tipo de string que alguém vai procurar com grep e não achar.
 
-O mesmo padrão aparece em outros comentários do fork (`Getwa-noiseClientsCount`,
-`Iteratewa-noiseClients` em `registry/wa_clients.go` antes da quebra); vale
-uma varredura por `wa-noise` grudado no meio de um identificador, e não uma
+O mesmo padrão aparece em outros comentários do fork (`GetnoiseClientsCount`,
+`IteratenoiseClients` em `registry/wa_clients.go` antes da quebra); vale
+uma varredura por `noise` grudado no meio de um identificador, e não uma
 correção pontual.
 
-**Correção sugerida**: `grep -rn '[A-Za-z]wa-noise[A-Z]' --include='*.go' .` e
+**Correção sugerida**: `grep -rn '[A-Za-z]noise[A-Z]' --include='*.go' .` e
 corrigir os casos, todos em comentário.
 
-**Status**: **CORRIGIDO** (2026-08-07), e o alcance era MAIOR que esta entrada estimava: 12 identificadores CamelCase corrompidos (`Getwa-noiseClient`, `Iteratewa-noiseClients`) mais 49 referencias `*wa-noise.X`, que deveriam ser `*wanoise.X` — 44 arquivos ao todo. Todas em comentario: o codigo compila, entao nenhuma era identificador real.
+**Status**: **CORRIGIDO** (2026-08-07), e o alcance era MAIOR que esta entrada estimava: 12 identificadores CamelCase corrompidos (`GetnoiseClient`, `IteratenoiseClients`) mais 49 referencias `*noise.X`, que deveriam ser `*noise.X` — 44 arquivos ao todo. Todas em comentario: o codigo compila, entao nenhuma era identificador real.
 com a F59 numa passada só.
 
 <!-- f-status: corrigido -->
 
-## F61 — `PATCHES.md` e `HOUSEKEEP.md` citam caminhos de `pkg/infra/wa-noise/` que não existem mais
+## F61 — `PATCHES.md` e `HOUSEKEEP.md` citam caminhos de `pkg/infra/noise/` que não existem mais
 
 **Data**: 2026-08-07.
-**Contexto**: reorganização de `pkg/infra/wa-noise/` por responsabilidade
+**Contexto**: reorganização de `pkg/infra/noise/` por responsabilidade
 (commit `ca34600`).
 
-**Onde**: ~15 ocorrências, sobretudo em `internal/wa-noise/PATCHES.md`
+**Onde**: ~15 ocorrências, sobretudo em `internal/noise/PATCHES.md`
 (linhas 251, 483, 715, 1065, 1489, 2054, 2747, 3084, 3188, 3421, 3497) e
-a entrada "2026-08-06 — data race real em `pkg/infra/wa-noise/safe_go_test.go`",
+a entrada "2026-08-06 — data race real em `pkg/infra/noise/safe_go_test.go`",
 que a divisão dos HOUSEKEEP (2026-08-08) moveu para a RAIZ.
 
-> A referência original era `internal/wa-noise/HOUSEKEEP.md:874` — ficou
+> A referência original era `internal/noise/HOUSEKEEP.md:874` — ficou
 > errada no arquivo E na linha. É a própria F61 acontecendo de novo, agora
 > por causa da divisão: **referência por número de linha nasce obsoleta**.
 > Cite por título.
 
-**Problema**: as referências são a `pkg/infra/wa-noise/walog/`,
-`pkg/infra/wa-noise/group/`, `pkg/infra/wa-noise/user/` e
-`pkg/infra/wa-noise/safego/`, que hoje são `observability/walog/`,
+**Problema**: as referências são a `pkg/infra/noise/walog/`,
+`pkg/infra/noise/group/`, `pkg/infra/noise/user/` e
+`pkg/infra/noise/safego/`, que hoje são `observability/walog/`,
 `adapters/group/`, `adapters/user/` e `runtime/safego/`. Quem seguir o
 caminho não acha nada.
 
@@ -483,7 +483,7 @@ não resolve.
 **Status**: **não corrigido**. Precisa da sua decisão entre as três, porque a
 escolha é sobre o que esses documentos são, não sobre o texto deles.
 **Status**: **corrigido** (opção 1). Nota de época acrescentada ao topo de
-`internal/wa-noise/PATCHES.md` com tabela de mapeamento dos quatro caminhos
+`internal/noise/PATCHES.md` com tabela de mapeamento dos quatro caminhos
 reorganizados em `ca34600`. O corpo do arquivo ficou intacto, preservando o
 registro histórico. O `HOUSEKEEP.md` da raiz já tinha anotações "(hoje ...)"
 nas referências afetadas (entrada de 2026-08-06 sobre data race).
@@ -510,7 +510,7 @@ Hoje isso devolve **39 ocorrências**: 38 marcadores reais e 1 falso positivo.
 
 ### O falso positivo — NÃO TOCAR
 
-`internal/wa-noise/core/user.go:125` não é um marcador. É a palavra portuguesa
+`internal/noise/core/user.go:125` não é um marcador. É a palavra portuguesa
 "todo", em caixa alta por ênfase, no meio de uma frase quebrada por wrap de
 comentário:
 
@@ -690,9 +690,9 @@ código linha a linha para portar. Foi aí que apareceu.
 
 **Onde**:
 
-- `pkg/infra/wa-noise/adapters/user/adapter.go` — `UserAdapter.GetManyLIDsForPNs`
-- `pkg/infra/wa-noise/adapters/user/adapter_test.go` — `fakeLIDStore.GetManyLIDsForPNs`
-- `internal/wa-noise/persistence/store/sqlstore/lidmap.go:133-158` — o real
+- `pkg/infra/noise/adapters/user/adapter.go` — `UserAdapter.GetManyLIDsForPNs`
+- `pkg/infra/noise/adapters/user/adapter_test.go` — `fakeLIDStore.GetManyLIDsForPNs`
+- `internal/noise/persistence/store/sqlstore/lidmap.go:133-158` — o real
 - `pkg/application/usecase/user/get_contacts_last_activity.go` — `normalizeToLID`, o consumidor
 
 **Problema**: três implementações, duas orientações de mapa.
@@ -1126,7 +1126,7 @@ grep -rn 'SendFBMessage' --include='*.go' pkg/ cmd/   ->  0 ocorrências
 
 `Client.SendFBMessage` (`core/sendfb.go:25`) é o único caminho até
 `EncryptForDevicesV3`, onde vive o `v` numérico. Ele tem **zero chamadores**
-em `pkg/` e `cmd/`, e a fachada `internal/wa-noise/main.go` **não o
+em `pkg/` e `cmd/`, e a fachada `internal/noise/main.go` **não o
 reexporta**. Nenhuma rota HTTP alcança o envio v3/FB.
 
 O que existe em `pkg/` é `handleFBMessage` (`eventhandler_message.go:400`),
@@ -1217,7 +1217,7 @@ aberto, fazendo poll de status a cada 3s.
 
 ```go
 if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-    uc.logger.Error(ctx, "no wanoise session", "error", err, "user_id", userID)
+    uc.logger.Error(ctx, "no noise session", "error", err, "user_id", userID)
     return nil, err
 }
 ```
@@ -1352,7 +1352,7 @@ o despacho em si é o mesmo caminho de todos os outros eventos, já exercitado.
 abre um WebSocket por sessão, e recarregar a página deixa os anteriores
 mortos até a próxima escrita.
 
-**Onde**: `pkg/infra/wa-noise/registry/broadcast/broadcast.go`, `Broadcast`.
+**Onde**: `pkg/infra/noise/registry/broadcast/broadcast.go`, `Broadcast`.
 
 ```go
 for _, c := range conns {
@@ -1758,7 +1758,7 @@ func (o *Orchestrator) Start(ctx context.Context, userID, token string) error {
 
 **Problema**: não há guarda de "já conectado". `Start` cria uma sessão nova
 incondicionalmente, `Register` substitui a anterior no registry e `Attach`
-registra um novo kill-channel. O `*wanoise.Client` antigo não é desconectado
+registra um novo kill-channel. O `*noise.Client` antigo não é desconectado
 por esse caminho — fica órfão e, até onde a leitura alcança, ainda falando
 com o servidor do WhatsApp. Dois sockets para a mesma conta é a condição
 clássica de `StreamReplaced` / conflito 440.
@@ -1901,7 +1901,7 @@ retornavam. **Nunca chamavam `Disconnect()`/`Logout()`.** Os handlers
 acabava ali.
 
 Os métodos de verdade existem e funcionam em
-`pkg/infra/wa-noise/runtime/session/guard.go:88-104`, e eram alcançados de
+`pkg/infra/noise/runtime/session/guard.go:88-104`, e eram alcançados de
 **um único lugar em todo o projeto**: `delete_user_complete.go:62,65`, na
 exclusão de usuário. Os dois endpoints HTTP nunca chegavam neles.
 
@@ -1946,7 +1946,7 @@ exige reiniciar o servidor, que ainda roda o binário antigo.
 
 **Data / contexto**: 2026-08-08, validação da F79 com o binário novo.
 
-**Onde**: `pkg/infra/wa-noise/runtime/session/guard.go:72-78`
+**Onde**: `pkg/infra/noise/runtime/session/guard.go:72-78`
 
 ```go
 func (a *SessionGuardAdapter) SessionStatus(_ context.Context, userID string) (bool, bool) {
@@ -1958,7 +1958,7 @@ func (a *SessionGuardAdapter) SessionStatus(_ context.Context, userID string) (b
 
 **Problema**: `POST /session/logout` respondeu 200 e logou `logged out` para
 as duas sessões (00:49:08 e 00:49:09). O `Logout` do SDK
-(`internal/wa-noise/core/client_session.go:25-56`) envia o IQ
+(`internal/noise/core/client_session.go:25-56`) envia o IQ
 `remove-companion-device`, chama `Disconnect()` e **apaga o store**
 (`cli.Store.Delete(ctx)`) — e devolveu nil, então tudo isso aconteceu.
 
@@ -2504,7 +2504,7 @@ nos testes do dia. O painel estava aberto acompanhando os pareamentos.
 
 1. `pkg/presentation/http/devui/assets/sessions.html:183-196` (`log()`) e
    `:346-353` (`ws.onmessage`)
-2. `pkg/infra/wa-noise/registry/broadcast/broadcast.go:27` (`writeTimeout`)
+2. `pkg/infra/noise/registry/broadcast/broadcast.go:27` (`writeTimeout`)
 
 **Problema**: logo depois de um pareamento o HistorySync despeja lotes de
 mensagens, e cada uma vira um broadcast para todas as conexões WS inscritas.
@@ -2950,9 +2950,9 @@ A queda do painel era o sintoma visível de algo maior.
 
 **Onde**: a cadeia inteira de entrega de eventos.
 
-- `pkg/infra/wa-noise/runtime/safego/safego.go:13-26` — `SafeGo`
+- `pkg/infra/noise/runtime/safego/safego.go:13-26` — `SafeGo`
 - `pkg/bootstrap/lifecycle_webhook.go:58,146,179,181` — os quatro despachos
-- `pkg/infra/wa-noise/registry/broadcast/broadcast.go:111-125` — fan-out
+- `pkg/infra/noise/registry/broadcast/broadcast.go:111-125` — fan-out
 - `pkg/bootstrap/config.go:39-41` — retry do webhook
 
 **Problema**: um único evento de domínio dispara **até quatro goroutines
@@ -3207,7 +3207,7 @@ sozinho, com o teto de despacho **desligado** (`WA_API_DISPATCH_MAX_CONCURRENCY`
 não definida, padrão 0) — ou seja, isto **não** é efeito do limitador.
 
 **Onde**:
-- `internal/wa-noise/core/client_events.go:155-180` — `handlerQueueLoop`
+- `internal/noise/core/client_events.go:155-180` — `handlerQueueLoop`
 - `pkg/bootstrap/eventhandler.go:25` — `handleEvent`, registrado em
   `pkg/bootstrap/session_attach_hook_adapter.go:68`
 
@@ -3806,7 +3806,7 @@ mais vazamento de `Codes` — e há, no mesmo log, outros eventos caindo no
 **Números** (17,5h de log, uma instalação):
 - 11 eventos caíram no `default`;
 - 43 tipos `*events.*` têm `case` próprio;
-- 69 structs declaradas em `internal/wa-noise/protocol/types/events/` —
+- 69 structs declaradas em `internal/noise/protocol/types/events/` —
   **limite superior**, não contagem de não-tratados: nem toda struct daquele
   pacote é evento despachado. Quem for corrigir tem de levantar a lista real,
   não subtrair 43 de 69.
@@ -3923,10 +3923,10 @@ sobre o log da instância viva (`/tmp/wa-ses.log`, 77 MB) e sobre
 `dbdata/users.db` em modo somente leitura.
 
 **Onde**:
-- `pkg/infra/wa-noise/runtime/session/guard.go:88-94` —
+- `pkg/infra/noise/runtime/session/guard.go:88-94` —
   `SessionGuardAdapter.Logout` devolve o erro **cru** do SDK
   (`client.Logout(...)`), sem embrulhar em `apperr`.
-- `internal/wa-noise/core/client_session.go:25-46` — `Client.Logout` manda um
+- `internal/noise/core/client_session.go:25-46` — `Client.Logout` manda um
   IQ `remove-companion-device` **antes** de qualquer coisa; sem websocket o
   `sendIQ` falha e a função retorna cedo:
   `return fmt.Errorf("error sending logout request: %w", err)`.
@@ -4011,8 +4011,8 @@ do servidor. A taxonomia para isso já existe e está em uso no repositório —
 `pkg/domain/apperr/codes.go` mapeia `CategoryValidation` para 400 e
 `response.go:50-57` aplica esse mapa sozinho **desde que o erro seja um
 `AppError`**. O caminho de logout simplesmente não participa: `guard.go:93`
-devolve erro cru. Repare que `wanoiseSession.Logout`
-(`pkg/infra/wa-noise/runtime/session/session.go:57-62`) até embrulha em
+devolve erro cru. Repare que `noiseSession.Logout`
+(`pkg/infra/noise/runtime/session/session.go:57-62`) até embrulha em
 `apperr`, mas escolhe `CategoryInternal` com `Retryable: true` — ou seja,
 mesmo o caminho que já migrou classificaria isto como 500 e ainda diria ao
 cliente que vale a pena repetir a mesma requisição, que produzirá o mesmo
@@ -4347,7 +4347,7 @@ negativo colado.
 ## F96 — `make check` está VERMELHO por toolchain, e não por código: `covdata` ausente
 
 **Data**: 2026-08-20 · **Contexto**: fechamento da CAP-07 (`sendText`) no
-`internal/wa-headless`; o gate foi rodado antes de commitar e reprovou.
+`internal/headless`; o gate foi rodado antes de commitar e reprovou.
 
 **Onde**: `Makefile:132-133` (alvo `coverage-gate`).
 
@@ -4360,7 +4360,7 @@ go: no such tool "covdata"
 go: no such tool "covdata"
 # wa-api/cmd/wss
 go: no such tool "covdata"
-# wa-api/pkg/infra/wa-noise/client/testkit
+# wa-api/pkg/infra/noise/client/testkit
 go: no such tool "covdata"
 make: *** [coverage-gate] Error 1
 ```
@@ -4465,7 +4465,7 @@ lint, coverage 838/838, log-coverage em ratchet, facade e filesize).
 
 **Data**: 2026-08-20 · **Contexto**: fechamento da F96, ao rodar o gate completo.
 
-**Onde**: `internal/wa-headless/engine/launcher_test.go`,
+**Onde**: `internal/headless/engine/launcher_test.go`,
 `TestLaunchStopsTheBrowserWhenTheEndpointNeverAnswers`.
 
 **O sintoma**: falha com *"the browser never started, so this test did not
@@ -4680,7 +4680,7 @@ identificada, correção é de prática e não de código.
 --- FAIL: TestHolder_StoppedHolderRefusesToBootAgain (30.00s)
 ```
 
-`git status --porcelain internal/wa-headless/runtime/` estava **vazio** — o
+`git status --porcelain internal/headless/runtime/` estava **vazio** — o
 pacote não foi tocado na sessão. Reexecutado isolado com `-count=3 -race`:
 **4,5 s, verde nas três**. Trinta segundos é o teto do teste; 4,5 s é o custo
 real. A distância entre os dois é a máquina, não o código.
@@ -4695,7 +4695,7 @@ Aqui é observação — árvore limpa naquele diretório.
 --- FAIL: TestStartSession_SuspectMarkerComposedPath_ClearedOnSuccess (30.00s)
 ```
 
-`git status --porcelain internal/wa-headless/core/` vazio; isolado com
+`git status --porcelain internal/headless/core/` vazio; isolado com
 `-count=3 -race`: **4,6 s, verde**. Duas ocorrências observadas (não inferidas)
 em pacotes diferentes no mesmo dia, ambas em testes com teto de 30 s. O padrão é
 o TETO, não o pacote: 30 s é generoso para o custo real e apertado para uma
@@ -4781,8 +4781,8 @@ certo.
 **Contexto**: fechar as três últimas linhas `MISSING` do `LEDGER-WWEBJS.md`
 (`getMentions`, `getGroupMentions`, `MESSAGE_REVOKED_ME`).
 
-**Onde**: `internal/wa-headless/capabilities/message/script.go` (`mentionsScript`),
-`internal/wa-headless/capabilities/message/message.go` (`MentionsOf`).
+**Onde**: `internal/headless/capabilities/message/script.go` (`mentionsScript`),
+`internal/headless/capabilities/message/message.go` (`MentionsOf`).
 
 **Problema**: a H106 mediu 395 mensagens carregadas e achou ZERO menções sob
 cinco nomes de campo candidatos, e concluiu — corretamente — que embarcar um
@@ -4859,9 +4859,9 @@ conclusão errada.
 **Data**: 2026-08-22
 **Contexto**: idem H142 — última linha `MISSING`.
 
-**Onde**: `internal/wa-headless/capabilities/revoke/revoke.go` (`ForMe`,
-`waitGone`, `loadedScript`), `internal/wa-headless/events/events.go`
-(`MessageRemoved`), `internal/wa-headless/events/ingress.go` (`onRemove`).
+**Onde**: `internal/headless/capabilities/revoke/revoke.go` (`ForMe`,
+`waitGone`, `loadedScript`), `internal/headless/events/events.go`
+(`MessageRemoved`), `internal/headless/events/ingress.go` (`onRemove`).
 
 **Problema**: a nota da H88 dizia *"não temos 'apagar para mim'; é falta de
 MÉTODO antes de ser falta de evento"* — e estava certa. O `revoke` só oferecia
@@ -4938,7 +4938,7 @@ mostra a outra metade — **não VERIFIQUE na página**, porque verificar cedo d
 **Contexto**: reauditar os 56 `PARTIAL` procurando os que ficaram acionáveis por
 causa das capacidades novas de hoje.
 
-**Onde**: `internal/wa-headless/probe_presence2_test.go` (novo),
+**Onde**: `internal/headless/probe_presence2_test.go` (novo),
 linhas `sendPresenceAvailable` e `sendPresenceUnavailable` do `LEDGER-WWEBJS.md`.
 
 **Hipótese**: as duas linhas estavam `PARTIAL` desde a H50 com a nota
@@ -5002,7 +5002,7 @@ tarefa atual.
 **Data**: 2026-08-22
 **Contexto**: continuação da reauditoria dos `PARTIAL` (H144).
 
-**Onde**: `internal/wa-headless/probe_gdesc2_test.go` (novo), linha `description`
+**Onde**: `internal/headless/probe_gdesc2_test.go` (novo), linha `description`
 do `LEDGER-WWEBJS.md`.
 
 **Hipótese**: a linha `description` diz que o leitor está entregue e **nunca foi
@@ -5050,7 +5050,7 @@ o mesmo bloqueio.
 **Data**: 2026-08-22
 **Contexto**: varredura sistemática dos 56 `PARTIAL` (continuação de H144/H145).
 
-**Onde**: `internal/wa-headless/capabilities/block/block.go` (`List`, `listScript`),
+**Onde**: `internal/headless/capabilities/block/block.go` (`List`, `listScript`),
 linha `getBlockedContacts` do `LEDGER-WWEBJS.md`.
 
 **Problema**: a linha dizia *"bloquear/desbloquear provados; LISTAR os bloqueados
@@ -5104,7 +5104,7 @@ a linha os fundia havia meses.
 **Data**: 2026-08-22
 **Contexto**: idem H146.
 
-**Onde**: `internal/wa-headless/probe_notreg_test.go` (novo), linha
+**Onde**: `internal/headless/probe_notreg_test.go` (novo), linha
 `isRegisteredUser` do `LEDGER-WWEBJS.md`.
 
 **Problema**: a linha dizia *"é passo interno de todo envio; não exposto"* e
@@ -5149,8 +5149,8 @@ armadilha nº 2 do `ARMADILHAS.md`; esta é a mesma armadilha com o sinal trocad
 **Contexto**: varredura dos `PARTIAL`, seguindo a lição da H147 (procurar linhas
 provadas por metade).
 
-**Onde**: `internal/wa-headless/probe_devcount_test.go` (novo),
-`internal/wa-headless/capabilities/addressbook/addressbook.go` (doc de
+**Onde**: `internal/headless/probe_devcount_test.go` (novo),
+`internal/headless/capabilities/addressbook/addressbook.go` (doc de
 `DeviceCount`), linha `getContactDeviceCount` do `LEDGER-WWEBJS.md`.
 
 **Hipótese**: a linha dizia *"o caminho funciona e o par NÃO tem registro de
@@ -5207,7 +5207,7 @@ uma linha parada por meses com diagnóstico errado.
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`, aplicando a lição da H148.
 
-**Onde**: `internal/wa-headless/probe_about2_test.go` (novo), linha `getAbout`.
+**Onde**: `internal/headless/probe_about2_test.go` (novo), linha `getAbout`.
 
 **Hipótese**: depois da H148 — em que uma medição antiga contra o jid de telefone
 tinha produzido um diagnóstico errado por meses — era natural suspeitar do mesmo
@@ -5245,7 +5245,7 @@ permissivos existe porque a lição sem o contra-exemplo vira superstição.
 não QUAL campo"* (H87) —, o que fazia delas o item de maior alcance da varredura:
 uma medição, duas linhas.
 
-**Onde**: `internal/wa-headless/probe_chatfields_test.go` (novo), linhas
+**Onde**: `internal/headless/probe_chatfields_test.go` (novo), linhas
 `CHAT_ARCHIVED` e `UNREAD_COUNT` do `LEDGER-WWEBJS.md`.
 
 **Hipótese**: a referência emite um evento por campo. Se a coleção entregasse os
@@ -5304,7 +5304,7 @@ independentes.
 
 **Onde**: `capabilities/addressbook.DeviceCount`, `capabilities/chats.ByJID`,
 `capabilities/chats.MarkUnread`. Sonda em
-`internal/wa-headless/probe_unreadid_test.go`.
+`internal/headless/probe_unreadid_test.go`.
 
 **O padrão**: este build arquiva sob LID. Um chamador que tenha o jid de telefone
 — que é o que um humano digita e o que a maior parte das APIs recebe — recebe
@@ -5355,8 +5355,8 @@ diferentes para a mesma pergunta.
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`.
 
-**Onde**: `internal/wa-headless/probe_msgcreate_test.go` (novo),
-`internal/wa-headless/events/ingress_test.go` (`rowFrom`,
+**Onde**: `internal/headless/probe_msgcreate_test.go` (novo),
+`internal/headless/events/ingress_test.go` (`rowFrom`,
 `TestBothDirectionsSurviveTheBoundary`, `TestTheIngressScriptReadsFromMe`),
 linha `MESSAGE_CREATE` do `LEDGER-WWEBJS.md`.
 
@@ -5416,9 +5416,9 @@ mudou de valor?** Esse é o campo que ninguém está testando.
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`.
 
-**Onde**: `internal/wa-headless/capabilities/message/message.go` (`InfoOf`,
+**Onde**: `internal/headless/capabilities/message/message.go` (`InfoOf`,
 `Info`, `ErrNotMine`), `.../script.go` (`infoScript`),
-`internal/wa-headless/probe_msginfo_test.go` (novo), linha `getInfo`.
+`internal/headless/probe_msginfo_test.go` (novo), linha `getInfo`.
 
 **Problema**: a linha dizia *"MsgInfoCollection VAZIA (0 de 368); temos ack, não
 'quem leu'"* (H71). A contagem estava correta — a coleção lê **0 ainda hoje** —
@@ -5498,9 +5498,9 @@ upstream diziam que o lugar plausível não é o lugar.
 mesma que fechou a H153 — *como a REFERÊNCIA obtém o dado?* — aplicada às
 reações porque três linhas dependiam da mesma resposta.
 
-**Onde**: `internal/wa-headless/capabilities/message/message.go` (`ReactionsOf`,
+**Onde**: `internal/headless/capabilities/message/message.go` (`ReactionsOf`,
 `Reactions`, `Reaction`), `.../script.go` (`reactionsScript`),
-`internal/wa-headless/probe_reactread_test.go` (novo). Linhas `getReactions`,
+`internal/headless/probe_reactread_test.go` (novo). Linhas `getReactions`,
 `sendReaction`, `react` e `MESSAGE_REACTION`.
 
 **A história das duas medições anteriores**, e ambas foram honestas:
@@ -5587,7 +5587,7 @@ concluir que algo é impossível.
 para verificar o `Remove` era trabalho ACIONÁVEL e não impedimento; esta entrada
 é esse trabalho.
 
-**Onde**: `internal/wa-headless/spa/reactions.go` (novo,
+**Onde**: `internal/headless/spa/reactions.go` (novo,
 `ReactionsForMessageExpr`), `capabilities/react/mine.go` (novo, `mineOn`),
 `capabilities/react/react.go` (o ramo de remoção),
 `capabilities/message/script.go` (passa a embutir a expressão compartilhada).
@@ -5655,7 +5655,7 @@ POR QUE não verificava, em vez de apenas que não verificava.
 literal"* — o upstream não tem lógica própria ali, apenas encaminha para um
 método do `Client`.
 
-**Onde**: `internal/wa-headless/probe_delegation_test.go` (novo). Linhas
+**Onde**: `internal/headless/probe_delegation_test.go` (novo). Linhas
 `Chat.getContact`, `GroupNotification.getChat`, `GroupNotification.getContact`.
 
 **A tentação, e por que ela é errada**: `getChatById` e `getContactById` estão
@@ -5710,8 +5710,8 @@ diretamente a pergunta que a H151 deixou aberta — *quem resolve identidade nes
 módulo* — e uma primitiva que devolva AS DUAS identidades é o que qualquer das
 três respostas precisaria.
 
-**Onde**: `internal/wa-headless/capabilities/lookup/pair.go` (novo, `LidAndPhone`,
-`Pair`), `internal/wa-headless/probe_lidpn_test.go` (novo).
+**Onde**: `internal/headless/capabilities/lookup/pair.go` (novo, `LidAndPhone`,
+`Pair`), `internal/headless/probe_lidpn_test.go` (novo).
 
 **O que a referência faz** (`wwebjs_util.js:1694-1716`): ramifica por `isLid`,
 pega a metade que falta em `WAWebApiContact.getCurrentLid` ou `getPhoneNumber`, e
@@ -5787,7 +5787,7 @@ plausível para "não achei".
 significava *"ninguém pediu"* e não *"não existe"* — mensões (H142), informação de
 mensagem (H153) e reações (H154). Interrogar este zero era obrigatório.
 
-**Onde**: `internal/wa-headless/probe_status2_test.go` (novo), linhas
+**Onde**: `internal/headless/probe_status2_test.go` (novo), linhas
 `getBroadcasts` e `getBroadcastById`.
 
 **Por que a suspeita era razoável**: os feeds de status são de OUTRAS pessoas.
@@ -5836,7 +5836,7 @@ pós-condição do `MarkRead` afirma que `unreadCount` mudou NA MESMA SESSÃO, e
 H78 mediu esse contador como cross-session — *"se generaliza é pergunta em
 aberto"*.
 
-**Onde**: `internal/wa-headless/probe_seen_test.go` (novo).
+**Onde**: `internal/headless/probe_seen_test.go` (novo).
 
 **O contador é a testemunha errada, de qualquer forma.** O que `sendSeen`
 produz que alguém pode observar é dizer ao REMETENTE que sua mensagem foi lida:
@@ -5872,9 +5872,9 @@ mesmo teste e respondeu.
 referência para ver o que ela faz de diferente — que é a ordem correta: medir,
 depois comparar.
 
-**Onde**: `internal/wa-headless/capabilities/chats/markread.go`,
-`internal/wa-headless/spa/modules.go` (`ModuleUpdateUnreadChatAction`,
-`ModuleStreamModel`), `internal/wa-headless/probe_seenstream_test.go` (novo).
+**Onde**: `internal/headless/capabilities/chats/markread.go`,
+`internal/headless/spa/modules.go` (`ModuleUpdateUnreadChatAction`,
+`ModuleStreamModel`), `internal/headless/probe_seenstream_test.go` (novo).
 
 **O que a referência faz** (`wwebjs_util.js:131-143`):
 
@@ -5950,7 +5950,7 @@ descartado a correção junto com a hipótese.
 **Data**: 2026-08-22
 **Contexto**: seguir a pista que a H160 registrou e deliberadamente não perseguiu.
 
-**Onde**: `internal/wa-headless/probe_markunread2_test.go` (novo), linha
+**Onde**: `internal/headless/probe_markunread2_test.go` (novo), linha
 `markChatUnread`.
 
 **Por que a pista era boa**: a H160 consertou o `MarkRead` trocando de MÓDULO —
@@ -6015,7 +6015,7 @@ o estado e muda o que a próxima pessoa precisa tentar — que é o único jeito
 parecia ser mais um caso de "sombra de escrita `BLOCKED`" como o `description` da
 H145.
 
-**Onde**: `internal/wa-headless/probe_pinned_test.go` e
+**Onde**: `internal/headless/probe_pinned_test.go` e
 `probe_pindual_test.go` (novos). Linhas `pin` (era `BLOCKED`) e
 `getPinnedMessages` (duas).
 
@@ -6078,7 +6078,7 @@ venha de uma pós-condição que o próprio tipo diz não conseguir observar.**
 fechada: *"vale reler todo `BLOCKED` cujo veredito venha de uma pós-condição que
 o próprio tipo diz não conseguir observar"*. Esta entrada é essa auditoria.
 
-**Onde**: `internal/wa-headless/probe_descdual_test.go` (novo), linhas
+**Onde**: `internal/headless/probe_descdual_test.go` (novo), linhas
 `setDescription` (duas) e `description`.
 
 **A varredura dos 47 `BLOCKED`** procurou vereditos que dependem de não-observação
@@ -6133,7 +6133,7 @@ pela analogia, decida pela medição.**
 **Contexto**: varredura dos `PARTIAL`. A linha tinha uma metade provada ao vivo
 (o caminho de APROVAÇÃO, H89) e a outra intocada.
 
-**Onde**: `internal/wa-headless/probe_directjoin_test.go` (novo), linha
+**Onde**: `internal/headless/probe_directjoin_test.go` (novo), linha
 `acceptInvite`.
 
 **Por que a metade faltante nunca tinha sido feita**: o grupo de laboratório
@@ -6196,7 +6196,7 @@ que depurar o efeito dela.
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`, aplicando a técnica que a H164 produziu.
 
-**Onde**: `internal/wa-headless/probe_reject_test.go` (novo), linhas
+**Onde**: `internal/headless/probe_reject_test.go` (novo), linhas
 `rejectGroupMembershipRequests` (duas).
 
 **Por que estava `PARTIAL`**: implementado e travado por teste unitário, mas
@@ -6254,7 +6254,7 @@ que o fixture podia ser construído. Vale reler toda linha cujo impedimento seja
 **Contexto**: a H165 terminou pedindo uma auditoria — *"vale reler toda linha
 cujo impedimento seja CUSTO COLATERAL e não impossibilidade"*. Esta é ela.
 
-**Onde**: `internal/wa-headless/probe_lifecycle_test.go` (novo), linhas
+**Onde**: `internal/headless/probe_lifecycle_test.go` (novo), linhas
 `clearMessages`, `delete` e `leave`.
 
 **A varredura** achou cinco linhas cujo impedimento é custo, não impossibilidade:
@@ -6314,8 +6314,8 @@ uma alternativa que ninguém tinha procurado. **Toda linha cujo motivo comece co
 pediam a mesma técnica — enumerar e ler a assinatura, que já pagou quatro vezes
 hoje.
 
-**Onde**: `internal/wa-headless/capabilities/fetchmessages/synchistory.go` (novo),
-`internal/wa-headless/probe_synchist_test.go` (novo). Linhas `syncHistory` (duas)
+**Onde**: `internal/headless/capabilities/fetchmessages/synchistory.go` (novo),
+`internal/headless/probe_synchist_test.go` (novo). Linhas `syncHistory` (duas)
 e `reject` (chamada).
 
 ### `syncHistory`: a nota estava certa sobre a diferença e calada sobre o módulo
@@ -6389,7 +6389,7 @@ conclusão errada.
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`.
 
-**Onde**: `internal/wa-headless/core/session.go` (`BootFailure.PageClass`,
+**Onde**: `internal/headless/core/session.go` (`BootFailure.PageClass`,
 `failClass`), `core/lifecycle.go` (`LifecycleFact.PageClass`),
 `runtime/lifecycle.go`, `events/events.go` (`Event.PageClass`,
 `PublishSessionStateWithClass`), `probe_authfail_test.go` (novo).
@@ -6448,7 +6448,7 @@ que agora tem.
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`.
 
-**Onde**: `internal/wa-headless/events/group.go` (`GroupMembershipRequest`, o
+**Onde**: `internal/headless/events/group.go` (`GroupMembershipRequest`, o
 mapa de subtipos), `probe_memreq_test.go` (novo), linha
 `GROUP_MEMBERSHIP_REQUEST`.
 
@@ -6507,7 +6507,7 @@ fazer por meses. Toda medição que termina em "não dá para distinguir" merece
 **Data**: 2026-08-22
 **Contexto**: varredura dos `PARTIAL`.
 
-**Onde**: `internal/wa-headless/probe_chatstate_test.go` (novo), linha
+**Onde**: `internal/headless/probe_chatstate_test.go` (novo), linha
 `sendStateRecording`.
 
 **A hipótese**: a linha diz que a prova ao vivo esbarra no bloqueio da observação
@@ -6670,7 +6670,7 @@ notas mais depressa do que se atualiza. Toda linha que herda veredito de outra
 **Contexto**: primeira medição da Fase 2 (decisão 65). O enunciado pede provar
 "sem leaks/orphans/races", e a regra do projeto manda medir ANTES de projetar.
 
-**Onde**: `internal/wa-headless/probe_teardown_test.go` (novo).
+**Onde**: `internal/headless/probe_teardown_test.go` (novo).
 
 **A lacuna que abriu esta entrada**: `NumGoroutine` aparece em **zero** testes
 deste módulo. A suíte de shutdown prova o CAMINHO do protocolo — que `CleanStop`
@@ -6745,7 +6745,7 @@ senão a nova pós-condição falharia sempre (H166).
 (*"67: Escolha a; Clear deve provar redução e falhar quando a pós-condição não
 ocorrer"*).
 
-**Onde**: `internal/wa-headless/capabilities/chats/lifecycle.go`
+**Onde**: `internal/headless/capabilities/chats/lifecycle.go`
 (`Emptied.MessagesAfter`, `ErrNotEmptied`, `residualKind`, o passo de verificação
 do `lifecycleScript`), `probe_clearedge_test.go` (novo).
 
@@ -6809,7 +6809,7 @@ que falha em uso normal, que é pior que não ter pós-condição nenhuma.
 **Contexto**: segunda dívida interna da Fase 2 (*"66: Escolha b; identidade não
 resolvida deve falhar explicitamente, sem rede oculta nem regras duplicadas"*).
 
-**Onde**: `internal/wa-headless/spa/jid.go` (novo, `IsUnresolvedIdentity`),
+**Onde**: `internal/headless/spa/jid.go` (novo, `IsUnresolvedIdentity`),
 `capabilities/chats/chats.go` e `markunread.go`,
 `capabilities/addressbook/addressbook.go`, `probe_identity66_test.go` e
 `probe_markread66_test.go` (novos).
@@ -6873,12 +6873,12 @@ qual metade dela se aplica.
 **Contexto**: Fase 2, item "concorrência/multi-sessão". Primeiro defeito real da
 fase, e o mais grave achado neste módulo desde que o ledger existe.
 
-**Onde**: `internal/wa-headless/capabilities/message/message.go`
+**Onde**: `internal/headless/capabilities/message/message.go`
 (`stateKeyPrefix`, `nextStateKey`, `parked`), `script.go` (os sete scripts),
 `probe_concurrency_test.go` (novo).
 
 **O defeito**: todo leitor de `capabilities/message` estacionava a resposta no
-MESMO global de página — `__waHeadlessMessage`. Duas chamadas concorrentes na
+MESMO global de página — `__headlessMessage`. Duas chamadas concorrentes na
 mesma sessão escreviam a mesma variável, e cada uma consultava até ela ficar
 não-vazia. Quem consultasse primeiro levava a resposta da OUTRA.
 
@@ -7164,7 +7164,7 @@ insistido também.
 **Data**: 2026-08-22
 **Contexto**: Fase 2, item "reconexão / recuperação determinística".
 
-**Onde**: `internal/wa-headless/runtime/inflight_test.go` (novo).
+**Onde**: `internal/headless/runtime/inflight_test.go` (novo).
 
 **A lacuna**: o contrato do `Holder` para sessão morta está documentado e testado
 — `ErrSessionDied`, e ele recusa rebootar em vez de esconder um navegador que
@@ -7244,7 +7244,7 @@ deixou abertas.
 ### Carga, antes das decisões
 
 1000 chamadas concorrentes numa sessão: **1,553 s, p50 40 ms, p95 233 ms, pior
-451 ms, zero erros**, com os globais `__waHeadless*` em **0 antes e 0 depois** e
+451 ms, zero erros**, com os globais `__headless*` em **0 antes e 0 depois** e
 goroutines 12 → 12. A liberação de chave da H177 aguenta volume — e a primeira
 medição, 72 chamadas em 110 ms, era amostra e não carga; foi refeita por isso.
 
@@ -7366,7 +7366,7 @@ não medi.
 **Data**: 2026-08-22
 **Contexto**: Fase 2, itens "long-running" e "limites de CPU/RAM".
 
-**Onde**: `internal/wa-headless/probe_longrun_test.go` (novo).
+**Onde**: `internal/headless/probe_longrun_test.go` (novo).
 
 **A pergunta que a linha de base de teardown NÃO responde**: a H174 mediu que uma
 sessão que ACABA não deixa nada. Se uma sessão que FICA cresce enquanto fica é
@@ -7378,7 +7378,7 @@ outra coisa, e o enunciado pede as duas.
 ```
 RSS médio (terço inicial → terço final):  727088KB → 638168KB   (-12%)
 goroutines:                                10 → 10, constante
-globais __waHeadless*:                     0 em todas as amostras
+globais __headless*:                     0 em todas as amostras
 latência:                                  6ms a 60ms, quase toda abaixo de 20ms
 ```
 
@@ -7422,7 +7422,7 @@ escolher a conclusão.
 **Data**: 2026-08-22
 **Contexto**: Fase 2, item "limites de CPU". Último item mensurável do enunciado.
 
-**Onde**: `internal/wa-headless/probe_cpu_test.go` (novo).
+**Onde**: `internal/headless/probe_cpu_test.go` (novo).
 
 **A suspeita por trás do item**, que é o que o tornava vale a pena: toda
 capacidade usa estacionar-e-consultar — a página estaciona a resposta e o Go
@@ -7473,11 +7473,11 @@ de "adicione concorrência" para "adicione sessões".
 ## F101 — `ParseJID("")` faz panic, e a lista de participantes chega até ele sem validação de elemento
 
 **Data**: 2026-08-22.
-**Contexto**: achado incidental na Fase 3 do `internal/wa-headless` (decisão 72),
-ao medir o comportamento do `JIDResolver` do `wa-noise` antes de extrair a regra
+**Contexto**: achado incidental na Fase 3 do `internal/headless` (decisão 72),
+ao medir o comportamento do `JIDResolver` do `noise` antes de extrair a regra
 pura para um pacote compartilhado. Não faz parte do escopo da Fase 3.
 
-**Onde**: `pkg/infra/wa-noise/mapping/jid/parse.go:12-13`
+**Onde**: `pkg/infra/noise/mapping/jid/parse.go:12-13`
 
 ```go
 func ParseJID(arg string) (types.JID, bool) {
@@ -7492,10 +7492,10 @@ Evidência MEDIDA (sonda descartável, removida após a medição):
 
 ```
 panic: runtime error: index out of range [0] with length 0
-wa-api/pkg/infra/wa-noise/mapping/jid.ParseJID(...)
-	pkg/infra/wa-noise/mapping/jid/parse.go:13
-wa-api/pkg/infra/wa-noise/mapping/jid.JIDResolverAdapter.ResolveJID(...)
-	pkg/infra/wa-noise/mapping/jid/resolver.go:22
+wa-api/pkg/infra/noise/mapping/jid.ParseJID(...)
+	pkg/infra/noise/mapping/jid/parse.go:13
+wa-api/pkg/infra/noise/mapping/jid.JIDResolverAdapter.ResolveJID(...)
+	pkg/infra/noise/mapping/jid/resolver.go:22
 ```
 
 Alcançabilidade — os 11 chamadores de `ResolveJID` foram enumerados um a um:
@@ -7537,7 +7537,7 @@ extração da decisão 72 justamente para não dar duas casas ao mesmo defeito.
 
 Três guardas, e a primeira é a que trava a CAUSA:
 
-1. `pkg/infra/wa-noise/mapping/jid/parse.go` — `if arg == "" { return types.JID{}, false }`
+1. `pkg/infra/noise/mapping/jid/parse.go` — `if arg == "" { return types.JID{}, false }`
    no topo de `ParseJID`, na ORIGEM da regra e não nos onze chamadores.
 2. `handler_group_mgmt.go` — `firstEmpty()` + `rejectEmptyElement()` nas duas
    rotas com lista (`/group/create`, `/group/updateparticipants`), com o ÍNDICE
@@ -7547,7 +7547,7 @@ Três guardas, e a primeira é a que trava a CAUSA:
 
 **Testes que travam o achado**:
 
-- `pkg/infra/wa-noise/mapping/jid/parse_empty_test.go` — a CAUSA, pelo
+- `pkg/infra/noise/mapping/jid/parse_empty_test.go` — a CAUSA, pelo
   adaptador REAL: `TestParseJIDRejectsEmptyInsteadOfPanicking`,
   `TestResolveJIDOnEmptyReturnsErrorNotPanic` e
   `TestResolveJIDStillAcceptsBareNumber` (o caminho de SUCESSO, para que a
@@ -7563,7 +7563,7 @@ Três guardas, e a primeira é a que trava a CAUSA:
 CONTROLE 1 — guarda removida do ParseJID
 --- FAIL: TestParseJIDRejectsEmptyInsteadOfPanicking (0.00s)
 panic: runtime error: index out of range [0] with length 0 [recovered, repanicked]
-	pkg/infra/wa-noise/mapping/jid/parse.go:16
+	pkg/infra/noise/mapping/jid/parse.go:16
 
 CONTROLE 2 — guardas do handler removidas
 --- FAIL: .../CreateGroup/participante_vazio: status: got 200, want 400
@@ -7592,11 +7592,11 @@ que é a ordem que a decisão 73 impôs.
 **Data**: 2026-08-22.
 **Contexto**: Fase 3 (decisão 71), ao projetar o registry que mapeia `txtID` →
 sessão headless. Não é defeito em produção: nada em produção fia o
-`wa-headless` ainda — é exatamente isso que a Fase 3 vai fazer. Fica
+`headless` ainda — é exatamente isso que a Fase 3 vai fazer. Fica
 registrado porque a fiação passaria por cima do problema sem vê-lo.
 
-**Onde**: `internal/wa-headless/engine/flags.go:133-136` e
-`internal/wa-headless/engine/launcher.go:113-140`
+**Onde**: `internal/headless/engine/flags.go:133-136` e
+`internal/headless/engine/launcher.go:113-140`
 
 **Problema, em duas metades.**
 
@@ -7928,9 +7928,9 @@ registrado aqui para que a limpeza não seja confundida com correção.
 
 **Data**: 2026-08-23. **Contexto**: fase 3, ao fechar o port `GroupRequests`.
 
-**Onde**: `internal/wa-headless/ESTADO.md` (seções de `GroupDirectory` e
+**Onde**: `internal/headless/ESTADO.md` (seções de `GroupDirectory` e
 `GroupLifecycle`) e as mensagens dos commits `a7d29fb` e `7294701`, contra
-`pkg/infra/wa-headless/phase3_inventory_test.go:45-51`.
+`pkg/infra/headless/phase3_inventory_test.go:45-51`.
 
 **Problema**: a prosa vinha **+1** sobre a medição, por pelo menos dois commits.
 
@@ -7948,7 +7948,7 @@ lado dele, em texto. **Duas fontes de verdade para o mesmo número derivam;** a
 
 **Correção sugerida**: não repetir em prosa nenhum número que um teste imprime.
 Onde o texto precisar do valor, citar o teste que o produz e o comando que o lê
-(`go test ./pkg/infra/wa-headless/ -run Total -v`), em vez do dígito. Aplicável
+(`go test ./pkg/infra/headless/ -run Total -v`), em vez do dígito. Aplicável
 a qualquer contagem futura (ports, capabilities, itens do LEDGER).
 
 **Status**: corrigido nesta sessão para o valor corrente (15/5/2, soma 22), com
@@ -8041,7 +8041,7 @@ o USO na posse (`TestStart_OwnershipRefusalIsClassified`), e o USO no logout
 
 > **Nota (2026-08-22)**: a entrada acima dizia "falta migrar a F93" — estava
 > desatualizada. O `guard.go` (commit que trouxe a guarda de sessão para o
-> wa-noise) já usava `CategoryConflict` para `CodeSessionNotConnected`, e o
+> noise) já usava `CategoryConflict` para `CodeSessionNotConnected`, e o
 > teste de encerramento já o esperava. A migração aconteceu, a entrada é que
 > não foi atualizada.
 
@@ -8645,7 +8645,7 @@ não devolve nada relacionado a ela.
 
 **Causa CONFIRMADA pelo remetente (2026-08-10)**: eram 4 fotos enviadas como
 um álbum. O quinto evento é o cabeçalho do álbum. `AlbumMessage` Ele existe no proto vendorizado
-(`internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.pb.go:11240`) e
+(`internal/noise/protocol/proto/waE2E/WAWebProtobufsE2E.pb.go:11240`) e
 **não** tem ramo em `processMessageMedia`. Um álbum de 4 fotos chega como um
 cabeçalho de álbum mais 4 mensagens de imagem — que é exatamente 5 recebidas e
 4 baixadas — que foi exatamente o que aconteceu.
@@ -9692,7 +9692,7 @@ A F174 (duplicata desta) já estava marcada como corrigida.
 o bloco que religou o campo público `LinkPreview`, inerte desde a deleção do
 `handlers.go` em `41bc8e2`.
 
-**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger.go`
+**Onde**: `pkg/infra/noise/adapters/chat/messenger.go`
 (`ChatMessengerAdapter.SendText`, ramo `preview != nil`), que preenche
 `ExtendedTextMessage{Text, MatchedText, Title, Description, JPEGThumbnail}`.
 
@@ -9726,7 +9726,7 @@ o preview aparece —, é uma capability entregue com fidelidade menor que a
 histórica, e isso não estava registrado em lugar nenhum.
 
 **Correção sugerida**: expor `Upload` na interface estreita
-`pkg/infra/wa-noise/client/client.go` (hoje ela não o expõe) e, no adapter,
+`pkg/infra/noise/client/client.go` (hoje ela não o expõe) e, no adapter,
 subir `HQImageData` como `MediaLinkThumbnail`, preenchendo os sete campos
 acima. Falha de upload MUST degradar para a thumbnail inline com log em
 `Warn`, exatamente como o original — nunca falhar o envio. Repare que
@@ -9755,8 +9755,8 @@ fica barata de fechar depois — vale reavaliar F114 logo após CAP-02.
    Falha de upload degrada para a thumbnail inline com log `Warn` — nunca
    falha o envio.
 
-   `MediaLinkThumbnail` foi exposto na fachada do wa-noise
-   (`internal/wa-noise/main.go`); `Upload` já estava na interface estreita
+   `MediaLinkThumbnail` foi exposto na fachada do noise
+   (`internal/noise/main.go`); `Upload` já estava na interface estreita
    desde CAP-02.
 
    Testes:
@@ -9773,7 +9773,7 @@ fica barata de fechar depois — vale reavaliar F114 logo após CAP-02.
 
 **Data/contexto**: 2026-08-18, CAP-02 (POST /chat/send/image, ramo URL).
 
-**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger.go`,
+**Onde**: `pkg/infra/noise/adapters/chat/messenger.go`,
 `ChatMessengerAdapter.SendImage` — a `waE2E.ImageMessage` montada não
 preenche `JPEGThumbnail`. O `handlers.go` pré-refactor
 (`git show 41bc8e2^:handlers.go`, trecho do branch de imagem) decodificava
@@ -9802,7 +9802,7 @@ Corrigido em três camadas:
    `SendImageRequest` e `MediaPayload`.
 2. `pkg/application/usecase/message/send_image.go`: payload recebe
    `req.JPEGThumbnail`.
-3. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `ImageMessage` recebe
+3. `pkg/infra/noise/adapters/chat/messenger.go`: `ImageMessage` recebe
    `payload.JPEGThumbnail`.
 
 **Testes**: `TestSendImage_JPEGThumbnailFlowsToPayload`
@@ -10001,7 +10001,7 @@ Corrigido em três camadas:
    `SendAudioRequest` e `AudioPayload`.
 2. `pkg/application/usecase/message/send_audio.go`: payload recebe
    `req.Waveform`.
-3. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `AudioMessage` recebe
+3. `pkg/infra/noise/adapters/chat/messenger.go`: `AudioMessage` recebe
    `payload.Waveform`.
 
 **Testes**: `TestSendAudio_WaveformFlowsToPayload`
@@ -10074,7 +10074,7 @@ Corrigido em três camadas:
    `JPEGThumbnail []byte` adicionados a `SendVideoRequest`.
 2. `pkg/application/usecase/message/send_video.go`: `resolveMimeType`
    recebe `req.MimeType` (era `""`), payload recebe `req.JPEGThumbnail`.
-3. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `VideoMessage` recebe
+3. `pkg/infra/noise/adapters/chat/messenger.go`: `VideoMessage` recebe
    `payload.JPEGThumbnail`.
 
 **Testes**: `TestSendVideo_MimeTypeAndThumbnailFlowToPayload`
@@ -10849,7 +10849,7 @@ O cliente não tem como distinguir isso de mídia legítima de zero byte, e o
 contrato público da rota promete conteúdo.
 
 Investigação da primitive (não suposição): em
-`internal/wa-noise/capabilities/media/download_transport.go`,
+`internal/noise/capabilities/media/download_transport.go`,
 `DownloadAndDecrypt` só devolve `(data, nil)` depois de `ValidateMedia` e
 `cbcutil.Decrypt`; o único caminho que produz zero byte sem erro é o ramo de
 mídia **não cifrada** (`mediaKey == nil && fileEncSHA256 == nil && mac == nil`)
@@ -10894,7 +10894,7 @@ deste commit).
 
 **Problema**: a primitive do SDK trata `URL` e `DirectPath` como **caminhos
 alternativos**, não como um obrigatório mais um opcional. Em
-`internal/wa-noise/capabilities/media/download.go:79-91`, `DownloadMessage`
+`internal/noise/capabilities/media/download.go:79-91`, `DownloadMessage`
 faz:
 
 ```go
@@ -11086,11 +11086,11 @@ A razão CAI 674 → 672 por **denominador**: `covered` **SOBE** 424 → 425. O
 conjunto de elegíveis teve 8 entradas e 5 saídas (net +3), enumerado nome por
 nome no comentário da própria chave no `.log-coverage-baseline` (diff de
 `logcov -golden`, coluna `ELIGIBLE`, HEAD vs atual). As duas funções novas sem
-log L1 são `pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download` e
-`pkg/infra/wa-noise/adapters/chat.downloadableFor`; a ausência de log nelas é a
+log L1 são `pkg/infra/noise/adapters/chat.MediaDownloaderAdapter.Download` e
+`pkg/infra/noise/adapters/chat.downloadableFor`; a ausência de log nelas é a
 convenção "adapter delegante não loga", confirmada por medição e não por
 opinião — `grep -cE 'log\.|hlog\.|logger|Logger'
-pkg/infra/wa-noise/adapters/chat/messenger.go` devolve **0**. Nenhum log foi
+pkg/infra/noise/adapters/chat/messenger.go` devolve **0**. Nenhum log foi
 plantado para inflar métrica (COV-4; já foi REQUIRED_FIX nesta sessão, ver
 F119/FIX-07).
 
@@ -11799,7 +11799,7 @@ medição se prova incompleta — a primeira foram os fixtures de SQLite sem WAL
    que é a assinatura de mudança só de alinhamento. `go build ./...` limpo.
 2. **`fmt-gate` novo no `Makefile`**, dentro de `check`, entre `vet` e `test`.
    Falha nomeando os arquivos e dizendo o comando de correção. Cobre `pkg/` e
-   `cmd/` apenas: `internal/wa-noise/` é vendorizado e acompanha o upstream.
+   `cmd/` apenas: `internal/noise/` é vendorizado e acompanha o upstream.
 
 **Controle negativo EXECUTADO**: desalinhei um `import` em `config.go`
 de propósito e o gate reprovou:
@@ -11876,7 +11876,7 @@ Corrigido em quatro camadas:
    `EditContextInfo` quando pelo menos um dos três campos está presente.
 3. `pkg/application/contracts/chat_ports.go`: assinatura de `EditMessage`
    ganha `ctxInfo *domain.EditContextInfo`.
-4. `pkg/infra/wa-noise/adapters/chat/messenger.go`: `EditMessage` monta
+4. `pkg/infra/noise/adapters/chat/messenger.go`: `EditMessage` monta
    `waE2E.ContextInfo` no `ExtendedTextMessage` quando `ctxInfo != nil`.
 
 **Testes**:
@@ -11900,9 +11900,9 @@ teste falha com `ContextInfo e' nil — F134 nao foi aplicado no wire`.
 **Data**: 2026-08-19. **Contexto**: CAP-10 — o packet pedia explicitamente
 para descobrir e RELATAR o que a primitive faz com `Id` inexistente/inválido.
 
-**Onde**: `internal/wa-noise/capabilities/message/builders.go:39`
+**Onde**: `internal/noise/capabilities/message/builders.go:39`
 (`BuildRevoke`) e `:101` (`BuildEdit`), alcançados por
-`internal/wa-noise/core/message_builders.go:34` e `:75`.
+`internal/noise/core/message_builders.go:34` e `:75`.
 
 **Problema**: **os dois construtores não validam nada e não consultam
 armazenamento nenhum**. Recebem o `id` como `types.MessageID` — que é um alias
@@ -11918,7 +11918,7 @@ NUNCA volta pelo `SendMessage`. A API não tem como distinguir "apagou" de "não
 existia".
 
 Evidência (medida, não deduzida): `TestChatMessengerAdapter_Mutation_UnknownIDIsNotValidated`
-em `pkg/infra/wa-noise/adapters/chat/messenger_mutation_test.go` roda os ids
+em `pkg/infra/noise/adapters/chat/messenger_mutation_test.go` roda os ids
 `""`, `"id-que-nao-existe"`, `"not a message id at all"` e
 `"../../etc/passwd"`; nenhum é recusado, e todos chegam crus a
 `MessageKey.ID`. (O `""` só não é alcançável pela rota porque o use case
@@ -12442,7 +12442,7 @@ causou o defeito em todas as capabilities desta sessão.
 `clientManager.SetPollOptions(txtid, msgid, req.Options)` DEPOIS do envio.
 Guardar o texto em claro das opções não é opcional: o voto chega como
 SHA-256 do texto da opção
-(`internal/wa-noise/capabilities/message/poll.go:38`), e
+(`internal/noise/capabilities/message/poll.go:38`), e
 `pkg/bootstrap/eventhandler_message.go:113-140` — que já está vivo e
 esperando — casa hash com texto usando `clientManager.GetPollOptions`. Sem as
 opções guardadas, `selected` sai VAZIO e o operador recebe hashes sem
@@ -12458,7 +12458,7 @@ metade.
   enviados, sem etapa de obtenção de bytes e sem upload. Terceiro caso real da
   mesma fronteira, depois de Location (CAP-08A) e Contact (CAP-08B).
 - A FRONTEIRA do guarda-opções ficou no ADAPTER
-  (`pkg/infra/wa-noise/adapters/chat/messenger.go`), atrás de uma interface
+  (`pkg/infra/noise/adapters/chat/messenger.go`), atrás de uma interface
   estreita `PollOptionRecorder` satisfeita por `*registry.ClientManager`. O
   motivo de guardar é puramente de wire, não de negócio, e o use case não pode
   conhecer o `ClientManager`. O adapter guarda sob `resp.ID` — o ID que a
@@ -12507,7 +12507,7 @@ no log), `TestSendPoll_SessionFailure`, `TestSendPoll_InvalidGroupNeverSends`,
 `TestSendPoll_SuccessEmitsNoOutcomeLog` (o eixo que a EVAL-10 provou sumir
 quando se migra tabela).
 
-`pkg/infra/wa-noise/adapters/chat/messenger_poll_test.go`:
+`pkg/infra/noise/adapters/chat/messenger_poll_test.go`:
 `TestChatMessengerAdapter_SendPoll_NoSession`,
 `TestChatMessengerAdapter_SendPoll_SelectableOptionCountIsOne`,
 `TestChatMessengerAdapter_SendPoll_RealBuilderProducesSelectableOne`,
@@ -12526,9 +12526,9 @@ passou de OITO para NOVE capabilities.
 
 **Dublês, e de onde vem a regra**: `testkit.Fake.BuildPollCreation` delega
 para o construtor REAL
-(`internal/wa-noise/capabilities/message/poll.go:65`), para onde
+(`internal/noise/capabilities/message/poll.go:65`), para onde
 `(*core.Client).BuildPollCreation` também delega
-(`internal/wa-noise/core/msgsecret_poll.go:65`). Os hashes do teste de ponta a
+(`internal/noise/core/msgsecret_poll.go:65`). Os hashes do teste de ponta a
 ponta vêm de `wamessage.HashPollOptions` — a MESMA função que
 `BuildPollVote` usa —, não de uma reimplementação local. ARMADILHA 1.
 
@@ -12555,7 +12555,7 @@ FAIL	wa-api/pkg/presentation/http/handlers	0.248s
     messenger_poll_test.go:177: SetPollOptions chamado 0 vez(es), quero exatamente 1
 --- FAIL: TestChatMessengerAdapter_SendPoll_StoredOptionsResolveTheVoteHashes (0.00s)
     messenger_poll_test.go:226: SetPollOptions chamado 0 vez(es), quero 1 — sem opcoes guardadas o voto e' ilegivel
-FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.192s
+FAIL	wa-api/pkg/infra/noise/adapters/chat	0.192s
 ```
 
 3. **`selectableOptionCount` de 1 para 2** — sim, é observável, pelos dois
@@ -12567,7 +12567,7 @@ FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.192s
     messenger_poll_test.go:102: selectableOptionCount = 2, quero 1 (escolha UNICA, contrato historico)
 --- FAIL: TestChatMessengerAdapter_SendPoll_RealBuilderProducesSelectableOne (0.00s)
     messenger_poll_test.go:137: SelectableOptionsCount = 2, quero 1
-FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.188s
+FAIL	wa-api/pkg/infra/noise/adapters/chat	0.188s
 ```
 
 4. **Guardar sob o id PEDIDO pelo cliente em vez do id do SERVIDOR** — o
@@ -12578,7 +12578,7 @@ FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.188s
 --- FAIL: TestChatMessengerAdapter_SendPoll_RemembersOptionsUnderServerID (0.00s)
     messenger_poll_test.go:184: msgID guardado = "id-pedido-pelo-cliente", quero o ID que o SERVIDOR devolveu ("id-que-o-sdk-usou"); com o id pedido pelo cliente o voto nunca encontra as opcoes
     messenger_poll_test.go:188: msgID guardado ("id-pedido-pelo-cliente") diverge do devolvido ao chamador ("id-que-o-sdk-usou")
-FAIL	wa-api/pkg/infra/wa-noise/adapters/chat	0.185s
+FAIL	wa-api/pkg/infra/noise/adapters/chat	0.185s
 ```
 
 **Complemento FIX-14 (2026-08-19) — o WIRING passou a ser travado.**
@@ -12616,9 +12616,9 @@ só é observável no log que o use case emite (`send_poll.go:76`). É medição
 COMPORTAMENTO pela única saída que carrega a causa — mais forte que um `grep`
 sobre o fonte, porque o que se prova é que a execução real atravessou o guarda.
 
-**Por que um `*wanoise.Client` de verdade e não um dublê**: a produção converte
+**Por que um `*noise.Client` de verdade e não um dublê**: a produção converte
 o tipo CONCRETO (`waclient.ClientForGetter`, `client.go:160`), então não há
-onde injetar um fake. `wanoise.NewClient(nil, nil)` é o mínimo que faz
+onde injetar um fake. `noise.NewClient(nil, nil)` é o mínimo que faz
 `EnsureSession` (`guard.go:57`) passar — sem sessão, o use case para em
 `send_poll.go:62` e o teste nunca alcançaria o guarda de registrador.
 
@@ -12648,7 +12648,7 @@ justificativa completa em `.log-coverage-baseline`, blocos `CAP-14`):
 
 A única entrada é o padrão "adapter delegante não loga", já aceito neste
 repositório (FIX-07, CAP-08A/08B, CAP-09, CAP-10): `grep -cE
-'log\.|hlog\.|logger|Logger' pkg/infra/wa-noise/adapters/chat/messenger.go`
+'log\.|hlog\.|logger|Logger' pkg/infra/noise/adapters/chat/messenger.go`
 devolve 0, e os treze irmãos do mesmo arquivo constam todos como
 `uncovered:L1`. NÃO foi plantado log para inflar a métrica — isso é violação
 COV-4 e já foi REQUIRED_FIX nesta sessão (F119).
@@ -12674,7 +12674,7 @@ falso positivo e falso negativo ao mesmo tempo:
 
 - **Falso positivo** (marquei stub, está implementado): `reject_call`. O
   cadeia real é `reject_call.go` → `uc.chats.RejectCall` →
-  `MiscAdapter.RejectCall` (`pkg/infra/wa-noise/adapters/misc/adapter.go:59`)
+  `MiscAdapter.RejectCall` (`pkg/infra/noise/adapters/misc/adapter.go:59`)
   → `client.RejectCall`. Ele só devolvia `Details: "Call rejected"` no
   resultado, e o grep casou com isso.
 - **Falso negativo** (não estavam na minha lista, também implementados):
@@ -12746,7 +12746,7 @@ default:
     })
 ```
 
-Nosso código: `pkg/infra/wa-noise/adapters/chat/messenger.go`, função
+Nosso código: `pkg/infra/noise/adapters/chat/messenger.go`, função
 `templateButtons`, ramo `default`.
 
 **Problema**: `string(int)` em Go converte para RUNE, não para decimal.
@@ -12782,7 +12782,7 @@ Mudar qualquer um dos dois mudaria o id que volta no clique de quem já tem
 a mensagem no aparelho.
 
 **Testes que travam** (todos em
-`pkg/infra/wa-noise/adapters/chat/messenger_template_test.go`):
+`pkg/infra/noise/adapters/chat/messenger_template_test.go`):
 
 - `TestChatMessengerAdapter_SendTemplate_AutomaticButtonNumbering` — assere
   o TEXTO `"1"` e `"2"`, e imprime os BYTES em caso de falha. Uma asserção
@@ -13726,7 +13726,7 @@ introduz no repo a família `waE2E.InteractiveMessage`/`NativeFlowMessage` —
 
 **Onde**: `pkg/domain/message.go` (DTOs), `pkg/application/contracts/interactive_messenger.go`
 (porta nova), `pkg/application/usecase/message/send_buttons.go`,
-`pkg/infra/wa-noise/adapters/chat/messenger_buttons.go`,
+`pkg/infra/noise/adapters/chat/messenger_buttons.go`,
 `pkg/presentation/http/handlers/handler_message_buttons.go`.
 
 **O defeito corrigido**: a rota validava `Phone` e `Body`, chamava
@@ -14065,7 +14065,7 @@ atualizada depois que o CAP-22 implementou `send_list` — ver **F150**, que
 inclusive corrige dois detalhes de contrato que esta entrada não tinha
 capturado (o embrulho `DocumentWithCaptionMessage`/`FutureProofMessage` e o
 nó BIZ `list(type="product_list", v="2")`). Controles negativos reexecutados
-nesta sessão (CAP-24) sobre `pkg/infra/wa-noise/adapters/chat/messenger_list.go`:
+nesta sessão (CAP-24) sobre `pkg/infra/noise/adapters/chat/messenger_list.go`:
 (1) `ListMessage` enviado sem o embrulho `DocumentWithCaptionMessage` — morde
 em `TestChatMessengerAdapter_SendList_Wrapper` ("a mensagem enviada nao tem
 DocumentWithCaptionMessage"); (2) nó BIZ removido do `SendRequestExtra` —
@@ -14118,9 +14118,9 @@ tem MAIS que as duas cadeias de fallback e os três descartes:
    native_flow`), mas com tag e atributos diferentes.
 
 Os dois foram confirmados como ainda válidos na versão vendorizada de
-`internal/wa-noise`: `waE2E.Message.DocumentWithCaptionMessage` e
+`internal/noise`: `waE2E.Message.DocumentWithCaptionMessage` e
 `waE2E.FutureProofMessage` existem tal qual no protobuf atual, e
-`send.RequestExtra.AdditionalNodes` (`internal/wa-noise/capabilities/send/types.go:66`)
+`send.RequestExtra.AdditionalNodes` (`internal/noise/capabilities/send/types.go:66`)
 é o mesmo mecanismo que o CAP-21 já usa. Nenhum dos dois estava enumerado no
 "contrato, enumerado" da F149 — ficam registrados aqui para quem reler a F149
 não repetir a omissão.
@@ -14136,7 +14136,7 @@ estão fechadas agora (buttons no CAP-21).
 **Achado incidental, não corrigido — `MessageComposerAdapter` órfão**:
 `SendListUseCase` era o ÚLTIMO consumidor de produção de
 `appport.MessageComposer`/`wachat.NewMessageComposerAdapter`
-(`pkg/infra/wa-noise/adapters/chat/composer.go`). Com a migração para
+(`pkg/infra/noise/adapters/chat/composer.go`). Com a migração para
 `appport.SimpleMessenger`, a variável `messageComposer` em
 `pkg/bootstrap/wiring_handlers.go` ficou sem uso e foi REMOVIDA (Go não
 compila var local não usada) — mas o adapter e a porta `port.MessageComposer`
@@ -14146,24 +14146,24 @@ escopo maior que esta capability. **Correção sugerida**: se nenhuma
 capability futura precisar de `port.MessageComposer` (o padrão
 "validated"/sem envio real que ele representa terminou com este bloco),
 remover `pkg/application/contracts/*message_composer*`,
-`pkg/infra/wa-noise/adapters/chat/composer.go` e o fake correspondente.
+`pkg/infra/noise/adapters/chat/composer.go` e o fake correspondente.
 
 **Status**: os dois itens de contrato — corrigidos (implementados desde já,
 travados por `TestChatMessengerAdapter_SendList_Wrapper` e
 `TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent`,
-`pkg/infra/wa-noise/adapters/chat/messenger_list_test.go`; controles
+`pkg/infra/noise/adapters/chat/messenger_list_test.go`; controles
 negativos reexecutados no CAP-24, ver a entrada de correção de STATUS da
 F149 acima). O achado do `MessageComposerAdapter` órfão: **corrigido em
 `3785655`** ("refactor(contracts): remove o andaime de MessageComposer, ja'
 orfao (F150)", HEAD desta sessão) — os cinco arquivos removidos, nome por
 nome no corpo do commit: `pkg/application/contracts/message_composer.go`,
-`pkg/infra/wa-noise/adapters/chat/composer.go`,
-`pkg/infra/wa-noise/adapters/chat/composer_test.go`,
+`pkg/infra/noise/adapters/chat/composer.go`,
+`pkg/infra/noise/adapters/chat/composer_test.go`,
 `pkg/presentation/http/handlers/handler_message_test.go`,
 `pkg/presentation/http/handlers/handler_interactive_test.go`, mais
 `contractsfake.MessageComposer`. Confirmado nesta sessão (CAP-24):
 `pkg/application/contracts/message_composer.go` e
-`pkg/infra/wa-noise/adapters/chat/composer.go` não existem mais na árvore
+`pkg/infra/noise/adapters/chat/composer.go` não existem mais na árvore
 (`ls` devolve "No such file or directory" para os dois). Esta entrada estava
 desatualizada — status "não corrigido" escrito antes do commit que fechou o
 achado, nunca revisado depois.
@@ -14407,15 +14407,15 @@ porta → adapter → use case, como as capabilities anteriores:
 
 - **Porta**: `pkg/application/contracts/phone_pairer.go` — `port.PhonePairer`
   (`SessionGuard` + `IsPaired` + `RequestPairingCode`).
-- **Adapter**: `pkg/infra/wa-noise/adapters/pairing/adapter.go`, com asserção
+- **Adapter**: `pkg/infra/noise/adapters/pairing/adapter.go`, com asserção
   de porta em tempo de compilação. Chama
   `client.PairPhone(ctx, phone, true, ClientChrome, "Chrome (Linux)")` — os
   três parâmetros fixos vindos VERBATIM de `41bc8e2^:handlers.go:733`, porque
   o servidor do WhatsApp valida o display name e responde 400 fora do
   conjunto comum.
 - **Seam**: `PairPhone` entrou em `waclient.Client`
-  (`pkg/infra/wa-noise/client/client.go`). A infra já existia — o cliente
-  vendorizado expõe `PairPhone` em `internal/wa-noise/core/pair-code.go:50`,
+  (`pkg/infra/noise/client/client.go`). A infra já existia — o cliente
+  vendorizado expõe `PairPhone` em `internal/noise/core/pair-code.go:50`,
   delegando a `capabilities/pairing/paircode.go:49`. O que faltava era a
   fiação, exatamente como o padrão deste repo previa.
 - **Use case**: `pkg/application/usecase/session/pair_phone.go`. Ordem:
@@ -14481,16 +14481,16 @@ Handler, todos pela **rota registrada** (`gorilla/mux`, `wiring_routes.go:53`)
    `linking_code`, `code`, `Details`, `Id`) que não podem aparecer. Mesmo
    estilo de `send_wire_contract_test.go`.
 
-Adapter — `pkg/infra/wa-noise/adapters/pairing/adapter_test.go`:
+Adapter — `pkg/infra/noise/adapters/pairing/adapter_test.go`:
 
 6. `TestRequestPairingCode_ReturnsCode` — caminho de sucesso uma camada
    abaixo, e os três parâmetros fixos do contrato com o servidor.
 7. `TestRequestPairingCode_RealPhoneRule` — o dublê aplica a regra REAL de
    validação de telefone (ARMADILHA 1). Os casos vêm do teste do próprio fork
-   (`internal/wa-noise/capabilities/pairing/paircode_test.go:89-91`).
+   (`internal/noise/capabilities/pairing/paircode_test.go:89-91`).
 8. `TestIsPaired_ReflectsLoggedIn`, `TestPhonePairer_SemSessao`.
 
-O dublê: `pkg/infra/wa-noise/client/testkit/fake_pairing.go` copia a regra de
+O dublê: `pkg/infra/noise/client/testkit/fake_pairing.go` copia a regra de
 `capabilities/pairing/paircode.go:57-62` (strip de não-dígitos, mínimo 7,
 recusa de prefixo `0`) e roda a validação **antes** de `PairPhoneFn`, para que
 nenhum caso de teste consiga desligá-la e ficar mais permissivo que a
@@ -14544,7 +14544,7 @@ do `testkit.Fake` desligada (ARMADILHA 1):
         adapter_test.go:100: telefone "0119999999" foi aceito; a producao o recusa
     --- FAIL: TestRequestPairingCode_RealPhoneRule/curto_demais (0.00s)
         adapter_test.go:100: telefone "12345" foi aceito; a producao o recusa
-FAIL	wa-api/pkg/infra/wa-noise/adapters/pairing	0.184s
+FAIL	wa-api/pkg/infra/noise/adapters/pairing	0.184s
 ```
 
 ### Efeito nos gates, e a deriva de baseline da F155
@@ -14556,10 +14556,10 @@ acrescentadas são as funções novas, nenhuma removida:
 ```
 > pkg/application/contracts/contractsfake.PhonePairer.IsPaired	EXCLUDED
 > pkg/application/contracts/contractsfake.PhonePairer.RequestPairingCode	EXCLUDED
-> pkg/infra/wa-noise/adapters/pairing.NewPhonePairerAdapter	EXCLUDED
-> pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.IsPaired	ELIGIBLE
-> pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter.RequestPairingCode	ELIGIBLE
-> pkg/infra/wa-noise/client/testkit.Fake.PairPhone	EXCLUDED
+> pkg/infra/noise/adapters/pairing.NewPhonePairerAdapter	EXCLUDED
+> pkg/infra/noise/adapters/pairing.PhonePairerAdapter.IsPaired	ELIGIBLE
+> pkg/infra/noise/adapters/pairing.PhonePairerAdapter.RequestPairingCode	ELIGIBLE
+> pkg/infra/noise/client/testkit.Fake.PairPhone	EXCLUDED
 ```
 
 `.log-coverage-baseline`: `min_func_coverage` 660 → **658**, `min_eligible`
@@ -14616,7 +14616,7 @@ timeout killing channel".
 leitura inicial deste achado apontava para `runPairing` consumindo, num
 único `for/switch`, um canal onde "success" e "timeout" chegariam os dois,
 na ordem errada. Essa leitura estava **incompleta**: o SDK vendorizado
-(`internal/wa-noise/core/qrchan.go:42-156`) garante, por um único
+(`internal/noise/core/qrchan.go:42-156`) garante, por um único
 `atomic.CompareAndSwapUint32(&qrc.closed, ...)` compartilhado entre
 `emitQRs` (timer local por código de QR) e `handleEvent` (eventos reais do
 websocket — `*events.PairSuccess`, `*events.Disconnected`), que **apenas UM
@@ -14629,10 +14629,10 @@ o CAS é descartado em silêncio dentro do SDK
 
 1. `emitQRs` — goroutine própria, dirigida por `time.After(timeout)` LOCAL,
    por código de QR (`qrCodeTimeout`/`qrCodeFirstTimeout`,
-   `internal/wa-noise/core/qrchan.go:71-101`).
+   `internal/noise/core/qrchan.go:71-101`).
 2. `handleEvent` — dirigida pelo `*events.PairSuccess` que chega de verdade
    pelo websocket, via `cli.dispatchEvent`
-   (`internal/wa-noise/core/client_events.go:217-232`, síncrono, na ordem de
+   (`internal/noise/core/client_events.go:217-232`, síncrono, na ordem de
    registro dos handlers).
 
 Se o timer local vence o CAS ANTES do `PairSuccess` real ser processado por
@@ -14646,12 +14646,12 @@ O que salva o diagnóstico é que o orchestrator já observa um SEGUNDO
 barramento, independente do canal de QR: `sess.Subscribe` (registrado em
 `Start`, ANTES do `sess.Pair` que cria o handler do canal de QR dentro do
 SDK). Esse barramento entrega `Connected`/`PairSuccess`
-(`pkg/infra/wa-noise/runtime/session/events.go`) e **não passa pelo CAS do
+(`pkg/infra/noise/runtime/session/events.go`) e **não passa pelo CAS do
 canal de QR** — ele é alimentado direto por `cli.dispatchEvent`, chamado de
 forma síncrona para TODOS os handlers registrados, incluindo o do
 orchestrator. `events.Connected` só é disparado depois de
 `cli.isLoggedIn.Store(true)`
-(`internal/wa-noise/core/connectionevents.go:162-206`,
+(`internal/noise/core/connectionevents.go:162-206`,
 `handleConnectSuccess`), então não há risco de ele disparar cedo demais e
 mascarar um timeout legítimo.
 
@@ -14761,7 +14761,7 @@ pacotes). `go run ./cmd/listroutes | sort | wc -l` = 107 (inalterado — esta
 capability não mexe em rotas HTTP). `gofmt -l` continua acusando os mesmos
 três arquivos pré-existentes da F133, nenhum novo.
 
-**Proibições respeitadas**: não editado `internal/wa-noise` (a causa raiz do
+**Proibições respeitadas**: não editado `internal/noise` (a causa raiz do
 SDK — a corrida entre `emitQRs` e `handleEvent` — é upstream; o fix mora
 inteiramente no orchestrator, que é o único lugar com visibilidade dos dois
 barramentos de evento). Não mexido em capabilities de mensagem.
@@ -18784,7 +18784,7 @@ Conferido byte a byte contra o histórico: o valor final montado não mudou.
 
 <!-- f-status: corrigido -->
 
-## F178 — `internal/wa-noise/protocol/argo/` tem cinco testes que NUNCA correram
+## F178 — `internal/noise/protocol/argo/` tem cinco testes que NUNCA correram
 
 **Data**: 2026-08-20. **Contexto**: [[F133]]. Depois de o gate se provar
 incompleto DUAS vezes no mesmo dia — fixtures de SQLite sem WAL ([[F161]]) e
@@ -18793,8 +18793,8 @@ formatação não verificada (F133) —, fiz a pergunta sistemática: **o que MA
 
 **Onde**: `Makefile`, variável `WACLIENT_TEST_PKGS` (linhas 329-344).
 
-**Problema**: 33 pacotes de `internal/wa-noise/` têm arquivo `_test.go`. A lista
-do gate tinha **32**. O que faltava era `./internal/wa-noise/protocol/argo/`,
+**Problema**: 33 pacotes de `internal/noise/` têm arquivo `_test.go`. A lista
+do gate tinha **32**. O que faltava era `./internal/noise/protocol/argo/`,
 com **cinco** testes que passam e que o `make check` nunca executou.
 
 **Teste que existe e não corre é pior que teste inexistente**: dá a impressão de
@@ -18814,7 +18814,7 @@ make -s -n waclient-test | tr ' ' '\n' | grep '^\./internal' | sed 's|/*$|/|' | 
 Com ele, o resultado é UM pacote, não quinze. **Não parseie Makefile à mão
 quando o `make` sabe expandir.**
 
-**Correção aplicada**: `./internal/wa-noise/protocol/argo/` acrescentado ao
+**Correção aplicada**: `./internal/noise/protocol/argo/` acrescentado ao
 `WACLIENT_TEST_PKGS`. Conferido que agora nenhum pacote com teste fica de fora
 (`comm` entre as duas listas devolve vazio).
 
@@ -18825,7 +18825,7 @@ o meu `grep` cortou a saída antes do resultado. Refeito com captura completa:
 $ make waclient-test   # com um t.Fatal plantado em argo_test.go
 EXIT=2
     argo_test.go:6: CN: prova que o gate roda argo
-FAIL	wa-api/internal/wa-noise/protocol/argo	0.150s
+FAIL	wa-api/internal/noise/protocol/argo	0.150s
 ```
 
 Antes desta correção, esse mesmo teste quebrado teria passado despercebido.
@@ -19118,9 +19118,9 @@ custo ANTES de escolher a forma.
 
 | peça | onde |
 |---|---|
-| `GetPNForLID` (adapter) | `pkg/infra/wa-noise/adapters/user/adapter.go:119` |
-| `CachedLIDMap.GetPNForLID` (SDK) | `internal/wa-noise/persistence/store/sqlstore/lidmap.go:123` |
-| **resolução em LOTE com cache, já em uso** | `pkg/infra/wa-noise/adapters/user/blocklist.go:104-114` (`getCachedPNForLID`) |
+| `GetPNForLID` (adapter) | `pkg/infra/noise/adapters/user/adapter.go:119` |
+| `CachedLIDMap.GetPNForLID` (SDK) | `internal/noise/persistence/store/sqlstore/lidmap.go:123` |
+| **resolução em LOTE com cache, já em uso** | `pkg/infra/noise/adapters/user/blocklist.go:104-114` (`getCachedPNForLID`) |
 
 O `blocklist.go` já resolve LIDs em lote com cache — ou seja, **o padrão que a
 correção da listagem precisa já está escrito neste repositório**, e o cuidado da
@@ -20080,7 +20080,7 @@ invólucros de compatibilidade: `viewOnceMessage`, `viewOnceMessageV2`,
 
 **Medido**: a biblioteca vendorizada **não desembrulha nenhum deles** antes de
 entregar o evento. O único desembrulho que ela faz é o de `DeviceSentMessage`
-(`internal/wa-noise/capabilities/message/protocol.go:75`).
+(`internal/noise/capabilities/message/protocol.go:75`).
 
 Consequência: uma mensagem embrulhada chega ao classificador **com o invólucro**,
 nenhum ramo casa, e ela é descartada — o mecanismo da [[F184]], por uma via
@@ -20109,7 +20109,7 @@ própria pedia.
 
 **O que eu escrevi**: "a biblioteca vendorizada não desembrulha nenhum deles".
 **Falso.** `events.Message.UnwrapRaw()`
-(`internal/wa-noise/protocol/types/events/message.go:119-162`) desembrulha
+(`internal/noise/protocol/types/events/message.go:119-162`) desembrulha
 **nove** invólucros antes de o evento chegar a nós: `deviceSentMessage`,
 `botInvokeMessage`, `ephemeralMessage`, `viewOnceMessage`, `viewOnceMessageV2`,
 `viewOnceMessageV2Extension`, `lottieStickerMessage`,
@@ -21129,7 +21129,7 @@ nosso código: **zero acertos** para qualquer um dos três. Não os tratamos, n�
 os gravamos, não os despachamos por webhook.
 
 A parte que é da biblioteca — não saber CRIAR labels — está registada em
-`internal/wa-noise/HOUSEKEEP.md`, entrada LIB-01. **Esta é a metade que é
+`internal/noise/HOUSEKEEP.md`, entrada LIB-01. **Esta é a metade que é
 nossa**: os eventos chegam e são deitados fora.
 
 É a mesma forma da [[F184]], noutra família: capacidade que existe a montante e
@@ -21427,10 +21427,10 @@ acréscimos são métodos de adaptador, e os oito pacotes de adaptador estão TO
 a 0,0% de cobertura de função:
 
 ```
-pkg/infra/wa-noise/adapters/chat        22 elegíveis   0 cobertas   0.0%
-pkg/infra/wa-noise/adapters/group       18            0            0.0%
-pkg/infra/wa-noise/adapters/misc        19            0            0.0%
-pkg/infra/wa-noise/adapters/user        16            0            0.0%
+pkg/infra/noise/adapters/chat        22 elegíveis   0 cobertas   0.0%
+pkg/infra/noise/adapters/group       18            0            0.0%
+pkg/infra/noise/adapters/misc        19            0            0.0%
+pkg/infra/noise/adapters/user        16            0            0.0%
 pairing / presence / profile / sessioncount    idem   0            0.0%
 ```
 
@@ -21487,7 +21487,7 @@ PROJEÇÃO após a paridade 453/716 = 63,3%   <- +22 métodos de adaptador que
 
 **(a) excluir o extrato de adaptadores do denominador.** O mecanismo JÁ existe e
 JÁ foi usado três vezes: regra X5, ficheiro `.logcov-exclude`, que hoje exclui
-`cmd/`, `contractsfake/`, `internal/wa-noise/` e `client/testkit/` — o
+`cmd/`, `contractsfake/`, `internal/noise/` e `client/testkit/` — o
 argumento escrito lá é literalmente "não logam por definição, e contar seus ~N
 métodos no denominador só dilui o percentual sem significar nada sobre o
 repositório real". Custo: uma linha. Efeito: o gate passa a exigir 74,4% em vez
@@ -21522,7 +21522,7 @@ silenciosa.
 O canal aprovou (a) e o Lucas confirmou-a diretamente. Aplicado:
 
 ```
-.logcov-exclude   + pkg/infra/wa-noise/adapters/   (razão de layering escrita lá)
+.logcov-exclude   + pkg/infra/noise/adapters/   (razão de layering escrita lá)
 baseline          min_eligible          676 -> 609
                   min_func_coverage     667 -> 744   <- SOBE
                   min_errpath_coverage  867 -> 868
@@ -21565,7 +21565,7 @@ adapters/misc   42,1% -> 81,0% -> 92,1%
 global           86,0% -> 86,5% -> 86,7%   (piso 867)  make check EXIT=0
 ```
 
-Testes: `pkg/infra/wa-noise/adapters/misc/adapter_newsletter_test.go`
+Testes: `pkg/infra/noise/adapters/misc/adapter_newsletter_test.go`
 (`SemSessaoRecusaAntesDoSDK`, `JIDChegaConvertidoAoSDK`,
 `ConviteNaoPassaPorToJID`, `PropagaFalhaDoSDK`, `CreatePassaOsCamposDeCriacao`,
 `ServerIDDeTextoInvalidoVaiZero`, `CaminhoDeSucessoDasOnze`,
@@ -21618,7 +21618,7 @@ o primeiro:
 **Causa**, confirmada no código: há DOIS caminhos que despacham `QR` para o
 mesmo código.
 
-1. `pkg/infra/wa-noise/runtime/session/events.go:54` traduz o `*events.QR` cru
+1. `pkg/infra/noise/runtime/session/events.go:54` traduz o `*events.QR` cru
    do SDK — que carrega a lista INTEIRA de códigos — para
    `SessionEventKindQR` com `Codes[0]`, e `orchestrator.go:666`
    (`translateStatusEvent`) despacha-o como `"QR"`.
@@ -21707,7 +21707,7 @@ código e 20s para os demais", e
 primeiro código vale 60s, e assumir 20 mostraria expirado o que ainda é
 válido").
 
-Ambos estão **errados hoje**. `internal/wa-noise/core/pair_constants.go:23`
+Ambos estão **errados hoje**. `internal/noise/core/pair_constants.go:23`
 tem `qrCodeFirstTimeout = qrCodeTimeout`, ou seja 20s, com comentário a dizer
 que a igualdade é intencional. E a medição confirma: os seis códigos chegaram
 em intervalos de 20s, incluindo o primeiro — 03:24:40, 03:25:00, 03:25:20,
@@ -21732,7 +21732,7 @@ códigos, o primeiro inclusive. Ambos guardam a história — já estiveram erra
 nas duas direções — porque saber que o número mudou é o que impede a terceira.
 
 **A trava**: `TestQRPrimeiroCodigoTemAMesmaJanelaQueOsDemais`, em
-`internal/wa-noise/core/pair_constants_test.go`. Não defende um VALOR, defende
+`internal/noise/core/pair_constants_test.go`. Não defende um VALOR, defende
 a IGUALDADE `qrCodeFirstTimeout == qrCodeTimeout`, que é o que os comentários
 afirmam. Se alguém voltar a dar janela própria ao primeiro código, o teste
 falha e a mensagem NOMEIA os dois ficheiros a atualizar — que é exatamente o
@@ -21763,7 +21763,7 @@ GET /session/status  -> 400 {"code":"no_session","message":"no session"}
 GET /session/connect -> 200 {"code":200,"data":{"status":"connecting"}}
 ```
 
-**Causa**: `pkg/infra/wa-noise/runtime/session/guard.go:20` — `EnsureSession`
+**Causa**: `pkg/infra/noise/runtime/session/guard.go:20` — `EnsureSession`
 exige um cliente VIVO no registry, e uma sessão desconectada não tem nenhum.
 `connect` não passa pela guarda, por ser justamente quem cria o cliente.
 
@@ -21955,7 +21955,7 @@ Prova de que não há caminho até ao SDK, e não apenas de que não o vi:
 1. Os dois structs só têm `appport.SessionGuard` e `appport.Logger` — nenhuma
    outra porta. Varri `pkg/application/usecase/` inteiro à procura de use cases
    com essa assinatura e são EXATAMENTE estes dois.
-2. `SetStatusMessage` não existe em `pkg/infra/wa-noise/client/client.go` (a
+2. `SetStatusMessage` não existe em `pkg/infra/noise/client/client.go` (a
    fachada), nem em nenhum adaptador. `grep -rn SetStatusMessage
    pkg/application/contracts pkg/infra` devolve zero fora do próprio use case.
 3. `DownloadHistorySync` e `RequestHistorySync` não são referidos em `pkg/`.
@@ -22305,8 +22305,8 @@ Acrescentar a guarda de tipo de JID fez falharem testes de handler que passavam
 **Onde**:
 - `pkg/application/contracts/contractsfake/chat.go:52` — `ResolveQualifiedJID`
   do dublê devolve `domain.JID(raw)`, sem validar nada;
-- `pkg/infra/wa-noise/mapping/jid/resolver.go:42` — a produção RECUSA:
-  `if jid.User == "" { return "", fmt.Errorf("wanoise: JID %q has no server", raw) }`.
+- `pkg/infra/noise/mapping/jid/resolver.go:42` — a produção RECUSA:
+  `if jid.User == "" { return "", fmt.Errorf("noise: JID %q has no server", raw) }`.
 
 O comentário da produção diz, com todas as letras, por que a recusa existe:
 
@@ -22517,7 +22517,7 @@ um erro tipado para esta família. Precisa de decisão, porque muda o contrato d
 `info query`.
 
 **Conjunto afetado, enumerado em 2026-08-21** (a entrada dizia "não verificado"):
-**66 chamadas de info query em 19 ficheiros** do `internal/wa-noise/`, incluindo
+**66 chamadas de info query em 19 ficheiros** do `internal/noise/`, incluindo
 `user_transport.go`, `group.go`/`group_transport.go`, `newsletter_transport.go`,
 `privacysettings.go`, `media_transport.go`, `broadcast.go`, `push.go`,
 `prekeys_transport.go`, `tctoken_transport.go`, `appstate_transport.go`. Ou
@@ -22528,7 +22528,7 @@ fronteira, nunca rota a rota.
 **E a entrada estava errada sobre a fragilidade.** Ela diz que "o status vem no
 texto do erro, o que é frágil de casar". Não é preciso casar texto: a
 biblioteca já expõe **treze sentinelas tipadas** em
-`internal/wa-noise/core/errors.go:194-208` (`ErrIQBadRequest`,
+`internal/noise/core/errors.go:194-208` (`ErrIQBadRequest`,
 `ErrIQNotAuthorized`, `ErrIQForbidden`, `ErrIQNotFound`, `ErrIQNotAllowed`,
 `ErrIQNotAcceptable`, `ErrIQGone`, `ErrIQResourceLimit`, `ErrIQLocked`,
 `ErrIQRateOverLimit`, `ErrIQInternalServerError`, `ErrIQServiceUnavailable`,
@@ -22581,11 +22581,11 @@ humanos.** Não vale a pena tentar tornar a prosa classificável.
 - `apperr`: três categorias novas — `CategoryUpstreamRejected` (422),
   `CategoryForbidden` (403), `CategoryRateLimited` (429), com o porquê de cada
   uma escrito onde ela é declarada.
-- `internal/wa-noise/main.go`: as catorze sentinelas de info query e o tipo
+- `internal/noise/main.go`: as catorze sentinelas de info query e o tipo
   `IQError` reexportados pela fachada do fork. É a forma sancionada — nenhum
   consumidor passa a importar `core/`, e o `waclient-facade-check` continua
   verde.
-- `pkg/infra/wa-noise/client/iqerror.go`: `ClassifyIQ(err)`. Vive aqui porque é
+- `pkg/infra/noise/client/iqerror.go`: `ClassifyIQ(err)`. Vive aqui porque é
   o único sítio que a ADR-001 autoriza a ver as sentinelas.
 - Ligado em `adapters/user/blocklist.go`, nos três pontos que fazem info query.
 
@@ -22626,11 +22626,11 @@ mentira, na direção oposta. E separa recusa de silêncio: `ErrIQTimedOut` **n�
 é recusa, porque o servidor não disse nada. Isso é a F209, não esta.
 
 **Cobertura completa (decisão 46=a do canal)**: wrappers explícitos no
-`RealClient`, em `pkg/infra/wa-noise/client/realclient_wrappers.go`. São os 50
+`RealClient`, em `pkg/infra/noise/client/realclient_wrappers.go`. São os 50
 métodos da interface `Client` que devolvem erro, gerados a partir dela, cada um
 `return errmap.ClassifyIQ(r.Client.X(...))`.
 
-Foi preciso porque `RealClient` **promovia** os métodos de `*wanoise.Client` em
+Foi preciso porque `RealClient` **promovia** os métodos de `*noise.Client` em
 vez de os escrever, e promoção não tem onde se intercalar. As alternativas
 descartadas pelo canal: chamar `ClassifyIQ` em cada adaptador (~63 sítios, e o
 próximo adaptador nasce sem a chamada) e classificar no `RespondJSON` (ponto
@@ -22669,11 +22669,11 @@ sem os wrappers    eligible 625, func_coverage 74,7%
 
 5,5 pontos percentuais de **diluição**, não de regressão: nenhum código que
 registava deixou de o fazer. Mantê-los no denominador faria o gate punir esta
-própria correção. `pkg/infra/wa-noise/client/` entrou no `.logcov-exclude` com
+própria correção. `pkg/infra/noise/client/` entrou no `.logcov-exclude` com
 a mesma justificação de arquitetura que os adaptadores já tinham — a fachada
 não é ponto de instrumentação.
 
-**E `ClassifyIQ` mudou-se para `pkg/infra/wa-noise/errmap/` para CONTINUAR
+**E `ClassifyIQ` mudou-se para `pkg/infra/noise/errmap/` para CONTINUAR
 medida.** A exclusão é por pacote e não distingue ficheiros; deixá-la em
 `client/` tirá-la-ia do denominador junto com a delegação. Ela tem lógica —
 decide categoria e regista a decisão — e é o oposto de delegação. A separação
@@ -22737,7 +22737,7 @@ etiquetas. Não estamos a divergir da referência — estamos a fazer o que ela
 faz.
 
 **2. A biblioteca já descarta snapshot mais velho.**
-`internal/wa-noise/capabilities/appstatesync/recovery.go:47`:
+`internal/noise/capabilities/appstatesync/recovery.go:47`:
 
 ```go
 } else if currentVersion >= version {
@@ -23033,7 +23033,7 @@ o status passaria com a chamada de rede ainda a acontecer.
 **Status**: **CORRIGIDO** em 2026-08-21, com autorização explícita do humano
 ("sim, pode corrigir").
 
-**Onde estava, exatamente**: `pkg/infra/wa-noise/mapping/jid/parse.go:16-17`. Sem
+**Onde estava, exatamente**: `pkg/infra/noise/mapping/jid/parse.go:16-17`. Sem
 `@`, `ParseJID` colava o servidor por omissão **sem olhar para a string**. A
 leniência em si é deliberada (F203, decisão 35=a: um campo chamado `Phone` que
 exige `@s.whatsapp.net` é contrato surpreendente); o que não era deliberado é
@@ -23415,7 +23415,7 @@ ter sido rediagnosticada três vezes é histórico legítimo.
 (pedido: "so faltaria realmente entender como funciona o HSCROLL_CARDS,
 ALBUM_IMAGE e PIXCARD").
 
-**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`
+**Onde**: `pkg/infra/noise/adapters/chat/messenger_carousel.go`
 (`SendCarousel`, `buildCarouselCard`), commit `6d4c050`.
 
 **Medição em campo** — sessão `aulapratica` (5516988263575) para 554192421234,
@@ -23580,7 +23580,7 @@ E a tabela EXISTE — só que noutro ficheiro:
 
 ```
 $ sqlite3 'file:/tmp/wa-live-2VRX/dbdata/main.db?mode=ro' \
-    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'wanoise%';"
+    "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'noise%';"
 ...
 wanoise_message_secrets      <- está aqui
 ```
@@ -23597,7 +23597,7 @@ o defeito não é só a tabela errada, é a ORDEM que faz a falha da primeira
 operação matar a segunda.
 
 **Correção sugerida**: apontar o `DELETE` dos segredos ao handle do store da
-wa-noise (ou removê-lo daqui e deixar o trim de segredos para quem é dono
+noise (ou removê-lo daqui e deixar o trim de segredos para quem é dono
 daquela base). Em qualquer dos casos, o trim de `message_history` **não pode**
 depender do sucesso do trim de segredos — são bases distintas e falhas
 independentes.
@@ -23724,7 +23724,7 @@ vale a pena adivinhar variantes dele.
 **Contexto**: achado de lado, ao investigar as mensagens "no session found for"
 durante a matriz de sondas de carrossel (F216). Não é escopo dessa tarefa.
 
-**Onde**: `internal/wa-noise/capabilities/retry/handle.go:112` (erro),
+**Onde**: `internal/noise/capabilities/retry/handle.go:112` (erro),
 `recent.go:103` (`GetForRetry`), `constants.go:51`
 (`RecentMessagesSize = 256`), `core/retry_transport.go:57`
 (`UseMessageStore() -> Client.UseRetryMessageStore`).
@@ -23751,8 +23751,8 @@ entradas. Há um caminho durável — `AddRecent` grava no store quando
 
 ```
 $ grep -rn "UseRetryMessageStore" --include="*.go" pkg/ internal/ | grep -v _test
-internal/wa-noise/capabilities/retry/transport.go:53:  // comentário
-internal/wa-noise/capabilities/retry/constants.go:31:  // comentário
+internal/noise/capabilities/retry/transport.go:53:  // comentário
+internal/noise/capabilities/retry/constants.go:31:  // comentário
 ```
 
 **Só comentários. O campo nunca é atribuído `true` em lado nenhum.** Confirmado
@@ -23816,7 +23816,7 @@ qualquer ambiente com banco de dados — o `DeleteOldOutgoingEvents` expurga
 tudo com mais de 7 dias, throttled a cada 12h.
 
 **Correção aplicada**: `UseRetryMessageStore = true` em ambos os callbacks de
-construção do cliente em `pkg/infra/wa-noise/runtime/session/provider.go`
+construção do cliente em `pkg/infra/noise/runtime/session/provider.go`
 (linhas 64 e 78).
 
 **Testes que travam**:
@@ -23862,7 +23862,7 @@ passou a ser escrito.
 verificam que `UseRetryMessageStore` fica `true` nos dois caminhos de
 construção — provam a FIAÇÃO, não o comportamento durável. O comportamento em
 si já tem teste do lado da biblioteca
-(`internal/wa-noise/capabilities/retry/recent_test.go:309`, o caminho terminal
+(`internal/noise/capabilities/retry/recent_test.go:309`, o caminho terminal
 com `UseMessageStore`). A divisão é defensável, mas ninguém deve ler os dois
 testes daqui como prova de que o reenvio sobrevive a um reinício — quem prova
 isso é a verificação em campo acima, e ela não é um teste que corra sozinho.
@@ -23874,7 +23874,7 @@ isso é a verificação em campo acima, e ela não é um teste que corra sozinho
 **Data**: 2026-08-22
 **Contexto**: mesma investigação da F214.
 
-**Onde**: `internal/wa-noise/capabilities/message/decrypt_session.go:102`
+**Onde**: `internal/noise/capabilities/message/decrypt_session.go:102`
 (`DecryptDM`, ramo `isPreKey == false`, linha 142).
 
 **Evidência medida**. Em 11 envios da matriz de sondas, 5 falhas de decifragem
@@ -24038,7 +24038,7 @@ em campo depende da confirmação da hipótese `IsFromMe`, que permanece aberta.
 **Contexto**: achado de lado, ao fotografar a matriz de 6 direções da F216. Não
 era o que a matriz procurava.
 
-**Onde**: `pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`,
+**Onde**: `pkg/infra/noise/adapters/chat/messenger_carousel.go`,
 `buildCarouselCard` — o ramo `if card.Title != ""` que preenche
 `waE2E.InteractiveMessage_Header.Title`. Exposto na rota como o campo `Title`
 de cada cartão (`domain.CarouselCard.Title`).
@@ -24075,7 +24075,7 @@ que nunca exista cartão cuja única informação esteja no campo que o iOS igno
   na documentação do handler, com referência à F217
 - `pkg/presentation/http/devui/assets/operacoes.js`: rótulo do campo Cards
   diz "Title só aparece no Android"
-- `pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`: comentário
+- `pkg/infra/noise/adapters/chat/messenger_carousel.go`: comentário
   inline no `buildCarouselCard`, junto ao `header.Title`
 
 Não há teste a acrescentar: a mudança é só comentário e string de interface,
@@ -24574,10 +24574,10 @@ referenciado por nenhum ficheiro do repo). A minha worktree de teste, em
 `aberto` depois de a capability do carrossel estar entregue, o que fazia a
 lista mentir — o defeito que a F211 apanhou.
 
-**Onde**: `internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.proto`,
+**Onde**: `internal/noise/protocol/proto/waE2E/WAWebProtobufsE2E.proto`,
 `InteractiveMessage.CarouselMessage.CarouselCardType`, valor `ALBUM_IMAGE = 2`.
 Exposto no domínio como `domain.CarouselAlbumImage` e montado em
-`pkg/infra/wa-noise/adapters/chat/messenger_carousel.go`.
+`pkg/infra/noise/adapters/chat/messenger_carousel.go`.
 
 **Medição em campo** — três variantes, todas fotografadas nos dois telemóveis:
 
@@ -24610,7 +24610,7 @@ considerados. O que NÃO existe é exposição pública: a rota
 
 **Se alguém reabrir isto**: o caminho é implementar `MessageAssociation` /
 `MEDIA_ALBUM` como capability própria de envio de álbum, não mexer no
-carrossel. Comece por `internal/wa-noise/.../waE2E` à procura de
+carrossel. Comece por `internal/noise/.../waE2E` à procura de
 `MessageAssociation`, e leia a F216 para a metodologia — sem fotografia dos
 dois lados não há resultado, porque o `200` mente.
 
@@ -24676,7 +24676,7 @@ O custo de o deixar lá é maior que o de o corrigir.
 datadir NOVO e duas sessões pareadas de raiz.
 
 **Onde**: caminho de `SendAppState`, visível em
-`pkg/infra/wa-noise/adapters/misc/adapter.go` (as três capabilities) e no
+`pkg/infra/noise/adapters/misc/adapter.go` (as três capabilities) e no
 tratamento de erro que sobe até ao handler.
 
 **Medição em campo** — três rotas, mesma sessão, mesmo instante:
@@ -24730,7 +24730,7 @@ sem saber se a existente falha sempre ou só neste estado.
 
 **O que foi feito**: `errmap.ClassifyAppState` traduz o erro de app-state com
 `code="409"` em `apperr.CategoryConflict` → HTTP 409. A função vive em
-`pkg/infra/wa-noise/errmap/appstate.go`, ao lado de `ClassifyIQ`, e é chamada
+`pkg/infra/noise/errmap/appstate.go`, ao lado de `ClassifyIQ`, e é chamada
 em `realclient_wrappers.go:SendAppState` encadeada após `ClassifyIQ`.
 
 Apenas o conflito 409 é traduzido. Dois guardas: `errors.Is(err,
@@ -24746,7 +24746,7 @@ app-state. Se a serialização mudar, o match quebra em silêncio. A alternativa
 
 **Testes** (17 total, todos via rota registrada com `mux.Router`):
 
-- `pkg/infra/wa-noise/errmap/appstate_test.go` — 5 testes unitários:
+- `pkg/infra/noise/errmap/appstate_test.go` — 5 testes unitários:
   `ConflictBecomesA409`, `NonConflictStaysUnchanged`, `PassthroughCases`,
   `Code409WithoutErrUpdateIsIgnored`, `BareErrUpdateIsNotConflict`.
 - `pkg/presentation/http/handlers/handler_appstate_conflict_test.go` — 12
@@ -24770,9 +24770,9 @@ ser exercitado.
 **`make check`**: passou (exit 0, zero FAILs, GOFLAGS=-p=2 GOMAXPROCS=2).
 
 **Arquivos tocados**:
-- `pkg/infra/wa-noise/errmap/appstate.go` — novo classificador
-- `pkg/infra/wa-noise/errmap/appstate_test.go` — 5 testes unitários
-- `pkg/infra/wa-noise/client/realclient_wrappers.go:211` — encadeamento
+- `pkg/infra/noise/errmap/appstate.go` — novo classificador
+- `pkg/infra/noise/errmap/appstate_test.go` — 5 testes unitários
+- `pkg/infra/noise/client/realclient_wrappers.go:211` — encadeamento
 - `pkg/presentation/http/handlers/handler_appstate_conflict_test.go` — 12
   testes de rota
 
@@ -24786,7 +24786,7 @@ primeiro.
 
 ### Parte (2) CORRIGIDA e VERIFICADA EM CAMPO 2026-08-24
 
-`pkg/infra/wa-noise/errmap/appstate.go`, `ClassifyAppState`. **Dois guardas**,
+`pkg/infra/noise/errmap/appstate.go`, `ClassifyAppState`. **Dois guardas**,
 não um: `errors.Is(err, appstatesync.ErrUpdate)` restringe a erros de
 app-state, e só então o `code="409"` decide. A comparação de texto decide
 apenas o CÓDIGO, nunca se é erro de app-state.
@@ -24867,7 +24867,7 @@ histórico grande, e "basta forçar um full sync".
 **O que resta como hipótese, NÃO medido**: o cálculo do `generateSnapshotMAC`
 diverge do que o servidor espera para este tipo de patch — na ordenação das
 mutações, no LTHash acumulado, ou na composição do MAC. Isso é defeito do
-FORK, não da nossa camada, e cai em `internal/wa-noise/protocol/appstate/`.
+FORK, não da nossa camada, e cai em `internal/noise/protocol/appstate/`.
 
 **Próximo passo, quando for a vez**: comparar a implementação de
 `generateSnapshotMAC` e do LTHash com a referência (Baileys tem o equivalente
@@ -24921,7 +24921,7 @@ Três saídas, e a escolha foi a terceira:
 
 | saída | avaliação |
 |---|---|
-| **(1) corrigir o MAC no fork** | a correta. Exige investigação com medição em `internal/wa-noise/protocol/appstate/`, não uma sessão de implementação. |
+| **(1) corrigir o MAC no fork** | a correta. Exige investigação com medição em `internal/noise/protocol/appstate/`, não uma sessão de implementação. |
 | **(2) desligar `validateMACs` para `regular_high`** | **recusada.** O parâmetro existe (`decode.go:29`) e está fixo em `true` (`fetch.go:87`), logo era fácil. Mas a verificação existe para detetar exatamente isto: desligá-la troca um erro visível por corrupção silenciosa do estado local. |
 | **(3) aceitar e documentar** | **escolhida agora.** `mute` e `star` ficam indisponíveis, com 409 honesto; `pin` funciona. |
 
@@ -24944,7 +24944,7 @@ do repositório.
 ### INVESTIGAÇÃO 2026-08-24 — o que foi eliminado, e o que sobra
 
 Sondas descartáveis instrumentaram `validateSnapshotMAC` e `decodeSnapshot`
-(`internal/wa-noise/protocol/appstate/decode.go`), e expuseram `FetchAppState`
+(`internal/noise/protocol/appstate/decode.go`), e expuseram `FetchAppState`
 por rota para disparar os dois tipos. Tudo revertido depois de medir.
 
 **Comparação lado a lado, MESMA sessão, MESMO código, no mesmo instante:**
@@ -25090,13 +25090,13 @@ dados individualmente autenticados.
 a primeira, que demonstravelmente produz falsos negativos.
 
 **Arquivos tocados no fork**:
-- `internal/wa-noise/protocol/appstate/decode.go` — `strictSnapshotMAC` em
+- `internal/noise/protocol/appstate/decode.go` — `strictSnapshotMAC` em
   `DecodePatches`, `decodeSnapshot`, `validatePatch`
-- `internal/wa-noise/capabilities/appstatesync/transport.go` —
+- `internal/noise/capabilities/appstatesync/transport.go` —
   `StrictSnapshotMAC()` na interface
-- `internal/wa-noise/capabilities/appstatesync/fetch.go` — passa o flag
-- `internal/wa-noise/core/client.go` — campo `StrictAppStateSnapshotMAC`
-- `internal/wa-noise/core/appstate_transport.go` — espelha o campo
+- `internal/noise/capabilities/appstatesync/fetch.go` — passa o flag
+- `internal/noise/core/client.go` — campo `StrictAppStateSnapshotMAC`
+- `internal/noise/core/appstate_transport.go` — espelha o campo
 
 **Testes**: 4 novos + controle negativo executado (ver `PATCHES.md`, entrada
 F223).
@@ -25469,7 +25469,7 @@ DIVERGEM entre si, e duas delas são NEGATIVAS — o que é informação, pela r
 do projeto:
 
 **whatsmeow** (o nosso upstream) — **não resolve**. `grep -riE "func.*[Ff]orward"`
-sobre `internal/wa-noise/` fora de `proto/` devolve **zero** funções. A
+sobre `internal/noise/` fora de `proto/` devolve **zero** funções. A
 biblioteca só expõe os campos `ContextInfo.IsForwarded` e
 `ContextInfo.ForwardingScore` (`waE2E/...pb.go:9022-9023`). Quem quiser
 encaminhar monta a mensagem e marca o contexto.
@@ -25734,7 +25734,7 @@ wire). Se o payload diz `@s.whatsapp.net` mas o wire espera `@lid`, a chave
 derivada difere e o MAC falha.
 
 **Correção aplicada**: `resolvePollSender` em
-`pkg/infra/wa-noise/adapters/chat/messenger.go` — resolução em 3 caminhos:
+`pkg/infra/noise/adapters/chat/messenger.go` — resolução em 3 caminhos:
 
 1. **History lookup** — lê `sender_jid` da `message_history` (forma do wire,
    autoritativa). Funciona para enquetes RECEBIDAS.
@@ -25752,7 +25752,7 @@ injetado via `WithPollSenderLookup` em `pkg/bootstrap/wiring_handlers.go`.
 confirmação de contagem.**
 
 **Testes que travam esta correção**
-(`pkg/infra/wa-noise/adapters/chat/messenger_poll_vote_sender_test.go`):
+(`pkg/infra/noise/adapters/chat/messenger_poll_vote_sender_test.go`):
 
 | # | Teste | O que trava |
 |---|---|---|
@@ -25843,8 +25843,8 @@ teste próprio para ele.
 **Onde**:
 - `pkg/bootstrap/wiring_routes.go:58` — `/user/status` → `ch.Session.SetStatusMessage`
 - `pkg/bootstrap/wiring_routes.go:234` — `/status/set/text` → **o mesmo handler**
-- `pkg/infra/wa-noise/adapters/misc/adapter.go:408-413` — "publishes the account status ("about") text"
-- `internal/wa-noise/core/user.go:61-63` — o upstream é explícito:
+- `pkg/infra/noise/adapters/misc/adapter.go:408-413` — "publishes the account status ("about") text"
+- `internal/noise/core/user.go:61-63` — o upstream é explícito:
 
 ```go
 // SetStatusMessage updates the current user's status text, which is shown in
@@ -26086,7 +26086,7 @@ Procurar outros `time.Duration` com tag JSON no repositório — o defeito
 repete-se onde o padrão se repetir.
 
 **Varredura de irmãos**: `time.Duration` com tag JSON no repositório:
-- `internal/wa-headless/engine/deadline.go` — config interno, nomes não
+- `internal/headless/engine/deadline.go` — config interno, nomes não
   mentem sobre unidade; é consumido por código que sabe que é nanosegundos.
 - `pkg/domain/mute.go:16` — `MuteDuration *time.Duration` com tag
   `mute_duration` — campo de ENTRADA (request), nome não anuncia segundos.
@@ -26118,7 +26118,7 @@ Controlo negativo executado — mutar `int64(dur.Seconds())` para `int64(dur)`:
 
 **Data/contexto**: 2026-08-25, mesma sessão de testes.
 
-**Onde**: `pkg/infra/wa-noise/adapters/misc/adapter.go` — todos os métodos de
+**Onde**: `pkg/infra/noise/adapters/misc/adapter.go` — todos os métodos de
 newsletter.
 
 **Problema**: o `MiscAdapter` usa
@@ -26178,7 +26178,7 @@ algum não puser prazo evita que o próximo nasça igual.
 
 **Status**: **corrigido**. `context.WithTimeout(ctx, waclient.RequestTimeout)` +
 `defer cancel()` aplicado aos onze métodos de newsletter em
-`pkg/infra/wa-noise/adapters/misc/adapter.go`.
+`pkg/infra/noise/adapters/misc/adapter.go`.
 
 Testes que travam:
 - `TestNewsletterAdapter_DeadlineAppliedToAllEleven` — asserção anti-regressão
@@ -26343,7 +26343,7 @@ Relatório completo da via pública guardado em
 
 ## Parte (a) — CORRIGIDA 2026-08-25, verificada em campo
 
-`pkg/infra/wa-noise/errmap/newsletter.go` classifica o `405` do GraphQL como
+`pkg/infra/noise/errmap/newsletter.go` classifica o `405` do GraphQL como
 `CategoryForbidden`, com código `newsletter_admin_cannot_unfollow`.
 
 **Melhor que o precedente da F223**: casa por CAMPO TIPADO
@@ -26403,7 +26403,7 @@ diferente. A rota usa `DELETE` (não POST) e está documentada em
 
 ### Testes que travam as três operações
 
-**Camada de capability** (`internal/wa-noise/capabilities/newsletter/`):
+**Camada de capability** (`internal/noise/capabilities/newsletter/`):
 - `TestDemoteAdminSendsCorrectMutation` — query ID + payload
 - `TestDemoteAdminPropagatesError` — erro propaga
 - `TestChangeOwnerSendsCorrectMutation` — query ID + payload
@@ -26427,7 +26427,7 @@ diferente. A rota usa `DELETE` (não POST) e está documentada em
 - `TestNewsletterOps_ChangeOwner_RequiresJIDAndUserJID`
 - `TestNewsletterOps_Delete_RequiresJIDAndConfirmJID`
 
-**Camada de fake** (`pkg/infra/wa-noise/client/testkit/`):
+**Camada de fake** (`pkg/infra/noise/client/testkit/`):
 - Tabela de `TestFakeNewsletter_SemFuncaoInjetadaDevolveZeroSemPanico`
   atualizada para 16 métodos
 
@@ -26509,7 +26509,7 @@ mutationChangeOwner      = "9546742745432473"   // era "7341777602580933" (Baile
 mutationDeleteNewsletter = "30062808666639665"  // já correto (coincide Baileys/bundle)
 ```
 
-Ficheiro alterado: `internal/wa-noise/capabilities/newsletter/queryids.go`.
+Ficheiro alterado: `internal/noise/capabilities/newsletter/queryids.go`.
 Testes existentes passam sem alteração (referenciam as constantes, não os
 valores literais).
 
@@ -26697,7 +26697,7 @@ delete verificados de ponta a ponta com transição de estado medida.
 
 **Data/contexto**: 2026-08-25, `make check` depois do merge da F233(a).
 
-**Onde**: `internal/wa-headless/core`, `session_test.go:831`.
+**Onde**: `internal/headless/core`, `session_test.go:831`.
 
 **Problema**: o teste falhou no `make check` completo com
 
@@ -26708,13 +26708,13 @@ delete verificados de ponta a ponta com transição de estado medida.
     Boot(launch/await-endpoint): the CALLER's context ended first
     (context deadline exceeded); the target was not asked
 2026/08/25 12:39:44 httptest.Server blocked in Close after 5 seconds
-FAIL	wa-api/internal/wa-headless/core	172.589s
+FAIL	wa-api/internal/headless/core	172.589s
 ```
 
 Corrido **isolado**, no mesmo commit e na mesma máquina:
 
 ```
-ok  	wa-api/internal/wa-headless/core	1.870s
+ok  	wa-api/internal/headless/core	1.870s
 ```
 
 1,87 s contra 30,00 s de prazo esgotado. **Não é regressão** — é fome de
@@ -26722,7 +26722,7 @@ recursos: `-race` sobre a árvore toda com `GOMAXPROCS=2`, mais um servidor da
 API a correr ao lado, e o arranque do browser não obtém endpoint a tempo.
 
 Nenhuma alteração desta sessão toca em lançamento de browser (as mudanças
-foram em `wa-noise`, `pkg/infra/history`, `errmap` e adaptadores).
+foram em `noise`, `pkg/infra/history`, `errmap` e adaptadores).
 
 **Porque importa mesmo assim**: um teste que depende de arrancar um browser
 dentro de um prazo fixo falha aleatoriamente em CI, e um vermelho intermitente
@@ -26734,10 +26734,10 @@ carga, ou marcar o teste para não correr em paralelo com a suíte pesada. Medir
 primeiro qual dos dois: o número acima (1,87 vs 30) sugere que o prazo é
 generoso em repouso e insuficiente sob contenção.
 
-**Nota**: o `internal/wa-headless` está fora do âmbito desta sessão por decisão
+**Nota**: o `internal/headless` está fora do âmbito desta sessão por decisão
 do utilizador. Registado por ter aparecido, não para ser corrigido agora.
 
-**Status**: não corrigido — fora do âmbito, e é do `wa-headless`.
+**Status**: não corrigido — fora do âmbito, e é do `headless`.
 
 <!-- f-status: aberto -->
 
@@ -26746,7 +26746,7 @@ do utilizador. Registado por ter aparecido, não para ser corrigido agora.
 
 **Data/contexto**: 2026-08-25, ao testar `demote` com o LID do dono.
 
-**Onde**: `pkg/infra/wa-noise/errmap/newsletter.go` — `ClassifyNewsletter`.
+**Onde**: `pkg/infra/noise/errmap/newsletter.go` — `ClassifyNewsletter`.
 
 **Problema**: a classificação é por CÓDIGO, não por operação. Qualquer `405` de
 newsletter recebe a mensagem escrita para o `unfollow`:
@@ -26887,13 +26887,13 @@ o `401` passou a `{"code":401,"error":{"code":"unauthorized","message":"unauthor
 
 <!-- f-status: corrigido -->
 
-## F237 — 62 dos 136 métodos do wa-noise nunca são chamados, e entre eles estão as COMUNIDADES
+## F237 — 62 dos 136 métodos do noise nunca são chamados, e entre eles estão as COMUNIDADES
 
 **Data/contexto**: 2026-08-25, medição da superfície da biblioteca a pedido do
 utilizador ("medir todos os noise").
 
 **Método**: enumerar os métodos públicos de `*Client` em
-`internal/wa-noise/core/`, e para cada um procurar chamada em `pkg/`.
+`internal/noise/core/`, e para cada um procurar chamada em `pkg/`.
 
 ```
 136 métodos públicos
@@ -26956,7 +26956,7 @@ ler as assinaturas.
 Lote `boot-albuquerque/wa-comunidades`, commit `8e1f987`, integrado em
 `feature/wa-noise`. O que passou a existir:
 
-| rota | porta | método do wa-noise |
+| rota | porta | método do noise |
 |---|---|---|
 | `POST /group/create` com `is_parent` | `GroupLifecycle` | `CreateGroup` (`ReqCreate.IsParent`) |
 | `POST /group/create` com `linked_parent_jid` | `GroupLifecycle` | `CreateGroup` (`ReqCreate.LinkedParent`) |
@@ -27068,7 +27068,7 @@ e LID (`…@lid`).
 
 <!-- f-status: corrigido -->
 
-## F239 — mapa de estado funcional das rotas wa-noise (inventário, 2026-08-25)
+## F239 — mapa de estado funcional das rotas noise (inventário, 2026-08-25)
 
 Bateria de contrato: **103 rotas** chamadas com payload vazio, medindo status,
 código de erro e latência. Excluídas `/session/*` (18) e 13 destrutivas ou de
@@ -27294,8 +27294,8 @@ do lote B.
 
 **Raiz**: dois elos estavam partidos na cadeia de erro:
 
-1. O adaptador (`pkg/infra/wa-noise/adapters/group/read.go`) devolvia o erro
-   do `wa-noise` cru, sem classificar. Quando a conta não é membro do grupo, o
+1. O adaptador (`pkg/infra/noise/adapters/group/read.go`) devolvia o erro
+   do `noise` cru, sem classificar. Quando a conta não é membro do grupo, o
    servidor do WhatsApp responde com um IQ error 403. Sem classificação, esse
    erro atravessa o usecase como texto opaco e `RespondJSON` não sabe que é
    4xx.
@@ -27753,7 +27753,7 @@ e das duas rotas de admin de canal.
 **Correção sugerida**: decidir e implementar.
 
 - Se o modo de aprovação for para existir, precisa de handler próprio e de
-  caminho no caso de uso — verificar primeiro se o `wa-noise` o expõe
+  caminho no caso de uso — verificar primeiro se o `noise` o expõe
   (`SetGroupJoinApprovalMode` aparece na lista da F237 como método existente,
   o que sugere que sim).
 - Se não for, **remover a rota**, como se fez na F229. Servir uma rota que
@@ -27817,7 +27817,7 @@ não o de aprovar/rejeitar pedidos de entrada.
 **A operação certa existe dos dois lados**, o que torna isto puramente uma
 ligação errada:
 
-- na biblioteca: `internal/wa-noise/core/group_participants.go:48-49`
+- na biblioteca: `internal/noise/core/group_participants.go:48-49`
   > `UpdateGroupRequestParticipants` can be used to approve or reject requests
   > to join the group.
 - no nosso domínio: `pkg/domain/group.go:214-216` já define
@@ -27952,7 +27952,7 @@ log: error="didn't find picture ID in response"
 Verificado depois: o `group_info` não traz nenhuma chave de foto — **a imagem
 não ficou**.
 
-O erro vem do `wa-noise` ao interpretar a resposta do servidor. Duas leituras
+O erro vem do `noise` ao interpretar a resposta do servidor. Duas leituras
 possíveis, e não as separei:
 
 1. o envio falhou e a mensagem é o sintoma;
@@ -28006,13 +28006,13 @@ O handler `handleSetGroupPhoto` agora:
    }
    ```
 3. Passa `photoBytes` (binário JPEG/PNG real) ao usecase, que por sua vez
-   entrega bytes reais ao `wa-noise`. Antes, o handler passava a string
+   entrega bytes reais ao `noise`. Antes, o handler passava a string
    base64 convertida a `[]byte` — o servidor recebia texto ASCII, interpretava
    como avatar vazio e apagava a foto.
 
 **Raiz do defeito**: `handleSetGroupPhoto` nunca fazia decode — passava
-`[]byte(req.Photo)` (a representação base64 como bytes crus). O `wa-noise`
-(`internal/wa-noise/capabilities/group/settings.go`) envia os bytes como
+`[]byte(req.Photo)` (a representação base64 como bytes crus). O `noise`
+(`internal/noise/capabilities/group/settings.go`) envia os bytes como
 `<picture type="image">PAYLOAD</picture>`; com base64 em vez de binário, o
 payload não é imagem válida, e o servidor trata como remoção.
 
@@ -28030,7 +28030,7 @@ decode; `TestSetGroupPhoto_DecodesBase64` falhou porque o fake recebeu a
 string base64 crua em vez dos bytes descodificados.
 
 **Nota**: a correção trata o lado do handler (decode). O comportamento do
-`wa-noise` de apagar a foto quando recebe payload inválido é upstream e
+`noise` de apagar a foto quando recebe payload inválido é upstream e
 permanece — mas agora nunca lhe chega payload inválido por esta rota.
 
 **Status**: não corrigido — aguarda verificação.
@@ -28055,7 +28055,7 @@ _, err := uc.UpdateGroupParticipants(r.Context(), id, req.GroupJID, req.Action, 
 customhttp.RespondJSON(w, 200, map[string]interface{}{"Details": "Participants updated"}, nil)
 ```
 
-**O primeiro valor de retorno é deitado fora.** O `wa-noise` devolve
+**O primeiro valor de retorno é deitado fora.** O `noise` devolve
 `[]types.GroupParticipant` — o resultado de CADA participante, que distingue
 entrou / falhou / recebeu convite em vez de ser adicionado (o WhatsApp faz isso
 quando as definições de privacidade do alvo impedem adição direta).
@@ -28086,7 +28086,7 @@ por participante chegar ao corpo da resposta.
 **Sétima vez nesta sessão que o `200` diz menos do que aparenta.**
 
 **Correção sugerida**: devolver o resultado por participante no corpo, no molde
-que o `wa-noise` já entrega. Se algum participante falhar, o status deve
+que o `noise` já entrega. Se algum participante falhar, o status deve
 refleti-lo — `207` ou `200` com lista de falhas, mas nunca um `"Participants
 updated"` liso.
 
@@ -28408,7 +28408,7 @@ F233(a) criou para o GraphQL.
 
 **O que foi feito:**
 
-1. Criado `pkg/infra/wa-noise/errmap/download.go` com `ClassifyDownload()`:
+1. Criado `pkg/infra/noise/errmap/download.go` com `ClassifyDownload()`:
    quando o erro contém `media.DownloadHTTPError` com status 403, 404 ou
    410, converte para `*apperr.AppError` com `code:"media_unavailable"`,
    `Category: CategoryNotFound`. Outros status passam inalterados.
@@ -28420,7 +28420,7 @@ F233(a) criou para o GraphQL.
    de `500`.
 
 **Ficheiros tocados:**
-- `pkg/infra/wa-noise/errmap/download.go` — criado
+- `pkg/infra/noise/errmap/download.go` — criado
 - `pkg/presentation/http/handlers/handler_download.go` — 5 handlers
   modificados (import + chamada a `ClassifyDownload`)
 
@@ -28544,7 +28544,7 @@ sessão que o `200` diz menos do que aparenta.**
 
 ## Causa apurada em 2026-08-26: a lista de destinatários é `contact.FullName`, e a conta Business não tem nenhum
 
-Instrumentei `getBroadcastListParticipants` (`internal/wa-noise/core/broadcast.go:12`)
+Instrumentei `getBroadcastListParticipants` (`internal/noise/core/broadcast.go:12`)
 para escrever a lista calculada num ficheiro, publiquei um status pela
 `filarapida`, e reverti o build. O que saiu:
 
@@ -28580,7 +28580,7 @@ recebe os contactos por `push_name` (de mensagens e status que chegam), não por
 uma sincronização de agenda que preencha `full_name`.
 
 **E o único destinatário externo é um número que a própria conta anotou à mão**:
-`5541992421234@s.whatsapp.net`, `full_name = "wa-headless-lab B"` — a forma com
+`5541992421234@s.whatsapp.net`, `full_name = "headless-lab B"` — a forma com
 nono dígito do mesmo número que a sessão `lucas` usa como `554192421234`. Ou
 seja, o status da `filarapida` foi para uma pessoa só, e possivelmente para uma
 forma de JID que não corresponde a conta nenhuma.
@@ -28610,7 +28610,7 @@ causa.
 3. Medir a metade que falta (self em PN numa conta LID) antes de mexer nela.
 
 **Status**: não corrigido — causa principal medida, correção por decidir com o
-utilizador porque toca em código vendorizado (`internal/wa-noise/core`).
+utilizador porque toca em código vendorizado (`internal/noise/core`).
 
 ## Medição de 2026-08-28: o único destinatário externo nunca chega — nono dígito
 
@@ -28649,7 +28649,7 @@ alguém o recebeu) sem precisar da hipótese ownID-PN-vs-LID, que continua
 **O que isto NÃO prova**: se `getStatusBroadcastRecipients` normalizasse o
 nono dígito (ou resolvesse por LID em vez de PN salvo), o destinatário
 poderia passar a ser alcançado — mas isso é código vendorizado
-(`internal/wa-noise/core`), e a correção sugerida original já apontava
+(`internal/noise/core`), e a correção sugerida original já apontava
 para lá. Este experimento não mexeu em código, só mediu.
 
 <!-- f-status: aberto -->
@@ -28690,7 +28690,7 @@ sugere que tem. Vai chamar `/chat/delete`, receber `400 missing_id`, e concluir
 que falta um parâmetro em vez de concluir que a capability não existe.
 
 **Correção sugerida**: remover o registo de `/chat/delete` (como se fez na
-F229) ou, se apagar conversa for para existir, implementá-la — o `wa-noise`
+F229) ou, se apagar conversa for para existir, implementá-la — o `noise`
 tem primitivas de chat na lista da F237 que valeria verificar.
 
 **Status**: não corrigido.
@@ -28828,7 +28828,7 @@ Os dois sinais existem. **O que não existe é um campo que diga o tipo.** O
 consumidor tem de saber que `smbi` significa conta comercial, ou inferir de
 `business_name` estar preenchido — nenhuma das duas está documentada.
 
-O nosso `pkg/infra/wa-noise/mapping/platform/platform.go` mapeia apenas a
+O nosso `pkg/infra/noise/mapping/platform/platform.go` mapeia apenas a
 plataforma que ANUNCIAMOS ao parear (`CHROME`, `SAFARI`, `IPAD`…). Não
 classifica o que vem do par.
 
@@ -28908,7 +28908,7 @@ de antes, `GET /session/profile/full`): confirma exatamente o já registado —
 exemplo) estava disponível para medir um TERCEIRO valor ao vivo.
 
 **Consulta às referências (regra do `CLAUDE.md`)**, já que a medição ao vivo
-não podia ir além de dois valores: `internal/wa-noise/protocol/proto/waWa6/WAWebProtobufsWa6.pb.go:836-877`
+não podia ir além de dois valores: `internal/noise/protocol/proto/waWa6/WAWebProtobufsWa6.pb.go:836-877`
 declara `ClientPayload_UserAgent_Platform`, o enum COMPLETO que o próprio
 protobuf da WhatsApp usa para o UserAgent que UM CLIENTE anuncia ao parear
 — 38 valores, incluindo `SMB_ANDROID = 10` e `SMB_IOS = 12` lado a lado
@@ -28918,7 +28918,7 @@ o protocolo define — não há "SMB Web" nem "SMB Desktop", porque o WhatsApp
 Business só existe como app móvel.
 
 **Segunda referência independente, no dicionário de compressão do próprio
-binário XML**: `internal/wa-noise/protocol/binary/token/token.go:14` lista
+binário XML**: `internal/noise/protocol/binary/token/token.go:14` lista
 `"smba"` entre os tokens reconhecidos no wire — confirmando que `smba`
 aparece de facto em tráfego real do protocolo, não é só um valor teórico do
 enum de pareamento.
@@ -28926,7 +28926,7 @@ enum de pareamento.
 **Ressalva que continua de pé**: o enum encontrado é o que UM CLIENTE
 anuncia de si mesmo ao parear (`ClientPayload.UserAgent.Platform`) — o
 campo lowercase `platform` que `GET /session/profile/full` devolve
-(`pkg/infra/wa-noise/adapters/profile/data_access.go:120`, `st.Platform`)
+(`pkg/infra/noise/adapters/profile/data_access.go:120`, `st.Platform`)
 vem de uma leitura DIFERENTE, o `GetUserInfo` que descreve o PAR, não a
 sessão própria. Os dois valores medidos (`smbi`, `iphone`) batem com os
 nomes do enum em minúsculas e sem underscore, o que é evidência forte de
@@ -28944,7 +28944,7 @@ minúsculas, `smba`/`smbi`) — não inventar um terceiro.
 
 **Data/contexto**: 2026-08-26, verificação em campo da F233(b).
 
-**Onde**: `internal/wa-noise/capabilities/newsletter/actions.go:219`
+**Onde**: `internal/noise/capabilities/newsletter/actions.go:219`
 
 ```go
 func CreateAdminInvite(ctx context.Context, t Transport, channelJID, userJID types.JID) error {
@@ -28985,24 +28985,24 @@ forma da resposta (acréscimo, não remoção) e confirmar com sessão real.
 
 **Onde mudou**:
 
-- `internal/wa-noise/capabilities/newsletter/actions.go` — `CreateAdminInvite`
+- `internal/noise/capabilities/newsletter/actions.go` — `CreateAdminInvite`
   passou de `error` para `(AdminInvite, error)`, com o parsing do payload
   MEX (`respCreateAdminInvite`, tipo privado) e a conversão de
   `invite_expiration_time` (epoch Unix em segundos, como STRING — medido) na
   MESMA camada onde a resposta de `Create` (canal) já era parseada — mantém
   o arquivo como "delegação fina" só na camada de `core`, que é a convenção
   que o próprio ficheiro documenta.
-- `internal/wa-noise/main.go` — `NewsletterAdminInvite` reexportado como
+- `internal/noise/main.go` — `NewsletterAdminInvite` reexportado como
   alias de `newsletter.AdminInvite` (mesmo padrão de
   `CreateNewsletterParams`/`GetNewsletterMessagesParams`).
-- `internal/wa-noise/core/newsletter.go` — `NewsletterCreateAdminInvite`
+- `internal/noise/core/newsletter.go` — `NewsletterCreateAdminInvite`
   passou a delegar e devolver o tipo, sem lógica própria.
-- `pkg/infra/wa-noise/client/client.go` + `realclient_wrappers.go` +
+- `pkg/infra/noise/client/client.go` + `realclient_wrappers.go` +
   `testkit/fake.go` + `testkit/fake_newsletter.go` — assinatura do client
   atualizada.
 - `pkg/domain/newsletter.go` — `NewsletterAdminInvite{ID string;
   ExpirationTime time.Time}`.
-- `pkg/infra/wa-noise/adapters/misc/adapter.go` — `CreateNewsletterAdminInvite`
+- `pkg/infra/noise/adapters/misc/adapter.go` — `CreateNewsletterAdminInvite`
   devolve o valor de domínio em vez de só erro.
 - `pkg/application/contracts/misc_ports.go` — porta `NewsletterReader`
   atualizada.
@@ -29034,7 +29034,7 @@ sete dias, confirmando o valor medido na investigação original. Antes da
 correção a mesma chamada respondia `{"code":200,"data":null}`. Canal
 apagado depois (`DELETE /newsletters/delete`) para não deixar resíduo.
 
-**Anti-regressão**: `internal/wa-noise/capabilities/newsletter/actions_test.go`,
+**Anti-regressão**: `internal/noise/capabilities/newsletter/actions_test.go`,
 `TestCreateAdminInviteDevolveOPayloadCru` (trava `AdminInvite.ID` e
 `ExpirationTime` a partir do payload MEX simulado) e
 `pkg/presentation/http/handlers/handler_newsletter_test.go`,
@@ -29124,7 +29124,7 @@ POST … "Action":"remove"   -> 200
 **A biblioteca sabe fazer**, e há três anos:
 
 ```go
-// internal/wa-noise/capabilities/group/participants.go:18-19
+// internal/noise/capabilities/group/participants.go:18-19
 ChangePromote ParticipantChange = "promote"
 ChangeDemote  ParticipantChange = "demote"
 ```
@@ -29144,12 +29144,12 @@ conjunto que ela guarda ser pequeno demais.
 adaptador. Sem tocar na guarda.
 
 **Corrigido em 2026-08-27**, exactamente pelo caminho sugerido, mais um elo em
-falta que a sugestão não via: `internal/wa-noise/main.go` (a fachada estreita
-sobre `internal/wa-noise/core`) só reexportava
+falta que a sugestão não via: `internal/noise/main.go` (a fachada estreita
+sobre `internal/noise/core`) só reexportava
 `ParticipantChangeAdd`/`ParticipantChangeRemove`, apesar de
 `core.ParticipantChangePromote`/`ParticipantChangeDemote` já existirem
-(`internal/wa-noise/core/group_participants.go:20-21`, aliases directos de
-`internal/wa-noise/capabilities/group.ChangePromote`/`ChangeDemote`). A
+(`internal/noise/core/group_participants.go:20-21`, aliases directos de
+`internal/noise/capabilities/group.ChangePromote`/`ChangeDemote`). A
 capacidade sempre existiu; faltavam TRÊS elos, não um:
 
 1. `pkg/domain/group.go` — `ParticipantPromote`/`ParticipantDemote` ao lado de
@@ -29157,9 +29157,9 @@ capacidade sempre existiu; faltavam TRÊS elos, não um:
 2. `pkg/application/usecase/group/group_management.go:271-283` — os dois casos
    novos no `switch` de `UpdateGroupParticipants`, com a mensagem de erro do
    `default` actualizada para citar as quatro acções.
-3. `internal/wa-noise/main.go` — reexportar `ParticipantChangePromote`/
+3. `internal/noise/main.go` — reexportar `ParticipantChangePromote`/
    `ParticipantChangeDemote` de `core`, sem o que o passo 4 não compila.
-4. `pkg/infra/wa-noise/adapters/group/participants.go` — o mapeamento binário
+4. `pkg/infra/noise/adapters/group/participants.go` — o mapeamento binário
    `change := wa.ParticipantChangeRemove; if action == domain.ParticipantAdd
    { change = wa.ParticipantChangeAdd }` tratava QUALQUER acção que não fosse
    "add" como remoção. Isto já estava ali ANTES da F247 guardar o `switch` do
@@ -29191,7 +29191,7 @@ corrido de novo.
   e afirma o `domain.ParticipantAction` que chegou à porta fake, não só o
   status HTTP. `TestUpdateGroupParticipants_RejectsUnknownAction` também
   perdeu `"promote"` e ganhou `"ADD"`.
-- `pkg/infra/wa-noise/adapters/group/participants_test.go` — é aqui que o
+- `pkg/infra/noise/adapters/group/participants_test.go` — é aqui que o
   defeito REAL do adaptador é travado:
   `TestGroupAdapter_UpdateGroupParticipants_PromoteOK`,
   `TestGroupAdapter_UpdateGroupParticipants_DemoteOK` (afirmam
@@ -29242,7 +29242,7 @@ Ambas as mutações restauradas antes do commit; suíte completa
 (`go test ./pkg/... ./cmd/...`) verde depois.
 
 **Status**: corrigido. `go build ./...`, `go vet ./...` e `make
-waclient-facade`/`waclient-filesize`/`waclient-test` verdes; `internal/wa-noise/main.go`
+waclient-facade`/`waclient-filesize`/`waclient-test` verdes; `internal/noise/main.go`
 mudou (reexport), mas não a árvore de `core` nem `capabilities` — nenhuma
 lógica de protocolo foi tocada, só o que já existia ficou visível ao resto do
 código.
@@ -29277,7 +29277,7 @@ enviamos.
 
 **CORREÇÃO desta entrada (2026-08-26, investigação)**: a linha *"não é a forma
 do JID (testado PN e LID)"* estava ERRADA. As duas entradas atravessam
-`resolveBlocklistPNJID` (`pkg/infra/wa-noise/adapters/user/blocklist.go:103`),
+`resolveBlocklistPNJID` (`pkg/infra/noise/adapters/user/blocklist.go:103`),
 que converte LID → PN, e produzem o MESMO stanza no fio. **A linha "testado em
 LID" não testou LID.** Ver F278.
 
@@ -29288,7 +29288,7 @@ da blocklist para endereçamento por LID (`jid` em `@lid`, mais `pn_jid` no
 (`8d023aa973`), 13 dias antes desta medição; o whatsapp-web.js converte PN→LID
 com `getAlternateUserWid` antes de bloquear.
 
-**Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-02 (biblioteca)
+**Correção sugerida**: ver `internal/noise/HOUSEKEEP.md` LIB-02 (biblioteca)
 e F278 (adaptador). O relato completo está em
 `INVESTIGATION-block-unblock.md`; os experimentos que exigem conta real, em
 `HUMAN-LAST.md` (E.1, E.2).
@@ -29321,7 +29321,7 @@ segundo devolve `200 []` — logo a sessão, o canal e o transporte estão bons.
 
 **A HIPÓTESE CAIU (2026-08-26, investigação), por leitura de código.**
 `GetMessageUpdates` **não é uma query MEX** — é um IQ binário simples com
-namespace `newsletter` (`internal/wa-noise/capabilities/newsletter/messages.go:89-97`).
+namespace `newsletter` (`internal/noise/capabilities/newsletter/messages.go:89-97`).
 Não passa por `queryids.go` e **não tem query ID nenhum**. Correr o extractor de
 `scripts/mex-query-ids/` não teria produzido informação sobre esta rota. Um
 achado com diagnóstico errado é pior que nenhum, e por isso esta correcção fica
@@ -29343,7 +29343,7 @@ com repro), PR #2620 (stanza capturado do WA Web; fechado por stale-bot, nunca
 revisto), port mergeado em rsalcara/InfiniteAPI #503 (2026-06-06). whatsmeow
 respondeu *"eu também não resolvo"* — código idêntico, intocado desde 2023.
 
-**Correção sugerida**: ver `internal/wa-noise/HOUSEKEEP.md` LIB-03. Relato
+**Correção sugerida**: ver `internal/noise/HOUSEKEEP.md` LIB-03. Relato
 completo em `INVESTIGATION-newsletter-updates.md`.
 
 ## Experimento fechado em 2026-08-28: o canal COM mensagens dá o MESMO resultado
@@ -30074,7 +30074,7 @@ código de convite.
 
 A regra em si é `domain.JID.IsNewsletter`, ao lado de `IsLID` e `IsPN` e com a
 constante `domain.ServerNewsletter`. **Não** se usou
-`pkg/infra/wa-noise/mapping/jid.ParseJID`: além de a camada de use case não
+`pkg/infra/noise/mapping/jid.ParseJID`: além de a camada de use case não
 importar `pkg/infra` para regras de domínio, aquele analisador trata uma cadeia
 sem `@` como TELEFONE, ou seja `554192421234` passaria — o oposto do que esta
 validação existe para fazer. `IsNewsletter` é mais estrita que `IsLID`/`IsPN`
@@ -30274,7 +30274,7 @@ de outra natureza (existência, não forma) e requer decisão própria.
 **Data**: 2026-08-26. **Contexto**: correcção do `POST /user/contacts/sync`
 (ausente vs inválido nos enums).
 
-**Onde**: `pkg/infra/wa-noise/adapters/misc/adapter.go:188-198`. O `switch mode`
+**Onde**: `pkg/infra/noise/adapters/misc/adapter.go:188-198`. O `switch mode`
 do `MiscAdapter.SyncContactRoster` devolve `invalid_sync_mode` no `default`,
 incluindo para `mode == ""`.
 
@@ -30328,7 +30328,7 @@ capacidade que não temos.
 
 **As seis ❌ dependem de infraestrutura, não de rota**: produto, catálogo e
 encomenda exigem um catálogo associado à conta; Flows é recurso do painel da
-Meta. A capability `catalog` do `wa-noise` **existe e não está ligada** a rota
+Meta. A capability `catalog` do `noise` **existe e não está ligada** a rota
 nenhuma — é uma das 62 da F237.
 
 **Falso positivo apanhado durante a medição, e registado porque enganaria
@@ -30349,8 +30349,8 @@ mostrou.
 produto/catálogo/encomenda, usando as referências do `CLAUDE.md`.
 
 **Achado 1, e é a resposta que faltava**: `ProductMessage` e `OrderMessage`
-já são tipos de mensagem no protobuf do PRÓPRIO `internal/wa-noise`
-(`internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.pb.go`,
+já são tipos de mensagem no protobuf do PRÓPRIO `internal/noise`
+(`internal/noise/protocol/proto/waE2E/WAWebProtobufsE2E.pb.go`,
 `ProductMessage` com `Product`, `Catalog`, `BusinessOwnerJID`, `Body`,
 `Footer`; e `OrderMessage` ao lado). Isto já respondia à pergunta por
 inspecção direta — nem precisou de referência externa: se o tipo existe no
@@ -30445,8 +30445,8 @@ recolhe e evidência que se recebe.
 
 ## A matriz por motor, e o que ela mostra
 
-Escrita em `docs/REFERENCIA-META-OFICIAL.md`, com colunas `wa-noise` (medido),
-`wa-headless` (**não medido** — fora do âmbito, e `?` é mais honesto que uma
+Escrita em `docs/REFERENCIA-META-OFICIAL.md`, com colunas `noise` (medido),
+`headless` (**não medido** — fora do âmbito, e `?` é mais honesto que uma
 suposição) e `meta_cloud`.
 
 **A linha divisória tem nome.** Tudo o que depende do **Commerce Manager e do
@@ -30525,6 +30525,19 @@ diferente — e essa só a medição em campo responde.
 <!-- f-status: aberto -->
 
 ## F273 — dois vocabulários de engine convivem: `"wanoise"/"headless"` (configuração) e `wa_noise/wa_headless` (domínio)
+
+**RESOLVIDO em 2026-08-29 (F382-F386)**: os dois vocabulários citados
+nesta entrada — `"wanoise"/"headless"` (configuração,
+`pkg/bootstrap/engine_selection.go`) e `wa_noise/wa_headless` (domínio,
+`pkg/domain/engine.go`) — foram unificados num terceiro, `noise`/
+`headless`, junto com a remoção do prefixo `wa` de todo o resto do
+código (identificadores, diretórios, comentários). Os valores citados
+abaixo (`"wanoise"`, `"wa_noise"`, `"wa_headless"`) são histórico — o que
+o código dizia NAQUELE dia, não o que diz hoje — e ficam entre aspas de
+propósito, sem passar pela substituição mecânica que tocou o resto deste
+arquivo, porque o PONTO desta entrada é a diferença entre os dois nomes
+antigos, e igualá-los apagaria essa diferença. Ver F382-F386 para a
+correção.
 
 **Data**: 2026-08-26. **Contexto**: worktree `engine-capability-foundation`,
 que criou o tipo `domain.Engine` e a coluna `users.engine` (migração 19).
@@ -30710,7 +30723,7 @@ e detecta o desalinhamento no sítio onde ele é diagnosticável.
 
 **Como ler os números**: `runEngineBackfill` imprime em TODO arranque a linha
 `"session engine backfill"` com `total_sessions`, `pending_before`,
-`to_wa_noise`, `to_wa_headless`, `listed_but_absent` e `default_engine`. É
+`to_noise`, `to_headless`, `listed_but_absent` e `default_engine`. É
 impressa mesmo quando nada mudou, de propósito: "zero linhas migradas" e "o
 backfill não correu" são indistinguíveis num log que fica calado.
 
@@ -30719,22 +30732,22 @@ divergente), que fica registado como pendência. O resto está **corrigido e
 travado** por `pkg/infra/db/user_engine_test.go` — doze testes, com três
 controlos negativos EXECUTADOS: backfill neutralizado (as quatro linhas ficam em
 `legacy_unknown`), ordem dos dois `UPDATE` invertida (a lista de headless vai
-toda para o padrão) e `DEFAULT` da coluna trocado para `wa_noise` (o teste da
+toda para o padrão) e `DEFAULT` da coluna trocado para `noise` (o teste da
 migração morde).
 
 <!-- f-status: aberto -->
 
-## F275 — o portão do HOUSEKEEP recusa o status da H144 **do wa-headless**, e isso trava `make check` e `coverage-gate` inteiros
+## F275 — o portão do HOUSEKEEP recusa o status da H144 **do headless**, e isso trava `make check` e `coverage-gate` inteiros
 
 **Data**: 2026-08-26. **Contexto**: worktree `engine-capability-foundation`,
 achado ao correr `make check` — nada a ver com o trabalho de engine.
 
-**Onde**: `internal/wa-headless/HOUSEKEEP.md:11038`, entrada **H144 — a H75
+**Onde**: `internal/headless/HOUSEKEEP.md:11038`, entrada **H144 — a H75
 fechou uma busca com base numa inferência errada**. O portão é
 `TestHousekeepEntriesAreMachineReadable`, em
-`internal/wa-headless/gate_test.go:635`, que lê
+`internal/headless/gate_test.go:635`, que lê
 `const housekeepPath = "HOUSEKEEP.md"` (linha 486) **relativo ao diretório do
-próprio pacote** — portanto o ficheiro do wa-headless, NÃO o da raiz.
+próprio pacote** — portanto o ficheiro do headless, NÃO o da raiz.
 
 **Problema**: o status daquela entrada é
 
@@ -30745,7 +30758,7 @@ NÃO entregue, agora por falta de sessão para medir, e não por falta de caminh
 
 e começa por `H75`, que não está em `openStatusTokens` nem em
 `closedStatusTokens`. O portão falha, e como corre dentro de
-`internal/wa-headless`, derruba o alvo `test` E o `coverage-gate` — dois gates
+`internal/headless`, derruba o alvo `test` E o `coverage-gate` — dois gates
 do `make check` ficam vermelhos por uma frase num documento.
 
 Saída medida:
@@ -30762,10 +30775,10 @@ versão do commit base (`git show 3a0b48b4:HOUSEKEEP.md > HOUSEKEEP.md`) o port�
 falha exatamente igual — o que, visto agora, é o próprio sinal de que o ficheiro
 da raiz nunca esteve envolvido. O diff desta worktree sobre a raiz é `95 0`.
 
-**Assunto: wa-headless, integralmente.** A H144 trata de envio de tipos ricos
+**Assunto: headless, integralmente.** A H144 trata de envio de tipos ricos
 (botões, lista, enquete, carrossel, template) no build da SPA, da
 `LEDGER-WWEBJS.md` e da H75 daquele mesmo ficheiro. Não toca `pkg/` nem o
-wa-noise em ponto nenhum.
+noise em ponto nenhum.
 
 **Correcção sugerida**: reescrever aquele status para começar por palavra do
 vocabulário (`parcialmente corrigido — a H75 estava errada no diagnóstico; ...`),
@@ -30774,15 +30787,15 @@ portão. As três entradas com dois status (H5, H14, H90) são um segundo achado
 mesma saída e pedem leitura à mão.
 
 **Status**: **não corrigido — fechado para esta worktree por decisão do
-usuário**: nesta sessão só se corrige achado de wa-noise/`pkg/`, e este é de
-wa-headless. Fica pendente para quem trabalhar naquele módulo. Enquanto durar,
+usuário**: nesta sessão só se corrige achado de noise/`pkg/`, e este é de
+headless. Fica pendente para quem trabalhar naquele módulo. Enquanto durar,
 `make check` não fecha verde neste repositório por razão nenhuma do código.
 
 ### A armadilha que me custou o diagnóstico errado: DOIS ficheiros têm uma H144
 
 A primeira versão desta entrada apontava para `HOUSEKEEP.md:4935`, da raiz — que
 também tem uma **H144**, sobre presença e sessão dupla
-(`internal/wa-headless/probe_presence2_test.go`). É outra entrada, de outro
+(`internal/headless/probe_presence2_test.go`). É outra entrada, de outro
 assunto, com outro status (`não corrigido`), e não é a que o portão recusa.
 
 A causa do engano: **o portão reporta só o identificador da entrada, `H144`, sem
@@ -30895,15 +30908,15 @@ contariam como duas fontes de verdade para o mesmo achado.
 **Contexto**: worktree `feature/provider-wa-noise`, tarefa de levantamento de
 capacidades (inventário de portas para a futura `capability-registry`). Não é
 escopo desta tarefa corrigir — é achado incidental encontrado ao rodar
-`go test ./pkg/infra/wa-noise/...` para confirmar que o ambiente estava
+`go test ./pkg/infra/noise/...` para confirmar que o ambiente estava
 saudável antes do levantamento.
 
-**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers_test.go` —
+**Onde**: `pkg/infra/noise/client/realclient_wrappers_test.go` —
 `TestTodoMetodoComErroTemWrapper` já falha na `main`, sem qualquer mudança
 minha. É o gate anti-regressão da decisão 46=a (comentário do próprio teste):
 todo método que devolve erro na interface `Client` precisa de wrapper em
 `RealClient` que chame `errmap.ClassifyIQ`; sem ele, o método fica PROMOVIDO de
-`*wanoise.Client` e devolve o erro cru do SDK.
+`*noise.Client` e devolve o erro cru do SDK.
 
 **Problema, com evidência**:
 
@@ -30916,22 +30929,22 @@ todo método que devolve erro na interface `Client` precisa de wrapper em
 ```
 
 Os sete correspondem a capacidades que o levantamento desta worktree marcou
-como implementadas no lado do adapter (`pkg/infra/wa-noise/adapters/group`
+como implementadas no lado do adapter (`pkg/infra/noise/adapters/group`
 para `GetSubGroups`/`GetLinkedGroupsParticipants`/`LinkGroup`/`UnlinkGroup`, via
-`CommunityDirectory`/`CommunityLifecycle`; `pkg/infra/wa-noise/adapters/misc`
+`CommunityDirectory`/`CommunityLifecycle`; `pkg/infra/noise/adapters/misc`
 para os três métodos `Newsletter*AdminInvite`, via `NewsletterReader`) — o
 código EXISTE e compila, mas uma recusa do servidor do WhatsApp nessas sete
 chamadas chega ao chamador como `500 internal server error` cru em vez de
 classificado (mesma família da F204), porque falta o wrapper que traduz.
 
-**Correção sugerida**: acrescentar em `pkg/infra/wa-noise/client` os sete
+**Correção sugerida**: acrescentar em `pkg/infra/noise/client` os sete
 wrappers que chamam `errmap.ClassifyIQ`, no padrão dos demais métodos da
 interface `Client`. É mudança mecânica, mas fora do escopo desta tarefa
 (levantamento, não correção de adapters).
 
 **Status**: não corrigido nesta sessão — é achado incidental de uma tarefa de
-levantamento, e a raiz (`pkg/infra/wa-noise/client`) não foi tocada por mim.
-Reflected no inventário (`docs/PROVIDER-WA-NOISE-INVENTORY.md`): as sete
+levantamento, e a raiz (`pkg/infra/noise/client`) não foi tocada por mim.
+Reflected no inventário (`docs/PROVIDER-NOISE-INVENTORY.md`): as sete
 capacidades estão marcadas `broken` (não `supported`), com este achado como
 evidência, para que a matriz de `capability-registry` não as trate como
 prontas.
@@ -30941,7 +30954,7 @@ lido por cmd/logcov/housekeep_status_test.go só reconhece cabeçalhos
 `## F\d+`, então H187 (sem número F) nunca foi rastreada por ele — o texto
 da H187 acima é histórico dentro do bloco de F276, não um segundo achado
 com veredito próprio. H187 continua aberta de facto (é trabalho de outra
-worktree, `pkg/infra/wa-noise/client`), só não tem marca formal porque
+worktree, `pkg/infra/noise/client`), só não tem marca formal porque
 nunca teve. -->
 ## F272 — a API oficial da Meta como referência, e a comparação que falta
 
@@ -30952,7 +30965,7 @@ que temos com o que a Meta fornece oficialmente e a uma integração futura.
 URLs verificados um a um.
 
 **A diferença de fundo, que não é de detalhe**: o `wa-api` fala o protocolo do
-WhatsApp Web pelo fork em `internal/wa-noise`. A Cloud API é HTTP sobre o Graph
+WhatsApp Web pelo fork em `internal/noise`. A Cloud API é HTTP sobre o Graph
 API, com número registado numa WABA, templates obrigatórios fora da janela de
 24 horas e custo por conversa. Não são duas formas de fazer a mesma coisa.
 
@@ -31307,13 +31320,13 @@ mentir sobre `users.connected`.
 
 **Status**: corrigido em 2026-08-27 (sessão `worktree/housekeep-session`).
 
-Correção em `pkg/infra/wa-noise/runtime/session/guard.go`
+Correção em `pkg/infra/noise/runtime/session/guard.go`
 (`SessionGuardAdapter.Logout`): quando `client.Logout` devolve a sentinela
-crua `wanoise.ErrNotLoggedIn` ("the store doesn't contain a device JID"), o
+crua `noise.ErrNotLoggedIn` ("the store doesn't contain a device JID"), o
 adaptador traduz para `apperr.New(apperr.CodeSessionNotPaired,
 apperr.CategoryConflict, ...)` — 409, distinto de `CodeSessionNotConnected`
 (F93). A checagem é por ESTADO (`errors.Is`), não por texto — a sentinela foi
-reexportada em `internal/wa-noise/main.go` (`ErrNotLoggedIn = core.ErrNotLoggedIn`),
+reexportada em `internal/noise/main.go` (`ErrNotLoggedIn = core.ErrNotLoggedIn`),
 seguindo o MESMO padrão já usado ali para `ErrIQBadRequest` e companhia
 (comentário do próprio ficheiro cita a F204). Novo código
 `apperr.CodeSessionNotPaired = "session_not_paired"` em
@@ -31326,7 +31339,7 @@ chama `uc.detacher.Detach(txtID)` continua a verificar SÓ
 ("não deve ser estendido cegamente ao caso novo"). Travado por
 `TestLogoutUseCase_ConectadaSemParNaoEstendeODetach`.
 
-Testes do defeito (`pkg/infra/wa-noise/runtime/session/guard_test.go`):
+Testes do defeito (`pkg/infra/noise/runtime/session/guard_test.go`):
 `TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa` (código, 409,
 `errors.Is` contra a sentinela original preservada na cadeia de causa, e que
 NÃO é classificado como `CodeSessionNotConnected`) e
@@ -31342,7 +31355,7 @@ status 409 E a forma do envelope (`success:false`, `code:409`,
 registada.
 
 Controlo negativo EXECUTADO na camada onde o fix vive
-(`pkg/infra/wa-noise/runtime/session`):
+(`pkg/infra/noise/runtime/session`):
 
 ```
 guard_test.go:269: code = "", quero "session_not_paired"
@@ -31421,8 +31434,8 @@ deixou de subir como `fmt.Errorf` cru e passou a
 422, com a mensagem do upstream (sem o segredo armazenado) no corpo. O código
 (`"upstream_rejected"`) é o MESMO valor que
 `errmap.CodeUpstreamRejected` usa para `/users/block`
-(`pkg/infra/wa-noise/errmap/iqerror.go`), declarado LOCALMENTE — importar
-`pkg/infra/wa-noise/errmap` de um use case de `pkg/application` inverteria a
+(`pkg/infra/noise/errmap/iqerror.go`), declarado LOCALMENTE — importar
+`pkg/infra/noise/errmap` de um use case de `pkg/application` inverteria a
 direção do Clean Architecture (ADR-001), por isso a constante é duplicada de
 propósito, com comentário citando a origem.
 
@@ -31569,10 +31582,10 @@ descrição do comportamento existente, não comportamento novo.
 ## F278 — o adaptador da blocklist resolve identidade no sentido INVERSO ao que o protocolo passou a exigir, e apaga a variável que a F264 julgava estar a medir
 
 **Data/contexto**: 2026-08-26, investigação da F264. Causa raiz na biblioteca
-vendorizada — ver `internal/wa-noise/HOUSEKEEP.md`, LIB-02. Esta entrada é a
+vendorizada — ver `internal/noise/HOUSEKEEP.md`, LIB-02. Esta entrada é a
 parte que é NOSSA.
 
-**Onde**: `pkg/infra/wa-noise/adapters/user/blocklist.go:103-116`
+**Onde**: `pkg/infra/noise/adapters/user/blocklist.go:103-116`
 
 ```go
 func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
@@ -31639,10 +31652,10 @@ o comportamento anterior.
 
 `block` continua a falhar (`422`, mesmo `400 bad-request`), exatamente como
 documentado: o WhatsApp exige um `pn_jid` adicional nesse caso, que
-`internal/wa-noise` não emite (LIB-02, correção "completa" pendente — porta
+`internal/noise` não emite (LIB-02, correção "completa" pendente — porta
 de whatsmeow `8d023aa973`). Confirmado ao vivo, não presumido.
 
-**Anti-regressão**: `pkg/infra/wa-noise/adapters/user/blocklist_test.go`,
+**Anti-regressão**: `pkg/infra/noise/adapters/user/blocklist_test.go`,
 `TestResolveBlocklistPNJID_HiddenUserServer_DevolveOMesmoLID` (trava a
 causa 1: LID recebido sai como o mesmo LID, não como PN),
 `TestResolveBlocklistPNJID_DefaultUserServer_ComLIDEmCacheResolveParaLID`
@@ -31744,7 +31757,7 @@ Cruzamento: `OBSERVADORES-AMBAR.md` §2 e `HUMAN-LAST.md` B.1.
 **Data**: 2026-08-26. **Contexto**: idem, rota
 `POST /groups/{group_jid}/join-requests`.
 
-**Onde**: `pkg/infra/wa-noise/adapters/group/participants.go:81`:
+**Onde**: `pkg/infra/noise/adapters/group/participants.go:81`:
 
 ```go
 _, err = client.UpdateGroupRequestParticipants(ctx, jid, jids, change)
@@ -31784,14 +31797,14 @@ com sessões reais.
 **Onde mudou**:
 
 - `pkg/domain/group_info.go` — `GroupParticipant` ganhou `Error int`.
-- `pkg/infra/wa-noise/adapters/group/map_group_info.go` —
+- `pkg/infra/noise/adapters/group/map_group_info.go` —
   `toDomainGroupParticipant` mapeia `Error: p.Error`.
 - `pkg/application/contracts/group_ports.go` — `GroupRequests.UpdateRequestParticipants`
   passou a devolver `(domain.ParticipantsUpdate, error)`.
-- `pkg/infra/wa-noise/adapters/group/participants.go` — a linha que
+- `pkg/infra/noise/adapters/group/participants.go` — a linha que
   descartava o resultado (`_, err := …`) agora constrói o
   `ParticipantsUpdate` com a lista de participantes.
-- `pkg/infra/wa-headless/groupreq/requests.go` — o mesmo port, do lado
+- `pkg/infra/headless/groupreq/requests.go` — o mesmo port, do lado
   headless: a capability já fazia um RPC por participante e já tinha o
   resultado por solicitante (usado só para `partialFailure`); agora esse
   resultado também sai no `ParticipantsUpdate` do caminho sem erro.
@@ -31832,7 +31845,7 @@ confirmou um pedido pendente real. `POST /groups/{group_jid}/join-requests
 pedidos pendentes ficou vazia depois (`GET` seguinte devolveu `[]`),
 confirmando que o pedido foi de facto decidido, não só respondido.
 
-**Anti-regressão**: `pkg/infra/wa-noise/adapters/group/participants_test.go`,
+**Anti-regressão**: `pkg/infra/noise/adapters/group/participants_test.go`,
 `TestGroupAdapter_UpdateRequestParticipants_Approve` — dublê devolve DOIS
 participantes (um `Error: 0`, um `Error: 409`) e o teste trava que os dois
 saem em `ParticipantsUpdate.Participants`, com `Confirmed: true`. Controle
@@ -32041,7 +32054,7 @@ EXIT=1
 
 `9a6b3ff` e `2d96535` reparam tudo; em `2d96535` a suíte passa (exit 0). **Não
 há trabalho perdido** — o enunciado da auditoria supunha que o remate estivesse
-por commitar no worktree `wa-api-wa-noise`, e esse worktree está limpo, dois
+por commitar no worktree `wa-api-noise`, e esse worktree está limpo, dois
 commits à frente.
 
 O que fica é o risco: qualquer `git bisect` que aterre em `fea7e6e` vê quatro
@@ -32275,13 +32288,13 @@ ficheiro — candidato a um F novo se alguém quiser assumir esse escopo.
 <!-- f-status: corrigido -->
 
 
-## F288 — `make check` ja' falha no HEAD por causa do HOUSEKEEP do wa-headless, ha' 466 commits
+## F288 — `make check` ja' falha no HEAD por causa do HOUSEKEEP do headless, ha' 466 commits
 
 **Data**: 2026-08-26. **Contexto**: auditoria de evidência (F281); apareceu ao
 correr `make check` para validar o gate novo.
 
-**Onde**: `internal/wa-headless/gate_test.go:635` e `:645`, que lêem
-`internal/wa-headless/HOUSEKEEP.md` (o `housekeepPath` do teste é relativo ao
+**Onde**: `internal/headless/gate_test.go:635` e `:645`, que lêem
+`internal/headless/HOUSEKEEP.md` (o `housekeepPath` do teste é relativo ao
 pacote — **não** é o `HOUSEKEEP.md` da raiz).
 
 **Problema**: `make check` termina em erro no HEAD `2d965350`, e a falha **não
@@ -32294,7 +32307,7 @@ tem nada a ver com o trabalho desta auditoria**:
           H144: "H75 corrigida quanto ao diagnóstico; envio de tipos ricos co"
     gate_test.go:645: entries with several authoritative statuses — read these by hand:
           H5 (2 statuses), H14 (2 statuses), H90 (2 statuses)
-FAIL	wa-api/internal/wa-headless	103.387s
+FAIL	wa-api/internal/headless	103.387s
 make: *** [test] Error 1
 ```
 
@@ -32309,11 +32322,11 @@ São dois defeitos distintos no mesmo ficheiro:
 **Confirmado pré-existente**, e não introduzido por mim:
 
 ```
-$ git log --oneline -1 -- internal/wa-headless/HOUSEKEEP.md
-1117852d 2026-08-23 wa-headless: H75 corrigida — o primitivo genérico de envio existe e carrega
+$ git log --oneline -1 -- internal/headless/HOUSEKEEP.md
+1117852d 2026-08-23 headless: H75 corrigida — o primitivo genérico de envio existe e carrega
 $ git rev-list --count 1117852d..HEAD
 466
-$ git diff 2d965350..HEAD --stat -- internal/wa-headless/HOUSEKEEP.md
+$ git diff 2d965350..HEAD --stat -- internal/headless/HOUSEKEEP.md
 (vazio — os meus commits não tocaram no ficheiro)
 ```
 
@@ -32328,9 +32341,9 @@ pacotes passam.
 vocabulário existente, e resolver em H5, H14 e H90 qual dos dois estados é o
 autoritativo — apagando o outro, não acrescentando um terceiro.
 
-**Referência cruzada**: o dado vive em `internal/wa-headless/HOUSEKEEP.md`, mas
+**Referência cruzada**: o dado vive em `internal/headless/HOUSEKEEP.md`, mas
 a entrada fica aqui porque quem sofre é um **gate** do build, que é âmbito da
-raiz. Quem for corrigir mexe no ficheiro do wa-headless.
+raiz. Quem for corrigir mexe no ficheiro do headless.
 
 **Status**: **não corrigido** — pré-existente e fora do âmbito da auditoria de
 evidência. Registado porque um `make check` vermelho no HEAD faz a próxima
@@ -32377,8 +32390,8 @@ make: *** [orphan-browser-check] Error 1
 O `ppid` **não é 1**, e o dono estava vivo:
 
 ```
-32190 32145  …/wa-headless.test -test.paniconexit0 -test.count=1 …
-32145 23386  go test -race -count=1 -timeout=20m -p 1 wa-api/internal/wa-headless …
+32190 32145  …/headless.test -test.paniconexit0 -test.count=1 …
+32145 23386  go test -race -count=1 -timeout=20m -p 1 wa-api/internal/headless …
 ```
 
 Ou seja: um `go test` de OUTRO worktree estava a correr, o seu binário de teste
@@ -32727,7 +32740,7 @@ asserção da perda morde; essa é a do primeiro controlo.
 
 **Onde**: `pkg/domain/apperr/codes.go:140` (`CategoryRateLimited` →
 `http.StatusTooManyRequests`), alimentada por
-`pkg/infra/wa-noise/errmap/iqerror.go:81` (`429` e `419` do servidor do
+`pkg/infra/noise/errmap/iqerror.go:81` (`429` e `419` do servidor do
 WhatsApp), que chega ao cliente por `RespondJSON`
 (`pkg/presentation/http/response.go:52`, que usa o status da categoria e ignora
 o que o call site passou). São **64** sítios a chamar `errmap.ClassifyIQ`.
@@ -32770,7 +32783,7 @@ regenerou `pkg/presentation/http/apidocs/openapi.yaml` sem diff inesperado
 
 **Ressalva de escopo, medida e não corrigida**: as dezoito rotas de canal
 (`api/openapi/paths/canal.yaml`) não têm `422` documentado e por isso também
-não ganharam `429` — confirmado que `pkg/infra/wa-noise/adapters/misc` (o
+não ganharam `429` — confirmado que `pkg/infra/noise/adapters/misc` (o
 adaptador de newsletter) não chama `errmap.ClassifyIQ`; usa outro caminho de
 erro (ver F271, `500 newsletter_failed`). Não é regressão desta correção:
 é uma inconsistência PRÉ-EXISTENTE fora do critério "atravessa
@@ -32906,9 +32919,9 @@ vale com os números medidos dos dois lados.
 **Onde e o quê**, ambos medidos em `HEAD` (`1636d228`) com a árvore limpa
 (`git stash -u`) e reproduzidos idênticos depois das alterações:
 
-1. `internal/wa-headless/gate_test.go:635`,
+1. `internal/headless/gate_test.go:635`,
    `TestHousekeepEntriesAreMachineReadable` — a entrada **H144** de
-   `internal/wa-headless/HOUSEKEEP.md:11038` começa o `**Status**` por `"H75"`,
+   `internal/headless/HOUSEKEEP.md:11038` começa o `**Status**` por `"H75"`,
    palavra fora do vocabulário que o gate reconhece. **Já está registado** em
    `HOUSEKEEP.md:30787`; esta linha é só o cruzamento.
 2. `make coverage-gate` — cobertura total **85,0 %** contra
@@ -33312,7 +33325,7 @@ fechado no estágio *ratchet*.
 **Data/contexto**: 2026-08-27, migração para DTO da família de utilizadores,
 contactos e blocklist. Achado de lado, ao correr a suíte inteira.
 
-**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers_test.go:56`.
+**Onde**: `pkg/infra/noise/client/realclient_wrappers_test.go:56`.
 
 **Problema**: sete métodos da interface `Client` devolvem erro e não têm
 wrapper que o traduza no `RealClient` — `LinkGroup`, `UnlinkGroup`,
@@ -33325,10 +33338,10 @@ F204).
 **Medição de que é pré-existente**, e é o ponto desta entrada:
 
 ```
-$ git stash -q && go test ./pkg/infra/wa-noise/client/ 2>&1 | tail -3
-        Sem wrapper, o método é PROMOVIDO de *wanoise.Client e devolve o erro cru do SDK; …
+$ git stash -q && go test ./pkg/infra/noise/client/ 2>&1 | tail -3
+        Sem wrapper, o método é PROMOVIDO de *noise.Client e devolve o erro cru do SDK; …
 FAIL
-FAIL	wa-api/pkg/infra/wa-noise/client	0.276s
+FAIL	wa-api/pkg/infra/noise/client	0.276s
 $ git stash pop -q
 ```
 
@@ -33343,7 +33356,7 @@ não.
 
 **Correção sugerida**: escrever os sete wrappers a chamar
 `errmap.ClassifyIQ`, como os restantes; e, separadamente, perceber por que
-`pkg/infra/wa-noise/client` está fora da lista do alvo `test`.
+`pkg/infra/noise/client` está fora da lista do alvo `test`.
 
 **Status**: corrigido — ver F334, que escreveu os sete wrappers depois de o
 utilizador ter pedido explicitamente para fechar este achado. A pergunta
@@ -33722,7 +33735,7 @@ não há como manter as quatro e ser canónico.
 $ grep -rn "RowId\|RowID\|Rowid\|Rowid2" --include='*.go' pkg/ | grep -v _test
 pkg/application/usecase/message/send_list.go:155:  for _, candidate := range []string{row.RowId, row.RowID, row.Rowid, row.Rowid2}
 pkg/application/usecase/message/send_list.go:188:  RowId:       resolveRowID(row, title),
-pkg/infra/wa-noise/adapters/chat/messenger_list.go:57:  RowID: proto.String(row.RowId),
+pkg/infra/noise/adapters/chat/messenger_list.go:57:  RowID: proto.String(row.RowId),
 ```
 
 Só `RowId` é **escrito** pelo use case depois de normalizar, e só `RowId` é
@@ -34727,7 +34740,7 @@ sessão).
 **Testes**: `go build ./...` limpo; `go test ./pkg/presentation/http/...
 ./pkg/application/usecase/message/...` verde; `make check` completo
 (build + vet + fmt + `-race` + lint + cobertura + cobertura de log + carimbo
-de rota + fachada/tamanho/testes de `internal/wa-noise`) verde após
+de rota + fachada/tamanho/testes de `internal/noise`) verde após
 regenerar `cmd/logcov/testdata/eligible.golden` (seis funções de DTO novas
 entraram como `EXCLUDED`, mesma classificação das demais desta família).
 
@@ -34906,7 +34919,7 @@ acima). `cmd/logcov/testdata/eligible.golden` regenerado.
 
 **Status**: **corrigido** nesta sessão. `go build ./...` verde. `go test ./...`
 verde, com a única excepção pré-existente e sem relação
-(`TestTodoMetodoComErroTemWrapper`, `pkg/infra/wa-noise/client` — 7 métodos
+(`TestTodoMetodoComErroTemWrapper`, `pkg/infra/noise/client` — 7 métodos
 de newsletter/community sem wrapper de `errmap`, confirmado sem diff nesse
 ficheiro nesta sessão; fora do âmbito desta tarefa).
 
@@ -35051,7 +35064,7 @@ o texto das chamadas a `Register` ali directamente duplicou registos
 conflitantes (`SetGroupPhoto` e `RemoveGroupPhoto` ficaram os DOIS registados
 como `POST /groups/{group_jid}/photo`, quando deviam ser `PUT` e `DELETE`
 respectivamente) e corrompeu comentários que citavam CAMINHOS DE FICHEIRO
-não relacionados com rotas HTTP (`internal/wa-noise/capabilities/user/info.go`
+não relacionados com rotas HTTP (`internal/noise/capabilities/user/info.go`
 virou `.../users/info.go`, um caminho que não existe, só porque a substring
 `/user/info` bateu). Revertido por completo (`git checkout --` nos 120
 ficheiros) e refeito por ficheiro, só onde uma string literal era de facto
@@ -35085,7 +35098,7 @@ reconfirmado `go test ./pkg/bootstrap/... ./pkg/infra/stdio/...` verde.
 completo depois da correcção. `go test ./...`: as únicas falhas restantes
 são as duas já registadas como pré-existentes e alheias a esta fundação
 (`cmd/logcov` — F295/F296 — e `TestTodoMetodoComErroTemWrapper` em
-`pkg/infra/wa-noise/client`, ficheiro que esta sessão não tocou, confirmado
+`pkg/infra/noise/client`, ficheiro que esta sessão não tocou, confirmado
 por `git diff --stat` vazio nesse caminho).
 
 **Documentação actualizada**: `api/openapi/CAMINHOS-CANONICOS.md` e
@@ -35172,7 +35185,7 @@ as worktrees-irmãs fundirem as seis migrações):
 - `TestLiveNaming_Users` — passa (`/users/lid/{jid}`).
 - `TestLiveNaming_Admin` — **falha**: `proxy_config.proxyUrl`,
   `proxy_config.webhookUseProxy`.
-- `TestLiveNaming_Newsletters` — passa (`types.JID` do wa-noise vendorizado
+- `TestLiveNaming_Newsletters` — passa (`types.JID` do noise vendorizado
   tem `MarshalText`, e `types.NewsletterMetadata`/`NewsletterThreadMetadata`
   já trazem etiquetas `json:"..."` em snake_case de fábrica).
 
@@ -35180,7 +35193,7 @@ Nenhuma destas falhas foi corrigida nesta sessão — não é o âmbito desta
 tarefa (que é o mecanismo de deteção, não a correção por família), e o
 `CLAUDE.md` pede para perguntar antes de corrigir achado fora de âmbito.
 
-**Achado incidental que atravessa a fronteira para `internal/wa-headless`
+**Achado incidental que atravessa a fronteira para `internal/headless`
 não se aplica aqui** — as três superfícies medidas (caminhos registados,
 OpenAPI embutido, corpo HTTP ao vivo) são todas código nosso
 (`pkg/bootstrap`, `pkg/presentation`), não a biblioteca vendorizada.
@@ -35378,8 +35391,8 @@ pelo relatório final da normalização de contrato (F296-F333). Este era o
 segundo dos dois — o primeiro (F332, esquemas OpenAPI desactualizados) foi
 tratado em paralelo por outros workers.
 
-**Onde**: `pkg/infra/wa-noise/client/realclient_wrappers.go`. Sete métodos
-da interface `Client` eram PROMOVIDOS de `*wanoise.Client` em vez de
+**Onde**: `pkg/infra/noise/client/realclient_wrappers.go`. Sete métodos
+da interface `Client` eram PROMOVIDOS de `*noise.Client` em vez de
 escritos — sem wrapper, uma recusa do servidor do WhatsApp chegava ao
 cliente HTTP como `500` em vez do código classificado por
 `errmap.ClassifyIQ` (o mecanismo da F204).
@@ -35402,9 +35415,9 @@ em produção, e não há medição para convite de admin — inventar um
 `CLAUDE.md` proíbe ("Medir antes de projetar").
 
 **Anti-regressão**: `TestTodoMetodoComErroTemWrapper`
-(`pkg/infra/wa-noise/client/realclient_wrappers_test.go`), que já existia e
+(`pkg/infra/noise/client/realclient_wrappers_test.go`), que já existia e
 já enumerava os sete em falta — não precisou de teste novo, só parou de
-falhar. `go test ./pkg/infra/wa-noise/client/... -race` verde.
+falhar. `go test ./pkg/infra/noise/client/... -race` verde.
 
 **Status**: corrigido.
 
@@ -35578,7 +35591,7 @@ isenta pelo gate).
 - **`api/openapi/schemas/grupo.yaml`**: **remoção**, não renomeação, dos
   schemas `InfoGrupo` e `ParticipanteGrupo` (sem sufixo). Achado que a
   directiva original não previa: estes dois schemas descreviam a struct de
-  protocolo do wa-noise servida DIRECTAMENTE, sem DTO, e o próprio ficheiro
+  protocolo do noise servida DIRECTAMENTE, sem DTO, e o próprio ficheiro
   já dizia (linha 1559, antes da remoção) que ficavam "só como registo do
   formato ANTERIOR" — a forma viva, usada por TODAS as rotas da família
   desde F312/F313/F316, é `InfoGrupoCanonico`/`ParticipanteGrupoCanonico`.
@@ -35985,6 +35998,16 @@ da normalização de contrato HTTP. Medido e confirmado pré-existente com
 
 <!-- f-status: aberto -->
 ## F342 — decisão 94 removida: seleção de engine passa a ser por sessão, escolhida no pedido de criação, não mais estática por variável de ambiente
+
+**RESOLVIDO em 2026-08-29 (F382-F386)**: a seção "Nomenclatura" abaixo
+registra uma decisão de nome de fio (`"noise"`, não `"wanoise"`) tomada
+NAQUELE dia, numa worktree diferente (`feature/wa-noise`) — cujo estado
+não é necessariamente o que este repositório tem hoje antes da F382-F386
+(ver F369, que reconcilia essa worktree de volta a esta). As citações
+literais abaixo (`domain.EngineNoise`, `wa_noise_`, `"wanoise"`) são
+histórico e ficam intocadas pela substituição mecânica que tocou o resto
+deste arquivo — mudar os nomes aqui apagaria o registro de qual forma o
+código tinha, e quando. Ver F382-F386 para a correção deste repositório.
 
 **Data/contexto**: 2026-08-27/28. O usuário viu no `/devui` (screenshot do
 modal "Nova sessão") que não havia como escolher `noise` vs `headless` ao
@@ -37105,7 +37128,7 @@ de ação do usuário):
    eventos também. `POST /newsletters/messages` confirmou `view_count:0`
    antes e depois nos dois casos. **Achado incidental**: o log do servidor
    registou "Newsletter live update" internamente logo depois de cada
-   tentativa (`internal/wa-noise/core/newsletter.go`, handler do evento),
+   tentativa (`internal/noise/core/newsletter.go`, handler do evento),
    mas nada chegou a nenhum dos dois WebSockets clientes — o evento existe
    e é recebido do WhatsApp, mas não é entregue por este caminho. Não
    corrigido nesta sessão (fora do escopo do pedido — era para destravar
@@ -37497,7 +37520,7 @@ API, e a janela para usar esses valores fecha quando a chamada termina.
 manualmente (a janela é curta demais para esse ciclo), escrevi um script
 que já reage sozinho — conecta ao `/session/ws` de `recebe`, espera o
 evento `CallOffer`, extrai `From`/`CallID` do payload
-(`types.BasicCallMeta`, `internal/wa-noise/protocol/types/call.go:5-12`)
+(`types.BasicCallMeta`, `internal/noise/protocol/types/call.go:5-12`)
 e dispara `POST /call/reject` imediatamente, dentro do mesmo processo.
 
 **Medição**: usuário fez uma chamada de voz real para o número de
@@ -37604,7 +37627,7 @@ dos dois de protocolo do WhatsApp (F264, F265).
 **Descoberta antes de qualquer código**: fui ler o próprio F275 no
 HOUSEKEEP para planear o conserto, e ele já dizia **"Status: corrigido em
 2026-08-27"** — um dia antes desta sessão de trabalho ter começado. A
-correção (`pkg/infra/wa-noise/runtime/session/guard.go`,
+correção (`pkg/infra/noise/runtime/session/guard.go`,
 `apperr.CodeSessionNotPaired`, `409`) já estava no código, com testes
 (`TestSessionGuardAdapter_Logout_ConectadoSemPareamentoRecusa`,
 `TestLogoutHandler_ConectadaSemPareamento_409ComEnvelopeCanonico`) e
@@ -37669,17 +37692,17 @@ o `block` exige, além do `jid` em LID (já resolvido pela app desde F278),
 um segundo atributo `pn_jid` com o número de telefone — que a biblioteca
 vendorizada nunca emitia.
 
-- `internal/wa-noise/capabilities/user/blocklist.go` — `UpdateBlocklist`
+- `internal/noise/capabilities/user/blocklist.go` — `UpdateBlocklist`
   ganha o parâmetro `pnJID types.JID`; o `<item>` leva `pn_jid` só quando
   `action==block` e `pnJID` não é vazio. Ver LIB-02 no HOUSEKEEP da
-  biblioteca (`internal/wa-noise/HOUSEKEEP.md`) para o detalhe da porta.
-- `internal/wa-noise/core/user_queries.go` — `Client.UpdateBlocklist`
+  biblioteca (`internal/noise/HOUSEKEEP.md`) para o detalhe da porta.
+- `internal/noise/core/user_queries.go` — `Client.UpdateBlocklist`
   propaga o parâmetro novo.
-- `pkg/infra/wa-noise/client/{client.go,realclient_wrappers.go}` e
-  `pkg/infra/wa-noise/client/testkit/{fake.go,fake_user.go}` — interface e
+- `pkg/infra/noise/client/{client.go,realclient_wrappers.go}` e
+  `pkg/infra/noise/client/testkit/{fake.go,fake_user.go}` — interface e
   dublê atualizados com o mesmo parâmetro (assinatura muda em toda a
   cadeia, mecânico).
-- `pkg/infra/wa-noise/adapters/user/blocklist.go` — `resolveBlocklistPN`
+- `pkg/infra/noise/adapters/user/blocklist.go` — `resolveBlocklistPN`
   (nova): resolve o PN do alvo — direto se o pedido já veio em PN, via
   `getCachedPNForLID` se veio em LID — só quando a ação é `block` (não
   gasta info query à toa no `unblock`, que não usa `pn_jid`). Sem
@@ -37696,7 +37719,7 @@ mais os dois testes existentes ajustados à assinatura nova.
 **Controlo negativo EXECUTADO nas duas camadas**:
 
 ```
-# internal/wa-noise (revertida a linha que adiciona pn_jid ao Attrs)
+# internal/noise (revertida a linha que adiciona pn_jid ao Attrs)
 --- FAIL: TestUpdateBlocklistBlockCarriesPNJID
     blocklist_test.go:166: pn_jid = <nil>, want 5511999@s.whatsapp.net
 
@@ -37734,7 +37757,7 @@ continua a falhar hoje" com só `newsletters/updates`, contagens
 atualizadas) e `api/openapi/base.yaml` (legenda) atualizados.
 `docs/OPENAPI-EVIDENCIAS.md` regenerado. `cmd/logcov/testdata/eligible.golden`
 regenerado (`resolveBlocklistPN`, nova função elegível, EXCLUDED).
-`internal/wa-noise/HOUSEKEEP.md` LIB-02 fechado (`aberto`→`corrigido`),
+`internal/noise/HOUSEKEEP.md` LIB-02 fechado (`aberto`→`corrigido`),
 com o mesmo detalhe de teste/controlo negativo.
 
 **Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
@@ -37771,7 +37794,7 @@ ignora, daí o timeout de 30s. A forma nova é idêntica ao IQ de
 `GetMessages`: destino o SERVIDOR, filho `<messages type='jid' jid=…
 count=… before=…>`.
 
-`internal/wa-noise/capabilities/newsletter/messages.go` —
+`internal/noise/capabilities/newsletter/messages.go` —
 `GetMessageUpdates` reescrito para reaproveitar `messagesAttrs`/
 `messagesTag` (o mesmo construtor que `GetMessages` já usa) em vez de ter
 o seu próprio `messageUpdatesAttrs`/`message_updates`, removidos. O
@@ -37782,7 +37805,7 @@ tempo) não tem equivalente na forma nova e fica **sem efeito no pedido**
 chamadores existentes que só preenchiam `Since` sem avisar por que
 deixaram de filtrar por tempo.
 
-**Testes** (`internal/wa-noise/capabilities/newsletter/messages_test.go`):
+**Testes** (`internal/noise/capabilities/newsletter/messages_test.go`):
 removidos os quatro testes de `messageUpdatesAttrs` (função extinta);
 `TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages` (trava a
 causa: destino servidor, tag `messages`, `count`/`before` corretos),
@@ -37815,7 +37838,7 @@ com o detalhe de F265, "Só uma continua a falhar hoje" vira "Nenhuma rota
 falha hoje", contagens atualizadas) e `api/openapi/base.yaml` (legenda,
 mantendo a frase fixa "As 0 por testar" que `TestEvidenceLegendMatchesTable`
 exige por regex) atualizados. `docs/OPENAPI-EVIDENCIAS.md` regenerado.
-`internal/wa-noise/HOUSEKEEP.md` LIB-03 fechado (`aberto`→`corrigido`),
+`internal/noise/HOUSEKEEP.md` LIB-03 fechado (`aberto`→`corrigido`),
 com o mesmo detalhe de teste/controlo negativo.
 
 **Verificação**: `go build ./...`, `go vet ./...`, `gofmt -l pkg cmd
@@ -37877,7 +37900,7 @@ vivo de forma inequívoca.
   tinha o que baixar ou entregar.
 
 **Testes** (`pkg/bootstrap/message_dedup_test.go`, com
-`waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"` importado):
+`waE2E "wa-api/internal/noise/protocol/proto/waE2E"` importado):
 - `TestDedup_SegundaCopiaComMidiaNaoEhSuprimidaQuandoPrimeiraEraVazia` —
   trava a causa: primeira cópia com `SenderKeyDistributionMessage` vazio,
   segunda com `VideoMessage` real, mesmo `message_id` → segunda NÃO
@@ -37957,9 +37980,9 @@ total). Nenhum commit feito.
 **Data/contexto**: worktree `feature/account-type-detection` (itens 33-35 do
 prompt arquitetural — detecção de tipo de conta). Ao investigar qual sinal do
 protocolo usar para saber se a conta própria é Business, li
-`internal/wa-noise/capabilities/user/info.go`.
+`internal/noise/capabilities/user/info.go`.
 
-**Onde**: `internal/wa-noise/capabilities/user/info.go:96-108` (função
+**Onde**: `internal/noise/capabilities/user/info.go:96-108` (função
 `GetInfo`):
 
 ```go
@@ -37975,7 +37998,7 @@ if verifiedName != nil {
 respData[jid] = info
 ```
 
-`types.UserInfo` (`internal/wa-noise/protocol/types/user.go:16-22`) TEM um
+`types.UserInfo` (`internal/noise/protocol/types/user.go:16-22`) TEM um
 campo `VerifiedName *VerifiedName`. `GetInfo` calcula o valor certo
 (`verifiedName`, a variável local) e usa-o para atualizar o nome business no
 contact store (`UpdateBusinessName`), mas nunca faz `info.VerifiedName =
@@ -37993,7 +38016,7 @@ corrigisse, o que não vale o ciclo para um achado fora de escopo.
 **Por que não usei `GetInfo` para a detecção desta worktree**: por causa
 exatamente deste bug — depender de `GetInfo` amarraria a detecção de tipo de
 conta a um caminho que já se sabe não devolver o campo. `DetectOwnAccountKind`
-(`internal/wa-noise/capabilities/user/accounttype.go`) chama `USync`
+(`internal/noise/capabilities/user/accounttype.go`) chama `USync`
 diretamente e lê `ParseVerifiedName` no próprio resultado, sem depender de
 `GetInfo`.
 
@@ -38050,7 +38073,7 @@ detecção de tipo de conta, `applyMigration` está fora do escopo (33-35), e a
 instrução do projeto é registrar e perguntar antes de corrigir bug
 pré-existente fora do escopo. `make check` desta worktree só falha em `lint`
 por causa deste item pré-existente e em `TestHousekeepEntriesAreMachineReadable`
-(H144 do wa-headless), ambos confirmados como não introduzidos por mim.
+(H144 do headless), ambos confirmados como não introduzidos por mim.
 
 <!-- f-status: aberto -->
 
@@ -38081,11 +38104,11 @@ engine já gravado na linha**. Teste de ataque
 (`TestAudit_Invariant2_RepositoryAcceptsEngineChangeAfterCreation`, em
 `pkg/infra/db/capability_audit_user_test.go`) chama `UpdateUser` diretamente
 com `domain.UserUpdate{Engine: &novoEngine}`, contornando o caso de uso, e o
-engine da linha muda de `wa_noise` para `wa_headless` sem erro nenhum:
+engine da linha muda de `noise` para `headless` sem erro nenhum:
 
 ```
 capability_audit_user_test.go:188: BROKE invariant 2 at the repository
-layer: engine went from "wa_noise" to "wa_headless" via
+layer: engine went from "noise" to "headless" via
 UserRepository.UpdateUser, with no comparison against the row's prior value.
 ```
 
@@ -38252,7 +38275,7 @@ final da ADR-0010 sobre por quê.
 que corrigiu a metade de PAREAMENTO da F273. Estes são os achados de lado do
 mesmo levantamento — o que foi encontrado a olhar, e que não cabia no enunciado.
 
-### (a) Dez adaptadores wa-noise concretos, ligados sem condicional por engine
+### (a) Dez adaptadores noise concretos, ligados sem condicional por engine
 
 **Onde**: `pkg/bootstrap/wiring_handlers.go`, linhas 130-208.
 
@@ -38268,12 +38291,12 @@ mesmo levantamento — o que foi encontrado a olhar, e que não cabia no enuncia
 ```
 
 **Problema**: é o MESMO padrão da F273 — handler ligado a um adaptador de UM
-engine, sem que nada leia `users.engine`. Uma sessão em `wa_headless` que
+engine, sem que nada leia `users.engine`. Uma sessão em `headless` que
 chamasse `/chat/send/text`, `/user/presence` ou `/group/info` seria servida pelo
 socket, com o registo dela a dizer outra coisa.
 
 **Por que NÃO é o mesmo dano, hoje**: nenhuma sessão corre em headless neste
-build. Nada de `pkg/infra/wa-headless` é construído em `pkg/bootstrap` — `grep
+build. Nada de `pkg/infra/headless` é construído em `pkg/bootstrap` — `grep
 -rn NewDisconnector pkg/bootstrap` devolve zero fora de testes. Enquanto isso
 for verdade, o roteamento errado é indistinguível do certo. Deixa de ser no dia
 em que o primeiro provider headless for ligado, e nesse dia são ~10 sítios, não
@@ -38379,7 +38402,7 @@ divergência era "hoje inobservável", e a superfície de pareamento acabou de
 mostrar a forma em que ela deixa de ser.
 
 **Onde**: `pkg/pairing/errors.go` (`CodeNoSession`) e
-`pkg/infra/wa-noise/adapters/pairing/qr.go` (`codeNoSessionRow`).
+`pkg/infra/noise/adapters/pairing/qr.go` (`codeNoSessionRow`).
 
 **Problema**: dois sítios constroem `apperr` com o código `"no_session"` para o
 mesmo facto — não há linha em `users` para este id. São deliberadamente iguais
@@ -38405,12 +38428,12 @@ camadas e é escopo próprio; registado, com referência cruzada para F272.
 ao correr `make check` no fim da tarefa. Achado de lado, e não da tarefa.
 
 **Onde**: `Makefile:251-281` (alvo `coverage-gate`), `.coverage-baseline`
-(`min_coverage=870`), e `internal/wa-headless/gate_test.go`
+(`min_coverage=870`), e `internal/headless/gate_test.go`
 (`TestHousekeepEntriesAreMachineReadable`).
 
 **Problema**: o `coverage-gate` corre os testes PRIMEIRO e só calcula a
 percentagem se eles passarem (`|| { ...; exit 1; }`, linha 262). Um teste está a
-falhar em `internal/wa-headless` — `TestHousekeepEntriesAreMachineReadable`, por
+falhar em `internal/headless` — `TestHousekeepEntriesAreMachineReadable`, por
 causa da entrada H144, cujo status começa por uma palavra fora do vocabulário
 que o scan classifica. Logo o gate morre na linha 262 e **nunca chega à linha
 267**, onde a comparação com o piso acontece.
@@ -38444,7 +38467,7 @@ silêncio, há uma falha REAL a esconder uma segunda falha atrás dela.
 
 **Correção sugerida**, por ordem:
 
-1. consertar a H144 em `internal/wa-headless/HOUSEKEEP.md` — o status tem de
+1. consertar a H144 em `internal/headless/HOUSEKEEP.md` — o status tem de
    começar por uma palavra do vocabulário que `openStatusTokens` /
    `closedStatusTokens` conhecem, ou a palavra nova entra na lista de propósito.
    É uma linha de texto, e desbloqueia o gate;
@@ -38456,8 +38479,8 @@ silêncio, há uma falha REAL a esconder uma segunda falha atrás dela.
 
 **Status**: **não corrigido**. As duas metades são escopo alheio: a H144
 pertence ao HOUSEKEEP da biblioteca vendorizada e a decisão sobre o piso é do
-dono do repositório. Referência cruzada em `internal/wa-noise/HOUSEKEEP.md` não
-se aplica — o achado atravessa para `internal/wa-headless`, que tem o seu
+dono do repositório. Referência cruzada em `internal/noise/HOUSEKEEP.md` não
+se aplica — o achado atravessa para `internal/headless`, que tem o seu
 próprio ficheiro, e a entrada H144 já lá está; o que falta lá é a informação de
 que ela bloqueia um gate do repositório inteiro.
 
@@ -38475,7 +38498,7 @@ multi-pod).
 **O que foi portado**: `pkg/infra/db/account_ownership.go` (355 linhas,
 commit `4c84304b` de `feature/macbook-lucas`) — tabela `account_ownership`
 (migração 20), chave `(identity, engine)`, distinta de `session_leases`
-(ADR-0005, só `wa_noise`, chaveada por `user_id`). `ClaimAccountIdentity`
+(ADR-0005, só `noise`, chaveada por `user_id`). `ClaimAccountIdentity`
 é a operação atômica: `pg_advisory_xact_lock` por `(identity,engine)` +
 `FOR UPDATE` + índice único PARCIAL (`WHERE status='active'`) como
 proteção estrutural — um `INSERT` direto via SQL cru, contornando a
@@ -38522,7 +38545,7 @@ go test ./pkg/infra/db/ -run "TestNewestWins" -race -v
 ```
 
 **Adaptação de vocabulário** (mesmo padrão de F358/F273): os testes
-portados usavam `"wa_noise"` como valor arbitrário de string na chave
+portados usavam `"noise"` como valor arbitrário de string na chave
 `(identity, engine)` — normalizado para `"noise"`, o valor real desta
 worktree, ainda que esta tabela não valide o campo contra
 `domain.EngineValido` (é `TEXT` livre, parte da chave composta, não um
@@ -38580,10 +38603,10 @@ worktree, que já partilha ancestral recente (`906abee1`) com
 (`domain.Engine` tipado, `pkg/capabilityregistry/` e `pkg/pairing/registry.go`
 já ligados, camada DTO em `pkg/presentation/http/dto/`) — ao contrário de
 `feature/wa-noise`, que usava vocabulário de engine não tipado
-(`domain.EngineNoise`/`domain.EngineWaHeadless`, valores `"noise"`/`"headless"`).
+(`domain.EngineNoise`/`domain.EngineHeadless`, valores `"noise"`/`"headless"`).
 
 Havia trabalho não commitado nesta worktree antes do merge (dois slots de
-perfil descartável para pareamento de teste, `internal/wa-headless/
+perfil descartável para pareamento de teste, `internal/headless/
 realspa_test.go` + `pairslot_test.go` novo) — perguntado ao usuário, que
 escolheu commitá-lo primeiro (commit `682b5921`), destravando o merge.
 
@@ -38599,13 +38622,13 @@ a suíte de 4 testes, que foi portada e adaptada.
 `pkg/presentation/http/dto/admin/request.go` — arquivo NOVO nesta worktree
 (não existia antes do merge; chegou por auto-merge sem marcador de
 conflito) — trazia o `Validate()`/`ToDomain()` de `feature/wa-noise`
-literalmente, que DEFAULTA `engine` vazio para `wa_noise` em vez de o
+literalmente, que DEFAULTA `engine` vazio para `noise` em vez de o
 recusar. Isso contradiz `AddUserUseCase.Execute` desta worktree — que já
 exigia `engine` obrigatório ANTES do merge (itens 4-5 do prompt
 arquitetural, F281), com suíte própria (`TestAddUserUseCase_
 Execute_EngineObrigatorio`, `TestAdminAddUser_
 EngineAusenteNuloVazioOuInvalidoE400`). Ao contrário de F368/macbook-lucas
-(onde o usuário autorizou explicitamente "wa-noise vence" e o "engine
+(onde o usuário autorizou explicitamente "noise vence" e o "engine
 obrigatório" foi INTENCIONALMENTE relaxado para opcional-com-default), aqui
 o "engine obrigatório" é invariante nativa desta worktree, documentada e
 testada, que o auto-merge silencioso quase sobrescreveu sem decisão
@@ -38652,27 +38675,27 @@ usuário (mesmo protocolo de F368/macbook-lucas).
 
 <!-- f-status: corrigido -->
 
-## F370 — `/session/*` para `wa_headless`: dispatch por engine para o que já tinha adapter (Fase 0 de um plano maior)
+## F370 — `/session/*` para `headless`: dispatch por engine para o que já tinha adapter (Fase 0 de um plano maior)
 
 **Data**: 2026-08-29. **Contexto**: pedido do usuário para que os endpoints
-`/session/*` funcionem também em `wa_headless`, não só `wa_noise`. Plano
+`/session/*` funcionem também em `headless`, não só `noise`. Plano
 completo aprovado em 5 fases (ver conversa/plano
 `sparkling-snuggling-patterson.md`); esta entrada cobre só a Fase 0,
 executada nesta sessão.
 
 **Onde**: `pkg/bootstrap/session_engine_guard.go` (novo),
 `pkg/bootstrap/wiring_handlers.go:163-183`,
-`pkg/infra/wa-headless/sessions.go` (`+EvaluatorForPairing`, `+Promote`),
-`pkg/infra/wa-headless/session/disconnector.go` (`SessionStatus` honesto).
+`pkg/infra/headless/sessions.go` (`+EvaluatorForPairing`, `+Promote`),
+`pkg/infra/headless/session/disconnector.go` (`SessionStatus` honesto).
 
 **Problema medido**: `sessionGuard` em `wiring_handlers.go` era sempre
-`wasession.NewSessionGuardAdapter(waClientLookup)` — só `wa_noise` — e essa
+`wasession.NewSessionGuardAdapter(waClientLookup)` — só `noise` — e essa
 MESMA variável é reusada por 11 use cases: `DisconnectUseCase`,
 `LogoutUseCase`, `GetStatusUseCase`, e oito outros que só chamam
 `EnsureSession` (config de S3/HMAC/proxy/history, `ListUsers`,
-`DeleteUserComplete`). Uma sessão gravada como `wa_headless` falhava
+`DeleteUserComplete`). Uma sessão gravada como `headless` falhava
 `EnsureSession` em TODOS eles, não só nas rotas de sessão.
-`pkg/infra/wa-headless/session.Disconnector` já implementava
+`pkg/infra/headless/session.Disconnector` já implementava
 `SessionDisconnector` inteiro, mas não estava construído em lugar nenhum de
 `pkg/bootstrap` (zero hits para `NewDisconnector` fora de teste).
 
@@ -38687,22 +38710,22 @@ capacidades (`capabilityregistry.Decide`) antes de despachar, então uma
 capacidade marcada `unknown`/`not_implemented` continua recusando mesmo com
 adapter presente.
 
-**Logout ficou deliberadamente PARCIAL**: `waHeadlessLogouter` fica `nil`
+**Logout ficou deliberadamente PARCIAL**: `headlessLogouter` fica `nil`
 até o formato real de chamada do `Socket.logout` ser medido contra a SPA
 (H122 só provou presença, nunca invocou — ver
-`internal/wa-headless/session/disconnector.go`). O usuário pediu para
+`internal/headless/session/disconnector.go`). O usuário pediu para
 reverter a recusa de política da H122 e implementar logout, mas escrever a
 chamada JS sem medição violaria a própria regra deste repositório
 (medir antes de projetar) e arriscaria desemparelhar uma conta real numa
-chamada nunca verificada. `Logout(wa_headless)` hoje recusa de forma
+chamada nunca verificada. `Logout(headless)` hoje recusa de forma
 identificável (`capability_not_supported`, pela matriz — `unknown` para
-`logout_session`/wa_headless) em vez de tentar ou de cair silenciosamente
+`logout_session`/headless) em vez de tentar ou de cair silenciosamente
 no adapter errado.
 
 **`SessionStatus` deixou de ser um placeholder de posse**
 (`connected==loggedIn==held`): agora, quando a sessão está detida, lê a
-página de verdade via `waheadless.RefreshOwnIdentity`
-(`internal/wa-headless/capabilities/owner`) para decidir `loggedIn`, e
+página de verdade via `headless.RefreshOwnIdentity`
+(`internal/headless/capabilities/owner`) para decidir `loggedIn`, e
 `connected` reflete se o `Evaluator` conseguiu ser resolvido (sem reboot
 para uma sessão já detida — `registry.Acquire` devolve a entrada
 existente). Sem posse, continua `(false,false)` SEM subir browser — a
@@ -38711,19 +38734,19 @@ mesma garantia de antes.
 **Testes**: `pkg/bootstrap/session_engine_guard_test.go` (novo) — defeito
 travado por `TestEnsureSessionDespachaPorEngineGravado`, que verifica
 CONTAGEM de chamadas por adapter (não só ausência de erro). Controle
-negativo EXECUTADO: dispatch de `wa_headless` trocado manualmente para
-`g.waNoise` em `disconnectorFor`, teste falhou (`adapter headless recebeu 0
-chamadas, want 1`), revertido. `pkg/infra/wa-headless/session/
+negativo EXECUTADO: dispatch de `headless` trocado manualmente para
+`g.noise` em `disconnectorFor`, teste falhou (`adapter headless recebeu 0
+chamadas, want 1`), revertido. `pkg/infra/headless/session/
 disconnector_test.go` reescrito para o novo contrato de `SessionStatus`
 (o teste antigo travava o placeholder antigo por design — não é regressão,
 é o comportamento antigo sendo substituído pelo honesto). `go build ./...`,
 `go vet ./...`, `go test -race` de `pkg/bootstrap/...` e
-`pkg/infra/wa-headless/...` verdes.
+`pkg/infra/headless/...` verdes.
 
 **O que falta** (fases seguintes do plano, não cobertas nesta entrada):
 Fase 1 (`connect`+`qr`), Fase 2 (`pairphone`) e a implementação real de
 Logout (Fase 3) exigem medição ao vivo contra o perfil descartável
-`.lab/` (`WA_HEADLESS_REAL_SPA=1`, `WA_HEADLESS_PAIR_SLOT=a|b`) — nenhuma
+`.lab/` (`HEADLESS_REAL_SPA=1`, `HEADLESS_PAIR_SLOT=a|b`) — nenhuma
 delas foi escrita nesta sessão porque nenhuma medição foi feita. Fase 4
 (atualizar `pkg/capabilityregistry/matrix.go` para `connect_session`/
 `get_pairing_qr`/`request_pairing_code`/`logout_session`) fica pendente
@@ -38736,11 +38759,11 @@ vivo que exige um humano com telefone para escanear QR no perfil
 descartável.
 
 **Atualização 2026-08-29 (mesmo dia)**: a medição ao vivo da Fase 1 (QR) foi
-tentada — ver `internal/wa-headless/HOUSEKEEP.md` H145 para a evidência
+tentada — ver `internal/headless/HOUSEKEEP.md` H145 para a evidência
 completa. Achado: o bloqueio não é falta de humano com telefone, é
 estrutural — `core.StartSession` recusa qualquer página que não classifique
 `APP_READY`, por desenho ("QR pairing is a separate, human-authorised
-slice", `internal/wa-headless/core/session.go:8-10`), e `Holder.Session()`
+slice", `internal/headless/core/session.go:8-10`), e `Holder.Session()`
 chama esse caminho incondicionalmente mesmo para `registry.KindPairing`.
 Não existe, em produção OU teste, nenhum caminho que suba um browser numa
 página de QR. A Fase 1 precisa primeiro de um novo primitivo de boot na
@@ -38751,8 +38774,8 @@ escopo do que este HOUSEKEEP previa originalmente.
 o primitivo (`core.StartPairingSession` + `Holder.PairingSession`) foi
 construído, e a cadeia completa de construção do QR (wwebjs) foi medida
 funcionando de ponta a ponta contra `.lab/test-account-profile` — ver
-`internal/wa-headless/HOUSEKEEP.md` H145, seção "Atualização, mesmo dia",
-para toda a evidência. `QRReader` e `Starter` para `wa_headless` estão
+`internal/headless/HOUSEKEEP.md` H145, seção "Atualização, mesmo dia",
+para toda a evidência. `QRReader` e `Starter` para `headless` estão
 escritos e ligados em `pkg/bootstrap/pairing_providers.go`;
 `get_pairing_qr`/`connect_session` passam a `Supported` na matriz. Fase 1
 do plano original: **corrigida**. Fase 2 (pairphone) e a implementação
@@ -38761,7 +38784,7 @@ real de `Logout` (Fase 3, H122) continuam pendentes.
 **Atualização 2026-08-29 (mesmo dia)**: refresh automático do QR
 (`WAWebLaunchSocketUtils.refreshQR`) e promoção pairing→operational
 (`registry.Promote`) implementados e ligados — ver
-`internal/wa-headless/HOUSEKEEP.md` H145, seção "refresh automático do QR
+`internal/headless/HOUSEKEEP.md` H145, seção "refresh automático do QR
 e promoção pairing→operational", para a evidência completa, incluindo um
 defeito real (condição de retentativa comparando o campo errado) pego
 pelo teste com dublê determinístico ANTES de qualquer medição ao vivo —
@@ -38776,7 +38799,7 @@ próprio overlay de "código expirado", com `Conn.ref` ficando com o valor
 ANTIGO em vez de vazio, o que o `qr.Reader` de antes desta atualização não
 detectava. Medido também que `refreshQR()` (a mesma chamada já usada para
 `ref` vazio) recupera em ~1s durante essa janela, sem precisar de clique
-real. Corrigido e testado — ver `internal/wa-headless/HOUSEKEEP.md` H145,
+real. Corrigido e testado — ver `internal/headless/HOUSEKEEP.md` H145,
 seção "o padrão de código expirado a cada 6 rotações".
 
 <!-- f-status: aberto -->
@@ -38793,14 +38816,14 @@ medido agora: `go tool cover -func=coverage.out | tail -1` devolve
 
 **Problema**: `go tool cover -func=coverage.out` lista 73 funções com 0.0%
 de cobertura só em `pkg/bootstrap`, e mais dezenas em
-`pkg/infra/wa-noise`, `pkg/infra/wa-headless`, `pkg/domain`,
-`internal/wa-headless/*`. Amostra confirmada por `git log -1` em duas
+`pkg/infra/noise`, `pkg/infra/headless`, `pkg/domain`,
+`internal/headless/*`. Amostra confirmada por `git log -1` em duas
 delas: `pkg/bootstrap/eventhandler_call.go` (`git log`: commit `66947214`,
 2026-08-07) e `pkg/bootstrap/dispatch_callhook.go` (commit `daa0c79d`,
 2026-08-09) — **ambas de semanas antes desta sessão e de qualquer arquivo
 tocado pela F370**. O gap não vem do trabalho desta sessão: `session_engine_
 guard.go` (novo) tem só UMA função a 0.0% (`logouterFor`, o ramo de sucesso
-com `wa_noise` não exercitado pelos testes atuais — os testes escritos
+com `noise` não exercitado pelos testes atuais — os testes escritos
 cobrem os ramos de recusa, não o de sucesso).
 
 O `HOUSEKEEP.md` (F369, entrada anterior a esta) registra "todos os outros
@@ -38821,16 +38844,16 @@ verde e reconciliar a baseline com uma medição explicada, não só recalibrada
 por conveniência.
 
 **Status**: não corrigido — fora do escopo da tarefa desta sessão
-(paridade `/session/*` para `wa_headless`, F370). Registrado para decisão do
+(paridade `/session/*` para `headless`, F370). Registrado para decisão do
 usuário: corrigir agora (grande, não relacionado) ou manter pendente.
 
 <!-- f-status: aberto -->
 
-## F372 — `.gitignore` escondia o vendor de JS do devui; QR do painel ficava preso ao caminho legado /session/qr e a um timeout raso demais para wa_headless
+## F372 — `.gitignore` escondia o vendor de JS do devui; QR do painel ficava preso ao caminho legado /session/qr e a um timeout raso demais para headless
 
 **Data**: 2026-08-29. **Contexto**: pedido do usuário para levar a lógica
 de refresh/retry de QR (F370/H145) ao `devui`, de forma uniforme para
-`wa_noise` e `wa_headless`, testando ao vivo com Claude in Chrome.
+`noise` e `headless`, testando ao vivo com Claude in Chrome.
 
 **Onde 1**: `.gitignore:21` — regra `vendor/` (sem barra inicial), que o
 git casa em QUALQUER profundidade, não só na raiz. Escondia
@@ -38860,7 +38883,7 @@ sessão pronta para commit.
 registra a rota; `router.Walk` confirma). `sessions.js` nunca foi
 atualizado, então toda sondagem de QR do painel batia 404 (`"404 page not
 found"`, texto padrão do `net/http`), para os DOIS engines — não era
-específico de `wa_headless`. Medido ao vivo: `curl` a `/session/qr` e
+específico de `headless`. Medido ao vivo: `curl` a `/session/qr` e
 `/session/pair/qr` no mesmo servidor, token válido, primeiro 404 e o
 segundo 200.
 
@@ -38873,9 +38896,9 @@ falhou com a mensagem esperada; revertida a reversão, teste passou).
 **Onde 3**: `pkg/presentation/http/devui/assets/sessions.js` —
 `QR_ESPERA_MS = 12000` (agora `QR_ESPERA_MS_PADRAO`).
 
-**Problema 3**: o comentário original media contra `wa_noise` (handshake
+**Problema 3**: o comentário original media contra `noise` (handshake
 de socket, 640ms–1,4s) e o valor foi reaproveitado sem medição para
-`wa_headless`, que faz *boot de Chrome real*. Medido ao vivo (Claude in
+`headless`, que faz *boot de Chrome real*. Medido ao vivo (Claude in
 Chrome, 2026-08-29, connect→primeiro `GET /session/pair/qr`): 13039ms só
 nesse pedido, QR ainda vazio — 12s bastava para o painel mostrar "falhou"
 ANTES do Chrome sequer montar a página. Reproduzido na sessão: o cartão
@@ -38883,8 +38906,8 @@ mostrou "A API aceitou o pedido mas não emitiu QR nenhum" por volta do
 segundo 12–13, com Chrome ainda a inicializar em segundo plano.
 
 **Correção 3**: timeout por engine — `esperaQRMs(s)` devolve
-`QR_ESPERA_MS_PADRAO` (12s) para `wa_noise` e `QR_ESPERA_MS_HEADLESS`
-(30s, folga sobre os ~13s medidos) para `wa_headless`. Verificado ao vivo:
+`QR_ESPERA_MS_PADRAO` (12s) para `noise` e `QR_ESPERA_MS_HEADLESS`
+(30s, folga sobre os ~13s medidos) para `headless`. Verificado ao vivo:
 com o fix, o mesmo cartão ficou em "Pedindo QR à API…" além do segundo 12
 sem falhar, e o QR real renderizou pouco depois (retry manual disparou o
 `connect`+`sondarQR` de novo e o Chrome — já com perfil quente — respondeu
@@ -38893,12 +38916,12 @@ dentro da janela de 30s).
 **Verificação ao vivo (Claude in Chrome, servidor real em
 `/tmp/wa-api-devui-test`)**: os dois engines, fim a fim, através do
 `devui`:
-- `wa_headless`: `Conectar` → QR renderizado client-side
+- `headless`: `Conectar` → QR renderizado client-side
   (`vendor/qrcode.js`) → auto-rotação observada (QR mudou de padrão, barra
   de TTL reiniciou) → botão "Tentar de novo" (`falhouQR`) testado e
   funcional após matar um Chrome perfil-travado remanescente de uma
   medição anterior da sessão (ambiente, não código).
-- `wa_noise`: sessão nova criada pelo próprio painel (`+ Nova sessão`,
+- `noise`: sessão nova criada pelo próprio painel (`+ Nova sessão`,
   engine `noise` por omissão — confirma o fix do dropdown do F370) →
   `Conectar` → QR renderizado imediatamente pelo mesmo caminho unificado,
   sem WebSocket `qrCodeBase64` nenhum envolvido.
@@ -38914,13 +38937,13 @@ unidade — é constante de UI validada só pela medição ao vivo acima,
 registrada aqui como a evidência).
 
 **Ressalva acrescentada pela F373**: a verificação ao vivo acima olhou para o
-ECRÃ e não para o CONTEÚDO do código. O QR de `wa_noise` renderizava, sem
+ECRÃ e não para o CONTEÚDO do código. O QR de `noise` renderizava, sem
 erro nenhum no console, e era **inválido** — ver F373. A renderização
 client-side introduzida aqui foi revertida lá.
 
 <!-- f-status: corrigido -->
 
-## F373 — o QR de `wa_noise` era inválido: os dois engines respondiam FORMAS diferentes na mesma rota, e o painel desenhou a imagem como se fosse o código
+## F373 — o QR de `noise` era inválido: os dois engines respondiam FORMAS diferentes na mesma rota, e o painel desenhou a imagem como se fosse o código
 
 **Data**: 2026-08-29. **Contexto**: relato do usuário — "o qrcode de noise
 esta invalido" — logo após a F372 unificar a renderização de QR no `devui`
@@ -38933,9 +38956,9 @@ erro no console"; renderizava mesmo. Era o CONTEÚDO que estava errado.
   `users.qrcode` o `payload["qrCodeBase64"]`, isto é, o **PNG já
   codificado**. O comentário do próprio código diz: *"A coluna guarda a
   IMAGEM, que é o que `GET /session/qr` devolve."*
-- `pkg/infra/wa-noise/adapters/pairing/qr.go:76` — `PairingQR` devolve
+- `pkg/infra/noise/adapters/pairing/qr.go:76` — `PairingQR` devolve
   `entries[0].QRCode`, ou seja, essa imagem, tal e qual.
-- `pkg/infra/wa-headless/pairing/qr.go:61` — `PairingQR` devolve a **string
+- `pkg/infra/headless/pairing/qr.go:61` — `PairingQR` devolve a **string
   crua** lida de `WAWebConnModel.Conn.ref` (H145). Nunca uma imagem.
 - `pkg/presentation/http/devui/assets/sessions.js:296` (`mostrarQR`, como a
   F372 o deixou) — desenhava o valor client-side com `vendor/qrcode.js`,
@@ -38949,12 +38972,12 @@ mesma porta `appport.PairingQRReader` e o mesmo `domain.GetQRResult.QRCode`.
 divergência entrou sem sinal nenhum quando o segundo engine chegou.
 
 O consumidor a quem se disse "os dois engines respondem a mesma forma"
-desenhou o que recebeu como PAYLOAD de QR. Para `wa_noise` isso significou
+desenhou o que recebeu como PAYLOAD de QR. Para `noise` isso significou
 um QR cujo conteúdo eram os ~1850 caracteres
 `data:image/png;base64,iVBORw0KG…`. O telefone lê o código perfeitamente e o
 WhatsApp recusa-o — que é exatamente o sintoma relatado.
 
-**Medição em campo (2026-08-29)**, servidor real, sessão `wa_noise` nova,
+**Medição em campo (2026-08-29)**, servidor real, sessão `noise` nova,
 `GET /session/pair/qr`:
 
 ```
@@ -38997,9 +39020,9 @@ correção mora no único ponto por onde os dois passam:
    (mesma lição da F68).
 2. **`pkg/application/usecase/session/get_qr.go`** — `Execute` normaliza com
    `qrimage.EnsureDataURI` DEPOIS da leitura ter dado certo. Idempotente: o
-   valor de `wa_noise` já é imagem e passa intacto; o de `wa_headless` é
+   valor de `noise` já é imagem e passa intacto; o de `headless` é
    renderizado. **Um engine novo herda a garantia sem saber que ela existe**,
-   que é precisamente o que faltou quando `wa_headless` chegou.
+   que é precisamente o que faltou quando `headless` chegou.
 3. **`sessions.js`** — volta a `<img src=…>`, e VERIFICA o prefixo
    documentado antes de desenhar (`QR_DATA_URI_PREFIXO`); um valor de outra
    forma cai em `contratoQRQuebrado()`, que diz o que recebeu em vez de
@@ -39012,7 +39035,7 @@ correção mora no único ponto por onde os dois passam:
 
 **O contrato público NÃO mudou.** `api/openapi/schemas/sessao.yaml:79` já
 documentava *"Imagem do QR code em data URI"*; `go run ./cmd/openapidoc`
-não produz diff. Quem estava fora da conformidade era `wa_headless`, e a
+não produz diff. Quem estava fora da conformidade era `headless`, e a
 correção põe-no lá — em vez de mudar o contrato de uma rota `✅` com
 evidência medida, que seria quebrar clientes para acomodar um defeito.
 
@@ -39027,7 +39050,7 @@ na verdade do binário ANTIGO. Refeita em `/tmp/wa-qr-fixed`, porta 8123,
 `WA_API_ADMIN_TOKEN` único, com a identidade do servidor confirmada por
 `GET /devui/config` ANTES de medir o que quer que fosse.
 
-Sondagem de 8 leituras de `GET /session/pair/qr` (`wa_noise`), decodificando
+Sondagem de 8 leituras de `GET /session/pair/qr` (`noise`), decodificando
 o PNG servido de volta para texto:
 
 ```
@@ -39072,11 +39095,11 @@ console sem erros.
 
 **Dublês corrigidos** (ARMADILHAS #1 — dublê divergente da produção): quatro
 testes semeavam `"2@codigo-de-pareamento"` / `"2@noise"` em `users.qrcode` ou
-no spy de `wa_noise` e afirmavam receber isso de volta. A coluna guarda a
+no spy de `noise` e afirmavam receber isso de volta. A coluna guarda a
 IMAGEM; o dublê divergia da produção **na exata regra em causa**, e é por
 isso que a suíte inteira estava verde com o defeito no lugar. Passam a usar
 `qrImageOf(t, …)`, que chama o codificador DA PRODUÇÃO. O spy de
-`wa_headless` continua a devolver a string crua, de propósito: é a forma real
+`headless` continua a devolver a string crua, de propósito: é a forma real
 dele, e igualar os dois dublês apagaria a normalização que se está a medir.
 
 **Controlo negativo 1** — `Execute` devolve o código cru (divergência de
@@ -39085,8 +39108,8 @@ and not used`), o que não prova nada (ARMADILHAS #3); ajustada até compilar E
 falhar:
 
 ```
---- FAIL: TestGetQR_OsDoisEnginesRespondemAImagemDocumentada/wa_headless
-    get_qr_contract_test.go:101: wa_headless: qr_code = "2@Ld9xK3vQpR7sT1uW5yA8bC2dE4fG6hJ0kL3mN5"…,
+--- FAIL: TestGetQR_OsDoisEnginesRespondemAImagemDocumentada/headless
+    get_qr_contract_test.go:101: headless: qr_code = "2@Ld9xK3vQpR7sT1uW5yA8bC2dE4fG6hJ0kL3mN5"…,
     e a rota documenta uma imagem em data URI (api/openapi/schemas/sessao.yaml).
     Devolver a string crua faz o consumidor desenhá-la como payload de QR — F373
 ```
@@ -39095,8 +39118,8 @@ falhar:
 defeito EXATO):
 
 ```
---- FAIL: TestGetQR_OsDoisEnginesRespondemAImagemDocumentada/wa_noise
-    get_qr_contract_test.go:106: wa_noise: qr_code = "data:image/png;base64,…" (5570 chars),
+--- FAIL: TestGetQR_OsDoisEnginesRespondemAImagemDocumentada/noise
+    get_qr_contract_test.go:106: noise: qr_code = "data:image/png;base64,…" (5570 chars),
     quero "data:image/png;base64,…" (1514 chars)
 --- FAIL: TestGetQR/devolve_o_QR_persistido
     session_test.go:290: QRCode = "data:image/png;base64,…", quero o data URI persistido
@@ -39123,13 +39146,13 @@ verdes.
 
 <!-- f-status: corrigido -->
 
-## F374 — QR do `wa_headless` não tinha fallback por tempo: um gap de rotação da SPA de 60s ficava mudo até o usuário achar que travou
+## F374 — QR do `headless` não tinha fallback por tempo: um gap de rotação da SPA de 60s ficava mudo até o usuário achar que travou
 
 **Data**: 2026-08-29. **Contexto**: pedido do usuário — "ao gerar o qrcode
 headless, e acabar o tempo 'timer' outro qrcode nao esta sendo gerado
 automaticamente, existe um grande delay".
 
-**Onde**: `internal/wa-headless/capabilities/qr/qr.go` — `kickScript`/`Read`
+**Onde**: `internal/headless/capabilities/qr/qr.go` — `kickScript`/`Read`
 só disparavam `refreshQR()` quando a própria página sinalizava `!ref` (sem
 código) ou o overlay `link_device_qr_expired_refresh_button` (código
 expirado). A rotação normal do QR é o SERVIDOR do WhatsApp empurrando um
@@ -39140,7 +39163,7 @@ se esse empurrão simplesmente atrasasse.
 `.lab/test-account-profile`) e capturei as rotações reais:
 `+10s, +70s, +90s, +110s, +130s, +150s` — gaps de **60s, 20s, 20s, 20s,
 20s**. Separadamente, instrumentei o `fetch` do devui numa sessão
-`wa_headless` real e capturei 65 sondagens seguidas de
+`headless` real e capturei 65 sondagens seguidas de
 `GET /session/pair/qr` devolvendo o MESMO `qr_code` byte a byte — o backend
 respondia `hasQR=true` toda vez, sem nunca considerar aquilo motivo pra
 agir. Não é rate-limit da conta (o mesmo perfil rotacionou normalmente no
@@ -39152,7 +39175,7 @@ contra a barra visual de 20s do devui (F372).
 primeira tentativa, se `true`, o script trata o ref como inutilizável e
 dispara `refreshQR()` mesmo com `ref` presente e sem overlay de expirado
 (`why="stale"`, tratado exatamente como `"no_ref"`/`"expired"` no retry
-Go-side). Quem decide QUANDO está "stale" é o `pkg/infra/wa-headless/pairing.
+Go-side). Quem decide QUANDO está "stale" é o `pkg/infra/headless/pairing.
 QRReader` (`codeSince map[string]codeTrack`), porque é o único ponto
 persistente entre polls HTTP separados — `qr.Reader` e o handler são
 reconstruídos a cada chamada. `qr.StaleRefreshAfter` (90s, com folga sobre
@@ -39162,18 +39185,18 @@ o único gap de 60s medido) fica no pacote `qr`, testável via var como
 **Zero relógio novo no lado da página** (invariante 6 preservado):
 `TestNoClockInProductionPageScripts` continua verde — a decisão de "quanto
 tempo é tempo demais" mora inteiramente em Go
-(`pkg/infra/wa-headless/pairing/qr.go`), a página só executa o MESMO nudge
+(`pkg/infra/headless/pairing/qr.go`), a página só executa o MESMO nudge
 já existente.
 
 **Testes** (controle negativo EXECUTADO em ambos):
-- `internal/wa-headless/capabilities/qr/qr_test.go`:
+- `internal/headless/capabilities/qr/qr_test.go`:
   `TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef` (positivo) e
   `TestRead_NoStaleHint_NeverForcesNudge` (negativo — prova que o parâmetro
   não muda nada quando o chamador não pede). Controle negativo executado:
   voltei `attempt == 0 && staleHint` para sempre-`false` dentro de `Read`;
   `TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef` falhou com
   `refreshed=false, want true`; revertido, voltou a passar.
-- `pkg/infra/wa-headless/pairing/qr_test.go`: `TestStaleHint_
+- `pkg/infra/headless/pairing/qr_test.go`: `TestStaleHint_
   SemHistoricoDevolveFalso`, `TestStaleHint_TornaVerdadeiroAposOLimiar`,
   `TestTrackCode_MesmoCodigoNaoReiniciaORelogio`,
   `TestTrackCode_CodigoDiferenteReiniciaORelogio`,
@@ -39190,7 +39213,7 @@ já existente.
 
 **Gates**: `go build ./...`, `go vet ./...`, `gofmt -l .` (limpo fora de
 `scripts/chromium-study/`, pré-existente), `TestNoClockInProductionPageScripts`
-e `go test -race ./pkg/... ./internal/wa-headless/...` — todos verdes.
+e `go test -race ./pkg/... ./internal/headless/...` — todos verdes.
 
 **Status**: corrigido nesta sessão.
 
@@ -39213,7 +39236,7 @@ qualquer "expira em Xs" que a API inventasse seria **sintético, não
 autoritativo** — a rotação do QR é decidida pelo SERVIDOR do WhatsApp, com
 variância real e medida (F374: gaps de 10s a 60s entre rotações
 automáticas, `TestProbeQRRetryPattern`). Devolver um número fixo prometeria
-uma garantia que a API não tem como cumprir. Ver `internal/wa-headless/
+uma garantia que a API não tem como cumprir. Ver `internal/headless/
 capabilities/qr/qr.go` — comentário de `StaleRefreshAfter` documenta a
 mesma variância.
 
@@ -39232,11 +39255,11 @@ usuário antes de virar plano**:
    de rotação no exato momento em que acontece, eliminando a adivinhação
    por completo. Duas ressalvas medidas nesta mesma sessão fazem isso NÃO
    ser um ajuste pequeno:
-   - O canal WS que existia pro `wa_noise` (evento `qr` com
+   - O canal WS que existia pro `noise` (evento `qr` com
      `qrCodeBase64`) foi removido do consumo do devui na F372 justamente
      por ser "canal com perda" (H145) — reintroduzi-lo como fonte de
      verdade repetiria o problema que a sondagem contínua resolveu.
-   - `wa_headless` NUNCA teve esse canal — teria que ser desenhado do
+   - `headless` NUNCA teve esse canal — teria que ser desenhado do
      zero, decidindo quem observa a rotação no lado do Chrome headless e
      como isso vira um push HTTP (SSE) ou WS pro cliente.
 
@@ -39249,8 +39272,8 @@ próprio, não uma correção incidental).
 achado esboçava (`stale_after_seconds` sintético): F377 optou por um campo
 puramente DESCRITIVO sobre o passado ("há quanto tempo já é este código"),
 não uma estimativa rotulada sobre o futuro — mais honesto, e sem precisar
-expor `qr.StaleRefreshAfter` (detalhe interno do `wa_headless`) numa forma
-que sugerisse a mesma garantia para o `wa_noise`, que não tem esse
+expor `qr.StaleRefreshAfter` (detalhe interno do `headless`) numa forma
+que sugerisse a mesma garantia para o `noise`, que não tem esse
 mecanismo. **A rota (2), push real por WS/SSE, continua em aberto** — não
 foi tocada.
 
@@ -39341,7 +39364,7 @@ time.Now()` (ignorando se o código era o mesmo); `TestGetQR_CodeAgeSeconds_
 AcumulaParaOMesmoCodigo` falhou (`code_age_seconds = 0, want >= 5`);
 revertido, voltou a passar.
 
-**Verificado ao vivo**: `curl` sequencial contra sessão `wa_noise` real —
+**Verificado ao vivo**: `curl` sequencial contra sessão `noise` real —
 primeira leitura `code_age_seconds: 0`, segunda (3s depois, mesmo QR)
 `code_age_seconds: 7` (bate com o tempo real decorrido desde o `connect`).
 Confirmado no Chrome que a doc de `/session/pair/qr` explica o campo
@@ -39356,7 +39379,7 @@ regenerados, `min_eligible` 1064→1065) — todos verdes.
 
 <!-- f-status: corrigido -->
 
-## F378 — desconectar pelo APARELHO deixava `wa_headless` em "conectada, não autenticada" em vez de "desconectada"
+## F378 — desconectar pelo APARELHO deixava `headless` em "conectada, não autenticada" em vez de "desconectada"
 
 **Data**: 2026-08-29. **Contexto**: usuário reportou — "conectei no
 'headless' em seguida desconectei pelo app no celular, e o mesmo foi para
@@ -39372,8 +39395,8 @@ Recuperei o token do `localStorage` (sem expor o valor — só usei-o num
   `code_age_seconds: 0` — a página se recuperou sozinha para uma tela de
   pareamento pronta, sem eu ter clicado em nada.
 
-**Onde**: `pkg/infra/wa-headless/session/disconnector.go`,
-`Disconnector.SessionStatus`. Quando `waheadless.RefreshOwnIdentity` falha
+**Onde**: `pkg/infra/headless/session/disconnector.go`,
+`Disconnector.SessionStatus`. Quando `headless.RefreshOwnIdentity` falha
 (inclui `owner.ErrNoOwner` — página mostrando QR, sem dono), o código
 devolvia sempre `(true, false)`, sem distinguir duas causas com o MESMO
 sintoma na página:
@@ -39381,12 +39404,12 @@ sintoma na página:
 2. a sessão pareou, e o WhatsApp encerrou-a remotamente (o celular
    desvinculou o aparelho) — a SPA volta sozinha para a MESMA tela de QR.
 
-**Comparação com `wa_noise`**: `pkg/infra/wa-noise/runtime/session/guard.go`
+**Comparação com `noise`**: `pkg/infra/noise/runtime/session/guard.go`
 usa `client.IsConnected()` — o estado real do socket do protocolo, que o
 whatsmeow derruba sozinho quando o celular desvincula o aparelho. O
 **mesmo evento físico** (desvincular pelo celular) produzia **estados
-diferentes** nos dois engines: `wa_noise` → "desconectada"; `wa_headless` →
-"conectada, não autenticada". O usuário escolheu igualar ao `wa_noise`.
+diferentes** nos dois engines: `noise` → "desconectada"; `headless` →
+"conectada, não autenticada". O usuário escolheu igualar ao `noise`.
 
 **Correção**: `Disconnector` ganha `everIdentity map[string]bool` — lembra,
 por txtID, se ESTE processo já observou uma identidade presente alguma vez.
@@ -39394,7 +39417,7 @@ A decisão virou uma função pura testável, `classifyIdentity(everHad,
 present bool) (connected, loggedIn, markSeen bool)`:
 - identidade presente → `(true, true)`, marca `everIdentity`;
 - identidade ausente e **já tinha pareado antes** → `(false, false)` —
-  mesma forma que `wa_noise` reporta para o mesmo gatilho;
+  mesma forma que `noise` reporta para o mesmo gatilho;
 - identidade ausente e **nunca pareou** → `(true, false)` — o
   comportamento antigo, preservado para o caso legítimo.
 
@@ -39435,32 +39458,32 @@ valor que os dois campos já documentados carregam.
 
 <!-- f-status: corrigido -->
 
-## F379 — `EnsureSession`/`Release` do `wa_headless` devolviam erro cru; toda rota `/session/*` que dependesse deles dava 500 em vez do 400 que `wa_noise` já dava
+## F379 — `EnsureSession`/`Release` do `headless` devolviam erro cru; toda rota `/session/*` que dependesse deles dava 500 em vez do 400 que `noise` já dava
 
 **Data**: 2026-08-29. **Contexto**: pedido do usuário — "trabalhe para que
 todas as outras rotas '/sessions' sejam compatíveis com 'headless' assim
 como são para 'noise'". Levantamento inicial ao vivo (curl, sessão
-`wa_headless` recém-criada, nunca conectada) contra cada rota `/session/*`.
+`headless` recém-criada, nunca conectada) contra cada rota `/session/*`.
 
 **Achado, medido**: comparando a MESMA condição (sessão nunca conectada)
 nos dois engines:
 
-| rota | `wa_noise` | `wa_headless` (antes) |
+| rota | `noise` | `headless` (antes) |
 |---|---|---|
 | `POST /session/history` | `400 no_session` | `500 internal_error` |
 | `GET /session/hmac/config` | `400 no_session` | `500 internal_error` |
 | `GET /session/disconnect` | `400 no_session` | `500 internal_error` |
 | `GET /session/s3/config` | `400 no_session` | `500 internal_error` |
 
-**Onde**: `pkg/infra/wa-headless/sessions.go` — `Sessions.EnsureSession` e
+**Onde**: `pkg/infra/headless/sessions.go` — `Sessions.EnsureSession` e
 `Sessions.Release` devolviam o erro do registry (`registry.ErrUnknownSession`,
 envolvido só por `fmt.Errorf`) diretamente ao chamador. `RespondJSON`
 (`pkg/presentation/http/response.go:107-120`) só deriva o status HTTP certo
 quando `errors.As(err, *apperr.AppError)` — qualquer outro erro cai no
 status LITERAL que o handler passou, que todo handler de `/session/*` fixa
-em `500`. `wa_noise` já tinha essa lição aprendida:
-`pkg/infra/wa-noise/runtime/session/guard.go` tem um `ErrNoSession(txtID,
-cause) *apperr.AppError` dedicado desde antes desta sessão — o `wa_headless`
+em `500`. `noise` já tinha essa lição aprendida:
+`pkg/infra/noise/runtime/session/guard.go` tem um `ErrNoSession(txtID,
+cause) *apperr.AppError` dedicado desde antes desta sessão — o `headless`
 nunca teve o equivalente.
 
 **Alcance**: `EnsureSession`/`Release` são o SessionGuard que
@@ -39470,8 +39493,8 @@ comentário do arquivo já registava que 11 use cases passam por ele
 métodos de `SessionController`). O defeito não era de UMA rota — era do
 PONTO ÚNICO por onde todas elas passam.
 
-**Correção**: `pkg/infra/wa-headless.ErrNoSession(txtID, cause)
-*apperr.AppError` — mesma forma exata do equivalente de `wa_noise`
+**Correção**: `pkg/infra/headless.ErrNoSession(txtID, cause)
+*apperr.AppError` — mesma forma exata do equivalente de `noise`
 (`code="no_session"`, `apperr.CategoryValidation`, mensagem `"no session"`),
 preservando a cadeia de causa via `Unwrap()` (`errors.Is` contra
 `registry.ErrUnknownSession` continua funcionando, testes pré-existentes
@@ -39479,7 +39502,7 @@ não precisaram mudar). `EnsureSession` e `Release` passam a devolvê-lo.
 
 **Fora do escopo desta entrada, registrado à parte para decisão futura**:
 `Sessions.Evaluator` (o outro método de fronteira, usado por praticamente
-TODOS os outros adaptadores `wa_headless` — mensagens, grupos, perfil,
+TODOS os outros adaptadores `headless` — mensagens, grupos, perfil,
 avatar, presença, etc., não só `/session/*`) tem o MESMO padrão de erro cru
 em alguns dos seus caminhos de saída. Não apliquei a mesma correção ali
 porque a distinção é mais delicada: `Evaluator` FAZ boot automático (não só
@@ -39508,7 +39531,7 @@ por desenho). Corrigido antes de prosseguir — registrado aqui só porque é
 exatamente o tipo de erro que a proteção do F129 existe para pegar, e
 funcionou.
 
-**Gates**: `go build`, `go vet`, `gofmt`, `go test ./pkg/infra/wa-headless/...`,
+**Gates**: `go build`, `go vet`, `gofmt`, `go test ./pkg/infra/headless/...`,
 `go test ./cmd/logcov/...` (baseline/golden regenerados: `min_func_coverage`
 601→600, `min_errpath_coverage` 783→782, `min_eligible` 1069→1071) — todos
 verdes. Verificado ao vivo: as quatro rotas da tabela acima voltam `400
@@ -39521,14 +39544,14 @@ quando for medida.
 
 <!-- f-status: corrigido -->
 
-## F380 — `POST /session/pair/phone` implementado para `wa_headless` (Fase 2 do plano de paridade)
+## F380 — `POST /session/pair/phone` implementado para `headless` (Fase 2 do plano de paridade)
 
 **Data**: 2026-08-29. **Contexto**: continuação do pedido "trabalhe para
 que todas as outras rotas '/sessions' sejam compatíveis com 'headless'
 assim como são para 'noise'" — a Fase 2 do plano de paridade original
 (pareamento por telefone), pendente desde a Fase 1 (F370).
 
-**Onde H122 parou**: `internal/wa-headless/HOUSEKEEP.md` H122 (2026-08-22)
+**Onde H122 parou**: `internal/headless/HOUSEKEEP.md` H122 (2026-08-22)
 mediu que `WAWebAltDeviceLinkingApi.setPairingType/initializeAltDeviceLinking/
 startAltLinkingFlow` EXISTEM neste build, mas nunca chamou nenhuma — só
 provou presença, contra uma sessão JÁ PAREADA (socket `CONNECTED`), onde o
@@ -39547,7 +39570,7 @@ return window.require('WAWebAltDeviceLinkingApi').startAltLinkingFlow(phoneNumbe
 
 Medido contra uma sessão GENUINAMENTE desemparelhada
 (`.lab/test-account-profile`, socket `UNPAIRED` confirmado antes da
-chamada — `TestProbeRequestPairingCode`, `internal/wa-headless/
+chamada — `TestProbeRequestPairingCode`, `internal/headless/
 probe_pairphone_test.go): a sequência completa executa sem erro de
 JavaScript e alcança o servidor real do WhatsApp. Com um número de teste
 falso (`15550101234` — `555` é reservado para ficção), a resposta foi um
@@ -39565,20 +39588,20 @@ implementado um enum fechado sem medir cada variante — o tipo bruto viaja
 na mensagem de erro, não uma tradução inventada.
 
 **O que foi construído**:
-- `internal/wa-headless/capabilities/phonepair` (novo): `Reader.Request`,
+- `internal/headless/capabilities/phonepair` (novo): `Reader.Request`,
   mesmo idioma kick-and-park de `capabilities/qr`.
-- `pkg/infra/wa-headless/pairing/phonepairer.go` (novo): `PhonePairer`
+- `pkg/infra/headless/pairing/phonepairer.go` (novo): `PhonePairer`
   implementa `appport.PhonePairer` — `IsPaired` reaproveita
-  `waheadless.RefreshOwnIdentity` (mesma leitura de `QRReader.
+  `headless.RefreshOwnIdentity` (mesma leitura de `QRReader.
   promoteIfPaired`); `RequestPairingCode` embrulha o erro em
   `apperr.New("pair_phone_failed", CategoryValidation, ...)` — o MESMO
-  código e categoria que `pkg/infra/wa-noise/adapters/pairing/adapter.go`
+  código e categoria que `pkg/infra/noise/adapters/pairing/adapter.go`
   já usa para a condição idêntica (F152: "contract fidelity deliberada",
   400 para toda falha de pareamento por telefone, seja número mal formado
   ou recusa do servidor).
-- `pkg/bootstrap/pairing_providers.go`: `waHeadless.PhonePairer` ligado.
+- `pkg/bootstrap/pairing_providers.go`: `headless.PhonePairer` ligado.
 - `pkg/capabilityregistry/matrix.go`: `request_pairing_code` passa de
-  `unknown` para `Supported`/`EvidenceProbable` em `wa_headless`.
+  `unknown` para `Supported`/`EvidenceProbable` em `headless`.
 
 **Testes corrigidos** (não relaxados — a medição mudou de fato, mesmo
 padrão já usado quando `get_pairing_qr` passou a suportado na F370):
@@ -39589,12 +39612,12 @@ padrão já usado quando `get_pairing_qr` passou a suportado na F370):
   `domain.CapCheckPairingStatus` (que continua `unknown`), preservando a
   invariante geral que os dois testes travam.
 - `pkg/presentation/http/handlers/handler_pairing_engine_test.go`:
-  `TestPairingPhone_WaHeadless_CapabilityNotSupported` (esperava 422)
-  substituído por `TestPairingPhone_WaHeadless_CallsOnlyHeadlessProvider`
-  (espera 200 e confere que só o provider `wa_headless` foi tocado) —
-  mesmo padrão de `TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider`.
+  `TestPairingPhone_Headless_CapabilityNotSupported` (esperava 422)
+  substituído por `TestPairingPhone_Headless_CallsOnlyHeadlessProvider`
+  (espera 200 e confere que só o provider `headless` foi tocado) —
+  mesmo padrão de `TestPairingQR_Headless_CallsOnlyHeadlessProvider`.
 
-**Testes novos** (controle negativo EXECUTADO): `internal/wa-headless/
+**Testes novos** (controle negativo EXECUTADO): `internal/headless/
 capabilities/phonepair/phonepair_test.go` — sucesso devolve o código,
 recusa estruturada cita o tipo (`IQErrorBadRequest`), código vazio com
 `ok=true` não é aceito como sucesso. Controle negativo: removi a citação
@@ -39602,10 +39625,10 @@ do tipo no erro devolvido; `TestRequest_RecusaDoWhatsappNomeiaOTipo`
 falhou citando a mensagem exata; revertido, voltou a passar.
 
 **Verificado ao vivo, fim a fim, pela rota HTTP real** (não só pelo
-probe): `POST /session/pair/phone` contra uma sessão `wa_headless`
+probe): `POST /session/pair/phone` contra uma sessão `headless`
 conectada, com o mesmo número de teste falso — respondeu `400
 pair_phone_failed`, com a mesma mensagem `CompanionHelloError
-(IQErrorBadRequest)` do probe. Idêntico em forma ao que `wa_noise` já
+(IQErrorBadRequest)` do probe. Idêntico em forma ao que `noise` já
 devolve para um número inválido.
 
 **Não completado, e por quê**: um pareamento REAL, de ponta a ponta (um
@@ -39617,7 +39640,7 @@ confirmação final ("o código realmente pareia") fica para quando houver um
 telefone disponível.
 
 **Gates**: `go build`, `go vet`, `gofmt`, `go test -race ./pkg/...
-./internal/wa-headless/capabilities/phonepair/...`, `go test
+./internal/headless/capabilities/phonepair/...`, `go test
 ./cmd/logcov/...` (baseline/golden regenerados: `min_errpath_coverage`
 782→781, `min_eligible` 1071→1075) — todos verdes. `go run
 ./cmd/openapidoc` não produziu diff — o contrato HTTP já documentava a
@@ -39630,14 +39653,14 @@ disponível, não por lacuna de código).
 
 <!-- f-status: corrigido -->
 
-## F381 — `POST /session/logout` implementado para `wa_headless` (Fase 3 do plano de paridade, reabre e fecha a H122)
+## F381 — `POST /session/logout` implementado para `headless` (Fase 3 do plano de paridade, reabre e fecha a H122)
 
 **Data**: 2026-08-29. **Contexto**: conclusão do pedido "trabalhe para que
 todas as outras rotas '/sessions' sejam compatíveis com 'headless' assim
 como são para 'noise'" — a Fase 3 (logout), a última pendência de
 capacidade real do plano de paridade original.
 
-**Onde H122 parou**: `internal/wa-headless/HOUSEKEEP.md` H122 (2026-08-22)
+**Onde H122 parou**: `internal/headless/HOUSEKEEP.md` H122 (2026-08-22)
 mediu que `Socket.logout` EXISTE e é função neste build, mas **recusou
 chamá-la deliberadamente**: desemparelha a conta de verdade, e restaurar
 exige um humano com o telefone. Bloqueio de POLÍTICA, não técnico.
@@ -39645,7 +39668,7 @@ exige um humano com o telefone. Bloqueio de POLÍTICA, não técnico.
 **Medição que reabriu a recusa**: com autorização explícita do usuário
 para desautenticar a conta de teste de propósito, medido ao vivo contra um
 perfil descartável REPAREADO na hora para este teste especificamente
-(`TestProbeSocketLogout`, `internal/wa-headless/probe_logout_test.go`):
+(`TestProbeSocketLogout`, `internal/headless/probe_logout_test.go`):
 
 ```
 BEFORE: {"socket":"CONNECTED","hasOwner":true}
@@ -39665,14 +39688,14 @@ nota abaixo); o usuário reparou uma delas ao vivo, via QR do devui, para
 que a medição pudesse ocorrer contra uma sessão genuinamente pareada.
 
 **O que foi construído**:
-- `internal/wa-headless/capabilities/logout` (novo): `Do(ctx, runner, eval,
+- `internal/headless/capabilities/logout` (novo): `Do(ctx, runner, eval,
   label) error` — chama `Socket.logout()`, reporta se a página aceitou a
   chamada. Não espera a transição completar (invariante 6: nenhum
   script decide por quanto tempo esperar) — o chamador observa o novo
   estado no próximo poll de status, do mesmo jeito que já observa qualquer
   outra mudança assíncrona.
-- `pkg/infra/wa-headless/session/disconnector.go`: `Disconnector.Logout`
-  — dois caminhos de recusa espelham `pkg/infra/wa-noise/runtime/session/
+- `pkg/infra/headless/session/disconnector.go`: `Disconnector.Logout`
+  — dois caminhos de recusa espelham `pkg/infra/noise/runtime/session/
   guard.go` EXATAMENTE (mesmo código, mesma categoria): `Evaluator`
   inalcançável → `apperr.CodeSessionNotConnected` (409, o código que
   `LogoutUseCase.Execute` verifica para chamar `detacher.Detach` mesmo em
@@ -39682,11 +39705,11 @@ que a medição pudesse ocorrer contra uma sessão genuinamente pareada.
   `nil` — é a MESMA instância de `Disconnector` já usada como
   `headlessDisconnector`, tipada para a porta mais estreita.
 - `pkg/capabilityregistry/matrix.go`: `logout_session` passa de `unknown`
-  para `Supported`/`EvidenceConfirmed` em `wa_headless`.
+  para `Supported`/`EvidenceConfirmed` em `headless`.
 
 **Testes** (controle negativo EXECUTADO nos dois pacotes): `internal/wa-
 headless/capabilities/logout/logout_test.go` — sucesso não erra, recusa
-cita o motivo da página. `pkg/infra/wa-headless/session/disconnector_test.go`
+cita o motivo da página. `pkg/infra/headless/session/disconnector_test.go`
 — `TestDisconectaMasNaoSAI` (que travava a RECUSA deliberada) substituído
 por `TestDisconnectorSatisfazOControladorInteiro` (mesmo padrão de
 substituição que F373/F380 já usaram quando uma medição muda de fato, não
@@ -39699,9 +39722,9 @@ falhou citando o código esperado; revertido. Reverti `logout.Do` para
 engolir o motivo da recusa — falhou citando a mensagem; revertido.
 
 **Verificado ao vivo, pela rota HTTP real**, os dois caminhos de recusa —
-comparados byte a byte com `wa_noise` na MESMA condição:
+comparados byte a byte com `noise` na MESMA condição:
 
-| condição | `wa_noise` | `wa_headless` |
+| condição | `noise` | `headless` |
 |---|---|---|
 | nunca conectou | `400 no_session` | `400 no_session` |
 | conectada, nunca pareada | `409 session_not_paired` | `409 session_not_paired` |
@@ -39719,15 +39742,252 @@ defeito de código, então não vira uma entrada própria — só o registro de
 que o estado dos dois slots mudou por fora do controle desta sessão.
 
 **Gates**: `go build`, `go vet`, `gofmt`, `go test -race ./pkg/...
-./internal/wa-headless/capabilities/logout/...
-./internal/wa-headless/capabilities/phonepair/...`, `go test
+./internal/headless/capabilities/logout/...
+./internal/headless/capabilities/phonepair/...`, `go test
 ./cmd/logcov/...` (baseline/golden regenerados: `min_errpath_coverage`
 781→780, `min_eligible` 1075→1077) — todos verdes. `go run
 ./cmd/openapidoc` não produziu diff.
 
 **Status**: corrigido nesta sessão. Com F380 (pairphone) e F381 (logout),
 o plano de paridade `/session/*` original (F370) está completo: todas as
-rotas de sessão que o `wa_noise` serve, o `wa_headless` agora serve
+rotas de sessão que o `noise` serve, o `headless` agora serve
 também, com o mesmo contrato de erro.
+
+<!-- f-status: corrigido -->
+
+## F382 — Fase 1 da remoção do prefixo `wa` fora do módulo: prosa e documentos
+
+**Data/contexto**: 2026-08-29. Pedido do usuário: em todo o repositório,
+só o módulo/repositório (`wa-api`) continua usando o prefixo `wa` —
+identificador, arquivo, diretório ou comentário usa só `noise`/`headless`.
+Escopo confirmado com o usuário via `AskUserQuestion` (contrato de fio
+muda também, documentos históricos são reescritos, os 4 diretórios de
+topo perdem o prefixo, protobuf vendorizado fica de fora, corte limpo sem
+alias — mesmo padrão da F269). Plano de 5 fases em
+`~/.claude/plans/sparkling-snuggling-patterson.md`. Esta entrada cobre só
+a Fase 1: prosa e documentos, zero risco de compilação — nenhum `.go`
+tocado.
+
+**Onde**: `docs/**/*.md` (incluindo renomear
+`docs/PROVIDER-WA-NOISE-INVENTORY.md`→`docs/PROVIDER-NOISE-INVENTORY.md`,
+`docs/PROVIDER-WA-HEADLESS-INVENTORY.md`→`docs/PROVIDER-HEADLESS-INVENTORY.md`,
+`docs/adr/0006-wa-headless-...md`→`docs/adr/0006-headless-...md`,
+`docs/adr/0007-decisao-final-wa-headless-...md`→`docs/adr/0007-decisao-final-headless-...md`),
+`ARMADILHAS.md`, `HOUSEKEEP.md` (este arquivo), `internal/headless/HOUSEKEEP.md`,
+`internal/headless/PATCHES.md`, `scripts/chromium-study/README.md`,
+`api/openapi/**/*.yaml` (só prosa/exemplo — os enums estruturais do
+contrato de fio ficam para a Fase 4).
+
+**Dois achados que o plano aprovado não previu**, ambos exigiram parar e
+decidir antes de continuar a substituição mecânica:
+
+1. **Uma segunda entrada auto-referente sobre a nomenclatura**: além da
+   F273 (já prevista no plano), a F342 — "decisão 94 removida" — também
+   discute a própria dualidade de nomes `wa_noise`/`noise` que está sendo
+   resolvida agora, citando identificadores Go literais
+   (`domain.EngineNoise`) de um estado histórico (a worktree
+   `feature/wa-noise`) que não bate com o estado atual deste repositório.
+   Tratada como a F273: nota "RESOLVIDO em 2026-08-29" prependada ao
+   título, corpo original preservado sem tocar, excluído da substituição
+   mecânica (faixa de linhas 36000–36136 no momento da substituição).
+
+2. **A tabela de banco `wanoise_*`** (`wanoise_contacts`, `wanoise_lid_map`,
+   `wanoise_message_secrets`, `wanoise_retry_buffer`,
+   `wanoise_app_state_version`, `wanoise_device`, etc., em
+   `internal/wa-noise/persistence/store/sqlstore/*.go` e
+   `pkg/infra/db/migrations.go`) não estava no plano aprovado — o plano só
+   cobria colunas/valores como `users.engine`, não nomes de tabela. É
+   escopo real de produção (schema já em disco), citado centenas de vezes
+   no `HOUSEKEEP.md` com comandos SQL e mensagens de erro reais copiadas
+   literalmente. Perguntado ao usuário via `AskUserQuestion`: escolheu
+   **incluir como Fase 6 separada** (não fica de fora como o protobuf
+   vendorizado, mas também não entra nesta leva — precisa de migração de
+   dados própria). Por isso a substituição mecânica desta fase protege
+   explicitamente `wanoise` quando seguido de `_` (regex `wanoise(?!_)`),
+   preservando toda menção a essas tabelas.
+
+**Um terceiro problema, descoberto e corrigido durante a execução, não por
+revisão prévia**: a primeira passada da substituição mecânica trocou
+literalmente nomes de branch git reais que contêm o padrão-alvo como
+substring — `feature/wa-noise`, `feature/wa-headless-foundation`,
+`feature/provider-wa-noise`, `feature/vendor-wa-noise` (a própria branch
+desta sessão de trabalho é uma delas) — corrompendo o registro histórico
+de qual branch foi de fato mesclada em quê (F368/F369, entre outras). O
+script de substituição (`/tmp/.../rename_fase1.py`) passou a mascarar
+esses 4 literais antes de aplicar as substituições e restaurá-los depois.
+Duas rodadas completas de substituição foram descartadas (`git checkout`)
+e refeitas depois de cada uma dessas descobertas — nenhuma delas chegou a
+ser commitada.
+
+**Verificação executada**: `go build ./... && go vet ./...` (sem `.go`
+tocado, verde trivialmente), `gofmt -l .` (as únicas pendências são
+pré-existentes em `scripts/chromium-study/*.go`, não tocadas nesta fase).
+Varredura pós-substituição em todos os arquivos tocados: zero ocorrências
+de `noise_*`/`headless_*` estilo nome-de-tabela introduzidas, zero branch
+`feature/wa-*` corrompida para `feature/*`, os 6 pares `enum:`/`example:`
+de `wa_noise`/`wa_headless` em `api/openapi/**` preservados intactos
+(contrato de fio real, adiado para a Fase 4).
+
+**Status**: corrigido nesta sessão (Fase 1 completa). Fases 2-5 do plano
+aprovado seguem pendentes; Fase 6 (tabelas `wanoise_*`) é novo escopo,
+ainda sem plano detalhado.
+
+<!-- f-status: corrigido -->
+
+## F383 — Fase 2 da remoção do prefixo `wa` fora do módulo: identificadores Go (nomes, não valores de fio)
+
+**Data/contexto**: 2026-08-29, continuação de F382. Renomeia SÓ o
+SÍMBOLO Go, mantendo o VALOR de fio inalterado (`domain.EngineNoise`
+continua `"wa_noise"`, `domain.EngineHeadless` continua `"wa_headless"`
+— a mudança de valor é Fase 4).
+
+**Onde**:
+- `pkg/domain/engine.go`: `EngineWaNoise`→`EngineNoise`,
+  `EngineWaHeadless`→`EngineHeadless`, e todos os 34 arquivos `.go` que
+  referenciam esses dois símbolos (call sites em todo o repositório,
+  guiado por `go build`).
+- 38 identificadores `WaNoise`/`WaHeadless` (CamelCase, exportados e não)
+  e 14 `waNoise`/`waHeadless` (camelCase, não exportados) — em CAMPOS,
+  VARIÁVEIS, TIPOS e FUNÇÕES/MÉTODOS, incluindo os que atravessam
+  fronteira de pacote (ex.: `GetWaNoiseClient`, definido em
+  `pkg/infra/wa-noise/registry/manager.go`, chamado de `pkg/bootstrap/`
+  e `pkg/application/contracts/`) — esses tiveram que ser renomeados de
+  uma vez só nos dois lados, ao contrário do que o plano original previa
+  ("Fase 2 fora dos 4 diretórios de topo, Fase 3 dentro"): um nome de
+  método/campo é um símbolo indivisível entre pacotes, e Go não permite
+  renomeá-lo pela metade sem quebrar a build. O que ficou mesmo para a
+  Fase 3 foi só o NOME DO PACOTE (`package wanoise`/`package waheadless`,
+  ainda intocado) e os `import` que o referenciam.
+
+**Uma exclusão deliberada**: `addWaNoiseMessageSecretsMessageIDIndexSQL`
+(`pkg/infra/db/migrations.go`) fica com o nome antigo — o identificador
+cita a tabela `wanoise_message_secrets`, que é escopo da Fase 6 (ainda
+não decidida em detalhe), não desta fase. Renomear o símbolo Go sem
+renomear a tabela que ele referencia deixaria o nome mentindo sobre o
+que o código faz.
+
+**Achado incidental, não corrigido**: o comentário de
+`pkg/domain/engine.go` (linhas 15-27, "A dualidade temporária com
+pkg/bootstrap/engine_selection.go") descreve uma duplicação de
+vocabulário (`EngineNoise`/`EngineHeadless` em `pkg/bootstrap` com
+valores `"wanoise"`/`"headless"`) que **já não existe no código atual**
+— `pkg/bootstrap/engine_selection.go` não declara mais essas constantes
+(removidas, aparentemente, num merge anterior a esta sessão — ver F342).
+O comentário está desatualizado independente desta tarefa de rename; não
+corrigido agora porque está fora do escopo (não é uma ocorrência de
+`wa_noise`/`wa_headless`/`WaNoise`/`WaHeadless`, é uma imprecisão de
+conteúdo pré-existente).
+
+**Verificação executada**: `go build ./... && go vet ./... && gofmt -l .`
+limpos (165 arquivos `.go` tocados), `go test ./pkg/... ./internal/...`
+verde, `go run ./cmd/openapidoc` rodado (o teste
+`TestOpenAPIGeradoEstaAtualizado` havia quebrado por causa das mudanças
+de prosa da Fase 1 em `api/openapi/**`, não desta fase — resolvido
+regenerando o documento embutido e `docs/OPENAPI-EVIDENCIAS.md`, com
+`docs/OPENAPI-EVIDENCIAS.md` conferido depois para garantir que os nomes
+de branch git protegidos na Fase 1 sobreviveram à regeneração).
+
+**Status**: corrigido nesta sessão (Fase 2 completa). Fases 3-5 seguem
+pendentes; Fase 6 (tabelas `wanoise_*`) segue sem plano detalhado.
+
+<!-- f-status: corrigido -->
+
+## F384 — Fase 3 da remoção do prefixo `wa` fora do módulo: diretórios e pacotes Go
+
+**Data/contexto**: 2026-08-29, continuação de F382/F383. `git mv` dos 4
+diretórios de topo (`internal/wa-noise`→`internal/noise`,
+`internal/wa-headless`→`internal/headless`,
+`pkg/infra/wa-noise`→`pkg/infra/noise`,
+`pkg/infra/wa-headless`→`pkg/infra/headless`), mais
+`pkg/infra/noise/observability/walog`→`.../observability/log`. Todos os
+`import` do repositório atualizados para os novos caminhos. Pacotes
+renomeados: `wanoise`→`noise` (fachada raiz de `internal/noise`, único
+arquivo `main.go`), `wanoise`→`core` (subpacote `internal/noise/core`,
+que já usava o mesmo nome do pai por inconsistência pré-existente —
+alinhado ao nome do diretório e ao único alias de import que já
+existia), `waheadless`→`headless` (as duas raízes,
+`internal/headless` e `pkg/infra/headless`), `waclient`→`client`
+(`pkg/infra/noise/client`), `waLog`→`log`
+(`internal/noise/observability/log`), `walog`→`log`
+(`pkg/infra/noise/observability/log`, mantendo os dois "log" distintos
+por caminho, sem ficheiro que precise importar os dois — risco de
+colisão registrado abaixo). **Excluído**, como já confirmado no plano:
+`internal/noise/protocol/proto/wa*` (protobuf vendorizado/gerado,
+dezenas de pacotes espelhando nomes oficiais do `.proto` do WhatsApp).
+
+**Três classes de bug reais, cada uma encontrada por `go build`/`go
+test` — não por revisão —, corrigidas antes de fechar a fase**:
+
+1. **Colisão de nome entre pacote renomeado e variável local.**
+   `pkg/infra/noise/client` (antes `waclient`) e
+   `pkg/infra/noise/observability/log`/`internal/noise/observability/log`
+   (antes `walog`/`waLog`) usam nomes — `client`, `log` — que já eram
+   nomes de VARIÁVEL LOCAL onipresentes no código adaptador (`client,
+   err := a.Client(txtID)`; parâmetros de logger chamados `log`). Um
+   `import` sem alias explícito faz o identificador do pacote ser
+   sombreado pela variável local no mesmo escopo, e o `go build` falha
+   com `undefined: client`/`undefined: log` só na função que usa os
+   dois. Corrigido dando alias explícito e distinto às três importações
+   (`clientpkg`, `sdklog`, `logbridge`) em vez de confiar no nome
+   importado bare — a mesma classe de risco que motivou o projeto a já
+   ter, antes desta sessão, vários aliases não-triviais.
+2. **Substituição textual corrompendo bytes de descriptor protobuf
+   embutido.** A primeira passada de correção de `import` em
+   `internal/noise/protocol/proto/wa*/*.pb.go` trocou o texto
+   `wa-api/internal/wa-noise/...` por `wa-api/internal/noise/...` no
+   ARQUIVO INTEIRO, incluindo a constante `..._rawDesc` — uma string Go
+   que embute o `FileDescriptorProto` compilado, com campos
+   **comprimento-prefixados em bytes** (ex.: `Z\x45wa-api/internal/...`
+   onde `\x45`=69 é o comprimento em bytes do texto que segue). Encurtar
+   o texto sem atualizar o byte de comprimento produz um descriptor
+   corrompido que `google.golang.org/protobuf` só detecta em
+   **runtime**, no `init()` do pacote, com `panic: slice bounds out of
+   range` — não há erro de compilação. Sintoma medido: 6+ pacotes
+   (`pkg/bootstrap`, `pkg/infra/headless`, `pkg/infra/history`,
+   `pkg/infra/media`, `pkg/infra/noise/adapters/accounttype`,
+   `pkg/infra/noise/adapters/chat`, ...) falhando com o mesmo panic ao
+   rodar `go test`, porque todos transitivamente importam o pacote
+   `.pb.go` corrompido. Corrigido revertendo as 62 arquivos e reaplicando
+   a correção só dentro dos blocos `import (...)` reais (rastreado
+   linha a linha por um script que só edita entre `import (` e o `)`
+   correspondente) — a mesma classe de risco vale para qualquer edição
+   textual futura em `.pb.go` gerado.
+3. **Corte antecipado do contrato de fio (Fase 4 disparada sem
+   querer).** Uma varredura de comentários `.go` remanescentes (texto
+   solto tipo `*wanoise.Client`, não identificadores) usou o mesmo
+   script de substituição textual da Fase 1, que inclui
+   `wa_noise`→`noise`/`wa_headless`→`headless` — os PRÓPRIOS valores de
+   fio, cujo corte é explicitamente Fase 4, ainda não feita. Isso mudou
+   `pkg/domain/engine.go` (`EngineNoise Engine = "noise"` em vez de
+   `"wa_noise"`) e ~7 arquivos de teste que verificam o valor literal.
+   Achado e revertido por dois filtros de `git diff` (linhas removidas
+   contendo `"wa_noise"`/`"wa_headless"` com e sem aspas), com cada um
+   dos 9 arquivos sinalizados inspecionado individualmente antes de
+   decidir reverter ou manter — a maioria (`no noise session`, mensagens
+   de log internas, nomes de função de teste) já não é o valor de fio e
+   estava correta; só `pkg/domain/engine.go`, `pkg/domain/engine_test.go`
+   e um comentário de `pkg/infra/db/user_engine_test.go` precisaram
+   reversão manual, linha a linha.
+
+**Nomenclatura**: pacotes acabaram com nomes distintos apesar de
+começarem todos como `wanoise`/`waheadless` — `noise` (fachada),
+`core` (núcleo interno), `client`, `log` (x2, caminhos diferentes) —
+porque o nome de pacote em Go precisa ser único no ESCOPO DE IMPORT de
+cada arquivo consumidor, não só remover o prefixo mecanicamente.
+
+**Verificação executada**: `go build ./... && go vet ./... && gofmt -l .`
+limpos (1130 arquivos tocados no total desde F382), `go test ./pkg/...
+./internal/...` completo sem panics nem falhas (confirmado depois de
+corrigir os três bugs acima — a suíte tinha panics reais até a correção
+2), `go run ./cmd/openapidoc` sem diff pendente após regenerar.
+Varredura final: zero `WaNoise`/`WaHeadless`/`waNoise`/`waHeadless`/
+`wanoise`/`waheadless` fora de `internal/noise/protocol/proto/wa*`
+(protobuf, fora de escopo) e das tabelas `wanoise_*` (Fase 6, fora de
+escopo desta fase); zero diretório com prefixo `wa-` remanescente em
+`internal/` e `pkg/infra/`.
+
+**Status**: corrigido nesta sessão (Fase 3 completa). Fases 4-5 do plano
+aprovado seguem pendentes; Fase 6 (tabelas `wanoise_*`) segue sem plano
+detalhado.
 
 <!-- f-status: corrigido -->

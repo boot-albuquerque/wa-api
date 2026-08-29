@@ -34,7 +34,7 @@ type UnblockResult struct {
 // Execute desbloqueia um usuário
 func (uc *UnblockUserUseCase) Execute(ctx context.Context, userID string, req domain.UnblockUserRequest) (*UnblockResult, error) {
 	if err := uc.blocklist.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

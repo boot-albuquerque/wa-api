@@ -455,8 +455,8 @@ func TestSendAudio_Seconds_ForwardedFromRequest(t *testing.T) {
 // --- upload: MediaAudio ----------------------------------------------------
 
 // TestSendAudio_Upload_UsesMediaAudio prova que o payload chega a SendAudio
-// (que o adapter usa com wanoise.MediaAudio no upload) — a garantia de que
-// audio nunca sobe como wanoise.MediaDocument ou wanoise.MediaImage é
+// (que o adapter usa com noise.MediaAudio no upload) — a garantia de que
+// audio nunca sobe como noise.MediaDocument ou noise.MediaImage é
 // verificada no controle negativo do adapter (ver messenger.go/HOUSEKEEP).
 // Aqui, no nivel do use case, o que se prova e' que o Payload.Bytes chega
 // intacto a domain.AudioPayload — a fronteira que o adapter consome.

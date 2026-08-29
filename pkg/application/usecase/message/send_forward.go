@@ -61,7 +61,7 @@ func (uc *SendForwardUseCase) forwardByContent(ctx context.Context, txtID string
 	}
 
 	if err := uc.textSender.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 
@@ -98,7 +98,7 @@ func (uc *SendForwardUseCase) forwardByContent(ctx context.Context, txtID string
 // looks up the stored message and re-sends it with forwarding context.
 func (uc *SendForwardUseCase) forwardByKey(ctx context.Context, txtID string, req domain.SendForwardRequest) (*domain.SendForwardResult, error) {
 	if err := uc.fwdSender.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

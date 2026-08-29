@@ -64,31 +64,31 @@ type sessionEngineGuard struct {
 	users pairing.SessionEngineReader
 	caps  *capabilityregistry.CapabilityRegistry
 
-	waNoise appport.SessionController
+	noise appport.SessionController
 
-	// waHeadlessDisconnector is nil when this process has no Chrome
+	// headlessDisconnector is nil when this process has no Chrome
 	// configured for wa_headless. A nil value is a valid, meaningful state:
 	// it means this process has no headless session controller right now,
 	// not that headless sessions cannot exist.
-	waHeadlessDisconnector appport.SessionDisconnector
+	headlessDisconnector appport.SessionDisconnector
 
-	// waHeadlessLogouter stays nil until Socket.logout's call shape is
+	// headlessLogouter stays nil until Socket.logout's call shape is
 	// measured against a real page (see
 	// pkg/infra/wa-headless/session/disconnector.go's package doc) — a
 	// separate field, not the same object typed down, because
 	// SessionDisconnector existing does not imply SessionLogouter does: the
 	// two are deliberately decoupled capabilities (session_guard.go).
-	waHeadlessLogouter appport.SessionLogouter
+	headlessLogouter appport.SessionLogouter
 }
 
-// newSessionEngineGuard builds the dispatcher. Both waHeadless* may be nil.
-func newSessionEngineGuard(users pairing.SessionEngineReader, caps *capabilityregistry.CapabilityRegistry, waNoise appport.SessionController, waHeadlessDisconnector appport.SessionDisconnector, waHeadlessLogouter appport.SessionLogouter) *sessionEngineGuard {
+// newSessionEngineGuard builds the dispatcher. Both headless* may be nil.
+func newSessionEngineGuard(users pairing.SessionEngineReader, caps *capabilityregistry.CapabilityRegistry, noise appport.SessionController, headlessDisconnector appport.SessionDisconnector, headlessLogouter appport.SessionLogouter) *sessionEngineGuard {
 	return &sessionEngineGuard{
-		users:                  users,
-		caps:                   caps,
-		waNoise:                waNoise,
-		waHeadlessDisconnector: waHeadlessDisconnector,
-		waHeadlessLogouter:     waHeadlessLogouter,
+		users:                users,
+		caps:                 caps,
+		noise:                noise,
+		headlessDisconnector: headlessDisconnector,
+		headlessLogouter:     headlessLogouter,
 	}
 }
 
@@ -112,11 +112,11 @@ func (g *sessionEngineGuard) targetEngine(ctx context.Context, txtID string) (do
 		// backfill default and lets the underlying wa_noise adapter produce
 		// its own, already-tested "no session" error rather than inventing a
 		// second one.
-		return domain.EngineWaNoise, nil
+		return domain.EngineNoise, nil
 	}
 	engine := entries[0].Engine
 	if !engine.IsValidForCreate() {
-		return domain.EngineWaNoise, nil
+		return domain.EngineNoise, nil
 	}
 	return engine, nil
 }
@@ -139,10 +139,10 @@ func errEngineUnavailable(engine domain.Engine) error {
 func (g *sessionEngineGuard) disconnectorFor(engine domain.Engine) (appport.SessionDisconnector, error) {
 	var d appport.SessionDisconnector
 	switch engine {
-	case domain.EngineWaNoise:
-		d = g.waNoise
-	case domain.EngineWaHeadless:
-		d = g.waHeadlessDisconnector
+	case domain.EngineNoise:
+		d = g.noise
+	case domain.EngineHeadless:
+		d = g.headlessDisconnector
 	}
 	if d == nil {
 		log.Warn().Str("engine", engine.String()).
@@ -156,10 +156,10 @@ func (g *sessionEngineGuard) disconnectorFor(engine domain.Engine) (appport.Sess
 func (g *sessionEngineGuard) logouterFor(engine domain.Engine) (appport.SessionLogouter, error) {
 	var l appport.SessionLogouter
 	switch engine {
-	case domain.EngineWaNoise:
-		l = g.waNoise
-	case domain.EngineWaHeadless:
-		l = g.waHeadlessLogouter
+	case domain.EngineNoise:
+		l = g.noise
+	case domain.EngineHeadless:
+		l = g.headlessLogouter
 	}
 	if l == nil {
 		log.Warn().Str("engine", engine.String()).

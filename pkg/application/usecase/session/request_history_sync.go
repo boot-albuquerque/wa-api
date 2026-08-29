@@ -34,7 +34,7 @@ func NewRequestHistorySyncUseCase(h appport.HistorySyncRequester, l appport.Logg
 // sucesso.
 func (uc *RequestHistorySyncUseCase) Execute(ctx context.Context, txtID string, req domain.RequestHistorySyncRequest) (*domain.RequestHistorySyncResult, error) {
 	if err := uc.history.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

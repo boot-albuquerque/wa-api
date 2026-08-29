@@ -12,8 +12,8 @@ documento disser "como no exemplo", o exemplo é:
 |---|---|
 | tipo de domínio | `pkg/domain/group_info.go` |
 | porta tipada | `pkg/application/contracts/group_ports.go` |
-| normalização protocolo→domínio (motor wa-noise) | `pkg/infra/wa-noise/adapters/group/map_group_info.go` |
-| normalização protocolo→domínio (motor headless) | `pkg/infra/wa-headless/groupdir/directory.go` |
+| normalização protocolo→domínio (motor noise) | `pkg/infra/noise/adapters/group/map_group_info.go` |
+| normalização protocolo→domínio (motor headless) | `pkg/infra/headless/groupdir/directory.go` |
 | DTO de resposta | `pkg/presentation/http/dto/group/group_info.go` |
 | apresentador | `pkg/presentation/http/dto/group/presenter.go` |
 | manipulador ligado | `pkg/presentation/http/handlers/handler_group.go` |
@@ -34,7 +34,7 @@ como corpos HTTP. Isso tinha duas consequências, e só uma delas é de estétic
 2. **O modelo de domínio ERA o modelo público.** Renomear um campo interno
    partia clientes em silêncio, e nenhum teste o via. Pior: onde a porta
    devolvia `any`, era o MOTOR da sessão que decidia a forma do JSON — o
-   `POST /group/info` servia a struct do wa-noise numa sessão e a struct de
+   `POST /group/info` servia a struct do noise numa sessão e a struct de
    conversa do headless noutra, e nenhuma das duas estava declarada em lado
    nenhum.
 

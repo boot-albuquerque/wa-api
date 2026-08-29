@@ -47,7 +47,7 @@ func NewGroupManagementUseCase(
 // recebiam.
 func (uc *GroupManagementUseCase) ensure(ctx context.Context, txtID string) error {
 	if err := uc.info.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return err
 	}
 	return nil

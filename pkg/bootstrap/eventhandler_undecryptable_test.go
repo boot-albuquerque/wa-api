@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"testing"
 
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 )
 
 // F215: a device never holds a Signal session with itself, so self-echoes

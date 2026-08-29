@@ -1,0 +1,124 @@
+package core
+
+import (
+	"context"
+	"fmt"
+
+	"google.golang.org/protobuf/proto"
+
+	armadillo "wa-api/internal/noise/protocol/proto"
+	"wa-api/internal/noise/protocol/proto/armadilloutil"
+	"wa-api/internal/noise/protocol/proto/instamadilloTransportPayload"
+	"wa-api/internal/noise/protocol/proto/waMsgApplication"
+	"wa-api/internal/noise/protocol/proto/waMsgTransport"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
+)
+
+func (cli *Client) handleDecryptedArmadillo(ctx context.Context, info *types.MessageInfo, decrypted []byte, retryCount int) (handlerFailed, protobufFailed bool) {
+	dec, err := decodeArmadillo(decrypted)
+	if err != nil {
+		cli.Log.Warnf("Failed to decode armadillo message from %s: %v", info.SourceString(), err)
+		protobufFailed = true
+		return
+	}
+	dec.Info = *info
+	dec.RetryCount = retryCount
+	if dec.Transport.GetProtocol().GetAncillary().GetSkdm() != nil {
+		if !info.IsGroup {
+			cli.Log.Warnf("Got sender key distribution message in non-group chat from %s", info.Sender)
+		} else {
+			skdm := dec.Transport.GetProtocol().GetAncillary().GetSkdm()
+			cli.handleSenderKeyDistributionMessage(ctx, info.Chat, info.Sender, skdm.AxolotlSenderKeyDistributionMessage)
+		}
+	}
+	if dec.Message != nil || dec.FBApplication != nil {
+		handlerFailed = cli.dispatchEvent(&dec)
+	}
+	return
+}
+
+func decodeArmadillo(data []byte) (dec events.FBMessage, err error) {
+	var transport waMsgTransport.MessageTransport
+	err = proto.Unmarshal(data, &transport)
+	if err != nil {
+		return dec, fmt.Errorf("failed to unmarshal transport: %w", err)
+	}
+	dec.Transport = &transport
+	if transport.GetPayload() == nil {
+		return
+	}
+	appPayloadVer := transport.GetPayload().GetApplicationPayload().GetVersion()
+	switch appPayloadVer {
+	case waMsgTransport.FBMessageApplicationVersion:
+		return decodeFBArmadillo(&transport)
+	case waMsgTransport.IGMessageApplicationVersion:
+		return decodeIGArmadillo(&transport)
+	default:
+		return dec, fmt.Errorf("%w %d in MessageTransport", armadilloutil.ErrUnsupportedVersion, appPayloadVer)
+	}
+}
+
+func decodeFBArmadillo(transport *waMsgTransport.MessageTransport) (dec events.FBMessage, err error) {
+	var application *waMsgApplication.MessageApplication
+	application, err = transport.GetPayload().DecodeFB()
+	if err != nil {
+		return dec, fmt.Errorf("failed to unmarshal application: %w", err)
+	}
+	dec.FBApplication = application
+	if application.GetPayload() == nil {
+		return
+	}
+
+	switch typedContent := application.GetPayload().GetContent().(type) {
+	case *waMsgApplication.MessageApplication_Payload_CoreContent:
+		err = fmt.Errorf("unsupported core content payload")
+	case *waMsgApplication.MessageApplication_Payload_Signal:
+		err = fmt.Errorf("unsupported signal payload")
+	case *waMsgApplication.MessageApplication_Payload_ApplicationData:
+		err = fmt.Errorf("unsupported application data payload")
+	case *waMsgApplication.MessageApplication_Payload_SubProtocol:
+		// Havia aqui um `var protoMsg proto.Message` / `var subData
+		// *waCommon.SubProtocol` seguido, depois do switch, de um
+		// `if protoMsg != nil { proto.Unmarshal(subData.GetPayload(), ...) }`.
+		// Nenhum ramo do switch atribuia as duas variaveis, entao a condicao
+		// era sempre falsa e o bloco inteiro era inalcancavel — cada ramo ja'
+		// decodifica direto para dec.Message (F34 em HOUSEKEEP.md). Removido.
+		switch subProtocol := typedContent.SubProtocol.GetSubProtocol().(type) {
+		case *waMsgApplication.MessageApplication_SubProtocolPayload_ConsumerMessage:
+			dec.Message, err = subProtocol.Decode()
+		case *waMsgApplication.MessageApplication_SubProtocolPayload_BusinessMessage:
+			dec.Message = (*armadillo.Unsupported_BusinessApplication)(subProtocol.BusinessMessage)
+		case *waMsgApplication.MessageApplication_SubProtocolPayload_PaymentMessage:
+			dec.Message = (*armadillo.Unsupported_PaymentApplication)(subProtocol.PaymentMessage)
+		case *waMsgApplication.MessageApplication_SubProtocolPayload_MultiDevice:
+			dec.Message, err = subProtocol.Decode()
+		case *waMsgApplication.MessageApplication_SubProtocolPayload_Voip:
+			dec.Message = (*armadillo.Unsupported_Voip)(subProtocol.Voip)
+		case *waMsgApplication.MessageApplication_SubProtocolPayload_Armadillo:
+			dec.Message, err = subProtocol.Decode()
+		default:
+			return dec, fmt.Errorf("unsupported subprotocol type: %T", subProtocol)
+		}
+	default:
+		err = fmt.Errorf("unsupported application payload content type: %T", typedContent)
+	}
+	return
+}
+
+func decodeIGArmadillo(transport *waMsgTransport.MessageTransport) (dec events.FBMessage, err error) {
+	innerTransport, err := transport.GetPayload().DecodeIG()
+	if err != nil {
+		return dec, fmt.Errorf("failed to unmarshal IG transport: %w", err)
+	}
+	dec.IGTransport = innerTransport
+	switch typedContent := innerTransport.GetTransportPayload().(type) {
+	case *instamadilloTransportPayload.TransportPayload_Add:
+		dec.Message = typedContent.Add
+	case *instamadilloTransportPayload.TransportPayload_Supplement:
+		dec.Message = typedContent.Supplement
+	case *instamadilloTransportPayload.TransportPayload_Delete:
+		dec.Message = typedContent.Delete
+	}
+	return
+}

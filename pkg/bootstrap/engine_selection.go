@@ -23,7 +23,7 @@ import (
 // elas ainda no ambiente simplesmente as ignora.
 //
 // O que NÃO mudou é o princípio de "sem fallback silencioso": um pedido de
-// sessão em domain.EngineWaHeadless num processo sem o Chrome do headless
+// sessão em domain.EngineHeadless num processo sem o Chrome do headless
 // configurado FALHA, com um erro dizendo por quê
 // (user.AddUserUseCase, engineHeadlessUnavailableCode) — nunca cai
 // silenciosamente para o socket. E o roteamento por PORT que a decisão 94

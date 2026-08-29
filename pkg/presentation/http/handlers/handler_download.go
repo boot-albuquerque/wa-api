@@ -6,7 +6,7 @@ import (
 
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/wa-noise/errmap"
+	"wa-api/pkg/infra/noise/errmap"
 	customhttp "wa-api/pkg/presentation/http"
 	dtomessage "wa-api/pkg/presentation/http/dto/message"
 

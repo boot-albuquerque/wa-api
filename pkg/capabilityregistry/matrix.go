@@ -41,8 +41,8 @@ func newMatrix() *matrix {
 		// lazy-init branch — see set()'s own comment on why that keeps it
 		// trivial by construction, not by hiding a branch.
 		byEngine: map[domain.Engine]map[domain.Capability]bool{
-			domain.EngineWaNoise:    make(map[domain.Capability]bool),
-			domain.EngineWaHeadless: make(map[domain.Capability]bool),
+			domain.EngineNoise:    make(map[domain.Capability]bool),
+			domain.EngineHeadless: make(map[domain.Capability]bool),
 		},
 	}
 }
@@ -134,11 +134,11 @@ func (m *matrix) expand(capability domain.Capability, engine domain.Engine, stat
 type row struct {
 	capability domain.Capability
 
-	waNoiseStatus   domain.CapabilityStatus
-	waNoiseEvidence domain.EvidenceStatus
+	noiseStatus   domain.CapabilityStatus
+	noiseEvidence domain.EvidenceStatus
 
-	waHeadlessStatus   domain.CapabilityStatus
-	waHeadlessEvidence domain.EvidenceStatus
+	headlessStatus   domain.CapabilityStatus
+	headlessEvidence domain.EvidenceStatus
 
 	note string
 }
@@ -309,7 +309,7 @@ func NewDefaultMatrix() *matrix {
 		// something grep can settle — while the status is not_implemented, the
 		// honest name for "we could, and we have not".
 		{domain.CapGetPairingQR, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: pkg/infra/wa-noise/adapters/pairing/qr.go, reading users.qrcode as written by the QR listener in pkg/bootstrap/lifecycle.go. wa_headless (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.QRReader, over core.StartPairingSession (new boot primitive, core/session.go) and internal/wa-headless/capabilities/qr — the wwebjs-derived QR construction chain (WAWebSignalStoreApi/WAWebUserPrefsInfoStore/WABase64/WAWebUserPrefsMultiDevice/WAWebCompanionRegClientUtils/WAWebConnModel.Conn.ref) MEASURED end-to-end against .lab/test-account-profile (TestProbeQRConstructionSurface), every step resolving to a real value"},
-		{domain.CapConnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: pkg/bootstrap/pairing_providers.go (waNoiseSessionStarter over the SessionOrchestrator). wa_headless (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.Starter, over Sessions.EvaluatorForPairing/core.StartPairingSession — fire-and-forget boot into the registry.KindPairing quota, same contract as wa_noise's Starter"},
+		{domain.CapConnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: pkg/bootstrap/pairing_providers.go (noiseSessionStarter over the SessionOrchestrator). wa_headless (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.Starter, over Sessions.EvaluatorForPairing/core.StartPairingSession — fire-and-forget boot into the registry.KindPairing quota, same contract as wa_noise's Starter"},
 		{domain.CapLogoutSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: adapters/user/adapter.go (or session teardown path). wa_headless: pkg/infra/wa-headless/session/disconnector.go — Socket.logout() MEASURED against a real, paired, disposable session (F381, reopening H122): called without throwing, and the page settled from CONNECTED to UNPAIRED with a fresh QR within ~18s"},
 
 		// wa_noise: DetectOwnAccountKind (internal/wa-noise/capabilities/user/
@@ -325,8 +325,8 @@ func NewDefaultMatrix() *matrix {
 	}
 
 	for _, r := range rows {
-		m.expand(r.capability, domain.EngineWaNoise, r.waNoiseStatus, r.waNoiseEvidence, r.note)
-		m.expand(r.capability, domain.EngineWaHeadless, r.waHeadlessStatus, r.waHeadlessEvidence, r.note)
+		m.expand(r.capability, domain.EngineNoise, r.noiseStatus, r.noiseEvidence, r.note)
+		m.expand(r.capability, domain.EngineHeadless, r.headlessStatus, r.headlessEvidence, r.note)
 	}
 	log.Info().Int("rows", len(rows)).
 		Msg("capabilityregistry: default matrix built from source-reading evidence")

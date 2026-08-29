@@ -75,12 +75,12 @@ func TestAudit_Invariant1_CreateRejectsGarbageEngine(t *testing.T) {
 	}
 }
 
-// TestAudit_Invariant1_CreateDefaultsEmptyToWaNoise documents (does not
+// TestAudit_Invariant1_CreateDefaultsEmptyToNoise documents (does not
 // attack) the DOCUMENTED zero-value behavior in engineForCreate: an absent
 // engine becomes wa_noise, not legacy_unknown and not an error. This is
 // the control that shows the two rejection tests above are actually
 // discriminating "invalid" from "absent", not just failing every insert.
-func TestAudit_Invariant1_CreateDefaultsEmptyToWaNoise(t *testing.T) {
+func TestAudit_Invariant1_CreateDefaultsEmptyToNoise(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
 
@@ -96,8 +96,8 @@ func TestAudit_Invariant1_CreateDefaultsEmptyToWaNoise(t *testing.T) {
 		t.Fatalf("CreateUser with empty engine: created=%v err=%v, want true/nil", created, err)
 	}
 	got := engineOf(t, db, rec.ID)
-	if got != string(domain.EngineWaNoise) {
-		t.Fatalf("engine after create with empty field = %q, want %q", got, domain.EngineWaNoise)
+	if got != string(domain.EngineNoise) {
+		t.Fatalf("engine after create with empty field = %q, want %q", got, domain.EngineNoise)
 	}
 }
 
@@ -117,7 +117,7 @@ func TestAudit_Invariant2_UseCaseComparisonRejectsDivergence(t *testing.T) {
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
 
-	rec := domain.UserRecord{ID: "audit-immutable-ctrl", Name: "audit", Token: "tok-immutable-ctrl", Engine: domain.EngineWaNoise}
+	rec := domain.UserRecord{ID: "audit-immutable-ctrl", Name: "audit", Token: "tok-immutable-ctrl", Engine: domain.EngineNoise}
 	if _, err := repo.CreateUser(ctx, rec); err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestAudit_Invariant2_UseCaseComparisonRejectsDivergence(t *testing.T) {
 		t.Fatalf("ListUsers: entries=%d err=%v", len(entries), err)
 	}
 	current := entries[0].Engine.String()
-	requested := string(domain.EngineWaHeadless)
+	requested := string(domain.EngineHeadless)
 	if requested == current {
 		t.Fatalf("test setup broken: requested equals current (%q)", current)
 	}
@@ -166,16 +166,16 @@ func TestAudit_Invariant2_RepositoryRejectsEngineChangeAfterCreation(t *testing.
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
 
-	rec := domain.UserRecord{ID: "audit-immutable-attack", Name: "audit", Token: "tok-immutable-attack", Engine: domain.EngineWaNoise}
+	rec := domain.UserRecord{ID: "audit-immutable-attack", Name: "audit", Token: "tok-immutable-attack", Engine: domain.EngineNoise}
 	if _, err := repo.CreateUser(ctx, rec); err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
 	before := engineOf(t, db, rec.ID)
-	if before != string(domain.EngineWaNoise) {
-		t.Fatalf("setup: engine after create = %q, want %q", before, domain.EngineWaNoise)
+	if before != string(domain.EngineNoise) {
+		t.Fatalf("setup: engine after create = %q, want %q", before, domain.EngineNoise)
 	}
 
-	newEngine := domain.EngineWaHeadless
+	newEngine := domain.EngineHeadless
 	err := repo.UpdateUser(ctx, rec.ID, domain.UserUpdate{Engine: &newEngine})
 	if err == nil {
 		t.Fatalf("UpdateUser with a divergent engine unexpectedly succeeded - the repository-level immutability guard (F279) did not fire")

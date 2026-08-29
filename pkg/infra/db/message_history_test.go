@@ -29,7 +29,7 @@ func newHistoryDB(t *testing.T) *sqlx.DB {
 }
 
 // newStoreDB opens a SEPARATE SQLite database with the wanoise_message_secrets
-// table — the schema that the wa-noise sqlstore creates in the STORE file
+// table — the schema that the noise sqlstore creates in the STORE file
 // (main.db), not in the application database (users.db). Using two databases
 // reproduces the production topology that F212 identified as the root cause.
 func newStoreDB(t *testing.T) *sqlx.DB {

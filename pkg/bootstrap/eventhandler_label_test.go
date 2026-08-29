@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/protocol/proto/waSyncAction"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/proto/waSyncAction"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 	"wa-api/pkg/infra/db"
 )
 

@@ -550,12 +550,12 @@ PedidoPresencaNaConversa:
 
         **Não há enum no servidor.** A cadeia é usada directamente como
         nome da etiqueta enviada ao WhatsApp
-        (`internal/wa-noise/core/presence.go:141`), logo um valor
+        (`internal/noise/core/presence.go:141`), logo um valor
         desconhecido não devolve `400` — é o WhatsApp que decide o que fazer
         com ele, e o resultado não foi medido aqui.
 
         As duas constantes que a biblioteca define são `composing` e
-        `paused` (`internal/wa-noise/protocol/types/presence.go:17-18`).
+        `paused` (`internal/noise/protocol/types/presence.go:17-18`).
         **Não existe um estado `recording`**: "a gravar" exprime-se como
         `state: composing` com `media: audio`.
       example: composing
@@ -575,7 +575,7 @@ PedidoPresencaNaConversa:
 
         **Só tem efeito quando `state` é `composing`**: em qualquer outro
         estado o valor é descartado sem aviso
-        (`internal/wa-noise/core/presence.go:142`). As duas constantes
+        (`internal/noise/core/presence.go:142`). As duas constantes
         conhecidas são `""` (texto) e `audio`.
       example: ''
 
@@ -869,7 +869,7 @@ PedidoDescargaDeMidia:
         ambos ausentes, a biblioteca toma a mídia por NÃO CIFRADA e devolve
         `200` com os bytes tal e qual vieram da CDN — que, para mídia real
         do WhatsApp, é conteúdo cifrado inútil disfarçado de sucesso
-        (`internal/wa-noise/capabilities/media/download_transport.go:37`).
+        (`internal/noise/capabilities/media/download_transport.go:37`).
         Com apenas um dos dois em falta, o HMAC falha e a resposta é
         `500 media_download_failed`.
       example: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=

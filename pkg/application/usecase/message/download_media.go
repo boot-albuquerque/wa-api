@@ -41,7 +41,7 @@ func (f mediaDownloadFlow) execute(ctx context.Context, txtID string, req domain
 	}
 
 	if err := f.downloader.EnsureSession(ctx, txtID); err != nil {
-		f.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		f.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 
@@ -57,7 +57,7 @@ func (f mediaDownloadFlow) execute(ctx context.Context, txtID string, req domain
 	// O histórico respondia 200 com `"Data":"data:image/jpeg;base64,"` nesse
 	// caso, porque `dataurl.New(nil, mime).String()` é uma Data URL válida e
 	// vazia. Investigando a primitive, o caso é alcançável mas sempre
-	// patológico: em internal/wa-noise/capabilities/media/download_transport.go
+	// patológico: em internal/noise/capabilities/media/download_transport.go
 	// (DownloadAndDecrypt) o retorno (data, nil) só ocorre depois de
 	// ValidateMedia + Decrypt, e o único caminho que produz zero byte sem erro
 	// é o ramo de mídia NÃO cifrada (mediaKey/fileEncSHA256/mac todos nil) com

@@ -16,8 +16,8 @@ import (
 
 	"wa-api/pkg/application/usecase/session"
 	"wa-api/pkg/domain"
-	"wa-api/pkg/infra/wa-noise/observability/applog"
-	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
+	"wa-api/pkg/infra/noise/observability/applog"
+	wasession "wa-api/pkg/infra/noise/runtime/session"
 	"wa-api/pkg/presentation/http/handlers"
 	"wa-api/pkg/presentation/http/middleware"
 )
@@ -32,9 +32,9 @@ const boundaryTestToken = "boundary-test-token"
 // noSessionGuard satisfies appport.SessionGuard and always reports "no
 // session". It exists so a real use case (session.GetStatusUseCase) runs and
 // logs through the real ZerologAdapter during a router-driven request —
-// without needing a live wa-noise connection. Que ele seja trivial de
+// without needing a live noise connection. Que ele seja trivial de
 // escrever é o ponto da ADR-001: com a porta antiga, a mesma fake tinha que
-// produzir um *wanoise.Client.
+// produzir um *noise.Client.
 type noSessionGuard struct{}
 
 func (noSessionGuard) EnsureSession(context.Context, string) error {
@@ -270,7 +270,7 @@ func boundaryLogReqIDCorrelates(t *testing.T) {
 		case boundaryLogMsg:
 			boundaryID = rec.str("req_id")
 		// F196: GetStatus deixou de consultar o SessionGuard, portanto já não
-		// emite "no wanoise session". A falha injetada agora vem de ListUsers,
+		// emite "no noise session". A falha injetada agora vem de ListUsers,
 		// e é esta a linha que ela produz. O teste é sobre o req_id, não sobre
 		// qual erro — mas procurar uma mensagem que ninguém emite fá-lo passar
 		// a medir a ausência de log em vez da correlação.

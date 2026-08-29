@@ -19,12 +19,12 @@ const (
 	s3TestConnectionLabel = "S3 connection test"
 
 	// s3UpstreamRejectedCode is the SAME string value as
-	// errmap.CodeUpstreamRejected ("upstream_rejected", pkg/infra/wa-noise/
+	// errmap.CodeUpstreamRejected ("upstream_rejected", pkg/infra/noise/
 	// errmap/iqerror.go) — it names the same concept, "a well formed,
 	// authorized request that the upstream refused" (apperr.
 	// CategoryUpstreamRejected), just for a different upstream (S3, not
 	// WhatsApp). It is declared separately, not imported: an application
-	// use case importing pkg/infra/wa-noise would invert the Clean
+	// use case importing pkg/infra/noise would invert the Clean
 	// Architecture dependency direction (ADR-001).
 	s3UpstreamRejectedCode = "upstream_rejected"
 )
@@ -67,7 +67,7 @@ func NewTestS3ConnectionUseCase(
 // plaintext row working, and the row would never be reconfigured.
 func (uc *TestS3ConnectionUseCase) Execute(ctx context.Context, txtID string) (*domain.S3TestResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

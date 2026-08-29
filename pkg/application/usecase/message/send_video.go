@@ -55,7 +55,7 @@ const dataPrefix = "data"
 // SendVideoUseCase envia um vídeo de verdade: obtém os bytes (por URL
 // externa via infra SSRF-safe, ou por decode local de data URI), resolve o
 // MIME pela precedência histórica de dois níveis (igual a Image), sobe o
-// anexo e envia a mensagem pelo wa-noise. Só devolve domain.StatusSent
+// anexo e envia a mensagem pelo noise. Só devolve domain.StatusSent
 // depois que o envio retorna sucesso — mesma disciplina de
 // SendImageUseCase/SendDocumentUseCase/SendAudioUseCase.
 //
@@ -96,7 +96,7 @@ func (uc *SendVideoUseCase) Execute(ctx context.Context, txtID string, req domai
 	}
 
 	if err := uc.media.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

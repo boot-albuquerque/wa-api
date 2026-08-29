@@ -10,7 +10,7 @@ import (
 )
 
 // sessionAttachHookAdapter implementa appport.SessionAttachHook. Fica em
-// pkg/bootstrap (não em pkg/infra/wa-noise) porque monta *UserEventHandler e
+// pkg/bootstrap (não em pkg/infra/noise) porque monta *UserEventHandler e
 // registra handleEvent — o handler de domínio completo, que depende de
 // estado privado de bootstrap (DB, NotifyFn, mode) e não pode ser movido
 // para infra sem inverter a direção de dependência bootstrap -> infra.
@@ -27,8 +27,8 @@ func NewSessionAttachHook(s *server) appport.SessionAttachHook {
 }
 
 // Attach replica exatamente a construção de lifecycle.go:218-232: resolve o
-// *wanoise.Client já registrado por SessionProvider/SessionRegistry via
-// clientManager.GetWaNoiseClient, monta o UserEventHandler, registra
+// *noise.Client já registrado por SessionProvider/SessionRegistry via
+// clientManager.GetNoiseClient, monta o UserEventHandler, registra
 // handleEvent e guarda o handle em clientManager.SetUserClient.
 //
 // Também é dona do kill-channel (lifecycle.go:459-472): a goroutine que
@@ -37,9 +37,9 @@ func NewSessionAttachHook(s *server) appport.SessionAttachHook {
 // um único escritor dessa coluna no caminho de desconexão — o orchestrator
 // só observa SessionEvent, nunca escreve nela.
 func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token string) error {
-	client := clientManager.GetWaNoiseClient(userID)
+	client := clientManager.GetNoiseClient(userID)
 	if client == nil {
-		return fmt.Errorf("sessionAttachHook: no wanoise client registered for userID %s", userID)
+		return fmt.Errorf("sessionAttachHook: no noise client registered for userID %s", userID)
 	}
 
 	// Garante a entrada no UserInfoCache antes de qualquer evento poder
@@ -93,7 +93,7 @@ func (h *sessionAttachHookAdapter) Attach(ctx context.Context, userID, token str
 		// a ser liberados.
 		stopSessionEventQueue(userID)
 		client.Disconnect()
-		clientManager.DeleteWaNoiseClient(userID)
+		clientManager.DeleteNoiseClient(userID)
 		clientManager.DeleteUserClient(userID)
 		clientManager.DeleteHTTPClient(userID)
 		if _, err := h.s.DB.Exec(`UPDATE users SET qrcode='', connected=0 WHERE id=$1`, userID); err != nil {

@@ -10,7 +10,7 @@ import (
 
 // SendPollUseCase envia uma enquete de verdade: monta o payload de criação a
 // partir dos campos escalares do request (sem upload, sem fetch, sem
-// conversão) e o envia pelo wa-noise. Só devolve domain.StatusSent depois
+// conversão) e o envia pelo noise. Só devolve domain.StatusSent depois
 // que o envio retorna sucesso — nunca antes (mesma disciplina de
 // SendMessageUseCase, CAP-01, e de SendLocationUseCase, CAP-08A).
 //
@@ -59,7 +59,7 @@ func (uc *SendPollUseCase) Execute(ctx context.Context, txtID string, req domain
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

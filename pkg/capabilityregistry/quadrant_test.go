@@ -31,19 +31,19 @@ type quadrant struct {
 
 func decideQuadrant(t *testing.T, r *CapabilityRegistry, capability domain.Capability) quadrant {
 	t.Helper()
-	np, err := r.Decide(capability, domain.EngineWaNoise, domain.AccountTypePersonal)
+	np, err := r.Decide(capability, domain.EngineNoise, domain.AccountTypePersonal)
 	if err != nil {
 		t.Fatalf("Decide(%q, wa_noise, personal): %v", capability, err)
 	}
-	nb, err := r.Decide(capability, domain.EngineWaNoise, domain.AccountTypeBusiness)
+	nb, err := r.Decide(capability, domain.EngineNoise, domain.AccountTypeBusiness)
 	if err != nil {
 		t.Fatalf("Decide(%q, wa_noise, business): %v", capability, err)
 	}
-	hp, err := r.Decide(capability, domain.EngineWaHeadless, domain.AccountTypePersonal)
+	hp, err := r.Decide(capability, domain.EngineHeadless, domain.AccountTypePersonal)
 	if err != nil {
 		t.Fatalf("Decide(%q, wa_headless, personal): %v", capability, err)
 	}
-	hb, err := r.Decide(capability, domain.EngineWaHeadless, domain.AccountTypeBusiness)
+	hb, err := r.Decide(capability, domain.EngineHeadless, domain.AccountTypeBusiness)
 	if err != nil {
 		t.Fatalf("Decide(%q, wa_headless, business): %v", capability, err)
 	}

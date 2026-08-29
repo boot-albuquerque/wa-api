@@ -10,7 +10,7 @@ import (
 // domínio.
 //
 // Substitui a antiga HealthClientProvider, que devolvia o tipo concreto do
-// SDK (IterateWaNoiseClients(func(*wanoise.Client) bool)) e portanto
+// SDK (IterateNoiseClients(func(*noise.Client) bool)) e portanto
 // obrigava o use case de health a importar o SDK concreto só para
 // perguntar "quantas sessões estão conectadas?" — uma pergunta que é
 // inteiramente de domínio. Ver ADR-001.

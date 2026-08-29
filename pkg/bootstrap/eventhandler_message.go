@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog/log"

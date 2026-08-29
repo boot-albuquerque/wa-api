@@ -2,17 +2,17 @@ package bootstrap
 
 import (
 	"context"
-	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
+	wasession "wa-api/pkg/infra/noise/runtime/session"
 
-	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/noise/persistence/store"
 
 	"github.com/rs/zerolog/log"
 
 	appport "wa-api/pkg/application/contracts"
 	appsession "wa-api/pkg/application/session"
+	"wa-api/pkg/infra/noise/mapping/platform"
+	logbridge "wa-api/pkg/infra/noise/observability/log"
 	"wa-api/pkg/infra/storage"
-	"wa-api/pkg/infra/wa-noise/mapping/platform"
-	"wa-api/pkg/infra/wa-noise/observability/walog"
 )
 
 // newSessionOrchestrator liga os quatro ports de sessão (Fases 2a-2e) ao
@@ -22,8 +22,8 @@ import (
 // substitui (*server).startClient, removido nesta fase.
 func newSessionOrchestrator(s *server) *appsession.Orchestrator {
 	// Nunca nil e nunca um logger nulo: Warn e Error do SDK saem sempre. --wadebug
-	// apenas baixa o piso (ver walog.ParseLevel).
-	clientLog := walog.New(log.Logger, walog.ModuleClient, walog.ParseLevel(*waDebug))
+	// apenas baixa o piso (ver logbridge.ParseLevel).
+	clientLog := logbridge.New(log.Logger, logbridge.ModuleClient, logbridge.ParseLevel(*waDebug))
 
 	// DeviceProps é global do SDK e precisa estar definido antes de qualquer
 	// cliente ser criado — antes vivia no topo de startClient.

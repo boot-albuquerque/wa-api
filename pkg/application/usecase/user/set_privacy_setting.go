@@ -22,7 +22,7 @@ func NewSetPrivacySettingUseCase(pm appport.PrivacyManager, logger appport.Logge
 // Execute sets a privacy setting with validation
 func (uc *SetPrivacySettingUseCase) Execute(ctx context.Context, userID string, req domain.SetPrivacySettingRequest) (domain.PrivacySettings, error) {
 	if err := uc.privacy.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return domain.PrivacySettings{}, err
 	}
 

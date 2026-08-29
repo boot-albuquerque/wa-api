@@ -24,7 +24,7 @@ func NewSetDefaultDisappearingTimerUseCase(s appport.DefaultDisappearingTimerSet
 // accepts: off, 24h, 7d, 90d.
 func (uc *SetDefaultDisappearingTimerUseCase) Execute(ctx context.Context, txtID, duration string) error {
 	if err := uc.setter.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return err
 	}
 

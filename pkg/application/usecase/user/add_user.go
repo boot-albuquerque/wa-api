@@ -43,7 +43,7 @@ const (
 	engineImmutableMsg  = "engine não pode ser alterado após a criação da conta"
 
 	// engineHeadlessUnavailableCode identifica um pedido de sessão em
-	// domain.EngineWaHeadless num servidor sem o Chrome do headless
+	// domain.EngineHeadless num servidor sem o Chrome do headless
 	// configurado. Recusar aqui é a mesma regra de "sem fallback silencioso"
 	// da decisão 94 (pkg/bootstrap/engine_routing.go): pedir um engine que o
 	// processo não pode servir tem de FALHAR, nunca cair para o socket em
@@ -97,7 +97,7 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserInput) 
 	if err != nil {
 		return nil, apperr.New(invalidEngineCode, apperr.CategoryValidation, invalidEngineMsg, false, err)
 	}
-	if engine == domain.EngineWaHeadless && !uc.headlessAvailable {
+	if engine == domain.EngineHeadless && !uc.headlessAvailable {
 		return nil, apperr.New(engineHeadlessUnavailableCode, apperr.CategoryValidation,
 			engineHeadlessUnavailableMsg, false, nil)
 	}

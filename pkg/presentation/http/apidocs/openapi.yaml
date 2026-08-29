@@ -115,8 +115,8 @@ components:
         pelo transporte que ninguém pediu emparelharia a sessão contra o que o
         próprio registo dela diz.
 
-        Medido em 2026-08-27: `wa_headless` não serve `get_pairing_qr` nem
-        `connect_session` (não existe adaptador, e nada de wa-headless é
+        Medido em 2026-08-27: `headless` não serve `get_pairing_qr` nem
+        `connect_session` (não existe adaptador, e nada de headless é
         construído no arranque), e `request_pairing_code` está por medir. A
         matriz completa está em `GET /admin/capabilities`.
     ErroInterno:
@@ -601,7 +601,7 @@ components:
             `qr_code` muda (rotação genuína) ou fica vazio.
 
             **NÃO é uma contagem regressiva de expiração.** HOUSEKEEP F375: nem
-            `wa_noise` nem `wa_headless` conseguem prometer honestamente quando
+            `noise` nem `headless` conseguem prometer honestamente quando
             o código atual vai expirar — a rotação é decidida pelo servidor do
             WhatsApp, com variância MEDIDA de 10 a 60 segundos entre rotações
             automáticas (F374, `TestProbeQRRetryPattern`). Este campo não
@@ -623,9 +623,9 @@ components:
           description: |
             Imagem do QR code em data URI (`data:image/png;base64,…`).
 
-            **A mesma forma para os dois engines** (HOUSEKEEP F373): `wa_noise`
+            **A mesma forma para os dois engines** (HOUSEKEEP F373): `noise`
             lê a imagem já gravada em `users.qrcode` pelo orquestrador a cada
-            evento `QR` (`orchestrator.go`); `wa_headless` lê a string crua que a
+            evento `QR` (`orchestrator.go`); `headless` lê a string crua que a
             página produz e a API a codifica em PNG no único ponto por onde os
             dois passam (`GetQRUseCase`, via `pkg/qrimage`). Antes da F373 os
             dois devolviam formas diferentes no mesmo campo — corrigido, não é
@@ -1031,7 +1031,7 @@ components:
           description: |
             Primeiro nome, quando veio da sincronização da agenda. Sempre presente;
             `""` (nunca `null`) quando não veio — o caso da esmagadora maioria.
-            Vazio SEMPRE no motor `wa-headless`, que não lê a agenda.
+            Vazio SEMPRE no motor `headless`, que não lê a agenda.
           example: ""
           nullable: false
           type: string
@@ -1040,7 +1040,7 @@ components:
             Se o motor tem mesmo um registo deste contacto, em vez de ter
             sintetizado a entrada a partir de uma identidade nua. Sempre presente;
             nunca `null`. Medido `true` em 461 de 461 e em 3456 de 3456 no motor
-            `wa-noise` — só é devolvido o que foi encontrado.
+            `noise` — só é devolvido o que foi encontrado.
           example: true
           nullable: false
           type: boolean
@@ -1058,7 +1058,7 @@ components:
         is_business:
           description: |
             Se a página classifica a conta como comercial. **Só o motor
-            `wa-headless` o responde**; no `wa-noise` vem sempre `false`, porque o
+            `headless` o responde**; no `noise` vem sempre `false`, porque o
             armazenamento de contactos não carrega a bandeira. Sempre presente.
           example: false
           nullable: false
@@ -1496,8 +1496,8 @@ components:
           um subconjunto de tipos de mídia).
         - `not_implemented`: o wa-api nunca escreveu a porta/use case/rota para
           esta capacidade, embora nada a bloqueie. Correcção: escrevê-la aqui.
-        - `engine_unsupported`: o transporte (socket wa-noise ou a SPA do
-          wa-headless) não tem forma nenhuma de realizar esta operação.
+        - `engine_unsupported`: o transporte (socket noise ou a SPA do
+          headless) não tem forma nenhuma de realizar esta operação.
           Correcção: implementar no transporte, ou aceitar a lacuna.
         - `upstream_unsupported`: o próprio WhatsApp não oferece esta operação
           pelo protocolo que este projecto fala (WhatsApp Web multi-dispositivo),
@@ -2107,8 +2107,8 @@ components:
         Identificador da mensagem escolhido pelo CLIENTE, e não pelo servidor.
 
         **Sempre opcional.** Ausente, `null` e `""` são indistinguíveis, e nos três
-        casos o wa-noise gera um identificador. Não há formato imposto nem
-        validação: o valor é passado ao wa-noise tal e qual.
+        casos o noise gera um identificador. Não há formato imposto nem
+        validação: o valor é passado ao noise tal e qual.
 
         **NÃO é chave de idempotência.** Não foi medido que o servidor ou o
         WhatsApp deduplique por este campo; enviar o mesmo `id` duas vezes envia
@@ -2195,8 +2195,8 @@ components:
         `domain.GroupInfo`.
 
         **O que mudou face a `InfoGrupo`**, e porquê: `InfoGrupo` descrevia a
-        struct de protocolo do wa-noise serializada DIRECTAMENTE, sem etiquetas
-        `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `wa-headless`
+        struct de protocolo do noise serializada DIRECTAMENTE, sem etiquetas
+        `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `headless`
         servia OUTRA struct na mesma chave, então a forma do corpo dependia de que
         motor tinha a sessão. Hoje os dois motores normalizam para
         `domain.GroupInfo`, e esta é a única forma servida.
@@ -2211,7 +2211,7 @@ components:
         As três datas são `null` quando o motor não as conhece — e não
         `"0001-01-01T00:00:00Z"`, que seria uma data real no fio.
 
-        **O que o motor headless não vê**: uma sessão servida por `wa-headless` só
+        **O que o motor headless não vê**: uma sessão servida por `headless` só
         consegue `jid`, `name` e `is_announce`; o resto vem no zero, e
         `participants` vem `[]`. Isso é visível, e é de propósito — preencher com
         palpite tornaria "não vejo" indistinguível de "o grupo é assim".
@@ -2381,15 +2381,15 @@ components:
         existir. O que varia é o conteúdo, não a presença.
 
         **Os dois motores preenchem metades complementares**, e isso é propriedade
-        do motor, não falta de dado. O `wa-noise` pergunta ao servidor e responde
-        `status`, `picture_id`, `devices` e `verified_name`; o `wa-headless` lê a
+        do motor, não falta de dado. O `noise` pergunta ao servidor e responde
+        `status`, `picture_id`, `devices` e `verified_name`; o `headless` lê a
         colecção de contactos da página e responde `push_name` e `business_name`.
         O que o motor não sabe vem no valor zero.
       properties:
         business_name:
           description: |
             Nome comercial do roster local. Sempre presente; `""` (nunca `null`).
-            Como `push_name`, só o motor `wa-headless` o preenche nesta rota.
+            Como `push_name`, só o motor `headless` o preenche nesta rota.
           example: ""
           nullable: false
           type: string
@@ -2439,8 +2439,8 @@ components:
         push_name:
           description: |
             Nome que a própria pessoa publica, quando o motor o conhece. Sempre
-            presente; `""` (nunca `null`). Só o motor `wa-headless` o preenche
-            nesta rota — o `wa-noise` pergunta ao servidor, que não o devolve aqui.
+            presente; `""` (nunca `null`). Só o motor `headless` o preenche
+            nesta rota — o `noise` pergunta ao servidor, que não o devolve aqui.
           example: ""
           nullable: false
           type: string
@@ -2448,7 +2448,7 @@ components:
           description: |
             O "recado" do perfil. Sempre presente; vem `""` (nunca `null`) quando a
             privacidade o esconde, quando não há nenhum, quando o servidor não o
-            devolveu, ou quando o motor é o `wa-headless` — os quatro casos são
+            devolveu, ou quando o motor é o `headless` — os quatro casos são
             indistinguíveis.
           example: ""
           nullable: false
@@ -2497,7 +2497,7 @@ components:
 
         A ordem do array é a ORDEM DO PEDIDO, não a de um mapa: o adaptador
         percorre os JIDs pedidos, e não o mapa que o servidor devolveu
-        (`pkg/infra/wa-noise/adapters/user/adapter.go`). JIDs para os quais o
+        (`pkg/infra/noise/adapters/user/adapter.go`). JIDs para os quais o
         servidor não respondeu ficam simplesmente FORA do array.
       properties:
         users:
@@ -2735,7 +2735,7 @@ components:
             lista mudou sem a comparar entrada a entrada.
 
             Sempre presente; nunca `null`. Vem `""` quando o WhatsApp devolveu uma
-            lista nula, e também no motor `wa-headless`, que não versiona a lista —
+            lista nula, e também no motor `headless`, que não versiona a lista —
             não confunda `""` com "a lista não mudou".
           example: "1787412261963655"
           nullable: false
@@ -3174,7 +3174,7 @@ components:
             Descritor da pré-visualização, com a **mesma forma** de `picture`.
 
             Ao contrário de `picture`, veio como objecto (nunca `null`) em todas as
-            medições do motor wa-noise, incluindo `GET /newsletter/list` e canal
+            medições do motor noise, incluindo `GET /newsletter/list` e canal
             apagado — e a assimetria é PRESERVADA de propósito em vez de suavizada:
             colapsar as duas para "null quando vazio" afirmaria que o canal não tem
             pré-visualização, coisa que o protocolo nunca disse. `null` no motor
@@ -3223,7 +3223,7 @@ components:
             Nunca `null`, nunca ausente.
 
             **Ressalva medida, e ela não mudou com a migração**: veio `0` em todos
-            os canais observados pelo motor wa-noise, incluindo um canal público de
+            os canais observados pelo motor noise, incluindo um canal público de
             terceiro com milhares de seguidores. O que este campo significa quando
             não é zero **não foi determinado com segurança** nesse motor. O motor
             headless reporta a contagem que a página mostra.
@@ -3234,7 +3234,7 @@ components:
           description: |
             Estado de verificação do canal. Valores observados: `unverified` (canal
             comum), `verified` (verificado pelo WhatsApp) e `""` (canal apagado ou
-            inexistente, no motor wa-noise).
+            inexistente, no motor noise).
 
             **O motor headless nunca responde `""` aqui**, e a diferença é uma
             decisão registada: a página responde um BOOLEANO, que não tem terceiro
@@ -3782,12 +3782,12 @@ components:
 
             `promote` e `demote` foram corrigidos em F263: a biblioteca por baixo
             já sabia promover e despromover há anos
-            (`internal/wa-noise/capabilities/group/participants.go:18-19`); só a
+            (`internal/noise/capabilities/group/participants.go:18-19`); só a
             rota não os expunha. `pkg/domain/group.go` ganhou
             `ParticipantPromote`/`ParticipantDemote`, o use case
             (`pkg/application/usecase/group/group_management.go`) passou a aceitar
             os dois valores, e o adaptador
-            (`pkg/infra/wa-noise/adapters/group/participants.go`) trocou o
+            (`pkg/infra/noise/adapters/group/participants.go`) trocou o
             mapeamento binário add/remove por um `switch` exaustivo sobre as
             quatro ações.
           enum:
@@ -4689,16 +4689,16 @@ components:
             Transporte que servirá a sessão. **Obrigatório** — não há default
             silencioso.
 
-            - `wa_noise`: fala o protocolo do WhatsApp Web directamente pelo
-              socket (`internal/wa-noise`). É o transporte histórico.
-            - `wa_headless`: conduz um Chromium por trás da SPA do WhatsApp Web.
+            - `noise`: fala o protocolo do WhatsApp Web directamente pelo
+              socket (`internal/noise`). É o transporte histórico.
+            - `headless`: conduz um Chromium por trás da SPA do WhatsApp Web.
 
             A engine é definida **aqui, uma única vez**: `PUT /admin/users/{id}`
             recusa qualquer tentativa de a alterar depois da criação
             (`409 engine_immutable`).
 
             Ausente, `null`, `""` ou qualquer valor **desconhecido** deste enum
-            (fora de `{wa_noise, wa_headless}`) — incluindo `legacy_unknown`, que
+            (fora de `{noise, headless}`) — incluindo `legacy_unknown`, que
             é um estado interno de leitura e nunca uma escolha de criação — dão
             `400 invalid_engine`.
           enum:
@@ -5126,7 +5126,7 @@ components:
             ambos ausentes, a biblioteca toma a mídia por NÃO CIFRADA e devolve
             `200` com os bytes tal e qual vieram da CDN — que, para mídia real
             do WhatsApp, é conteúdo cifrado inútil disfarçado de sucesso
-            (`internal/wa-noise/capabilities/media/download_transport.go:37`).
+            (`internal/noise/capabilities/media/download_transport.go:37`).
             Com apenas um dos dois em falta, o HMAC falha e a resposta é
             `500 media_download_failed`.
           example: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
@@ -5509,7 +5509,7 @@ components:
             | código válido | sim | — |
 
             O URL completo também passa, porque a biblioteca corta o prefixo
-            (`internal/wa-noise/capabilities/group/invite.go:105`), mas isso não
+            (`internal/noise/capabilities/group/invite.go:105`), mas isso não
             foi medido nesta rota e o nome do campo continua a ser `code`.
 
             Repare que `POST /group/invitelink` devolve o **link inteiro**, e não
@@ -6795,7 +6795,7 @@ components:
             | `"   "` | **passa a guarda** | **medido: `500 internal server error`**, não `400`. Não há `trim`, e o valor segue para o WhatsApp |
             | código inexistente | não | **medido: `500`** — o use case embrulha o erro com `fmt.Errorf` e a recusa perde a taxonomia (`get_group_invite_info.go:44`) |
             | `IVccRoDVSbpHKNkgNxyZx4` | sim | — |
-            | `https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4` | **sim** | medido `200`; a biblioteca corta o prefixo (`internal/wa-noise/capabilities/group/invite.go:83`) |
+            | `https://chat.whatsapp.com/IVccRoDVSbpHKNkgNxyZx4` | **sim** | medido `200`; a biblioteca corta o prefixo (`internal/noise/capabilities/group/invite.go:83`) |
           example: IVccRoDVSbpHKNkgNxyZx4
           minLength: 1
           nullable: false
@@ -7336,7 +7336,7 @@ components:
 
             Não há `trim`, `pattern` nem verificação de comprimento no wa-api: a
             única regra local é *não ser vazio*. A validação de forma do número
-            acontece no wa-noise, e a recusa chega ao cliente como
+            acontece no noise, e a recusa chega ao cliente como
             `400 pair_phone_failed` com a mensagem do SDK
             (`adapters/pairing/adapter.go:65-85`).
           example: "554192421234"
@@ -7420,7 +7420,7 @@ components:
 
             **Só tem efeito quando `state` é `composing`**: em qualquer outro
             estado o valor é descartado sem aviso
-            (`internal/wa-noise/core/presence.go:142`). As duas constantes
+            (`internal/noise/core/presence.go:142`). As duas constantes
             conhecidas são `""` (texto) e `audio`.
           example: ""
           nullable: false
@@ -7449,12 +7449,12 @@ components:
 
             **Não há enum no servidor.** A cadeia é usada directamente como
             nome da etiqueta enviada ao WhatsApp
-            (`internal/wa-noise/core/presence.go:141`), logo um valor
+            (`internal/noise/core/presence.go:141`), logo um valor
             desconhecido não devolve `400` — é o WhatsApp que decide o que fazer
             com ele, e o resultado não foi medido aqui.
 
             As duas constantes que a biblioteca define são `composing` e
-            `paused` (`internal/wa-noise/protocol/types/presence.go:17-18`).
+            `paused` (`internal/noise/protocol/types/presence.go:17-18`).
             **Não existe um estado `recording`**: "a gravar" exprime-se como
             `state: composing` com `media: audio`.
           example: composing
@@ -9370,7 +9370,7 @@ components:
           type: string
         role:
           description: |
-            Papel do chamador no canal. Os três valores do motor wa-noise foram
+            Papel do chamador no canal. Os três valores do motor noise foram
             medidos ponta a ponta na cadeia de administração de 2026-08-26 (F233):
 
             | valor | significa |
@@ -9579,7 +9579,7 @@ components:
 
             **Sempre presente**, nunca `null`. Neste transporte é sempre `true`,
             porque o protocolo devolve a lista resultante na própria resposta
-            (`pkg/infra/wa-noise/adapters/group/participants.go:37`). O campo
+            (`pkg/infra/noise/adapters/group/participants.go:37`). O campo
             existe porque nem todo transporte consegue confirmar, e um sucesso que
             ninguém verificou não pode ser calado (`pkg/domain/group.go:236`).
 
@@ -10601,8 +10601,8 @@ components:
         campo `jid` de cada entrada, e o `count` que o log já calculava passou a
         ser servido em vez de o cliente ter de contar o mapa.
 
-        **A ORDEM é determinística.** O motor `wa-noise` lê de um mapa e ORDENA por
-        JID antes de devolver; o `wa-headless` preserva a ordem que a colecção da
+        **A ORDEM é determinística.** O motor `noise` lê de um mapa e ORDENA por
+        JID antes de devolver; o `headless` preserva a ordem que a colecção da
         página já tem. Sem isso, a mesma agenda saía numa ordem diferente a cada
         chamada e nenhum cliente conseguia diffar duas respostas.
 
@@ -10649,7 +10649,7 @@ components:
             Quantas entradas vêm em `contacts`. É a mesma contagem que o servidor
             já registava no log e que o cliente tinha de derivar contando o mapa.
 
-            **Para o motor `wa-headless` é a contagem de PESSOAS, não de linhas**:
+            **Para o motor `headless` é a contagem de PESSOAS, não de linhas**:
             a colecção da página traz uma linha por identidade, e a mesma pessoa
             aparece duas vezes — 944 linhas dobradas em 390 pessoas no perfil
             medido. Devolver o número de linhas reportaria o dobro dos contactos
@@ -11108,8 +11108,8 @@ components:
           type: boolean
         engine:
           description: |
-            Transporte que serve esta sessão: `wa_noise` fala o protocolo
-            directamente pelo socket; `wa_headless` conduz o Chromium por trás da
+            Transporte que serve esta sessão: `noise` fala o protocolo
+            directamente pelo socket; `headless` conduz o Chromium por trás da
             SPA do WhatsApp Web. Definido na criação (`POST /admin/users`) e
             **imutável** depois — `PUT /admin/users/{id}` recusa qualquer valor
             diferente do já gravado com `409 engine_immutable`.
@@ -11122,9 +11122,9 @@ components:
             fora dos dois listados não ocorre nesta resposta: é escrito pelo
             servidor a partir da coluna gravada, nunca lido de um pedido.
 
-            `wa_headless` hoje serve 17 dos 25 "ports" que `wa_noise` serve; uma
+            `headless` hoje serve 17 dos 25 "ports" que `noise` serve; uma
             chamada que o headless não cobre recusa com um erro dizendo qual port
-            e por quê — nunca cai para `wa_noise` em silêncio.
+            e por quê — nunca cai para `noise` em silêncio.
           enum:
             - wa_noise
             - wa_headless
@@ -11563,7 +11563,7 @@ paths:
         medido hoje para uma conta real.
 
         **`total`** é a contagem de linhas do array `capabilities` — número de
-        capacidades × número de engines (`wa_noise`, `wa_headless`) × três
+        capacidades × número de engines (`noise`, `headless`) × três
         tipos de conta.
 
         Uma combinação em que a decisão falhar internamente não derruba a
@@ -11583,21 +11583,21 @@ paths:
                   capabilities:
                     - account_type: unknown
                       capability: send_text
-                      engine: wa_noise
+                      engine: noise
                       evidence: confirmed
                       reason: verificado contra conta real (HOUSEKEEP F210)
                       status: supported
                       supported: true
                     - account_type: unknown
                       capability: catalog
-                      engine: wa_noise
+                      engine: noise
                       evidence: unknown
                       reason: nenhum use case nem rota escreve este fluxo ainda
                       status: not_implemented
                       supported: false
                     - account_type: unknown
                       capability: channel_create
-                      engine: wa_headless
+                      engine: headless
                       evidence: probable
                       reason: a SPA não expõe este fluxo ao automatismo do Chromium
                       status: engine_unsupported
@@ -11656,7 +11656,7 @@ paths:
                 code: 200
                 data:
                   - connected: true
-                    engine: wa_noise
+                    engine: noise
                     events: All
                     expiration: 0
                     hmac_configured: false
@@ -11718,7 +11718,7 @@ paths:
 
         - `name` e `token` são **obrigatórios**; a falta de qualquer um deles dá
           `400 missing_name_or_token`.
-        - `engine` é **obrigatório**: `wa_noise` ou `wa_headless`. Ausente,
+        - `engine` é **obrigatório**: `noise` ou `headless`. Ausente,
           `null`, `""` ou outro valor (incluindo `legacy_unknown`) dá
           `400 invalid_engine`. É definido aqui e **não pode ser alterado**
           depois — `PUT /admin/users/{id}` recusa a mudança com
@@ -11746,7 +11746,7 @@ paths:
         content:
           application/json:
             example:
-              engine: wa_noise
+              engine: noise
               events: Message,Receipt,Connected
               history: 100
               name: filarapida
@@ -11769,7 +11769,7 @@ paths:
                 code: 200
                 data:
                   connected: false
-                  engine: wa_noise
+                  engine: noise
                   events: Message,Receipt,Connected
                   expiration: 0
                   hmac_configured: false
@@ -11811,7 +11811,7 @@ paths:
                 code: 400
                 error:
                   code: invalid_engine
-                  message: engine é obrigatório e deve ser "wa_noise" ou "wa_headless"
+                  message: engine é obrigatório e deve ser "noise" ou "headless"
                 success: false
               schema:
                 $ref: '#/components/schemas/Erro'
@@ -11951,7 +11951,7 @@ paths:
                 code: 200
                 data:
                   - connected: true
-                    engine: wa_noise
+                    engine: noise
                     events: All
                     expiration: 0
                     hmac_configured: false
@@ -13049,7 +13049,7 @@ paths:
                     - is_group: true
                       jid: 120363411669320145@g.us
                       last_activity: "2026-08-24T19:01:14.41138-04:00"
-                      name: wa-headless-lab — teste automatizado, pode apagar
+                      name: headless-lab — teste automatizado, pode apagar
                   limit: 3
                   offset: 0
                   total: 384
@@ -13289,12 +13289,12 @@ paths:
           logo um valor desconhecido não é recusado com `400` — o que o
           WhatsApp faz com ele não foi medido aqui. As duas constantes que a
           biblioteca define são `composing` e `paused`
-          (`internal/wa-noise/protocol/types/presence.go:17-18`).
+          (`internal/noise/protocol/types/presence.go:17-18`).
         - **Não existe um estado `recording`.** "A gravar" exprime-se como
           `state: composing` com `media: audio`.
         - `media` só tem efeito quando `state` é `composing`; em qualquer
           outro estado é descartado sem aviso
-          (`internal/wa-noise/core/presence.go:142`). Os dois valores
+          (`internal/noise/core/presence.go:142`). Os dois valores
           conhecidos são `""` (texto) e `audio`.
         - Não há rota para "parar de escrever" a não ser enviar `paused`. O
           sinal também expira sozinho do lado do WhatsApp.
@@ -13457,7 +13457,7 @@ paths:
         **Como se observa o reenvio, quando ele chega** (apurado a 2026-08-26):
         o `request_id` **R** devolvido aqui reaparece na mensagem reenviada, no
         campo `UnavailableRequestID`
-        (`internal/wa-noise/capabilities/message/history_sync.go:250`). Há três
+        (`internal/noise/capabilities/message/history_sync.go:250`). Há três
         leituras que o expõem:
 
         1. `GET /chats/history` sobre o mesmo `chat_jid` — o `data_json` do
@@ -15964,7 +15964,7 @@ paths:
       description: |
         Devolve o link de convite actual do grupo. **Não o revoga**: o
         adaptador chama o SDK com o sinalizador de reposição a falso
-        (`pkg/infra/wa-noise/adapters/group/read.go:44`), logo chamadas
+        (`pkg/infra/noise/adapters/group/read.go:44`), logo chamadas
         repetidas devolvem o mesmo link. Não há rota nesta API para revogar um
         link.
 
@@ -16449,7 +16449,7 @@ paths:
         "add" or "remove")`.
 
         A biblioteca por baixo sabe promover e despromover há anos
-        (`internal/wa-noise/capabilities/group/participants.go:18-19`); é a
+        (`internal/noise/capabilities/group/participants.go:18-19`); é a
         rota que não o expõe. **A consequência é concreta: por esta API não há
         forma de dar nem de tirar administrador a ninguém.** Não há rota
         alternativa.
@@ -17056,7 +17056,7 @@ paths:
         descobre lendo esta resposta). Ausente devolve `400 missing_code`. O
         valor é o código nu. **Medido**: o URL completo também devolve `200`,
         porque a biblioteca corta o prefixo
-        (`internal/wa-noise/capabilities/group/invite.go:83`).
+        (`internal/noise/capabilities/group/invite.go:83`).
 
         **Ressalva medida**: a resposta traz `AnnounceVersionID`,
         `ParticipantVersionID` e `MemberAddMode` VAZIOS, ao contrário de
@@ -18897,7 +18897,7 @@ paths:
 
         **`200`, mas o efeito nunca foi observado — e agora sabemos que não é
         por falta de tentar.** `NewsletterMarkViewed` incrementa o contador de
-        visualizações do lado da biblioteca (`internal/wa-noise/core/newsletter.go:52`),
+        visualizações do lado da biblioteca (`internal/noise/core/newsletter.go:52`),
         e esse contador é servido por `POST /newsletters/updates`, que estava
         **inoperante** até 2026-08-28 (F265/LIB-03: o servidor não respondia,
         `500` ao fim de 30s) — já corrigida (ver a descrição de
@@ -19273,7 +19273,7 @@ paths:
         **Regra que surpreende**: **um administrador ou dono NÃO pode deixar de
         seguir o próprio canal**. O WhatsApp recusa com `405`, e nós traduzimos
         isso em `403 newsletter_admin_cannot_unfollow`
-        (`pkg/infra/wa-noise/errmap/newsletter.go:74`). Para sair, é preciso
+        (`pkg/infra/noise/errmap/newsletter.go:74`). Para sair, é preciso
         primeiro deixar de ser administrador — o que, no caso do dono, significa
         transferir a posse por `POST /newsletter/change-owner`.
 
@@ -20067,7 +20067,7 @@ paths:
         **A engine vem da sessão gravada**, não de um parâmetro do pedido. Uma
         linha cujo `engine` ainda não foi migrado (`legacy_unknown` — coluna
         adicionada antes do backfill de arranque correr contra ela) resolve para
-        `wa_noise`, o mesmo default documentado no backfill — o manipulador
+        `noise`, o mesmo default documentado no backfill — o manipulador
         nunca expõe esse estado de migração interno ao cliente.
 
         **Autenticação**: token de sessão.
@@ -20584,8 +20584,8 @@ paths:
 
         **Regras**:
 
-        - `engine` é obrigatório, não-nulo, não-vazio, e só aceita `wa_noise` ou
-          `wa_headless`. **O engine é escolhido pelo pedido de emparelhamento e
+        - `engine` é obrigatório, não-nulo, não-vazio, e só aceita `noise` ou
+          `headless`. **O engine é escolhido pelo pedido de emparelhamento e
           determina qual transporte executa a ligação; não é inferido da sessão
           do chamador.** Ausente, vazio, `legacy_unknown` ou qualquer outro
           valor dá `400 invalid_engine`, e nenhum transporte é tocado;
@@ -20601,7 +20601,7 @@ paths:
           pedir o código ao servidor, e uma sessão emparelhada recebe
           `400 already_paired`;
         - exige um cliente vivo, logo `GET /session/connect` antes;
-        - o número é validado do lado do WhatsApp e do wa-noise. Número curto
+        - o número é validado do lado do WhatsApp e do noise. Número curto
           demais ou em formato nacional volta como `400 pair_phone_failed`,
           com a mensagem original do SDK;
         - o código tem validade curta. Expirado, peça outro.
@@ -20611,7 +20611,7 @@ paths:
         content:
           application/json:
             example:
-              engine: wa_noise
+              engine: noise
               phone: "554192421234"
             schema:
               $ref: '#/components/schemas/PedidoPareamentoTelefone'
@@ -20673,7 +20673,7 @@ paths:
         Devolve a imagem do QR code guardada para esta sessão, em data URI, e
         `code_age_seconds` — há quanto tempo esse MESMO código é o que esta
         rota devolve (`0` quando muda). Não é um prazo de expiração: nem
-        `wa_noise` nem `wa_headless` sabem prometer quando o servidor do
+        `noise` nem `headless` sabem prometer quando o servidor do
         WhatsApp vai rodar o código (variância medida de 10-60s, HOUSEKEEP
         F374/F375) — é só o quanto já passou, para o cliente distinguir
         rotação normal de código travado sem a API inventar um prazo.
@@ -21549,7 +21549,7 @@ paths:
         **A ressalva que o `200` esconde, e que foi medida**: um `200` com
         `message_id` **não garante que o status chegue a alguém**. A lista de
         destinatários é construída a partir do campo `FullName` de cada contacto
-        (`internal/wa-noise/core/broadcast.go`), e uma conta WhatsApp Business
+        (`internal/noise/core/broadcast.go`), e uma conta WhatsApp Business
         recebe os contactos por `PushName`, não por sincronização de agenda. O
         número medido: numa conta Business com 461 contactos, apenas 1 tinha
         `FullName`, e a publicação foi para **dois** destinatários (esse mais a

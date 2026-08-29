@@ -29,7 +29,7 @@ var errNoSession = errors.New("session not found")
 // afrouxar a catraca — trocar um problema por outro.
 func assertNoSessionLog(t *testing.T, logger *contractsfake.Logger, userID string) {
 	t.Helper()
-	rec, ok := logger.FindLevel(contractsfake.LevelWarn, "no wanoise session")
+	rec, ok := logger.FindLevel(contractsfake.LevelWarn, "no noise session")
 	if !ok {
 		t.Fatalf("log de sessão ausente não emitido; houve %v", logger.Messages())
 	}

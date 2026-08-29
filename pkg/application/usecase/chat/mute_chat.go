@@ -38,7 +38,7 @@ func NewMuteChatUseCase(cm appport.ChatMuter, jr appport.JIDResolver, logger app
 // Execute mutes or unmutes a chat.
 func (uc *MuteChatUseCase) Execute(ctx context.Context, userID string, req domain.MuteChatRequest) (*domain.MuteChatResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

@@ -98,7 +98,7 @@ func (r *Registry) TargetEngine(ctx context.Context, targetSessionID string) (do
 	}
 	engine := entries[0].Engine
 	if !engine.IsValidForCreate() {
-		return domain.EngineWaNoise, nil
+		return domain.EngineNoise, nil
 	}
 	return engine, nil
 }

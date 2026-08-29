@@ -174,8 +174,8 @@ func newPairingHarness(t *testing.T, rows ...sessionRow) *pairingHarness {
 	// (pkg/infra/wa-headless/pairing/qr.go). Um dublê que devolvesse a mesma
 	// forma pelos dois nunca exercitaria a normalização que existe justamente
 	// porque elas divergem.
-	noise := &pairingSpy{engine: domain.EngineWaNoise, qr: qrImageOf(t, qrCodeNoise), code: "NOISE-CODE"}
-	headless := &pairingSpy{engine: domain.EngineWaHeadless, qr: qrCodeHeadless, code: "HEADLESS-CODE"}
+	noise := &pairingSpy{engine: domain.EngineNoise, qr: qrImageOf(t, qrCodeNoise), code: "NOISE-CODE"}
+	headless := &pairingSpy{engine: domain.EngineHeadless, qr: qrCodeHeadless, code: "HEADLESS-CODE"}
 
 	return &pairingHarness{
 		registry: pairing.NewRegistry(usersFor(rows...), capabilityRegistryForTest(),

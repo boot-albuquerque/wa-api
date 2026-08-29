@@ -15,7 +15,7 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/infra/db"
-	"wa-api/pkg/infra/wa-noise/observability/applog"
+	"wa-api/pkg/infra/noise/observability/applog"
 	"wa-api/pkg/presentation/http/contracttest"
 	"wa-api/pkg/presentation/http/handlers"
 )

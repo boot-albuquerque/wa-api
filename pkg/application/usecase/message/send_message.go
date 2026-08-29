@@ -8,7 +8,7 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// SendMessageUseCase envia uma mensagem de texto de verdade pelo wa-noise.
+// SendMessageUseCase envia uma mensagem de texto de verdade pelo noise.
 type SendMessageUseCase struct {
 	messages appport.TextMessenger
 	jids     appport.JIDResolver
@@ -38,7 +38,7 @@ func (uc *SendMessageUseCase) Execute(ctx context.Context, txtID string, req dom
 	}
 
 	if err := uc.messages.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

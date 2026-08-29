@@ -8,12 +8,12 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/patrickmn/go-cache"
 
-	waCommon "wa-api/internal/wa-noise/protocol/proto/waCommon"
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	waWeb "wa-api/internal/wa-noise/protocol/proto/waWeb"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	waCommon "wa-api/internal/noise/protocol/proto/waCommon"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/proto/waHistorySync"
+	waWeb "wa-api/internal/noise/protocol/proto/waWeb"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 	"wa-api/pkg/infra/db"
 )
 

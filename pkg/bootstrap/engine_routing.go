@@ -43,7 +43,7 @@ func (e ErrEngineSemPort) Error() string {
 // `temHeadless` é a presença da implementação headless daquele port — nil
 // significa "este engine não serve isto", e nunca "use o outro".
 func rotaDeEngine(engine string, temHeadless bool) (usarHeadless bool, recusar bool) {
-	if engine != string(domain.EngineWaHeadless) {
+	if engine != string(domain.EngineHeadless) {
 		return false, false
 	}
 	if !temHeadless {

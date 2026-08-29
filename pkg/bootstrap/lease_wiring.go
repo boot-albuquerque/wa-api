@@ -74,7 +74,7 @@ func buildLeaseManager(s *server) (*leaseManager, error) {
 // of them, and mechanical edits across tests are how a test quietly stops
 // asserting what its name claims.
 func hasLiveSessionLocally(userID string) bool {
-	return clientManager.GetWaNoiseClient(userID) != nil
+	return clientManager.GetNoiseClient(userID) != nil
 }
 
 // setupSessionOwnership builds the manager and installs it on the server, or
@@ -112,10 +112,10 @@ func releaseSessionLocally(userID string) {
 	log.Warn().Str("userid", userID).
 		Msg("releasing session locally after losing ownership; the new owner takes it from here")
 
-	if client := clientManager.GetWaNoiseClient(userID); client != nil {
+	if client := clientManager.GetNoiseClient(userID); client != nil {
 		client.Disconnect()
 	}
-	clientManager.DeleteWaNoiseClient(userID)
+	clientManager.DeleteNoiseClient(userID)
 	clientManager.DeleteUserClient(userID)
 	clientManager.DeleteHTTPClient(userID)
 }

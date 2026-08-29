@@ -9,10 +9,10 @@ import (
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
-	headlessadapter "wa-api/pkg/infra/wa-headless"
-	headlesspairing "wa-api/pkg/infra/wa-headless/pairing"
-	wapairing "wa-api/pkg/infra/wa-noise/adapters/pairing"
-	waclient "wa-api/pkg/infra/wa-noise/client"
+	headlessadapter "wa-api/pkg/infra/headless"
+	headlesspairing "wa-api/pkg/infra/headless/pairing"
+	wapairing "wa-api/pkg/infra/noise/adapters/pairing"
+	"wa-api/pkg/infra/noise/client"
 	"wa-api/pkg/pairing"
 )
 
@@ -26,7 +26,7 @@ const codeSessionOwnedByAnotherReplica = "session_owned_by_another_replica"
 // msgSessionOwnedByAnotherReplica is the historical message, byte for byte.
 const msgSessionOwnedByAnotherReplica = "this session is owned by another replica; route the request to its owner"
 
-// waNoiseSessionStarter implements appport.SessionStarter over the
+// noiseSessionStarter implements appport.SessionStarter over the
 // SessionOrchestrator that already drives the socket transport.
 //
 // It is a thin adapter and not new behaviour: both methods do exactly what the
@@ -34,7 +34,7 @@ const msgSessionOwnedByAnotherReplica = "this session is owned by another replic
 // (WithStartSession / WithCheckOwnership). What changed is that they are now
 // reached THROUGH an engine, so a session recorded as wa_headless cannot arrive
 // here by default any more. See HOUSEKEEP F273/F281.
-type waNoiseSessionStarter struct {
+type noiseSessionStarter struct {
 	server *server
 }
 
@@ -45,7 +45,7 @@ type waNoiseSessionStarter struct {
 // 200 {"status":"connecting"}. The claim is idempotent for the same owner —
 // StartSession's own Start claims it again and succeeds. In `single` mode
 // s.Leases is nil, the claim always succeeds, and nothing is ever refused here.
-func (s *waNoiseSessionStarter) CheckOwnership(_ context.Context, txtID string) error {
+func (s *noiseSessionStarter) CheckOwnership(_ context.Context, txtID string) error {
 	if !claimSessionOwnership(s.server.Leases, txtID) {
 		// claimSessionOwnership already logs WHY it refused (lease held
 		// elsewhere, or the coordinator could not answer). This line says what
@@ -71,11 +71,11 @@ func (s *waNoiseSessionStarter) CheckOwnership(_ context.Context, txtID string) 
 // connection outlives the request that asked for it, and cancelling it when the
 // client hangs up would tear down a session the client expects to find on its
 // next poll.
-func (s *waNoiseSessionStarter) StartSession(_ context.Context, txtID, token string) {
+func (s *noiseSessionStarter) StartSession(_ context.Context, txtID, token string) {
 	go s.server.startSession(txtID, token)
 }
 
-var _ appport.SessionStarter = (*waNoiseSessionStarter)(nil)
+var _ appport.SessionStarter = (*noiseSessionStarter)(nil)
 
 // buildPairingRegistry wires the pairing surface: which provider serves which
 // engine, for QR, phone code and connect.
@@ -103,19 +103,19 @@ var _ appport.SessionStarter = (*waNoiseSessionStarter)(nil)
 // signal the original design chose over a missing entry
 // (capability_not_supported vs engine_unavailable) — see
 // pairing.Registry.ResolvePhonePairer.
-func buildPairingRegistry(s *server, users appport.UserRepository, getClient waclient.Getter, caps *capabilityregistry.CapabilityRegistry, headlessSessions *headlessadapter.Sessions) *pairing.Registry {
-	waNoise := &pairing.Provider{
-		Engine:      domain.EngineWaNoise,
+func buildPairingRegistry(s *server, users appport.UserRepository, getClient client.Getter, caps *capabilityregistry.CapabilityRegistry, headlessSessions *headlessadapter.Sessions) *pairing.Registry {
+	noise := &pairing.Provider{
+		Engine:      domain.EngineNoise,
 		QRReader:    wapairing.NewQRReaderAdapter(getClient, users),
 		PhonePairer: wapairing.NewPhonePairerAdapter(getClient),
-		Starter:     &waNoiseSessionStarter{server: s},
+		Starter:     &noiseSessionStarter{server: s},
 	}
-	waHeadless := &pairing.Provider{Engine: domain.EngineWaHeadless}
+	headless := &pairing.Provider{Engine: domain.EngineHeadless}
 	headlessPorts := 0
 	if headlessSessions != nil {
-		waHeadless.QRReader = headlesspairing.NewQRReader(headlessSessions)
-		waHeadless.Starter = headlesspairing.NewStarter(headlessSessions)
-		waHeadless.PhonePairer = headlesspairing.NewPhonePairer(headlessSessions)
+		headless.QRReader = headlesspairing.NewQRReader(headlessSessions)
+		headless.Starter = headlesspairing.NewStarter(headlessSessions)
+		headless.PhonePairer = headlesspairing.NewPhonePairer(headlessSessions)
 		headlessPorts = 3
 	}
 	// Logged with the per-engine port counts rather than a bare "built": the
@@ -126,5 +126,5 @@ func buildPairingRegistry(s *server, users appport.UserRepository, getClient wac
 		Int("wa_noise_ports", 3).
 		Int("wa_headless_ports", headlessPorts).
 		Msg("pairing: provider registry wired")
-	return pairing.NewRegistry(users, caps, waNoise, waHeadless)
+	return pairing.NewRegistry(users, caps, noise, headless)
 }

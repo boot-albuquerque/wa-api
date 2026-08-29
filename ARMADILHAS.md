@@ -466,7 +466,7 @@ uma espera fora delas — e o `OpLog` diz qual foi a última operação registra
 **Data**: 2026-08-18 · **Descoberta**: LOOP 05.1, primeira corrida de N ciclos
 contra o perfil pareado real.
 
-**O defeito**: `internal/wa-headless/core/session.go:303` chama `spa.Probe`
+**O defeito**: `internal/headless/core/session.go:303` chama `spa.Probe`
 **exatamente uma vez**, imediatamente depois de `tab.Navigate` retornar, e falha
 o boot se a classe não for `APP_READY`. Não há laço, espera de assentamento nem
 nova tentativa.
@@ -751,7 +751,7 @@ identidade `PRESENT` em todos (esperas de 104ms, 99ms, 2,9ms), parada limpa,
 longa rodava. Defeito **meu**, introduzido hoje, na função que eu havia acabado
 de escrever para consertar um instrumento cego.
 
-**Onde**: `internal/wa-headless/realspa_test.go`,
+**Onde**: `internal/headless/realspa_test.go`,
 `sampleIdentityUntilPresent`.
 
 **O código**:
@@ -814,7 +814,7 @@ sempre a resposta mais perigosa possível.
 **Data**: 2026-08-19 · **Contexto**: pareamento do perfil de laboratório por QR
 ao vivo, a pedido do humano. Defeito causado pela ação, não pré-existente.
 
-**Onde**: `internal/wa-headless/realspa_test.go`,
+**Onde**: `internal/headless/realspa_test.go`,
 `TestRealSPAUnpairedBootObservation` (e, por tabela,
 `TestRealSPACaptureQRCode` e `TestRealSPALiveQR`).
 
@@ -992,7 +992,7 @@ simetria" é o caminho natural, e falha. Na H58 falhou ao vivo, com uma mensagem
 **Como evitar, e é barato:** `String(mod.fn)` no console dá o corpo da função
 minificada, e os nomes dos parâmetros desestruturados sobrevivem à minificação
 porque são propriedades. Uma sonda de 10 segundos
-(`internal/wa-headless/probe_block_test.go`) leu as duas assinaturas exatas e a
+(`internal/headless/probe_block_test.go`) leu as duas assinaturas exatas e a
 lista de valores válidos de `BlockEntryPoint` de uma vez. É estritamente mais
 barato que uma execução ao vivo falhando.
 
@@ -1197,7 +1197,7 @@ texto de teste e três testes quebram por um motivo que não tem nada a ver com 
 que eles medem.
 
 **A regra**: qualquer comprimento que atravesse a fronteira Go↔página se compara
-em unidades UTF-16. O ajudante é `utf16Len` (`internal/wa-headless/utf16len_test.go`),
+em unidades UTF-16. O ajudante é `utf16Len` (`internal/headless/utf16len_test.go`),
 e ele tem teste próprio com casos que DIFEREM de `len()` — para que não vire
 sinônimo de `len()` num refactor.
 
@@ -1326,10 +1326,10 @@ que é a primeira armadilha deste arquivo.
 
 **Medido em 2026-08-26, na F275.**
 
-`TestHousekeepEntriesAreMachineReadable` vive em `internal/wa-headless/` e lê
+`TestHousekeepEntriesAreMachineReadable` vive em `internal/headless/` e lê
 `const housekeepPath = "HOUSEKEEP.md"` (`gate_test.go:486`) **relativo ao
 diretório do próprio pacote** — ou seja,
-`internal/wa-headless/HOUSEKEEP.md`, e nunca o da raiz.
+`internal/headless/HOUSEKEEP.md`, e nunca o da raiz.
 
 Mas a mensagem de falha imprime só o identificador da entrada:
 
@@ -2181,16 +2181,16 @@ limitação ficou registada.
 ## 30. Dois produtores da mesma `string` num campo só: o tipo não vê a diferença, e o consumidor escolhe uma
 
 **Medido em 2026-08-29** (HOUSEKEEP F373). `GET /session/pair/qr` é servido
-por dois engines pela mesma porta. `wa_noise` devolvia a **imagem** do QR
+por dois engines pela mesma porta. `noise` devolvia a **imagem** do QR
 (data URI de um PNG, porque o orquestrador grava a imagem em `users.qrcode`);
-`wa_headless` devolvia a **string crua** de pareamento. As duas são `string`,
+`headless` devolvia a **string crua** de pareamento. As duas são `string`,
 saem no mesmo campo `qr_code`, atravessam o mesmo `domain.GetQRResult`.
 
 Nada as distinguia: nem o tipo, nem a porta, nem o DTO, nem a revisão. A
 divergência entrou no dia em que o segundo engine chegou e ficou lá.
 
 Depois um consumidor — o painel — foi escrito para "a forma que os dois
-engines respondem", e desenhou o valor como payload de QR. Para `wa_noise`
+engines respondem", e desenhou o valor como payload de QR. Para `noise`
 isso produziu um QR impecável codificando `data:image/png;base64,iVBOR…`. O
 telefone lê; o WhatsApp recusa.
 
@@ -2216,7 +2216,7 @@ produção guarda uma imagem (ver armadilha #1).
    diferentes, e só a segunda interessa. Decodifique de volta — aqui bastou o
    `BarcodeDetector` do próprio navegador sobre os pixels que o painel mostra.
 4. **Um contrato escrito é a arbitragem.** O schema já dizia "imagem em data
-   URI" desde antes; foi `wa_headless` que nunca o cumpriu. Ler o contrato
+   URI" desde antes; foi `headless` que nunca o cumpriu. Ler o contrato
    antes de escolher qual forma é "a certa" evitou mudar uma rota pública
    para acomodar um defeito.
 

@@ -219,7 +219,7 @@ InfoUtilizadores:
 
     A ordem do array é a ORDEM DO PEDIDO, não a de um mapa: o adaptador
     percorre os JIDs pedidos, e não o mapa que o servidor devolveu
-    (`pkg/infra/wa-noise/adapters/user/adapter.go`). JIDs para os quais o
+    (`pkg/infra/noise/adapters/user/adapter.go`). JIDs para os quais o
     servidor não respondeu ficam simplesmente FORA do array.
   required: [users]
   properties:
@@ -257,8 +257,8 @@ InfoUtilizador:
     existir. O que varia é o conteúdo, não a presença.
 
     **Os dois motores preenchem metades complementares**, e isso é propriedade
-    do motor, não falta de dado. O `wa-noise` pergunta ao servidor e responde
-    `status`, `picture_id`, `devices` e `verified_name`; o `wa-headless` lê a
+    do motor, não falta de dado. O `noise` pergunta ao servidor e responde
+    `status`, `picture_id`, `devices` e `verified_name`; o `headless` lê a
     colecção de contactos da página e responde `push_name` e `business_name`.
     O que o motor não sabe vem no valor zero.
   required: [jid, lid, status, picture_id, verified_name, devices, push_name, business_name]
@@ -286,7 +286,7 @@ InfoUtilizador:
       description: |
         O "recado" do perfil. Sempre presente; vem `""` (nunca `null`) quando a
         privacidade o esconde, quando não há nenhum, quando o servidor não o
-        devolveu, ou quando o motor é o `wa-headless` — os quatro casos são
+        devolveu, ou quando o motor é o `headless` — os quatro casos são
         indistinguíveis.
       example: ''
     picture_id:
@@ -335,15 +335,15 @@ InfoUtilizador:
       nullable: false
       description: |
         Nome que a própria pessoa publica, quando o motor o conhece. Sempre
-        presente; `""` (nunca `null`). Só o motor `wa-headless` o preenche
-        nesta rota — o `wa-noise` pergunta ao servidor, que não o devolve aqui.
+        presente; `""` (nunca `null`). Só o motor `headless` o preenche
+        nesta rota — o `noise` pergunta ao servidor, que não o devolve aqui.
       example: ''
     business_name:
       type: string
       nullable: false
       description: |
         Nome comercial do roster local. Sempre presente; `""` (nunca `null`).
-        Como `push_name`, só o motor `wa-headless` o preenche nesta rota.
+        Como `push_name`, só o motor `headless` o preenche nesta rota.
       example: ''
 
 Roster:
@@ -364,8 +364,8 @@ Roster:
     campo `jid` de cada entrada, e o `count` que o log já calculava passou a
     ser servido em vez de o cliente ter de contar o mapa.
 
-    **A ORDEM é determinística.** O motor `wa-noise` lê de um mapa e ORDENA por
-    JID antes de devolver; o `wa-headless` preserva a ordem que a colecção da
+    **A ORDEM é determinística.** O motor `noise` lê de um mapa e ORDENA por
+    JID antes de devolver; o `headless` preserva a ordem que a colecção da
     página já tem. Sem isso, a mesma agenda saía numa ordem diferente a cada
     chamada e nenhum cliente conseguia diffar duas respostas.
 
@@ -403,7 +403,7 @@ Roster:
         Quantas entradas vêm em `contacts`. É a mesma contagem que o servidor
         já registava no log e que o cliente tinha de derivar contando o mapa.
 
-        **Para o motor `wa-headless` é a contagem de PESSOAS, não de linhas**:
+        **Para o motor `headless` é a contagem de PESSOAS, não de linhas**:
         a colecção da página traz uma linha por identidade, e a mesma pessoa
         aparece duas vezes — 944 linhas dobradas em 390 pessoas no perfil
         medido. Devolver o número de linhas reportaria o dobro dos contactos
@@ -496,7 +496,7 @@ ContactoDoRoster:
         Se o motor tem mesmo um registo deste contacto, em vez de ter
         sintetizado a entrada a partir de uma identidade nua. Sempre presente;
         nunca `null`. Medido `true` em 461 de 461 e em 3456 de 3456 no motor
-        `wa-noise` — só é devolvido o que foi encontrado.
+        `noise` — só é devolvido o que foi encontrado.
       example: true
     first_name:
       type: string
@@ -504,7 +504,7 @@ ContactoDoRoster:
       description: |
         Primeiro nome, quando veio da sincronização da agenda. Sempre presente;
         `""` (nunca `null`) quando não veio — o caso da esmagadora maioria.
-        Vazio SEMPRE no motor `wa-headless`, que não lê a agenda.
+        Vazio SEMPRE no motor `headless`, que não lê a agenda.
       example: ''
     full_name:
       type: string
@@ -537,7 +537,7 @@ ContactoDoRoster:
       nullable: false
       description: |
         Se a página classifica a conta como comercial. **Só o motor
-        `wa-headless` o responde**; no `wa-noise` vem sempre `false`, porque o
+        `headless` o responde**; no `noise` vem sempre `false`, porque o
         armazenamento de contactos não carrega a bandeira. Sempre presente.
       example: false
 
@@ -918,7 +918,7 @@ ListaBloqueados:
         lista mudou sem a comparar entrada a entrada.
 
         Sempre presente; nunca `null`. Vem `""` quando o WhatsApp devolveu uma
-        lista nula, e também no motor `wa-headless`, que não versiona a lista —
+        lista nula, e também no motor `headless`, que não versiona a lista —
         não confunda `""` com "a lista não mudou".
       example: '1787412261963655'
 

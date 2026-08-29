@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"wa-api/internal/wa-noise/persistence/store/sqlstore"
+	"wa-api/internal/noise/persistence/store/sqlstore"
 
 	"github.com/gorilla/mux"
 	"github.com/jmoiron/sqlx"
@@ -26,8 +26,8 @@ import (
 
 	appsession "wa-api/pkg/application/session"
 	dbmig "wa-api/pkg/infra/db"
+	logbridge "wa-api/pkg/infra/noise/observability/log"
 	"wa-api/pkg/infra/storage"
-	"wa-api/pkg/infra/wa-noise/observability/walog"
 )
 
 // ServerMode represents the server operating mode
@@ -370,8 +370,8 @@ func Main() {
 	storage.GetS3Manager().SetEncryptionKey(appCtx.GlobalEncryptionKey)
 
 	// Nunca nil e nunca um logger nulo: Warn e Error do sqlstore saem sempre.
-	// --wadebug apenas baixa o piso (ver walog.ParseLevel).
-	dbLog := walog.New(log.Logger, walog.ModuleDatabase, walog.ParseLevel(*waDebug))
+	// --wadebug apenas baixa o piso (ver logbridge.ParseLevel).
+	dbLog := logbridge.New(log.Logger, logbridge.ModuleDatabase, logbridge.ParseLevel(*waDebug))
 
 	// Get database configuration
 	config := getDatabaseConfig(exPath, *dataDir)

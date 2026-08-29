@@ -16,7 +16,7 @@ import (
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
-	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
+	wasession "wa-api/pkg/infra/noise/runtime/session"
 	"wa-api/pkg/pairing"
 )
 
@@ -110,12 +110,12 @@ func boundaryPairingRegistry(s *spyPort) *pairing.Registry {
 			if id == "" {
 				return nil, nil
 			}
-			return []domain.UserListEntry{{ID: id, Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineNoise}}, nil
 		},
 	}
 	return pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
-		&pairing.Provider{Engine: domain.EngineWaNoise, QRReader: s, PhonePairer: s, Starter: s},
-		&pairing.Provider{Engine: domain.EngineWaHeadless})
+		&pairing.Provider{Engine: domain.EngineNoise, QRReader: s, PhonePairer: s, Starter: s},
+		&pairing.Provider{Engine: domain.EngineHeadless})
 }
 
 // Detach entrou com a F80: o logout pela API agora solta a sessao depois de

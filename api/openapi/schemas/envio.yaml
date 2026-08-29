@@ -78,8 +78,8 @@ IdCliente:
     Identificador da mensagem escolhido pelo CLIENTE, e não pelo servidor.
 
     **Sempre opcional.** Ausente, `null` e `""` são indistinguíveis, e nos três
-    casos o wa-noise gera um identificador. Não há formato imposto nem
-    validação: o valor é passado ao wa-noise tal e qual.
+    casos o noise gera um identificador. Não há formato imposto nem
+    validação: o valor é passado ao noise tal e qual.
 
     **NÃO é chave de idempotência.** Não foi medido que o servidor ou o
     WhatsApp deduplique por este campo; enviar o mesmo `id` duas vezes envia

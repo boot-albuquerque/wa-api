@@ -50,7 +50,7 @@ type AddUserInput struct {
 	History     int
 
 	// Engine is the transport the caller chose for this session
-	// (EngineWaNoise or EngineWaHeadless). It is REQUIRED (items 4-5 of the
+	// (EngineNoise or EngineHeadless). It is REQUIRED (items 4-5 of the
 	// architectural prompt, F281): the DTO passes it through unmodified,
 	// and AddUserUseCase.Execute rejects an absent, null, empty or unknown
 	// value with invalid_engine — there is no silent default.
@@ -178,8 +178,8 @@ type UserAccount struct {
 	// key itself never leaves the database in cleartext (F158).
 	HmacConfigured bool
 
-	// Engine is the transport this session was created with (EngineWaNoise
-	// or EngineWaHeadless).
+	// Engine is the transport this session was created with (EngineNoise
+	// or EngineHeadless).
 	Engine string
 
 	Proxy UserProxySettings

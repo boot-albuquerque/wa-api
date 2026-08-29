@@ -4,27 +4,27 @@ import (
 	"slices"
 	"strconv"
 
-	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
-	wagroup "wa-api/pkg/infra/wa-noise/adapters/group"
-	wamisc "wa-api/pkg/infra/wa-noise/adapters/misc"
-	wapresence "wa-api/pkg/infra/wa-noise/adapters/presence"
-	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
-	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
+	wachat "wa-api/pkg/infra/noise/adapters/chat"
+	wagroup "wa-api/pkg/infra/noise/adapters/group"
+	wamisc "wa-api/pkg/infra/noise/adapters/misc"
+	wapresence "wa-api/pkg/infra/noise/adapters/presence"
+	wauser "wa-api/pkg/infra/noise/adapters/user"
+	wasession "wa-api/pkg/infra/noise/runtime/session"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/egress"
+	headlessadapter "wa-api/pkg/infra/headless"
+	headlessregistry "wa-api/pkg/infra/headless/registry"
+	headlesssession "wa-api/pkg/infra/headless/session"
 	wahistory "wa-api/pkg/infra/history"
 	"wa-api/pkg/infra/media/opengraph"
 	"wa-api/pkg/infra/media/sticker"
-	headlessadapter "wa-api/pkg/infra/wa-headless"
-	headlessregistry "wa-api/pkg/infra/wa-headless/registry"
-	headlesssession "wa-api/pkg/infra/wa-headless/session"
-	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
-	waclient "wa-api/pkg/infra/wa-noise/client"
-	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
-	"wa-api/pkg/infra/wa-noise/observability/applog"
+	"wa-api/pkg/infra/noise/adapters/sessioncount"
+	clientpkg "wa-api/pkg/infra/noise/client"
+	wajid "wa-api/pkg/infra/noise/mapping/jid"
+	"wa-api/pkg/infra/noise/observability/applog"
 	customhttp "wa-api/pkg/presentation/http"
 	"wa-api/pkg/presentation/http/handlers"
 
@@ -130,7 +130,7 @@ var customHandlerSet = &customHandlers{}
 // customHandlerSet estariam nil quando as rotas fossem registradas.
 func initCustomHandlers(s *server) {
 	// Adapters
-	waClientLookup := waclient.ClientForGetter(clientManager.GetWaNoiseClient)
+	waClientLookup := clientpkg.ClientForGetter(clientManager.GetNoiseClient)
 	presenceController := wapresence.NewPresenceControllerAdapter(waClientLookup)
 	// WithPollOptions liga o guarda-opcoes de enquete: o adapter memoriza o
 	// texto em claro das opcoes depois de cada envio, e o handler de eventos
@@ -164,7 +164,7 @@ func initCustomHandlers(s *server) {
 	miscAdapter := wamisc.NewMiscAdapter(waClientLookup)
 	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
-	waNoiseSessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
+	noiseSessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
 
 	// headlessSessionController is nil when this process has no Chrome
@@ -196,7 +196,7 @@ func initCustomHandlers(s *server) {
 		headlessLogouter = headlessController
 	}
 	capabilities := capabilityregistry.NewCapabilityRegistry()
-	sessionGuard := newSessionEngineGuard(userRepo, capabilities, waNoiseSessionGuard, headlessDisconnector, headlessLogouter)
+	sessionGuard := newSessionEngineGuard(userRepo, capabilities, noiseSessionGuard, headlessDisconnector, headlessLogouter)
 
 	// Profile UseCase
 	getProfileUC := profile.NewGetProfileUseCase(miscAdapter, logger)

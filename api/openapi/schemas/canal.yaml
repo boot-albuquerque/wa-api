@@ -695,7 +695,7 @@ MetadadosCanal:
         Nunca `null`, nunca ausente.
 
         **Ressalva medida, e ela não mudou com a migração**: veio `0` em todos
-        os canais observados pelo motor wa-noise, incluindo um canal público de
+        os canais observados pelo motor noise, incluindo um canal público de
         terceiro com milhares de seguidores. O que este campo significa quando
         não é zero **não foi determinado com segurança** nesse motor. O motor
         headless reporta a contagem que a página mostra.
@@ -706,7 +706,7 @@ MetadadosCanal:
       description: |
         Estado de verificação do canal. Valores observados: `unverified` (canal
         comum), `verified` (verificado pelo WhatsApp) e `""` (canal apagado ou
-        inexistente, no motor wa-noise).
+        inexistente, no motor noise).
 
         **O motor headless nunca responde `""` aqui**, e a diferença é uma
         decisão registada: a página responde um BOOLEANO, que não tem terceiro
@@ -755,7 +755,7 @@ MetadadosCanal:
         Descritor da pré-visualização, com a **mesma forma** de `picture`.
 
         Ao contrário de `picture`, veio como objecto (nunca `null`) em todas as
-        medições do motor wa-noise, incluindo `GET /newsletter/list` e canal
+        medições do motor noise, incluindo `GET /newsletter/list` e canal
         apagado — e a assimetria é PRESERVADA de propósito em vez de suavizada:
         colapsar as duas para "null quando vazio" afirmaria que o canal não tem
         pré-visualização, coisa que o protocolo nunca disse. `null` no motor
@@ -870,7 +870,7 @@ RelacaoComCanal:
       type: string
       nullable: false
       description: |
-        Papel do chamador no canal. Os três valores do motor wa-noise foram
+        Papel do chamador no canal. Os três valores do motor noise foram
         medidos ponta a ponta na cadeia de administração de 2026-08-26 (F233):
 
         | valor | significa |

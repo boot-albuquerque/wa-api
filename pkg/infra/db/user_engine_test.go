@@ -76,7 +76,7 @@ func TestBackfillReproducesHeadlessSessionList(t *testing.T) {
 	}
 
 	headless := []string{"bravo", "delta"}
-	report, err := dbpkg.BackfillUserEngines(ctx, db, headless, domain.EngineWaNoise)
+	report, err := dbpkg.BackfillUserEngines(ctx, db, headless, domain.EngineNoise)
 	if err != nil {
 		t.Fatalf("BackfillUserEngines: %v", err)
 	}
@@ -84,10 +84,10 @@ func TestBackfillReproducesHeadlessSessionList(t *testing.T) {
 	// Enumeração nome por nome, não contagem agregada: um total certo com os
 	// membros trocados passaria numa asserção de contagem.
 	want := map[string]string{
-		"alpha":   string(domain.EngineWaNoise),
-		"bravo":   string(domain.EngineWaHeadless),
-		"charlie": string(domain.EngineWaNoise),
-		"delta":   string(domain.EngineWaHeadless),
+		"alpha":   string(domain.EngineNoise),
+		"bravo":   string(domain.EngineHeadless),
+		"charlie": string(domain.EngineNoise),
+		"delta":   string(domain.EngineHeadless),
 	}
 	for id, expected := range want {
 		if got := engineOf(t, db, id); got != expected {
@@ -102,8 +102,8 @@ func TestBackfillReproducesHeadlessSessionList(t *testing.T) {
 	}{
 		{"TotalUsers", report.TotalUsers, 4},
 		{"PendingBefore", report.PendingBefore, 4},
-		{"ToWaHeadless", report.ToWaHeadless, 2},
-		{"ToWaNoise", report.ToWaNoise, 2},
+		{"ToHeadless", report.ToHeadless, 2},
+		{"ToNoise", report.ToNoise, 2},
 		{"RemainingLegacyUnknown", report.RemainingLegacyUnknown, 0},
 		{"len(ListedButAbsent)", len(report.ListedButAbsent), 0},
 	}
@@ -128,18 +128,18 @@ func TestBackfillIsIdempotent(t *testing.T) {
 	}
 	headless := []string{"bravo"}
 
-	if _, err := dbpkg.BackfillUserEngines(ctx, db, headless, domain.EngineWaNoise); err != nil {
+	if _, err := dbpkg.BackfillUserEngines(ctx, db, headless, domain.EngineNoise); err != nil {
 		t.Fatalf("first backfill: %v", err)
 	}
 
 	// Uma escolha posterior, do tipo que a API vai poder fazer: alpha passa a
 	// headless SEM estar na lista de ambiente.
 	if _, err := db.Exec(`UPDATE users SET engine = $1 WHERE id = 'alpha'`,
-		string(domain.EngineWaHeadless)); err != nil {
+		string(domain.EngineHeadless)); err != nil {
 		t.Fatalf("post-backfill engine change: %v", err)
 	}
 
-	second, err := dbpkg.BackfillUserEngines(ctx, db, headless, domain.EngineWaNoise)
+	second, err := dbpkg.BackfillUserEngines(ctx, db, headless, domain.EngineNoise)
 	if err != nil {
 		t.Fatalf("second backfill: %v", err)
 	}
@@ -147,16 +147,16 @@ func TestBackfillIsIdempotent(t *testing.T) {
 	if second.PendingBefore != 0 {
 		t.Errorf("second run PendingBefore = %d, want 0", second.PendingBefore)
 	}
-	if second.ToWaNoise != 0 || second.ToWaHeadless != 0 {
-		t.Errorf("second run changed rows: to_wa_noise=%d to_wa_headless=%d, want 0/0",
-			second.ToWaNoise, second.ToWaHeadless)
+	if second.ToNoise != 0 || second.ToHeadless != 0 {
+		t.Errorf("second run changed rows: to_noise=%d to_headless=%d, want 0/0",
+			second.ToNoise, second.ToHeadless)
 	}
-	if got := engineOf(t, db, "alpha"); got != string(domain.EngineWaHeadless) {
+	if got := engineOf(t, db, "alpha"); got != string(domain.EngineHeadless) {
 		t.Errorf("second run overwrote a deliberate choice: alpha = %q, want %q",
-			got, domain.EngineWaHeadless)
+			got, domain.EngineHeadless)
 	}
-	if got := engineOf(t, db, "bravo"); got != string(domain.EngineWaHeadless) {
-		t.Errorf("bravo = %q, want %q", got, domain.EngineWaHeadless)
+	if got := engineOf(t, db, "bravo"); got != string(domain.EngineHeadless) {
+		t.Errorf("bravo = %q, want %q", got, domain.EngineHeadless)
 	}
 }
 
@@ -173,13 +173,13 @@ func TestBackfillOrderPutsHeadlessFirst(t *testing.T) {
 	for _, id := range []string{"a", "b", "c"} {
 		insertLegacyUser(t, db, id)
 	}
-	if _, err := dbpkg.BackfillUserEngines(ctx, db, []string{"a", "b", "c"}, domain.EngineWaNoise); err != nil {
+	if _, err := dbpkg.BackfillUserEngines(ctx, db, []string{"a", "b", "c"}, domain.EngineNoise); err != nil {
 		t.Fatalf("backfill: %v", err)
 	}
 	for _, id := range []string{"a", "b", "c"} {
-		if got := engineOf(t, db, id); got != string(domain.EngineWaHeadless) {
+		if got := engineOf(t, db, id); got != string(domain.EngineHeadless) {
 			t.Fatalf("engine of %q = %q, want %q (default UPDATE ran before the headless one)",
-				id, got, domain.EngineWaHeadless)
+				id, got, domain.EngineHeadless)
 		}
 	}
 }
@@ -191,7 +191,7 @@ func TestBackfillReportsListedButAbsent(t *testing.T) {
 	insertLegacyUser(t, db, "present")
 
 	report, err := dbpkg.BackfillUserEngines(context.Background(), db,
-		[]string{"present", "ghost"}, domain.EngineWaNoise)
+		[]string{"present", "ghost"}, domain.EngineNoise)
 	if err != nil {
 		t.Fatalf("BackfillUserEngines: %v", err)
 	}
@@ -206,7 +206,7 @@ func TestBackfillRejectsInvalidDefaultEngine(t *testing.T) {
 	db := newUserTestDB(t)
 	insertLegacyUser(t, db, "alpha")
 
-	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "", "wanoise"} {
+	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "", "noise"} {
 		_, err := dbpkg.BackfillUserEngines(context.Background(), db, nil, bad)
 		if !errors.Is(err, domain.ErrInvalidEngine) {
 			t.Errorf("default %q: err = %v, want ErrInvalidEngine", bad, err)
@@ -220,24 +220,24 @@ func TestBackfillRejectsInvalidDefaultEngine(t *testing.T) {
 // TestBackfillOnEmptyDatabase: zero sessões é resultado válido e reportado.
 func TestBackfillOnEmptyDatabase(t *testing.T) {
 	db := newUserTestDB(t)
-	report, err := dbpkg.BackfillUserEngines(context.Background(), db, nil, domain.EngineWaNoise)
+	report, err := dbpkg.BackfillUserEngines(context.Background(), db, nil, domain.EngineNoise)
 	if err != nil {
 		t.Fatalf("BackfillUserEngines: %v", err)
 	}
-	if report.TotalUsers != 0 || report.ToWaNoise != 0 || report.ToWaHeadless != 0 {
+	if report.TotalUsers != 0 || report.ToNoise != 0 || report.ToHeadless != 0 {
 		t.Fatalf("report on empty db = %+v, want all zeros", report)
 	}
 }
 
 // --- Repositório: gravar e ler o engine -------------------------------------
 
-// TestCreateUserDefaultsEngineToWaNoise trava o valor ZERO documentado de
+// TestCreateUserDefaultsEngineToNoise trava o valor ZERO documentado de
 // domain.UserRecord.Engine.
 //
 // Nenhuma rota HTTP sabe pedir engine ainda, então todo criador de hoje deixa o
 // campo vazio. Gravar legacy_unknown numa linha que está a nascer AGORA seria
 // mentira — a linha é nova e a configuração corrente diz wa_noise.
-func TestCreateUserDefaultsEngineToWaNoise(t *testing.T) {
+func TestCreateUserDefaultsEngineToNoise(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
 
@@ -247,8 +247,8 @@ func TestCreateUserDefaultsEngineToWaNoise(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("CreateUser: created=%v err=%v", created, err)
 	}
-	if got := engineOf(t, db, "new-1"); got != string(domain.EngineWaNoise) {
-		t.Fatalf("engine of a freshly created user = %q, want %q", got, domain.EngineWaNoise)
+	if got := engineOf(t, db, "new-1"); got != string(domain.EngineNoise) {
+		t.Fatalf("engine of a freshly created user = %q, want %q", got, domain.EngineNoise)
 	}
 }
 
@@ -260,7 +260,7 @@ func TestCreateUserPersistsExplicitEngine(t *testing.T) {
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
 
-	for _, e := range []domain.Engine{domain.EngineWaNoise, domain.EngineWaHeadless} {
+	for _, e := range []domain.Engine{domain.EngineNoise, domain.EngineHeadless} {
 		id := "user-" + e.String()
 		created, err := repo.CreateUser(ctx, domain.UserRecord{
 			ID: id, Name: id, Token: "tok-" + id, Engine: e,
@@ -289,7 +289,7 @@ func TestCreateUserRejectsInvalidEngine(t *testing.T) {
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
 
-	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "wanoise", "headless", "foobar"} {
+	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "noise", "headless", "foobar"} {
 		created, err := repo.CreateUser(ctx, domain.UserRecord{
 			ID: "bad-" + bad.String(), Name: "bad", Token: "tok-bad-" + bad.String(), Engine: bad,
 		})
@@ -323,20 +323,20 @@ func TestUpdateUserEngine_IdempotentResendSucceeds(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	noise := domain.EngineWaNoise
+	noise := domain.EngineNoise
 	if err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &noise}); err != nil {
 		t.Fatalf("UpdateUser with the SAME engine as already persisted: %v", err)
 	}
-	if got := engineOf(t, db, "u1"); got != string(domain.EngineWaNoise) {
-		t.Fatalf("engine after idempotent update = %q, want %q", got, domain.EngineWaNoise)
+	if got := engineOf(t, db, "u1"); got != string(domain.EngineNoise) {
+		t.Fatalf("engine after idempotent update = %q, want %q", got, domain.EngineNoise)
 	}
 
 	entries, err := repo.ListUsers(ctx, "u1")
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("ListUsers: %v (%d entries)", err, len(entries))
 	}
-	if entries[0].Engine != domain.EngineWaNoise {
-		t.Errorf("ListUsers engine = %q, want %q", entries[0].Engine, domain.EngineWaNoise)
+	if entries[0].Engine != domain.EngineNoise {
+		t.Errorf("ListUsers engine = %q, want %q", entries[0].Engine, domain.EngineNoise)
 	}
 }
 
@@ -356,13 +356,13 @@ func TestUpdateUserEngine_DivergentValueRejected(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	headless := domain.EngineWaHeadless
+	headless := domain.EngineHeadless
 	err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &headless})
 	if !errors.Is(err, domain.ErrEngineImmutable) {
 		t.Fatalf("UpdateUser(engine=%q) err = %v, want errors.Is(err, domain.ErrEngineImmutable)", headless, err)
 	}
-	if got := engineOf(t, db, "u1"); got != string(domain.EngineWaNoise) {
-		t.Fatalf("engine changed despite the rejected update: got %q, want %q", got, domain.EngineWaNoise)
+	if got := engineOf(t, db, "u1"); got != string(domain.EngineNoise) {
+		t.Fatalf("engine changed despite the rejected update: got %q, want %q", got, domain.EngineNoise)
 	}
 }
 
@@ -384,7 +384,7 @@ func TestUpdateUserRejectsInvalidEngine(t *testing.T) {
 		if err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &e}); !errors.Is(err, domain.ErrInvalidEngine) {
 			t.Errorf("UpdateUser(engine=%q) err = %v, want ErrInvalidEngine", bad, err)
 		}
-		if got := engineOf(t, db, "u1"); got != string(domain.EngineWaNoise) {
+		if got := engineOf(t, db, "u1"); got != string(domain.EngineNoise) {
 			t.Errorf("UpdateUser(engine=%q) changed the row to %q", bad, got)
 		}
 	}

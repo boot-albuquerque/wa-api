@@ -39,7 +39,7 @@ func NewSendPresenceUseCase(pc appport.PresenceAnnouncer, logger appport.Logger)
 // Execute sets presence status
 func (uc *SendPresenceUseCase) Execute(ctx context.Context, userID string, req domain.SendPresenceRequest) error {
 	if err := uc.presence.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return err
 	}
 

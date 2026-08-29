@@ -64,7 +64,7 @@ func errInvalidEngine(raw string) error {
 	log.Debug().Str("code", CodeInvalidEngine).Int("raw_len", len(raw)).
 		Msg("pairing: building refusal")
 	return apperr.New(CodeInvalidEngine, apperr.CategoryValidation,
-		fmt.Sprintf("engine must be %q or %q", domain.EngineWaNoise, domain.EngineWaHeadless),
+		fmt.Sprintf("engine must be %q or %q", domain.EngineNoise, domain.EngineHeadless),
 		false, fmt.Errorf("%w (got %q)", domain.ErrInvalidEngine, raw))
 }
 

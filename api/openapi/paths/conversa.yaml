@@ -82,7 +82,7 @@
                     push_name: Lucas Albuqueque
                     phone: '554192421234'
                   - jid: 120363411669320145@g.us
-                    name: wa-headless-lab — teste automatizado, pode apagar
+                    name: headless-lab — teste automatizado, pode apagar
                     is_group: true
                     last_activity: '2026-08-24T19:01:14.41138-04:00'
                 total: 384
@@ -854,12 +854,12 @@
         logo um valor desconhecido não é recusado com `400` — o que o
         WhatsApp faz com ele não foi medido aqui. As duas constantes que a
         biblioteca define são `composing` e `paused`
-        (`internal/wa-noise/protocol/types/presence.go:17-18`).
+        (`internal/noise/protocol/types/presence.go:17-18`).
       - **Não existe um estado `recording`.** "A gravar" exprime-se como
         `state: composing` com `media: audio`.
       - `media` só tem efeito quando `state` é `composing`; em qualquer
         outro estado é descartado sem aviso
-        (`internal/wa-noise/core/presence.go:142`). Os dois valores
+        (`internal/noise/core/presence.go:142`). Os dois valores
         conhecidos são `""` (texto) e `audio`.
       - Não há rota para "parar de escrever" a não ser enviar `paused`. O
         sinal também expira sozinho do lado do WhatsApp.
@@ -1080,7 +1080,7 @@
       **Como se observa o reenvio, quando ele chega** (apurado a 2026-08-26):
       o `request_id` **R** devolvido aqui reaparece na mensagem reenviada, no
       campo `UnavailableRequestID`
-      (`internal/wa-noise/capabilities/message/history_sync.go:250`). Há três
+      (`internal/noise/capabilities/message/history_sync.go:250`). Há três
       leituras que o expõem:
 
       1. `GET /chats/history` sobre o mesmo `chat_jid` — o `data_json` do

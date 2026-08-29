@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"fmt"
 
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/types/events"
 
 	"github.com/rs/zerolog/log"
 )

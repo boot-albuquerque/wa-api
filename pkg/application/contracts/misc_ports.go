@@ -103,7 +103,7 @@ type ChatOperations interface {
 
 // ProfileAccessProvider entrega o ProfileDataAccess da sessão.
 //
-// Substitui a fábrica func(*wanoise.Client) ProfileDataAccess que
+// Substitui a fábrica func(*noise.Client) ProfileDataAccess que
 // GetProfileUseCase recebia no construtor: a porta existia, mas o use case
 // precisava do cliente concreto do SDK para poder construí-la, o que anulava
 // o isolamento que ela deveria dar.
@@ -127,7 +127,7 @@ type NewsletterReader interface {
 	// O RETORNO ERA `any` E DEIXOU DE SER. A razão registada era não arrastar
 	// `types.NewsletterMetadata` para a aplicação; o efeito medido foi outro: a
 	// forma do JSON de `/newsletter/info` passava a ser decidida pelo MOTOR da
-	// sessão — a struct do vendor no wa-noise, `channel.DirectoryEntry` (sem
+	// sessão — a struct do vendor no noise, `channel.DirectoryEntry` (sem
 	// etiquetas `json` nenhumas) no headless. Um tipo de domínio próprio resolve
 	// os dois problemas; `any` só resolvia o primeiro.
 	//

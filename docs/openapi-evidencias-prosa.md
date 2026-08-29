@@ -103,9 +103,9 @@ e 'status/set/audio'"), um quarto conserto de código fechou os dois últimos
   novo. O WhatsApp exige, além do `jid` em LID (já corrigido para
   unblock), um atributo `pn_jid` adicional no block, que a biblioteca
   vendorizada não emitia. Portado de whatsmeow (`8d023aa973`) para
-  `internal/wa-noise/capabilities/user/blocklist.go` (`UpdateBlocklist`
+  `internal/noise/capabilities/user/blocklist.go` (`UpdateBlocklist`
   ganha o parâmetro `pnJID`, emitido só quando a ação é `block` e o valor
-  não é vazio) e `pkg/infra/wa-noise/adapters/user/blocklist.go`
+  não é vazio) e `pkg/infra/noise/adapters/user/blocklist.go`
   (`resolveBlocklistPN`, resolve o PN do alvo — do próprio JID pedido, ou
   via mapeamento LID→PN em cache). Sete testes novos (biblioteca +
   adaptador), com controlo negativo EXECUTADO nas duas camadas — revertida
@@ -153,7 +153,7 @@ não é um `400`, é ausência de resposta. A forma que o WA Web usa hoje é
 o SERVIDOR, filho `<messages type='jid' jid=… count=… before=…>` em vez
 de `<message_updates>`. Portado (mesma decisão do usuário: manter as duas
 rotas separadas, sem fundir contrato) em
-`internal/wa-noise/capabilities/newsletter/messages.go` —
+`internal/noise/capabilities/newsletter/messages.go` —
 `GetMessageUpdates` reaproveita `messagesAttrs`/`messagesTag`, mapeando o
 cursor `After` (`types.MessageServerID`) para o atributo `before`; `Since`
 (`time.Time`) não tem equivalente na forma nova e fica sem efeito no

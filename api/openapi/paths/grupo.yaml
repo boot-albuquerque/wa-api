@@ -421,7 +421,7 @@
       descobre lendo esta resposta). Ausente devolve `400 missing_code`. O
       valor é o código nu. **Medido**: o URL completo também devolve `200`,
       porque a biblioteca corta o prefixo
-      (`internal/wa-noise/capabilities/group/invite.go:83`).
+      (`internal/noise/capabilities/group/invite.go:83`).
 
       **Ressalva medida**: a resposta traz `AnnounceVersionID`,
       `ParticipantVersionID` e `MemberAddMode` VAZIOS, ao contrário de
@@ -533,7 +533,7 @@
     description: |
       Devolve o link de convite actual do grupo. **Não o revoga**: o
       adaptador chama o SDK com o sinalizador de reposição a falso
-      (`pkg/infra/wa-noise/adapters/group/read.go:44`), logo chamadas
+      (`pkg/infra/noise/adapters/group/read.go:44`), logo chamadas
       repetidas devolvem o mesmo link. Não há rota nesta API para revogar um
       link.
 
@@ -1417,7 +1417,7 @@
       "add" or "remove")`.
 
       A biblioteca por baixo sabe promover e despromover há anos
-      (`internal/wa-noise/capabilities/group/participants.go:18-19`); é a
+      (`internal/noise/capabilities/group/participants.go:18-19`); é a
       rota que não o expõe. **A consequência é concreta: por esta API não há
       forma de dar nem de tirar administrador a ninguém.** Não há rota
       alternativa.

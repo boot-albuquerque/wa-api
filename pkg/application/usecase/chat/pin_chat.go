@@ -24,7 +24,7 @@ func NewPinChatUseCase(cp appport.ChatPinner, jr appport.JIDResolver, logger app
 // Execute pins or unpins a chat.
 func (uc *PinChatUseCase) Execute(ctx context.Context, userID string, req domain.PinChatRequest) (*domain.PinChatResult, error) {
 	if err := uc.chats.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

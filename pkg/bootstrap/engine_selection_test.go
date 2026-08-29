@@ -25,10 +25,10 @@ func TestSemFallbackSILENCIOSO(t *testing.T) {
 		querUsar    bool
 		querRecusar bool
 	}{
-		{"socket serve tudo", string(domain.EngineWaNoise), false, false, false},
-		{"socket serve tudo mesmo havendo headless", string(domain.EngineWaNoise), true, false, false},
-		{"headless com implementação", string(domain.EngineWaHeadless), true, true, false},
-		{"headless SEM implementação RECUSA", string(domain.EngineWaHeadless), false, false, true},
+		{"socket serve tudo", string(domain.EngineNoise), false, false, false},
+		{"socket serve tudo mesmo havendo headless", string(domain.EngineNoise), true, false, false},
+		{"headless com implementação", string(domain.EngineHeadless), true, true, false},
+		{"headless SEM implementação RECUSA", string(domain.EngineHeadless), false, false, true},
 	}
 	for _, c := range casos {
 		usar, recusar := rotaDeEngine(c.engine, c.temHeadless)
@@ -43,7 +43,7 @@ func TestSemFallbackSILENCIOSO(t *testing.T) {
 // medido quando há. Um erro genérico mandaria quem opera adivinhar.
 func TestARecusaDIZOQueAconteceu(t *testing.T) {
 	err := error(ErrEngineSemPort{
-		Port: "GroupPhotoSetter", Engine: string(domain.EngineWaHeadless), TxtID: "s1",
+		Port: "GroupPhotoSetter", Engine: string(domain.EngineHeadless), TxtID: "s1",
 		Motivo: "modulos de foto ausentes do build (H140)",
 	})
 	msg := err.Error()
@@ -59,7 +59,7 @@ func TestARecusaDIZOQueAconteceu(t *testing.T) {
 }
 
 func TestSemMotivoARecusaAindaDizQueNaoHaFallback(t *testing.T) {
-	msg := ErrEngineSemPort{Port: "X", Engine: string(domain.EngineWaHeadless)}.Error()
+	msg := ErrEngineSemPort{Port: "X", Engine: string(domain.EngineHeadless)}.Error()
 	if !strings.Contains(msg, "sem fallback") {
 		t.Fatalf("a recusa sem motivo não explica por que não caiu no outro transporte: %s", msg)
 	}

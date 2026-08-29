@@ -31,7 +31,7 @@ import (
 // file's two halves are:
 //
 //  1. the production wiring still reaches an ownership-checking starter for a
-//     wa_noise session (TestConnectStarterIsWiredForWaNoise);
+//     wa_noise session (TestConnectStarterIsWiredForNoise);
 //  2. through the REGISTERED ROUTE, a denial becomes 409 and StartSession is
 //     never called (TestConnectOwnershipCheckIsWired).
 //
@@ -40,30 +40,30 @@ import (
 
 const ownershipWiringUser = "FIX108"
 
-// TestConnectStarterIsWiredForWaNoise: the registry the production wiring
+// TestConnectStarterIsWiredForNoise: the registry the production wiring
 // builds must resolve a starter for a wa_noise session, and it must be the one
 // that consults the lease manager.
 //
 // The type assertion is the point. `Starter != nil` would pass for any struct
-// wired by mistake; the ownership check lives in *waNoiseSessionStarter
+// wired by mistake; the ownership check lives in *noiseSessionStarter
 // specifically, and this is what stops a future refactor from wiring a
 // pass-through that answers 200 without ever claiming a lease.
-func TestConnectStarterIsWiredForWaNoise(t *testing.T) {
+func TestConnectStarterIsWiredForNoise(t *testing.T) {
 	s := &server{DB: newChatHistoryDB(t), ExPath: t.TempDir()}
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: id, Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineNoise}}, nil
 		},
 	}
 	reg := buildPairingRegistry(s, users, nil, capabilityregistry.NewCapabilityRegistry(), nil)
 
-	starter, err := reg.ResolveStarter(context.Background(), ownershipWiringUser, domain.EngineWaNoise.String())
+	starter, err := reg.ResolveStarter(context.Background(), ownershipWiringUser, domain.EngineNoise.String())
 	if err != nil {
 		t.Fatalf("ResolveStarter for a wa_noise session: %v — production wiring no longer reaches a starter, "+
 			"so GET /session/connect cannot connect anything (F273/F281)", err)
 	}
-	if _, ok := starter.(*waNoiseSessionStarter); !ok {
-		t.Fatalf("starter is %T, want *waNoiseSessionStarter — the ownership pre-check lives there, and without "+
+	if _, ok := starter.(*noiseSessionStarter); !ok {
+		t.Fatalf("starter is %T, want *noiseSessionStarter — the ownership pre-check lives there, and without "+
 			"it GET /session/connect answers 200 {\"status\":\"connecting\"} when ownership is denied (F108)", starter)
 	}
 }
@@ -158,12 +158,12 @@ func TestConnectRouteRequiresEngine(t *testing.T) {
 func starterRegistry(starter appport.SessionStarter) *pairing.Registry {
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: id, Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineNoise}}, nil
 		},
 	}
 	return pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
-		&pairing.Provider{Engine: domain.EngineWaNoise, Starter: starter},
-		&pairing.Provider{Engine: domain.EngineWaHeadless})
+		&pairing.Provider{Engine: domain.EngineNoise, Starter: starter},
+		&pairing.Provider{Engine: domain.EngineHeadless})
 }
 
 // serveConnect drives the request through the REGISTERED routes with the

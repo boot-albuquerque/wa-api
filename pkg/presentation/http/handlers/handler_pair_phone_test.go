@@ -65,12 +65,12 @@ func pairPhoneRouter(pp *contractsfake.PhonePairer) http.Handler {
 	// fake e' o provider desse engine. A matriz consultada e' a REAL.
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: id, Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: id, Engine: domain.EngineNoise}}, nil
 		},
 	}
 	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
-		&pairing.Provider{Engine: domain.EngineWaNoise, PhonePairer: pp},
-		&pairing.Provider{Engine: domain.EngineWaHeadless})
+		&pairing.Provider{Engine: domain.EngineNoise, PhonePairer: pp},
+		&pairing.Provider{Engine: domain.EngineHeadless})
 	h := NewPairPhoneHandler(silentLogger{}, reg)
 
 	r := mux.NewRouter()

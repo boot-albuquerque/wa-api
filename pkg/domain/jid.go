@@ -5,7 +5,7 @@ package domain
 import "strings"
 
 // JID representa um WhatsApp JID (Jabber ID) no domínio.
-// Abstrai wa-api/internal/wa-noise/protocol/types.JID para evitar vazamento de
+// Abstrai wa-api/internal/noise/protocol/types.JID para evitar vazamento de
 // dependência de infraestrutura na camada de aplicação.
 type JID string
 

@@ -157,8 +157,8 @@ EstadoCapacidade:
       um subconjunto de tipos de mídia).
     - `not_implemented`: o wa-api nunca escreveu a porta/use case/rota para
       esta capacidade, embora nada a bloqueie. Correcção: escrevê-la aqui.
-    - `engine_unsupported`: o transporte (socket wa-noise ou a SPA do
-      wa-headless) não tem forma nenhuma de realizar esta operação.
+    - `engine_unsupported`: o transporte (socket noise ou a SPA do
+      headless) não tem forma nenhuma de realizar esta operação.
       Correcção: implementar no transporte, ou aceitar a lacuna.
     - `upstream_unsupported`: o próprio WhatsApp não oferece esta operação
       pelo protocolo que este projecto fala (WhatsApp Web multi-dispositivo),

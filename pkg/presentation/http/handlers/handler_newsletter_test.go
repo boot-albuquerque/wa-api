@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/noise/protocol/types"
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
-	"wa-api/pkg/infra/wa-noise/errmap"
+	"wa-api/pkg/infra/noise/errmap"
 )
 
 // As onze rotas de newsletter. O que estes testes travam NAO e' "o handler

@@ -1178,7 +1178,7 @@
       **A ressalva que o `200` esconde, e que foi medida**: um `200` com
       `message_id` **não garante que o status chegue a alguém**. A lista de
       destinatários é construída a partir do campo `FullName` de cada contacto
-      (`internal/wa-noise/core/broadcast.go`), e uma conta WhatsApp Business
+      (`internal/noise/core/broadcast.go`), e uma conta WhatsApp Business
       recebe os contactos por `PushName`, não por sincronização de agenda. O
       número medido: numa conta Business com 461 contactos, apenas 1 tinha
       `FullName`, e a publicação foi para **dois** destinatários (esse mais a

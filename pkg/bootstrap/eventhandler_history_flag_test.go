@@ -5,14 +5,14 @@ import (
 
 	"github.com/patrickmn/go-cache"
 
-	wanoise "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/persistence/store"
-	waCommon "wa-api/internal/wa-noise/protocol/proto/waCommon"
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	waWeb "wa-api/internal/wa-noise/protocol/proto/waWeb"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise"
+	"wa-api/internal/noise/persistence/store"
+	waCommon "wa-api/internal/noise/protocol/proto/waCommon"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/proto/waHistorySync"
+	waWeb "wa-api/internal/noise/protocol/proto/waWeb"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 )
 
 // F230. history = 0 must block BOTH paths: real-time AND sync. Before this
@@ -35,7 +35,7 @@ func handlerComHistoricoN(t *testing.T, userID string, historyLimit int) *UserEv
 	return &UserEventHandler{
 		UserID:   userID,
 		DB:       discardTestDB(t),
-		WAClient: wanoise.NewClient(dev, nil),
+		WAClient: noise.NewClient(dev, nil),
 	}
 }
 

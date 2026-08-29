@@ -11,7 +11,7 @@ import (
 
 // DeleteMessageUseCase revoga ("apaga para todos") uma mensagem própria de
 // verdade: valida os campos obrigatórios, resolve o destinatário e manda a
-// revogação pelo wa-noise. Só devolve domain.StatusDeleted DEPOIS que o
+// revogação pelo noise. Só devolve domain.StatusDeleted DEPOIS que o
 // envio retorna sucesso — nunca antes (mesma disciplina de
 // SendLocationUseCase, CAP-08A). Até o CAP-10 este usecase devolvia
 // Status="validated" sem revogar nada.
@@ -51,7 +51,7 @@ func (uc *DeleteMessageUseCase) Execute(ctx context.Context, txtID string, req d
 	}
 
 	if err := uc.chats.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

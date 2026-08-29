@@ -12,7 +12,7 @@ import (
 func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 	r := NewCapabilityRegistry()
 
-	noise, err := r.Decide(domain.CapSendCarousel, domain.EngineWaNoise, domain.AccountTypeUnknown)
+	noise, err := r.Decide(domain.CapSendCarousel, domain.EngineNoise, domain.AccountTypeUnknown)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 		t.Fatalf("send_carousel on wa_noise: got Evidence=%v, want confirmed (F216)", noise.Evidence)
 	}
 
-	headless, err := r.Decide(domain.CapSendCarousel, domain.EngineWaHeadless, domain.AccountTypeUnknown)
+	headless, err := r.Decide(domain.CapSendCarousel, domain.EngineHeadless, domain.AccountTypeUnknown)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 func TestDecide_ConfirmedEngineUnsupported(t *testing.T) {
 	r := NewCapabilityRegistry()
 
-	d, err := r.Decide(domain.CapSetGroupPhoto, domain.EngineWaHeadless, domain.AccountTypeUnknown)
+	d, err := r.Decide(domain.CapSetGroupPhoto, domain.EngineHeadless, domain.AccountTypeUnknown)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDecide_ConfirmedEngineUnsupported(t *testing.T) {
 func TestDecide_NeverReturnsSupportedForAnUnknownCell(t *testing.T) {
 	r := NewCapabilityRegistry()
 
-	d, err := r.Decide(domain.Capability("totally_unregistered_capability"), domain.EngineWaNoise, domain.AccountTypeUnknown)
+	d, err := r.Decide(domain.Capability("totally_unregistered_capability"), domain.EngineNoise, domain.AccountTypeUnknown)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestDecide_UnknownEngineIsAnError(t *testing.T) {
 func TestDecide_FailedPreconditionOverridesSupported(t *testing.T) {
 	r := NewCapabilityRegistry()
 
-	d, err := r.Decide(domain.CapSetGroupLocked, domain.EngineWaNoise, domain.AccountTypeUnknown, "group_admin")
+	d, err := r.Decide(domain.CapSetGroupLocked, domain.EngineNoise, domain.AccountTypeUnknown, "group_admin")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestDecide_FailedPreconditionOverridesSupported(t *testing.T) {
 func TestProvider_CapabilitiesNonEmptyForBothEngines(t *testing.T) {
 	r := NewCapabilityRegistry()
 
-	for _, engine := range []domain.Engine{domain.EngineWaNoise, domain.EngineWaHeadless} {
+	for _, engine := range []domain.Engine{domain.EngineNoise, domain.EngineHeadless} {
 		p, err := r.Provider(engine)
 		if err != nil {
 			t.Fatalf("Provider(%q): %v", engine, err)

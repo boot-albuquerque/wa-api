@@ -399,7 +399,7 @@
       **Regra que surpreende**: **um administrador ou dono NÃO pode deixar de
       seguir o próprio canal**. O WhatsApp recusa com `405`, e nós traduzimos
       isso em `403 newsletter_admin_cannot_unfollow`
-      (`pkg/infra/wa-noise/errmap/newsletter.go:74`). Para sair, é preciso
+      (`pkg/infra/noise/errmap/newsletter.go:74`). Para sair, é preciso
       primeiro deixar de ser administrador — o que, no caso do dono, significa
       transferir a posse por `POST /newsletter/change-owner`.
 
@@ -763,7 +763,7 @@
 
       **`200`, mas o efeito nunca foi observado — e agora sabemos que não é
       por falta de tentar.** `NewsletterMarkViewed` incrementa o contador de
-      visualizações do lado da biblioteca (`internal/wa-noise/core/newsletter.go:52`),
+      visualizações do lado da biblioteca (`internal/noise/core/newsletter.go:52`),
       e esse contador é servido por `POST /newsletters/updates`, que estava
       **inoperante** até 2026-08-28 (F265/LIB-03: o servidor não respondia,
       `500` ao fim de 30s) — já corrigida (ver a descrição de

@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	errNoSession = errors.New("porta: sem sessao wanoise")
+	errNoSession = errors.New("porta: sem sessao noise")
 	errDB        = errors.New("repo: banco indisponivel")
 )
 
@@ -141,9 +141,9 @@ func TestUseCases_SemSessao_PropagamACausa(t *testing.T) {
 			// GetQR deixou de nomear um engine nesta mensagem quando a
 			// leitura passou para trás de port.PairingQRReader: o use case já
 			// não sabe qual transporte serve a sessão, e continuar a escrever
-			// "wanoise" seria uma linha de log que mente para metade dos
-			// pedidos. Os outros seis ainda consomem portas só do wa-noise.
-			wantRefusalMsg := "no wanoise session"
+			// "noise" seria uma linha de log que mente para metade dos
+			// pedidos. Os outros seis ainda consomem portas só do noise.
+			wantRefusalMsg := "no noise session"
 			if tc.name == "GetQR" {
 				wantRefusalMsg = "no session for QR read"
 			}
@@ -268,7 +268,7 @@ func TestValidacaoDePayloadPrecedeAGuardaDeSessao(t *testing.T) {
 
 func TestGetQR(t *testing.T) {
 	// O valor semeado é um data URI, e não "2@abc", porque é isso que a
-	// coluna users.qrcode REALMENTE guarda: o listener de QR do wa_noise
+	// coluna users.qrcode REALMENTE guarda: o listener de QR do noise
 	// escreve o PNG já codificado (pkg/application/session/orchestrator.go,
 	// onPairingQR — "A coluna guarda a IMAGEM"). O dublê dizia "2@abc" e por
 	// isso divergia da produção na exata regra em causa; foi a F373 que o
@@ -357,7 +357,7 @@ func TestGetQR(t *testing.T) {
 			t.Error("resultado devia ser nil")
 		}
 		// A ausência de registro passou a ser detectada pelo adaptador de
-		// engine (pkg/infra/wa-noise/adapters/pairing/qr.go) e não pelo use
+		// engine (pkg/infra/noise/adapters/pairing/qr.go) e não pelo use
 		// case, então o registro que sobra aqui é o da falha da leitura.
 		if !log.Logged("failed to read QR code") {
 			t.Errorf("ausencia de registro nao foi logada: %v", log.Messages())

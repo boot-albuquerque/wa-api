@@ -62,8 +62,8 @@ func newConnectWiringRouter(t *testing.T) (*mux.Router, <-chan string) {
 	initCustomHandlers(&server{DB: newChatHistoryDB(t), ExPath: t.TempDir()})
 
 	// The "is the wiring in place" half now lives in
-	// TestConnectStarterIsWiredForWaNoise (connect_ownership_wiring_test.go),
-	// which asserts the PRODUCTION registry resolves a *waNoiseSessionStarter.
+	// TestConnectStarterIsWiredForNoise (connect_ownership_wiring_test.go),
+	// which asserts the PRODUCTION registry resolves a *noiseSessionStarter.
 	// What this file measures is the other half, and the one a nil-check can
 	// never give: that a real HTTP request through the registered route
 	// actually CALLS the launcher.

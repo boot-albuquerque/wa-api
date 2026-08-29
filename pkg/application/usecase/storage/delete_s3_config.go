@@ -48,7 +48,7 @@ func NewDeleteS3ConfigUseCase(
 // changed. So the registry is only touched after the write succeeded.
 func (uc *DeleteS3ConfigUseCase) Execute(ctx context.Context, txtID string) (*domain.S3ConfigResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

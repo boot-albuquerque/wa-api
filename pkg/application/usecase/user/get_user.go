@@ -27,7 +27,7 @@ func NewGetUserUseCase(cd appport.ContactRoster, jr appport.JIDResolver, logger 
 // fronteira, e é lá que passaram a viver.
 func (uc *GetUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) ([]domain.UserInfo, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

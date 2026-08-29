@@ -36,7 +36,7 @@ func NewLogoutUseCase(sc appport.SessionLogouter, d appport.SessionDetacher, l a
 // Execute encerra a autenticação da sessão de txtID no WhatsApp.
 func (uc *LogoutUseCase) Execute(ctx context.Context, txtID string, req domain.LogoutRequest) (*domain.LogoutResult, error) {
 	if err := uc.sessions.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

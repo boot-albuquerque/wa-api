@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"testing"
 
-	wanoise "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/persistence/store"
+	"wa-api/internal/noise"
+	"wa-api/internal/noise/persistence/store"
 )
 
 // F82: uma sessão pareada por QR não sobrevivia a um restart.
@@ -29,7 +29,7 @@ func conectado(t *testing.T, pushName string) (*UserEventHandler, func() int) {
 		UserID:   "u-f82",
 		Token:    "tok-f82",
 		DB:       sqlDB,
-		WAClient: wanoise.NewClient(&store.Device{PushName: pushName}, nil),
+		WAClient: noise.NewClient(&store.Device{PushName: pushName}, nil),
 	}
 	lerColuna := func() int {
 		var conectado int

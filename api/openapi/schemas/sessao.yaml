@@ -84,9 +84,9 @@ CodigoQR:
       description: |
         Imagem do QR code em data URI (`data:image/png;base64,…`).
 
-        **A mesma forma para os dois engines** (HOUSEKEEP F373): `wa_noise`
+        **A mesma forma para os dois engines** (HOUSEKEEP F373): `noise`
         lê a imagem já gravada em `users.qrcode` pelo orquestrador a cada
-        evento `QR` (`orchestrator.go`); `wa_headless` lê a string crua que a
+        evento `QR` (`orchestrator.go`); `headless` lê a string crua que a
         página produz e a API a codifica em PNG no único ponto por onde os
         dois passam (`GetQRUseCase`, via `pkg/qrimage`). Antes da F373 os
         dois devolviam formas diferentes no mesmo campo — corrigido, não é
@@ -115,7 +115,7 @@ CodigoQR:
         `qr_code` muda (rotação genuína) ou fica vazio.
 
         **NÃO é uma contagem regressiva de expiração.** HOUSEKEEP F375: nem
-        `wa_noise` nem `wa_headless` conseguem prometer honestamente quando
+        `noise` nem `headless` conseguem prometer honestamente quando
         o código atual vai expirar — a rotação é decidida pelo servidor do
         WhatsApp, com variância MEDIDA de 10 a 60 segundos entre rotações
         automáticas (F374, `TestProbeQRRetryPattern`). Este campo não
@@ -186,7 +186,7 @@ PedidoPareamentoTelefone:
 
         Não há `trim`, `pattern` nem verificação de comprimento no wa-api: a
         única regra local é *não ser vazio*. A validação de forma do número
-        acontece no wa-noise, e a recusa chega ao cliente como
+        acontece no noise, e a recusa chega ao cliente como
         `400 pair_phone_failed` com a mensagem do SDK
         (`adapters/pairing/adapter.go:65-85`).
       example: '554192421234'

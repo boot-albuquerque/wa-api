@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/types"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"

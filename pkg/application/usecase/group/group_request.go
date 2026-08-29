@@ -33,7 +33,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 	}
 
 	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 
@@ -55,7 +55,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 // ExecuteUpdateGroupRequestParticipants aprova ou rejeita solicitações de entrada
 func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context.Context, userID string, req domain.UpdateGroupRequestParticipantsRequest) (*domain.UpdateGroupRequestParticipantsResult, error) {
 	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 
@@ -118,7 +118,7 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 // ExecuteSetGroupJoinApprovalMode alterna o requisito de aprovação para entrar no grupo
 func (uc *GroupRequestUseCase) ExecuteSetGroupJoinApprovalMode(ctx context.Context, userID string, req domain.SetGroupJoinApprovalModeRequest) (*domain.SetGroupJoinApprovalModeResult, error) {
 	if err := uc.requests.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

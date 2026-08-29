@@ -40,7 +40,7 @@ func TestListNewsletterExecute(t *testing.T) {
 			// o handler acima distingue "sem sessão" de "SDK quebrado" por
 			// ela, e a string opaca destruía essa distinção.
 			wantErr:       errSession,
-			wantErrorLog:  "no wanoise session",
+			wantErrorLog:  "no noise session",
 			wantListCalls: 0,
 		},
 		{
@@ -111,10 +111,10 @@ func TestListNewsletterExecute(t *testing.T) {
 				}
 				return
 			}
-			// "no wanoise session" e' o unico caso que sai em warn: sessao
+			// "no noise session" e' o unico caso que sai em warn: sessao
 			// nao conectada e' estado esperado, nao erro de servidor (F72).
 			nivel := "error"
-			if tt.wantErrorLog == "no wanoise session" {
+			if tt.wantErrorLog == "no noise session" {
 				nivel = "warn"
 			}
 			rec, ok := logger.FindLevel(nivel, tt.wantErrorLog)

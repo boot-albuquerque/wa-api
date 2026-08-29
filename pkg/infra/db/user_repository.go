@@ -442,7 +442,7 @@ var _ appport.UserRepository = (*UserRepository)(nil)
 // is a mistake, and only the first has a default.
 func engineForCreate(e domain.Engine) (domain.Engine, error) {
 	if e == "" {
-		return domain.EngineWaNoise, nil
+		return domain.EngineNoise, nil
 	}
 	if !e.IsValidForCreate() {
 		// O log mora AQUI, e nao no chamador: e' esta funcao que conhece a

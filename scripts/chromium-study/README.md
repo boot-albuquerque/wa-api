@@ -1,7 +1,7 @@
 # chromium-study
 
 Estudo experimental que sustenta a **ADR-0006** — escolha da engine de browser do
-`internal/wa-headless` e custo por sessão.
+`internal/headless` e custo por sessão.
 
 Isto **não é código de produção**. É o harness de medição e as evidências brutas
 que produziram as decisões registradas na ADR.
@@ -39,8 +39,8 @@ go build ./...
 ## Estado das conclusões
 
 As decisões com confiança HIGH, e as condições para `GO WITH CONDITIONS` em
-produção, estão registradas em `docs/adr/0006-wa-headless-engine-de-browser-e-custo-por-sessao.md`
-e `docs/adr/0007-decisao-final-wa-headless-escopo-e-custo.md` — as ADRs são a
+produção, estão registradas em `docs/adr/0006-headless-engine-de-browser-e-custo-por-sessao.md`
+e `docs/adr/0007-decisao-final-headless-escopo-e-custo.md` — as ADRs são a
 fonte de verdade; os relatórios fase a fase que as sustentaram (Fases 1 a 6)
 foram removidos em 2026-08-28 por serem histórico de campanha já incorporado
 às ADRs, exceto `ACHADO-RENDERER-NAO-RESPONSIVO.md`, mantido por ser um

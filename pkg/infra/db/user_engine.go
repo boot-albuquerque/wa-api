@@ -61,9 +61,9 @@ type EngineBackfillReport struct {
 	// PendingBefore is how many of those rows still said legacy_unknown.
 	PendingBefore int
 
-	// ToWaHeadless and ToWaNoise are rows this run actually changed.
-	ToWaHeadless int
-	ToWaNoise    int
+	// ToHeadless and ToNoise are rows this run actually changed.
+	ToHeadless int
+	ToNoise    int
 
 	// ListedButAbsent are ids present in WA_API_ENGINE_HEADLESS_SESSIONS that
 	// matched no row. Reported and NOT an error: an operator may list a
@@ -152,7 +152,7 @@ func BackfillUserEngines(
 	if err != nil {
 		return report, err
 	}
-	report.ToWaHeadless += headlessCount
+	report.ToHeadless += headlessCount
 	report.ListedButAbsent = absent
 
 	res, err := db.ExecContext(ctx,
@@ -170,10 +170,10 @@ func BackfillUserEngines(
 			Msg("failed to read rows affected for default engine backfill")
 		return report, err
 	}
-	if defaultEngine == domain.EngineWaHeadless {
-		report.ToWaHeadless += int(affected)
+	if defaultEngine == domain.EngineHeadless {
+		report.ToHeadless += int(affected)
 	} else {
-		report.ToWaNoise += int(affected)
+		report.ToNoise += int(affected)
 	}
 
 	if err := db.GetContext(ctx, &report.RemainingLegacyUnknown,
@@ -205,7 +205,7 @@ func backfillHeadlessSessions(
 	for _, id := range ids {
 		res, err := db.ExecContext(ctx,
 			`UPDATE users SET engine = $1 WHERE id = $2 AND engine = $3`,
-			domain.EngineWaHeadless, id, domain.EngineLegacyUnknown)
+			domain.EngineHeadless, id, domain.EngineLegacyUnknown)
 		if err != nil {
 			log.Error().Err(err).Str("table", usersTable).Str("user_id", id).
 				Str("query", "backfill_engine_headless").

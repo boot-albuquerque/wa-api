@@ -17,7 +17,7 @@ const fetchImageMaxBytes int64 = 16 * 1024 * 1024
 const dataImagePrefix = "data:image"
 
 // PublishStatusImageUseCase publishes an image as an ephemeral status story.
-// The image is uploaded and sent to StatusBroadcastJID; wa-noise resolves the
+// The image is uploaded and sent to StatusBroadcastJID; noise resolves the
 // recipient list from the account's privacy settings (core/broadcast.go).
 type PublishStatusImageUseCase struct {
 	media   appport.MediaMessenger
@@ -35,7 +35,7 @@ func (uc *PublishStatusImageUseCase) Execute(ctx context.Context, txtID string, 
 	}
 
 	if err := uc.media.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

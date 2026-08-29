@@ -14,7 +14,7 @@ import "fmt"
 //
 // # The temporary duality with pkg/bootstrap/engine_selection.go
 //
-// pkg/bootstrap declares EngineWaNoise = "wanoise" and EngineWaHeadless =
+// pkg/bootstrap declares EngineNoise = "wanoise" and EngineHeadless =
 // "headless". Those are the INFRASTRUCTURE CONFIGURATION strings, read from
 // WA_API_ENGINE and WA_API_ENGINE_HEADLESS_SESSIONS, and they predate this
 // type. The values here are the PUBLIC CONTRACT values, in snake_case, and
@@ -28,11 +28,11 @@ import "fmt"
 type Engine string
 
 const (
-	// EngineWaNoise is the socket transport. It is the historical default.
-	EngineWaNoise Engine = "wa_noise"
+	// EngineNoise is the socket transport. It is the historical default.
+	EngineNoise Engine = "wa_noise"
 
-	// EngineWaHeadless is the browser-driven SPA transport.
-	EngineWaHeadless Engine = "wa_headless"
+	// EngineHeadless is the browser-driven SPA transport.
+	EngineHeadless Engine = "wa_headless"
 
 	// EngineLegacyUnknown is INTERNAL ONLY: it marks a row whose engine was
 	// never recorded because the column did not exist when the row was
@@ -50,7 +50,7 @@ const (
 // ErrInvalidEngine is returned when a value is not an engine this contract
 // accepts for creating a session.
 var ErrInvalidEngine = fmt.Errorf("invalid engine: must be %q or %q",
-	EngineWaNoise, EngineWaHeadless)
+	EngineNoise, EngineHeadless)
 
 // ErrEngineImmutable is returned when an update tries to change the engine
 // of a session that already has one recorded. See HOUSEKEEP F279: this was
@@ -70,7 +70,7 @@ func (e Engine) String() string { return string(e) }
 // is that it describes history, never a choice.
 func (e Engine) IsValidForCreate() bool {
 	switch e {
-	case EngineWaNoise, EngineWaHeadless:
+	case EngineNoise, EngineHeadless:
 		return true
 	default:
 		return false

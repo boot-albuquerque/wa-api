@@ -76,7 +76,7 @@ var migrations = []Migration{
 	{
 		ID:    9,
 		Name:  "add_wanoise_message_secrets_message_id_idx",
-		UpSQL: addWaNoiseMessageSecretsMessageIDIndexSQL,
+		UpSQL: addNoiseMessageSecretsMessageIDIndexSQL,
 	},
 	{
 		ID:    10,
@@ -421,7 +421,7 @@ ALTER TABLE session_leases DROP COLUMN owner_addr;
 
 // renameMessageSecretsIndexSQL acompanha a renomeação das tabelas do módulo de
 // protocolo (ver renameLegacyTables em
-// internal/wa-noise/persistence/store/sqlstore/legacy_rename.go). Renomear a
+// internal/noise/persistence/store/sqlstore/legacy_rename.go). Renomear a
 // tabela não renomeia seus índices, e este índice em particular é criado por
 // esta camada (migração 9), não pelo módulo — por isso o rename mora aqui.
 //
@@ -599,7 +599,7 @@ END $$;
 -- SQLite version (handled in code)
 `
 
-const addWaNoiseMessageSecretsMessageIDIndexSQL = `
+const addNoiseMessageSecretsMessageIDIndexSQL = `
 -- PostgreSQL version
 DO $$
 BEGIN

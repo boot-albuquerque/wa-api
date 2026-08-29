@@ -38,23 +38,23 @@ const (
 	tgUnknown  = "sess-nao-cadastrada"
 )
 
-func newTestGuard(waHeadlessDisconnector, waHeadlessLogouter *contractsfake.SessionController) (*sessionEngineGuard, *contractsfake.SessionController) {
+func newTestGuard(headlessDisconnector, headlessLogouter *contractsfake.SessionController) (*sessionEngineGuard, *contractsfake.SessionController) {
 	users := &engineReaderStub{rows: map[string]domain.Engine{
-		tgNoise:    domain.EngineWaNoise,
-		tgHeadless: domain.EngineWaHeadless,
+		tgNoise:    domain.EngineNoise,
+		tgHeadless: domain.EngineHeadless,
 		tgLegacy:   domain.EngineLegacyUnknown,
 	}}
 	caps := capabilityregistry.NewCapabilityRegistry()
-	waNoise := &contractsfake.SessionController{}
+	noise := &contractsfake.SessionController{}
 	var hd appport.SessionDisconnector
 	var hl appport.SessionLogouter
-	if waHeadlessDisconnector != nil {
-		hd = waHeadlessDisconnector
+	if headlessDisconnector != nil {
+		hd = headlessDisconnector
 	}
-	if waHeadlessLogouter != nil {
-		hl = waHeadlessLogouter
+	if headlessLogouter != nil {
+		hl = headlessLogouter
 	}
-	return newSessionEngineGuard(users, caps, waNoise, hd, hl), waNoise
+	return newSessionEngineGuard(users, caps, noise, hd, hl), noise
 }
 
 // TestEnsureSessionDespachaPorEngineGravado: uma sessão gravada como
@@ -84,10 +84,10 @@ func TestEnsureSessionDespachaPorEngineGravado(t *testing.T) {
 	}
 }
 
-// TestLegacyUnknownCaiEmWaNoise: uma linha sem engine gravado (migração
+// TestLegacyUnknownCaiEmNoise: uma linha sem engine gravado (migração
 // anterior à coluna) resolve para wa_noise, o mesmo default do backfill
 // (pkg/infra/db/user_engine.go) e do pairing.Registry.TargetEngine.
-func TestLegacyUnknownCaiEmWaNoise(t *testing.T) {
+func TestLegacyUnknownCaiEmNoise(t *testing.T) {
 	guard, noise := newTestGuard(nil, nil)
 	if err := guard.EnsureSession(context.Background(), tgLegacy); err != nil {
 		t.Fatalf("EnsureSession(legacy_unknown) = %v, want nil (deveria cair em wa_noise)", err)
@@ -97,10 +97,10 @@ func TestLegacyUnknownCaiEmWaNoise(t *testing.T) {
 	}
 }
 
-// TestSemLinhaCaiEmWaNoise: sessão sem linha nenhuma também cai em
+// TestSemLinhaCaiEmNoise: sessão sem linha nenhuma também cai em
 // wa_noise, deixando o adapter produzir seu próprio erro de "sem sessão" em
 // vez deste tipo inventar um segundo.
-func TestSemLinhaCaiEmWaNoise(t *testing.T) {
+func TestSemLinhaCaiEmNoise(t *testing.T) {
 	guard, noise := newTestGuard(nil, nil)
 	wantErr := errors.New("sem sessao")
 	noise.EnsureSessionFunc = func(context.Context, string) error { return wantErr }
@@ -126,14 +126,14 @@ func TestDisconnectSemAdapterHeadlessDevolveEngineUnavailable(t *testing.T) {
 	}
 }
 
-// TestLogoutSemLogouterHeadlessRecusa: enquanto waHeadlessLogouter continuar
+// TestLogoutSemLogouterHeadlessRecusa: enquanto headlessLogouter continuar
 // nil (Socket.logout não medido — ver
 // pkg/infra/wa-headless/session/disconnector.go) E a matriz continuar
 // marcando logout_session como "unknown" para wa_headless
 // (pkg/capabilityregistry/matrix.go), Logout numa sessão wa_headless recusa
 // de forma identificável — hoje pela checagem de capacidade, que roda ANTES
 // da resolução do adapter — e NÃO cai silenciosamente no wa_noise. Se a
-// matriz for atualizada para Supported sem que waHeadlessLogouter seja
+// matriz for atualizada para Supported sem que headlessLogouter seja
 // wired, a recusa muda de código (capability_not_supported ->
 // session_engine_unavailable) mas continua sendo uma recusa: é essa segunda
 // garantia, não o código específico, que TestDisconnectSemAdapterHeadlessDevolveEngineUnavailable
@@ -172,10 +172,10 @@ func TestSessionStatusSemLinhaDevolveFalseFalse(t *testing.T) {
 	}
 }
 
-// TestLogoutWaNoiseDespachaComSucesso: o caminho de sucesso de Logout —
+// TestLogoutNoiseDespachaComSucesso: o caminho de sucesso de Logout —
 // engine wa_noise, capacidade suportada, logouter presente — chega ao
 // adapter e devolve o que ele devolver, sem alteração.
-func TestLogoutWaNoiseDespachaComSucesso(t *testing.T) {
+func TestLogoutNoiseDespachaComSucesso(t *testing.T) {
 	guard, noise := newTestGuard(nil, nil)
 	if err := guard.Logout(context.Background(), tgNoise); err != nil {
 		t.Fatalf("Logout(wa_noise) = %v, want nil", err)

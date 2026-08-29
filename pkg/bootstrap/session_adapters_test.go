@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
-	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/noise"
 )
 
 // TestSessionEventDispatcher_SemUserEventHandler: o dispatcher resolve userID ->
@@ -30,8 +30,8 @@ func TestSessionEventDispatcher_SemUserEventHandler(t *testing.T) {
 // *bootstrap.UserEventHandler — o caso que a type assertion do dispatcher defende.
 type handleForaDoTipo struct{}
 
-func (handleForaDoTipo) GetWAClient() *wanoise.Client { return nil }
-func (handleForaDoTipo) GetUserID() string            { return "user-tipo-errado" }
+func (handleForaDoTipo) GetWAClient() *noise.Client { return nil }
+func (handleForaDoTipo) GetUserID() string          { return "user-tipo-errado" }
 
 // TestSessionEventDispatcher_HandleDeOutroTipo: se o registro contiver algo
 // que não é *bootstrap.UserEventHandler, o dispatcher loga e desiste em vez de
@@ -52,15 +52,15 @@ func TestSessionEventDispatcher_HandleDeOutroTipo(t *testing.T) {
 }
 
 // TestSessionAttachHook_AttachSemClienteRegistrado: Attach depende do
-// *wanoise.Client que o SessionRegistry publica no clientManager. Sem ele,
+// *noise.Client que o SessionRegistry publica no clientManager. Sem ele,
 // falhar alto é obrigatório — montar um UserEventHandler com WAClient nil registraria
 // um handle que entra em pânico no primeiro evento recebido.
 func TestSessionAttachHook_AttachSemClienteRegistrado(t *testing.T) {
-	clientManager.DeleteWaNoiseClient("user-sem-cliente")
+	clientManager.DeleteNoiseClient("user-sem-cliente")
 
 	err := NewSessionAttachHook(&server{}).Attach(context.Background(), "user-sem-cliente", "token")
 	if err == nil {
-		t.Fatal("Attach sem *wanoise.Client registrado deveria falhar")
+		t.Fatal("Attach sem *noise.Client registrado deveria falhar")
 	}
 	if !strings.Contains(err.Error(), "user-sem-cliente") {
 		t.Fatalf("erro não identifica o userID: %v", err)

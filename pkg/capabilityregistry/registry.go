@@ -27,15 +27,15 @@ func NewCapabilityRegistry() *CapabilityRegistry {
 	m := NewDefaultMatrix()
 	return &CapabilityRegistry{
 		providers: map[domain.Engine]CapabilityProvider{
-			domain.EngineWaNoise:    &matrixProvider{engine: domain.EngineWaNoise, m: m},
-			domain.EngineWaHeadless: &matrixProvider{engine: domain.EngineWaHeadless, m: m},
+			domain.EngineNoise:    &matrixProvider{engine: domain.EngineNoise, m: m},
+			domain.EngineHeadless: &matrixProvider{engine: domain.EngineHeadless, m: m},
 		},
 	}
 }
 
 // ErrUnknownEngine is returned by Provider/Decide when asked about an engine
-// this registry has no provider for (i.e. not domain.EngineWaNoise or
-// domain.EngineWaHeadless).
+// this registry has no provider for (i.e. not domain.EngineNoise or
+// domain.EngineHeadless).
 var ErrUnknownEngine = fmt.Errorf("capabilityregistry: unknown engine")
 
 // Provider resolves the CapabilityProvider for one engine.

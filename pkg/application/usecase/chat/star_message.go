@@ -24,7 +24,7 @@ func NewStarMessageUseCase(ms appport.MessageStarrer, jr appport.JIDResolver, lo
 // Execute stars or unstars a message.
 func (uc *StarMessageUseCase) Execute(ctx context.Context, userID string, req domain.StarMessageRequest) (*domain.StarMessageResult, error) {
 	if err := uc.stars.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

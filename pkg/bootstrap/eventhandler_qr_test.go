@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/types/events"
 )
 
 // codigoDePareamentoFalso imita a forma real de um codigo de QR do WhatsApp

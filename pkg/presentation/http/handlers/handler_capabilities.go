@@ -40,7 +40,7 @@ func sortedCapabilities() []domain.Capability {
 
 // knownEngines is every engine the capability registry has a provider for.
 // Sorted so /admin/capabilities has a stable row order.
-var knownEngines = []domain.Engine{domain.EngineWaNoise, domain.EngineWaHeadless}
+var knownEngines = []domain.Engine{domain.EngineNoise, domain.EngineHeadless}
 
 // knownAccountTypes is every account type the matrix is keyed on. Unlike
 // knownEngines this deliberately INCLUDES AccountTypeUnknown: it is the only
@@ -81,7 +81,7 @@ func NewCapabilityHandlers(users appport.UserRepository, registry *capabilityreg
 // column.
 //
 // A row whose engine still reads EngineLegacyUnknown (column added but the
-// startup backfill has not run against it) falls back to EngineWaNoise, the
+// startup backfill has not run against it) falls back to EngineNoise, the
 // documented default the backfill itself would assign
 // (pkg/infra/db/user_engine.go) — a handler must not surface an internal
 // migration state as a client-facing error.
@@ -95,7 +95,7 @@ func (h *CapabilityHandlers) sessionEngine(ctx context.Context, txtID string) (d
 	}
 	engine := entries[0].Engine
 	if !engine.IsValidForCreate() {
-		return domain.EngineWaNoise, nil
+		return domain.EngineNoise, nil
 	}
 	return engine, nil
 }

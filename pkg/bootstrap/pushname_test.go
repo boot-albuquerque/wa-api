@@ -3,11 +3,11 @@ package bootstrap
 import (
 	"testing"
 
-	wanoise "wa-api/internal/wa-noise"
-	"wa-api/internal/wa-noise/persistence/store"
-	"wa-api/internal/wa-noise/protocol/proto/waHistorySync"
-	"wa-api/internal/wa-noise/protocol/proto/waWeb"
-	"wa-api/internal/wa-noise/protocol/types"
+	"wa-api/internal/noise"
+	"wa-api/internal/noise/persistence/store"
+	"wa-api/internal/noise/protocol/proto/waHistorySync"
+	"wa-api/internal/noise/protocol/proto/waWeb"
+	"wa-api/internal/noise/protocol/types"
 )
 
 // F84: o WebMessageInfo do HistorySync JÁ CARREGA o pushName (campo 19 do
@@ -49,7 +49,7 @@ func handlerComRoster(nomeNoRoster string) *UserEventHandler {
 		cs.contacts = map[types.JID]types.ContactInfo{j: {Found: true, PushName: nomeNoRoster}}
 	}
 	dev := &store.Device{Contacts: cs}
-	return &UserEventHandler{WAClient: wanoise.NewClient(dev, nil)}
+	return &UserEventHandler{WAClient: noise.NewClient(dev, nil)}
 }
 
 // TestPushName_VemDoProtobuf é o teste da F84. O roster está vazio, como está

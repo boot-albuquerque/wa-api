@@ -1,10 +1,10 @@
 # ADR-0001: Reimplementação nativa e gradual do protocolo binário do WhatsApp
 
 - **Status**: accepted (roadmap de longo prazo, execução incremental) —
-  **amendado parcialmente por [ADR-0002](0002-vendorizar-wa-noise-em-vez-de-reimplementar.md)**
-  (2026-08-06): a rejeição de "fork completo do wa-noise" e o critério
+  **amendado parcialmente por [ADR-0002](0002-vendorizar-noise-em-vez-de-reimplementar.md)**
+  (2026-08-06): a rejeição de "fork completo do noise" e o critério
   "não vale reimplementar Signal/Noise do zero" foram revistos à luz de
-  a licença MPL-2.0 permitir vendorizar o núcleo do `wa-noise`
+  a licença MPL-2.0 permitir vendorizar o núcleo do `noise`
   (`binary`/`socket`/`store`/`types`/`proto`) e o módulo `libsignal`
   quase sem alteração, reescrevendo só a camada de orquestração de alto
   nível. A filosofia geral deste ADR (migração incremental, ports antes
@@ -13,7 +13,7 @@
 
 ## Contexto
 
-O `wa-api` é construído sobre o [`wa-noise`](https://wa-api/internal/wa-noise), uma
+O `wa-api` é construído sobre o [`noise`](https://wa-api/internal/noise), uma
 biblioteca Go que implementa o protocolo do WhatsApp Web/Multi-Device: o
 transporte binário `waBinary` (nós `<iq>`/`<message>` codificados, não HTTP
 nem protobuf de topo), a criptografia de sessão (Signal/Noise) e a
@@ -24,16 +24,16 @@ Depender de uma lib de terceiros pra isso é a escolha certa por padrão — nã
 é razoável reimplementar Signal/Noise do zero por capricho. Mas na prática já
 sentimos o custo dessa dependência de duas formas:
 
-1. **O `wa-noise` não aceita correções nossas com facilidade.** Quando
+1. **O `noise` não aceita correções nossas com facilidade.** Quando
    encontramos uma lacuna ou comportamento que não serve o `wa-api`, o
    caminho normal (abrir PR upstream, esperar merge, publicar release, subir
    `go.mod`) é lento ou trava. Hoje `go.mod` já fixa um pseudo-commit
    (`v0.0.0-20260516102357-8d3700152a69`), não uma tag — sintoma de que já
-   dependemos de estado do `wa-noise` que não necessariamente vira release
+   dependemos de estado do `noise` que não necessariamente vira release
    estável no ritmo que precisamos.
 2. **A lib expõe só o que o autor decidiu expor, na forma que ele decidiu
    expor.** O caso concreto que motivou este ADR: `GetProfilePictureInfo`
-   (`wa-noise/user.go:517`) suporta busca condicional — você passa
+   (`noise/user.go:517`) suporta busca condicional — você passa
    `ExistingID` (o `pic.ID` da última foto que já se tem) e, se a foto não
    mudou, o servidor responde rápido com "não mudou" (código 304) em vez de
    reenviar tudo. **Ninguém na nossa pipeline usa isso:**
@@ -43,7 +43,7 @@ sentimos o custo dessa dependência de duas formas:
      `ExistingID: ""`;
    - `app-core` (repo `disparazaap`, `upsert-avatar.ts`) só persiste
      `avatar_url`/`avatar_synced_at` — **descarta o `pic.ID`** que o
-     `wa-noise` devolve a cada fetch bem-sucedido.
+     `noise` devolve a cada fetch bem-sucedido.
 
    Resultado: **todo fetch de avatar é sempre um fetch completo**, mesmo pra
    contatos cuja foto não mudou desde o último ciclo. Isso consome o cap
@@ -53,16 +53,16 @@ sentimos o custo dessa dependência de duas formas:
    observado em dev, 2026-08-06).
 
    Esse caso específico **não exige reimplementar nada** — é threadar um
-   campo que o `wa-noise` já expõe (`ExistingID`) através de
+   campo que o `noise` já expõe (`ExistingID`) através de
    `GetAvatarRequest` → `user_adapters.go` → contrato HTTP → `wa-worker` →
    schema do `app-core` (`avatar_id` além de `avatar_url`). Fica registrado
    aqui como **evidência do padrão maior**: a lib expõe uma capacidade, mas
    como ninguém na nossa cadeia pediu por ela no design original, ela nunca
    chegou a ser usada — e корrigir isso depende só de mudar código nosso, não
-   de esperar o `wa-noise`.
+   de esperar o `noise`.
 
 O padrão que nos preocupa é o oposto: quando a lacuna está **dentro** do
-`wa-noise` (um bug, uma falha de mapeamento de erro, um caso do protocolo
+`noise` (um bug, uma falha de mapeamento de erro, um caso do protocolo
 que ele não cobre), estamos reféns do ritmo de aceitação de PR upstream.
 
 ## Decisão
@@ -71,25 +71,25 @@ Adotar como **objetivo de longo prazo, perseguido incrementalmente** a
 reimplementação nativa do protocolo binário do WhatsApp — `waBinary` (nós
 IQ), a camada de criptografia de sessão, e a serialização dos payloads que
 mais nos interessam — dentro do próprio `wa-api`, reduzindo a dependência do
-`wa-noise` peça por peça, começando pelas superfícies onde:
+`noise` peça por peça, começando pelas superfícies onde:
 
 1. já identificamos lacuna concreta e recorrente (como o caso do avatar
    acima), e
 2. o custo de reimplementar é baixo comparado ao custo de esperar upstream.
 
-**Não é um rewrite.** O `wa-noise` continua sendo a base até que cada peça
+**Não é um rewrite.** O `noise` continua sendo a base até que cada peça
 nativa esteja madura e testada em produção. A migração é **superfície por
 superfície**, nunca big-bang:
 
 - Cada peça nativa vive atrás do mesmo *port* (`appport.ContactDirectory` e
-  afins) que os adapters `wa-noise/*` já implementam hoje — trocar a
+  afins) que os adapters `noise/*` já implementam hoje — trocar a
   implementação por baixo não deve exigir tocar em use case ou handler.
 - Critério de partida pra "vale a pena nativizar esta superfície": (a) já
   sentimos dor real nela (bug, lacuna, ou latência de correção upstream), e
   (b) o escopo é pequeno o suficiente pra testar isoladamente contra tráfego
-  real antes de substituir o caminho `wa-noise`.
+  real antes de substituir o caminho `noise`.
 - Nenhuma superfície native migra sem a mesma cobertura de testes (unit +
-  contract) que o `wa-noise` tem hoje via os testes existentes do adapter.
+  contract) que o `noise` tem hoje via os testes existentes do adapter.
 
 ### Primeira candidata concreta (não iniciada)
 
@@ -98,17 +98,17 @@ começar: request/response pequenos, sem stream de mensagens em tempo real,
 já mapeados em `user_adapters.go`. Antes de qualquer reimplementação nativa
 aqui, o passo imediato e de baixo risco é o já descrito no Contexto: threadar
 `ExistingID`/`avatar_id` pelas camadas existentes usando a API que o
-`wa-noise` já oferece. Isso resolve o sintoma (fetch sempre completo) sem
+`noise` já oferece. Isso resolve o sintoma (fetch sempre completo) sem
 exigir nenhum trabalho de protocolo nativo — fica registrado como o próximo
 passo antes de decidir se vale nativizar essa IQ específica.
 
 ## Racional
 
 - **Correções em código nosso não esperam merge alheio.** O ritmo de
-  release do `wa-noise` upstream não é algo que controlamos; peças nativas
+  release do `noise` upstream não é algo que controlamos; peças nativas
   sob nosso controle eliminam essa dependência crítica de tempo.
 - **Superfície por superfície é reversível.** Cada port abstrai a troca —
-  se uma peça nativa se provar pior que o `wa-noise` em produção, a
+  se uma peça nativa se provar pior que o `noise` em produção, a
   reversão é trocar o adapter de volta, não desfazer um rewrite.
 - **O caso do avatar mostra o padrão sem forçar prematuramente a
   reimplementação binária** — a maioria das lacunas que vamos encontrar
@@ -119,18 +119,18 @@ passo antes de decidir se vale nativizar essa IQ específica.
 ## Evidência complementar: análise do `wuzapi`
 
 Pra checar se as dores descritas no Contexto são peculiaridade do `wa-api` ou
-padrão do ecossistema `wa-noise`, foi analisado o
+padrão do ecossistema `noise`, foi analisado o
 [`wuzapi`](https://github.com/asternic/wuzapi) — outro projeto Go open-source
-que também expõe o `wa-noise` via API HTTP, mais maduro/populoso que o
+que também expõe o `noise` via API HTTP, mais maduro/populoso que o
 `wa-api` (~15.3k linhas, análise em 2026-08-06, repo local em
 `~/Documents/projetos/github/wuzapi`). Seis apontamentos relevantes:
 
 1. **Arquitetura sem abstração sobre a lib.** `clients.go:10-40` define um
-   `ClientManager` (`sync.RWMutex` + `map[userID]*wa-noise.Client`) e
-   `handlers.go` chama o SDK `wa-noise` **diretamente dentro dos handlers**
-   HTTP (76 ocorrências de `clientManager.Getwa-noiseClient(txtid).X(...)`),
+   `ClientManager` (`sync.RWMutex` + `map[userID]*noise.Client`) e
+   `handlers.go` chama o SDK `noise` **diretamente dentro dos handlers**
+   HTTP (76 ocorrências de `clientManager.GetnoiseClient(txtid).X(...)`),
    sem port/adapter separando use case de infraestrutura. Contraste com o
-   `wa-api`, que já isola o `wa-noise` atrás de ports
+   `wa-api`, que já isola o `noise` atrás de ports
    (`appport.ContactDirectory` e afins) — arquitetura que este ADR pretende
    preservar ao nativizar superfícies.
 
@@ -138,9 +138,9 @@ que também expõe o `wa-noise` via API HTTP, mais maduro/populoso que o
    `GetAvatar()`:
    ```go
    existingID := ""
-   pic, err = clientManager.Getwa-noiseClient(txtid).GetProfilePictureInfo(
+   pic, err = clientManager.GetnoiseClient(txtid).GetProfilePictureInfo(
        context.Background(), jid,
-       &wa-noise.GetProfilePictureParams{Preview: t.Preview, ExistingID: existingID},
+       &noise.GetProfilePictureParams{Preview: t.Preview, ExistingID: existingID},
    )
    ```
    `existingID` é zerado na hora e nunca preenchido a partir de estado
@@ -158,19 +158,19 @@ que também expõe o `wa-noise` via API HTTP, mais maduro/populoso que o
 3. **Erros sem tradução semântica.** Sem camada de abstração, erros do SDK
    viram HTTP 400/500 genéricos na maioria dos handlers — reforça o valor de
    manter os ports no `wa-api` mesmo nas peças que continuarem no
-   `wa-noise`.
+   `noise`.
 
 4. **Mesma pseudo-versão pinada.** `go.mod` do `wuzapi` fixa
-   `wa-api/internal/wa-noise v0.0.0-20260516102357-8d3700152a69` — **o mesmo
+   `wa-api/internal/noise v0.0.0-20260516102357-8d3700152a69` — **o mesmo
    pseudo-commit exato** que o `wa-api` usa hoje. Evidência direta de que
    não há tag estável recente disponível no upstream; corrobora o argumento
-   do Contexto de que essa é uma limitação estrutural do `wa-noise`, não um
+   do Contexto de que essa é uma limitação estrutural do `noise`, não um
    sintoma de manutenção do `wa-api`.
 
 5. **Workaround próprio existe, mas fora do escopo do protocolo binário.**
    `clients.go:14-20` mantém um cache in-memory (`pollOptions
    map[string]map[string][]string`) de texto plano das opções de enquete,
-   pra resolver os hashes SHA-256 que o `wa-noise` entrega nos eventos de
+   pra resolver os hashes SHA-256 que o `noise` entrega nos eventos de
    voto — contorno de aplicação, não de protocolo. Não encontrado nenhum
    workaround que exigisse reimplementar `waBinary`/criptografia; reforça
    que nativizar protocolo deve continuar sendo exceção, não ponto de
@@ -178,7 +178,7 @@ que também expõe o `wa-noise` via API HTTP, mais maduro/populoso que o
 
 6. **Eventos**: dispatch centralizado em um switch grande
    (`myEventHandler`, `wmiau.go:696`) roteando por tipo de evento
-   `wa-noise` pra webhook/RabbitMQ/stdio — mesmo padrão observado no
+   `noise` pra webhook/RabbitMQ/stdio — mesmo padrão observado no
    `wa-api`, sem achado que sugira lacuna na lib.
 
 **Conclusão da análise**: nenhum achado no `wuzapi` motiva acelerar a
@@ -197,19 +197,19 @@ mas pode virar **bloqueio real** no dia em que precisarmos de dado de grupo.
 
 ### O que descobrimos
 
-`GetAllContacts` (`wa-noise/store/sqlstore/store.go:797`) lê exclusivamente
-da tabela `wa-noise_contacts`:
+`GetAllContacts` (`noise/store/sqlstore/store.go:797`) lê exclusivamente
+da tabela `wanoise_contacts`:
 
 ```sql
 SELECT their_jid, first_name, full_name, push_name, business_name, redacted_phone
-  FROM wa-noise_contacts WHERE our_jid=$1
+  FROM wanoise_contacts WHERE our_jid=$1
 ```
 
 Essa tabela é alimentada só por eventos `contact_action` do app-state sync —
 a agenda 1:1 do usuário. **Grupos nunca entram nela**, por design do
-`wa-noise`: metadados de grupo (membros, admin, nome) vivem numa estrutura
+`noise`: metadados de grupo (membros, admin, nome) vivem numa estrutura
 inteiramente separada (`GetGroupInfo`/`GetJoinedGroups`), não em
-`wa-noise_contacts`. Não é um bug nem uma omissão nossa — é a lib decidindo
+`wanoise_contacts`. Não é um bug nem uma omissão nossa — é a lib decidindo
 que "contato" e "grupo" são conceitos diferentes desde a base, e só expõe
 `their_jid` do primeiro.
 
@@ -218,7 +218,7 @@ que "contato" e "grupo" são conceitos diferentes desde a base, e só expõe
 O `wa-api` usa `GetAllContacts` como fonte de `GET /user/contacts`
 (`user_adapters.go`), que o `wa-worker` consome pra sincronizar a agenda do
 tenant no `disparazaap`. A tela de contatos do produto é sobre conversas
-privadas com clientes — grupo nunca deveria aparecer ali. Como o `wa-noise`
+privadas com clientes — grupo nunca deveria aparecer ali. Como o `noise`
 já filtra isso na origem, **não precisamos de filtro nosso** nesse caminho
 específico (o `wa-api` não escreve nenhuma lógica de "ignore grupo" — a lib
 simplesmente nunca oferece o dado).
@@ -232,7 +232,7 @@ fazer servir (não é um parâmetro que falta, é uma tabela que não tem o dado
 Seria necessário:
 
 1. Portas novas sobre `GetGroupInfo`/`GetJoinedGroups` (ou equivalente) do
-   `wa-noise` — capacidade que a lib TEM, só não é usada hoje (mesmo padrão
+   `noise` — capacidade que a lib TEM, só não é usada hoje (mesmo padrão
    do caso do avatar: "a lib expõe, ninguém threadou" ainda não se aplica
    aqui porque ninguém pediu).
 2. Ports/domain novos no `wa-api` (`Group`, não `Contact`) — grupo não é o
@@ -249,11 +249,11 @@ Este ADR não cria trabalho de grupo agora — não há demanda de produto pra
 isso hoje. Fica documentado para que, quando essa demanda aparecer, quem
 investigar não perca tempo redescobrindo que `GetAllContacts` é a fonte
 errada — a resposta já está aqui: portas novas sobre a API de grupos do
-`wa-noise`, não sobre `ContactDirectory`.
+`noise`, não sobre `ContactDirectory`.
 
 ## Alternativas descartadas
 
-- **Fork completo do `wa-noise` agora**: alto custo de manutenção
+- **Fork completo do `noise` agora**: alto custo de manutenção
   imediato (toda a superfície de protocolo, criptografia incluída) sem
   evidência suficiente ainda de que a maioria das lacunas exige isso — o
   caso do avatar já mostra que parte da dor é uso incompleto da lib, não
@@ -271,7 +271,7 @@ errada — a resposta já está aqui: portas novas sobre a API de grupos do
 
 ## Consequências
 
-- Cada nova lacuna encontrada num adapter `wa-noise/*` deve, antes de virar
+- Cada nova lacuna encontrada num adapter `noise/*` deve, antes de virar
   "esperar PR upstream", ser avaliada contra as duas perguntas do critério de
   partida (dor real + escopo pequeno o bastante pra isolar).
 - Este ADR não cria trabalho imediato — a primeira ação concreta é o fix de
@@ -288,7 +288,7 @@ errada — a resposta já está aqui: portas novas sobre a API de grupos do
   `SessionEvent` (`pkg/application/contracts/session_event.go`) e
   `PairingEvent` (`pkg/application/contracts/pairing_event.go`) tipando os 6
   eventos de sessão/transporte e o fluxo de QR sem vazar nenhum tipo de
-  `wa-api/internal/wa-noise` na assinatura pública do port. A orquestração (grava
+  `wa-api/internal/noise` na assinatura pública do port. A orquestração (grava
   em `users`, webhook, S3, retry) permanece em `SessionOrchestrator`,
   agnóstica de provider, e não precisa ser tocada quando a primeira peça
   nativa chegar — só a implementação de `SessionProvider` muda. Eventos de
@@ -299,6 +299,6 @@ errada — a resposta já está aqui: portas novas sobre a API de grupos do
   superfície candidata a nativização: existem só para preservar a direção de
   dependência (`pkg/application` e `pkg/infra` nunca importam
   `pkg/bootstrap`), e continuam implementados por `ClientManager`/
-  `pkg/bootstrap` independentemente de a sessão vir do `wa-noise` ou de
+  `pkg/bootstrap` independentemente de a sessão vir do `noise` ou de
   código nativo. Quem for avaliar a nativização da sessão deve olhar apenas
   para `SessionProvider`/`Session`.

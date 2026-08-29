@@ -6,16 +6,16 @@ import (
 	"slices"
 	"strings"
 
-	"wa-api/pkg/infra/wa-noise/runtime/safego"
+	"wa-api/pkg/infra/noise/runtime/safego"
 
-	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/noise"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/rs/zerolog/log"
 )
 
 type UserEventHandler struct {
-	WAClient       *wanoise.Client
+	WAClient       *noise.Client
 	EventHandlerID uint32
 	UserID         string
 	Token          string

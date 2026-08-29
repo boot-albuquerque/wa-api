@@ -629,7 +629,7 @@ func TestEditUser_EngineImutavel(t *testing.T) {
 	repo := &contractsfake.UserRepository{
 		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineNoise}}, nil
 		},
 	}
 	uc := user.NewEditUserUseCase(repo, &contractsfake.S3SecretCipher{},
@@ -664,7 +664,7 @@ func TestEditUser_EngineIgualAoPersistidoEhNoop(t *testing.T) {
 	repo := &contractsfake.UserRepository{
 		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineNoise}}, nil
 		},
 		UpdateUserFunc: func(context.Context, string, domain.UserUpdate) error { return nil },
 	}

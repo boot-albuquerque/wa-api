@@ -35,7 +35,7 @@
       **A engine vem da sessão gravada**, não de um parâmetro do pedido. Uma
       linha cujo `engine` ainda não foi migrado (`legacy_unknown` — coluna
       adicionada antes do backfill de arranque correr contra ela) resolve para
-      `wa_noise`, o mesmo default documentado no backfill — o manipulador
+      `noise`, o mesmo default documentado no backfill — o manipulador
       nunca expõe esse estado de migração interno ao cliente.
 
       **Autenticação**: token de sessão.
@@ -117,7 +117,7 @@
       medido hoje para uma conta real.
 
       **`total`** é a contagem de linhas do array `capabilities` — número de
-      capacidades × número de engines (`wa_noise`, `wa_headless`) × três
+      capacidades × número de engines (`noise`, `headless`) × três
       tipos de conta.
 
       Uma combinação em que a decisão falhar internamente não derruba a
@@ -146,21 +146,21 @@
               data:
                 capabilities:
                   - capability: send_text
-                    engine: wa_noise
+                    engine: noise
                     account_type: unknown
                     supported: true
                     status: supported
                     reason: verificado contra conta real (HOUSEKEEP F210)
                     evidence: confirmed
                   - capability: catalog
-                    engine: wa_noise
+                    engine: noise
                     account_type: unknown
                     supported: false
                     status: not_implemented
                     reason: nenhum use case nem rota escreve este fluxo ainda
                     evidence: unknown
                   - capability: channel_create
-                    engine: wa_headless
+                    engine: headless
                     account_type: unknown
                     supported: false
                     status: engine_unsupported

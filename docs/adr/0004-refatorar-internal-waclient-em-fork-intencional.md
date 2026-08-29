@@ -9,7 +9,7 @@
 
 ## Contexto
 
-O ADR-0002/0003 vendorizaram `wa-api/internal/wa-noise` inteiro em
+O ADR-0002/0003 vendorizaram `wa-api/internal/noise` inteiro em
 `internal/waclient/` como cópia fiel do upstream (~124.7k linhas, 155
 arquivos), com `scripts/waclient-diff.sh` comparando byte-a-byte (após
 normalização de import path) contra uma versão upstream baixada, e
@@ -50,7 +50,7 @@ import path sem tocar em bytes de descriptor).
    SOLID, arquivos de produção ≤ 300 linhas, zero magic number/string
    hardcoded fora de constante nomeada, logging estruturado via o bridge
    `waLog.Logger`→zerolog (ver trabalho em andamento em
-   `pkg/infra/wa-noise/walog/`), e cobertura de teste unitária + de
+   `pkg/infra/noise/walog/`), e cobertura de teste unitária + de
    integração para o que for tocado.
 3. **`make waclient-drift` deixa de ser um gate binário sobre todo o
    diretório** e passa a validar apenas `internal/waclient/proto/` — a
@@ -125,12 +125,12 @@ import path sem tocar em bytes de descriptor).
   trabalho de infraestrutura antes de qualquer PR de refactor de conteúdo.
 - `PATCHES.md` deixa de ser um arquivo vazio de template e passa a ganhar
   entradas reais a cada PR que toca `internal/waclient/` fora de `proto/`.
-- Atualizações futuras do wa-noise upstream deixam de poder ser
+- Atualizações futuras do noise upstream deixam de poder ser
   re-vendorizadas automaticamente via `scripts/waclient-vendor.sh` para
   tudo fora de `proto/` — merges futuros exigirão reconciliação manual
   guiada por `PATCHES.md`. Este é um custo aceito conscientemente, não um
   efeito colateral.
-- O trabalho já em andamento em `pkg/infra/wa-noise/` (splits, bridge
+- O trabalho já em andamento em `pkg/infra/noise/` (splits, bridge
   `walog`, `apperr`) continua válido e serve de base/padrão de referência
   para a Fase A dentro de `internal/waclient/` propriamente dito.
 - Cada fase (A/B/C) deve ser planejada via `ralplan` própria antes de
@@ -151,13 +151,13 @@ import path sem tocar em bytes de descriptor).
 
 Após esta ADR, os dois diretórios foram renomeados:
 
-- `internal/waclient/` → `internal/wa-noise/`
-- `pkg/infra/wa-noise/` → `pkg/infra/wa-noise/`
+- `internal/waclient/` → `internal/noise/`
+- `pkg/infra/noise/` → `pkg/infra/noise/`
 
 A mudança é de **caminho/import path apenas** — nenhuma cláusula
-`package X` foi alterada (`package wa-noise`, `package walog` etc.
+`package X` foi alterada (`package noise`, `package walog` etc.
 continuam com o mesmo identificador), e não houve mudança de comportamento.
-`internal/wa-noise/proto/` foi verificado byte-a-byte contra o upstream
+`internal/noise/proto/` foi verificado byte-a-byte contra o upstream
 declarado em `UPSTREAM` após a renomeação (`make waclient-drift`, saída
 vazia).
 
@@ -166,7 +166,7 @@ Os nomes dos alvos de `make` (`waclient-drift`, `waclient-license-check`,
 estáveis de propósito — só o caminho para onde apontam mudou.
 
 O texto desta ADR e o das ADRs 0002/0003 **não** foi reescrito: as
-referências a `internal/waclient/` e `pkg/infra/wa-noise/` acima e nas
+referências a `internal/waclient/` e `pkg/infra/noise/` acima e nas
 ADRs anteriores são registro histórico do que foi decidido na época. Leia
-`internal/waclient/` como `internal/wa-noise/` e `pkg/infra/wa-noise/`
-como `pkg/infra/wa-noise/` ao confrontar essas ADRs com o código atual.
+`internal/waclient/` como `internal/noise/` e `pkg/infra/noise/`
+como `pkg/infra/noise/` ao confrontar essas ADRs com o código atual.

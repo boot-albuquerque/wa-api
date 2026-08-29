@@ -11,14 +11,14 @@ import (
 	"github.com/justinas/alice"
 	"github.com/rs/zerolog/log"
 
-	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/noise"
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/usecase/message"
 	"wa-api/pkg/domain"
-	wachat "wa-api/pkg/infra/wa-noise/adapters/chat"
-	waclient "wa-api/pkg/infra/wa-noise/client"
-	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
-	"wa-api/pkg/infra/wa-noise/observability/applog"
+	wachat "wa-api/pkg/infra/noise/adapters/chat"
+	clientpkg "wa-api/pkg/infra/noise/client"
+	wajid "wa-api/pkg/infra/noise/mapping/jid"
+	"wa-api/pkg/infra/noise/observability/applog"
 )
 
 // FIX-14 — trava do wiring `.WithPollOptions` (wiring_handlers.go:115).
@@ -92,15 +92,15 @@ func newPollWiringRouter(t *testing.T) *mux.Router {
 
 // seedPollWiringSession registra um cliente wa-noise para pollWiringUser.
 //
-// Nao e' um duble: e' um *wanoise.Client de verdade, sem device. E' o minimo
+// Nao e' um duble: e' um *noise.Client de verdade, sem device. E' o minimo
 // que faz EnsureSession (guard.go:57) passar — sem ele o use case para ANTES
 // de chamar SendPoll (send_poll.go:62) e o teste nunca alcancaria o guarda de
 // registrador. O cliente nao pode ser um fake porque a producao converte o
-// tipo CONCRETO (waclient.ClientForGetter, client.go:160).
+// tipo CONCRETO (clientpkg.ClientForGetter, client.go:160).
 func seedPollWiringSession(t *testing.T) {
 	t.Helper()
-	clientManager.SetWaNoiseClient(pollWiringUser, wanoise.NewClient(nil, nil))
-	t.Cleanup(func() { clientManager.DeleteWaNoiseClient(pollWiringUser) })
+	clientManager.SetNoiseClient(pollWiringUser, noise.NewClient(nil, nil))
+	t.Cleanup(func() { clientManager.DeleteNoiseClient(pollWiringUser) })
 }
 
 // TestPollOptionsRecorderIsWiredIntoChatMessenger e' a trava.
@@ -151,13 +151,13 @@ func TestPollOptionsRecorderIsWiredIntoChatMessenger(t *testing.T) {
 // repo na sua forma silenciosa.
 //
 // O adapter e o use case sao os da PRODUCAO, com o mesmo lookup de cliente
-// (waclient.ClientForGetter sobre clientManager.GetWaNoiseClient, como
+// (clientpkg.ClientForGetter sobre clientManager.GetNoiseClient, como
 // wiring_handlers.go:106). A UNICA diferenca em relacao ao wiring real e' a
 // chamada `.WithPollOptions` ausente.
 func TestPollOptionsRecorderAbsenceIsWhatTheWiringTestDetects(t *testing.T) {
 	seedPollWiringSession(t)
 
-	lookup := waclient.ClientForGetter(clientManager.GetWaNoiseClient)
+	lookup := clientpkg.ClientForGetter(clientManager.GetNoiseClient)
 	semRegistrador := wachat.NewChatMessengerAdapter(lookup)
 	uc := message.NewSendPollUseCase(
 		semRegistrador, wajid.NewJIDResolverAdapter(), applog.NewZerologAdapter(log.Logger))

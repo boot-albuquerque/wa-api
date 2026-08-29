@@ -3,10 +3,10 @@ package bootstrap
 import (
 	"testing"
 
-	waCommon "wa-api/internal/wa-noise/protocol/proto/waCommon"
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	waCommon "wa-api/internal/noise/protocol/proto/waCommon"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 )
 
 // HOUSEKEEP F187 — a trava da UNIFICAÇÃO.

@@ -41,7 +41,7 @@ func TestListUsersUseCase_Execute(t *testing.T) {
 			QRCode: "qr", Expiration: 42, ProxyURL: "http://proxy", HasProxyURL: true,
 			WebhookUseProxy: true, Events: "Message",
 			S3:     domain.S3Config{Enabled: true, Bucket: "b", AccessKey: "segredo", RetentionDays: 3},
-			Engine: domain.EngineWaHeadless,
+			Engine: domain.EngineHeadless,
 		},
 		{ID: "u2", Name: "bob"},
 	}
@@ -119,8 +119,8 @@ func TestListUsersUseCase_Execute(t *testing.T) {
 				t.Error("Proxy.Enabled = false, queria true")
 			}
 			// item 9: leitura administrativa devolve o engine.
-			if first.Engine != domain.EngineWaHeadless.String() {
-				t.Errorf("Engine = %q, queria %q", first.Engine, domain.EngineWaHeadless.String())
+			if first.Engine != domain.EngineHeadless.String() {
+				t.Errorf("Engine = %q, queria %q", first.Engine, domain.EngineHeadless.String())
 			}
 			if len(sessions.SessionStatusCalls) != tt.wantLen {
 				t.Errorf("SessionStatus chamado %d vezes, queria %d", len(sessions.SessionStatusCalls), tt.wantLen)

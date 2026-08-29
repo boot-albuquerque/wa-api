@@ -206,7 +206,7 @@ func TestSessionStatus_ContratoPublico_ValoresMapeados(t *testing.T) {
 func TestSessionQR_ContratoPublico(t *testing.T) {
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineNoise}}, nil
 		},
 	}
 	qr := &contractsfake.PairingQRReader{
@@ -217,8 +217,8 @@ func TestSessionQR_ContratoPublico(t *testing.T) {
 		},
 	}
 	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
-		&pairing.Provider{Engine: domain.EngineWaNoise, QRReader: qr},
-		&pairing.Provider{Engine: domain.EngineWaHeadless})
+		&pairing.Provider{Engine: domain.EngineNoise, QRReader: qr},
+		&pairing.Provider{Engine: domain.EngineHeadless})
 	router := familyRouter(t, "/session/qr", NewGetQRHandler(&contractsfake.Logger{}, reg), http.MethodGet)
 
 	rec := serveFamily(t, router, http.MethodGet, "/session/qr?engine=wa_noise", "")
@@ -241,12 +241,12 @@ func TestSessionPairPhone_ContratoPublico(t *testing.T) {
 	}
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineWaNoise}}, nil
+			return []domain.UserListEntry{{ID: "u1", Engine: domain.EngineNoise}}, nil
 		},
 	}
 	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
-		&pairing.Provider{Engine: domain.EngineWaNoise, PhonePairer: pp},
-		&pairing.Provider{Engine: domain.EngineWaHeadless})
+		&pairing.Provider{Engine: domain.EngineNoise, PhonePairer: pp},
+		&pairing.Provider{Engine: domain.EngineHeadless})
 	router := familyRouter(t, "/session/pairphone", NewPairPhoneHandler(&contractsfake.Logger{}, reg), http.MethodPost)
 
 	rec := serveFamily(t, router, http.MethodPost, "/session/pairphone", `{"engine":"wa_noise","phone":"5511999999999"}`)

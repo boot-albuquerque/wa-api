@@ -508,7 +508,7 @@ Este documento afirmava que **fixar conversa, favoritar e silenciar** faltavam
 no protocolo e exigiriam trabalho de raiz. **Estava errado.**
 
 O erro de método: procurei pelos nomes dos MÉTODOS do cliente (`MuteChat`,
-`PinInChat`, `StarMessage`) em `internal/wa-noise/core`. O app-state não vive
+`PinInChat`, `StarMessage`) em `internal/noise/core`. O app-state não vive
 lá — vive nos construtores de patch, e os três já existiam:
 
 ```
@@ -931,7 +931,7 @@ inventário com esta forma — `/chat/ephemeral` aceita `"24h"` como texto.
 
 **`Action` só aceita `add` e `remove`.** `promote` e `demote` devolvem
 `400 invalid_action` — ver HOUSEKEEP F263: a biblioteca sabe fazê-lo
-(`internal/wa-noise/capabilities/group/participants.go:18-19`), a rota não o
+(`internal/noise/capabilities/group/participants.go:18-19`), a rota não o
 expõe.
 
 ### community — 4 rotas (F237)

@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 )
 
 // F102. O defeito era de OBSERVABILIDADE, não de entrega: uma mensagem

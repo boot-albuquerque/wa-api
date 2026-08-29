@@ -10,9 +10,9 @@ import (
 	"github.com/rs/zerolog/hlog"
 )
 
-// wsConnRegistry is the subset of *wanoise.ClientManager this handler
+// wsConnRegistry is the subset of *noise.ClientManager this handler
 // needs — kept as an interface so handler tests can supply a fake without
-// pulling in the real wa-noise client machinery.
+// pulling in the real noise client machinery.
 type wsConnRegistry interface {
 	AddWSConn(userID string, conn *websocket.Conn)
 	RemoveWSConn(userID string, conn *websocket.Conn)

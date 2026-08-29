@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	waclientuser "wa-api/internal/wa-noise/capabilities/user"
-	"wa-api/internal/wa-noise/protocol/appstate"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	noiseuser "wa-api/internal/noise/capabilities/user"
+	"wa-api/internal/noise/protocol/appstate"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 	"wa-api/pkg/domain"
 	dbpkg "wa-api/pkg/infra/db"
 
@@ -33,7 +33,7 @@ func (evh *UserEventHandler) handleAppStateSyncComplete(evt *events.AppStateSync
 	}
 
 	// WAPatchCriticalUnblockLow carrega a agenda de contatos do usuário
-	// (wa-api/internal/wa-noise/protocol/appstate.WAPatchCriticalUnblockLow). Observamos a
+	// (wa-api/internal/noise/protocol/appstate.WAPatchCriticalUnblockLow). Observamos a
 	// conclusão desse patch com uma contagem — não com os contatos em si —
 	// porque é a mesma fonte que GET /user/contacts lê
 	// (evh.WAClient.Store.Contacts.GetAllContacts), então o número aqui
@@ -106,9 +106,9 @@ func (evh *UserEventHandler) handleConnected(st *eventState) bool {
 		}
 		accountType := domain.AccountTypeUnknown
 		switch kind {
-		case waclientuser.AccountKindBusiness:
+		case noiseuser.AccountKindBusiness:
 			accountType = domain.AccountTypeBusiness
-		case waclientuser.AccountKindPersonal:
+		case noiseuser.AccountKindPersonal:
 			accountType = domain.AccountTypePersonal
 		}
 		if accountType == domain.AccountTypeUnknown {

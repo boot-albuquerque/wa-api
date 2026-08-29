@@ -29,7 +29,7 @@ type UserRecord struct {
 	//
 	// The ZERO VALUE is meaningful and documented: no HTTP route can set this
 	// field yet (that belongs to the session-model worktree), so every caller
-	// today leaves it empty and the repository writes EngineWaNoise — the same
+	// today leaves it empty and the repository writes EngineNoise — the same
 	// default WA_API_ENGINE already has. A non-empty value that is not valid
 	// for creation is an ERROR, never a silent correction.
 	Engine Engine

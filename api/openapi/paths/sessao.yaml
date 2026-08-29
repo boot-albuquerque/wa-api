@@ -230,7 +230,7 @@
       Devolve a imagem do QR code guardada para esta sessão, em data URI, e
       `code_age_seconds` — há quanto tempo esse MESMO código é o que esta
       rota devolve (`0` quando muda). Não é um prazo de expiração: nem
-      `wa_noise` nem `wa_headless` sabem prometer quando o servidor do
+      `noise` nem `headless` sabem prometer quando o servidor do
       WhatsApp vai rodar o código (variância medida de 10-60s, HOUSEKEEP
       F374/F375) — é só o quanto já passou, para o cliente distinguir
       rotação normal de código travado sem a API inventar um prazo.
@@ -306,8 +306,8 @@
 
       **Regras**:
 
-      - `engine` é obrigatório, não-nulo, não-vazio, e só aceita `wa_noise` ou
-        `wa_headless`. **O engine é escolhido pelo pedido de emparelhamento e
+      - `engine` é obrigatório, não-nulo, não-vazio, e só aceita `noise` ou
+        `headless`. **O engine é escolhido pelo pedido de emparelhamento e
         determina qual transporte executa a ligação; não é inferido da sessão
         do chamador.** Ausente, vazio, `legacy_unknown` ou qualquer outro
         valor dá `400 invalid_engine`, e nenhum transporte é tocado;
@@ -323,7 +323,7 @@
         pedir o código ao servidor, e uma sessão emparelhada recebe
         `400 already_paired`;
       - exige um cliente vivo, logo `GET /session/connect` antes;
-      - o número é validado do lado do WhatsApp e do wa-noise. Número curto
+      - o número é validado do lado do WhatsApp e do noise. Número curto
         demais ou em formato nacional volta como `400 pair_phone_failed`,
         com a mensagem original do SDK;
       - o código tem validade curta. Expirado, peça outro.
@@ -338,7 +338,7 @@
           schema:
             $ref: '#/components/schemas/PedidoPareamentoTelefone'
           example:
-            engine: wa_noise
+            engine: noise
             phone: '554192421234'
     responses:
       '200':

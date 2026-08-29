@@ -17,7 +17,7 @@ import (
 // --- community test scaffolding ------------------------------------------
 
 var comErrPort = errors.New("community port exploded")
-var comErrNoSession = errors.New("no wanoise session for user")
+var comErrNoSession = errors.New("no noise session for user")
 
 type comFakes struct {
 	directory *contractsfake.CommunityDirectory

@@ -92,7 +92,7 @@ func TestGroupManagement_SemSessaoRecusaAntesDeEscrever(t *testing.T) {
 				t.Fatal("esperava erro de sessão")
 			}
 			assertCode(t, err, "no_session")
-			assertLog(t, f.log, wantLog{contractsfake.LevelWarn, "no wanoise session", []string{"txtID", "error"}})
+			assertLog(t, f.log, wantLog{contractsfake.LevelWarn, "no noise session", []string{"txtID", "error"}})
 
 			// Nenhuma escrita pode ter acontecido.
 			if n := len(f.life.CreateGroupCalls) + len(f.life.JoinGroupCalls) + len(f.life.LeaveGroupCalls) +

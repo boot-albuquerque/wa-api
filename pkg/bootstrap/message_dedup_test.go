@@ -6,9 +6,9 @@ import (
 
 	"github.com/patrickmn/go-cache"
 
-	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	waE2E "wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 )
 
 // F103. O que estes testes travam é a POLÍTICA, não o mecanismo: qual cópia

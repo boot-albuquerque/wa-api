@@ -10,7 +10,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
-	"wa-api/pkg/infra/wa-headless/registry"
+	"wa-api/pkg/infra/headless/registry"
 )
 
 func chromeFalso(t *testing.T) string {

@@ -53,7 +53,7 @@ func (uc *CommunityReadUseCase) GetSubGroups(ctx context.Context, txtID string, 
 		return nil, err
 	}
 	if err := uc.dir.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 	res, err := uc.dir.GetSubGroups(ctx, txtID, community)
@@ -77,7 +77,7 @@ func (uc *CommunityReadUseCase) GetParticipants(ctx context.Context, txtID strin
 		return nil, err
 	}
 	if err := uc.dir.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 	res, err := uc.dir.GetLinkedGroupsParticipants(ctx, txtID, community)
@@ -133,7 +133,7 @@ func (uc *CommunityWriteUseCase) LinkGroup(ctx context.Context, txtID string, re
 		return err
 	}
 	if err := uc.lifecycle.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return err
 	}
 	if err := uc.lifecycle.LinkGroup(ctx, txtID, parent, child); err != nil {
@@ -164,7 +164,7 @@ func (uc *CommunityWriteUseCase) UnlinkGroup(ctx context.Context, txtID string, 
 		return err
 	}
 	if err := uc.lifecycle.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return err
 	}
 	if err := uc.lifecycle.UnlinkGroup(ctx, txtID, parent, child); err != nil {

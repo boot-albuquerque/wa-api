@@ -40,7 +40,7 @@ const dataImagePrefix = "data:image"
 
 // SendImageUseCase envia uma imagem de verdade: obtém os bytes (por URL
 // externa via infra SSRF-safe, ou por decode local de data URI), sobe o
-// anexo e envia a mensagem pelo wa-noise. Só devolve domain.StatusSent
+// anexo e envia a mensagem pelo noise. Só devolve domain.StatusSent
 // depois que o envio retorna sucesso — nunca antes (mesma disciplina de
 // SendMessageUseCase, CAP-01).
 //
@@ -78,7 +78,7 @@ func (uc *SendImageUseCase) Execute(ctx context.Context, txtID string, req domai
 	}
 
 	if err := uc.media.EnsureSession(ctx, txtID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "txtID", txtID, "error", err)
+		uc.logger.Warn(ctx, "no noise session", "txtID", txtID, "error", err)
 		return nil, err
 	}
 

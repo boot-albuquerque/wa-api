@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	wamgr "wa-api/pkg/infra/wa-noise/registry"
+	wamgr "wa-api/pkg/infra/noise/registry"
 
-	wanoise "wa-api/internal/wa-noise"
+	"wa-api/internal/noise"
 
 	"github.com/rs/zerolog/log"
 )
@@ -50,7 +50,7 @@ func SetProcessMediaHandler(handler *ProcessMediaHandler) {
 
 func ProcessMedia(
 	userClient UserClient,
-	msg wanoise.DownloadableMessage,
+	msg noise.DownloadableMessage,
 	mimeType string,
 	fallbackExt string,
 	timeout time.Duration,

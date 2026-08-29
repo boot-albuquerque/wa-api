@@ -21,7 +21,7 @@ func NewGetContactsUseCase(cd appport.ContactRoster, logger appport.Logger) *Get
 // Execute retrieves all contacts
 func (uc *GetContactsUseCase) Execute(ctx context.Context, userID string, _ domain.GetContactsRequest) ([]domain.Contact, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

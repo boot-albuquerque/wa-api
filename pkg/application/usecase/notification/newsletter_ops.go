@@ -119,7 +119,7 @@ func NewNewsletterOpsUseCase(nr appport.NewsletterReader, logger appport.Logger)
 // Execute corre a operação pedida.
 func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req NewsletterRequest) (*NewsletterResult, error) {
 	if err := uc.newsletters.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID, "op", string(req.Op))
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID, "op", string(req.Op))
 		return nil, err
 	}
 

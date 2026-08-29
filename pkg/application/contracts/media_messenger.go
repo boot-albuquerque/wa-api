@@ -29,13 +29,13 @@ type MediaMessenger interface {
 	// protocolo não oferece essa operação).
 	SendImage(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 
-	// SendDocument sobe payload.Bytes (com wanoise.MediaDocument, não
+	// SendDocument sobe payload.Bytes (com noise.MediaDocument, não
 	// MediaImage) e envia uma DocumentMessage para target, usando
 	// payload.FileName como metadata pura (CAP-04). Mesma disciplina de
 	// SendImage quanto a upload/envio e a ausência de rollback de upload.
 	SendDocument(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 
-	// SendAudio sobe payload.Bytes (com wanoise.MediaAudio) e envia uma
+	// SendAudio sobe payload.Bytes (com noise.MediaAudio) e envia uma
 	// AudioMessage para target, usando payload.PTT e payload.Seconds como
 	// metadata de protocolo (CAP-05). Mesma disciplina de SendImage/
 	// SendDocument quanto a upload/envio e a ausência de rollback de
@@ -51,7 +51,7 @@ type MediaMessenger interface {
 	// payload de áudio é um tipo à parte.
 	SendAudio(ctx context.Context, txtID string, target domain.JID, payload domain.AudioPayload, replyTo *domain.ReplyContext, id string) (domain.MessageSendResult, error)
 
-	// SendVideo sobe payload.Bytes (com wanoise.MediaVideo, não
+	// SendVideo sobe payload.Bytes (com noise.MediaVideo, não
 	// MediaImage/MediaDocument/MediaAudio) e envia uma VideoMessage para
 	// target, usando payload.Caption como metadata pura (CAP-06). Mesma
 	// disciplina de SendImage/SendDocument/SendAudio quanto a upload/envio
@@ -64,7 +64,7 @@ type MediaMessenger interface {
 	// implementados aqui — sem probing).
 	SendVideo(ctx context.Context, txtID string, target domain.JID, payload domain.MediaPayload, replyTo *domain.ReplyContext, mentionedJID []string, id string) (domain.MessageSendResult, error)
 
-	// SendSticker sobe payload.Bytes (com wanoise.MediaImage — sticker NÃO
+	// SendSticker sobe payload.Bytes (com noise.MediaImage — sticker NÃO
 	// tem MediaType próprio no SDK) e envia uma StickerMessage para target
 	// (CAP-07). payload.Bytes/payload.MimeType TÊM de ser os bytes/MIME já
 	// processados pelo pipeline de sticker (appport.StickerProcessor) — o

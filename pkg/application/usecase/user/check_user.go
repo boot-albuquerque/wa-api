@@ -34,7 +34,7 @@ type CheckUserResult struct {
 // Execute verifica se um usuário está no WhatsApp
 func (uc *CheckUserUseCase) Execute(ctx context.Context, userID string, req domain.CheckUserRequest) ([]CheckUserResult, error) {
 	if err := uc.contacts.EnsureSession(ctx, userID); err != nil {
-		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
+		uc.logger.Warn(ctx, "no noise session", "error", err, "user_id", userID)
 		return nil, err
 	}
 

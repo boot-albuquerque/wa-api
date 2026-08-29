@@ -101,8 +101,8 @@ type AddUserRequest struct {
 	History    int    `json:"history"`
 
 	// Engine is the transport chosen for this session:
-	// domain.EngineWaNoise or domain.EngineWaHeadless. Empty defaults to
-	// domain.EngineWaNoise. Replaces decisão 94's startup-time, env-var
+	// domain.EngineNoise or domain.EngineHeadless. Empty defaults to
+	// domain.EngineNoise. Replaces decisão 94's startup-time, env-var
 	// driven selection — the choice is now per-session and made by the
 	// caller before the session (or its QR code) is created.
 	Engine string `json:"engine"`

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"wa-api/internal/wa-noise/protocol/proto/waE2E"
-	"wa-api/internal/wa-noise/protocol/types"
-	"wa-api/internal/wa-noise/protocol/types/events"
+	"wa-api/internal/noise/protocol/proto/waE2E"
+	"wa-api/internal/noise/protocol/types"
+	"wa-api/internal/noise/protocol/types/events"
 	"wa-api/pkg/infra/db"
 
 	"github.com/jmoiron/sqlx"
