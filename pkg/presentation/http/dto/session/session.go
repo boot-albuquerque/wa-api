@@ -28,12 +28,21 @@ type DisconnectResponse struct {
 	Details string `json:"details"`
 }
 
-// GetQRResponse is the body of `data` for GET /session/qr.
+// GetQRResponse is the body of `data` for GET /session/pair/qr.
 //
 // The key was `QRCode` — the Go field name, PascalCase on the wire. It is
 // `qr_code` now, and the old spelling is gone (hard cutover, no dual key).
+//
+// CodeAgeSeconds (F375/F377): how long, in seconds, THIS EXACT code has
+// been the one this route returns — 0 the moment it changes (or the moment
+// qr_code first becomes non-empty). It is NOT an expiry countdown: neither
+// engine can honestly promise one (HOUSEKEEP F374 measured the SPA's own
+// rotation gap varying 10-60s, server-driven). What a client CAN do with
+// this: distinguish "the same code, camping normally" from "something is
+// stuck" without the API inventing a number it cannot back up.
 type GetQRResponse struct {
-	QRCode string `json:"qr_code"`
+	QRCode         string `json:"qr_code"`
+	CodeAgeSeconds int    `json:"code_age_seconds"`
 }
 
 // LogoutResponse is the body of `data` for POST /session/logout.

@@ -31,8 +31,19 @@ type DisconnectResult struct {
 }
 
 // GetQRResult representa o resultado de obtenção do QR code.
+//
+// CodeAgeSeconds NÃO vem do PairingQRReader/do use case — HOUSEKEEP F375/
+// F377: nem wa_noise nem wa_headless sabem dizer quando o código atual
+// EXPIRA (a rotação é decidida pelo servidor do WhatsApp, com variância
+// medida de 10-60s — F374), então prometer isso seria inventar um número. O
+// que a API PODE dizer com honestidade é POR QUANTO TEMPO já devolveu o
+// MESMO código — puramente descritivo, sem promessa sobre o futuro. Quem
+// preenche este campo é o handler HTTP (o único ponto de vida longa comum
+// aos dois engines — ver GetQRHandler em handler_session.go), não o use
+// case, que é reconstruído a cada chamada.
 type GetQRResult struct {
-	QRCode string
+	QRCode         string
+	CodeAgeSeconds int
 }
 
 // LogoutRequest representa o payload de logout.

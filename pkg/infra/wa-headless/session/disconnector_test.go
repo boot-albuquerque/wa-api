@@ -74,6 +74,65 @@ func TestSessionStatusNaoDetidaNaoSobe(t *testing.T) {
 	}
 }
 
+// TestClassifyIdentity_NuncaPareouEConectadaNaoAutenticada: uma sessão que
+// nunca confirmou identidade nenhuma é o caso normal de "esperando o
+// escaneio" — connected=true, loggedIn=false, e NÃO marca everIdentity.
+func TestClassifyIdentity_NuncaPareouEConectadaNaoAutenticada(t *testing.T) {
+	connected, loggedIn, markSeen := classifyIdentity(false, false)
+	if !connected || loggedIn || markSeen {
+		t.Fatalf("classifyIdentity(everHad=false, present=false) = (%v,%v,%v), quer (true,false,false)",
+			connected, loggedIn, markSeen)
+	}
+}
+
+// TestClassifyIdentity_IdentidadePresenteMarcaEReportaPareada: identidade
+// presente é sempre (true,true), e marca everIdentity — não importa se já
+// tinha sido vista antes.
+func TestClassifyIdentity_IdentidadePresenteMarcaEReportaPareada(t *testing.T) {
+	for _, everHad := range []bool{false, true} {
+		connected, loggedIn, markSeen := classifyIdentity(everHad, true)
+		if !connected || !loggedIn || !markSeen {
+			t.Fatalf("classifyIdentity(everHad=%v, present=true) = (%v,%v,%v), quer (true,true,true)",
+				everHad, connected, loggedIn, markSeen)
+		}
+	}
+}
+
+// TestClassifyIdentity_PareouEDeslogouRemotoReportaDesconectada é o achado
+// da F378: o usuário conectou no wa_headless, desconectou pelo APARELHO
+// (desvincular no celular), e o painel mostrou "conectada, não
+// autenticada" em vez de "desconectada" — o MESMO evento físico que no
+// wa_noise produz "desconectada" (client.IsConnected() cai). MEDIDO ao
+// vivo: a página se recupera sozinha para um QR novo e funcional
+// (GET /session/pair/qr respondeu code_age_seconds=0 imediatamente), então
+// RefreshOwnIdentity falhando (ou devolvendo ausente) é EXATAMENTE a mesma
+// forma que uma sessão nunca pareada — só o histórico (everHad) distingue.
+func TestClassifyIdentity_PareouEDeslogouRemotoReportaDesconectada(t *testing.T) {
+	connected, loggedIn, markSeen := classifyIdentity(true, false)
+	if connected || loggedIn || markSeen {
+		t.Fatalf("classifyIdentity(everHad=true, present=false) = (%v,%v,%v), quer (false,false,false) — "+
+			"F378: sessão que já pareou e perdeu a identidade tem de ser reportada como DESCONECTADA, "+
+			"não como se estivesse ainda esperando o primeiro escaneio",
+			connected, loggedIn, markSeen)
+	}
+}
+
+// NOTA sobre cobertura de SessionStatus (F378): este pacote não tem como
+// simular "identidade presente" na borda pública sem Chrome real — o
+// Evaluator do adapter (`d.sessions.Evaluator`) falha ANTES de alcançar
+// classifyIdentity sempre que `cfgFor` aponta para um binário inexistente
+// (o mesmo caminho de TestSessionStatusDetidaMasIlegivelNaoAdivinha), então
+// um teste que chamasse SessionStatus depois de markIdentitySeen passaria
+// pela MESMA razão que o defeito original passava — não prova nada (é
+// exactamente o "controle negativo que não morde" que ARMADILHAS.md #3
+// cataloga; a primeira versão desta suíte tinha um assim, removido).
+// classifyIdentity — a função pura acima — é onde a decisão realmente mora,
+// e é isso que os três testes acima travam sem precisar de browser. A
+// integração ponta a ponta foi medida ao vivo contra um Chrome real (ver
+// HOUSEKEEP F378: `code_age_seconds=0` num QR novo depois do celular
+// desvincular o aparelho, confirmando que o caminho "identidade ausente"
+// realmente é alcançado nesse cenário).
+
 // TestSessionStatusDetidaMasIlegivelNaoAdivinha: a ADR-0005 D6 separa
 // intenção de estado observado. Uma sessão DETIDA cujo Evaluator não
 // consegue ser lido (aqui, cfgFor aponta para um binário inexistente — o

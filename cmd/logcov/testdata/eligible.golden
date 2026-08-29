@@ -3600,8 +3600,12 @@ pkg/infra/wa-headless/roster.Roster.list	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/roster.Roster.lister	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/session.Disconnector.Disconnect	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/session.Disconnector.EnsureSession	EXCLUDED	X7
-pkg/infra/wa-headless/session.Disconnector.SessionStatus	ELIGIBLE	uncovered:L2(S-consume,disconnector.go:84)
+pkg/infra/wa-headless/session.Disconnector.SessionStatus	ELIGIBLE	covered
+pkg/infra/wa-headless/session.Disconnector.forgetIdentity	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/session.Disconnector.hadIdentity	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/session.Disconnector.markIdentitySeen	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/session.NewDisconnector	EXCLUDED	X1
+pkg/infra/wa-headless/session.classifyIdentity	ELIGIBLE	uncovered:L1
 pkg/infra/wa-noise/adapters/accounttype.Detector.Detect	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/accounttype.Detector.EnsureSession	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/accounttype.NewDetector	EXCLUDED	X5
@@ -4306,7 +4310,7 @@ pkg/presentation/http/handlers.CommunityLinkGroupHandler.ServeHTTP	ELIGIBLE	unco
 pkg/presentation/http/handlers.CommunityUnlinkGroupHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_community.go:148)
 pkg/presentation/http/handlers.ConfigureHmacHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.ConfigureS3Handler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:98);uncovered:L2(S-consume,handler_session.go:120);uncovered:L2(S-http,handler_session.go:126);uncovered:L2(S-consume,handler_session.go:137);uncovered:L2(S-http,handler_session.go:143)
+pkg/presentation/http/handlers.ConnectHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:100);uncovered:L2(S-consume,handler_session.go:122);uncovered:L2(S-http,handler_session.go:128);uncovered:L2(S-consume,handler_session.go:139);uncovered:L2(S-http,handler_session.go:145)
 pkg/presentation/http/handlers.ConnectHandler.WithCheckStartInFlight	EXCLUDED	X1
 pkg/presentation/http/handlers.DeleteHmacConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.DeleteMessageHandler.ServeHTTP	ELIGIBLE	covered
@@ -4330,7 +4334,8 @@ pkg/presentation/http/handlers.GetHealthHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetHistoryHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetHmacConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetPrivacySettingsHandler.ServeHTTP	ELIGIBLE	covered
-pkg/presentation/http/handlers.GetQRHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:213)
+pkg/presentation/http/handlers.GetQRHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:253)
+pkg/presentation/http/handlers.GetQRHandler.trackCodeAge	ELIGIBLE	uncovered:L1
 pkg/presentation/http/handlers.GetS3ConfigHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetStatusHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.GetUserInfoHandler.ServeHTTP	ELIGIBLE	covered
@@ -4427,7 +4432,7 @@ pkg/presentation/http/handlers.NewUpdateGroupRequestParticipantsHandler	EXCLUDED
 pkg/presentation/http/handlers.NewUpdateWebhookHandler	EXCLUDED	X1
 pkg/presentation/http/handlers.NewUserHandlers	EXCLUDED	X1
 pkg/presentation/http/handlers.NewWSHandler	EXCLUDED	X1
-pkg/presentation/http/handlers.PairPhoneHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:291)
+pkg/presentation/http/handlers.PairPhoneHandler.ServeHTTP	ELIGIBLE	uncovered:L2(S-consume,handler_session.go:332)
 pkg/presentation/http/handlers.PinChatHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.PublishStatusAudioHandler.ServeHTTP	ELIGIBLE	covered
 pkg/presentation/http/handlers.PublishStatusImageHandler.ServeHTTP	ELIGIBLE	covered

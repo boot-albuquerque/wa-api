@@ -39195,3 +39195,242 @@ e `go test -race ./pkg/... ./internal/wa-headless/...` — todos verdes.
 **Status**: corrigido nesta sessão.
 
 <!-- f-status: corrigido -->
+
+## F375 — `GET /session/pair/qr` não devolve metadado nenhum de retry/expiração; achado de arquitetura, não corrigido
+
+**Data**: 2026-08-29. **Contexto**: usuário testou `GET /session/pair/qr` na
+prática, para os dois engines, depois da F372-F374, e notou que o body não
+carrega nenhuma informação de temporização — nem "quantos segundos até
+poder tentar de novo", nem qualquer outro detalhe além do código em si.
+
+**Onde**: `pkg/domain/session.go:34` — `GetQRResult struct { QRCode string
+}`. Um único campo. `pkg/presentation/http/dto/session/presenter.go:32-36`
+(`PresentGetQR`) só repassa esse campo pro body HTTP; não há
+`expires_in_seconds`, `retry_after`, nem timestamp nenhum na resposta.
+
+**Por que não é um bug de implementação, e por que não corrigi de graça**:
+qualquer "expira em Xs" que a API inventasse seria **sintético, não
+autoritativo** — a rotação do QR é decidida pelo SERVIDOR do WhatsApp, com
+variância real e medida (F374: gaps de 10s a 60s entre rotações
+automáticas, `TestProbeQRRetryPattern`). Devolver um número fixo prometeria
+uma garantia que a API não tem como cumprir. Ver `internal/wa-headless/
+capabilities/qr/qr.go` — comentário de `StaleRefreshAfter` documenta a
+mesma variância.
+
+**Duas direções de correção, nenhuma trivial, ambas precisam de decisão do
+usuário antes de virar plano**:
+
+1. **Metadado sintético no body** (barato): a API poderia devolver, por
+   exemplo, `stale_after_seconds` (o próprio `qr.StaleRefreshAfter`, hoje
+   90s) como uma ESTIMATIVA explicitamente rotulada como aproximação — não
+   uma promessa de expiração real. Mudança pequena em
+   `GetQRResult`/`PresentGetQR`/`api/openapi/schemas/sessao.yaml`, mas o
+   valor prático é limitado: o cliente já pode simplesmente continuar
+   sondando `GET /session/pair/qr` (o que devui já faz) e reagir à MUDANÇA
+   real do `qr_code`, sem precisar de um timer adivinhado.
+2. **Push real (WS/SSE)** (correto, caro): o servidor empurraria o evento
+   de rotação no exato momento em que acontece, eliminando a adivinhação
+   por completo. Duas ressalvas medidas nesta mesma sessão fazem isso NÃO
+   ser um ajuste pequeno:
+   - O canal WS que existia pro `wa_noise` (evento `qr` com
+     `qrCodeBase64`) foi removido do consumo do devui na F372 justamente
+     por ser "canal com perda" (H145) — reintroduzi-lo como fonte de
+     verdade repetiria o problema que a sondagem contínua resolveu.
+   - `wa_headless` NUNCA teve esse canal — teria que ser desenhado do
+     zero, decidindo quem observa a rotação no lado do Chrome headless e
+     como isso vira um push HTTP (SSE) ou WS pro cliente.
+
+**Correção sugerida**: nenhuma aplicada. Se o usuário priorizar, a rota (1)
+é a que cabe numa sessão só; a rota (2) é trabalho de desenho (merece plano
+próprio, não uma correção incidental).
+
+**Atualização 2026-08-29 (mesmo dia)**: a rota (1) foi aplicada — ver F377
+(`code_age_seconds` em `GET /session/pair/qr`). Não é exatamente o que este
+achado esboçava (`stale_after_seconds` sintético): F377 optou por um campo
+puramente DESCRITIVO sobre o passado ("há quanto tempo já é este código"),
+não uma estimativa rotulada sobre o futuro — mais honesto, e sem precisar
+expor `qr.StaleRefreshAfter` (detalhe interno do `wa_headless`) numa forma
+que sugerisse a mesma garantia para o `wa_noise`, que não tem esse
+mecanismo. **A rota (2), push real por WS/SSE, continua em aberto** — não
+foi tocada.
+
+**Status**: parcialmente corrigido. O gap de "corpo sem detalhe nenhum de
+temporização" foi endereçado (F377); o gap de "cliente tem que adivinhar
+quando sondar de novo, em vez de ser avisado" permanece — é o que só um
+push real resolveria.
+
+<!-- f-status: aberto -->
+
+## F376 — `cmd/openapidoc` gerava nota falsa em toda rota canonizada: "o caminho antigo continua a ser servido"
+
+**Data**: 2026-08-29. **Contexto**: usuário pediu pra atualizar o
+`openapi.yaml` e testar a doc servida ao vivo no Chrome, depois das
+correções F372-F375. Achado ao vivo, não fazia parte do pedido original.
+
+**Onde**: `cmd/openapidoc/main.go:298-303`, função `canonicalNote` —
+template usado para toda operação canonizada, escreve: *"O caminho antigo
+continua a ser servido e não tem data de remoção"*.
+
+**Problema, medido**: essa frase descreve a política ORIGINAL da F269
+(manter os dois caminhos, o antigo `deprecated: true`). Essa política foi
+**revertida em 2026-08-27** para corte limpo (`api/openapi/
+CAMINHOS-CANONICOS.md`, secção "Reversão de 2026-08-27": *"o antigo devolve
+404... está no OpenAPI: sim (canónico) / não (antigo, nunca esteve)"*). O
+template do gerador nunca foi atualizado quando a política mudou — toda
+operação canonizada (78 no total, confirmado por `git diff --stat` após
+regenerar) carregava a alegação falsa. Confirmado ao vivo: `curl
+localhost:8099/session/qr` devolve 404, e a mesma página `/docs` que serve
+esse `openapi.yaml` (via `//go:embed`) dizia o oposto — o padrão exato que
+`docs/PRODUCTION-READINESS.md`/`ARMADILHAS.md` #27 já cataloga: doc e
+comportamento divergindo sem nenhum gate acusar.
+
+**Correção**: `canonicalNote` reescrita para dizer *"não responde mais
+(404) desde 2026-08-27 — corte limpo, não período de transição"*.
+Regenerado `pkg/presentation/http/apidocs/openapi.yaml` via `go run
+./cmd/openapidoc` — 78 operações afetadas, diff só no texto da nota
+(conferido). Verificado ao vivo: rebuild + restart do servidor de teste,
+`curl localhost:8099/docs/openapi.yaml | cmp - pkg/.../openapi.yaml` (o
+`cmp` obrigatório do CLAUDE.md) e conferência visual no Chrome em
+`GET /session/pair/qr` — o texto servido bate com a correção.
+
+**Status**: corrigido nesta sessão. Sem teste de unidade dedicado (não
+havia um travando o texto antes, e não há README de convenção pedindo
+um); a evidência é a medição ao vivo acima, e o próprio `cmd/openapidoc`
+falharia a gerar (`applyCanonicalPaths` recusa rota sem operação
+documentada) se a tabela `caminhos.tsv` e os paths divergissem de novo.
+
+<!-- f-status: corrigido -->
+
+## F377 — `GET /session/pair/qr` não carregava nenhum detalhe de temporização no body; adicionado `code_age_seconds`
+
+**Data**: 2026-08-29. **Contexto**: pedido explícito do usuário — "melhore
+o app para isso retorne mais info no body e atualize o openapi com essas
+novas informações", depois de reportar (F375) que testar a rota na prática
+mostrou um body só com `qr_code`, sem nada que ajudasse o cliente a decidir
+se um código repetido era normal ou sintoma de algo travado.
+
+**Decisão de desenho**: NÃO adicionar um campo de "expira em Xs" — F375 já
+tinha registado por que isso seria inventar um número (rotação decidida
+pelo servidor do WhatsApp, variância medida de 10-60s, F374). O que a API
+PODE prometer com honestidade é o PASSADO, não o futuro: por quanto tempo
+o código atual — o valor exato que `qr_code` está devolvendo agora — já é
+o mesmo.
+
+**O que mudou**:
+- `pkg/domain/session.go`: `GetQRResult` ganha `CodeAgeSeconds int`.
+- `pkg/presentation/http/dto/session/session.go`: `GetQRResponse` ganha
+  `code_age_seconds` (JSON), documentado como NÃO sendo contagem
+  regressiva.
+- `pkg/presentation/http/handlers/handler_session.go`: `GetQRHandler`
+  (único objeto comum aos dois engines que vive além de uma chamada HTTP —
+  o use case e o `PairingQRReader` que o registry resolve são
+  reconstruídos a cada pedido, ver `NewGetQRHandler`) ganha `since
+  map[string]codeAge` e `trackCodeAge`, chamado depois do use case
+  devolver o código.
+- `api/openapi/schemas/sessao.yaml` e `api/openapi/paths/sessao.yaml`:
+  campo documentado, exemplos atualizados, e a descrição da rota corrigida
+  para citar `GET /session/pair/qr` (o caminho antigo `GET /session/qr`
+  ainda aparecia na prosa de `pairphone`, achado incidental da mesma
+  revisão — ver F376 pro achado irmão sobre a mesma família de rotas).
+
+**Testes** (controle negativo EXECUTADO): 4 testes novos em
+`handler_session_test.go` — zero na primeira aparição, acumula pro mesmo
+código, reinicia numa rotação genuína, zera e esquece quando o código fica
+vazio. Controle negativo: fiz `trackCodeAge` sempre re-marcar `since =
+time.Now()` (ignorando se o código era o mesmo); `TestGetQR_CodeAgeSeconds_
+AcumulaParaOMesmoCodigo` falhou (`code_age_seconds = 0, want >= 5`);
+revertido, voltou a passar.
+
+**Verificado ao vivo**: `curl` sequencial contra sessão `wa_noise` real —
+primeira leitura `code_age_seconds: 0`, segunda (3s depois, mesmo QR)
+`code_age_seconds: 7` (bate com o tempo real decorrido desde o `connect`).
+Confirmado no Chrome que a doc de `/session/pair/qr` explica o campo
+corretamente (o `Try it out` do Swagger não completou — a spec tem
+`http://localhost:8080` fixo em `Servers`, desalinhado da porta real do
+servidor de teste, 8099; achado pré-existente e fora do escopo desta
+entrada, não investigado).
+
+**Status**: corrigido nesta sessão. `go build`, `go vet`, `gofmt`, `go test
+-race ./pkg/...` e `go test ./cmd/logcov/...` (baseline/golden
+regenerados, `min_eligible` 1064→1065) — todos verdes.
+
+<!-- f-status: corrigido -->
+
+## F378 — desconectar pelo APARELHO deixava `wa_headless` em "conectada, não autenticada" em vez de "desconectada"
+
+**Data**: 2026-08-29. **Contexto**: usuário reportou — "conectei no
+'headless' em seguida desconectei pelo app no celular, e o mesmo foi para
+'conectada, não autenticada' em vez de 'desconectada'".
+
+**Reprodução ao vivo, sem pedir nada extra**: a sessão do relato do usuário
+ainda estava viva no servidor de teste. Via devui (Claude in Chrome),
+confirmei visualmente o cartão mostrando "conectada, não autenticada".
+Recuperei o token do `localStorage` (sem expor o valor — só usei-o num
+`fetch` dentro da própria página) e medi:
+- `GET /session/status`: `{"connected": true, "logged_in": false, "jid": ""}`.
+- `GET /session/pair/qr`: devolveu um **QR novo e funcional**,
+  `code_age_seconds: 0` — a página se recuperou sozinha para uma tela de
+  pareamento pronta, sem eu ter clicado em nada.
+
+**Onde**: `pkg/infra/wa-headless/session/disconnector.go`,
+`Disconnector.SessionStatus`. Quando `waheadless.RefreshOwnIdentity` falha
+(inclui `owner.ErrNoOwner` — página mostrando QR, sem dono), o código
+devolvia sempre `(true, false)`, sem distinguir duas causas com o MESMO
+sintoma na página:
+1. a sessão nunca pareou (tela de QR inicial);
+2. a sessão pareou, e o WhatsApp encerrou-a remotamente (o celular
+   desvinculou o aparelho) — a SPA volta sozinha para a MESMA tela de QR.
+
+**Comparação com `wa_noise`**: `pkg/infra/wa-noise/runtime/session/guard.go`
+usa `client.IsConnected()` — o estado real do socket do protocolo, que o
+whatsmeow derruba sozinho quando o celular desvincula o aparelho. O
+**mesmo evento físico** (desvincular pelo celular) produzia **estados
+diferentes** nos dois engines: `wa_noise` → "desconectada"; `wa_headless` →
+"conectada, não autenticada". O usuário escolheu igualar ao `wa_noise`.
+
+**Correção**: `Disconnector` ganha `everIdentity map[string]bool` — lembra,
+por txtID, se ESTE processo já observou uma identidade presente alguma vez.
+A decisão virou uma função pura testável, `classifyIdentity(everHad,
+present bool) (connected, loggedIn, markSeen bool)`:
+- identidade presente → `(true, true)`, marca `everIdentity`;
+- identidade ausente e **já tinha pareado antes** → `(false, false)` —
+  mesma forma que `wa_noise` reporta para o mesmo gatilho;
+- identidade ausente e **nunca pareou** → `(true, false)` — o
+  comportamento antigo, preservado para o caso legítimo.
+
+`everIdentity[txtID]` é esquecido quando a sessão deixa de estar detida
+(`!Holds`), para uma tentativa de pareamento seguinte não herdar o
+histórico de uma janela anterior sem relação nenhuma — mesmo padrão de
+`forgetCode`/`forgetIdentity` já usado em F374/F377.
+
+**Limite assumido, documentado no código**: o relógio é EM MEMÓRIA, por
+processo — um restart do servidor esquece que uma sessão já pareou, e a
+primeira leitura pós-restart de uma sessão genuinely-deslogada voltaria a
+mostrar "conectada, não autenticada" uma vez, até a chamada seguinte. Mesma
+limitação que F374/F377 já aceitam pela mesma razão (nenhum outro objeto
+aqui sobrevive a um restart para lembrar por conta própria).
+
+**Testes** (controle negativo EXECUTADO): 3 testes da tabela de decisão
+pura (`classifyIdentity`) — nunca pareou, identidade presente (com
+`everHad` `true` e `false`), e pareou-depois-perdeu. Controle negativo:
+fiz o ramo `everHad` ser ignorado (sempre `(true, false, false)` quando
+ausente); `TestClassifyIdentity_PareouEDeslogouRemotoReportaDesconectada`
+falhou com a mensagem exata do achado; revertido, voltou a passar.
+
+Uma quarta tentativa de teste de integração (via `SessionStatus` pela
+borda pública, sem Chrome real) foi **descartada**: sem browser, o
+`Evaluator` falha ANTES de alcançar `classifyIdentity`, então esse teste
+passaria pela MESMA razão que o defeito original passava — não provava
+nada (ARMADILHAS #3). Documentado no arquivo de teste por que a integração
+ponta a ponta só é provável pela medição ao vivo acima, não por um teste de
+unidade.
+
+**Gates**: `go build`, `go vet`, `gofmt`, `go test -race ./pkg/...` e
+`go test ./cmd/logcov/...` (baseline/golden regenerados: `min_eligible`
+1065→1069, `min_func_coverage` 604→601) — todos verdes. `go run
+./cmd/openapidoc` não produziu diff — o contrato HTTP não mudou, só o
+valor que os dois campos já documentados carregam.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->

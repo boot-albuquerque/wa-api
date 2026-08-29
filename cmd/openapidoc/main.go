@@ -295,11 +295,23 @@ const pathTableColumns = 4
 // The note stays even though the old operation is gone from the document: a
 // reader arriving from an existing integration searches for the name they
 // know, and finding it here is what tells them where it went.
+//
+// CORRECTED 2026-08-29 (found live, via /docs, while testing F373/F374): this
+// used to say the old path "continua a ser servido e não tem data de
+// remoção" — true under the ORIGINAL F269 policy, false since the
+// 2026-08-27 reversal to a clean cutover (api/openapi/CAMINHOS-CANONICOS.md:
+// "está no OpenAPI: sim (canónico) / não (antigo, nunca esteve)... é
+// servido? sim / não — 404... tempo de vida: permanente / terminou em
+// 2026-08-27"). The generator template was never updated when the policy
+// changed, so every canonicalized operation's doc carried a false claim —
+// confirmed live: GET /session/qr answers 404, and the served /docs page
+// still said otherwise. HOUSEKEEP F376.
 func canonicalNote(caminhoAntigo, metodo string) string {
 	return "> **Substitui `" + strings.ToUpper(metodo) + " " + caminhoAntigo +
-		"`.** O caminho antigo **continua a ser servido** e não tem data de " +
-		"remoção, mas deixou de ser documentado: uma operação, um nome. A " +
-		"tabela de equivalência completa está em `docs/ENDPOINTS.md`.\n\n"
+		"`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 " +
+		"— corte limpo, não período de transição. Fica citado aqui só para " +
+		"quem chega de uma integração antiga e procura o nome que conhecia. " +
+		"A tabela de equivalência completa está em `docs/ENDPOINTS.md`.\n\n"
 }
 
 // pathParameters builds the OpenAPI parameter list for a templated path.

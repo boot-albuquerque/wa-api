@@ -227,13 +227,19 @@
     tags: [Sessões]
     summary: Ler o QR code de emparelhamento
     description: |
-      Devolve a imagem do QR code guardada para esta sessão, em data URI.
+      Devolve a imagem do QR code guardada para esta sessão, em data URI, e
+      `code_age_seconds` — há quanto tempo esse MESMO código é o que esta
+      rota devolve (`0` quando muda). Não é um prazo de expiração: nem
+      `wa_noise` nem `wa_headless` sabem prometer quando o servidor do
+      WhatsApp vai rodar o código (variância medida de 10-60s, HOUSEKEEP
+      F374/F375) — é só o quanto já passou, para o cliente distinguir
+      rotação normal de código travado sem a API inventar um prazo.
 
       **Vazio é comportamento normal, não defeito.** O valor só existe
       durante a janela de emparelhamento: é gravado a cada código novo que o
       WhatsApp emite e limpo quando a janela expira. Numa sessão já
       autenticada, ou numa que ainda não chamou `GET /session/connect`, a
-      resposta é `200` com `{"qr_code": ""}`.
+      resposta é `200` com `{"qr_code": "", "code_age_seconds": 0}`.
 
       **Como usar**: chame `GET /session/connect` primeiro e sondar esta rota
       até o campo vir preenchido. O código gira sozinho — leia sempre o mais
@@ -252,7 +258,7 @@
       '200':
         description: |
           Valor actual da coluna de QR. Medido em 2026-08-26 numa sessão já
-          autenticada: `{"qr_code": ""}`.
+          autenticada: `{"qr_code": "", "code_age_seconds": 0}`.
         content:
           application/json:
             schema:
@@ -266,6 +272,7 @@
               code: 200
               data:
                 qr_code: ''
+                code_age_seconds: 0
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -293,7 +300,7 @@
       1. `POST /admin/users` cria a sessão e devolve o token;
       2. `GET /session/connect` com esse token;
       3. `POST /session/pairphone` com o número — esta rota — **ou**
-         `GET /session/qr` para o caminho por imagem;
+         `GET /session/pair/qr` para o caminho por imagem;
       4. digitar o `linking_code` no telemóvel;
       5. `GET /session/status` confirma com `logged_in: true`.
 

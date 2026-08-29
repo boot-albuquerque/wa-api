@@ -589,21 +589,53 @@ components:
       type: object
     CodigoQR:
       description: |
-        Resposta de `GET /session/qr`. Medida no servidor vivo em 2026-08-26,
-        numa sessão já autenticada: `{"qr_code": ""}`.
+        Resposta de `GET /session/pair/qr` (canónico desde F269; `GET
+        /session/qr` foi cortado em 2026-08-27 e não responde mais — ver
+        `docs/ENDPOINTS.md`). Medida no servidor vivo em 2026-08-26, numa sessão
+        já autenticada: `{"qr_code": "", "code_age_seconds": 0}`.
       properties:
+        code_age_seconds:
+          description: |
+            Há quantos segundos ESTE MESMO código (o valor exato de `qr_code`,
+            byte a byte) é o que esta rota devolve — `0` no instante em que
+            `qr_code` muda (rotação genuína) ou fica vazio.
+
+            **NÃO é uma contagem regressiva de expiração.** HOUSEKEEP F375: nem
+            `wa_noise` nem `wa_headless` conseguem prometer honestamente quando
+            o código atual vai expirar — a rotação é decidida pelo servidor do
+            WhatsApp, com variância MEDIDA de 10 a 60 segundos entre rotações
+            automáticas (F374, `TestProbeQRRetryPattern`). Este campo não
+            inventa esse número: é puramente descritivo, sobre o PASSADO
+            ("há quanto tempo já é este código"), não uma promessa sobre o
+            futuro.
+
+            **Como usar**: um cliente que sonda esta rota repetidamente pode
+            distinguir "o mesmo código de sempre, rotação em curso normalmente"
+            (valor crescendo devagar, `qr_code` igual) de "parece travado" sem a
+            API adivinhar um prazo que não tem como cumprir.
+
+            **Sempre presente, nunca ausente e nunca `null`.** Zero quando
+            `qr_code` é vazio (nada para medir a idade).
+          example: 0
+          nullable: false
+          type: integer
         qr_code:
           description: |
-            Imagem do QR code em data URI (`data:image/png;base64,…`), lida da
-            coluna `users.qrcode`.
+            Imagem do QR code em data URI (`data:image/png;base64,…`).
+
+            **A mesma forma para os dois engines** (HOUSEKEEP F373): `wa_noise`
+            lê a imagem já gravada em `users.qrcode` pelo orquestrador a cada
+            evento `QR` (`orchestrator.go`); `wa_headless` lê a string crua que a
+            página produz e a API a codifica em PNG no único ponto por onde os
+            dois passam (`GetQRUseCase`, via `pkg/qrimage`). Antes da F373 os
+            dois devolviam formas diferentes no mesmo campo — corrigido, não é
+            mais o caso.
 
             **Sempre presente, nunca ausente e nunca `null`.** Sem `omitempty` na
-            struct (`domain/session.go:29`), e o valor zero de `string` é `""`.
+            struct (`domain/session.go`), e o valor zero de `string` é `""`.
 
-            **Vazio é informação, não defeito.** A coluna só tem valor durante a
-            janela de emparelhamento: o orquestrador grava a imagem a cada evento
-            `QR` (`orchestrator.go:537`) e limpa-a no timeout
-            (`orchestrator.go:552`).
+            **Vazio é informação, não defeito.** Só existe valor durante a janela
+            de emparelhamento.
 
             | estado | significa |
             |---|---|
@@ -617,6 +649,7 @@ components:
           type: string
       required:
         - qr_code
+        - code_age_seconds
       type: object
     ConfiguracaoHmacLida:
       description: |
@@ -12362,7 +12395,7 @@ paths:
   /chats/archive:
     post:
       description: |
-        > **Substitui `POST /chat/archive`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/archive`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Move a conversa para a lista de arquivadas, ou tira-a de lá.
 
@@ -12449,7 +12482,7 @@ paths:
   /chats/delete/message:
     post:
       description: |
-        > **Substitui `POST /chat/delete/message`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/delete/message`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Revoga uma mensagem própria: ela desaparece para todos os
         participantes, substituída pelo aviso do cliente.
@@ -12667,7 +12700,7 @@ paths:
   /chats/ephemeral:
     post:
       description: |
-        > **Substitui `POST /chat/ephemeral`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/ephemeral`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Liga, desliga ou muda o prazo ao fim do qual as mensagens desta
         conversa desaparecem sozinhas.
@@ -12741,7 +12774,7 @@ paths:
   /chats/ephemeral/default:
     post:
       description: |
-        > **Substitui `POST /chat/ephemeral/default`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/ephemeral/default`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Define o prazo de desaparecimento que passa a valer para as conversas
         NOVAS desta conta.
@@ -12811,7 +12844,7 @@ paths:
   /chats/history:
     get:
       description: |
-        > **Substitui `GET /chat/history`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /chat/history`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve as mensagens já gravadas de uma conversa, da mais recente para
         a mais antiga. É leitura do banco LOCAL, não do WhatsApp: responde com
@@ -12953,7 +12986,7 @@ paths:
   /chats/list:
     get:
       description: |
-        > **Substitui `GET /chat/list`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /chat/list`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve uma página da lista de conversas, ordenada da mais recente para
         a mais antiga. Junta três fontes que sozinhas não respondem "com quem
@@ -13043,7 +13076,7 @@ paths:
   /chats/mute:
     post:
       description: |
-        > **Substitui `POST /chat/mute`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/mute`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Silencia as notificações de uma conversa por 8 horas, por 1 semana ou
         para sempre.
@@ -13157,7 +13190,7 @@ paths:
   /chats/pin:
     post:
       description: |
-        > **Substitui `POST /chat/pin`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/pin`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Fixa a CONVERSA no topo da lista, ou tira-a de lá.
 
@@ -13240,7 +13273,7 @@ paths:
   /chats/presence:
     post:
       description: |
-        > **Substitui `POST /chat/presence`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/presence`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Mostra ao outro lado que se está a escrever ou a gravar áudio
         (`state: composing` com `media: audio`).
@@ -13324,7 +13357,7 @@ paths:
   /chats/react:
     post:
       description: |
-        > **Substitui `POST /chat/react`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/react`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Coloca um emoji de reação numa mensagem, ou retira o que já lá está.
 
@@ -13401,7 +13434,7 @@ paths:
   /chats/request-unavailable-message:
     post:
       description: |
-        > **Substitui `POST /chat/request-unavailable-message`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/request-unavailable-message`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Pede ao dispositivo que escreveu a mensagem que a envie outra vez,
         cifrada para esta sessão.
@@ -13497,7 +13530,7 @@ paths:
   /chats/send/audio:
     post:
       description: |
-        > **Substitui `POST /chat/send/audio`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/audio`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia áudio, como mensagem de voz (a bolha com a onda) ou como ficheiro
         de áudio, conforme `ptt`.
@@ -13633,7 +13666,7 @@ paths:
   /chats/send/buttons:
     post:
       description: |
-        > **Substitui `POST /chat/send/buttons`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/buttons`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia uma mensagem interativa de fluxo nativo, com corpo, rodapé, imagem
         de cabeçalho opcional e uma lista de botões.
@@ -13752,7 +13785,7 @@ paths:
   /chats/send/carousel:
     post:
       description: |
-        > **Substitui `POST /chat/send/carousel`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/carousel`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia vários cartões que deslizam na horizontal, cada um com a sua
         imagem, texto e botões — no wire, cada cartão é uma mensagem de botões
@@ -13872,7 +13905,7 @@ paths:
   /chats/send/contact:
     post:
       description: |
-        > **Substitui `POST /chat/send/contact`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/contact`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia um contacto em formato vCard, que o cliente desenha como cartão com
         botão de guardar.
@@ -13977,7 +14010,7 @@ paths:
   /chats/send/document:
     post:
       description: |
-        > **Substitui `POST /chat/send/document`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/document`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia um ficheiro como anexo, com o nome com que ele deve aparecer no
         cliente.
@@ -14104,7 +14137,7 @@ paths:
   /chats/send/edit:
     post:
       description: |
-        > **Substitui `POST /chat/send/edit`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/edit`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Substitui o texto de uma mensagem que a própria conta enviou. O cliente do
         destinatário desenha a marca de "editada".
@@ -14215,7 +14248,7 @@ paths:
   /chats/send/forward:
     post:
       description: |
-        > **Substitui `POST /chat/send/forward`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/forward`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Encaminha uma mensagem, marcada como encaminhada no cliente. A rota tem
         **duas formas**, e é a presença de `message_id` que escolhe qual delas
@@ -14357,7 +14390,7 @@ paths:
   /chats/send/image:
     post:
       description: |
-        > **Substitui `POST /chat/send/image`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/image`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia uma imagem, com legenda opcional. Os bytes vêm num de dois
         transportes: URI de dados no próprio pedido, ou URL http(s) que o
@@ -14494,7 +14527,7 @@ paths:
   /chats/send/list:
     post:
       description: |
-        > **Substitui `POST /chat/send/list`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/list`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia uma mensagem com um botão que abre uma lista de opções agrupadas em
         secções.
@@ -14616,7 +14649,7 @@ paths:
   /chats/send/location:
     post:
       description: |
-        > **Substitui `POST /chat/send/location`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/location`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia um ponto no mapa, com rótulo opcional. Não há upload nem busca
         externa — só metadata de protocolo.
@@ -14718,7 +14751,7 @@ paths:
   /chats/send/poll:
     post:
       description: |
-        > **Substitui `POST /chat/send/poll`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/poll`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Cria uma enquete de escolha ÚNICA na conversa. Para votar numa enquete que
         já existe, use `/chat/send/pollvote`.
@@ -14825,7 +14858,7 @@ paths:
   /chats/send/sticker:
     post:
       description: |
-        > **Substitui `POST /chat/send/sticker`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/sticker`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia um autocolante.
 
@@ -14971,7 +15004,7 @@ paths:
   /chats/send/template:
     post:
       description: |
-        > **Substitui `POST /chat/send/template`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/template`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia um modelo hidratado: corpo, rodapé e até quatro botões de modelo.
         É o formato ANTIGO de mensagem com botões, e tem vocabulário próprio.
@@ -15090,7 +15123,7 @@ paths:
   /chats/send/text:
     post:
       description: |
-        > **Substitui `POST /chat/send/text`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/text`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia texto simples para um contacto, grupo ou canal, opcionalmente com
         pré-visualização de link, citação e menções.
@@ -15203,7 +15236,7 @@ paths:
   /chats/send/video:
     post:
       description: |
-        > **Substitui `POST /chat/send/video`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /chat/send/video`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Envia um vídeo, com legenda opcional. Mesmos dois transportes da imagem:
         URI de dados ou URL http(s) buscada pelo servidor.
@@ -15331,7 +15364,7 @@ paths:
   /communities/{community_jid}/participants:
     get:
       description: |
-        > **Substitui `POST /community/participants`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /community/participants`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve os participantes de **todos** os grupos ligados à comunidade,
         reunidos numa lista só.
@@ -15405,7 +15438,7 @@ paths:
   /communities/{community_jid}/subgroups:
     get:
       description: |
-        > **Substitui `POST /community/subgroups`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /community/subgroups`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Lista os grupos ligados a uma comunidade.
 
@@ -15487,7 +15520,7 @@ paths:
   /communities/{community_jid}/subgroups/{group_jid}:
     delete:
       description: |
-        > **Substitui `POST /community/unlink`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /community/unlink`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Retira um grupo da comunidade. O grupo continua a existir — deixa apenas
         de ser sub-grupo. Medido a 2026-08-26, com a contagem de sub-grupos a
@@ -15570,7 +15603,7 @@ paths:
         - Comunidades
     put:
       description: |
-        > **Substitui `POST /community/link`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /community/link`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Torna um grupo existente sub-grupo de uma comunidade. Medido a
         2026-08-26: o sub-grupo passa a aparecer em
@@ -16015,7 +16048,7 @@ paths:
   /groups/{group_jid}/join-requests:
     get:
       description: |
-        > **Substitui `GET /group/requestparticipants`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /group/requestparticipants`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve quem pediu para entrar no grupo e ainda espera decisão. Só tem
         conteúdo em grupos com `IsJoinApprovalRequired` verdadeiro — nos outros
@@ -16126,7 +16159,7 @@ paths:
         - Grupos
     post:
       description: |
-        > **Substitui `POST /group/updaterequestparticipants`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/updaterequestparticipants`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Decide os pedidos pendentes listados por
         `GET /group/requestparticipants`. É a contrapartida de
@@ -16405,7 +16438,7 @@ paths:
   /groups/{group_jid}/participants:
     post:
       description: |
-        > **Substitui `POST /group/updateparticipants`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/updateparticipants`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Adiciona ou remove membros, vários de uma vez.
 
@@ -16549,7 +16582,7 @@ paths:
   /groups/{group_jid}/photo:
     delete:
       description: |
-        > **Substitui `POST /group/photo/remove`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/photo/remove`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Tira a foto do grupo, deixando-o sem imagem. É a mesma operação de
         `POST /group/photo` com conteúdo nulo
@@ -16618,7 +16651,7 @@ paths:
         - Grupos
     put:
       description: |
-        > **Substitui `POST /group/photo`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/photo`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Substitui a foto do grupo pela imagem enviada.
 
@@ -16723,7 +16756,7 @@ paths:
   /groups/{group_jid}/settings/join-approval:
     put:
       description: |
-        > **Substitui `POST /group/joinapprovalmode`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/joinapprovalmode`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Liga ou desliga a exigência de aprovação. Com ela ligada, quem segue o
         link de convite fica em espera, e passa a aparecer em
@@ -16889,7 +16922,7 @@ paths:
   /groups/create:
     post:
       description: |
-        > **Substitui `POST /group/create`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/create`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Cria um grupo com os participantes indicados. A MESMA rota cria as três
         coisas, e o que as distingue são dois campos opcionais:
@@ -17135,7 +17168,7 @@ paths:
   /groups/join:
     post:
       description: |
-        > **Substitui `POST /group/join`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/join`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Faz a conta entrar no grupo por trás de um convite.
 
@@ -17220,7 +17253,7 @@ paths:
   /groups/leave:
     post:
       description: |
-        > **Substitui `POST /group/leave`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/leave`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Faz a conta sair do grupo. **É irreversível pela própria conta**: não
         há rota que a reponha, e voltar exige um convite novo ou que um
@@ -17290,7 +17323,7 @@ paths:
   /groups/list:
     post:
       description: |
-        > **Substitui `POST /group/list`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /group/list`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve todos os grupos de que a conta participa, cada um com os mesmos
         metadados que `GET /groups/{group_jid}` traz.
@@ -17866,7 +17899,7 @@ paths:
   /messages/star:
     post:
       description: |
-        > **Substitui `POST /message/star`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /message/star`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Marca uma mensagem como favorita, ou retira a marca.
 
@@ -17968,7 +18001,7 @@ paths:
   /newsletters/admin-invite:
     post:
       description: |
-        > **Substitui `POST /newsletter/admin-invite`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/admin-invite`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Cria um convite para que outro utilizador se torne **administrador** do
         canal.
@@ -18049,7 +18082,7 @@ paths:
   /newsletters/admin-invite/accept:
     post:
       description: |
-        > **Substitui `POST /newsletter/admin-invite/accept`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/admin-invite/accept`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Aceita, **na sessão convidada**, um convite criado por
         `POST /newsletter/admin-invite`. É esta chamada que transforma o
@@ -18114,7 +18147,7 @@ paths:
   /newsletters/admin-invite/revoke:
     post:
       description: |
-        > **Substitui `POST /newsletter/admin-invite/revoke`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/admin-invite/revoke`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Cancela um convite de administrador que ainda não foi aceite.
 
@@ -18177,7 +18210,7 @@ paths:
   /newsletters/change-owner:
     post:
       description: |
-        > **Substitui `POST /newsletter/change-owner`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/change-owner`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Transfere a posse do canal para outro utilizador. Medido a 2026-08-26: o
         alvo passa a `role: owner` e **quem chamava, o dono anterior, cai a
@@ -18262,7 +18295,7 @@ paths:
   /newsletters/create:
     post:
       description: |
-        > **Substitui `POST /newsletter/create`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/create`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Cria um canal de difusão novo, do qual a sessão que chama fica **dono**
         (`viewer.role: owner`).
@@ -18369,7 +18402,7 @@ paths:
   /newsletters/delete:
     delete:
       description: |
-        > **Substitui `DELETE /newsletter/delete`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `DELETE /newsletter/delete`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         **Destrói o canal e todo o seu conteúdo. Não há como desfazer.**
 
@@ -18442,7 +18475,7 @@ paths:
   /newsletters/demote:
     post:
       description: |
-        > **Substitui `POST /newsletter/demote`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/demote`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Tira o papel de administrador a um utilizador, que passa a
         `role: subscriber` — medido a 2026-08-26 (F233).
@@ -18521,7 +18554,7 @@ paths:
   /newsletters/follow:
     post:
       description: |
-        > **Substitui `POST /newsletter/follow`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/follow`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Passa a seguir o canal indicado, que a partir daí aparece em
         `GET /newsletter/list`.
@@ -18585,7 +18618,7 @@ paths:
   /newsletters/info:
     post:
       description: |
-        > **Substitui `POST /newsletter/info`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/info`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve o retrato de um canal: nome, descrição, código de convite,
         contagem de seguidores, estado e — o mais útil — **o papel de quem
@@ -18695,7 +18728,7 @@ paths:
   /newsletters/info-invite:
     post:
       description: |
-        > **Substitui `POST /newsletter/info-invite`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/info-invite`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         O mesmo retrato de `POST /newsletter/info`, mas a partir do **código do
         link público** em vez do JID.
@@ -18781,7 +18814,7 @@ paths:
   /newsletters/list:
     get:
       description: |
-        > **Substitui `GET /newsletter/list`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /newsletter/list`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Lista todos os canais seguidos pela sessão, cada um com os mesmos
         metadados de `POST /newsletter/info`.
@@ -18851,7 +18884,7 @@ paths:
   /newsletters/mark-viewed:
     post:
       description: |
-        > **Substitui `POST /newsletter/mark-viewed`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/mark-viewed`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Informa o WhatsApp de que as mensagens indicadas foram vistas, o que
         alimenta as contagens de visualização do canal.
@@ -18938,7 +18971,7 @@ paths:
   /newsletters/messages:
     post:
       description: |
-        > **Substitui `POST /newsletter/messages`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/messages`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve as publicações do canal, da mais recente para trás.
 
@@ -19052,7 +19085,7 @@ paths:
   /newsletters/mute:
     post:
       description: |
-        > **Substitui `POST /newsletter/mute`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/mute`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Liga ou desliga o silenciamento do canal para esta sessão, conforme o
         campo `mute`.
@@ -19115,7 +19148,7 @@ paths:
         - Canais
   /newsletters/react:
     post:
-      description: "> **Substitui `POST /newsletter/react`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.\n\nPõe — ou tira — uma reação numa publicação do canal.\n\n**Como se REMOVE a reação**: enviando `reaction` vazio. É por isso que\nesse campo não é obrigatório: exigi-lo tornaria impossível desfazer\n(`newsletter_ops.go:234`).\n\n**Regras**: `jid` e `server_id` são obrigatórios. `server_id` a zero é\nrecusado com `400 missing_server_id`. `data` traz `{\"status\": \"sent\"}` em sucesso.\n\n**CORRECÇÃO a 2026-08-26**: esta descrição dizia que \"o efeito não é\nconfirmável por esta API\". **É.** `POST /newsletters/messages` devolve\n`reactions` por publicação, e ele traz valores reais — o exemplo\npublicado nesta mesma documentação é `{'\U0001F44D': 3, '\U0001F602': 58}`. O efeito\nconfirma-se lendo o mesmo `server_id` **antes e depois**, e\nfechando com a REMOÇÃO (`reaction` vazio) para ver o contador voltar ao\nvalor inicial: sem esse terceiro passo, um incremento pode ser de outra\npessoa.\n\nDuas armadilhas ao comparar: `count` é obrigatório de facto nas\nleituras, e **as chaves de emoji não são normalizadas** (`\"❤\"` e `\"❤️\"`\nsão entradas separadas). Ver `OBSERVADORES-AMBAR.md` §5.\n\n**Autenticação**: token de sessão.\n"
+      description: "> **Substitui `POST /newsletter/react`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.\n\nPõe — ou tira — uma reação numa publicação do canal.\n\n**Como se REMOVE a reação**: enviando `reaction` vazio. É por isso que\nesse campo não é obrigatório: exigi-lo tornaria impossível desfazer\n(`newsletter_ops.go:234`).\n\n**Regras**: `jid` e `server_id` são obrigatórios. `server_id` a zero é\nrecusado com `400 missing_server_id`. `data` traz `{\"status\": \"sent\"}` em sucesso.\n\n**CORRECÇÃO a 2026-08-26**: esta descrição dizia que \"o efeito não é\nconfirmável por esta API\". **É.** `POST /newsletters/messages` devolve\n`reactions` por publicação, e ele traz valores reais — o exemplo\npublicado nesta mesma documentação é `{'\U0001F44D': 3, '\U0001F602': 58}`. O efeito\nconfirma-se lendo o mesmo `server_id` **antes e depois**, e\nfechando com a REMOÇÃO (`reaction` vazio) para ver o contador voltar ao\nvalor inicial: sem esse terceiro passo, um incremento pode ser de outra\npessoa.\n\nDuas armadilhas ao comparar: `count` é obrigatório de facto nas\nleituras, e **as chaves de emoji não são normalizadas** (`\"❤\"` e `\"❤️\"`\nsão entradas separadas). Ver `OBSERVADORES-AMBAR.md` §5.\n\n**Autenticação**: token de sessão.\n"
       requestBody:
         content:
           application/json:
@@ -19167,7 +19200,7 @@ paths:
   /newsletters/subscribe:
     post:
       description: |
-        > **Substitui `POST /newsletter/subscribe`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/subscribe`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Liga as atualizações ao vivo do canal, para que as publicações novas
         cheguem por eventos em vez de sondagem.
@@ -19233,7 +19266,7 @@ paths:
   /newsletters/unfollow:
     post:
       description: |
-        > **Substitui `POST /newsletter/unfollow`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/unfollow`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Deixa de seguir o canal. Ele sai de `GET /newsletter/list`.
 
@@ -19310,7 +19343,7 @@ paths:
   /newsletters/updates:
     post:
       description: |
-        > **Substitui `POST /newsletter/updates`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /newsletter/updates`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve as mensagens de um canal com os seus contadores (vistas,
         reações) — a mesma forma de `POST /newsletter/messages`, com um
@@ -20533,7 +20566,7 @@ paths:
   /session/pair/phone:
     post:
       description: |
-        > **Substitui `POST /session/pairphone`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /session/pairphone`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Pede ao WhatsApp um **código de emparelhamento** de oito caracteres,
         que a pessoa digita no telemóvel em *Aparelhos conectados → Conectar
@@ -20545,7 +20578,7 @@ paths:
         1. `POST /admin/users` cria a sessão e devolve o token;
         2. `GET /session/connect` com esse token;
         3. `POST /session/pairphone` com o número — esta rota — **ou**
-           `GET /session/qr` para o caminho por imagem;
+           `GET /session/pair/qr` para o caminho por imagem;
         4. digitar o `linking_code` no telemóvel;
         5. `GET /session/status` confirma com `logged_in: true`.
 
@@ -20635,15 +20668,21 @@ paths:
   /session/pair/qr:
     get:
       description: |
-        > **Substitui `GET /session/qr`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /session/qr`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
-        Devolve a imagem do QR code guardada para esta sessão, em data URI.
+        Devolve a imagem do QR code guardada para esta sessão, em data URI, e
+        `code_age_seconds` — há quanto tempo esse MESMO código é o que esta
+        rota devolve (`0` quando muda). Não é um prazo de expiração: nem
+        `wa_noise` nem `wa_headless` sabem prometer quando o servidor do
+        WhatsApp vai rodar o código (variância medida de 10-60s, HOUSEKEEP
+        F374/F375) — é só o quanto já passou, para o cliente distinguir
+        rotação normal de código travado sem a API inventar um prazo.
 
         **Vazio é comportamento normal, não defeito.** O valor só existe
         durante a janela de emparelhamento: é gravado a cada código novo que o
         WhatsApp emite e limpo quando a janela expira. Numa sessão já
         autenticada, ou numa que ainda não chamou `GET /session/connect`, a
-        resposta é `200` com `{"qr_code": ""}`.
+        resposta é `200` com `{"qr_code": "", "code_age_seconds": 0}`.
 
         **Como usar**: chame `GET /session/connect` primeiro e sondar esta rota
         até o campo vir preenchido. O código gira sozinho — leia sempre o mais
@@ -20663,6 +20702,7 @@ paths:
               example:
                 code: 200
                 data:
+                  code_age_seconds: 0
                   qr_code: ""
                 success: true
               schema:
@@ -20674,7 +20714,7 @@ paths:
                     type: object
           description: |
             Valor actual da coluna de QR. Medido em 2026-08-26 numa sessão já
-            autenticada: `{"qr_code": ""}`.
+            autenticada: `{"qr_code": "", "code_age_seconds": 0}`.
         "400":
           $ref: '#/components/responses/SemSessao'
         "401":
@@ -21660,7 +21700,7 @@ paths:
   /users/avatar:
     post:
       description: |
-        > **Substitui `POST /user/avatar`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/avatar`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         **Esta rota LÊ.** Apesar do método `POST` e do nome, ela não altera a
         foto de conta nenhuma: devolve o URL da foto de perfil do contacto
@@ -21768,7 +21808,7 @@ paths:
   /users/block:
     post:
       description: |
-        > **Substitui `POST /user/block`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/block`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Acrescenta um contacto à lista de bloqueados da conta.
 
@@ -21867,7 +21907,7 @@ paths:
   /users/blocklist:
     get:
       description: |
-        > **Substitui `GET /user/blocklist`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /user/blocklist`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve os JIDs bloqueados pela conta, com o hash com que o WhatsApp
         versiona a lista.
@@ -21926,7 +21966,7 @@ paths:
   /users/check:
     post:
       description: |
-        > **Substitui `POST /user/check`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/check`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Pergunta ao WhatsApp, em lote, quais dos números dados têm conta, e
         devolve o JID resolvido de cada um.
@@ -22028,7 +22068,7 @@ paths:
   /users/contacts:
     get:
       description: |
-        > **Substitui `GET /user/contacts`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /user/contacts`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve todos os contactos que a sessão conhece, num objecto indexado
         por JID.
@@ -22109,7 +22149,7 @@ paths:
   /users/contacts/last-activity:
     get:
       description: |
-        > **Substitui `GET /user/contacts/last-activity`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /user/contacts/last-activity`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve, por JID, o instante da mensagem mais recente daquela conversa.
 
@@ -22176,7 +22216,7 @@ paths:
   /users/contacts/sync:
     post:
       description: |
-        > **Substitui `POST /user/contacts/sync`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/contacts/sync`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Força a busca do patch de app-state que carrega a agenda de contactos.
         É o que se chama quando `GET /user/contacts` devolve menos contactos do
@@ -22269,7 +22309,7 @@ paths:
   /users/history/sync:
     post:
       description: |
-        > **Substitui `POST /user/history/sync`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/history/sync`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Pede ao dispositivo principal as mensagens **anteriores** a uma que o
         chamador já tem. É assim que se recupera histórico antigo de uma
@@ -22373,7 +22413,7 @@ paths:
   /users/info:
     post:
       description: |
-        > **Substitui `POST /user/info`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/info`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve, por JID consultado, os aparelhos ligados àquela conta, o recado
         do perfil, o identificador da foto e o LID correspondente.
@@ -22459,7 +22499,7 @@ paths:
   /users/lid/{jid}:
     get:
       description: |
-        > **Substitui `GET /user/lid/{jid}`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /user/lid/{jid}`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve o identificador de privacidade (`@lid`) correspondente a um
         número, consultando o mapeamento que a sessão mantém localmente.
@@ -22553,7 +22593,7 @@ paths:
   /users/presence:
     post:
       description: |
-        > **Substitui `POST /user/presence`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/presence`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Marca a conta como online ou offline perante o WhatsApp.
 
@@ -22621,7 +22661,7 @@ paths:
   /users/presence/subscribe:
     post:
       description: |
-        > **Substitui `POST /user/presence/subscribe`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/presence/subscribe`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Pede ao WhatsApp para passar a enviar notificações quando aquele
         contacto fica online ou offline.
@@ -22688,7 +22728,7 @@ paths:
   /users/privacy:
     get:
       description: |
-        > **Substitui `GET /user/privacy`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /user/privacy`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Devolve as definições de privacidade em vigor na conta ligada.
 
@@ -22750,7 +22790,7 @@ paths:
         - Contactos e utilizadores
     post:
       description: |
-        > **Substitui `POST /user/privacy`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/privacy`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Altera UMA definição de privacidade da conta ligada. O caminho é o mesmo
         da leitura, e o manipulador despacha por método
@@ -22856,7 +22896,7 @@ paths:
   /users/profile/{jid}:
     get:
       description: |
-        > **Substitui `GET /user/profile/{jid}`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `GET /user/profile/{jid}`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Junta identidades (número e LID), presença na rede, aparelhos, recado e
         foto de perfil, a partir de QUALQUER uma das identidades do contacto.
@@ -22952,7 +22992,7 @@ paths:
   /users/status:
     post:
       description: |
-        > **Substitui `POST /user/status`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/status`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Altera o **recado** do perfil — o texto que aparece como "Sobre" no
         WhatsApp. Muda a conta, e é visível para quem a puder ver segundo as
@@ -23022,7 +23062,7 @@ paths:
   /users/unblock:
     post:
       description: |
-        > **Substitui `POST /user/unblock`.** O caminho antigo **continua a ser servido** e não tem data de remoção, mas deixou de ser documentado: uma operação, um nome. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
+        > **Substitui `POST /user/unblock`.** O caminho antigo **não responde mais** (404) desde 2026-08-27 — corte limpo, não período de transição. Fica citado aqui só para quem chega de uma integração antiga e procura o nome que conhecia. A tabela de equivalência completa está em `docs/ENDPOINTS.md`.
 
         Retira um contacto da lista de bloqueados da conta.
 

@@ -33,7 +33,7 @@ func PresentGetQR(r *domain.GetQRResult) GetQRResponse {
 	if r == nil {
 		return GetQRResponse{}
 	}
-	return GetQRResponse{QRCode: r.QRCode}
+	return GetQRResponse{QRCode: r.QRCode, CodeAgeSeconds: r.CodeAgeSeconds}
 }
 
 // PresentLogout maps the logout result.

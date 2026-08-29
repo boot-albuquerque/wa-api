@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -522,6 +523,102 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 			"desenhar o proprio data URI — F373): %s", rec.Body.String())
 	}
 	logassert.NoSecrets(t, recs)
+}
+
+// codeAgeReader is a PairingQRReader whose PairingQR answer is settable
+// between calls, for the code_age_seconds tests below — they need to
+// control exactly WHEN the code changes, not just what it starts as.
+type codeAgeReader struct{ code string }
+
+func (r *codeAgeReader) EnsureSession(context.Context, string) error { return nil }
+func (r *codeAgeReader) PairingQR(context.Context, string) (string, error) {
+	return r.code, nil
+}
+
+func codeAgeHandler(reader *codeAgeReader) *GetQRHandler {
+	return NewGetQRHandler(&contractsfake.Logger{}, sessionCaseRegistry(&pairing.Provider{
+		Engine:   domain.EngineWaNoise,
+		QRReader: reader,
+	}))
+}
+
+func codeAgeOf(t *testing.T, h *GetQRHandler) (qrCode string, ageSeconds int) {
+	t.Helper()
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/qr?engine=wa_noise", "", "user-1", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
+	}
+	data := sessionEnvelope(t, rec)["data"].(map[string]any)
+	qr, _ := data["qr_code"].(string)
+	age, _ := data["code_age_seconds"].(float64) // JSON numbers decode as float64
+	return qr, int(age)
+}
+
+// TestGetQR_CodeAgeSeconds_ZeroQuandoOCodigoAcabaDeAparecer: a primeira vez
+// que um código aparece (nunca visto antes por este handler), a idade é 0 —
+// não há "desde quando" para medir ainda.
+func TestGetQR_CodeAgeSeconds_ZeroQuandoOCodigoAcabaDeAparecer(t *testing.T) {
+	h := codeAgeHandler(&codeAgeReader{code: qrImageOf(t, "2@codigo-A")})
+	_, age := codeAgeOf(t, h)
+	if age != 0 {
+		t.Fatalf("code_age_seconds = %d, want 0 — primeira aparição do código", age)
+	}
+}
+
+// TestGetQR_CodeAgeSeconds_AcumulaParaOMesmoCodigo é o achado que motivou
+// F375/F377: o usuário reportou que o body de GET /session/pair/qr não
+// carrega NENHUM detalhe de temporização, obrigando o cliente a adivinhar
+// se um código repetido é normal (rotação em curso, gap medido de até 60s —
+// F374) ou sintoma de algo travado. Aqui a idade é semeada diretamente (sem
+// sleep real) e a MESMA leitura do reader deve DEVOLVER a idade acumulada,
+// não reiniciar por engano a cada poll.
+func TestGetQR_CodeAgeSeconds_AcumulaParaOMesmoCodigo(t *testing.T) {
+	codigo := qrImageOf(t, "2@codigo-A")
+	h := codeAgeHandler(&codeAgeReader{code: codigo})
+	h.since["user-1"] = codeAge{code: codigo, since: time.Now().Add(-5 * time.Second)}
+
+	qr, age := codeAgeOf(t, h)
+	if qr != codigo {
+		t.Fatalf("qr_code mudou sem o reader ter mudado: %q", qr)
+	}
+	if age < 5 {
+		t.Fatalf("code_age_seconds = %d, want >= 5 — a idade semeada não foi honrada", age)
+	}
+}
+
+// TestGetQR_CodeAgeSeconds_ReiniciaQuandoOCodigoMuda: a SPA rotacionou (ou
+// o adaptador devolveu outra imagem) — a idade tem de voltar a 0, senão um
+// cliente que confia neste campo para "está preso?" teria falso positivo
+// logo depois de uma rotação genuína.
+func TestGetQR_CodeAgeSeconds_ReiniciaQuandoOCodigoMuda(t *testing.T) {
+	reader := &codeAgeReader{code: qrImageOf(t, "2@codigo-A")}
+	h := codeAgeHandler(reader)
+	h.since["user-1"] = codeAge{code: reader.code, since: time.Now().Add(-30 * time.Second)}
+
+	reader.code = qrImageOf(t, "2@codigo-B") // rotação genuína
+	_, age := codeAgeOf(t, h)
+	if age != 0 {
+		t.Fatalf("code_age_seconds = %d, want 0 — o código MUDOU, a idade não pode sobreviver", age)
+	}
+}
+
+// TestGetQR_CodeAgeSeconds_ZeroEEsquecidoQuandoVazio: código vazio (sessão
+// ainda não pronta, ou acabou de parear) não tem idade — e o rastreamento
+// para aquele txtID é esquecido, para uma tentativa de pareamento seguinte
+// não herdar um relógio de uma janela anterior sem relação nenhuma.
+func TestGetQR_CodeAgeSeconds_ZeroEEsquecidoQuandoVazio(t *testing.T) {
+	reader := &codeAgeReader{code: qrImageOf(t, "2@codigo-A")}
+	h := codeAgeHandler(reader)
+	h.since["user-1"] = codeAge{code: reader.code, since: time.Now().Add(-30 * time.Second)}
+
+	reader.code = ""
+	qr, age := codeAgeOf(t, h)
+	if qr != "" || age != 0 {
+		t.Fatalf("qr_code=%q code_age_seconds=%d, want vazio e 0", qr, age)
+	}
+	if _, ainda := h.since["user-1"]; ainda {
+		t.Fatal("h.since ainda tem a entrada de user-1 depois de um código vazio — não foi esquecida")
+	}
 }
 
 // TestGetStatus_ReportsLiveSessionState: connected/loggedIn vem do leitor ao

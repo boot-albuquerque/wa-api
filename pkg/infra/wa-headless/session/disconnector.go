@@ -24,6 +24,7 @@ package session
 
 import (
 	"context"
+	"sync"
 
 	waheadless "wa-api/internal/wa-headless"
 	appport "wa-api/pkg/application/contracts"
@@ -35,11 +36,14 @@ import (
 // Disconnector implements appport.SessionDisconnector over a headless session.
 type Disconnector struct {
 	sessions *adapter.Sessions
+
+	mu           sync.Mutex
+	everIdentity map[string]bool
 }
 
 // NewDisconnector builds the adapter.
 func NewDisconnector(sessions *adapter.Sessions) *Disconnector {
-	return &Disconnector{sessions: sessions}
+	return &Disconnector{sessions: sessions, everIdentity: make(map[string]bool)}
 }
 
 // EnsureSession reports whether this process can serve txtID, without booting.
@@ -70,8 +74,37 @@ const statusLabel = "adapter/session-status"
 //     (nothing known, so loggedIn stays false) from owner.ErrNoOwner (page
 //     answered, showing a QR — genuinely not logged in) from a real Identity
 //     (paired).
+//
+// # A session that WAS paired and lost its identity is not the same as one
+// # that never paired (HOUSEKEEP F378)
+//
+// Both shapes make RefreshOwnIdentity fail the same way — a QR screen with
+// no owner — because that is genuinely what the page shows in both cases.
+// MEASURED live (2026-08-29, real headless session, phone unlinked the
+// device): the page recovers ON ITS OWN to a fresh, fully working QR —
+// GET /session/pair/qr answers immediately with code_age_seconds=0 — with
+// nothing here to tell a caller this was a REMOTE LOGOUT rather than a
+// session that simply never got scanned yet. Reporting (true, false) for
+// both, as before this fix, produced "conectada, não autenticada" for an
+// event wa_noise reports as fully disconnected (whatsmeow's client drops
+// IsConnected() on the same real-world trigger) — the same physical action
+// (unlink from the phone) read as two different states depending only on
+// which engine the session happened to use.
+//
+// everIdentity remembers, per txtID, whether THIS ADAPTER has ever observed
+// a present identity. Once it has, a later absence is read as "this session
+// was connected and lost its identity" and reported as disconnected — same
+// shape wa_noise already reports for the identical trigger — instead of the
+// misleading "still pairing" shape a session that never paired also
+// produces. In-memory, per PROCESS lifetime (not persisted): a restart
+// forgets it, and the next status poll for an actually-still-logged-out
+// session would read as "conectada, não autenticada" once, until the next
+// RefreshOwnIdentity call — the same limitation F374/F377's per-process
+// trackers already accept for the same reason (no other object here lives
+// across a restart to remember it in).
 func (d *Disconnector) SessionStatus(ctx context.Context, txtID string) (connected, loggedIn bool) {
 	if !d.sessions.Holds(txtID) {
+		d.forgetIdentity(txtID)
 		return false, false
 	}
 	eval, err := d.sessions.Evaluator(ctx, txtID)
@@ -81,13 +114,51 @@ func (d *Disconnector) SessionStatus(ctx context.Context, txtID string) (connect
 		return false, false
 	}
 	identity, err := waheadless.RefreshOwnIdentity(ctx, d.sessions.Runner(), eval, statusLabel)
-	if err != nil {
-		// Includes owner.ErrNoOwner (paired-not-yet / showing QR) and any
-		// read failure alike: both mean "connected, not confirmed logged
-		// in" for this port's purposes.
-		return true, false
+	present := err == nil && identity.Present()
+	connected, loggedIn, markSeen := classifyIdentity(d.hadIdentity(txtID), present)
+	if markSeen {
+		d.markIdentitySeen(txtID)
 	}
-	return true, identity.Present()
+	return connected, loggedIn
+}
+
+// classifyIdentity is the decision table SessionStatus applies, pulled out
+// as a pure function so the transition F378 fixes (present now vs. present
+// before) is testable without a live page. everHad is whatever
+// hadIdentity(txtID) already reports; present is whether THIS read found an
+// identity.
+func classifyIdentity(everHad, present bool) (connected, loggedIn, markSeen bool) {
+	if present {
+		return true, true, true
+	}
+	if everHad {
+		// Was paired, now isn't — WhatsApp itself ended the session
+		// (typically: phone unlinked the device). Report it the way
+		// wa_noise already reports the identical trigger: disconnected, not
+		// "still pairing" (HOUSEKEEP F378).
+		return false, false, false
+	}
+	// Never confirmed an identity for this txtID — a fresh, unpaired
+	// session, genuinely mid-pairing.
+	return true, false, false
+}
+
+func (d *Disconnector) markIdentitySeen(txtID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.everIdentity[txtID] = true
+}
+
+func (d *Disconnector) hadIdentity(txtID string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.everIdentity[txtID]
+}
+
+func (d *Disconnector) forgetIdentity(txtID string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.everIdentity, txtID)
 }
 
 // Disconnect drops the session's transport and frees its slot.

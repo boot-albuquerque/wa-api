@@ -1318,7 +1318,18 @@ rules_frozen=true
 # nao regressao: nenhuma funcao PERDEU cobertura, so' entraram novas sem
 # log. Medido com `go run ./cmd/logcov -json` apos a
 # correcao completa, nao inferido.
-min_func_coverage=604
+#
+# F378 (2026-08-29, mesmo dia): func_coverage CAI 604->601 (-3). ENTRAM 4
+# elegiveis, nenhuma coberta: Disconnector.classifyIdentity (a tabela de
+# decisao pura que distingue "nunca pareou" de "pareou e perdeu a
+# identidade" — achado do usuario: desconectar pelo APARELHO deixava o
+# wa_headless em "conectada, nao autenticada" em vez de "desconectada",
+# diferente do wa_noise para o MESMO evento) e os tres helpers de estado
+# (markIdentitySeen/hadIdentity/forgetIdentity) que sustentam o relogio por
+# txtID. Mesmo criterio das entradas F373/F374/F377 acima: helpers puros ou
+# de mapa em memoria, sem caminho de erro que justifique log por L1. Medido
+# com `go run ./cmd/logcov -json` apos a correcao completa, nao inferido.
+min_func_coverage=601
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): func_coverage 601 -> 604
 # (+3, ratchet-UP). Medido apos o merge completo, com todos os conflitos
@@ -1806,7 +1817,26 @@ min_errpath_coverage=783
 # das cinco loga (ver anotacao de min_func_coverage acima para o porque).
 # Medido com `go run ./cmd/logcov -json` e golden com `-golden` (ambos sem
 # argumento) no mesmo commit. Nao inferido.
-min_eligible=1064
+#
+# F377 (2026-08-29, mesmo dia): min_eligible SOBE 1064->1065 (+1). ENTRA:
+# GetQRHandler.trackCodeAge (o relogio de "ha quanto tempo este MESMO codigo
+# esta no ar", uniforme para os dois engines — GetQRResponse.CodeAgeSeconds,
+# pedido explicito do usuario apos testar GET /session/pair/qr na pratica e
+# notar que o body nao carregava nenhum detalhe de temporizacao). Nao loga —
+# mesmo criterio das cinco entradas acima (helper de estado em mapa, sem
+# caminho de erro). func_coverage e errpath_coverage permanecem 604/783.
+# Medido com `go run ./cmd/logcov -json` e golden com `-golden` no mesmo
+# commit. Nao inferido.
+#
+# F378 (2026-08-29, mesmo dia): min_eligible SOBE 1065->1069 (+4). ENTRAM:
+# Disconnector.classifyIdentity + markIdentitySeen/hadIdentity/
+# forgetIdentity (relogio "esta sessao ja' pareou alguma vez" que faz
+# SessionStatus reportar desconectada, nao "conectada, nao autenticada",
+# quando o celular desvincula o aparelho remotamente). Nenhuma loga — mesmo
+# criterio das entradas acima. func_coverage cai para 601 (ver anotacao
+# correspondente); errpath_coverage permanece 783. Medido com `go run
+# ./cmd/logcov -json` e golden com `-golden` no mesmo commit. Nao inferido.
+min_eligible=1069
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
 # (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de

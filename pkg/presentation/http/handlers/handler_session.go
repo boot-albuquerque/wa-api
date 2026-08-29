@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"sync"
+	"time"
 
 	customhttp "wa-api/pkg/presentation/http"
 
@@ -187,9 +189,24 @@ func (h *DisconnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // effect, so it keeps caching, retries and browser navigation working. A GET
 // with a body is not a contract this repository is going to start. See the
 // GET-vs-POST note in HOUSEKEEP F281.
+// codeAge tracks, per txtID, the code this handler last returned and since
+// when — the state behind GetQRResponse.CodeAgeSeconds (HOUSEKEEP F375/
+// F377). GetQRHandler is the only object common to BOTH engines that lives
+// across separate HTTP requests: the use case and the PairingQRReader the
+// registry resolves are both built PER CALL (see NewGetQRHandler's own
+// comment on why), so neither can hold this across polls the way this
+// handler can.
+type codeAge struct {
+	code  string
+	since time.Time
+}
+
 type GetQRHandler struct {
 	logger  appport.Logger
 	pairing *pairing.Registry
+
+	mu    sync.Mutex
+	since map[string]codeAge
 }
 
 // NewGetQRHandler builds the handler over the pairing provider registry.
@@ -199,7 +216,30 @@ type GetQRHandler struct {
 // the defect (HOUSEKEEP F273). GetQRUseCase holds only its port and a logger,
 // so building one costs a struct literal.
 func NewGetQRHandler(l appport.Logger, reg *pairing.Registry) *GetQRHandler {
-	return &GetQRHandler{logger: l, pairing: reg}
+	return &GetQRHandler{logger: l, pairing: reg, since: make(map[string]codeAge)}
+}
+
+// trackCodeAge records the code just about to be returned for txtID and
+// reports how long (seconds) it has ALREADY been the same code — 0 if it
+// just changed, or if it is empty (nothing to age: not ready, or paired).
+// A changed or empty code also DROPS the tracked entry, so a later pairing
+// attempt for the same txtID starts its own clock instead of inheriting one
+// from an unrelated earlier pairing screen — same reasoning as
+// pkg/infra/wa-headless/pairing.QRReader.forgetCode (F374), independent
+// tracker, same shape.
+func (h *GetQRHandler) trackCodeAge(txtID, code string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if code == "" {
+		delete(h.since, txtID)
+		return 0
+	}
+	prev, ok := h.since[txtID]
+	if ok && prev.code == code {
+		return int(time.Since(prev.since).Seconds())
+	}
+	h.since[txtID] = codeAge{code: code, since: time.Now()}
+	return 0
 }
 
 func (h *GetQRHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -226,6 +266,7 @@ func (h *GetQRHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
+	rsp.CodeAgeSeconds = h.trackCodeAge(targetID, rsp.QRCode)
 	customhttp.RespondJSON(w, 200, dtosession.PresentGetQR(rsp), nil)
 }
 

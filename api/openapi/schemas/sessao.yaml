@@ -72,24 +72,31 @@ ResultadoDesconexao:
 CodigoQR:
   type: object
   description: |
-    Resposta de `GET /session/qr`. Medida no servidor vivo em 2026-08-26,
-    numa sessão já autenticada: `{"qr_code": ""}`.
-  required: [qr_code]
+    Resposta de `GET /session/pair/qr` (canónico desde F269; `GET
+    /session/qr` foi cortado em 2026-08-27 e não responde mais — ver
+    `docs/ENDPOINTS.md`). Medida no servidor vivo em 2026-08-26, numa sessão
+    já autenticada: `{"qr_code": "", "code_age_seconds": 0}`.
+  required: [qr_code, code_age_seconds]
   properties:
     qr_code:
       type: string
       nullable: false
       description: |
-        Imagem do QR code em data URI (`data:image/png;base64,…`), lida da
-        coluna `users.qrcode`.
+        Imagem do QR code em data URI (`data:image/png;base64,…`).
+
+        **A mesma forma para os dois engines** (HOUSEKEEP F373): `wa_noise`
+        lê a imagem já gravada em `users.qrcode` pelo orquestrador a cada
+        evento `QR` (`orchestrator.go`); `wa_headless` lê a string crua que a
+        página produz e a API a codifica em PNG no único ponto por onde os
+        dois passam (`GetQRUseCase`, via `pkg/qrimage`). Antes da F373 os
+        dois devolviam formas diferentes no mesmo campo — corrigido, não é
+        mais o caso.
 
         **Sempre presente, nunca ausente e nunca `null`.** Sem `omitempty` na
-        struct (`domain/session.go:29`), e o valor zero de `string` é `""`.
+        struct (`domain/session.go`), e o valor zero de `string` é `""`.
 
-        **Vazio é informação, não defeito.** A coluna só tem valor durante a
-        janela de emparelhamento: o orquestrador grava a imagem a cada evento
-        `QR` (`orchestrator.go:537`) e limpa-a no timeout
-        (`orchestrator.go:552`).
+        **Vazio é informação, não defeito.** Só existe valor durante a janela
+        de emparelhamento.
 
         | estado | significa |
         |---|---|
@@ -99,6 +106,31 @@ CodigoQR:
         Medido em 2026-08-26 nas duas sessões autenticadas: `{"qr_code": ""}`
         com `200` nas duas.
       example: ''
+    code_age_seconds:
+      type: integer
+      nullable: false
+      description: |
+        Há quantos segundos ESTE MESMO código (o valor exato de `qr_code`,
+        byte a byte) é o que esta rota devolve — `0` no instante em que
+        `qr_code` muda (rotação genuína) ou fica vazio.
+
+        **NÃO é uma contagem regressiva de expiração.** HOUSEKEEP F375: nem
+        `wa_noise` nem `wa_headless` conseguem prometer honestamente quando
+        o código atual vai expirar — a rotação é decidida pelo servidor do
+        WhatsApp, com variância MEDIDA de 10 a 60 segundos entre rotações
+        automáticas (F374, `TestProbeQRRetryPattern`). Este campo não
+        inventa esse número: é puramente descritivo, sobre o PASSADO
+        ("há quanto tempo já é este código"), não uma promessa sobre o
+        futuro.
+
+        **Como usar**: um cliente que sonda esta rota repetidamente pode
+        distinguir "o mesmo código de sempre, rotação em curso normalmente"
+        (valor crescendo devagar, `qr_code` igual) de "parece travado" sem a
+        API adivinhar um prazo que não tem como cumprir.
+
+        **Sempre presente, nunca ausente e nunca `null`.** Zero quando
+        `qr_code` é vazio (nada para medir a idade).
+      example: 0
 
 PedidoPareamentoTelefone:
   type: object
