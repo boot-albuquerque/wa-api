@@ -77,6 +77,13 @@ const (
 	// via internal/wa-headless/.gitignore. It is never the study's paired
 	// profile: that one belongs to another phase and is not disposable.
 	labProfileDir = ".lab/test-account-profile"
+	// labProfileRoot e' a raiz DESCARTAVEL: so' o que esta' aqui dentro pode ser
+	// pareado, e a lista de nomes e' fechada (ver pairingSlot).
+	labProfileRoot  = ".lab"
+	labProfileSlotA = "test-account-profile"
+	labProfileSlotB = "test-account-profile-b"
+	// pairSlotEnv escolhe QUAL dos dois perfis descartaveis parear.
+	pairSlotEnv = "WA_HEADLESS_PAIR_SLOT"
 	// profileDirOverride points the READ-ONLY observation probes at a profile
 	// other than the lab one, so a profile whose paired state is unknown can be
 	// looked at with the instrument that is already proven to work.
@@ -161,14 +168,46 @@ func requireExistingProfile(dir string) error {
 func pairingProfileDir() (string, error) {
 	if override := os.Getenv(profileDirOverride); override != "" {
 		return "", fmt.Errorf("refusing to pair: %s=%s is set, and pairing MUTATES the "+
-			"profile it opens. Only %s is disposable. Unset %s to pair the lab profile",
-			profileDirOverride, override, labProfileDir, profileDirOverride)
+			"profile it opens. Only the lab profiles under %s are disposable. Unset %s "+
+			"and use %s to choose which lab profile to pair",
+			profileDirOverride, override, labProfileRoot, profileDirOverride, pairSlotEnv)
 	}
-	abs, err := filepath.Abs(labProfileDir)
+	slot, err := pairingSlot(os.Getenv(pairSlotEnv))
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(filepath.Join(labProfileRoot, slot))
 	if err != nil {
 		return "", fmt.Errorf("resolving the lab profile: %w", err)
 	}
 	return abs, nil
+}
+
+// pairingSlot decides WHICH disposable lab profile a pairing run may open.
+//
+// # Por que uma lista fechada, e não um caminho livre
+//
+// A guarda original recusava qualquer caminho vindo do ambiente, e a razão está
+// escrita nela: parear MUTA o perfil, e apontá-la a um perfil real sobrescreveria
+// uma credencial que não é descartável. Essa razão continua inteira.
+//
+// O que mudou é a necessidade: medir se uma mensagem CHEGA exige os DOIS lados,
+// e um perfil só nunca poderá confirmar recepção. Então a lista cresce para dois
+// nomes FIXOS sob a mesma raiz descartável, em vez de a guarda ser removida —
+// um nome livre traria de volta exatamente o risco que ela existe para impedir.
+//
+// Vazio é o slot "a", que é o perfil histórico: quem já corria isto não muda nada.
+func pairingSlot(bruto string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(bruto)) {
+	case "", "a":
+		return labProfileSlotA, nil
+	case "b":
+		return labProfileSlotB, nil
+	default:
+		return "", fmt.Errorf("%s=%q invalido: use %q ou %q. Um nome livre reabriria a "+
+			"possibilidade de parear sobre um perfil que nao e' descartavel",
+			pairSlotEnv, bruto, "a", "b")
+	}
 }
 
 // launchObservationProfile boots the observation profile with the PRODUCTION
