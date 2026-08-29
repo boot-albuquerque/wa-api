@@ -11038,3 +11038,103 @@ A pergunta que decide — *o ack sobe?* — exige sessão pareada, e
 **Status**: não entregue — a H75 foi corrigida quanto ao diagnóstico; envio de
 tipos ricos continua NÃO entregue, agora por falta de sessão para medir, e não
 por falta de caminho.
+
+## H145 — `/session/qr` para wa_headless: falta um boot primitivo inteiro, não só um adapter
+
+**Data**: 2026-08-29. **Contexto**: pedido do usuário para aplicar a mesma
+lógica de contrato QR do `wa_noise` (leitura de `users.qrcode`, string crua,
+sem renderização — ver `pkg/infra/wa-noise/adapters/pairing/qr.go`) ao
+`wa_headless`, depois de consultar como `wwebjs` e `open-wa` resolvem e
+renderizam o QR.
+
+**Onde**: `internal/wa-headless/probe_qr_test.go` (novo, `TestProbeQRConstructionSurface`),
+`internal/wa-headless/core/session.go:8-10,321-323`,
+`internal/wa-headless/runtime/holder.go:121`,
+`pkg/infra/wa-headless/registry/registry.go` (`KindPairing`).
+
+### O que a referência ensina (medido no código-fonte, não de memória)
+
+`whatsapp-web.js` (`src/Client.js`, branch `main`, lido via
+`raw.githubusercontent.com`) constrói a string do QR — não renderiza nada,
+devolve texto cru para quem chamar desenhar, exatamente como o contrato
+`wa_noise` deste projeto já faz:
+
+```js
+registrationInfo = await window.require('WAWebSignalStoreApi').waSignalStore.getRegistrationInfo()
+noiseKeyPair     = await window.require('WAWebUserPrefsInfoStore').waNoiseInfo.get()
+staticKeyB64     = window.require('WABase64').encodeB64(noiseKeyPair.staticKeyPair.pubKey)
+identityKeyB64   = window.require('WABase64').encodeB64(registrationInfo.identityKeyPair.pubKey)
+advSecretKey     = await window.require('WAWebUserPrefsMultiDevice').getADVSecretKey()
+platform         = window.require('WAWebCompanionRegClientUtils').DEVICE_PLATFORM
+qr = ref + ',' + staticKeyB64 + ',' + identityKeyB64 + ',' + advSecretKey + ',' + platform
+```
+
+`ref` vem de `window.require('WAWebConnModel').Conn.ref`, que rotaciona via
+evento Backbone `change:ref` (`Conn.on('change:ref', (_, ref) => ...)`), e o
+refresh manual usa `window.require('WAWebCmd').Cmd.refreshQR()` quando o
+estado vira `UNPAIRED_IDLE`. `WAWebLaunchSocketUtils.refreshQR` é um
+segundo caminho de refresh, usado ao cancelar pareamento por código.
+
+`open-wa/wa-automate-nodejs` foi consultado (`gh api
+repos/open-wa/wa-automate-nodejs/git/trees/master?recursive=true`) e a
+arquitetura atual do repositório (`packages/core/src/transport/`) só expõe
+`assets/qr.min.js` — uma biblioteca de RENDERIZAÇÃO client-side minificada,
+não a lógica de leitura. Busca de código (`gh api search/code`) por
+`Conn.ref`/`WAWebConnModel` no repositório não encontrou nada. Conclusão:
+`open-wa` não acrescentou evidência própria além do que `wwebjs` já deu —
+registrado para não parecer que a consulta foi pulada.
+
+### Cruzamento com medições já existentes deste projeto
+
+`EVIDENCIA-SPA.md` M2.2 (2026-08-12) já tinha medido as CHAVES do
+`WAWebConnModel` no perfil não pareado e confirmou `__x_ref`, `__x_refExpiry`,
+`__x_refTTL` presentes — ou seja, `Conn.ref` (o acessor Backbone sobre
+`__x_ref`) plausivelmente existe nesta build, INDEPENDENTE desta sessão.
+`WAWebLaunchSocketUtils.refreshQR` já tinha sido confirmado FUNÇÃO por H122.
+`WAWebCmd` já é usado em produção (`Revoke.Sender`/`.Admin`,
+`internal/wa-headless/capabilities/`). Os cinco módulos que faltavam
+confirmar — `WAWebSignalStoreApi`, `WAWebUserPrefsInfoStore`, `WABase64`,
+`WAWebUserPrefsMultiDevice`, `WAWebCompanionRegClientUtils` — **não foram
+medidos nesta sessão**, pelo motivo abaixo.
+
+### O bloqueio real: não é o módulo, é o boot
+
+`TestProbeQRConstructionSurface` tentou medir os módulos acima contra
+`.lab/test-account-profile` (perfil descartável, hoje NÃO pareado — a
+própria medição confirma: página classificada `PAIRING_LOADING`). O boot
+falhou ANTES de qualquer `window.require` rodar:
+
+```
+core: boot failed at not_ready (stopped_via=browser.close):
+core: page classified "PAIRING_LOADING", want "APP_READY";
+this boot path is restoration-only — pairing is a separate,
+human-authorised slice
+```
+
+`internal/wa-headless/runtime/holder.go:121` chama `core.StartSession`
+INCONDICIONALMENTE — `Holder.Session()` não distingue `registry.KindPairing`
+de `KindOperational`. `core/session.go:8-10` e `:321-323` dizem, em texto
+claro: *"QR pairing is a separate, human-authorised slice: nothing here
+shows a QR code, waits for one, or mutates an unpaired profile."* Isso não
+é um bug — é uma fronteira desenhada de propósito pelos autores deste
+pacote.
+
+**Conclusão medida**: a cota `KindPairing` do `registry.go` é contabilidade
+sem capacidade de boot por trás — não existe, em produção OU teste, nenhum
+caminho de código deste repositório que suba um browser numa página de QR e
+interaja com ela. Construir o `QRReader` de `wa_headless` para
+`/session/qr` não é "escrever um adapter": é primeiro escrever um NOVO
+primitivo de boot na camada `core` (algo como `core.StartPairingSession`,
+tolerante às classes de página de QR/pareamento), e só depois o adapter que
+lê `WAWebConnModel.Conn.ref` + monta a string por cima dele. Isso é maior
+que um adapter e atravessa uma fronteira que os próprios autores do pacote
+marcaram como exigindo autorização deliberada — a mesma categoria de
+decisão que H122 marca para o `logout`.
+
+**Correção sugerida**: decisão consciente do usuário sobre construir
+`core.StartPairingSession` (ou equivalente) antes de prosseguir — não é
+uma correção que se aplica "de graça" dentro do escopo de um adapter.
+
+**Status**: não corrigido. Medição registrada (`TestProbeQRConstructionSurface`,
+`t.Skip` documentando o achado); nenhum adapter escrito, porque a camada que
+ele precisaria não existe ainda.

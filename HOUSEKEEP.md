@@ -38735,6 +38735,18 @@ executado). Fases 1-3 não corrigidas nesta sessão — pendem de medição ao
 vivo que exige um humano com telefone para escanear QR no perfil
 descartável.
 
+**Atualização 2026-08-29 (mesmo dia)**: a medição ao vivo da Fase 1 (QR) foi
+tentada — ver `internal/wa-headless/HOUSEKEEP.md` H145 para a evidência
+completa. Achado: o bloqueio não é falta de humano com telefone, é
+estrutural — `core.StartSession` recusa qualquer página que não classifique
+`APP_READY`, por desenho ("QR pairing is a separate, human-authorised
+slice", `internal/wa-headless/core/session.go:8-10`), e `Holder.Session()`
+chama esse caminho incondicionalmente mesmo para `registry.KindPairing`.
+Não existe, em produção OU teste, nenhum caminho que suba um browser numa
+página de QR. A Fase 1 precisa primeiro de um novo primitivo de boot na
+camada `core` (H145) antes de qualquer adapter de leitura de QR — maior
+escopo do que este HOUSEKEEP previa originalmente.
+
 <!-- f-status: aberto -->
 
 ## F371 — `make coverage-gate` falha por dívida técnica PRÉ-EXISTENTE, não relacionada a esta sessão
