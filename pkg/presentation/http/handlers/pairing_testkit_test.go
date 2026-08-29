@@ -21,9 +21,12 @@ import (
 // and the test asserting 422 would be asserting the fake. ARMADILHAS.md #1.
 //
 // The consequence is that the wa_headless expectations in these tests are
-// MEASUREMENTS of the real matrix (get_pairing_qr and connect_session are
-// not_implemented there, request_pairing_code is unknown), not choices made in
-// the test file.
+// MEASUREMENTS of the real matrix. Since 2026-08-29 (HOUSEKEEP H145) that
+// matrix marks get_pairing_qr and connect_session as Supported for
+// wa_headless — pkg/infra/wa-headless/pairing.QRReader/Starter exist and are
+// wired in production — so requests naming wa_headless for those two now
+// reach the headless spy instead of being refused. request_pairing_code
+// remains unknown; a phone-pairing test still expects 422.
 
 // pairingSpy is a provider port that records every call.
 //
@@ -152,6 +155,20 @@ func (h *pairingHarness) assertOnlyNoiseCalled(t *testing.T) {
 	}
 	if h.headless.calls != 0 {
 		t.Errorf("wa_headless provider calls = %d, want 0 — a wa_noise request reached the other engine (cross-engine fallback is forbidden)", h.headless.calls)
+	}
+}
+
+// assertOnlyHeadlessCalled fails unless the wa-headless spy was touched and
+// the wa-noise one was not — the mirror of assertOnlyNoiseCalled, added
+// 2026-08-29 (HOUSEKEEP H145) once get_pairing_qr/connect_session became
+// reachable for wa_headless.
+func (h *pairingHarness) assertOnlyHeadlessCalled(t *testing.T) {
+	t.Helper()
+	if h.headless.calls == 0 {
+		t.Errorf("wa_headless provider calls = 0, want >0 — the request named wa_headless and nothing served it")
+	}
+	if h.noise.calls != 0 {
+		t.Errorf("wa_noise provider calls = %d, want 0 — a wa_headless request reached the other engine (cross-engine fallback is forbidden)", h.noise.calls)
 	}
 }
 

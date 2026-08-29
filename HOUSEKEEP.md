@@ -38747,6 +38747,17 @@ página de QR. A Fase 1 precisa primeiro de um novo primitivo de boot na
 camada `core` (H145) antes de qualquer adapter de leitura de QR — maior
 escopo do que este HOUSEKEEP previa originalmente.
 
+**Atualização 2026-08-29 (mesmo dia, autorização explícita do usuário)**:
+o primitivo (`core.StartPairingSession` + `Holder.PairingSession`) foi
+construído, e a cadeia completa de construção do QR (wwebjs) foi medida
+funcionando de ponta a ponta contra `.lab/test-account-profile` — ver
+`internal/wa-headless/HOUSEKEEP.md` H145, seção "Atualização, mesmo dia",
+para toda a evidência. `QRReader` e `Starter` para `wa_headless` estão
+escritos e ligados em `pkg/bootstrap/pairing_providers.go`;
+`get_pairing_qr`/`connect_session` passam a `Supported` na matriz. Fase 1
+do plano original: **corrigida**. Fase 2 (pairphone) e a implementação
+real de `Logout` (Fase 3, H122) continuam pendentes.
+
 <!-- f-status: aberto -->
 
 ## F371 — `make coverage-gate` falha por dívida técnica PRÉ-EXISTENTE, não relacionada a esta sessão

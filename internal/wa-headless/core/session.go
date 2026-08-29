@@ -217,6 +217,38 @@ type StartConfig struct {
 	// OnLifecycle receives this session's lifecycle facts. Nil is the ordinary
 	// case; see core/lifecycle.go for why this is a callback and not a bus.
 	OnLifecycle LifecycleObserver
+	// AcceptClasses overrides which spa.PageClass values this boot accepts as
+	// READY instead of the restoration-only default of {ClassAppReady}. Nil
+	// or empty keeps that default — every existing StartSession caller is
+	// unaffected. StartPairingSession is the only caller that sets this.
+	//
+	// It exists so ONE boot sequence (ownership guard, launch, tab, navigate,
+	// settle, teardown-on-failure) serves both restoration and pairing,
+	// instead of a second copy of ~300 lines diverging from this one the
+	// first time either is touched. What differs between the two is only
+	// WHICH classes are a success — never the mechanics of getting there.
+	AcceptClasses []spa.PageClass
+}
+
+// acceptsClass reports whether class is one of accepted, or ClassAppReady
+// when accepted is empty (the restoration-only default).
+func acceptsClass(class spa.PageClass, accepted []spa.PageClass) bool {
+	for _, c := range acceptedOrDefault(accepted) {
+		if class == c {
+			return true
+		}
+	}
+	return false
+}
+
+// acceptedOrDefault names the set acceptsClass checks against, for both the
+// check itself and the failure message — one definition, so the error a
+// caller reads can never name a different set than the one that refused it.
+func acceptedOrDefault(accepted []spa.PageClass) []spa.PageClass {
+	if len(accepted) == 0 {
+		return []spa.PageClass{spa.ClassAppReady}
+	}
+	return accepted
 }
 
 // Session is a live, READY headless session — the state that outlives a
@@ -328,6 +360,54 @@ func StartSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		// dozen returns and a fact emitted at each of them would be a dozen
 		// places to forget one — which is the same reasoning that put the
 		// teardown behind a single fail().
+		f := LifecycleFact{Phase: PhaseBootFailed}
+		var bf *BootFailure
+		if errors.As(err, &bf) {
+			f.Reason, f.WasSuspect = string(bf.Stage), bf.WasSuspect
+			f.PageClass = string(bf.PageClass)
+		}
+		emit(cfg.OnLifecycle, f)
+		return nil, err
+	}
+	sess.onLifecycle = cfg.OnLifecycle
+	emit(cfg.OnLifecycle, LifecycleFact{Phase: PhaseReady, WasSuspect: sess.wasSuspect})
+	return sess, nil
+}
+
+// StartPairingSession is StartSession's counterpart for the human-authorised
+// pairing slice StartSession's own doc comment names and refuses: it boots a
+// profile that may show a QR code instead of restoring an already-paired one.
+//
+// It is additive, not a relaxation of StartSession: every existing caller of
+// StartSession is unaffected (cfg.AcceptClasses stays nil there, so the
+// restoration-only check is unchanged), and this function is the ONLY place
+// in the package that widens it. A caller reaches for this deliberately —
+// there is no flag on StartSession that turns it on by accident.
+//
+// Accepted page classes are spa.ClassAppReady (the profile turned out to
+// already be paired — a fine outcome, not just a fallback), spa.
+// ClassLoginRequired (a QR is on screen) and spa.ClassPairingLoading (the
+// pairing screen mounted but the QR has not rendered yet — spa.settleTerminal
+// treats this as terminal too, so WaitForReady returns here rather than
+// spending the whole settle budget spinning on it; a caller reading the QR
+// polls the page itself for when Conn.ref populates, same as the reference's
+// own change:ref listener does asynchronously).
+//
+// cfg.RequiredModules defaults to an EMPTY (non-nil) slice here, not
+// spa.RequiredAtStartup: the modules that list names are what an APP_READY
+// chat surface needs, and a QR screen has none of them mounted yet.
+// spa.VerifyInventory treats an empty list as trivially satisfied — see its
+// own len(modules)==0 check — which is the correct answer for "nothing is
+// required yet", not the loosened one.
+func StartPairingSession(ctx context.Context, cfg StartConfig) (*Session, error) {
+	if len(cfg.AcceptClasses) == 0 {
+		cfg.AcceptClasses = []spa.PageClass{spa.ClassAppReady, spa.ClassLoginRequired, spa.ClassPairingLoading}
+	}
+	if cfg.RequiredModules == nil {
+		cfg.RequiredModules = []spa.Module{}
+	}
+	sess, err := startSession(ctx, cfg)
+	if err != nil {
 		f := LifecycleFact{Phase: PhaseBootFailed}
 		var bf *BootFailure
 		if errors.As(err, &bf) {
@@ -503,13 +583,13 @@ func startSession(ctx context.Context, cfg StartConfig) (*Session, error) {
 		settleBudget = spa.DefaultSettleBudget
 	}
 	snap, class := spa.WaitForReady(ctx, runner, tab.Evaluate, settleBudget, "core/start/probe")
-	if class != spa.ClassAppReady {
+	if !acceptsClass(class, cfg.AcceptClasses) {
 		tab.Close()
 		failClass = class
 		return failTab(StageNotReady, fmt.Errorf(
-			"core: page classified %q, want %q; this boot path is restoration-only — "+
-				"pairing is a separate, human-authorised slice (snapshot url=%q dom_nodes=%d)",
-			class, spa.ClassAppReady, snap.URL, snap.DOMNodes))
+			"core: page classified %q, want one of %v; this boot path accepts only that set "+
+				"(snapshot url=%q dom_nodes=%d)",
+			class, acceptedOrDefault(cfg.AcceptClasses), snap.URL, snap.DOMNodes))
 	}
 
 	required := cfg.RequiredModules

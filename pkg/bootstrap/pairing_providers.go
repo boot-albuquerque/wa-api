@@ -9,6 +9,8 @@ import (
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
+	headlessadapter "wa-api/pkg/infra/wa-headless"
+	headlesspairing "wa-api/pkg/infra/wa-headless/pairing"
 	wapairing "wa-api/pkg/infra/wa-noise/adapters/pairing"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	"wa-api/pkg/pairing"
@@ -78,23 +80,25 @@ var _ appport.SessionStarter = (*waNoiseSessionStarter)(nil)
 // buildPairingRegistry wires the pairing surface: which provider serves which
 // engine, for QR, phone code and connect.
 //
-// # Why wa_headless has an entry with three nil ports, instead of no entry
+// # wa_headless: QR and connect are wired, phone-code is not (HOUSEKEEP F370)
 //
-// A missing entry and an entry with nothing in it produce different errors, and
-// the difference is the one an operator needs. No entry at all would mean this
-// process does not know the engine exists; an empty provider says it knows and
-// has nothing wired for it. Today neither is reachable from a request, because
-// the capability matrix refuses wa_headless for all three operations first
-// (pkg/capabilityregistry/matrix.go: get_pairing_qr and connect_session are
-// not_implemented there, request_pairing_code is unknown) — the entry exists so
-// that the day a headless adapter lands, wiring it is filling in a field rather
-// than discovering that the registration site was never written.
+// Until 2026-08-29 (H145) wa_headless had an entry with three nil ports on
+// purpose: no PairingQRReader, PhonePairer or SessionStarter implementation
+// existed anywhere in the tree, and nothing under pkg/infra/wa-headless was
+// even constructed in pkg/bootstrap. That changed for QR/connect only —
+// pkg/infra/wa-headless/pairing.QRReader/Starter, built over
+// core.StartPairingSession (a new boot primitive; core.StartSession itself
+// stays restoration-only) and the wwebjs-derived QR construction MEASURED
+// against this build (internal/wa-headless/capabilities/qr, H145). PhonePairer
+// is still nil: the capability matrix still marks request_pairing_code
+// unknown for wa_headless, and nothing has measured whether it needs the
+// same UNPAIRED-state gate H122 found for wa_noise's own phone pairing.
 //
-// This is measured, not assumed: as of 2026-08-27 nothing under
-// pkg/infra/wa-headless is constructed anywhere in pkg/bootstrap, and no
-// PairingQRReader, PhonePairer or SessionStarter implementation exists for that
-// engine anywhere in the tree.
-func buildPairingRegistry(s *server, users appport.UserRepository, getClient waclient.Getter, caps *capabilityregistry.CapabilityRegistry) *pairing.Registry {
+// A nil PhonePairer on an otherwise-populated Provider is still the same
+// deliberate signal the original design chose over a missing entry
+// (capability_not_supported vs engine_unavailable) — see
+// pairing.Registry.ResolvePhonePairer.
+func buildPairingRegistry(s *server, users appport.UserRepository, getClient waclient.Getter, caps *capabilityregistry.CapabilityRegistry, headlessSessions *headlessadapter.Sessions) *pairing.Registry {
 	waNoise := &pairing.Provider{
 		Engine:      domain.EngineWaNoise,
 		QRReader:    wapairing.NewQRReaderAdapter(getClient, users),
@@ -102,13 +106,19 @@ func buildPairingRegistry(s *server, users appport.UserRepository, getClient wac
 		Starter:     &waNoiseSessionStarter{server: s},
 	}
 	waHeadless := &pairing.Provider{Engine: domain.EngineWaHeadless}
+	headlessPorts := 0
+	if headlessSessions != nil {
+		waHeadless.QRReader = headlesspairing.NewQRReader(headlessSessions)
+		waHeadless.Starter = headlesspairing.NewStarter(headlessSessions)
+		headlessPorts = 2
+	}
 	// Logged with the per-engine port counts rather than a bare "built": the
 	// question an operator asks of this line is "does THIS process serve
-	// headless pairing", and a count of zero answers it where a provider list
-	// would not.
+	// headless pairing", and a count answers it where a provider list would
+	// not.
 	log.Info().
 		Int("wa_noise_ports", 3).
-		Int("wa_headless_ports", 0).
+		Int("wa_headless_ports", headlessPorts).
 		Msg("pairing: provider registry wired")
 	return pairing.NewRegistry(users, caps, waNoise, waHeadless)
 }

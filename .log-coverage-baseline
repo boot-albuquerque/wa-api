@@ -1758,7 +1758,22 @@ min_errpath_coverage=783
 # trivial). Golden regenerado (`go run ./cmd/logcov -golden >
 # cmd/logcov/testdata/eligible.golden`) no mesmo commit. Medido com
 # `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao inferido.
-min_eligible=1051
+#
+# feature/wa-headless-foundation (2026-08-29, HOUSEKEEP H145, mesmo dia):
+# min_eligible SOBE 1051->1057 (+6, ratchet-UP). ENTRAM: internal/wa-headless/
+# capabilities/qr.Reader.{Read,parked} (novo pacote, construcao do QR),
+# internal/wa-headless/core.StartPairingSession, internal/wa-headless/
+# runtime.Holder.PairingSession (o novo primitivo de boot tolerante a QR),
+# pkg/infra/wa-headless/pairing.QRReader.PairingQR e
+# pkg/infra/wa-headless/pairing.Starter.StartSession.func1 (a goroutine
+# fire-and-forget, promovida a X6). func_coverage e errpath_coverage
+# permanecem 607/783 — as seis entram JA cobertas, nenhuma dilui a razao.
+# Medido com `go run ./cmd/logcov -json` (sem argumento — e' o que
+# TestBaselineBateComAMedicao usa; da' o mesmo numero de `-json ./pkg` neste
+# commit porque nada elegivel existe fora de pkg/ e internal/wa-headless/) e
+# golden regenerado (`go run ./cmd/logcov -golden`, tambem sem argumento —
+# TestGoldenBate idem) no mesmo commit. Nao inferido.
+min_eligible=1057
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
 # (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de

@@ -11135,6 +11135,82 @@ decisão que H122 marca para o `logout`.
 `core.StartPairingSession` (ou equivalente) antes de prosseguir — não é
 uma correção que se aplica "de graça" dentro do escopo de um adapter.
 
-**Status**: não corrigido. Medição registrada (`TestProbeQRConstructionSurface`,
-`t.Skip` documentando o achado); nenhum adapter escrito, porque a camada que
-ele precisaria não existe ainda.
+**Status (correção original)**: não corrigido. Medição registrada
+(`TestProbeQRConstructionSurface`, `t.Skip` documentando o achado); nenhum
+adapter escrito, porque a camada que ele precisaria não existe ainda.
+
+### Atualização, mesmo dia (2026-08-29): construído, medido de ponta a ponta, corrigido
+
+O usuário autorizou explicitamente construir o primitivo de boot. Construído:
+
+- **`core.StartPairingSession`** (`internal/wa-headless/core/session.go`) —
+  aditivo, não um relaxamento: `StartConfig.AcceptClasses` (novo campo,
+  `nil`/vazio preserva o comportamento restoration-only de `StartSession`
+  byte a byte — `TestStartSession_UnaffectedByAcceptClasses`, e todos os 17
+  testes pré-existentes de `core` continuam verdes) deixa `startSession`
+  aceitar `ClassAppReady`, `ClassLoginRequired` OU `ClassPairingLoading` em
+  vez de só o primeiro. `RequiredModules` vira uma lista vazia (não `nil`) —
+  uma tela de QR não tem os módulos de app pronto montados ainda.
+- **`Holder.PairingSession`** (`internal/wa-headless/runtime/holder.go`) —
+  irmã de `Holder.Session`, mesmas invariantes (um boot por rajada
+  concorrente, sonda de processo sem lock), chamando
+  `core.StartPairingSession` em vez de `core.StartSession`.
+- **`Sessions.EvaluatorForPairing`** (`pkg/infra/wa-headless/sessions.go`,
+  já existia da F370 Fase 0) atualizado para chamar `Holder.PairingSession`
+  em vez de `Holder.Session` — antes desta correção chamava o caminho
+  restoration-only por engano, o que teria reproduzido o mesmo `not_ready`
+  desta entrada assim que fosse exercitado.
+
+**Medição repetida com o primitivo novo** (`TestProbeQRConstructionSurface`,
+reescrita para usar `PairingSession`, contra `.lab/test-account-profile`,
+ainda não pareado): a cadeia INTEIRA do wwebjs funciona neste build depois
+de esperar `Conn.ref` popular (chega por volta de t+15s, confirmando o
+comentário de `spa.ClassPairingLoading`) —
+`getRegistrationInfo_ok: true`, `identityKeyPair_pubKey_present: true`,
+`waNoiseInfo_get_ok: true`, `staticKeyPair_pubKey_present: true`,
+`getADVSecretKey_ok: true`, `DEVICE_PLATFORM_type: "string"`,
+`encodeB64_roundtrip_ok: true`, `WAWebConnModel.Conn.ref_populated: true`.
+**Única divergência da referência**: `WAWebCmd.Cmd.refreshQR` está AUSENTE
+neste build (medido `false`) — `WAWebLaunchSocketUtils.refreshQR` existe
+(medido `true`, e já confirmado por H122) e é o caminho de refresh a usar
+no futuro, nunca o outro.
+
+**Escrito e ligado em produção**:
+`internal/wa-headless/capabilities/qr` (o algoritmo, com o comentário do
+pacote citando exatamente de onde cada passo vem), `pkg/infra/wa-headless/
+pairing.QRReader` e `.Starter` (implementam `appport.PairingQRReader` e
+`appport.SessionStarter`), e `pkg/bootstrap/pairing_providers.go`
+(`buildPairingRegistry` agora popula `QRReader`/`Starter` para
+`wa_headless` quando `s.Headless.ChromePath` está configurado).
+`pkg/capabilityregistry/matrix.go`: `get_pairing_qr` e `connect_session`
+passam de `not_implemented` para `Supported`/`EvidenceConfirmed` para
+`wa_headless`.
+
+**Testes**: `internal/wa-headless/core/pairing_session_test.go` (novo —
+`StartPairingSession` aceita QR e página já pronta; `StartSession`
+continua a recusar QR; `acceptsClass` isolado). Controle negativo
+EXECUTADO: `acceptsClass` trocado para sempre devolver `true`, três testes
+falharam (incluindo o pré-existente `TestStartSession_QRPage_
+TerminatesFastWithSpecificCause`), revertido. `pkg/infra/wa-headless/
+pairing/{qr,starter}_test.go` (novos — satisfação de porta, sessão não
+detida devolve vazio sem boot, `StartSession` não bloqueia o chamador).
+Três testes de `pkg/presentation/http/handlers` e dois de `pkg/pairing`
+que fixavam o comportamento ANTIGO (`capability_not_supported` para
+`wa_headless`) foram atualizados para o novo — não é enfraquecimento de
+asserção, é a medição mudando porque o adapter passou a existir (ver
+`pairing_testkit_test.go` e `handler_pairing_engine_test.go`, ambos com
+comentário citando a mudança). `go build ./...`, `go vet ./...`,
+`go test -race ./pkg/...` e `go test ./internal/wa-headless/...` verdes;
+`.log-coverage-baseline`/`cmd/logcov/testdata/eligible.golden`
+regenerados e documentados (ratchet-UP, sem diluição).
+
+**O que continua faltando**: refresh do QR (`WAWebLaunchSocketUtils.
+refreshQR`, nunca invocado, só presença medida), promoção
+pairing→operational (`registry.Promote` continua sem chamador em
+produção — QRReader não detecta pareamento bem-sucedido e não promove a
+sessão), e phone-pairing (`request_pairing_code` continua `unknown` — F370
+Fase 2). Logout continua sem logouter (H122, não revisitado nesta
+atualização).
+
+**Status**: corrigido para QR e connect. Refresh, promoção e phone-pairing
+permanecem pendentes, registrados acima e em `HOUSEKEEP.md` F370.

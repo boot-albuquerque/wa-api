@@ -341,6 +341,14 @@ internal/wa-headless/capabilities/presence.observeScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.onlineScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.resultScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.setScript	EXCLUDED	X1
+internal/wa-headless/capabilities/qr.New	EXCLUDED	X1
+internal/wa-headless/capabilities/qr.Reader.Read	ELIGIBLE	uncovered:L2(S-consume,qr.go:120)
+internal/wa-headless/capabilities/qr.Reader.parked	ELIGIBLE	uncovered:L2(S-ret,qr.go:141);uncovered:L2(S-ret,qr.go:149);uncovered:L2(S-ret,qr.go:156);uncovered:L2(S-ret,qr.go:161);uncovered:L2(S-ret,qr.go:165)
+internal/wa-headless/capabilities/qr.Reader.parked.func1	EXCLUDED	X6
+internal/wa-headless/capabilities/qr.Reader.parked.func2	EXCLUDED	X6
+internal/wa-headless/capabilities/qr.Reader.parked.func3	EXCLUDED	X6
+internal/wa-headless/capabilities/qr.kickScript	EXCLUDED	X1
+internal/wa-headless/capabilities/qr.nextStateKey	EXCLUDED	X1
 internal/wa-headless/capabilities/react.New	EXCLUDED	X1
 internal/wa-headless/capabilities/react.Reactor.Add	ELIGIBLE	uncovered:L1
 internal/wa-headless/capabilities/react.Reactor.Remove	ELIGIBLE	uncovered:L1
@@ -383,7 +391,10 @@ internal/wa-headless/core.Session.ProcessAlive	ELIGIBLE	uncovered:L1
 internal/wa-headless/core.Session.ProfileDir	EXCLUDED	X1
 internal/wa-headless/core.Session.Stop	ELIGIBLE	uncovered:L1
 internal/wa-headless/core.Session.Tab	EXCLUDED	X1
+internal/wa-headless/core.StartPairingSession	ELIGIBLE	uncovered:L1
 internal/wa-headless/core.StartSession	ELIGIBLE	uncovered:L1
+internal/wa-headless/core.acceptedOrDefault	EXCLUDED	X1
+internal/wa-headless/core.acceptsClass	EXCLUDED	X1
 internal/wa-headless/core.acquireOwnership	ELIGIBLE	uncovered:L1
 internal/wa-headless/core.acquireOwnership.func1	EXCLUDED	X6
 internal/wa-headless/core.emit	EXCLUDED	X1
@@ -508,6 +519,8 @@ internal/wa-headless/observability.errSuffix	EXCLUDED	X1
 internal/wa-headless/runtime.Holder.AttachHub	ELIGIBLE	uncovered:L1
 internal/wa-headless/runtime.Holder.AttachHub.func1	EXCLUDED	X6
 internal/wa-headless/runtime.Holder.BrowserPID	ELIGIBLE	uncovered:L1
+internal/wa-headless/runtime.Holder.PairingSession	ELIGIBLE	uncovered:L1
+internal/wa-headless/runtime.Holder.PairingSession.func1	EXCLUDED	X6
 internal/wa-headless/runtime.Holder.Session	ELIGIBLE	uncovered:L1
 internal/wa-headless/runtime.Holder.Session.func1	EXCLUDED	X6
 internal/wa-headless/runtime.Holder.Stop	ELIGIBLE	uncovered:L1
@@ -2901,7 +2914,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectStartInFlightCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:541)
+pkg/bootstrap.connectStartInFlightCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:546)
 pkg/bootstrap.connectStartInFlightCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -3539,6 +3552,13 @@ pkg/infra/wa-headless/newsletter.Reader.creator	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/newsletter.Reader.follower	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/newsletter.mapChannelEntry	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/newsletter.verificationFromBool	EXCLUDED	X1
+pkg/infra/wa-headless/pairing.NewQRReader	EXCLUDED	X1
+pkg/infra/wa-headless/pairing.NewStarter	EXCLUDED	X1
+pkg/infra/wa-headless/pairing.QRReader.EnsureSession	EXCLUDED	X7
+pkg/infra/wa-headless/pairing.QRReader.PairingQR	ELIGIBLE	covered
+pkg/infra/wa-headless/pairing.Starter.CheckOwnership	EXCLUDED	X1
+pkg/infra/wa-headless/pairing.Starter.StartSession	EXCLUDED	X1
+pkg/infra/wa-headless/pairing.Starter.StartSession.func1	ELIGIBLE	covered
 pkg/infra/wa-headless/presence.Announcer.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/presence.Announcer.SendChatPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,announcer.go:109)
 pkg/infra/wa-headless/presence.Announcer.SendPresence	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,announcer.go:83);uncovered:L2(S-ret,announcer.go:90)

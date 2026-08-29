@@ -103,31 +103,28 @@ func TestPairingQR_WaNoise_CallsOnlyNoiseProvider(t *testing.T) {
 	h.assertOnlyNoiseCalled(t)
 }
 
-// TestPairingQR_WaHeadless_CapabilityNotSupported é o caso REAL medido, e não
-// o simétrico que o enunciado antecipava.
+// TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider é o caso REAL medido.
 //
-// Medição (2026-08-27): não existe implementação de PairingQRReader para
-// wa_headless em lado nenhum da árvore, e nada de pkg/infra/wa-headless é
-// sequer construído em pkg/bootstrap — `grep -rn NewDisconnector pkg/bootstrap`
-// devolve zero fora de testes. A matriz de capacidades regista isso como
-// not_implemented com evidência confirmada, e é a matriz REAL que este teste
-// consulta (ver pairing_testkit_test.go).
+// Medição (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.QRReader
+// existe, é construído em pkg/bootstrap (buildPairingRegistry) quando
+// s.Headless.ChromePath está configurado, e get_pairing_qr é Supported para
+// wa_headless na matriz real. Um pedido wa_headless legítimo é servido — pelo
+// provider wa_headless, nunca pelo outro — não mais recusado.
 //
-// Por isso o esperado é 422 capability_not_supported — e, sobretudo, ZERO
-// chamadas a QUALQUER provider. O provider wa_headless está totalmente ligado
-// no harness: se a recusa viesse de uma porta nil em vez da matriz, este teste
-// continuaria a passar pelo motivo errado, e é por isso que o harness o liga.
-func TestPairingQR_WaHeadless_CapabilityNotSupported(t *testing.T) {
+// Até 2026-08-27 este teste esperava 422 capability_not_supported; a
+// substituição não é um relaxamento de asserção, é a medição mudando de fato
+// porque o adapter passou a existir.
+func TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{headlessSession, domain.EngineWaHeadless})
 	rec := servePairing(t, pairingRouter(t, h, headlessSession), http.MethodGet, "/session/qr"+engineQueryHeadless, "")
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, quero 422 (corpo %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), pairing.CodeCapabilityNotSupported) {
-		t.Errorf("corpo = %s, quero o código %q", rec.Body.String(), pairing.CodeCapabilityNotSupported)
+	if !strings.Contains(rec.Body.String(), "2@headless") {
+		t.Errorf("corpo = %s, quero o código do provider wa_headless", rec.Body.String())
 	}
-	h.assertNoProviderCalled(t)
+	h.assertOnlyHeadlessCalled(t)
 }
 
 // --- 3 e 4: PairPhone por engine -----------------------------------------
@@ -263,16 +260,17 @@ func TestPairing_EngineMismatch_PairPhone_409(t *testing.T) {
 // sessão a parear, identificada pela ROTA, é wa_headless (o ALVO), e o pedido
 // nomeia wa_headless. Se a resolução lesse o engine do actor — do contexto, do
 // cache do middleware, do token — ela concluiria wa_noise, veria divergência
-// contra o pedido e responderia 409; ou pior, pararia a sessão do alvo pelo
-// socket e responderia 200.
+// contra o pedido e responderia 409; ou pior, serviria pelo provider do ACTOR
+// (wa_noise) e responderia 200 com o código ERRADO.
 //
-// O esperado é o engine do ALVO: wa_headless, que nesta build não serve QR, e
-// portanto 422 capability_not_supported. Ou seja, o teste distingue TRÊS
+// Desde 2026-08-29 (HOUSEKEEP H145) o engine do ALVO — wa_headless — SERVE QR,
+// então o resultado correto passou a ser 200 com o código do provider
+// wa_headless, não mais uma recusa. O teste continua a distinguir TRÊS
 // resultados, e só um deles é o correto:
 //
-//	409 engine_mismatch  -> leu o engine do ACTOR (o defeito)
-//	200 com 2@noise      -> serviu pelo provider do ACTOR (o defeito, pior)
-//	422 not_supported    -> leu o engine do ALVO (correto)
+//	409 engine_mismatch      -> leu o engine do ACTOR (o defeito)
+//	200 com 2@noise          -> serviu pelo provider do ACTOR (o defeito, pior)
+//	200 com 2@headless       -> leu o engine do ALVO e serviu por ele (correto)
 //
 // É por isso que a divergência entre actor e alvo tem de ser observável para o
 // teste existir. Ver handlers.pairingTarget: nenhuma rota registada em produção
@@ -293,18 +291,17 @@ func TestPairing_UsesTargetEngineNotActorEngine(t *testing.T) {
 			"em vez do engine do ALVO (%q). É exatamente o defeito da F273 (corpo %s)",
 			domain.EngineWaNoise, domain.EngineWaHeadless, rec.Body.String())
 	}
-	if rec.Code == http.StatusOK {
-		t.Fatalf("status = 200: o pedido foi servido, e o único provider capaz de servir QR nesta build é o do "+
-			"ACTOR (wa_noise). O alvo é wa_headless (corpo %s)", rec.Body.String())
+	if strings.Contains(rec.Body.String(), "2@noise") {
+		t.Fatalf("corpo = %s: serviu pelo provider do ACTOR (wa_noise) em vez do ALVO (wa_headless)", rec.Body.String())
 	}
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, quero 422 — o engine do ALVO é wa_headless, que não serve QR nesta build (corpo %s)",
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200 — o engine do ALVO é wa_headless, que serve QR nesta build (corpo %s)",
 			rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), pairing.CodeCapabilityNotSupported) {
-		t.Errorf("corpo = %s, quero o código %q", rec.Body.String(), pairing.CodeCapabilityNotSupported)
+	if !strings.Contains(rec.Body.String(), "2@headless") {
+		t.Errorf("corpo = %s, quero o QR do provider wa_headless (2@headless)", rec.Body.String())
 	}
-	h.assertNoProviderCalled(t)
+	h.assertOnlyHeadlessCalled(t)
 }
 
 // TestPairing_UsesTargetEngineNotActorEngine_Positive é a metade de SUCESSO da
@@ -361,17 +358,21 @@ func TestPairingConnect_WaNoise_CallsOnlyNoiseProvider(t *testing.T) {
 	}
 }
 
-// TestPairingConnect_WaHeadless_CapabilityNotSupported: connect_session é
-// not_implemented para wa_headless na matriz real (nada de wa-headless é
-// construído em pkg/bootstrap). 422, e o starter nunca é chamado.
-func TestPairingConnect_WaHeadless_CapabilityNotSupported(t *testing.T) {
+// TestPairingConnect_WaHeadless_CallsOnlyHeadlessProvider: connect_session é
+// Supported para wa_headless na matriz real desde 2026-08-29 (HOUSEKEEP
+// H145) — pkg/infra/wa-headless/pairing.Starter existe e é construído em
+// pkg/bootstrap. 200, e só o starter wa_headless é chamado.
+//
+// Até 2026-08-27 este teste esperava 422 capability_not_supported; ver o
+// mesmo comentário em TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider.
+func TestPairingConnect_WaHeadless_CallsOnlyHeadlessProvider(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{headlessSession, domain.EngineWaHeadless})
 	rec := servePairing(t, pairingRouter(t, h, headlessSession), http.MethodGet, "/session/connect"+engineQueryHeadless, "")
 
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, quero 422 (corpo %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	h.assertNoProviderCalled(t)
+	h.assertOnlyHeadlessCalled(t)
 }
 
 // TestPairing_UnknownTargetSession_400: um alvo sem linha não é um alvo. A

@@ -150,6 +150,42 @@ func (h *Holder) Session(ctx context.Context) (*core.Session, error) {
 	return sess, nil
 }
 
+// PairingSession is Session's counterpart for a profile that may show a QR
+// code — core.StartPairingSession instead of core.StartSession is the only
+// difference from Session above, and every invariant Session's own doc
+// comment documents (one boot per concurrent burst, the process-liveness
+// recheck on a cached session, the lock-free PID probe) applies identically
+// here, because a Holder still holds exactly ONE session regardless of which
+// boot produced it. A Holder that already holds a session — however it
+// booted — returns it here too; a caller that wants to know whether ITS
+// session ended up paired or still showing a QR reads core.Session.Tab()
+// itself, which this package has no opinion about.
+func (h *Holder) PairingSession(ctx context.Context) (*core.Session, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.stopped {
+		return nil, ErrHolderStopped
+	}
+	if h.session != nil {
+		if !h.session.ProcessAlive() {
+			return nil, ErrSessionDied
+		}
+		return h.session, nil
+	}
+
+	sess, err := core.StartPairingSession(ctx, h.cfg)
+	if err != nil {
+		return nil, err
+	}
+	h.session = sess
+	if h.cfg.Runner != nil {
+		br := sess.Browser()
+		h.cfg.Runner.TargetAlive = func() bool { return !browserGone(br) }
+	}
+	return sess, nil
+}
+
 // BrowserPID answers the product's getBrowserPid: the process id a supervisor
 // should register and watch.
 //

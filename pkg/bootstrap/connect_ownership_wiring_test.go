@@ -55,7 +55,7 @@ func TestConnectStarterIsWiredForWaNoise(t *testing.T) {
 			return []domain.UserListEntry{{ID: id, Engine: domain.EngineWaNoise}}, nil
 		},
 	}
-	reg := buildPairingRegistry(s, users, nil, capabilityregistry.NewCapabilityRegistry())
+	reg := buildPairingRegistry(s, users, nil, capabilityregistry.NewCapabilityRegistry(), nil)
 
 	starter, err := reg.ResolveStarter(context.Background(), ownershipWiringUser, domain.EngineWaNoise.String())
 	if err != nil {

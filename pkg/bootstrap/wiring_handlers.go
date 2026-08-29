@@ -174,10 +174,15 @@ func initCustomHandlers(s *server) {
 	// nil controller as "engine not available in this process", which is the
 	// honest answer for a wa_headless session on a process nobody configured
 	// Chrome for.
+	// headlessSessions is nil under the same condition, and for the same
+	// reason, as headlessDisconnector below — kept as its own variable
+	// (rather than only building the Disconnector) because buildPairingRegistry
+	// also needs it, for the Starter/QRReader pair.
+	var headlessSessions *headlessadapter.Sessions
 	var headlessDisconnector appport.SessionDisconnector
 	if s.Headless.ChromePath != "" {
 		headlessRegistry := headlessregistry.New(s.Headless.MaxSessions)
-		headlessSessions := headlessadapter.NewSessions(headlessRegistry, s.Headless.StartConfigFor)
+		headlessSessions = headlessadapter.NewSessions(headlessRegistry, s.Headless.StartConfigFor)
 		headlessDisconnector = headlesssession.NewDisconnector(headlessSessions)
 	}
 	// headlessLogouter stays nil until Socket.logout is measured — see
@@ -204,7 +209,7 @@ func initCustomHandlers(s *server) {
 	// pkg/pairing and HOUSEKEEP F273. There is deliberately no getQRUC/
 	// pairPhoneUC here any more: a use case built at wiring time is a use case
 	// bound to one engine's adapter forever, which is the defect itself.
-	pairingRegistry := buildPairingRegistry(s, userRepo, waClientLookup, capabilities)
+	pairingRegistry := buildPairingRegistry(s, userRepo, waClientLookup, capabilities, headlessSessions)
 	// O detacher e' o MESMO adapter que o orchestrator usa (Fase 2f): sem
 	// ele, o logout pela API apagava o store e deixava o cliente
 	// registrado, com /session/status mentindo loggedIn=true (F80).

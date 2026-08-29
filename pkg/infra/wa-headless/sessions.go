@@ -99,6 +99,11 @@ func (s *Sessions) Evaluator(ctx context.Context, txtID string) (waheadless.Eval
 // held, regardless of kind (registry.go), so calling this on an id already
 // promoted to KindOperational still resolves to its (single) holder.
 //
+// It boots through Holder.PairingSession, not Holder.Session: the latter
+// (core.StartSession) refuses any page that is not already APP_READY, by
+// design (HOUSEKEEP H145) — exactly the QR/pairing screen this method
+// exists to reach.
+//
 // Same load-bearing order as Evaluator: config before Acquire.
 func (s *Sessions) EvaluatorForPairing(ctx context.Context, txtID string) (waheadless.Evaluator, error) {
 	cfg, err := s.configFor(txtID)
@@ -109,7 +114,7 @@ func (s *Sessions) EvaluatorForPairing(ctx context.Context, txtID string) (wahea
 	if err != nil {
 		return nil, err
 	}
-	sess, err := holder.Session(ctx)
+	sess, err := holder.PairingSession(ctx)
 	if err != nil {
 		return nil, err
 	}
