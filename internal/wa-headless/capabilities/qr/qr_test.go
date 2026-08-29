@@ -29,8 +29,14 @@ type pageDouble struct {
 	// is the first one that finds a populated ref. 1 means "ref present
 	// from the very first kick". 0 means "never populates".
 	refAfterKicks int
-	kicks         int
-	refreshKicks  int // how many kicks were asked to refresh (doRefresh=true)
+	// expiredUntilKick: kicks numbered 1..expiredUntilKick report the
+	// "code expired" overlay (why="expired", ref present but stale — see
+	// this package's own doc comment on the measured 6-rotation pattern)
+	// instead of "no_ref". Zero disables this simulation. Meaningless
+	// unless < refAfterKicks.
+	expiredUntilKick int
+	kicks            int
+	refreshKicks     int // how many kicks were asked to refresh (doRefresh=true)
 
 	answers map[string]string
 }
@@ -62,6 +68,8 @@ func (d *pageDouble) eval(_ context.Context, expr string, out *string) error {
 			// the `if (!ref)` branch, so a kick that finds ref ALREADY
 			// present never sets refreshed, regardless of doRefresh.
 			d.answers[key] = fmt.Sprintf(`{"ok":true,"why":"","qr":"ref%d,static,identity,adv,platform","refreshed":false}`, d.kicks)
+		} else if d.expiredUntilKick > 0 && d.kicks <= d.expiredUntilKick {
+			d.answers[key] = fmt.Sprintf(`{"ok":false,"why":"expired","qr":"","refreshed":%v}`, doRefresh)
 		} else {
 			d.answers[key] = fmt.Sprintf(`{"ok":false,"why":"no_ref","qr":"","refreshed":%v}`, doRefresh)
 		}
@@ -169,5 +177,31 @@ func TestRead_RespectsCallerContext(t *testing.T) {
 	_, _, err := New(engine.NewRunner(), d.eval).Read(ctx, "test")
 	if err == nil {
 		t.Fatal("Read returned nil error, want ctx.Err() — the caller's deadline must be honoured")
+	}
+}
+
+// TestRead_ExpiredOverlay_NudgesAndRecovers: MEASURED (H145,
+// TestProbeQRRetryPattern/TestProbeQRExpiredRecovery) — after 6 automatic
+// rotations the SPA shows its own "code expired" overlay with Conn.ref
+// still POPULATED but stale, and firing refreshQR() while it shows
+// recovers in ~1s. Read must treat why="expired" exactly like "no_ref":
+// nudge once, retry Go-side, and return the eventual fresh code — never
+// silently hand back the stale one, and never treat "expired" as a hard
+// error.
+func TestRead_ExpiredOverlay_NudgesAndRecovers(t *testing.T) {
+	compressBudgets(t)
+	d := &pageDouble{expiredUntilKick: 2, refAfterKicks: 3}
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if code == "" {
+		t.Fatal("code is empty, want a code — expired should have recovered by the 3rd kick")
+	}
+	if !refreshed {
+		t.Fatal("refreshed=false, want true — the overlay was showing on the first kick")
+	}
+	if d.refreshKicks != 1 {
+		t.Fatalf("refreshKicks=%d, want EXACTLY 1 — expired must not be nudged again on every retry", d.refreshKicks)
 	}
 }

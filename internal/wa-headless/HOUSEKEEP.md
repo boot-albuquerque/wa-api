@@ -11279,6 +11279,60 @@ escanear o QR com telefone contra o perfil descartável até o fim), embora
 o CAMINHO de código tenha sido testado. Phone-pairing (F370 Fase 2) e
 logout real (H122) continuam de fora.
 
-**Status**: corrigido — refresh e promoção implementados, testados
-(unitário + dublê determinístico + real-SPA parcial) e ligados em
+**Status (desta seção)**: corrigido — refresh e promoção implementados,
+testados (unitário + dublê determinístico + real-SPA parcial) e ligados em
 produção.
+
+### Atualização, mesmo dia (2026-08-29): o padrão de "código expirado" a cada 6 rotações — achado do usuário, medido e corrigido
+
+O usuário relatou, antes de qualquer escaneamento com telefone: *"após X
+promoções o SPA solicita manualmente um retry"*. Perguntado, ele confirmou
+que "X promoções" queria dizer **X rotações automáticas do QR**.
+
+**Medido** (`TestProbeQRRetryPattern`, 10 minutos corridos, novo,
+`.lab/test-account-profile`): o QR rotaciona sozinho a cada ~20s. **Depois
+de EXATAMENTE 6 rotações (~2min30s)**, a página para de rotacionar e
+troca o `data-testid` inventory para incluir
+`link_device_qr_expired_refresh_button` e `refresh-large` — um overlay
+"código expirado, clique para atualizar". O padrão se repetiu de forma
+IDÊNTICA três vezes seguidas nos 10 minutos (rotações 1–6, 7–12, 13–18),
+sempre no mesmo ritmo — não é ruído, é comportamento nativo da SPA.
+
+**O achado que importa para o nosso código**: durante a janela de
+"expirado", `Conn.ref` **não fica vazio** — continua com o valor ANTIGO
+(obsoleto). O `qr.Reader.Read` de antes desta correção só disparava o
+nudge de refresh quando `!ref`. Ou seja: um poller batendo em
+`/session/qr` depois da 6ª rotação receberia o MESMO código obsoleto
+indefinidamente, porque `ref` continua "presente" aos olhos do código —
+um defeito real, silencioso, que só apareceria em campo depois de ~2m30s
+de uma sessão de pareamento parada.
+
+**Medido antes de corrigir, não assumido**
+(`TestProbeQRExpiredRecovery`, novo): esperei a janela de "expirado"
+aparecer de verdade e chamei `WAWebLaunchSocketUtils.refreshQR()`
+programaticamente NESSE momento — o mesmo `refreshQR()` que o código já
+chamava para `ref` vazio. Recuperou em **~1 segundo**, sem precisar de
+clique real no botão. Ou seja, a correção é estender a MESMA detecção que
+já existia, não construir um caminho novo de clique via CDP.
+
+**Correção**: `kickScript` agora checa
+`[data-testid="link_device_qr_expired_refresh_button"]` (constante
+`expiredButtonSelector`, medida, não adivinhada) junto com `!ref`; se
+qualquer um dos dois for verdadeiro, dispara o mesmo nudge (`why` vira
+`"expired"` em vez de `"no_ref"` para o `Read` saber a causa, mas o
+tratamento — nudge, reportar não-pronto, `Read` retenta do lado Go — é
+idêntico). `Read` passa a aceitar `"expired"` como retryable, ao lado de
+`"no_ref"`.
+
+**Testes**: `TestRead_ExpiredOverlay_NudgesAndRecovers`
+(`qr_test.go`) — dublê estendido com `expiredUntilKick`, simulando a
+janela de expirado antes do ref reaparecer; controle negativo EXECUTADO
+(reverter a condição de `Read` para só aceitar `"no_ref"` derrubou o
+teste com `qr: the page could not assemble the code: expired`, revertido).
+`go build ./...`, `go vet ./...`, `TestNoClockInProductionPageScripts`,
+`go test -race ./pkg/...` e `go test ./internal/wa-headless/...` verdes;
+`.log-coverage-baseline`/`eligible.golden` sem mudança de número (só
+posições, regenerado).
+
+**Status**: corrigido e medido de ponta a ponta — o achado do usuário
+virou teste que trava.

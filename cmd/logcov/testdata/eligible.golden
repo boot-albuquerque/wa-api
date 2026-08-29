@@ -342,12 +342,12 @@ internal/wa-headless/capabilities/presence.onlineScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.resultScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.setScript	EXCLUDED	X1
 internal/wa-headless/capabilities/qr.New	EXCLUDED	X1
-internal/wa-headless/capabilities/qr.Reader.Read	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,qr.go:190)
-internal/wa-headless/capabilities/qr.Reader.parked	ELIGIBLE	uncovered:L2(S-ret,qr.go:216);uncovered:L2(S-ret,qr.go:224);uncovered:L2(S-ret,qr.go:231);uncovered:L2(S-ret,qr.go:236);uncovered:L2(S-ret,qr.go:240)
+internal/wa-headless/capabilities/qr.Reader.Read	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,qr.go:219)
+internal/wa-headless/capabilities/qr.Reader.parked	ELIGIBLE	uncovered:L2(S-ret,qr.go:245);uncovered:L2(S-ret,qr.go:253);uncovered:L2(S-ret,qr.go:260);uncovered:L2(S-ret,qr.go:265);uncovered:L2(S-ret,qr.go:269)
 internal/wa-headless/capabilities/qr.Reader.parked.func1	EXCLUDED	X6
 internal/wa-headless/capabilities/qr.Reader.parked.func2	EXCLUDED	X6
 internal/wa-headless/capabilities/qr.Reader.parked.func3	EXCLUDED	X6
-internal/wa-headless/capabilities/qr.Reader.readOnce	ELIGIBLE	uncovered:L2(S-consume,qr.go:201)
+internal/wa-headless/capabilities/qr.Reader.readOnce	ELIGIBLE	uncovered:L2(S-consume,qr.go:230)
 internal/wa-headless/capabilities/qr.kickScript	EXCLUDED	X1
 internal/wa-headless/capabilities/qr.nextStateKey	EXCLUDED	X1
 internal/wa-headless/capabilities/react.New	EXCLUDED	X1

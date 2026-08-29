@@ -38768,6 +38768,17 @@ pelo teste com dublê determinístico ANTES de qualquer medição ao vivo —
 a sonda real não teria notado, porque o perfil descartável já tinha o
 ref populado na primeira leitura.
 
+**Atualização 2026-08-29 (mesmo dia, achado do usuário)**: o usuário
+relatou, antes de escanear com telefone, que "após X promoções [rotações]
+o SPA solicita manualmente um retry". Medido (10 minutos corridos):
+verdade — a cada 6 rotações automáticas (~2min30s) a página mostra seu
+próprio overlay de "código expirado", com `Conn.ref` ficando com o valor
+ANTIGO em vez de vazio, o que o `qr.Reader` de antes desta atualização não
+detectava. Medido também que `refreshQR()` (a mesma chamada já usada para
+`ref` vazio) recupera em ~1s durante essa janela, sem precisar de clique
+real. Corrigido e testado — ver `internal/wa-headless/HOUSEKEEP.md` H145,
+seção "o padrão de código expirado a cada 6 rotações".
+
 <!-- f-status: aberto -->
 
 ## F371 — `make coverage-gate` falha por dívida técnica PRÉ-EXISTENTE, não relacionada a esta sessão

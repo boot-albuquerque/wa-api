@@ -28,16 +28,32 @@
 //
 // One divergence from the reference: WAWebCmd.Cmd.refreshQR does NOT exist
 // in this build (measured false); WAWebLaunchSocketUtils.refreshQR does
-// (measured true, and independently confirmed by H122). When Conn.ref is
-// empty, Read nudges the page with WAWebLaunchSocketUtils.refreshQR() —
-// firing it, never waiting on it inside the page (invariant 6,
-// gate_pageclock_test.go: a page script does not decide how long to
-// wait) — and Read itself, on the GO side, retries a bounded number of
-// times under the caller's ctx to give the nudge a chance to land. Calling
-// refreshQR is safe and idempotent: it is the same function a human
-// clicking "refresh code" on the real page triggers, and wwebjs's own
-// reference calls the equivalent path unconditionally on its
+// (measured true, and independently confirmed by H122). Read nudges the
+// page with WAWebLaunchSocketUtils.refreshQR() whenever the code on offer
+// is not usable — firing it, never waiting on it inside the page
+// (invariant 6, gate_pageclock_test.go: a page script does not decide how
+// long to wait) — and Read itself, on the GO side, retries a bounded
+// number of times under the caller's ctx to give the nudge a chance to
+// land. Calling refreshQR is safe and idempotent: it is the same function
+// a human clicking "refresh code" on the real page triggers, and wwebjs's
+// own reference calls the equivalent path unconditionally on its
 // UNPAIRED_IDLE transition, not behind a "does this look necessary" check.
+//
+// # The code does not stay valid forever, and Conn.ref does not say so
+//
+// MEASURED (2026-08-29, TestProbeQRRetryPattern, 10 minutes,
+// .lab/test-account-profile): the SPA rotates Conn.ref on its own roughly
+// every 20s, but after exactly 6 rotations (~2m30s) it stops and shows its
+// own "code expired" overlay instead —
+// data-testid="link_device_qr_expired_refresh_button" — three times in a
+// row, at the same 6-rotation cadence, across the whole window. Conn.ref
+// does NOT go empty during that overlay: it keeps the STALE value, so the
+// `!ref` check alone would silently keep handing out a dead code forever.
+// TestProbeQRExpiredRecovery confirmed the fix is the SAME nudge: firing
+// WAWebLaunchSocketUtils.refreshQR() while the overlay is showing produces
+// a fresh ref in ~1s, no click required — so kickScript treats "expired
+// overlay present" exactly like "ref empty": nudge, report not-ready, let
+// Read retry.
 package qr
 
 import (
@@ -70,6 +86,13 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
+// expiredButtonSelector is Meta's own hook for the "code expired, click to
+// refresh" overlay — MEASURED present (TestProbeQRRetryPattern), not
+// guessed. Mirrors the convention spa/probe.go already uses for the QR
+// canvas itself (a data-testid literal named as a constant, not repeated
+// inline).
+const expiredButtonSelector = `[data-testid="link_device_qr_expired_refresh_button"]`
+
 // refreshRetries and refreshRetryTick bound the GO-SIDE wait after a nudge:
 // up to refreshRetries extra kicks, refreshRetryTick apart, before Read
 // gives up and reports no code. Vars so a test can compress them, same
@@ -93,10 +116,12 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Reader {
 	return &Reader{runner: runner, eval: eval}
 }
 
-// kickScript reads Conn.ref ONCE and, if empty AND doRefresh, FIRES (never
-// awaits or waits on) WAWebLaunchSocketUtils.refreshQR() before reporting
-// no_ref — no setTimeout, no Date.now() loop: waiting for the nudge to
-// land is Read's job, on the Go side, under the caller's ctx (invariant 6).
+// kickScript reads Conn.ref ONCE and checks the expired-overlay selector
+// ONCE. If the ref is empty OR the overlay is showing, and doRefresh, it
+// FIRES (never awaits or waits on) WAWebLaunchSocketUtils.refreshQR()
+// before reporting not-ready — no setTimeout, no Date.now() loop: waiting
+// for the nudge to land is Read's job, on the Go side, under the caller's
+// ctx (invariant 6).
 //
 // doRefresh is false on Read's retry attempts, so one Read call fires the
 // nudge AT MOST ONCE — retrying is "did the page settle yet", not "nudge
@@ -109,7 +134,8 @@ func kickScript(key string, doRefresh bool) string {
 		try {
 			const conn = window.require('WAWebConnModel');
 			const ref = (conn && conn.Conn && conn.Conn.ref) || "";
-			if (!ref) {
+			const expired = !!document.querySelector('` + expiredButtonSelector + `');
+			if (!ref || expired) {
 				if (` + strconv.FormatBool(doRefresh) + `) {
 					try {
 						const ls = window.require('WAWebLaunchSocketUtils');
@@ -119,7 +145,7 @@ func kickScript(key string, doRefresh bool) string {
 						}
 					} catch (e) {}
 				}
-				out.why = "no_ref";
+				out.why = expired ? "expired" : "no_ref";
 				window.` + key + ` = JSON.stringify(out);
 				return;
 			}
@@ -151,17 +177,20 @@ type wireResult struct {
 // Read assembles the current QR string, or reports why it could not.
 //
 // An empty string with a nil error means "no code on offer right now" —
-// either the ref has not arrived yet (a fresh pairing screen: the code
-// arrives around t+15s) or the caller polled a session that finished
-// pairing between calls. Both are normal states, not failures.
+// the ref has not arrived yet (a fresh pairing screen: the code arrives
+// around t+15s), the SPA's own "code expired" overlay is showing (measured
+// after every 6th automatic rotation, ~2m30s — see this package's own doc
+// comment), or the caller polled a session that finished pairing between
+// calls. All three are normal states, not failures.
 //
 // refreshed reports whether WAWebLaunchSocketUtils.refreshQR() was fired
-// during this call — nudged whenever ref comes back empty. When it fires,
-// Read retries up to refreshRetries more times, refreshRetryTick apart
-// (Go-side, under ctx — see kickScript's own doc comment on invariant 6),
-// giving the page a bounded window to react before finally reporting no
-// code — the same "wait then answer" behaviour a single in-page loop would
-// have had, without a page script owning the decision.
+// during this call — nudged whenever the code is not usable (empty ref, or
+// the expired overlay). When it fires, Read retries up to refreshRetries
+// more times, refreshRetryTick apart (Go-side, under ctx — see
+// kickScript's own doc comment on invariant 6), giving the page a bounded
+// window to react before finally reporting no code — the same "wait then
+// answer" behaviour a single in-page loop would have had, without a page
+// script owning the decision.
 func (r *Reader) Read(ctx context.Context, label string) (code string, refreshed bool, err error) {
 	for attempt := 0; ; attempt++ {
 		out, err := r.readOnce(ctx, label, attempt == 0)
@@ -174,7 +203,7 @@ func (r *Reader) Read(ctx context.Context, label string) (code string, refreshed
 		if out.OK {
 			return out.QR, refreshed, nil
 		}
-		if out.Why != "no_ref" {
+		if out.Why != "no_ref" && out.Why != "expired" {
 			return "", refreshed, fmt.Errorf("%w: %s", ErrRead, out.Why)
 		}
 		// refreshed (the AGGREGATE across attempts), not out.Refreshed (this
