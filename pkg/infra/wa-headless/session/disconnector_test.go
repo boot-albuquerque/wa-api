@@ -64,21 +64,30 @@ func TestDesconectarSessaoAlheiaEErro(t *testing.T) {
 	}
 }
 
-// TestSessionStatusRelataPOSSEENaoAdivinha: a ADR-0005 D6 separa intenção de
-// estado observado, e responder "conectado" sem olhar a página seria mentir —
-// mas olhar exigiria subir um browser para responder a uma consulta de estado.
-// Relatar posse é a resposta honesta disponível.
-func TestSessionStatusRelataPOSSEENaoAdivinha(t *testing.T) {
-	reg := registry.New(1)
-	d := NewDisconnector(adapter.NewSessions(reg, cfgFor))
-
+// TestSessionStatusNaoDetidaNaoSobe: sem posse, SessionStatus devolve
+// (false, false) SEM tentar subir um browser — GET /session/status não pode
+// custar um boot só para responder a um poll de sessão que nem existe aqui.
+func TestSessionStatusNaoDetidaNaoSobe(t *testing.T) {
+	d := NewDisconnector(adapter.NewSessions(registry.New(1), cfgFor))
 	if c, l := d.SessionStatus(context.Background(), "s1"); c || l {
 		t.Fatalf("sessão não detida reportada como conectada=%v autenticada=%v", c, l)
 	}
+}
+
+// TestSessionStatusDetidaMasIlegivelNaoAdivinha: a ADR-0005 D6 separa
+// intenção de estado observado. Uma sessão DETIDA cujo Evaluator não
+// consegue ser lido (aqui, cfgFor aponta para um binário inexistente — o
+// mesmo caso de "página inalcançável" que um Chrome real produziria) não
+// vira "conectado" por posse: sem conseguir olhar a página, a resposta
+// honesta continua (false, false), nunca uma suposição otimista.
+func TestSessionStatusDetidaMasIlegivelNaoAdivinha(t *testing.T) {
+	reg := registry.New(1)
+	d := NewDisconnector(adapter.NewSessions(reg, cfgFor))
+
 	if _, err := reg.Acquire("s1", waheadless.StartConfig{}, registry.KindOperational); err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
-	if c, l := d.SessionStatus(context.Background(), "s1"); !c || !l {
-		t.Fatalf("sessão detida reportada como conectada=%v autenticada=%v", c, l)
+	if c, l := d.SessionStatus(context.Background(), "s1"); c || l {
+		t.Fatalf("sessão detida e ilegível reportada como conectada=%v autenticada=%v, quer (false,false)", c, l)
 	}
 }

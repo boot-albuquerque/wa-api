@@ -11,12 +11,16 @@ import (
 	wauser "wa-api/pkg/infra/wa-noise/adapters/user"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
 
+	appport "wa-api/pkg/application/contracts"
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/infra/db"
 	"wa-api/pkg/infra/egress"
 	wahistory "wa-api/pkg/infra/history"
 	"wa-api/pkg/infra/media/opengraph"
 	"wa-api/pkg/infra/media/sticker"
+	headlessadapter "wa-api/pkg/infra/wa-headless"
+	headlessregistry "wa-api/pkg/infra/wa-headless/registry"
+	headlesssession "wa-api/pkg/infra/wa-headless/session"
 	"wa-api/pkg/infra/wa-noise/adapters/sessioncount"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
@@ -160,8 +164,27 @@ func initCustomHandlers(s *server) {
 	miscAdapter := wamisc.NewMiscAdapter(waClientLookup)
 	userAdapter := wauser.NewUserAdapter(waClientLookup)
 	userRepo := db.NewUserRepository(s.DB)
-	sessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
+	waNoiseSessionGuard := wasession.NewSessionGuardAdapter(waClientLookup)
 	logger := applog.NewZerologAdapter(log.Logger)
+
+	// headlessSessionController is nil when this process has no Chrome
+	// configured for wa_headless (s.Headless is the zero HeadlessConfig in
+	// that case — see engine_headless.go's headlessConfigConfigurada doc on
+	// why that is silent, not fatal, at startup). sessionEngineGuard treats a
+	// nil controller as "engine not available in this process", which is the
+	// honest answer for a wa_headless session on a process nobody configured
+	// Chrome for.
+	var headlessDisconnector appport.SessionDisconnector
+	if s.Headless.ChromePath != "" {
+		headlessRegistry := headlessregistry.New(s.Headless.MaxSessions)
+		headlessSessions := headlessadapter.NewSessions(headlessRegistry, s.Headless.StartConfigFor)
+		headlessDisconnector = headlesssession.NewDisconnector(headlessSessions)
+	}
+	// headlessLogouter stays nil until Socket.logout is measured — see
+	// pkg/infra/wa-headless/session/disconnector.go's package doc.
+	var headlessLogouter appport.SessionLogouter
+	capabilities := capabilityregistry.NewCapabilityRegistry()
+	sessionGuard := newSessionEngineGuard(userRepo, capabilities, waNoiseSessionGuard, headlessDisconnector, headlessLogouter)
 
 	// Profile UseCase
 	getProfileUC := profile.NewGetProfileUseCase(miscAdapter, logger)
@@ -181,7 +204,6 @@ func initCustomHandlers(s *server) {
 	// pkg/pairing and HOUSEKEEP F273. There is deliberately no getQRUC/
 	// pairPhoneUC here any more: a use case built at wiring time is a use case
 	// bound to one engine's adapter forever, which is the defect itself.
-	capabilities := capabilityregistry.NewCapabilityRegistry()
 	pairingRegistry := buildPairingRegistry(s, userRepo, waClientLookup, capabilities)
 	// O detacher e' o MESMO adapter que o orchestrator usa (Fase 2f): sem
 	// ele, o logout pela API apagava o store e deixava o cliente

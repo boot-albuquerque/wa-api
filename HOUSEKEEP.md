@@ -38651,3 +38651,133 @@ alcançáveis verdes, mas **NÃO commitado** até autorização explícita do
 usuário (mesmo protocolo de F368/macbook-lucas).
 
 <!-- f-status: corrigido -->
+
+## F370 — `/session/*` para `wa_headless`: dispatch por engine para o que já tinha adapter (Fase 0 de um plano maior)
+
+**Data**: 2026-08-29. **Contexto**: pedido do usuário para que os endpoints
+`/session/*` funcionem também em `wa_headless`, não só `wa_noise`. Plano
+completo aprovado em 5 fases (ver conversa/plano
+`sparkling-snuggling-patterson.md`); esta entrada cobre só a Fase 0,
+executada nesta sessão.
+
+**Onde**: `pkg/bootstrap/session_engine_guard.go` (novo),
+`pkg/bootstrap/wiring_handlers.go:163-183`,
+`pkg/infra/wa-headless/sessions.go` (`+EvaluatorForPairing`, `+Promote`),
+`pkg/infra/wa-headless/session/disconnector.go` (`SessionStatus` honesto).
+
+**Problema medido**: `sessionGuard` em `wiring_handlers.go` era sempre
+`wasession.NewSessionGuardAdapter(waClientLookup)` — só `wa_noise` — e essa
+MESMA variável é reusada por 11 use cases: `DisconnectUseCase`,
+`LogoutUseCase`, `GetStatusUseCase`, e oito outros que só chamam
+`EnsureSession` (config de S3/HMAC/proxy/history, `ListUsers`,
+`DeleteUserComplete`). Uma sessão gravada como `wa_headless` falhava
+`EnsureSession` em TODOS eles, não só nas rotas de sessão.
+`pkg/infra/wa-headless/session.Disconnector` já implementava
+`SessionDisconnector` inteiro, mas não estava construído em lugar nenhum de
+`pkg/bootstrap` (zero hits para `NewDisconnector` fora de teste).
+
+**Correção**: `sessionEngineGuard` (novo tipo em `pkg/bootstrap`) resolve o
+engine GRAVADO da sessão (mesma leitura de
+`pairing.Registry.TargetEngine`, reusando `pairing.SessionEngineReader`
+como tipo do campo em vez de duplicar a interface) e despacha
+`EnsureSession`/`Disconnect`/`Logout`/`SessionStatus` para o adapter do
+engine certo. É *drop-in* para o valor `sessionGuard` de antes — nenhum dos
+11 use cases mudou. `Disconnect`/`Logout` passam ainda pela matriz de
+capacidades (`capabilityregistry.Decide`) antes de despachar, então uma
+capacidade marcada `unknown`/`not_implemented` continua recusando mesmo com
+adapter presente.
+
+**Logout ficou deliberadamente PARCIAL**: `waHeadlessLogouter` fica `nil`
+até o formato real de chamada do `Socket.logout` ser medido contra a SPA
+(H122 só provou presença, nunca invocou — ver
+`internal/wa-headless/session/disconnector.go`). O usuário pediu para
+reverter a recusa de política da H122 e implementar logout, mas escrever a
+chamada JS sem medição violaria a própria regra deste repositório
+(medir antes de projetar) e arriscaria desemparelhar uma conta real numa
+chamada nunca verificada. `Logout(wa_headless)` hoje recusa de forma
+identificável (`capability_not_supported`, pela matriz — `unknown` para
+`logout_session`/wa_headless) em vez de tentar ou de cair silenciosamente
+no adapter errado.
+
+**`SessionStatus` deixou de ser um placeholder de posse**
+(`connected==loggedIn==held`): agora, quando a sessão está detida, lê a
+página de verdade via `waheadless.RefreshOwnIdentity`
+(`internal/wa-headless/capabilities/owner`) para decidir `loggedIn`, e
+`connected` reflete se o `Evaluator` conseguiu ser resolvido (sem reboot
+para uma sessão já detida — `registry.Acquire` devolve a entrada
+existente). Sem posse, continua `(false,false)` SEM subir browser — a
+mesma garantia de antes.
+
+**Testes**: `pkg/bootstrap/session_engine_guard_test.go` (novo) — defeito
+travado por `TestEnsureSessionDespachaPorEngineGravado`, que verifica
+CONTAGEM de chamadas por adapter (não só ausência de erro). Controle
+negativo EXECUTADO: dispatch de `wa_headless` trocado manualmente para
+`g.waNoise` em `disconnectorFor`, teste falhou (`adapter headless recebeu 0
+chamadas, want 1`), revertido. `pkg/infra/wa-headless/session/
+disconnector_test.go` reescrito para o novo contrato de `SessionStatus`
+(o teste antigo travava o placeholder antigo por design — não é regressão,
+é o comportamento antigo sendo substituído pelo honesto). `go build ./...`,
+`go vet ./...`, `go test -race` de `pkg/bootstrap/...` e
+`pkg/infra/wa-headless/...` verdes.
+
+**O que falta** (fases seguintes do plano, não cobertas nesta entrada):
+Fase 1 (`connect`+`qr`), Fase 2 (`pairphone`) e a implementação real de
+Logout (Fase 3) exigem medição ao vivo contra o perfil descartável
+`.lab/` (`WA_HEADLESS_REAL_SPA=1`, `WA_HEADLESS_PAIR_SLOT=a|b`) — nenhuma
+delas foi escrita nesta sessão porque nenhuma medição foi feita. Fase 4
+(atualizar `pkg/capabilityregistry/matrix.go` para `connect_session`/
+`get_pairing_qr`/`request_pairing_code`/`logout_session`) fica pendente
+das fases 1-3, para a matriz continuar sendo evidência de código lido, não
+de intenção.
+
+**Status**: Fase 0 corrigida e verificada (unit, `-race`, controle negativo
+executado). Fases 1-3 não corrigidas nesta sessão — pendem de medição ao
+vivo que exige um humano com telefone para escanear QR no perfil
+descartável.
+
+<!-- f-status: aberto -->
+
+## F371 — `make coverage-gate` falha por dívida técnica PRÉ-EXISTENTE, não relacionada a esta sessão
+
+**Data**: 2026-08-29. **Contexto**: rodando `make check` como gate de saída
+para o trabalho da F370, descoberto incidentalmente — não é escopo da tarefa
+atual.
+
+**Onde**: `.coverage-baseline` (`min_coverage=870`, isto é, 87.0%) contra o
+medido agora: `go tool cover -func=coverage.out | tail -1` devolve
+**83.7%** — 3.3 pontos abaixo do piso declarado.
+
+**Problema**: `go tool cover -func=coverage.out` lista 73 funções com 0.0%
+de cobertura só em `pkg/bootstrap`, e mais dezenas em
+`pkg/infra/wa-noise`, `pkg/infra/wa-headless`, `pkg/domain`,
+`internal/wa-headless/*`. Amostra confirmada por `git log -1` em duas
+delas: `pkg/bootstrap/eventhandler_call.go` (`git log`: commit `66947214`,
+2026-08-07) e `pkg/bootstrap/dispatch_callhook.go` (commit `daa0c79d`,
+2026-08-09) — **ambas de semanas antes desta sessão e de qualquer arquivo
+tocado pela F370**. O gap não vem do trabalho desta sessão: `session_engine_
+guard.go` (novo) tem só UMA função a 0.0% (`logouterFor`, o ramo de sucesso
+com `wa_noise` não exercitado pelos testes atuais — os testes escritos
+cobrem os ramos de recusa, não o de sucesso).
+
+O `HOUSEKEEP.md` (F369, entrada anterior a esta) registra "todos os outros
+alvos de `make check` ... verificados verdes", o que inclui implicitamente
+`coverage-gate` — mas isso não bate com o que a medição desta sessão
+encontra. Não investigado o suficiente para saber SE a F369 mediu com um
+`COVER_PKGS`/escopo diferente (por exemplo, antes de alguma integração que
+ampliou o conjunto de pacotes cobertos por `-coverpkg`), OU se a alegação da
+F369 estava errada quando escrita.
+
+**Correção sugerida**: NÃO é ajustar `min_coverage` para baixo sem
+investigar — o próprio texto do gate diz "Codigo novo sem teste, ou teste
+deletado. Cubra o codigo novo, ou justifique e ajuste min_coverage no PR."
+Como a dívida é de dezenas de funções pré-existentes espalhadas por vários
+pacotes, a correção real é ou (a) escrever os testes que faltam nessas
+funções especificamente, ou (b) investigar por que a F369 achou o gate
+verde e reconciliar a baseline com uma medição explicada, não só recalibrada
+por conveniência.
+
+**Status**: não corrigido — fora do escopo da tarefa desta sessão
+(paridade `/session/*` para `wa_headless`, F370). Registrado para decisão do
+usuário: corrigir agora (grande, não relacionado) ou manter pendente.
+
+<!-- f-status: aberto -->

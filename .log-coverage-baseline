@@ -1289,7 +1289,24 @@ rules_frozen=true
 # erro). UpdateUser e execUpdateUser continuam elegiveis e cobertas; nenhuma
 # funcao perdeu log. Medido com `go run ./cmd/logcov -json ./pkg` apos a
 # correcao completa, nao inferido.
-min_func_coverage=604
+#
+# feature/wa-headless-foundation (2026-08-29, HOUSEKEEP F370): func_coverage
+# SOBE 604->607 (+3, ratchet-UP). ENTRAM elegiveis novas: pkg/bootstrap.
+# sessionEngineGuard.{EnsureSession,Disconnect,Logout,SessionStatus,
+# checkCapability,disconnectorFor,logouterFor,targetEngine} e
+# errEngineUnavailable (dispatch de /session/* por engine gravado, F370),
+# todas cobertas por log.Warn/Error estruturado nos ramos de erro (mesmo
+# padrao de pairing/errors.go: builder loga Debug, resolve-call-site loga
+# Warn). pkg/infra/wa-headless/session.Disconnector.SessionStatus mudou de
+# EXCLUDED (corpo trivial) para ELIGIBLE (agora le' a pagina de verdade) e
+# ja' nasce coberta. pkg/infra/wa-headless.Sessions.EvaluatorForPairing
+# (nova) fica DESCOBERTA por L1, mesmo padrao pre-existente de
+# Sessions.Evaluator/EnsureSession (o unico caminho que o teste unitario nao
+# alcanca honestamente e' o boot do browser — ver comentario do arquivo);
+# nao e' regressao introduzida por esta entrada, e' a MESMA lacuna ja
+# conhecida se repetindo numa terceira funcao de forma identica. Medido com
+# `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao inferido.
+min_func_coverage=607
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): func_coverage 601 -> 604
 # (+3, ratchet-UP). Medido apos o merge completo, com todos os conflitos
@@ -1631,7 +1648,6 @@ min_func_coverage=604
 # nem tupla multi-valor do callee). O denominador cresceu e o numerador
 # cresceu junto na mesma proporcao; o piso nao caiu. Medido apos a correcao
 # completa, nao inferido.
-min_errpath_coverage=782
 #
 # fusao com feature/wa-noise (2026-08-28): errpath_coverage 783 -> 782
 # (-1 decimo, ratchet-DOWN por medicao). A migracao do handler_capabilities.go
@@ -1644,6 +1660,15 @@ min_errpath_coverage=782
 # min_func_coverage e min_eligible SOBEM neste mesmo merge, confirmando que
 # nao ha' perda de cobertura real.
 #
+# feature/wa-headless-foundation (2026-08-29, HOUSEKEEP F370): errpath_coverage
+# SOBE 782->783 (+1, ratchet-UP). sessionEngineGuard adiciona caminhos de
+# saida novos (dispatch de /session/* por engine, ver min_func_coverage
+# acima); todos cobertos por log.Warn no menor bloco (forma (a)) OU por
+# `err := f(...); return err` explicito (forma (b) por identificador, nao
+# `return f(...)` direto — mesma regra citada na entrada de F279 acima).
+# Medido com `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao
+# inferido.
+min_errpath_coverage=783
 # INTEGRACAO (2026-08-27): apos mesclar fundacao + sessao + utilizadores +
 # canais/newsletters, re-medido: errpath_coverage SOBE 777->778. Ratchet-UP.
 #
@@ -1723,7 +1748,17 @@ min_errpath_coverage=782
 # interface, not a func decl) and the removal of the now-dead duplicate
 # engine-validity branch inside execUpdateUser. Medido apos a correcao
 # completa, nao inferido.
-min_eligible=1040
+#
+# feature/wa-headless-foundation (2026-08-29, HOUSEKEEP F370): min_eligible
+# SOBE 1040->1051 (+11, so nunca cai). ENTRAM: as 9 funcoes novas de
+# pkg/bootstrap.sessionEngineGuard e errEngineUnavailable (ver
+# min_func_coverage acima), pkg/infra/wa-headless.Sessions.
+# EvaluatorForPairing, e pkg/infra/wa-headless/session.Disconnector.
+# SessionStatus (mudou de EXCLUDED para ELIGIBLE — corpo deixou de ser
+# trivial). Golden regenerado (`go run ./cmd/logcov -golden >
+# cmd/logcov/testdata/eligible.golden`) no mesmo commit. Medido com
+# `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao inferido.
+min_eligible=1051
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
 # (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de

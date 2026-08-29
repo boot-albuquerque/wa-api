@@ -90,3 +90,36 @@ func (s *Sessions) Evaluator(ctx context.Context, txtID string) (waheadless.Eval
 	}
 	return sess.Tab().Evaluate, nil
 }
+
+// EvaluatorForPairing is Evaluator's counterpart for a session that has not
+// paired yet: it acquires against the SEPARATE pairing quota
+// (registry.KindPairing, registry.DefaultMaxPairing) instead of the
+// operational one, so a burst of pairing attempts cannot starve sessions
+// that are already up. Acquire returns the existing entry for an id already
+// held, regardless of kind (registry.go), so calling this on an id already
+// promoted to KindOperational still resolves to its (single) holder.
+//
+// Same load-bearing order as Evaluator: config before Acquire.
+func (s *Sessions) EvaluatorForPairing(ctx context.Context, txtID string) (waheadless.Evaluator, error) {
+	cfg, err := s.configFor(txtID)
+	if err != nil {
+		return nil, fmt.Errorf("waheadless: config for session: %w", err)
+	}
+	holder, err := s.registry.Acquire(txtID, cfg, registry.KindPairing)
+	if err != nil {
+		return nil, err
+	}
+	sess, err := holder.Session(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return sess.Tab().Evaluate, nil
+}
+
+// Promote moves txtID from the pairing quota to the operational one, once a
+// caller has observed pairing succeed. See registry.Registry.Promote: the
+// registry does not detect pairing itself, so whoever does (the QR/pairphone
+// adapters, via owner.Refresh) must call this.
+func (s *Sessions) Promote(txtID string) error {
+	return s.registry.Promote(txtID)
+}

@@ -2901,7 +2901,7 @@ pkg/bootstrap.clusterModeFromEnv	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,cluste
 pkg/bootstrap.comTexto	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchQueueBytes	EXCLUDED	X1
 pkg/bootstrap.configuredDispatchWorkers	EXCLUDED	X1
-pkg/bootstrap.connectStartInFlightCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:519)
+pkg/bootstrap.connectStartInFlightCheck	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,wiring_handlers.go:541)
 pkg/bootstrap.connectStartInFlightCheck.func1	EXCLUDED	X6
 pkg/bootstrap.currentCapabilityReport	EXCLUDED	X1
 pkg/bootstrap.defaultHistoryTextFor	EXCLUDED	X1
@@ -2926,6 +2926,7 @@ pkg/bootstrap.enqueueSessionEvent	ELIGIBLE	uncovered:L1
 pkg/bootstrap.ensureS3ClientForUser	EXCLUDED	X1
 pkg/bootstrap.ensureUserInfoCached	ELIGIBLE	covered
 pkg/bootstrap.entregarWebhookNaFilaDeErro	ELIGIBLE	covered
+pkg/bootstrap.errEngineUnavailable	ELIGIBLE	uncovered:L2(S-ret,session_engine_guard.go:132)
 pkg/bootstrap.generateGlobalHMACKey	ELIGIBLE	covered
 pkg/bootstrap.generateHmacSignature	ELIGIBLE	uncovered:L1
 pkg/bootstrap.generateSecret	ELIGIBLE	covered
@@ -2964,6 +2965,7 @@ pkg/bootstrap.montarRequisicaoWebhook	ELIGIBLE	covered
 pkg/bootstrap.newDispatchPool	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newLeaseManager	EXCLUDED	X1
 pkg/bootstrap.newRateLimitObserver	EXCLUDED	X1
+pkg/bootstrap.newSessionEngineGuard	EXCLUDED	X1
 pkg/bootstrap.newSessionOrchestrator	ELIGIBLE	uncovered:L1
 pkg/bootstrap.newSessionOrchestrator.func1	EXCLUDED	X6
 pkg/bootstrap.newSessionOrchestrator.func2	EXCLUDED	X6
@@ -3040,6 +3042,14 @@ pkg/bootstrap.sessionAttachHookAdapter.Attach.func1	EXCLUDED	X6
 pkg/bootstrap.sessionAttachHookAdapter.Attach.func2	EXCLUDED	X6
 pkg/bootstrap.sessionAttachHookAdapter.Attach.func3	ELIGIBLE	covered
 pkg/bootstrap.sessionAttachHookAdapter.Detach	EXCLUDED	X1
+pkg/bootstrap.sessionEngineGuard.Disconnect	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.EnsureSession	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.Logout	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.SessionStatus	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.checkCapability	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.disconnectorFor	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.logouterFor	ELIGIBLE	covered
+pkg/bootstrap.sessionEngineGuard.targetEngine	ELIGIBLE	covered
 pkg/bootstrap.sessionEventDispatcherAdapter.Dispatch	ELIGIBLE	covered
 pkg/bootstrap.sessionEventQueue.consumir	EXCLUDED	X1
 pkg/bootstrap.sessionEventQueue.executar	ELIGIBLE	covered
@@ -3428,7 +3438,9 @@ pkg/infra/storage.sanitizeS3KeyComponent	EXCLUDED	X1
 pkg/infra/wa-headless.NewSessions	EXCLUDED	X1
 pkg/infra/wa-headless.Sessions.EnsureSession	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless.Sessions.Evaluator	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless.Sessions.EvaluatorForPairing	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless.Sessions.Holds	EXCLUDED	X1
+pkg/infra/wa-headless.Sessions.Promote	EXCLUDED	X7
 pkg/infra/wa-headless.Sessions.Release	EXCLUDED	X7
 pkg/infra/wa-headless.Sessions.Runner	EXCLUDED	X1
 pkg/infra/wa-headless.ToPageJID	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,jid.go:28);uncovered:L2(S-ret,jid.go:44);uncovered:L2(S-ret,jid.go:50)
@@ -3563,7 +3575,7 @@ pkg/infra/wa-headless/roster.Roster.list	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/roster.Roster.lister	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/session.Disconnector.Disconnect	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/session.Disconnector.EnsureSession	EXCLUDED	X7
-pkg/infra/wa-headless/session.Disconnector.SessionStatus	EXCLUDED	X1
+pkg/infra/wa-headless/session.Disconnector.SessionStatus	ELIGIBLE	uncovered:L2(S-consume,disconnector.go:84)
 pkg/infra/wa-headless/session.NewDisconnector	EXCLUDED	X1
 pkg/infra/wa-noise/adapters/accounttype.Detector.Detect	EXCLUDED	X5
 pkg/infra/wa-noise/adapters/accounttype.Detector.EnsureSession	EXCLUDED	X5
