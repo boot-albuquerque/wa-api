@@ -11204,13 +11204,81 @@ comentário citando a mudança). `go build ./...`, `go vet ./...`,
 `.log-coverage-baseline`/`cmd/logcov/testdata/eligible.golden`
 regenerados e documentados (ratchet-UP, sem diluição).
 
-**O que continua faltando**: refresh do QR (`WAWebLaunchSocketUtils.
-refreshQR`, nunca invocado, só presença medida), promoção
-pairing→operational (`registry.Promote` continua sem chamador em
-produção — QRReader não detecta pareamento bem-sucedido e não promove a
-sessão), e phone-pairing (`request_pairing_code` continua `unknown` — F370
-Fase 2). Logout continua sem logouter (H122, não revisitado nesta
+**O que continua faltando (nesta atualização)**: refresh do QR
+(`WAWebLaunchSocketUtils.refreshQR`, nunca invocado, só presença medida),
+promoção pairing→operational (`registry.Promote` continua sem chamador em
+produção), e phone-pairing (`request_pairing_code` continua `unknown` —
+F370 Fase 2). Logout continua sem logouter (H122, não revisitado nesta
 atualização).
 
-**Status**: corrigido para QR e connect. Refresh, promoção e phone-pairing
-permanecem pendentes, registrados acima e em `HOUSEKEEP.md` F370.
+**Status (desta seção)**: corrigido para QR e connect. Refresh e promoção
+foram corrigidos na atualização seguinte, abaixo.
+
+### Atualização, mesmo dia (2026-08-29): refresh automático do QR e promoção pairing→operational
+
+Pedido do usuário para fechar os dois itens em aberto acima.
+
+**Refresh**: `WAWebLaunchSocketUtils.refreshQR()` é invocado sempre que
+`Conn.ref` volta vazio — é seguro e idempotente (é a mesma função que um
+humano clicando "atualizar código" dispara, e a referência a chama
+incondicionalmente na transição `UNPAIRED_IDLE`, sem checagem de
+necessidade). **A decisão de ESPERAR o nudge surtir efeito teve de ir para
+o lado Go**, não para dentro da página: a primeira versão usava um laço
+`while` com `Date.now()`/`setTimeout` dentro do script, e
+`TestNoClockInProductionPageScripts` (invariante 6,
+`gate_pageclock_test.go`) reprovou — "a página não decide quanto tempo
+esperar", com motivo próprio no comentário do gate (H90: a mesma classe de
+defeito já escapou uma vez, silenciosamente, num save de agenda de
+contatos). Corrigido: `kickScript` agora dispara o refresh e responde
+`no_ref` NA HORA, sem esperar; `Reader.Read` é quem espera, com um laço de
+retentativa próprio (`refreshRetries`/`refreshRetryTick`, vars como
+`Budget`/`Tick`), sob o `ctx` do chamador, disparando o nudge só na
+PRIMEIRA tentativa — repeti-lo a cada retentativa chamaria `refreshQR`
+bem mais vezes do que um humano clicando o botão jamais chamaria.
+
+**Achado do próprio processo de correção**: a primeira versão de
+`Read` comparava `out.Refreshed` (da tentativa ATUAL) em vez do agregado
+`refreshed` (across tentativas) na condição de parada — como só a
+tentativa 0 pede refresh, toda retentativa via `out.Refreshed=false` e o
+laço desistia depois de 2 chamadas, não das `refreshRetries`
+configuradas. **Pego por teste, não por medição ao vivo**: a sonda contra
+a SPA real (`TestProbeQRReader_ProductionPackage`) não teria notado — o
+perfil descartável usado já tinha `Conn.ref` populado na primeira leitura,
+então o caminho de retentativa nunca foi exercitado por ela. Só o dublê
+determinístico (`pageDouble`, `qr_test.go`, que simula o protocolo de
+chave de página sem interpretar JS) simulando "ref aparece só na 3ª
+tentativa" expôs o defeito — e o controle negativo (reverter o fix,
+`!out.Refreshed` no lugar de `!refreshed`) derrubou 3 dos 4 testes novos,
+confirmando que eles mordem.
+
+**Promoção**: `QRReader.PairingQR` agora, sempre que o código volta vazio,
+faz UMA leitura extra (`waheadless.RefreshOwnIdentity` — a mesma que
+`SessionStatus` do headless já usa) para perguntar se a página já tem
+dono. Se tiver, chama `sessions.Promote(txtID)` — best-effort: falha vira
+log e a PRÓXIMA leitura tenta de novo, a sessão nunca se perde, só fica na
+cota de pareamento um pouco mais que o ideal. Isto fecha o
+"`registry.Promote` sem chamador em produção" que a matriz de linhas do
+`grep` já apontava desde antes desta feature existir.
+
+**Testes**: `internal/wa-headless/capabilities/qr/qr_test.go` (novo) — 4
+casos com um dublê determinístico do protocolo de chave de página (não
+interpreta JS; simula "quantos kicks até o ref aparecer"), cobrindo:
+ref já presente (zero refresh), ref aparece na N-ésima tentativa (refresh
+disparado só na 1ª), nunca aparece (desiste dentro do orçamento), e
+contexto do chamador cancelado no meio da espera. Controle negativo
+EXECUTADO (ver acima). `TestProbeQRReader_ProductionPackage`
+(`probe_qr_test.go`, real, `.lab/test-account-profile`) chama o PACOTE DE
+PRODUÇÃO (não um script duplicado) e mediu um código real de 5 campos em
+~15s, sem nunca logar o valor. `go build ./...`, `go vet ./...`,
+`TestNoClockInProductionPageScripts`, `go test -race ./pkg/...` e
+`go test ./internal/wa-headless/...` verdes; `.log-coverage-baseline`/
+`eligible.golden` regenerados (1057→1059, ratchet-UP, sem diluição).
+
+**O que continua faltando**: a promoção não foi medida ao vivo (exigiria
+escanear o QR com telefone contra o perfil descartável até o fim), embora
+o CAMINHO de código tenha sido testado. Phone-pairing (F370 Fase 2) e
+logout real (H122) continuam de fora.
+
+**Status**: corrigido — refresh e promoção implementados, testados
+(unitário + dublê determinístico + real-SPA parcial) e ligados em
+produção.

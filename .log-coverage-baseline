@@ -1773,7 +1773,18 @@ min_errpath_coverage=783
 # commit porque nada elegivel existe fora de pkg/ e internal/wa-headless/) e
 # golden regenerado (`go run ./cmd/logcov -golden`, tambem sem argumento —
 # TestGoldenBate idem) no mesmo commit. Nao inferido.
-min_eligible=1057
+#
+# feature/wa-headless-foundation (2026-08-29, mesmo dia, refresh automatico
+# do QR + promocao pairing->operational): min_eligible SOBE 1057->1059 (+2,
+# ratchet-UP). ENTRAM: internal/wa-headless/capabilities/qr.Reader.readOnce
+# (extraido de Read ao mover a decisao de espera do refresh para o lado Go —
+# invariante 6, gate_pageclock_test.go) e pkg/infra/wa-headless/
+# pairing.QRReader.promoteIfPaired (chama registry.Promote quando a
+# identidade do dono aparece). func_coverage e errpath_coverage permanecem
+# 607/783 — as duas entram JA cobertas. Medido com `go run ./cmd/logcov
+# -json` e golden com `-golden` (ambos sem argumento) no mesmo commit. Nao
+# inferido.
+min_eligible=1059
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
 # (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de

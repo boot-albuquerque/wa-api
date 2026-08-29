@@ -28,9 +28,16 @@
 //
 // One divergence from the reference: WAWebCmd.Cmd.refreshQR does NOT exist
 // in this build (measured false); WAWebLaunchSocketUtils.refreshQR does
-// (measured true, and independently confirmed by H122) — this package does
-// not refresh yet, but a future refresh path should use the latter, not the
-// former.
+// (measured true, and independently confirmed by H122). When Conn.ref is
+// empty, Read nudges the page with WAWebLaunchSocketUtils.refreshQR() —
+// firing it, never waiting on it inside the page (invariant 6,
+// gate_pageclock_test.go: a page script does not decide how long to
+// wait) — and Read itself, on the GO side, retries a bounded number of
+// times under the caller's ctx to give the nudge a chance to land. Calling
+// refreshQR is safe and idempotent: it is the same function a human
+// clicking "refresh code" on the real page triggers, and wwebjs's own
+// reference calls the equivalent path unconditionally on its
+// UNPAIRED_IDLE transition, not behind a "does this look necessary" check.
 package qr
 
 import (
@@ -63,6 +70,15 @@ var (
 	Tick   = 250 * time.Millisecond
 )
 
+// refreshRetries and refreshRetryTick bound the GO-SIDE wait after a nudge:
+// up to refreshRetries extra kicks, refreshRetryTick apart, before Read
+// gives up and reports no code. Vars so a test can compress them, same
+// convention as Budget/Tick.
+var (
+	refreshRetries   = 8
+	refreshRetryTick = 400 * time.Millisecond
+)
+
 // ErrRead is the page refusing or failing partway through the chain.
 var ErrRead = fmt.Errorf("qr: the page could not assemble the code")
 
@@ -77,14 +93,36 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Reader {
 	return &Reader{runner: runner, eval: eval}
 }
 
-func kickScript(key string) string {
+// kickScript reads Conn.ref ONCE and, if empty AND doRefresh, FIRES (never
+// awaits or waits on) WAWebLaunchSocketUtils.refreshQR() before reporting
+// no_ref — no setTimeout, no Date.now() loop: waiting for the nudge to
+// land is Read's job, on the Go side, under the caller's ctx (invariant 6).
+//
+// doRefresh is false on Read's retry attempts, so one Read call fires the
+// nudge AT MOST ONCE — retrying is "did the page settle yet", not "nudge
+// it again every 400ms", which would call refreshQR far more often than a
+// human clicking the button ever would.
+func kickScript(key string, doRefresh bool) string {
 	return `(() => {
 	(async () => {
-		const out = { ok: false, why: "", qr: "" };
+		const out = { ok: false, why: "", qr: "", refreshed: false };
 		try {
 			const conn = window.require('WAWebConnModel');
-			const ref = conn && conn.Conn && conn.Conn.ref;
-			if (!ref) { out.why = "no_ref"; window.` + key + ` = JSON.stringify(out); return; }
+			const ref = (conn && conn.Conn && conn.Conn.ref) || "";
+			if (!ref) {
+				if (` + strconv.FormatBool(doRefresh) + `) {
+					try {
+						const ls = window.require('WAWebLaunchSocketUtils');
+						if (ls && typeof ls.refreshQR === 'function') {
+							ls.refreshQR();
+							out.refreshed = true;
+						}
+					} catch (e) {}
+				}
+				out.why = "no_ref";
+				window.` + key + ` = JSON.stringify(out);
+				return;
+			}
 			const registrationInfo = await window.require('WAWebSignalStoreApi').waSignalStore.getRegistrationInfo();
 			const noiseKeyPair = await window.require('WAWebUserPrefsInfoStore').waNoiseInfo.get();
 			const b64 = window.require('WABase64').encodeB64;
@@ -104,33 +142,70 @@ func kickScript(key string) string {
 }
 
 type wireResult struct {
-	OK  bool   `json:"ok"`
-	Why string `json:"why"`
-	QR  string `json:"qr"`
+	OK        bool   `json:"ok"`
+	Why       string `json:"why"`
+	QR        string `json:"qr"`
+	Refreshed bool   `json:"refreshed"`
 }
 
 // Read assembles the current QR string, or reports why it could not.
 //
 // An empty string with a nil error means "no code on offer right now" —
-// either the ref has not arrived yet or the caller polled a session that
-// finished pairing between calls. Both are normal states, not failures.
-func (r *Reader) Read(ctx context.Context, label string) (string, error) {
+// either the ref has not arrived yet (a fresh pairing screen: the code
+// arrives around t+15s) or the caller polled a session that finished
+// pairing between calls. Both are normal states, not failures.
+//
+// refreshed reports whether WAWebLaunchSocketUtils.refreshQR() was fired
+// during this call — nudged whenever ref comes back empty. When it fires,
+// Read retries up to refreshRetries more times, refreshRetryTick apart
+// (Go-side, under ctx — see kickScript's own doc comment on invariant 6),
+// giving the page a bounded window to react before finally reporting no
+// code — the same "wait then answer" behaviour a single in-page loop would
+// have had, without a page script owning the decision.
+func (r *Reader) Read(ctx context.Context, label string) (code string, refreshed bool, err error) {
+	for attempt := 0; ; attempt++ {
+		out, err := r.readOnce(ctx, label, attempt == 0)
+		if err != nil {
+			return "", refreshed, err
+		}
+		if out.Refreshed {
+			refreshed = true
+		}
+		if out.OK {
+			return out.QR, refreshed, nil
+		}
+		if out.Why != "no_ref" {
+			return "", refreshed, fmt.Errorf("%w: %s", ErrRead, out.Why)
+		}
+		// refreshed (the AGGREGATE across attempts), not out.Refreshed (this
+		// attempt alone): only attempt 0 ever fires the nudge — see
+		// kickScript's doRefresh — so every retry after it reports
+		// out.Refreshed=false on its own and must not be read as "nothing
+		// was ever nudged, stop retrying".
+		if !refreshed || attempt >= refreshRetries {
+			return "", refreshed, nil
+		}
+		select {
+		case <-ctx.Done():
+			return "", refreshed, ctx.Err()
+		case <-time.After(refreshRetryTick):
+		}
+	}
+}
+
+// readOnce is a single kick-and-poll round trip, returning the page's raw
+// answer.
+func (r *Reader) readOnce(ctx context.Context, label string, doRefresh bool) (wireResult, error) {
 	key := nextStateKey()
-	raw, err := r.parked(ctx, kickScript(key), key, label+"/qr")
+	raw, err := r.parked(ctx, kickScript(key, doRefresh), key, label+"/qr")
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrRead, err)
+		return wireResult{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}
 	var out wireResult
 	if e := json.Unmarshal([]byte(raw), &out); e != nil {
-		return "", fmt.Errorf("qr: unexpected answer shape: %w", e)
+		return wireResult{}, fmt.Errorf("qr: unexpected answer shape: %w", e)
 	}
-	if !out.OK {
-		if out.Why == "no_ref" {
-			return "", nil
-		}
-		return "", fmt.Errorf("%w: %s", ErrRead, out.Why)
-	}
-	return out.QR, nil
+	return out, nil
 }
 
 // parked kicks the async script and polls the page global it parks its

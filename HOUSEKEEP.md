@@ -38758,6 +38758,16 @@ escritos e ligados em `pkg/bootstrap/pairing_providers.go`;
 do plano original: **corrigida**. Fase 2 (pairphone) e a implementação
 real de `Logout` (Fase 3, H122) continuam pendentes.
 
+**Atualização 2026-08-29 (mesmo dia)**: refresh automático do QR
+(`WAWebLaunchSocketUtils.refreshQR`) e promoção pairing→operational
+(`registry.Promote`) implementados e ligados — ver
+`internal/wa-headless/HOUSEKEEP.md` H145, seção "refresh automático do QR
+e promoção pairing→operational", para a evidência completa, incluindo um
+defeito real (condição de retentativa comparando o campo errado) pego
+pelo teste com dublê determinístico ANTES de qualquer medição ao vivo —
+a sonda real não teria notado, porque o perfil descartável já tinha o
+ref populado na primeira leitura.
+
 <!-- f-status: aberto -->
 
 ## F371 — `make coverage-gate` falha por dívida técnica PRÉ-EXISTENTE, não relacionada a esta sessão

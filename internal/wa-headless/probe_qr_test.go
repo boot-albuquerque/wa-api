@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
+	"wa-api/internal/wa-headless/capabilities/qr"
 	"wa-api/internal/wa-headless/core"
 	"wa-api/internal/wa-headless/engine"
 	waruntime "wa-api/internal/wa-headless/runtime"
@@ -165,4 +167,75 @@ func TestProbeQRConstructionSurface(t *testing.T) {
 	}
 	out, _ := json.MarshalIndent(pretty, "", "  ")
 	t.Logf("QR construction surface (profile=%s, overridden=%v):\n%s", dir, overridden, out)
+}
+
+// TestProbeQRReader_ProductionPackage exercises the PRODUCTION
+// capabilities/qr.Reader — not a duplicate probe script — against the same
+// unpaired profile TestProbeQRConstructionSurface uses, confirming the
+// package this repository actually ships assembles a real code end to end.
+//
+// Never logs the code itself (live pairing material — anyone who reads it
+// could scan it into a phone). Only its SHAPE: non-empty, and comma-joined
+// into the 5 fields wwebjs's construction produces (ref, staticKeyB64,
+// identityKeyB64, advSecretKey, platform).
+func TestProbeQRReader_ProductionPackage(t *testing.T) {
+	requireRealSPA(t)
+	if os.Getenv("WA_PROBE_QR") == "" {
+		t.Skip("set WA_PROBE_QR=1")
+	}
+	dir, overridden, err := observationProfileDir()
+	if err != nil {
+		t.Fatalf("resolving observation profile: %v", err)
+	}
+	if overridden {
+		if err := requireExistingProfile(dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runner := engine.NewRunner()
+	h := waruntime.NewHolder(core.StartConfig{
+		BinaryPath: findChrome(t), ProfileDir: dir, DebuggingPort: ephemeralPort(t),
+		UserAgent: realSPAUserAgent, NavigateURL: realSPAURL, Runner: runner,
+	})
+	defer h.Stop(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	sess, err := h.PairingSession(ctx)
+	if err != nil {
+		t.Fatalf("boot (pairing-tolerant): %v", err)
+	}
+	eval := sess.Tab().Evaluate
+
+	reader := qr.New(runner, eval)
+	// The page needs its own ~15s to mount and populate Conn.ref before the
+	// FIRST Read even has a code to report; poll Read itself (Go-side,
+	// under ctx) rather than pre-waiting, so this also exercises the
+	// "no code yet" -> eventually-populated path a real HTTP poller sees.
+	deadline := time.Now().Add(45 * time.Second)
+	var code string
+	var refreshed bool
+	for {
+		code, refreshed, err = reader.Read(ctx, "test/qr-reader")
+		if err != nil {
+			t.Fatalf("Read: %v", err)
+		}
+		if code != "" || !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+	if code == "" {
+		t.Fatalf("Read never produced a code within %s (refreshed=%v)", 45*time.Second, refreshed)
+	}
+	parts := strings.Split(code, ",")
+	if len(parts) != 5 {
+		t.Fatalf("code has %d comma-separated fields, want 5 (ref,staticKeyB64,identityKeyB64,advSecretKey,platform)", len(parts))
+	}
+	for i, p := range parts {
+		if p == "" {
+			t.Errorf("field %d is empty", i)
+		}
+	}
+	t.Logf("Read produced a well-shaped 5-field code (lengths: %d,%d,%d,%d,%d)",
+		len(parts[0]), len(parts[1]), len(parts[2]), len(parts[3]), len(parts[4]))
 }
