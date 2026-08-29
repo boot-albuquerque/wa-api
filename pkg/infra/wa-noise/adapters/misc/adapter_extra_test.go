@@ -54,7 +54,7 @@ func TestMiscAdapter_ListSubscribed_OK_WithItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSubscribed = %v", err)
 	}
-	if len(got.([]types.NewsletterMetadata)) != 2 {
+	if len(got) != 2 {
 		t.Errorf("ListSubscribed = %+v", got)
 	}
 }

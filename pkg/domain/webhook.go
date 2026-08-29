@@ -1,5 +1,10 @@
 package domain
 
+// As structs deste ficheiro JÁ NÃO SÃO o formato de fio. Elas são
+// Go-idiomáticas por dentro — PascalCase, sem etiquetas `json` — e quem serve
+// HTTP passa por pkg/presentation/http/dto/webhook.
+// Ver docs/HTTP-DTO-CONVENTIONS.md.
+
 // WebhookConfigRequest represents a webhook configuration request.
 //
 // Clients historically used different field names: POST sent "webhookurl",
@@ -7,10 +12,10 @@ package domain
 // whichever is non-empty (preferring "webhookurl" when both are present,
 // matching the POST-first convention).
 type WebhookConfigRequest struct {
-	WebhookURL      string   `json:"webhook"`
-	WebhookURLField string   `json:"webhookurl"`
-	Events          []string `json:"events,omitempty"`
-	Active          bool     `json:"active"`
+	WebhookURL      string
+	WebhookURLField string
+	Events          []string
+	Active          bool
 }
 
 // ResolveURL returns the webhook URL from whichever field the client
@@ -22,18 +27,9 @@ func (r WebhookConfigRequest) ResolveURL() string {
 	return r.WebhookURL
 }
 
-// WebhookConfigResult representa o resultado de operação de webhook.
-type WebhookConfigResult struct {
-	Webhook   string   `json:"webhook"`
-	Events    []string `json:"events,omitempty"`
-	Active    bool     `json:"active,omitempty"`
-	Details   string   `json:"Details,omitempty"`
-	Subscribe []string `json:"subscribe,omitempty"`
-}
-
 // WebhookHistoryRequest representa a requisição para configuração de histórico.
 type WebhookHistoryRequest struct {
-	History int `json:"history"`
+	History int
 }
 
 // WebhookHistoryResult representa o resultado de operação de histórico.
@@ -47,19 +43,6 @@ type WebhookHistoryRequest struct {
 // (`41bc8e2^:handlers.go:6072-6075`). Dropping the tag RESTORES that shape and
 // is what lets `GET /webhook/history` report a disabled limit at all.
 type WebhookHistoryResult struct {
-	Details string `json:"Details,omitempty"`
-	History int    `json:"History"`
-}
-
-// ChatMapping representa um mapeamento de chat para histórico.
-type ChatMapping struct {
-	UserID          string `json:"user_id" db:"user_id"`
-	ChatJID         string `json:"chat_jid" db:"chat_jid"`
-	LastMessageTime string `json:"last_message_time" db:"last_message_time"`
-}
-
-// ChatInfo representa informações de um chat no índice.
-type ChatInfo struct {
-	ChatJID     string `json:"chat_jid"`
-	LastUpdated string `json:"last_updated"`
+	Details string
+	History int
 }

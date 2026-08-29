@@ -497,7 +497,7 @@ type NewsletterReaderListSubscribedCall struct {
 type NewsletterReader struct {
 	SessionGuard
 
-	ListSubscribedFunc  func(ctx context.Context, txtID string) (any, error)
+	ListSubscribedFunc  func(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error)
 	ListSubscribedCalls []NewsletterReaderListSubscribedCall
 
 	// As onze abaixo entraram com o levantamento de paridade de 2026-08-20.
@@ -506,14 +506,14 @@ type NewsletterReader struct {
 	// de falha mais provável destas rotas é passar o identificador errado — o
 	// código de convite onde ia o JID, ou o JID do canal onde ia o da
 	// conversa — e uma contagem não distingue isso de sucesso.
-	CreateNewsletterFunc func(ctx context.Context, txtID, name, description string, picture []byte) (any, error)
-	NewsletterInfoFunc   func(ctx context.Context, txtID string, jid domain.JID) (any, error)
-	NewsletterInviteFunc func(ctx context.Context, txtID, inviteKey string) (any, error)
+	CreateNewsletterFunc func(ctx context.Context, txtID, name, description string, picture []byte) (*domain.NewsletterMetadata, error)
+	NewsletterInfoFunc   func(ctx context.Context, txtID string, jid domain.JID) (*domain.NewsletterMetadata, error)
+	NewsletterInviteFunc func(ctx context.Context, txtID, inviteKey string) (*domain.NewsletterMetadata, error)
 	FollowFunc           func(ctx context.Context, txtID string, jid domain.JID) error
 	UnfollowFunc         func(ctx context.Context, txtID string, jid domain.JID) error
 	MuteFunc             func(ctx context.Context, txtID string, jid domain.JID, mute bool) error
-	MessagesFunc         func(ctx context.Context, txtID string, jid domain.JID, count int, before string) (any, error)
-	UpdatesFunc          func(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) (any, error)
+	MessagesFunc         func(ctx context.Context, txtID string, jid domain.JID, count int, before string) ([]domain.NewsletterMessage, error)
+	UpdatesFunc          func(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) ([]domain.NewsletterMessage, error)
 	MarkViewedFunc       func(ctx context.Context, txtID string, jid domain.JID, serverIDs []int) error
 	ReactFunc            func(ctx context.Context, txtID string, jid domain.JID, serverID int, reaction, messageID string) error
 	SubscribeLiveFunc    func(ctx context.Context, txtID string, jid domain.JID) (time.Duration, error)
@@ -522,7 +522,7 @@ type NewsletterReader struct {
 	ChangeOwnerFunc func(ctx context.Context, txtID string, channelJID, newOwnerJID domain.JID) error
 	DeleteFunc      func(ctx context.Context, txtID string, channelJID domain.JID) error
 
-	CreateAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	CreateAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error)
 	AcceptAdminInviteFunc func(ctx context.Context, txtID string, channelJID domain.JID) error
 	RevokeAdminInviteFunc func(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
 
@@ -543,12 +543,17 @@ type NewsletterCall struct {
 var _ port.NewsletterReader = (*NewsletterReader)(nil)
 
 // ListSubscribed implementa port.NewsletterReader.
-func (f *NewsletterReader) ListSubscribed(ctx context.Context, txtID string) (any, error) {
+//
+// The zero value answers an EMPTY SLICE and not nil, because neither real
+// adapter can answer nil: the wa-noise one builds the slice with make(), and the
+// headless one does too. A double that answered nil would bless a nil branch no
+// production path can reach (ARMADILHAS #1).
+func (f *NewsletterReader) ListSubscribed(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error) {
 	f.ListSubscribedCalls = append(f.ListSubscribedCalls, NewsletterReaderListSubscribedCall{Ctx: ctx, TxtID: txtID})
 	if f.ListSubscribedFunc != nil {
 		return f.ListSubscribedFunc(ctx, txtID)
 	}
-	return nil, nil
+	return []domain.NewsletterMetadata{}, nil
 }
 
 // --- AppStateSyncer ------------------------------------------------------
@@ -586,25 +591,32 @@ func (f *NewsletterReader) record(method, txtID string, jid domain.JID, extra st
 }
 
 // CreateNewsletter implementa port.NewsletterReader.
-func (f *NewsletterReader) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error) {
+//
+// The zero value answers a channel and not nil, for the reason ListSubscribed
+// answers a slice: a successful create always produced metadata in both
+// adapters, so a nil default would bless a branch production never takes.
+func (f *NewsletterReader) CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (*domain.NewsletterMetadata, error) {
 	f.record("CreateNewsletter", txtID, "", name)
 	if f.CreateNewsletterFunc != nil {
 		return f.CreateNewsletterFunc(ctx, txtID, name, description, picture)
 	}
-	return nil, nil
+	return &domain.NewsletterMetadata{}, nil
 }
 
 // NewsletterInfo implementa port.NewsletterReader.
-func (f *NewsletterReader) NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (any, error) {
+func (f *NewsletterReader) NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (*domain.NewsletterMetadata, error) {
 	f.record("NewsletterInfo", txtID, jid, "")
 	if f.NewsletterInfoFunc != nil {
 		return f.NewsletterInfoFunc(ctx, txtID, jid)
 	}
-	return nil, nil
+	// A channel that does not exist comes back as metadata with an EMPTY id and
+	// state "non_existing" — measured 2026-08-26 — and never as nil. The zero
+	// value mirrors that.
+	return &domain.NewsletterMetadata{}, nil
 }
 
 // NewsletterInfoWithInvite implementa port.NewsletterReader.
-func (f *NewsletterReader) NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (any, error) {
+func (f *NewsletterReader) NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (*domain.NewsletterMetadata, error) {
 	// O `inviteKey` vai em Extra e NÃO em JID de propósito: é um código de
 	// convite, não um identificador de conversa. Guardá-lo no campo de JID
 	// faria um teste de "passou o identificador certo" passar com os dois
@@ -613,7 +625,7 @@ func (f *NewsletterReader) NewsletterInfoWithInvite(ctx context.Context, txtID, 
 	if f.NewsletterInviteFunc != nil {
 		return f.NewsletterInviteFunc(ctx, txtID, inviteKey)
 	}
-	return nil, nil
+	return &domain.NewsletterMetadata{}, nil
 }
 
 // FollowNewsletter implementa port.NewsletterReader.
@@ -644,21 +656,21 @@ func (f *NewsletterReader) ToggleNewsletterMute(ctx context.Context, txtID strin
 }
 
 // NewsletterMessages implementa port.NewsletterReader.
-func (f *NewsletterReader) NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) (any, error) {
+func (f *NewsletterReader) NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) ([]domain.NewsletterMessage, error) {
 	f.record("NewsletterMessages", txtID, jid, before)
 	if f.MessagesFunc != nil {
 		return f.MessagesFunc(ctx, txtID, jid, count, before)
 	}
-	return nil, nil
+	return []domain.NewsletterMessage{}, nil
 }
 
 // NewsletterMessageUpdates implementa port.NewsletterReader.
-func (f *NewsletterReader) NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) (any, error) {
+func (f *NewsletterReader) NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) ([]domain.NewsletterMessage, error) {
 	f.record("NewsletterMessageUpdates", txtID, jid, after)
 	if f.UpdatesFunc != nil {
 		return f.UpdatesFunc(ctx, txtID, jid, count, since, after)
 	}
-	return nil, nil
+	return []domain.NewsletterMessage{}, nil
 }
 
 // MarkNewsletterViewed implementa port.NewsletterReader.
@@ -716,12 +728,12 @@ func (f *NewsletterReader) DeleteNewsletter(ctx context.Context, txtID string, c
 }
 
 // CreateNewsletterAdminInvite implementa port.NewsletterReader.
-func (f *NewsletterReader) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error {
+func (f *NewsletterReader) CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error) {
 	f.record("CreateNewsletterAdminInvite", txtID, channelJID, string(userJID))
 	if f.CreateAdminInviteFunc != nil {
 		return f.CreateAdminInviteFunc(ctx, txtID, channelJID, userJID)
 	}
-	return nil
+	return domain.NewsletterAdminInvite{}, nil
 }
 
 // AcceptNewsletterAdminInvite implementa port.NewsletterReader.

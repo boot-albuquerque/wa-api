@@ -12,6 +12,7 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 	customhttp "wa-api/pkg/presentation/http"
+	dtocapability "wa-api/pkg/presentation/http/dto/capability"
 )
 
 // allCapabilities is every domain.Capability this build knows about — the
@@ -144,26 +145,7 @@ func (h *CapabilityHandlers) Session(w http.ResponseWriter, r *http.Request) {
 		caps[c.String()] = decision.Status.String()
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"account_type": accountType.String(),
-		"capabilities": caps,
-	}, nil)
-}
-
-// adminCapabilityRow is one row of the /admin/capabilities matrix: the full
-// CapabilityDecision, flattened for JSON. Unlike Session above, this DOES
-// carry reason/evidence — the admin surface is diagnostic (item 56 of the
-// architectural prompt), and reason/evidence are exactly what a diagnosis
-// needs.
-type adminCapabilityRow struct {
-	Capability            string   `json:"capability"`
-	Engine                string   `json:"engine"`
-	AccountType           string   `json:"account_type"`
-	Supported             bool     `json:"supported"`
-	Status                string   `json:"status"`
-	Reason                string   `json:"reason"`
-	Evidence              string   `json:"evidence"`
-	RequiredPreconditions []string `json:"required_preconditions,omitempty"`
+	customhttp.RespondJSON(w, http.StatusOK, dtocapability.PresentSessionCapabilities(accountType.String(), caps), nil)
 }
 
 // Admin handles GET /admin/capabilities: the full capability × engine ×
@@ -171,7 +153,7 @@ type adminCapabilityRow struct {
 // router level (same subrouter as every other /admin/* route) — this
 // handler does not re-check the admin token.
 func (h *CapabilityHandlers) Admin(w http.ResponseWriter, r *http.Request) {
-	rows := make([]adminCapabilityRow, 0, len(allCapabilities)*len(knownEngines)*len(knownAccountTypes))
+	rows := make([]dtocapability.AdminCapabilityRow, 0, len(allCapabilities)*len(knownEngines)*len(knownAccountTypes))
 	for _, c := range allCapabilities {
 		for _, engine := range knownEngines {
 			for _, accountType := range knownAccountTypes {
@@ -183,7 +165,7 @@ func (h *CapabilityHandlers) Admin(w http.ResponseWriter, r *http.Request) {
 						Str("capability", c.String()).Str("engine", engine.String()).
 						Str("account_type", accountType.String()).
 						Msg("capability decision failed while building admin matrix")
-					rows = append(rows, adminCapabilityRow{
+					rows = append(rows, dtocapability.AdminCapabilityRow{
 						Capability:  c.String(),
 						Engine:      engine.String(),
 						AccountType: accountType.String(),
@@ -193,7 +175,7 @@ func (h *CapabilityHandlers) Admin(w http.ResponseWriter, r *http.Request) {
 					})
 					continue
 				}
-				rows = append(rows, adminCapabilityRow{
+				rows = append(rows, dtocapability.AdminCapabilityRow{
 					Capability:            decision.Capability.String(),
 					Engine:                decision.Engine.String(),
 					AccountType:           decision.AccountType.String(),
@@ -207,8 +189,5 @@ func (h *CapabilityHandlers) Admin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, map[string]interface{}{
-		"capabilities": rows,
-		"total":        len(rows),
-	}, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtocapability.PresentAdminCapabilities(rows), nil)
 }

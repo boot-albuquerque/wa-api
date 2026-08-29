@@ -12,12 +12,13 @@ import (
 	"wa-api/pkg/application/contracts/contractsfake"
 	"wa-api/pkg/application/usecase/user"
 	"wa-api/pkg/domain"
+	"wa-api/pkg/presentation/http/contracttest"
 )
 
-// GET /user/blocklist e' a unica rota do pacote que NAO responde no envelope
-// do ADR-002 no caminho feliz: escreve o JSON cru para preservar o formato
-// legado. As recusas, essas sim, passam por RespondJSON — e e' por isso que o
-// teste separa as duas formas em vez de assumir uma.
+// GET /user/blocklist ERA a unica rota do pacote que NAO respondia no
+// envelope do ADR-002 no caminho feliz: escrevia o JSON cru "para preservar o
+// formato legado". A migracao de DTO da familia de utilizadores acabou com a
+// excecao, e este teste passou a afirmar o envelope como todas as outras.
 
 func blNewHandler(bm *contractsfake.BlocklistManager) *GetBlocklistHandler {
 	return NewGetBlocklistHandler(user.NewGetBlocklistUseCase(bm, &contractsfake.Logger{}))
@@ -35,19 +36,28 @@ func TestGetBlocklistHandler_Sucesso(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("Content-Type: got %q, want application/json", ct)
+	var env struct {
+		Success bool `json:"success"`
+		Code    int  `json:"code"`
+		Data    struct {
+			Blocklist []string `json:"blocklist"`
+			DHash     string   `json:"dhash"`
+		} `json:"data"`
 	}
-	var got map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("corpo nao e' JSON: %v (%s)", err, rec.Body.String())
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("corpo nao e' o envelope canonico: %v (%s)", err, rec.Body.String())
 	}
-	if _, ok := got["Blocklist"]; !ok {
-		t.Fatalf("corpo sem a chave Blocklist do formato legado: %s", rec.Body.String())
+	if !env.Success || env.Code != 200 {
+		t.Fatalf("envelope = %+v, quero success=true code=200", env)
 	}
-	if got["DHash"] != "h1" {
-		t.Fatalf("DHash: got %v, want h1", got["DHash"])
+	if len(env.Data.Blocklist) != 1 || env.Data.Blocklist[0] != "5511999@s.whatsapp.net" {
+		t.Fatalf("blocklist = %#v", env.Data.Blocklist)
 	}
+	if env.Data.DHash != "h1" {
+		t.Fatalf("dhash: got %v, want h1", env.Data.DHash)
+	}
+	contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())
+	contracttest.AssertNoKeys(t, rec.Body.Bytes(), "Blocklist", "DHash")
 	logassert.NoSecrets(t, capture.Records(t))
 }
 

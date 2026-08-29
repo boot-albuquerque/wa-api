@@ -168,7 +168,14 @@ func initCustomHandlers(s *server) {
 
 	// Session UseCases
 	connectUC := session.NewConnectUseCase(logger)
-	disconnectUC := session.NewDisconnectUseCase(sessionGuard, logger)
+	// disconnectInFlightReleaser (F274): a successful disconnect also clears
+	// the orchestrator's per-user "start in flight" mark, so a `connect`
+	// right after `disconnect` is not blocked by a pairing flow the
+	// disconnect itself just tore down.
+	disconnectUC := session.NewDisconnectUseCase(
+		disconnectInFlightReleaser{SessionDisconnector: sessionGuard, orch: s.SessionOrchestrator},
+		logger,
+	)
 	// The pairing surface (QR, phone code, connect) is resolved PER REQUEST
 	// from the engine the request names and the target session records — see
 	// pkg/pairing and HOUSEKEEP F273. There is deliberately no getQRUC/
@@ -243,7 +250,8 @@ func initCustomHandlers(s *server) {
 		SendTemplate:    handlers.NewSendTemplateHandler(sendTemplateUC),
 	}
 	sessionHandlers := &SessionHandlers{
-		Connect:            handlers.NewConnectHandler(connectUC, pairingRegistry),
+		Connect: handlers.NewConnectHandler(connectUC, pairingRegistry).
+			WithCheckStartInFlight(connectStartInFlightCheck(s)),
 		Disconnect:         handlers.NewDisconnectHandler(disconnectUC),
 		GetQR:              handlers.NewGetQRHandler(logger, pairingRegistry),
 		Logout:             handlers.NewLogoutHandler(logoutUC),
@@ -284,9 +292,9 @@ func initCustomHandlers(s *server) {
 
 	// User UseCases
 	listUsersUC := user.NewListUsersUseCase(userRepo, logger, sessionGuard)
-	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, s3SecretCipher{}, logger)
+	addUserUC := user.NewAddUserUseCase(userRepo, hmacKeyEncryptor{}, s3SecretCipher{}, logger, s.Headless.ChromePath != "")
 	editUserUC := user.NewEditUserUseCase(userRepo, s3SecretCipher{}, userInfoRepublisher{db: s.DB}, logger)
-	deleteUserUC := user.NewDeleteUserUseCase(userRepo, logger)
+	deleteUserUC := user.NewDeleteUserUseCase(userRepo, userInfoRepublisher{db: s.DB}, logger)
 	checkUserUC := user.NewCheckUserUseCase(userAdapter, logger)
 	getUserUC := user.NewGetUserUseCase(userAdapter, jidResolver, logger)
 	getUserLIDUC := user.NewGetUserLIDUseCase(userAdapter, jidResolver, logger)
@@ -323,7 +331,7 @@ func initCustomHandlers(s *server) {
 	getHealthUC := notification.NewGetHealthUseCase(s.DB.DB, sessionCounter, logger, version)
 	listNewsletterUC := notification.NewListNewsletterUseCase(miscAdapter, logger)
 	newsletterOpsUC := notification.NewNewsletterOpsUseCase(miscAdapter, logger)
-	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, logger, s.ExPath)
+	deleteUserCompleteUC := user.NewDeleteUserCompleteUseCase(s.DB.DB, sessionGuard, userInfoRepublisher{db: s.DB}, logger, s.ExPath)
 	rejectCallUC := chat.NewRejectCallUseCase(miscAdapter, jidResolver, logger)
 	getPrivacySettingsUC := user.NewGetPrivacySettingsUseCase(userAdapter, logger)
 	setPrivacySettingUC := user.NewSetPrivacySettingUseCase(userAdapter, logger)
@@ -441,13 +449,16 @@ func initCustomHandlers(s *server) {
 		UnlinkGroup:     handlers.NewCommunityUnlinkGroupHandler(communityWriteUC),
 	}
 
-	// Download Handlers (/chat/download*)
+	// Download Handlers (/chats/download/{kind} — the five legacy per-kind
+	// handlers were removed 2026-08-27, HOUSEKEEP.md F297)
 	downloadHandlers := &handlers.DownloadHandlers{
-		Image:    handlers.NewDownloadImageHandler(message.NewDownloadImageUseCase(mediaDownloader, logger)),
-		Video:    handlers.NewDownloadVideoHandler(message.NewDownloadVideoUseCase(mediaDownloader, logger)),
-		Audio:    handlers.NewDownloadAudioHandler(message.NewDownloadAudioUseCase(mediaDownloader, logger)),
-		Document: handlers.NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(mediaDownloader, logger)),
-		Sticker:  handlers.NewDownloadStickerHandler(message.NewDownloadStickerUseCase(mediaDownloader, logger)),
+		Media: handlers.NewDownloadMediaHandler(message.NewDownloadMediaUseCase(
+			message.NewDownloadImageUseCase(mediaDownloader, logger),
+			message.NewDownloadVideoUseCase(mediaDownloader, logger),
+			message.NewDownloadAudioUseCase(mediaDownloader, logger),
+			message.NewDownloadDocumentUseCase(mediaDownloader, logger),
+			message.NewDownloadStickerUseCase(mediaDownloader, logger),
+		)),
 	}
 
 	// Presence Handlers (/user/presence, /chat/presence, /chat/markread)
@@ -492,5 +503,19 @@ func initCustomHandlers(s *server) {
 		Newsletter:  handlers.NewNewsletterHandlers(newsletterOpsUC),
 		Label:       handlers.NewLabelHandlers(db.NewLabelRepository(s.DB)),
 		Capability:  handlers.NewCapabilityHandlers(userRepo, capabilities),
+	}
+}
+
+// connectStartInFlightCheck returns the F274 pre-check function for the
+// ConnectHandler. s.SessionOrchestrator is read at CALL time, not captured
+// now: some tests build a bare *server without setting it (mirrors
+// connectOwnershipCheck's own s.Leases nil-tolerance) — treated as "no guard
+// installed yet", never as a crash.
+func connectStartInFlightCheck(s *server) func(string) error {
+	return func(userID string) error {
+		if s.SessionOrchestrator == nil {
+			return nil
+		}
+		return s.SessionOrchestrator.CheckStartAvailable(userID)
 	}
 }

@@ -27,12 +27,8 @@ go build ./...
 
 | arquivo | conteúdo |
 |---|---|
-| `RELATORIO-FASE-1-E-2.md` | comparação de controllers, níveis de abstração, falso sucesso |
-| `RELATORIO-FASE-3.md` | profiling causal do rod, topologia, SPA real, soak de 60 min |
-| `RELATORIO-FASE-4.md` | ConnectionPolicy, custo real do BrowserContext |
-| `RELATORIO-FASE-4B.md` | WhatsApp Web: RAM por sessão, UA obrigatório, SingletonLock |
-| `RELATORIO-FASE-4C.md` | harness confiável, aba única, e a causa real da perda de sessão |
 | `METHODOLOGY.md` | regra epistemológica e separação de camadas |
+| `ACHADO-RENDERER-NAO-RESPONSIVO.md` | o achado da Fase 6 que sobreviveu à limpeza dos relatórios fase a fase |
 | `main.go`, `controllers.go`, `levels*.go` | harness das Fases 1–2 |
 | `p3_*.go` | Fase 3 — profiling, topologia, SPA real, soak |
 | `p4_*.go`, `p4b_*.go` | Fase 4/4B — connection policy, contextos, WhatsApp Web |
@@ -42,18 +38,19 @@ go build ./...
 
 ## Estado das conclusões
 
-As decisões com confiança HIGH estão na ADR-0006. O que **não** foi estabelecido
-está listado explicitamente no fim de cada relatório.
+As decisões com confiança HIGH, e as condições para `GO WITH CONDITIONS` em
+produção, estão registradas em `docs/adr/0006-wa-headless-engine-de-browser-e-custo-por-sessao.md`
+e `docs/adr/0007-decisao-final-wa-headless-escopo-e-custo.md` — as ADRs são a
+fonte de verdade; os relatórios fase a fase que as sustentaram (Fases 1 a 6)
+foram removidos em 2026-08-28 por serem histórico de campanha já incorporado
+às ADRs, exceto `ACHADO-RENDERER-NAO-RESPONSIVO.md`, mantido por ser um
+achado autônomo (Fase 6, nó H1).
 
-A Fase 4C fechou a restrição de aba única (uma sessão ativa por perfil) e
-identificou a causa real da perda de credencial: o **desligamento** do Chromium,
-não invalidação pelo WhatsApp. SIGTERM corrompe o estado de sessão; o browser
-tem de ser encerrado por `Browser.close` via CDP. Seguem em aberto:
-InteractionPolicy, correctness boundary de CPU no alvo real, e o soak de 24h
-(NOT EXECUTED por restrição operacional).
-
-A decisão corrente é `GO` para a arquitetura e `GO WITH CONDITIONS` para
-produção, com as condições listadas em RELATORIO-FASE-4C.md §7.
+Resumo do que a Fase 4C estabeleceu: a restrição de aba única (uma sessão
+ativa por perfil), e a causa real da perda de credencial — o
+**desligamento** do Chromium, não invalidação pelo WhatsApp. SIGTERM corrompe
+o estado de sessão; o browser tem de ser encerrado por `Browser.close` via
+CDP.
 
 ## Cuidados ao executar
 

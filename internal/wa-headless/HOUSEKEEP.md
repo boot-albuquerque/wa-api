@@ -11035,5 +11035,6 @@ Então o que hoje ficou provado é **existência e carregabilidade**, não entre
 A pergunta que decide — *o ack sobe?* — exige sessão pareada, e
 `.lab/test-account-profile` expirou (classifica `OTHER` em 60s).
 
-**Status**: H75 corrigida quanto ao diagnóstico; envio de tipos ricos continua
-NÃO entregue, agora por falta de sessão para medir, e não por falta de caminho.
+**Status**: não entregue — a H75 foi corrigida quanto ao diagnóstico; envio de
+tipos ricos continua NÃO entregue, agora por falta de sessão para medir, e não
+por falta de caminho.

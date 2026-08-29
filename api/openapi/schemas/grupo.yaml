@@ -1,11 +1,5 @@
 # Grupo: Grupos.
 #
-# A FORMA DE `InfoGrupo` FOI MEDIDA, não derivada da struct: chamada real a
-# `POST /group/info` e a `POST /group/list` em 2026-08-26 contra a sessão
-# `filarapida`. Os nomes vêm em maiúscula inicial porque o adaptador devolve a
-# struct do wa-noise (`internal/wa-noise/protocol/types/group.go:15`) sem
-# etiquetas `json`, logo o Go serializa os nomes dos campos tal e qual.
-#
 # SEMÂNTICA DE PRESENÇA — a regra que vale para TODO campo de pedido desta
 # família, medida em 2026-08-26 e não teórica:
 #
@@ -18,7 +12,7 @@
 #
 #   Os quatro estados são INDISTINGUÍVEIS para o servidor. Nenhum campo desta
 #   família é `nullable: true` no pedido, e nenhum consegue exprimir "não
-#   decidi". Só o TIPO ERRADO é distinguido: `{"groupJID":123}` devolve
+#   decidi". Só o TIPO ERRADO é distinguido: `{"group_jid":123}` devolve
 #   `400 could_not_decode_payload` (medido).
 #
 #   Não há `trim` em lado nenhum (`ARMADILHAS.md`, secção 3.2 do contrato
@@ -27,464 +21,67 @@
 #   falta, e por vezes num envelope diferente.
 #
 #   Campo desconhecido é ignorado, e REGISTADO no log — medido:
-#   `POST /group/info {"groupJID":"…","campo_inexistente":"lixo"}` devolve
+#   `POST /group/info {"group_jid":"…","campo_inexistente":"lixo"}` devolve
 #   `200`. Um erro de escrita no nome de um campo não dá erro: dá o valor zero.
 #
-# NOS CAMPOS DE RESPOSTA a regra é a simétrica: as structs do protocolo não têm
-# `omitempty` em campo nenhum, logo TODA propriedade de `InfoGrupo` e de
-# `ParticipanteGrupo` aparece SEMPRE, mesmo vazia. A única excepção medida é
-# `AddRequest`, que é ponteiro e vem `null`.
-
-ParticipanteGrupo:
-  type: object
-  description: |
-    Um membro do grupo. Medido em `POST /group/info` — os três identificadores
-    vêm sempre juntos, e `JID` é igual a `LID` nos grupos cujo
-    `AddressingMode` é `lid`, que é o caso de todos os grupos medidos.
-
-    **Todas as propriedades abaixo aparecem SEMPRE**: o tipo do protocolo
-    (`internal/wa-noise/protocol/types/group.go:94-108`) não tem `omitempty` em
-    campo nenhum, logo o Go serializa também o valor zero. Ler este objecto
-    nunca exige verificar ausência — exige verificar VAZIO.
-  properties:
-    JID:
-      type: string
-      nullable: false
-      description: |
-        Identificador a usar para falar com este participante. É sempre igual
-        a `LID` ou a `PhoneNumber` — nunca uma terceira forma.
-
-        **Sempre presente**, nunca `null`. Vem `""` quando o WhatsApp não o
-        deu — o que aconteceria numa entrada de erro da resposta de
-        `POST /group/create`; não foi observado com dados.
-      example: 90937376170214@lid
-    PhoneNumber:
-      type: string
-      nullable: false
-      description: |
-        O número, em forma PN. **Sempre presente**, nunca `null`; `""` num
-        participante que só tenha LID.
-      example: 554192421234@s.whatsapp.net
-    LID:
-      type: string
-      nullable: false
-      description: |
-        O identificador opaco do participante. **Sempre presente**, nunca
-        `null`; `""` num grupo cujo `AddressingMode` não seja `lid`.
-      example: 90937376170214@lid
-    IsAdmin:
-      type: boolean
-      nullable: false
-      description: |
-        Administrador do grupo. **Sempre presente**, nunca `null` nem ausente:
-        `false` significa "não é administrador", e não "não se sabe".
-      example: false
-    IsSuperAdmin:
-      type: boolean
-      nullable: false
-      description: |
-        Criador do grupo. Um super-administrador é também administrador.
-        **Sempre presente**, nunca `null`.
-      example: false
-    DisplayName:
-      type: string
-      nullable: false
-      description: |
-        Só vem preenchido para participantes anónimos de grupos em modo
-        anúncio; nos grupos medidos veio sempre `""`.
-
-        **Nunca ausente e nunca `null`** — o campo existe sempre, e `""` é a
-        forma normal de "não se aplica".
-      example: ''
-    Error:
-      type: integer
-      nullable: false
-      minimum: 0
-      description: |
-        Código de falha ao ADICIONAR este participante. Só é diferente de zero
-        na resposta de `POST /group/create` e de `POST /group/updateparticipants`,
-        onde parte dos participantes pode falhar sem que a operação falhe.
-
-        **`0` significa "sem falha"**, e é o valor em toda leitura
-        (`/group/info`, `/group/list`, `/group/inviteinfo`) — nunca ausente,
-        nunca `null`. O significado dos valores diferentes de zero vem do
-        WhatsApp e não foi determinado com segurança pela implementação actual.
-      example: 0
-    AddRequest:
-      type: object
-      nullable: true
-      description: |
-        Presente quando adicionar este participante gerou um convite em vez de
-        uma adesão.
-
-        **É o ÚNICO campo ponteiro deste objecto**
-        (`internal/wa-noise/protocol/types/group.go:107`), logo é o único que
-        vem `null` — e veio `null` em TODAS as respostas medidas
-        (`/group/info`, `/group/list`, `/group/inviteinfo`). Nunca é omitido:
-        ou vem preenchido, ou vem literalmente `null`. Quem o desreferenciar
-        sem verificar parte.
-      properties:
-        Code:
-          type: string
-          nullable: false
-          description: |
-            Código do convite gerado para este participante. Nunca `null`
-            quando `AddRequest` não for `null`. **Não observado com dados** —
-            nenhuma resposta medida trouxe `AddRequest` preenchido.
-          example: IVccRoDVSbpHKNkgNxyZx4
-        Expiration:
-          type: string
-          format: date-time
-          nullable: false
-          description: |
-            Instante em que o convite deixa de valer. Nunca `null`; sendo um
-            `time.Time` não-ponteiro, um valor por definir sai como
-            `0001-01-01T00:00:00Z` — o zero do Go — e não como `null`.
-            **Não observado com dados.**
-          example: '2026-08-27T08:42:47-04:00'
-
-InfoGrupo:
-  type: object
-  description: |
-    Metadados de um grupo. Devolvido por `POST /group/info` (dentro de
-    `group_info`), por `POST /group/list` (uma entrada por grupo) e por
-    `POST /group/inviteinfo` (dentro de `invite_info`).
-
-    **TODAS as propriedades aparecem SEMPRE, nas três origens, e NENHUMA vem
-    `null`** — medido em 2026-08-26. O tipo do protocolo
-    (`internal/wa-noise/protocol/types/group.go:15-42`) não tem `omitempty`, e
-    não tem campo ponteiro. A pergunta útil sobre este objecto nunca é "o campo
-    veio?", é "o campo veio VAZIO?".
-
-    **As três origens não trazem o mesmo CONTEÚDO**, e isso foi medido:
-    `POST /group/list` devolve `ParticipantCount: 0` para todos os grupos,
-    enquanto `POST /group/info` e `POST /group/inviteinfo` sobre o MESMO grupo,
-    no mesmo minuto, devolveram `2`. Para contar membros use `Participants`,
-    que vem correcto nas três. A resposta de `/group/inviteinfo` traz
-    `AnnounceVersionID`, `ParticipantVersionID` e `MemberAddMode` como `""`.
-  properties:
-    JID:
-      type: string
-      nullable: false
-      description: |
-        Identificador do grupo. **Sempre presente e sempre preenchido** nas
-        três origens medidas; nunca `null`.
-      example: 120363411669320145@g.us
-    OwnerJID:
-      type: string
-      nullable: false
-      description: |
-        Quem criou o grupo, em forma LID. **Sempre presente**, nunca `null`;
-        `""` num grupo cujo criador o WhatsApp não revele.
-      example: 90937376170214@lid
-    OwnerPN:
-      type: string
-      nullable: false
-      description: |
-        O mesmo criador, em forma PN. **Sempre presente**, nunca `null`; `""`
-        quando o WhatsApp só dá a forma LID.
-      example: 554192421234@s.whatsapp.net
-    Name:
-      type: string
-      nullable: false
-      description: |
-        Nome do grupo, o que `POST /group/name` altera. **Sempre presente**,
-        nunca `null`. `""` é possível — nenhuma rota desta API o consegue
-        produzir, porque `/group/name` recusa nome vazio.
-      example: Equipa de entregas
-    NameSetAt:
-      type: string
-      format: date-time
-      nullable: false
-      description: |
-        Quando o nome actual foi definido. **Sempre presente**, nunca `null`:
-        é `time.Time` não-ponteiro, logo um valor por definir sai como
-        `0001-01-01T00:00:00Z`, o zero do Go.
-      example: '2026-08-26T08:42:49-04:00'
-    NameSetBy:
-      type: string
-      nullable: false
-      description: |
-        Quem definiu o nome actual, em forma LID. **Sempre presente**, nunca
-        `null`; `""` quando o WhatsApp não o diz.
-      example: 90937376170214@lid
-    NameSetByPN:
-      type: string
-      nullable: false
-      description: |
-        O mesmo, em forma PN. **Sempre presente**, nunca `null`; `""` quando
-        só há forma LID.
-      example: 554192421234@s.whatsapp.net
-    Topic:
-      type: string
-      nullable: false
-      description: |
-        Descrição do grupo, o que `POST /group/topic` altera. **Sempre
-        presente**, nunca `null`. **Medido `""` num grupo sem descrição** — é
-        assim que se detecta a ausência de tópico, e não por o campo faltar.
-      example: Combinações de rota do turno da manhã
-    TopicID:
-      type: string
-      nullable: false
-      description: |
-        Identificador da descrição actual. Tem a forma de um `message_id`
-        porque a descrição de grupo VIAJA como mensagem no protocolo.
-        **Sempre presente**, nunca `null`; medido `""` em grupo sem descrição.
-      example: 3EB0A4B2AFD45E625C0917
-    TopicSetAt:
-      type: string
-      format: date-time
-      nullable: false
-      description: |
-        Quando a descrição actual foi definida. **Sempre presente e nunca
-        `null`.** Num grupo sem descrição vem `0001-01-01T00:00:00Z`, o zero
-        do Go — medido. Quem comparar datas tem de tratar esse valor como
-        "nunca", porque ele não é `null` nem ausente.
-      example: '2026-08-26T08:42:50-04:00'
-    TopicSetBy:
-      type: string
-      nullable: false
-      description: |
-        Quem definiu a descrição, em forma LID. **Sempre presente**, nunca
-        `null`; medido `""` em grupo sem descrição.
-      example: 90937376170214@lid
-    TopicSetByPN:
-      type: string
-      nullable: false
-      description: |
-        O mesmo, em forma PN. **Sempre presente**, nunca `null`; medido `""`
-        em grupo sem descrição.
-      example: 554192421234@s.whatsapp.net
-    TopicDeleted:
-      type: boolean
-      nullable: false
-      description: |
-        A descrição foi apagada, e não apenas nunca definida. **Sempre
-        presente**, nunca `null` nem ausente — `false` é uma afirmação, não
-        uma ausência de informação.
-      example: false
-    IsLocked:
-      type: boolean
-      nullable: false
-      description: |
-        Só administradores editam nome, descrição e foto. É o que
-        `POST /group/locked` alterna. **Sempre presente**, nunca `null`.
-      example: false
-    IsAnnounce:
-      type: boolean
-      nullable: false
-      description: |
-        Só administradores enviam mensagens. É o que `POST /group/announce`
-        alterna. **Sempre presente**, nunca `null`.
-      example: false
-    AnnounceVersionID:
-      type: string
-      nullable: false
-      description: |
-        Versão do estado de anúncio, atribuída pelo servidor. É um número
-        embrulhado em TEXTO, tal como o WhatsApp o dá.
-
-        **Sempre presente**, nunca `null`. **Medido `""` na resposta de
-        `POST /group/inviteinfo`** — o convite não traz versões — e preenchido
-        em `/group/info` e `/group/list`.
-      example: '1787748173200757'
-    IsEphemeral:
-      type: boolean
-      nullable: false
-      description: |
-        O grupo tem mensagens temporárias ligadas. **Sempre presente**, nunca
-        `null`. Redundante com `DisappearingTimer > 0`, e medido coerente com
-        ele nos dois grupos observados.
-      example: true
-    DisappearingTimer:
-      type: integer
-      nullable: false
-      minimum: 0
-      description: |
-        Duração das mensagens temporárias, em SEGUNDOS — `86400` para as 24
-        horas que `POST /group/ephemeral` pede como `"24h"`. A rota recebe
-        texto e a leitura devolve segundos.
-
-        **`0` tem significado**: temporizador DESLIGADO. Não é ausência nem
-        "sem limite". O campo está sempre presente e nunca vem `null`, logo
-        `0` é a única forma de "desligado".
-      example: 86400
-    IsIncognito:
-      type: boolean
-      nullable: false
-      description: |
-        Grupo em que os participantes não vêem os números uns dos outros. Os
-        sub-grupos de aviso criados automaticamente por uma comunidade vêm
-        com este campo verdadeiro. **Sempre presente**, nunca `null`.
-      example: false
-    IsParent:
-      type: boolean
-      nullable: false
-      description: |
-        Este "grupo" é na verdade uma COMUNIDADE. É o que
-        `POST /group/create` com `is_parent: true` produz. **Sempre
-        presente**, nunca `null`.
-      example: false
-    DefaultMembershipApprovalMode:
-      type: string
-      nullable: false
-      description: |
-        Só vem preenchido em comunidades, com `request_required` — medido.
-        **Sempre presente**, nunca `null`; `""` em grupo normal.
-
-        Não é declarado como `enum` de propósito: o valor vem do WhatsApp e o
-        conjunto completo não foi determinado com segurança pela
-        implementação atual — o tipo é `string` livre
-        (`internal/wa-noise/protocol/types/group.go:51`).
-      example: ''
-    LinkedParentJID:
-      type: string
-      nullable: false
-      description: |
-        A comunidade de que este grupo é sub-grupo. **Sempre presente**, nunca
-        `null`; `""` num grupo solto — que é como se detecta que ele não
-        pertence a comunidade nenhuma.
-      example: ''
-    IsDefaultSubGroup:
-      type: boolean
-      nullable: false
-      description: |
-        Este é o sub-grupo de avisos que o WhatsApp cria sozinho ao criar uma
-        comunidade. Não foi criado por ninguém e não deve ser apagado.
-        **Sempre presente**, nunca `null`.
-      example: false
-    IsJoinApprovalRequired:
-      type: boolean
-      nullable: false
-      description: |
-        Entrar exige aprovação de um administrador. É o que
-        `POST /group/joinapprovalmode` alterna, e é o que faz
-        `GET /group/requestparticipants` ter alguma coisa para listar.
-        **Sempre presente**, nunca `null`.
-      example: false
-    AddressingMode:
-      type: string
-      nullable: false
-      description: |
-        Que forma de identificador o grupo usa no fio. Veio `lid` em todos os
-        grupos medidos. **Sempre presente**, nunca `null`.
-
-        Não é declarado como `enum`: o tipo é `string` livre no protocolo
-        (`internal/wa-noise/protocol/types/group.go:33`) e o conjunto de
-        valores possíveis não foi determinado com segurança pela
-        implementação atual.
-      example: lid
-    GroupCreated:
-      type: string
-      format: date-time
-      nullable: false
-      description: |
-        Quando o grupo foi criado. **Sempre presente**, nunca `null`; sendo
-        `time.Time` não-ponteiro, um valor por definir sairia como
-        `0001-01-01T00:00:00Z` — não foi observado.
-      example: '2026-08-26T08:42:47-04:00'
-    CreatorCountryCode:
-      type: string
-      nullable: false
-      description: |
-        País da conta que criou o grupo, em duas letras. **Sempre presente**,
-        nunca `null`; `""` quando o WhatsApp não o dá.
-      example: BR
-    ParticipantVersionID:
-      type: string
-      nullable: false
-      description: |
-        Versão da lista de participantes, atribuída pelo servidor. Muda a cada
-        entrada ou saída. É um número embrulhado em TEXTO.
-
-        **Sempre presente**, nunca `null`. **Medido `""` em
-        `POST /group/inviteinfo`.**
-      example: '1787748408570878'
-    Participants:
-      type: array
-      nullable: false
-      description: |
-        Os membros. Vem correcta nas três origens — ao contrário de
-        `ParticipantCount`.
-
-        **Sempre presente** e, nas leituras medidas, sempre uma lista não
-        vazia (a própria conta está lá). O tipo é uma fatia Go não-ponteiro,
-        logo uma fatia `nil` sairia como `null` e NÃO como `[]` — não foi
-        observado, mas quem itera sobre a resposta deve tratar `null` como
-        lista vazia. A ordem não é significativa e não é estável entre
-        chamadas.
-      items:
-        $ref: '#/components/schemas/ParticipanteGrupo'
-    ParticipantCount:
-      type: integer
-      nullable: false
-      minimum: 0
-      description: |
-        Número de membros. **Sempre presente**, nunca `null`.
-
-        **Medido a ZERO em `POST /group/list`** para todos os grupos,
-        incluindo os que `POST /group/info` e `POST /group/inviteinfo` contam
-        correctamente no mesmo instante. Aqui `0` NÃO significa "grupo sem
-        membros": significa "esta origem não preencheu o campo". Não use este
-        campo a partir da listagem; conte `Participants`.
-      example: 2
-    MemberAddMode:
-      type: string
-      enum: [admin_add, all_member_add, '']
-      nullable: false
-      description: |
-        Quem pode acrescentar membros. Os dois valores do protocolo são
-        `admin_add` e `all_member_add`
-        (`internal/wa-noise/protocol/types/group.go:9-12`).
-
-        **Sempre presente**, nunca `null`. **Medido `""` em
-        `POST /group/inviteinfo`**, e é por isso que `''` entra na lista: é um
-        estado real da resposta, e não um valor do protocolo.
-
-        É campo de RESPOSTA — nenhuma rota desta API o envia nem o altera —
-        logo não há validação de entrada a violar. Um valor DESCONHECIDO, se o
-        WhatsApp vier a introduzir um, é devolvido tal e qual, sem erro e sem
-        aviso: o tipo é `string` livre e nada no caminho o valida contra a
-        lista. Quem consumir tem de tratar valor fora da lista, não presumir
-        que ela é fechada.
-      example: admin_add
-    Suspended:
-      type: boolean
-      nullable: false
-      description: |
-        O grupo está suspenso pelo WhatsApp. **Sempre presente**, nunca
-        `null`.
-      example: false
+# `InfoGrupo` e `ParticipanteGrupo` (sem sufixo) existiram aqui como registo do
+# formato ANTERIOR — a struct de protocolo do wa-noise servida directamente,
+# sem DTO, PascalCase no fio — e foram REMOVIDOS nesta sessão (F335): eram
+# schemas ÓRFÃOS, sem `$ref` algum no documento (confirmado por grep antes da
+# remoção), e a sua presença só servia para o gate de nomenclatura (F330)
+# falhar contra um formato que a API já não serve há várias sessões. A forma
+# viva é `InfoGrupoCanonico`/`ParticipanteGrupoCanonico`, produzida por
+# `PresentGroupInfo` (`pkg/presentation/http/dto/group/presenter.go`).
 
 SolicitacaoEntrada:
   type: object
   description: |
     Um pedido de entrada pendente, devolvido por
-    `GET /group/requestparticipants`.
+    `GET /group/requestparticipants`. O corpo é
+    `dtogroup.GroupJoinRequestResponse`
+    (`pkg/presentation/http/dto/group/group.go`), produzido por
+    `PresentGroupJoinRequest` — não mais a struct de protocolo serializada
+    directamente.
 
     **A forma não foi observada com dados**: os dois grupos disponíveis não
-    tinham pedidos pendentes, e todas as chamadas medidas devolveram `[]`. Os
-    campos abaixo vêm do tipo do protocolo
-    (`internal/wa-noise/protocol/types/group.go:172-175`), que é serializado
-    sem etiquetas `json` e sem `omitempty` — logo os dois aparecem sempre.
+    tinham pedidos pendentes, e todas as chamadas medidas devolveram `[]`. As
+    descrições de campo abaixo ainda reflectem o que era conhecido do tipo de
+    protocolo antes da migração, não uma nova medição.
+  required: [jid, requested_at, added_by_jid, method]
   properties:
-    JID:
+    jid:
       type: string
       nullable: false
       description: |
         Quem pediu para entrar. **Sempre presente** quando houver uma entrada,
-        nunca `null` nem omitido — não há `omitempty` no tipo. **Não observado
+        nunca `null` nem omitido — o DTO não usa `omitempty`. **Não observado
         com dados.**
       example: 554192421234@s.whatsapp.net
-    RequestedAt:
+    requested_at:
       type: string
       format: date-time
+      nullable: true
+      description: |
+        Quando o pedido foi feito. `null`, e nunca
+        `"0001-01-01T00:00:00Z"`, quando o motor não relata o momento — ver
+        `presentTime` em `docs/HTTP-DTO-CONVENTIONS.md` §5. **Não observado
+        com dados.**
+      example: '2026-08-26T08:42:47-04:00'
+    added_by_jid:
+      type: string
       nullable: false
       description: |
-        Quando o pedido foi feito. **Sempre presente**, nunca `null`: é
-        `time.Time` não-ponteiro, logo um valor por definir sairia como
-        `0001-01-01T00:00:00Z`. **Não observado com dados.**
-      example: '2026-08-26T08:42:47-04:00'
+        Quem adicionou o solicitante. `""` quando ninguém o fez — um pedido
+        feito ao seguir um link de convite não tem quem o adicionou. **Não
+        observado com dados.**
+      example: ''
+    method:
+      type: string
+      nullable: false
+      description: |
+        Como o pedido chegou (`InviteLink` para um convite). `""` quando o
+        motor não o relata. **Não observado com dados.**
+      example: InviteLink
 
 AlvoGrupo:
   type: object
@@ -492,22 +89,21 @@ AlvoGrupo:
     O grupo sobre o qual a operação age. Usado por `POST /group/info`,
     `POST /group/invitelink` e `POST /group/leave`. O nome específico da rota
     tem precedência sobre `chat` quando os dois vierem
-    (`pkg/domain/chat_target.go:14-17`) — medido: `{"groupJID":"<grupo>",
+    (`pkg/domain/chat_target.go:14-17`) — medido: `{"group_jid":"<grupo>",
     "chat":"nonsense"}` devolve `200`, porque `chat` nem é olhado.
 
     **Nenhum dos dois campos é ponteiro**, logo ausente, `null` e `""` são o
     mesmo pedido. O que muda entre eles é apenas o NOME.
 
-    **O nome do campo varia entre rotas desta família**, e não por acidente:
-    `/group/photo/remove`, `/group/ephemeral` e `/group/joinapprovalmode`
-    leem `groupjid` todo em minúsculas, e as restantes leem `groupJID`. Na
-    prática o descodificador do Go casa nomes ignorando maiúsculas, logo as
-    duas grafias funcionam em todas — mas o exemplo de cada rota traz a que
-    foi medida.
+    **O nome do campo é `group_jid` em toda a família**, uniformemente: a
+    migração para DTO (`docs/HTTP-DTO-CONVENTIONS.md`) fechou a variação de
+    grafia (`groupJID` vs `groupjid`) que esta secção documentava antes —
+    cada rota lê agora o mesmo DTO de pedido tipado, com a mesma etiqueta
+    `json:"group_jid"`.
 
     Campos desconhecidos são IGNORADOS em silêncio.
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -515,7 +111,7 @@ AlvoGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não — salvo se `chat` vier | `/group/info` e `/group/invitelink`: `400 missing_group_jid`; `/group/leave`: `400` com `error` em TEXTO (F266) |
+        | ausente | não — salvo se `chat` vier | `/group/info` e `/group/invitelink`: `400 missing_group_jid` (recusa tipada, do use case); `/group/leave`: `400 invalid_request` (objecto canónico, do manipulador — `rejectMissingField`) |
         | `null` | não | idêntico a ausente — **indistinguível** |
         | `""` | não | idêntico a ausente — **indistinguível** |
         | `"   "` | **passa a guarda** | `400 invalid_group_jid` — erro DIFERENTE, porque não há `trim` |
@@ -529,11 +125,11 @@ AlvoGrupo:
       nullable: false
       description: |
         Nome universal do destino, aceite em toda a API. **Só é lido quando
-        `groupJID` estiver vazio** (`ResolveChatField`); os dois juntos e
-        diferentes fazem ganhar `groupJID` — medido.
+        `group_jid` estiver vazio** (`ResolveChatField`); os dois juntos e
+        diferentes fazem ganhar `group_jid` — medido.
 
         Ausente, `null` e `""` são indistinguíveis, e valem "não usar o
-        alias". As mesmas regras de forma de `groupJID` valem para o valor.
+        alias". As mesmas regras de forma de `group_jid` valem para o valor.
       example: 120363411669320145@g.us
 
 PedidoCriarGrupo:
@@ -543,12 +139,13 @@ PedidoCriarGrupo:
     três saem desta mesma rota, e o que as distingue são `is_parent` e
     `linked_parent_jid`.
 
-    **Todas as recusas desta rota saem no envelope ANTIGO**, com `error` em
-    texto simples e sempre a mesma frase `"bad request"` (F266). Medido: as
-    SEIS causas distintas — `name` em falta, `participants` em falta,
-    `participants` vazio, entrada vazia em `participants`, `is_parent` com
-    `linked_parent_jid` — produzem corpos IDÊNTICOS. O cliente não consegue
-    saber qual campo falhou; a causa fica só no log do servidor.
+    **Todas as recusas desta rota saem no objecto canónico**
+    `{"code":"invalid_request","message":"Requisição inválida."}`
+    (`docs/HTTP-DTO-CONVENTIONS.md` §7) — o manipulador não usa códigos de erro
+    próprios aqui. As SEIS causas distintas — `name` em falta, `participants`
+    em falta, `participants` vazio, entrada vazia em `participants`,
+    `is_parent` com `linked_parent_jid` — produzem corpos IDÊNTICOS. O cliente
+    não consegue saber qual campo falhou; a causa fica só no log do servidor.
 
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
@@ -564,7 +161,7 @@ PedidoCriarGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400`, `error: "bad request"` (envelope antigo) |
+        | ausente | não | `400 invalid_request` |
         | `null` | não | idêntico a ausente — **indistinguível** |
         | `""` | não | idêntico a ausente — **indistinguível** |
         | `"   "` | **sim** | aceite tal e qual; **não há `trim`**, e o grupo fica com um nome de três espaços |
@@ -584,10 +181,10 @@ PedidoCriarGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | **depende** | com `is_parent: true`, sim; senão `400 "bad request"` |
+        | ausente | **depende** | com `is_parent: true`, sim; senão `400 invalid_request` |
         | `null` | igual a ausente | **indistinguível** — medido |
         | `[]` | igual a ausente | **indistinguível** — a guarda é `len(...) < 1` |
-        | `[""]` | não | `400 "bad request"`; o log diz o ÍNDICE, a resposta não |
+        | `[""]` | não | `400 invalid_request`; o log diz o ÍNDICE, a resposta não |
         | `["554192421234", ""]` | não | recusa a lista INTEIRA — não há descarte silencioso de item |
         | `["   "]` | passa a guarda | `400 invalid_jid` — `"   "` não é `""` |
         | `["nao-e-jid"]` | não | `400 invalid_jid`, com o valor citado na mensagem |
@@ -643,7 +240,7 @@ PedidoCriarGrupo:
         | ausente | grupo solto |
         | `null` | idêntico a ausente — **indistinguível** |
         | `""` | idêntico a ausente — **indistinguível**, e é o que faz a exclusão mútua com `is_parent` não disparar |
-        | preenchido, com `is_parent: true` | `400 "bad request"` |
+        | preenchido, com `is_parent: true` | `400 invalid_request` |
         | preenchido, sem `is_parent` | sub-grupo da comunidade indicada |
 
         Um valor mal formado não é validado por esta API: segue para
@@ -655,12 +252,11 @@ PedidoEntrarGrupo:
   description: |
     **A struct de domínio mente aqui.** `GroupJoinRequest`
     (`pkg/domain/group.go:52-54`) declara `inviteLink`, e não é o que a rota
-    lê: o manipulador declara a sua própria struct anónima com `code`
-    (`handler_group_mgmt.go:148-150`). Um cliente escrito a partir do domínio
-    recebe `400` — medido: `{"inviteLink":"IVccRoDVSbpHKNkgNxyZx4"}` devolve
-    `400 "bad request"`, porque `inviteLink` é um campo DESCONHECIDO, é
-    ignorado (e registado no log como `unknown field "inviteLink"`), e `code`
-    fica `""`.
+    lê: o corpo é `dtogroup.JoinGroupRequest`
+    (`pkg/presentation/http/dto/group/request.go`), com `code`. Um cliente
+    escrito a partir do domínio recebe `400`, porque `inviteLink` é um campo
+    DESCONHECIDO nesta rota, é ignorado (e registado no log como
+    `unknown field "inviteLink"`), e `code` fica `""`.
 
     Este é o custo concreto de campo desconhecido não dar erro: o nome errado
     não se queixa de si próprio — queixa-se do campo certo estar em falta.
@@ -676,11 +272,11 @@ PedidoEntrarGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400`, `error: "bad request"` (envelope antigo, F266) |
+        | ausente | não | `400 invalid_request` — objecto canónico `error.code`/`error.message` |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente** |
         | `"   "` | **passa a guarda** | não há `trim`; segue para o WhatsApp. Por analogia com `/group/inviteinfo`, onde foi MEDIDO, o desfecho é `500`, não `400` |
-        | `inviteLink` em vez de `code` | não | `400 "bad request"` — campo desconhecido; ignorado, mas o log nomeia-o |
+        | `inviteLink` em vez de `code` | não | `400 invalid_request` — campo desconhecido; ignorado, mas o log nomeia-o |
         | código válido | sim | — |
 
         O URL completo também passa, porque a biblioteca corta o prefixo
@@ -695,15 +291,15 @@ PedidoEntrarGrupo:
 PedidoInfoConvite:
   type: object
   description: |
-    Inspecção de um convite. O campo chama-se `Code` com maiúscula
-    (`pkg/domain/group.go:42-44`) — a bateria de campo mediu `400 missing_code`
-    com `inviteLink`, porque `inviteLink` é campo desconhecido e é ignorado.
-
-    Na prática o descodificador do Go casa nomes ignorando maiúsculas, logo
-    `code` minúsculo também funciona — medido `200`.
-  required: [Code]
+    Inspecção de um convite. O corpo é `dtogroup.GetGroupInviteInfoRequest`
+    (`pkg/presentation/http/dto/group/request.go`), com `json:"code"`
+    minúsculo — não mais a struct de domínio com `Code` maiúsculo que este
+    ficheiro descrevia antes da migração para DTO
+    (`docs/HTTP-DTO-CONVENTIONS.md`). `inviteLink` continua a ser campo
+    desconhecido e é ignorado.
+  required: [code]
   properties:
-    Code:
+    code:
       type: string
       nullable: false
       minLength: 1
@@ -724,16 +320,16 @@ PedidoInfoConvite:
 PedidoNomeGrupo:
   type: object
   description: |
-    Novo nome de um grupo. Os campos são lidos da struct anónima do
-    manipulador (`handler_group_mgmt.go:192-196`), não da de domínio.
+    Novo nome de um grupo. O corpo é `dtogroup.SetGroupNameRequest`
+    (`pkg/presentation/http/dto/group/request.go`).
 
-    **Só `Name` é validado.** Um pedido sem grupo passa a validação e falha
-    mais à frente, na resolução do JID — e os dois erros saem em ENVELOPES
-    DIFERENTES: `Name` em falta dá `error` em texto simples, grupo em falta dá
-    `error.code = invalid_jid`.
+    **Só `name` é validado no manipulador.** Um pedido sem grupo passa a
+    validação e falha mais à frente, na resolução do JID: `name` em falta dá
+    `error.code = invalid_request` (objecto canónico, sem taxonomia própria),
+    grupo em falta ou inválido dá `error.code = invalid_jid`.
   required: [name]
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -752,7 +348,7 @@ PedidoNomeGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só é lido quando `groupJID` estiver vazio.
+        Nome universal do destino. Só é lido quando `group_jid` estiver vazio.
         Ausente, `null` e `""` são indistinguíveis e valem "não usar o alias".
       example: 120363411669320145@g.us
     name:
@@ -764,7 +360,7 @@ PedidoNomeGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400`, `error: "bad request"` (envelope ANTIGO, F266) |
+        | ausente | não | `400 invalid_request` |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente**. Não há forma de LIMPAR o nome por esta rota |
         | `"   "` | **sim** | aceite tal e qual; **não há `trim`** |
@@ -774,12 +370,12 @@ PedidoNomeGrupo:
 PedidoTopicoGrupo:
   type: object
   description: |
-    Nova descrição de um grupo. Campos da struct anónima do manipulador
-    (`handler_group_mgmt.go:213-217`). Tal como em `/group/name`, só o campo
-    de conteúdo é validado.
+    Nova descrição de um grupo. O corpo é `dtogroup.SetGroupTopicRequest`
+    (`pkg/presentation/http/dto/group/request.go`). Tal como em
+    `/group/name`, só o campo de conteúdo é validado.
   required: [topic]
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -791,7 +387,7 @@ PedidoTopicoGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us
     topic:
@@ -803,7 +399,7 @@ PedidoTopicoGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400`, `error: "bad request"` (envelope ANTIGO, F266) |
+        | ausente | não | `400 invalid_request` |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente** — **não há forma de APAGAR a descrição por esta rota**: o vazio é recusado, não interpretado como limpeza |
         | `"   "` | **sim** | aceite tal e qual; **não há `trim`**. É o mais perto de "apagar" que a rota permite |
@@ -814,11 +410,11 @@ PedidoFotoGrupo:
   type: object
   description: |
     Foto de grupo. **Duas armadilhas medidas, e as duas com uma variável de
-    cada vez.** Campos da struct anónima do manipulador
-    (`handler_group_mgmt.go:234-238`); só `Photo` é validado.
+    cada vez.** O corpo é `dtogroup.SetGroupPhotoRequest`
+    (`pkg/presentation/http/dto/group/request.go`); só `photo` é validado.
   required: [photo]
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -830,7 +426,7 @@ PedidoFotoGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us
     photo:
@@ -843,17 +439,17 @@ PedidoFotoGrupo:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400`, `error: "bad request"` (envelope ANTIGO, F266) |
+        | ausente | não | `400 invalid_request` |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente**. Para REMOVER a foto a rota é `POST /group/photo/remove`, não o envio de vazio |
-        | `"   "` | não | passa a guarda `== ""` e morre no descodificador base64: `400` — **mas com o MESMO corpo `"bad request"`** |
+        | `"   "` | não | passa a guarda `== ""` e morre no descodificador base64: `400` — **mas com o MESMO corpo `invalid_request`** |
         | `data:image/jpeg;base64,…` | **não** | `400` — medido; o descodificador recusa os `:` e `;` do URI de dados |
         | base64 inválido | não | `400`, **corpo idêntico ao de campo em falta** |
         | JPEG em base64 cru | sim | — |
         | PNG em base64 cru | não | bem descodificado aqui e recusado pelo WhatsApp: `422 upstream_rejected` |
 
         **As quatro causas de `400` desta rota produzem o mesmo corpo**
-        — `{"code":400,"error":"bad request","success":false}` — porque a
+        — `{"code":400,"error":{"code":"invalid_request","message":"Requisição inválida."},"success":false}` — porque a
         falha de base64 também sai por `RespondJSON` com erro não-tipado
         (`handler_group_mgmt.go:249`). Nem sequer se distingue "não mandei
         foto" de "mandei com prefixo `data:`".
@@ -865,15 +461,14 @@ PedidoFotoGrupo:
 PedidoAnuncioGrupo:
   type: object
   description: |
-    Alterna o modo em que só administradores enviam mensagens. Os campos vêm
-    da struct anónima do manipulador (`handler_group_mgmt.go:275-279`), que
-    declara `GroupJID` e `Announce` SEM etiqueta `json` — o Go casa por nome
-    ignorando maiúsculas, logo `groupJID`, `groupjid` e `GroupJID` são o
-    mesmo campo, e `announce` e `Announce` também.
+    Alterna o modo em que só administradores enviam mensagens. O corpo é
+    `dtogroup.SetGroupAnnounceRequest`
+    (`pkg/presentation/http/dto/group/request.go`), com `group_jid` e
+    `announce`.
 
     **O manipulador não valida campo nenhum.**
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -885,7 +480,7 @@ PedidoAnuncioGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us
     announce:
@@ -912,13 +507,14 @@ PedidoAnuncioGrupo:
 PedidoTrancarGrupo:
   type: object
   description: |
-    Alterna o modo em que só administradores editam os metadados. Campos da
-    struct anónima do manipulador (`handler_group_mgmt.go:292-296`), também
-    sem etiqueta `json` em `GroupJID` e `Locked`.
+    Alterna o modo em que só administradores editam os metadados. O corpo é
+    `dtogroup.SetGroupLockedRequest`
+    (`pkg/presentation/http/dto/group/request.go`), com `group_jid` e
+    `locked`.
 
     **O manipulador não valida campo nenhum.**
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -930,7 +526,7 @@ PedidoTrancarGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupJID` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us
     locked:
@@ -954,13 +550,14 @@ PedidoTrancarGrupo:
 PedidoTemporizadorGrupo:
   type: object
   description: |
-    Mensagens temporárias do grupo. Campos da struct anónima do manipulador
-    (`handler_group_mgmt.go:309-313`); o campo do grupo é `groupjid`, todo em
-    minúsculas.
+    Mensagens temporárias do grupo. O corpo é
+    `dtogroup.SetDisappearingTimerRequest`
+    (`pkg/presentation/http/dto/group/request.go`), com `group_jid` e
+    `duration`.
 
     **O manipulador não valida campo nenhum.**
   properties:
-    groupjid:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -972,7 +569,7 @@ PedidoTemporizadorGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupjid` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us
     duration:
@@ -1006,25 +603,26 @@ PedidoTemporizadorGrupo:
 PedidoAtualizarParticipantes:
   type: object
   description: |
-    Adiciona ou remove membros. Campos da struct anónima do manipulador
-    (`handler_group_mgmt.go:330-335`), que declara `GroupJID`, `Phone` e
-    `Action` SEM etiqueta `json` — as grafias `groupjid`/`phone`/`action`
-    funcionam igualmente, medido.
+    Adiciona ou remove membros. O corpo é
+    `dtogroup.UpdateGroupParticipantsRequest`
+    (`pkg/presentation/http/dto/group/request.go`), com `group_jid`, `phone` e
+    `action`.
 
     **A ORDEM da validação importa e é surpreendente**
-    (`handler_group_mgmt.go:341-355`): `Phone` → entrada vazia de `Phone` →
-    `Action` → `GroupJID`. Um pedido a que falte TUDO queixa-se primeiro dos
+    (`handler_group_mgmt.go:289-304`): `phone` → entrada vazia de `phone` →
+    `action` → `group_jid`. Um pedido a que falte TUDO queixa-se primeiro dos
     telefones, e o grupo é o ÚLTIMO a ser exigido.
 
-    **As quatro recusas do manipulador saem no envelope ANTIGO**, todas com o
-    mesmo corpo `{"code":400,"error":"bad request","success":false}` (F266).
-    Só as recusas do use case — `invalid_jid`, `invalid_action` — trazem
-    `error.code`.
+    **As quatro recusas do manipulador saem no mesmo corpo**
+    `{"code":400,"error":{"code":"invalid_request","message":"Requisição inválida."},"success":false}`
+    — nenhuma delas tem código próprio. Só as recusas que atravessam o use
+    case — `invalid_jid`, `invalid_action` — trazem um `error.code`
+    específico.
 
     Veja a limitação de `Action`: promover e despromover NÃO estão nesta rota.
-  required: [Phone, Action]
+  required: [group_jid, phone, action]
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -1033,7 +631,7 @@ PedidoAtualizarParticipantes:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não — salvo se `chat` vier | `400 "bad request"` (envelope ANTIGO), e só depois de `Phone` e `Action` passarem |
+        | ausente | não — salvo se `chat` vier | `400 invalid_request`, e só depois de `phone` e `action` passarem |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente** |
         | `"   "` | passa a guarda | `400 invalid_jid` (envelope NOVO) — medido |
@@ -1043,11 +641,11 @@ PedidoAtualizarParticipantes:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupJID` estiver vazio —
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio —
         medido a funcionar nesta rota. Ausente, `null` e `""` são
         indistinguíveis.
       example: 120363411669320145@g.us
-    Phone:
+    phone:
       type: array
       nullable: false
       minItems: 1
@@ -1056,10 +654,10 @@ PedidoAtualizarParticipantes:
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400 "bad request"` (envelope ANTIGO) |
+        | ausente | não | `400 invalid_request` |
         | `null` | não | **indistinguível de ausente** — medido |
         | `[]` | não | **indistinguível de ausente** — a guarda é `len(...) < 1` |
-        | `[""]` | não | `400 "bad request"`; o log diz o ÍNDICE, a resposta não |
+        | `[""]` | não | `400 invalid_request`; o log diz o ÍNDICE, a resposta não |
         | `["554192421234", ""]` | não | recusa a lista INTEIRA — **não há descarte silencioso de item** |
         | `["   "]` | passa a guarda | `400 invalid_jid`, `could not parse JID "   "` — medido |
         | `["554192421234"]` | **sim** | número nu é aceite — medido a passar da resolução |
@@ -1079,31 +677,35 @@ PedidoAtualizarParticipantes:
           índice no log.
         example: 554192421234@s.whatsapp.net
       example: [554192421234@s.whatsapp.net]
-    Action:
+    action:
       type: string
-      enum: [add, remove]
+      enum: [add, remove, promote, demote]
       nullable: false
       description: |
         O que fazer com os participantes indicados.
 
         | estado | aceite? | efeito |
         |---|---|---|
-        | ausente | não | `400 "bad request"` (envelope ANTIGO), e só depois de `Phone` passar |
+        | ausente | não | `400 invalid_request`, e só depois de `phone` passar |
         | `null` | não | **indistinguível de ausente** |
         | `""` | não | **indistinguível de ausente** |
-        | `add` / `remove` | sim | — |
+        | `add` / `remove` / `promote` / `demote` | sim | — |
         | `ADD` | **não** | `400 invalid_action` — medido; **é sensível a maiúsculas** |
-        | `promote` / `demote` | **não** | `400 invalid_action` — medido |
-        | qualquer outro valor | não | `400 invalid_action`, envelope NOVO, com o valor citado: `unknown participant action "promote" (must be "add" or "remove")` |
+        | qualquer outro valor | não | `400 invalid_action`, com o valor citado: `unknown participant action "..." (must be "add", "remove", "promote" or "demote")` |
 
         **Valor fora da lista é sempre RECUSADO**, nunca ignorado nem tratado
         como padrão. Não há valor por omissão.
 
-        A biblioteca por baixo sabe promover e despromover há anos
-        (`internal/wa-noise/capabilities/group/participants.go:18-19`); a
-        rota é que não o expõe. Está registado como F263 no `HOUSEKEEP.md`, e
-        a consequência é concreta: **por esta API não há forma de dar nem de
-        tirar administrador a ninguém.**
+        `promote` e `demote` foram corrigidos em F263: a biblioteca por baixo
+        já sabia promover e despromover há anos
+        (`internal/wa-noise/capabilities/group/participants.go:18-19`); só a
+        rota não os expunha. `pkg/domain/group.go` ganhou
+        `ParticipantPromote`/`ParticipantDemote`, o use case
+        (`pkg/application/usecase/group/group_management.go`) passou a aceitar
+        os dois valores, e o adaptador
+        (`pkg/infra/wa-noise/adapters/group/participants.go`) trocou o
+        mapeamento binário add/remove por um `switch` exaustivo sobre as
+        quatro ações.
       example: add
 
 PedidoModoAprovacao:
@@ -1111,12 +713,12 @@ PedidoModoAprovacao:
   description: |
     Exigir, ou deixar de exigir, aprovação para entrar. Usa a struct de
     DOMÍNIO (`pkg/domain/group_request.go:38-42`) — não há struct anónima
-    aqui. O campo do grupo é `groupjid`, todo em minúsculas.
+    aqui. O campo do grupo é `group_jid`, todo em minúsculas.
 
     As recusas saem no envelope NOVO, com `error.code`.
-  required: [groupjid]
+  required: [group_jid]
   properties:
-    groupjid:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -1135,7 +737,7 @@ PedidoModoAprovacao:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupjid` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us
     mode:
@@ -1147,7 +749,7 @@ PedidoModoAprovacao:
 
         | estado | efeito |
         |---|---|
-        | ausente | **DESLIGA** a exigência — um pedido só com `groupjid` ABRE o grupo |
+        | ausente | **DESLIGA** a exigência — um pedido só com `group_jid` ABRE o grupo |
         | `null` | idêntico a ausente: `false`, em silêncio. **Indistinguível** |
         | `false` | desliga a exigência |
         | `true` | passa a exigir |
@@ -1172,12 +774,12 @@ PedidoSolicitacoesEntrada:
     | pedido | resposta medida |
     |---|---|
     | sem corpo e sem query | `400 could_not_decode_payload` — a causa REAL é o grupo em falta, não o corpo |
-    | `{"groupJID":null}` | `400 missing_group_jid` — a mensagem certa |
+    | `{"group_jid":null}` | `400 missing_group_jid` — a mensagem certa |
     | `{}` sem query | `400 missing_group_jid` |
     | `?group_jid=<grupo>` sem corpo | `200` |
     | corpo que NÃO é JSON, com `?group_jid=` | `200` — o erro de descodificação é PERDOADO quando a query traz o grupo (`handler_group.go:47-63`) |
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -1191,7 +793,7 @@ PedidoSolicitacoesEntrada:
       type: string
       nullable: false
       description: |
-        Nome universal do destino, no corpo. Só lido quando `groupJID`
+        Nome universal do destino, no corpo. Só lido quando `group_jid`
         estiver vazio; ausente, `null` e `""` são indistinguíveis. Medido a
         funcionar sozinho: `{"chat":"<grupo>"}` devolve `200`.
       example: 120363411669320145@g.us
@@ -1203,13 +805,13 @@ PedidoDecidirSolicitacoes:
     (`pkg/domain/group_request.go:23-27`).
 
     **Todas as recusas saem no envelope NOVO**, com `error.code` — esta rota
-    não passa por `rejectMissingField`. A ordem medida é `groupJID` → `Phone`
+    não passa por `rejectMissingField`. A ordem medida é `group_jid` → `Phone`
     → `Action` → resolução do grupo → resolução dos telefones → validação de
     `Action` contra a lista; ou seja, o inverso da ordem de
     `POST /group/updateparticipants`.
-  required: [groupJID, Phone, Action]
+  required: [group_jid, phone, action]
   properties:
-    groupJID:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -1227,11 +829,11 @@ PedidoDecidirSolicitacoes:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupJID` estiver vazio —
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio —
         medido a funcionar nesta rota. Ausente, `null` e `""` são
         indistinguíveis.
       example: 120363411669320145@g.us
-    Phone:
+    phone:
       type: array
       nullable: false
       minItems: 1
@@ -1262,7 +864,7 @@ PedidoDecidirSolicitacoes:
           vira `""` e é recusado com `invalid_phone`.
         example: 554192421234@s.whatsapp.net
       example: [554192421234@s.whatsapp.net]
-    Action:
+    action:
       type: string
       enum: [approve, reject]
       nullable: false
@@ -1288,34 +890,294 @@ ResultadoListaGrupos:
   properties:
     groups:
       type: array
-      nullable: true
+      nullable: false
       description: |
         Todos os grupos de que a sessão participa, incluindo comunidades
-        (`IsParent: true`) e os sub-grupos de avisos que elas criam sozinhas
-        (`IsDefaultSubGroup: true`). Não há filtro nem paginação: **a rota
-        ignora o corpo por completo** — medido `200` com `{"groupJID":"lixo"}`
+        (`is_parent: true`) e os sub-grupos de avisos que elas criam sozinhas
+        (`is_default_sub_group: true`). Não há filtro nem paginação: **a rota
+        ignora o corpo por completo** — medido `200` com `{"group_jid":"lixo"}`
         e mesmo com um corpo que não é JSON.
 
-        **Sempre presente** — o campo não tem `omitempty`
-        (`pkg/domain/group.go:12`). Mas o seu tipo é `interface{}`, logo uma
-        resposta sem grupos pode vir `null` em vez de `[]`; não foi observada
-        com dados, e quem itera sem verificar `null` parte. Nas leituras
-        medidas veio sempre uma lista não vazia.
+        **Sempre `[]`, nunca `null`**: `PresentListGroups`
+        (`pkg/presentation/http/dto/group/presenter_group.go`) aloca a lista
+        antes do laço, mesmo vazia — o gap de `interface{}` que este ficheiro
+        documentava antes da migração para DTO fechou com o apresentador.
 
         A ordem não é significativa e não é estável entre chamadas.
       items:
-        $ref: '#/components/schemas/InfoGrupo'
+        $ref: '#/components/schemas/InfoGrupoCanonico'
+
+ParticipanteGrupoCanonico:
+  type: object
+  description: |
+    Um membro do grupo, na forma CANÓNICA — chaves em `snake_case` minúsculo,
+    produzidas por um apresentador escrito à mão
+    (`pkg/presentation/http/dto/group/presenter.go`) e não pela serialização
+    directa da struct de protocolo.
+
+    É a forma que `POST /group/info` devolve. As outras rotas desta família
+    ainda devolvem `ParticipanteGrupo`, com os nomes do Go — a migração é
+    família a família, e esta é a primeira.
+
+    **Todas as propriedades aparecem SEMPRE**: o DTO não usa `omitempty` em
+    campo nenhum, de propósito. Ler este objecto nunca exige verificar
+    ausência — exige verificar VAZIO.
+  required: [jid, phone_number, lid, display_name, is_admin, is_super_admin, error]
+  properties:
+    jid:
+      type: string
+      nullable: false
+      description: |
+        Identificador a usar para falar com este participante. É sempre igual
+        a `lid` ou a `phone_number` — nunca uma terceira forma. `""` quando o
+        WhatsApp não o deu.
+      example: 90937376170214@lid
+    phone_number:
+      type: string
+      nullable: false
+      description: O número, em forma PN. `""` num participante que só tenha LID.
+      example: 554192421234@s.whatsapp.net
+    lid:
+      type: string
+      nullable: false
+      description: |
+        O identificador opaco do participante. `""` num grupo cujo modo de
+        endereçamento não seja `lid`.
+      example: 90937376170214@lid
+    display_name:
+      type: string
+      nullable: false
+      description: |
+        Só vem preenchido para participantes anónimos de grupos em modo
+        anúncio; `""` é a forma normal de "não se aplica".
+      example: ''
+    is_admin:
+      type: boolean
+      nullable: false
+      description: |
+        Administrador do grupo. `false` significa "não é administrador", e não
+        "não se sabe".
+      example: false
+    is_super_admin:
+      type: boolean
+      nullable: false
+      description: Criador do grupo. Um super-administrador é também administrador.
+      example: false
+    error:
+      type: integer
+      nullable: false
+      description: |
+        F280 (2026-08-28): o código de erro que o protocolo devolve para
+        ESTE participante, dentro de um lote com sucesso parcial — uma
+        adição ou um pedido de entrada em que alguns passaram e outros não.
+        `0` é o normal: participante sem erro reportado, incluindo toda
+        leitura de roster (`GET /groups/{group_jid}`, `POST /group/info`),
+        onde este campo é sempre `0`.
+
+        Antes desta correção o valor existia no protocolo e era descartado —
+        um sucesso parcial ficava indistinguível de sucesso total (F280,
+        `HOUSEKEEP.md`).
+      example: 0
+
+InfoGrupoCanonico:
+  type: object
+  description: |
+    Metadados de um grupo, na forma CANÓNICA — `snake_case` minúsculo,
+    produzida pelo apresentador `PresentGroupInfo`
+    (`pkg/presentation/http/dto/group/presenter.go`) a partir de
+    `domain.GroupInfo`.
+
+    **O que mudou face a `InfoGrupo`**, e porquê: `InfoGrupo` descrevia a
+    struct de protocolo do wa-noise serializada DIRECTAMENTE, sem etiquetas
+    `json` — daí `JID`, `OwnerJID`, `IsAdmin`. Pior: o motor `wa-headless`
+    servia OUTRA struct na mesma chave, então a forma do corpo dependia de que
+    motor tinha a sessão. Hoje os dois motores normalizam para
+    `domain.GroupInfo`, e esta é a única forma servida.
+
+    **Campos que desapareceram** e a razão: `OwnerPN`, `TopicID`,
+    `TopicDeleted`, `AddressingMode`, `CreatorCountryCode`,
+    `AnnounceVersionID`, `ParticipantVersionID` e `Error`/`AddRequest` dos
+    participantes eram detalhe do protocolo, não do recurso. `Suspended` passou
+    a `is_suspended`.
+
+    **Presença**: nenhuma propriedade tem `omitempty`. Todas aparecem sempre.
+    As três datas são `null` quando o motor não as conhece — e não
+    `"0001-01-01T00:00:00Z"`, que seria uma data real no fio.
+
+    **O que o motor headless não vê**: uma sessão servida por `wa-headless` só
+    consegue `jid`, `name` e `is_announce`; o resto vem no zero, e
+    `participants` vem `[]`. Isso é visível, e é de propósito — preencher com
+    palpite tornaria "não vejo" indistinguível de "o grupo é assim".
+  required:
+    [jid, owner_jid, name, name_set_at, name_set_by, topic, topic_set_at,
+     topic_set_by, is_locked, is_announce, is_ephemeral, disappearing_timer,
+     is_incognito, is_suspended, is_parent, linked_parent_jid,
+     is_default_sub_group, is_join_approval_required, member_add_mode,
+     created_at, participant_count, participants]
+  properties:
+    jid:
+      type: string
+      nullable: false
+      description: JID do grupo, sempre terminado em `@g.us`.
+      example: 120363411669320145@g.us
+    owner_jid:
+      type: string
+      nullable: false
+      description: Quem criou o grupo. `""` quando o WhatsApp não o deu.
+      example: 90937376170214@lid
+    name:
+      type: string
+      nullable: false
+      description: O nome (assunto) do grupo.
+      example: Equipa de entregas
+    name_set_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: |
+        Quando o nome foi definido, em RFC 3339 UTC. `null` quando desconhecido.
+      example: '2026-08-26T12:42:49Z'
+    name_set_by:
+      type: string
+      nullable: false
+      description: Quem definiu o nome. `""` quando desconhecido.
+      example: 90937376170214@lid
+    topic:
+      type: string
+      nullable: false
+      description: A descrição do grupo. `""` num grupo sem descrição.
+      example: Combinações de rota do turno da manhã
+    topic_set_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: Quando a descrição foi definida. `null` quando desconhecido.
+      example: '2026-08-26T12:42:51Z'
+    topic_set_by:
+      type: string
+      nullable: false
+      description: Quem definiu a descrição. `""` quando desconhecido.
+      example: 90937376170214@lid
+    is_locked:
+      type: boolean
+      nullable: false
+      description: Só administradores podem editar os dados do grupo.
+      example: false
+    is_announce:
+      type: boolean
+      nullable: false
+      description: Só administradores podem enviar mensagens.
+      example: false
+    is_ephemeral:
+      type: boolean
+      nullable: false
+      description: Mensagens temporárias ligadas.
+      example: true
+    disappearing_timer:
+      type: integer
+      nullable: false
+      minimum: 0
+      description: |
+        Duração das mensagens temporárias, em SEGUNDOS. `0` quando desligadas.
+      example: 86400
+    is_incognito:
+      type: boolean
+      nullable: false
+      description: Grupo em modo incógnito.
+      example: false
+    is_suspended:
+      type: boolean
+      nullable: false
+      description: Grupo suspenso pelo WhatsApp.
+      example: false
+    is_parent:
+      type: boolean
+      nullable: false
+      description: O "grupo" é na verdade uma COMUNIDADE.
+      example: false
+    linked_parent_jid:
+      type: string
+      nullable: false
+      description: |
+        A comunidade a que este grupo pertence. `""` num grupo solto.
+      example: ''
+    is_default_sub_group:
+      type: boolean
+      nullable: false
+      description: É o grupo de avisos criado com a comunidade.
+      example: false
+    is_join_approval_required:
+      type: boolean
+      nullable: false
+      description: Entrar exige aprovação de um administrador.
+      example: false
+    member_add_mode:
+      type: string
+      nullable: false
+      description: |
+        Quem pode adicionar membros. Valores do WhatsApp: `admin_add`,
+        `all_member_add`. `""` quando o servidor não o disse.
+      example: admin_add
+    created_at:
+      type: string
+      format: date-time
+      nullable: true
+      description: Quando o grupo foi criado. `null` quando desconhecido.
+      example: '2026-08-26T12:42:47Z'
+    participant_count:
+      type: integer
+      nullable: false
+      minimum: 0
+      description: |
+        O que o servidor reportou, que NÃO é sempre o tamanho de
+        `participants`: um não-administrador a ler um grupo em modo anúncio
+        recebe a contagem sem a lista.
+      example: 2
+    participants:
+      type: array
+      nullable: false
+      description: |
+        Os membros. **Sempre um array, nunca `null`** — só um dos dois se
+        percorre sem verificação. Vem `[]` quando a sessão é servida pelo motor
+        headless, que não vê a lista.
+      items:
+        $ref: '#/components/schemas/ParticipanteGrupoCanonico'
 
 ResultadoInfoGrupo:
   type: object
   description: |
     Resposta de `POST /group/info`. `group_info` está **sempre presente** e
-    nunca vem `null`: o campo não tem `omitempty` (`pkg/domain/group.go:25`) e
-    o manipulador só chega a responder `200` depois de o WhatsApp ter
-    devolvido os metadados.
+    nunca vem `null`: o apresentador emite a chave sempre, e o manipulador só
+    chega a responder `200` depois de o WhatsApp ter devolvido os metadados.
+
+    Foi a PRIMEIRA rota migrada para a forma canónica em `snake_case` — ver
+    `InfoGrupoCanonico` e `docs/HTTP-DTO-CONVENTIONS.md`. Toda a família de
+    grupo e comunidade migrou desde então; `InfoGrupo` (sem sufixo) fica
+    documentado só como registo do formato ANTERIOR.
+  required: [group_info]
   properties:
     group_info:
-      $ref: '#/components/schemas/InfoGrupo'
+      $ref: '#/components/schemas/InfoGrupoCanonico'
+
+ResultadoCriarGrupo:
+  type: object
+  description: |
+    Resposta de `POST /group/create`, produzida por `PresentCreatedGroup`
+    (`pkg/presentation/http/dto/group/presenter_group.go`) a partir de
+    `dtogroup.CreateGroupResponse`.
+  required: [group_info, created]
+  properties:
+    group_info:
+      $ref: '#/components/schemas/InfoGrupoCanonico'
+    created:
+      type: boolean
+      nullable: false
+      description: |
+        `false` quando o grupo já existia e foi ENCONTRADO em vez de CRIADO —
+        só o motor headless consegue responder `false`, porque a sua
+        capacidade é "garantir que este grupo existe". Um cliente que não
+        distinga os dois não sabe se acabou de alterar a conta de alguém.
+      example: true
 
 ResultadoInfoConvite:
   type: object
@@ -1324,13 +1186,16 @@ ResultadoInfoConvite:
     presente** e nunca vem `null` (`pkg/domain/group.go:47`); um convite
     inválido não chega aqui — devolve `500`.
 
-    **Medido**: os metadados vêm com `AnnounceVersionID`,
-    `ParticipantVersionID` e `MemberAddMode` a `""`, ao contrário de
-    `POST /group/info` sobre o mesmo grupo no mesmo minuto. `ParticipantCount`
-    vem CORRECTO aqui — é `POST /group/list` que o traz a zero.
+    **Medido, antes da migração para DTO**: os metadados vinham com
+    `member_add_mode` a `""`, ao contrário de `POST /group/info` sobre o mesmo
+    grupo no mesmo minuto. `participant_count` vinha CORRECTO aqui — é
+    `POST /group/list` que o traz a zero. O corpo é hoje a mesma forma
+    canónica de `POST /group/info`, via `GetGroupInviteInfoResponse`
+    (`pkg/presentation/http/dto/group/group.go`); a divergência de campos
+    observada acima não foi re-verificada contra o novo apresentador.
   properties:
     invite_info:
-      $ref: '#/components/schemas/InfoGrupo'
+      $ref: '#/components/schemas/InfoGrupoCanonico'
 
 ResultadoLinkConvite:
   type: object
@@ -1354,33 +1219,37 @@ ResultadoAtualizarParticipantes:
   type: object
   description: |
     Resposta de `POST /group/updateparticipants`. É a única rota de escrita
-    desta família que devolve mais do que `Details`.
+    desta família que devolve mais do que `details`.
 
-    O corpo é montado à mão como mapa no manipulador
-    (`handler_group_mgmt.go:367-371`), e não a partir de uma struct — logo as
-    três chaves aparecem SEMPRE, sem `omitempty` a intervir.
+    O corpo é `dtogroup.UpdateGroupParticipantsResponse`
+    (`pkg/presentation/http/dto/group/group.go`), produzido por
+    `PresentParticipantsUpdate` — não mais um mapa montado à mão no
+    manipulador. As quatro chaves aparecem SEMPRE, sem `omitempty`.
+  required: [details, participants, confirmed, reason]
   properties:
-    Details:
+    details:
       type: string
       nullable: false
       description: |
         Confirmação textual, constante: `Participants updated`. **Sempre
         presente**, nunca `null`. Não distingue adição de remoção nem diz
-        quantos passaram — para isso é `result`.
+        quantos passaram — para isso é `participants`.
       example: Participants updated
-    result:
+    participants:
       type: array
-      nullable: true
+      nullable: false
       description: |
-        A lista de participantes que o WhatsApp devolveu na MESMA resposta.
-        `Error` diferente de zero numa entrada diz que aquele participante
-        falhou enquanto os outros passaram.
+        A lista de participantes que o WhatsApp devolveu na MESMA resposta, na
+        forma canónica. `error` diferente de zero numa entrada diz que
+        aquele participante falhou enquanto os outros passaram (F280,
+        2026-08-28) — antes disso o `Error` numérico do protocolo era
+        descartado, e só `is_admin`/`is_super_admin` inesperados davam uma
+        pista indirecta.
 
-        **A chave aparece sempre**, mas o valor é `any`
-        (`pkg/domain/group.go:229`) e vem do transporte: pode ser `null` se o
-        WhatsApp não devolver lista. Quem itera sem verificar `null` parte.
+        **Sempre um array, nunca `null`**: `make([]GroupParticipantResponse,
+        0, ...)` antes do laço (`presenter_group.go`).
       items:
-        $ref: '#/components/schemas/ParticipanteGrupo'
+        $ref: '#/components/schemas/ParticipanteGrupoCanonico'
     confirmed:
       type: boolean
       nullable: false
@@ -1400,15 +1269,15 @@ ResultadoAtualizarParticipantes:
 PedidoRemoverFotoGrupo:
   type: object
   description: |
-    Remoção da foto. Campos da struct anónima do manipulador
-    (`handler_group_mgmt.go:262-265`); o campo do grupo é `groupjid`, todo em
-    minúsculas, ao contrário do `groupJID` das rotas vizinhas.
+    Remoção da foto. O corpo é `dtogroup.GroupTargetRequest`
+    (`pkg/presentation/http/dto/group/request.go`) — o mesmo tipo partilhado
+    por `/group/invitelink`, `/group/leave` e `/group/requestparticipants`.
 
     **O manipulador não valida campo nenhum**, e o corpo INTEIRO é opcional no
     sentido em que `{}` é aceite pelo descodificador — a falha vem depois, na
     resolução do JID.
   properties:
-    groupjid:
+    group_jid:
       type: string
       nullable: false
       description: |
@@ -1421,6 +1290,6 @@ PedidoRemoverFotoGrupo:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só lido quando `groupjid` estiver vazio;
+        Nome universal do destino. Só lido quando `group_jid` estiver vazio;
         ausente, `null` e `""` são indistinguíveis.
       example: 120363411669320145@g.us

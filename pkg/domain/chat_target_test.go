@@ -110,30 +110,11 @@ func chatAliasCases() []chatAliasCase {
 				return req.Phone, err
 			},
 		},
-		{
-			name:       "BlockUserRequest/Phone",
-			chatOnly:   `{"chat":"554192421234@s.whatsapp.net"}`,
-			legacyOnly: `{"Phone":"554192421234@s.whatsapp.net"}`,
-			both:       `{"Phone":"legacy@s.whatsapp.net","chat":"alias@s.whatsapp.net"}`,
-			empty:      `{}`,
-			decode: func(body string) (string, error) {
-				var req BlockUserRequest
-				err := DecodeRequest(strings.NewReader(body), &req)
-				return req.Phone, err
-			},
-		},
-		{
-			name:       "GetAvatarRequest/Phone",
-			chatOnly:   `{"chat":"554192421234@s.whatsapp.net"}`,
-			legacyOnly: `{"Phone":"554192421234@s.whatsapp.net"}`,
-			both:       `{"Phone":"legacy@s.whatsapp.net","chat":"alias@s.whatsapp.net"}`,
-			empty:      `{}`,
-			decode: func(body string) (string, error) {
-				var req GetAvatarRequest
-				err := DecodeRequest(strings.NewReader(body), &req)
-				return req.Phone, err
-			},
-		},
+		// BlockUserRequest e GetAvatarRequest saíram desta tabela porque
+		// deixaram de ser tipos de FIO: quem descodifica /user/block e
+		// /user/avatar é pkg/presentation/http/dto/user, e é lá que o alias
+		// `chat` vive agora. A cobertura mudou de casa junto —
+		// pkg/presentation/http/dto/user/request_test.go.
 		{
 			name:       "SendForwardRequest/Phone",
 			chatOnly:   `{"chat":"554192421234@s.whatsapp.net","stanzaId":"abc","Chat":"origin@s.whatsapp.net"}`,

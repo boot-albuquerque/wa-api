@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -39,7 +39,7 @@ func (h *SendStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.SendStickerRequest
+	var req dtomessage.SendStickerRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -49,14 +49,14 @@ func (h *SendStickerHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Msg("media send failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendSticker(result), nil)
 }
 
 // SendVideoHandler é o handler HTTP para POST /chat/send/video.
@@ -85,7 +85,7 @@ func (h *SendVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.SendVideoRequest
+	var req dtomessage.SendVideoRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -95,14 +95,14 @@ func (h *SendVideoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Msg("media send failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendVideo(result), nil)
 }
 
 // SendContactHandler é o handler HTTP para POST /chat/send/contact.

@@ -12,6 +12,7 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/pairing"
+	dtosession "wa-api/pkg/presentation/http/dto/session"
 
 	"github.com/rs/zerolog/hlog"
 
@@ -56,8 +57,9 @@ func sessionUser(w http.ResponseWriter, r *http.Request) (string, bool) {
 // ConnectHandler handles GET /session/connect. After validation, it spawns
 // a goroutine to start the WhatsApp WebSocket connection.
 type ConnectHandler struct {
-	usecase *session.ConnectUseCase
-	pairing *pairing.Registry
+	usecase            *session.ConnectUseCase
+	pairing            *pairing.Registry
+	CheckStartInFlight func(userID string) error // injected by bootstrap (F274)
 }
 
 // NewConnectHandler builds the handler over the pairing provider registry.
@@ -68,6 +70,20 @@ type ConnectHandler struct {
 // names and the TARGET session records. See pkg/pairing and HOUSEKEEP F273.
 func NewConnectHandler(uc *session.ConnectUseCase, reg *pairing.Registry) *ConnectHandler {
 	return &ConnectHandler{usecase: uc, pairing: reg}
+}
+
+// WithCheckStartInFlight injects a synchronous pre-check (F274) for a
+// pairing flow already in progress for this user.
+//
+// Without it, the guard lives entirely inside Start, which runs in a
+// goroutine fired AFTER the handler already responded 200. A client hitting
+// `GET /session/connect` while a previous pairing flow was still active (for
+// example, right after `/session/disconnect` cut the transport but left the
+// flow running) got `200 {"status":"connecting"}` for an attempt that never
+// started — the same class of lie F108 closed for ownership.
+func (h *ConnectHandler) WithCheckStartInFlight(fn func(userID string) error) *ConnectHandler {
+	h.CheckStartInFlight = fn
+	return h
 }
 
 func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +110,24 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// F274: in-flight check BEFORE ownership, mirroring the order Start
+	// itself uses internally (inFlight.acquire runs before claimOwnership).
+	// Unlike the ownership check, this one is a read-only PEEK — see
+	// Orchestrator.CheckStartAvailable — so it does not touch the guard that
+	// Start's own acquire, moments later inside the goroutine, still needs to
+	// succeed.
+	if h.CheckStartInFlight != nil {
+		if flightErr := h.CheckStartInFlight(targetID); flightErr != nil {
+			if isClientCausedSessionError(flightErr) {
+				hlog.FromRequest(r).Warn().Err(flightErr).Str("handler", "Connect").Str("user_id", targetID).Msg("session start already in flight")
+			} else {
+				hlog.FromRequest(r).Error().Err(flightErr).Str("handler", "Connect").Str("user_id", targetID).Msg("session start already in flight")
+			}
+			customhttp.RespondJSON(w, 500, nil, flightErr)
+			return
+		}
+	}
+
 	// F108: ownership check BEFORE responding. Without this, the handler
 	// fires startSession in a goroutine and responds 200 "connecting" without
 	// knowing whether ownership was denied — the client receives success for
@@ -118,7 +152,7 @@ func (h *ConnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	info, _ := r.Context().Value(appport.UserInfoKey).(userInfo)
 	starter.StartSession(r.Context(), targetID, info.Get("Token"))
 
-	customhttp.RespondJSON(w, 200, map[string]interface{}{"status": "connecting"}, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentConnect(nil), nil)
 }
 
 // DisconnectHandler handles POST /session/disconnect/{id}
@@ -143,7 +177,7 @@ func (h *DisconnectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentDisconnect(rsp), nil)
 }
 
 // GetQRHandler handles GET /session/qr?engine=...
@@ -192,7 +226,7 @@ func (h *GetQRHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentGetQR(rsp), nil)
 }
 
 // LogoutHandler handles POST /session/logout/{id}
@@ -215,14 +249,13 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentLogout(rsp), nil)
 }
 
 // PairPhoneHandler handles POST /session/pairphone.
 //
-// Body: {"engine":"wa_noise","Phone":"5541999999999"}. `engine` is mandatory;
-// `phone_number` is accepted as a snake_case alias of `Phone` — see
-// domain.PairPhoneRequest for why the historical field keeps its capital.
+// Body: {"engine":"wa_noise","phone":"5541999999999"}. `engine` is mandatory —
+// see dtosession.PairPhoneRequest for the wire contract.
 type PairPhoneHandler struct {
 	logger  appport.Logger
 	pairing *pairing.Registry
@@ -242,24 +275,25 @@ func (h *PairPhoneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	targetID := pairingTarget(r, actorID)
 
-	var req domain.PairPhoneRequest
+	var req dtosession.PairPhoneRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
+	domainReq := req.ToDomain()
 
 	// The engine is resolved BEFORE the phone number is validated, and the
 	// order is load-bearing: a request naming an engine that does not serve
 	// pairing must be refused without a provider being touched, whatever else
 	// is wrong with it. PairPhoneUseCase's own missing_phone guard runs after.
-	pairer, err := h.pairing.ResolvePhonePairer(r.Context(), targetID, req.Engine)
+	pairer, err := h.pairing.ResolvePhonePairer(r.Context(), targetID, domainReq.Engine)
 	if err != nil {
 		respondPairingRefusal(w, r, "PairPhone", targetID, err)
 		return
 	}
 
-	rsp, err := session.NewPairPhoneUseCase(pairer, h.logger).Execute(r.Context(), targetID, req)
+	rsp, err := session.NewPairPhoneUseCase(pairer, h.logger).Execute(r.Context(), targetID, domainReq)
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "PairPhone").Str("user_id", targetID).Msg("session use case failed")
@@ -270,7 +304,7 @@ func (h *PairPhoneHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentPairPhone(rsp), nil)
 }
 
 // GetStatusHandler handles GET /session/status/{id}
@@ -295,7 +329,7 @@ func (h *GetStatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentGetStatus(rsp), nil)
 }
 
 // SetStatusMessageHandler handles POST /session/statusmessage/{id}
@@ -311,13 +345,13 @@ func (h *SetStatusMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	var req domain.SetStatusMessageRequest
+	var req dtosession.SetStatusMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "SetStatusMessage").Str("user_id", id).Msg("session use case failed")
@@ -328,7 +362,7 @@ func (h *SetStatusMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentSetStatusMessage(rsp), nil)
 }
 
 // RequestHistorySyncHandler handles POST /session/historysync/{id}
@@ -348,14 +382,14 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 	// documentava count, chat_jid, oldest_msg_id, oldest_msg_from_me e
 	// oldest_msg_timestamp, e nenhum deles era lido — o corpo do cliente ia
 	// para o lixo e a rota respondia 200.
-	var req domain.RequestHistorySyncRequest
+	var req dtosession.RequestHistorySyncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 		hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Msg("could not decode payload")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
 		return
 	}
 
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "RequestHistorySync").Str("user_id", id).Msg("session use case failed")
@@ -366,7 +400,7 @@ func (h *RequestHistorySyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentRequestHistorySync(rsp), nil)
 }
 
 // SyncContactRosterHandler handles POST /user/contacts/sync.
@@ -386,13 +420,13 @@ func (h *SyncContactRosterHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	var req domain.SyncContactRosterRequest
+	var req dtosession.SyncContactRosterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("path", r.URL.Path).Msg("session request rejected")
 		customhttp.RespondJSON(w, 400, nil, errDecodePayload)
 		return
 	}
-	rsp, err := h.usecase.Execute(r.Context(), id, req)
+	rsp, err := h.usecase.Execute(r.Context(), id, req.ToDomain())
 	if err != nil {
 		if isClientCausedSessionError(err) {
 			hlog.FromRequest(r).Warn().Err(err).Str("handler", "SyncContactRoster").Str("user_id", id).Msg("session use case failed")
@@ -403,5 +437,5 @@ func (h *SyncContactRosterHandler) ServeHTTP(w http.ResponseWriter, r *http.Requ
 		customhttp.RespondJSON(w, 500, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, 200, rsp, nil)
+	customhttp.RespondJSON(w, 200, dtosession.PresentSyncContactRoster(rsp), nil)
 }

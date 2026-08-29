@@ -12,21 +12,34 @@ import (
 	"wa-api/pkg/domain"
 )
 
+// userRemovedCompletelyDetails is the summary this use case reports on
+// success. A named constant and not a literal: the contract test asserts the
+// SAME string production returns (ADR-0004).
+const userRemovedCompletelyDetails = "user instance removed completely"
+
 // DeleteUserCompleteUseCase completely deletes a user
 type DeleteUserCompleteUseCase struct {
-	db       *sql.DB
-	sessions appport.SessionController
-	logger   appport.Logger
-	exPath   string
+	db          *sql.DB
+	sessions    appport.SessionController
+	republisher appport.UserInfoRepublisher
+	logger      appport.Logger
+	exPath      string
 }
 
-// NewDeleteUserCompleteUseCase creates a new instance
-func NewDeleteUserCompleteUseCase(db *sql.DB, sc appport.SessionController, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
+// NewDeleteUserCompleteUseCase creates a new instance.
+//
+// republisher drops the cached token/user-id entries after the row is
+// removed from `users`. See appport.UserInfoRepublisher and HOUSEKEEP F273:
+// this path deletes the row directly with SQL, same as DeleteUserUseCase, so
+// it needs the same invalidation or the deleted user's token keeps
+// authenticating until the cache entry's TTL runs out.
+func NewDeleteUserCompleteUseCase(db *sql.DB, sc appport.SessionController, republisher appport.UserInfoRepublisher, logger appport.Logger, exPath string) *DeleteUserCompleteUseCase {
 	return &DeleteUserCompleteUseCase{
-		db:       db,
-		sessions: sc,
-		logger:   logger,
-		exPath:   exPath,
+		db:          db,
+		sessions:    sc,
+		republisher: republisher,
+		logger:      logger,
+		exPath:      exPath,
 	}
 }
 
@@ -81,6 +94,11 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 		return nil, fmt.Errorf("database error")
 	}
 
+	// ORDER matters (F273): invalidate the cache only AFTER the row is gone,
+	// so a concurrent read cannot repopulate the cache from a row that still
+	// exists.
+	uc.republisher.RepublishUser(ctx, userID)
+
 	// 4. Cleanup from memory (simulated - actual implementation would need concrete client manager)
 	// This is delegated to the handler which has access to the global clientManager
 
@@ -103,13 +121,11 @@ func (uc *DeleteUserCompleteUseCase) Execute(ctx context.Context, userID string)
 	uc.logger.Info(ctx, "user deleted successfully", "user_id", userID, "name", uname, "jid", jid)
 
 	return &domain.DeleteUserCompleteResult{
-		Code: 200,
-		Data: domain.UserDeleteData{
+		User: domain.UserDeleteData{
 			ID:   userID,
 			Name: uname,
 			JID:  jid,
 		},
-		Success: true,
-		Details: "user instance removed completely",
+		Details: userRemovedCompletelyDetails,
 	}, nil
 }

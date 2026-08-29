@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/pkg/application/contracts/contractsfake"
@@ -60,29 +61,29 @@ func TestNewsletter_CadaRotaChamaOMetodoCerto(t *testing.T) {
 		{"/newsletter/updates", func(h *NewsletterHandlers) http.Handler { return h.Updates },
 			`{"jid":"` + canalDeTeste + `","count":5,"after":"7"}`, "NewsletterMessageUpdates", canalDeTeste, "7"},
 		{"/newsletter/mark-viewed", func(h *NewsletterHandlers) http.Handler { return h.MarkViewed },
-			`{"jid":"` + canalDeTeste + `","serverIDs":[1,2]}`, "MarkNewsletterViewed", canalDeTeste, "[1 2]"},
+			`{"jid":"` + canalDeTeste + `","server_ids":[1,2]}`, "MarkNewsletterViewed", canalDeTeste, "[1 2]"},
 		{"/newsletter/react", func(h *NewsletterHandlers) http.Handler { return h.React },
-			`{"jid":"` + canalDeTeste + `","serverID":3,"reaction":"👍","messageID":"m1"}`,
+			`{"jid":"` + canalDeTeste + `","server_id":3,"reaction":"👍","message_id":"m1"}`,
 			"SendNewsletterReaction", canalDeTeste, "👍"},
 		{"/newsletter/subscribe", func(h *NewsletterHandlers) http.Handler { return h.Subscribe },
 			`{"jid":"` + canalDeTeste + `"}`, "SubscribeNewsletterLiveUpdates", canalDeTeste, ""},
 		{"/newsletter/demote", func(h *NewsletterHandlers) http.Handler { return h.Demote },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"DemoteNewsletterAdmin", canalDeTeste, "5516900000000@s.whatsapp.net"},
 		{"/newsletter/change-owner", func(h *NewsletterHandlers) http.Handler { return h.ChangeOwner },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"ChangeNewsletterOwner", canalDeTeste, "5516900000000@s.whatsapp.net"},
 		{"/newsletter/delete", func(h *NewsletterHandlers) http.Handler { return h.Delete },
-			`{"jid":"` + canalDeTeste + `","confirmJID":"` + canalDeTeste + `"}`,
+			`{"jid":"` + canalDeTeste + `","confirm_jid":"` + canalDeTeste + `"}`,
 			"DeleteNewsletter", canalDeTeste, ""},
 		{"/newsletter/admin-invite", func(h *NewsletterHandlers) http.Handler { return h.AdminInvite },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"CreateNewsletterAdminInvite", canalDeTeste, "5516900000000@s.whatsapp.net"},
 		{"/newsletter/admin-invite/accept", func(h *NewsletterHandlers) http.Handler { return h.AdminInviteAccept },
 			`{"jid":"` + canalDeTeste + `"}`,
 			"AcceptNewsletterAdminInvite", canalDeTeste, ""},
 		{"/newsletter/admin-invite/revoke", func(h *NewsletterHandlers) http.Handler { return h.AdminInviteRevoke },
-			`{"jid":"` + canalDeTeste + `","userJID":"5516900000000@s.whatsapp.net"}`,
+			`{"jid":"` + canalDeTeste + `","user_jid":"5516900000000@s.whatsapp.net"}`,
 			"RevokeNewsletterAdminInvite", canalDeTeste, "5516900000000@s.whatsapp.net"},
 	}
 
@@ -346,7 +347,7 @@ func TestNewsletter_DeleteSemConfirmJID_E400(t *testing.T) {
 func TestNewsletter_DeleteConfirmJIDMismatch_E400(t *testing.T) {
 	nr := &contractsfake.NewsletterReader{}
 	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
-		`{"jid":"`+canalDeTeste+`","confirmJID":"999999999@newsletter"}`,
+		`{"jid":"`+canalDeTeste+`","confirm_jid":"999999999@newsletter"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusBadRequest)
@@ -362,7 +363,7 @@ func TestNewsletter_DemoteFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).Demote, http.MethodPost, "/newsletter/demote",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -375,7 +376,7 @@ func TestNewsletter_ChangeOwnerFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).ChangeOwner, http.MethodPost, "/newsletter/change-owner",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -388,7 +389,7 @@ func TestNewsletter_DeleteFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).Delete, http.MethodPost, "/newsletter/delete",
-		`{"jid":"`+canalDeTeste+`","confirmJID":"`+canalDeTeste+`"}`,
+		`{"jid":"`+canalDeTeste+`","confirm_jid":"`+canalDeTeste+`"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -434,14 +435,51 @@ func TestNewsletter_AdminInviteAcceptSemJID_E400(t *testing.T) {
 	}
 }
 
-func TestNewsletter_AdminInviteFalhaDaPortaE500(t *testing.T) {
+// TestNewsletter_AdminInviteDevolveIDEExpiracao trava a F261: até
+// 2026-08-28 esta rota respondia `data:null` mesmo em sucesso — o servidor
+// confirma o `id` do convite e `invite_expiration_time`, e o adaptador
+// descartava os dois. Controle negativo: reverter o handler para
+// `dtonewsletter.PresentNewsletterAck(rsp.Status)` faz este teste falhar,
+// porque `data` volta a não ter `id`.
+func TestNewsletter_AdminInviteDevolveIDEExpiracao(t *testing.T) {
+	quando := time.Date(2026, 12, 31, 12, 0, 0, 0, time.UTC)
 	nr := &contractsfake.NewsletterReader{
-		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) error {
-			return errors.New("server down")
+		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) (domain.NewsletterAdminInvite, error) {
+			return domain.NewsletterAdminInvite{ID: "120363411706831441@newsletter", ExpirationTime: quando}, nil
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
+		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var env struct {
+		Data struct {
+			ID           string  `json:"id"`
+			ExpirationAt *string `json:"expiration_at"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &env); err != nil {
+		t.Fatalf("response is not valid JSON: %v", err)
+	}
+	if env.Data.ID != "120363411706831441@newsletter" {
+		t.Errorf("data.id = %q, want the invite ID (F261: era descartado, respondia data:null)", env.Data.ID)
+	}
+	if env.Data.ExpirationAt == nil || *env.Data.ExpirationAt != "2026-12-31T12:00:00Z" {
+		t.Errorf("data.expiration_at = %v, want 2026-12-31T12:00:00Z", env.Data.ExpirationAt)
+	}
+}
+
+func TestNewsletter_AdminInviteFalhaDaPortaE500(t *testing.T) {
+	nr := &contractsfake.NewsletterReader{
+		CreateAdminInviteFunc: func(_ context.Context, _ string, _, _ domain.JID) (domain.NewsletterAdminInvite, error) {
+			return domain.NewsletterAdminInvite{}, errors.New("server down")
+		},
+	}
+	rec, _ := ipmServe(t, newsletterOps(nr).AdminInvite, http.MethodPost, "/newsletter/admin-invite",
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)
@@ -467,7 +505,7 @@ func TestNewsletter_AdminInviteRevokeFalhaDaPortaE500(t *testing.T) {
 		},
 	}
 	rec, _ := ipmServe(t, newsletterOps(nr).AdminInviteRevoke, http.MethodPost, "/newsletter/admin-invite/revoke",
-		`{"jid":"`+canalDeTeste+`","userJID":"5516900000000@s.whatsapp.net"}`,
+		`{"jid":"`+canalDeTeste+`","user_jid":"5516900000000@s.whatsapp.net"}`,
 		func(r *http.Request) *http.Request { return ipmWithUser(r, "user-1") })
 
 	assertErrorEnvelope(t, rec, http.StatusInternalServerError)

@@ -53,6 +53,29 @@ func (j JID) IsNewsletter() bool {
 		strings.TrimSpace(string(j)[:at]) == string(j)[:at]
 }
 
+// IsUserJID reports whether the JID addresses a WhatsApp user — a phone
+// number (@s.whatsapp.net) or a hidden identity (@lid) — with a non-blank,
+// whitespace-free user part.
+//
+// Mirrors IsNewsletter (F271, same defect on a sibling field): a userJID field
+// feeds an ADMIT decision — who gets promoted, demoted or invited as channel
+// admin — so it has to be strict where IsLID and IsPN are merely descriptive.
+// Without this, "   " or "nao-e-jid" in userJID reach the adapter and come
+// back as a 500 instead of a 400, exactly like the channel jid did.
+func (j JID) IsUserJID() bool {
+	at := strings.LastIndexByte(string(j), '@')
+	// Single return, shaped like IsNewsletter right above: `at > 0` carries
+	// "there is a user part", the TrimSpace comparison rejects one made only
+	// of blanks, and the last disjunction is the suffix check. Kept as one
+	// expression rather than early-return guards so the log-coverage gate's
+	// X1 rule (trivial: <=2 statements, no exit paths) classifies it the same
+	// way it already classifies IsLID/IsPN/IsNewsletter — an if-chain here
+	// would move this predicate into the gate's denominator for no behavior
+	// change, the same trap F271's own fix hit and documented above.
+	return at > 0 && strings.TrimSpace(string(j)[:at]) == string(j)[:at] &&
+		(string(j)[at:] == ServerPN || string(j)[at:] == ServerLID)
+}
+
 // StatusBroadcastJID is the well-known destination for ephemeral status
 // stories (image, video, audio). Sending a message to this JID triggers
 // the broadcast-list resolution inside wa-noise (core/broadcast.go),

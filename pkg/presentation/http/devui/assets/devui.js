@@ -113,7 +113,8 @@ export async function listarSessoes() {
     nome: u.name,
     jid: u.jid || "",
     conectado: !!u.connected,
-    autenticado: !!u.loggedIn,
+    autenticado: !!u.logged_in,
+    engine: u.engine || "noise",
     token: Tokens.de(u.id),
     temToken: !!Tokens.de(u.id),
   }));
@@ -131,10 +132,14 @@ export const $ = (id) => document.getElementById(id);
 
 // novoToken gera o token de uma sessão nova.
 //
-// `wa_noise_` + 32 hex de crypto.getRandomValues, que são 128 bits de
-// entropia. Gerado no cliente porque é o cliente que o guarda: pedi-lo ao
-// servidor obrigaria a uma rota nova para produzir um valor que ninguém
-// precisa de reproduzir.
+// 32 hex de crypto.getRandomValues, que são 128 bits de entropia. Gerado no
+// cliente porque é o cliente que o guarda: pedi-lo ao servidor obrigaria a
+// uma rota nova para produzir um valor que ninguém precisa de reproduzir.
+//
+// SEM prefixo de engine: o token não amarra transporte nenhum — a escolha
+// de engine é um campo próprio do pedido de criação (`engine`), não algo
+// que se lê do formato do token. Um prefixo `wa_noise_` fixo era enganoso
+// mesmo quando a sessão nascia em headless (decisão 94, removida).
 //
 // getRandomValues e NÃO Math.random: este valor é a credencial da sessão, e
 // Math.random é previsível por desenho — o gerador do V8 não é
@@ -142,5 +147,5 @@ export const $ = (id) => document.getElementById(id);
 export function novoToken() {
   const b = new Uint8Array(16);
   crypto.getRandomValues(b);
-  return "wa_noise_" + [...b].map((n) => n.toString(16).padStart(2, "0")).join("");
+  return [...b].map((n) => n.toString(16).padStart(2, "0")).join("");
 }

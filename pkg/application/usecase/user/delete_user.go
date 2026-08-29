@@ -11,17 +11,24 @@ import (
 
 // DeleteUserUseCase deleta um usuário
 type DeleteUserUseCase struct {
-	users  appport.UserRepository
-	logger appport.Logger
+	users       appport.UserRepository
+	republisher appport.UserInfoRepublisher
+	logger      appport.Logger
 }
 
-// NewDeleteUserUseCase cria uma nova instância
-func NewDeleteUserUseCase(users appport.UserRepository, logger appport.Logger) *DeleteUserUseCase {
-	return &DeleteUserUseCase{users: users, logger: logger}
+// NewDeleteUserUseCase cria uma nova instância.
+//
+// republisher drops the cached token/user-id entries after a successful
+// delete. See appport.UserInfoRepublisher and HOUSEKEEP F273: without it, a
+// token belonging to a deleted user kept authenticating for up to
+// tokenCacheTTL because the auth middleware reads the cache and never
+// revalidates against the database on a hit.
+func NewDeleteUserUseCase(users appport.UserRepository, republisher appport.UserInfoRepublisher, logger appport.Logger) *DeleteUserUseCase {
+	return &DeleteUserUseCase{users: users, republisher: republisher, logger: logger}
 }
 
 // Execute deleta um usuário
-func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserRequest) error {
+func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserInput) error {
 	if req.UserID == "" {
 		return apperr.New("missing_user_id", apperr.CategoryValidation, "user ID is required", false, nil)
 	}
@@ -34,6 +41,11 @@ func (uc *DeleteUserUseCase) Execute(ctx context.Context, req domain.DeleteUserR
 	if !deleted {
 		return apperr.New("user_not_found", apperr.CategoryNotFound, "user not found", false, nil)
 	}
+
+	// ORDER matters (F273): the row is gone from `users` BEFORE the cache is
+	// touched. Invalidating first would leave a window where a concurrent
+	// request repopulates the cache from a row that still exists.
+	uc.republisher.RepublishUser(ctx, req.UserID)
 
 	uc.logger.Info(ctx, "User deleted successfully", "user_id", req.UserID)
 	return nil

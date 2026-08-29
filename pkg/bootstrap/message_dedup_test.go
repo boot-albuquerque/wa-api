@@ -6,6 +6,7 @@ import (
 
 	"github.com/patrickmn/go-cache"
 
+	waE2E "wa-api/internal/wa-noise/protocol/proto/waE2E"
 	"wa-api/internal/wa-noise/protocol/types"
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
@@ -26,6 +27,28 @@ func eventoDedup(id, tipo, midia, pushname string) *events.Message {
 		MediaType: midia,
 		PushName:  pushname,
 	}}
+}
+
+// eventoDedupComConteudo é eventoDedup mais o campo Message — necessário
+// para os testes de F358, que dependem do PAYLOAD (não só do metadado de
+// Info) para decidir se a cópia tem mídia utilizável.
+func eventoDedupComConteudo(id, tipo, midia, pushname string, msg *waE2E.Message) *events.Message {
+	evt := eventoDedup(id, tipo, midia, pushname)
+	evt.Message = msg
+	return evt
+}
+
+// mensagemMidiaVazia é o que a F358 mediu chegando primeiro: type=media,
+// media_type=video, mas o Message decodificado só tem o envelope de
+// estabelecimento de sessão de grupo — nenhum payload de mídia.
+func mensagemMidiaVazia() *waE2E.Message {
+	return &waE2E.Message{
+		SenderKeyDistributionMessage: &waE2E.SenderKeyDistributionMessage{},
+	}
+}
+
+func mensagemComVideo() *waE2E.Message {
+	return &waE2E.Message{VideoMessage: &waE2E.VideoMessage{}}
 }
 
 func TestDedup_PrimeiraPassaSegundaEhSuprimida(t *testing.T) {
@@ -119,6 +142,68 @@ func TestDedup_SemPerdaNaoAlarma(t *testing.T) {
 // O que se verifica é o efeito observável: `st.dowebhook` nasce 0 e só
 // `handleMessage` o liga. Se a segunda cópia for suprimida, ele fica 0 e o
 // despacho de `eventhandler.go:183` não acontece.
+// TestDedup_SegundaCopiaComMidiaNaoEhSuprimidaQuandoPrimeiraEraVazia trava a
+// CAUSA da F358 medida em campo (`POST /status/set/video`,
+// `POST /status/set/audio`): a primeira cópia de uma mensagem de status
+// chega tipada como mídia (`type=media`, `media_type=video`) mas com o
+// Message decodificado carregando só o SenderKeyDistributionMessage — o
+// envelope de sessão de grupo, sem o vídeo em si. A F103 original
+// suprimiria a segunda cópia (mesmo Type/MediaType/PushName, então o teste
+// de "perdeu" nunca dispara) — e essa segunda cópia É a que carrega o vídeo
+// de verdade. Sem esta correção, o vídeo nunca chega a quem recebe.
+func TestDedup_SegundaCopiaComMidiaNaoEhSuprimidaQuandoPrimeiraEraVazia(t *testing.T) {
+	limparDedup(t)
+
+	primeiraSuprimida := mensagemJaProcessada("u1",
+		eventoDedupComConteudo("M-F358", "media", "video", "FilaRápida", mensagemMidiaVazia()))
+	if primeiraSuprimida {
+		t.Fatal("a PRIMEIRA copia foi suprimida; nunca haveria uma segunda tentativa")
+	}
+
+	segundaSuprimida := mensagemJaProcessada("u1",
+		eventoDedupComConteudo("M-F358", "media", "video", "FilaRápida", mensagemComVideo()))
+	if segundaSuprimida {
+		t.Error("a segunda copia (com o video de verdade) foi suprimida; e' exatamente o defeito da F358 — Type/MediaType identicos escondem que so' a segunda copia tem payload")
+	}
+}
+
+// TestDedup_SegundaCopiaSemMidiaContinuaSuprimidaQuandoPrimeiraJaTinha e' o
+// controle: quando a PRIMEIRA copia ja' tinha midia utilizavel, uma segunda
+// copia (com ou sem midia) continua suprimida como antes — a correcao da
+// F358 nao reabre a supressao da F103 para o caso comum.
+func TestDedup_SegundaCopiaSemMidiaContinuaSuprimidaQuandoPrimeiraJaTinha(t *testing.T) {
+	limparDedup(t)
+
+	mensagemJaProcessada("u1",
+		eventoDedupComConteudo("M-F358-B", "media", "video", "FilaRápida", mensagemComVideo()))
+
+	segundaSuprimida := mensagemJaProcessada("u1",
+		eventoDedupComConteudo("M-F358-B", "media", "video", "FilaRápida", mensagemComVideo()))
+	if !segundaSuprimida {
+		t.Error("uma segunda copia identica, com a primeira ja' tendo midia, deveria continuar suprimida (politica F103 intacta)")
+	}
+}
+
+// TestDedup_MensagemDeTextoNuncaContaComoMidiaVazia trava que a checagem de
+// F358 so se aplica a mensagens tipadas como midia — uma mensagem de texto
+// (Type != "media") nunca deve ser tratada como "sem conteudo utilizavel",
+// mesmo com Message == nil, ou a supressao normal do F103 quebraria para
+// texto tambem.
+func TestDedup_MensagemDeTextoNuncaContaComoMidiaVazia(t *testing.T) {
+	limparDedup(t)
+	buf := capturarLog(t)
+
+	mensagemJaProcessada("u1", eventoDedup("M-TEXTO", "text", "", "Ana"))
+	segundaSuprimida := mensagemJaProcessada("u1", eventoDedup("M-TEXTO", "text", "", "Ana"))
+
+	if !segundaSuprimida {
+		t.Error("a segunda copia de uma mensagem de TEXTO deveria continuar suprimida — F358 e' so' sobre mensagens de midia")
+	}
+	if strings.Contains(buf.String(), "F358") {
+		t.Errorf("o log de F358 disparou para uma mensagem de texto, que nao tem este modo de falha: %s", buf.String())
+	}
+}
+
 func TestDedup_SeamDoHandleMessage(t *testing.T) {
 	limparDedup(t)
 	capturarLog(t)

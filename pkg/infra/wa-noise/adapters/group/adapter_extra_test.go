@@ -186,7 +186,8 @@ func TestGroupAdapter_PropagatesErrors(t *testing.T) {
 				}}
 			},
 			call: func(a *GroupAdapter) error {
-				return a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove)
+				_, err := a.UpdateRequestParticipants(context.Background(), "u1", "g@g.us", []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove)
+				return err
 			},
 		}},
 		{"SetJoinApprovalMode", fakeSpec{

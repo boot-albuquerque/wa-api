@@ -68,6 +68,42 @@ type mensagemVista struct {
 	Tipo        string
 	TipoDeMidia string
 	PushName    string
+	// TemConteudoUtilizavel é F358, não F103: F103 media só metadado
+	// (Type/MediaType/PushName) — os dois exemplos investigados TINHAM o
+	// payload, só faltava o rótulo. F358 é o caso que F103 não previu: o
+	// `type=media` chega correto, mas o Message decodificado não tem
+	// NENHUM dos campos de mídia (Image/Audio/Document/Video/Sticker/
+	// Album) — é um envelope SenderKeyDistributionMessage, a primeira
+	// metade de uma entrega de grupo/broadcast, sem o conteúdo em si.
+	// Medido em `POST /status/set/video`: a PRIMEIRA cópia chega assim,
+	// tipada como mídia mas vazia; a mídia de verdade chega segundos
+	// depois, com o MESMO message_id — e a F103 original suprimia essa
+	// segunda cópia porque Type/MediaType/PushName são idênticos nas
+	// duas, então o teste de "perdeu" (linhas 129-138) nunca disparava.
+	TemConteudoUtilizavel bool
+}
+
+// temConteudoDeMidiaUtilizavel diz se este evento, sendo do tipo "media",
+// carrega pelo menos um dos payloads que processMessageMedia sabe baixar.
+//
+// Mensagens que não são de mídia (texto, etc.) não têm este modo de falha —
+// contam sempre como "com conteúdo utilizável", para que a comparação em
+// mensagemJaProcessada nunca as trate como uma entrega incompleta.
+//
+// log:exempt predicado puro sem I/O nem erro; o único chamador
+// (mensagemJaProcessada) já loga o resultado desta checagem quando ele muda
+// o desfecho (achado F358) — logar aqui também duplicaria a mesma decisão.
+func temConteudoDeMidiaUtilizavel(info *events.Message) bool {
+	if info.Info.Type != messageWireTypeMedia {
+		return true
+	}
+	msg := info.Message
+	return msg.GetImageMessage() != nil ||
+		msg.GetAudioMessage() != nil ||
+		msg.GetDocumentMessage() != nil ||
+		msg.GetVideoMessage() != nil ||
+		msg.GetStickerMessage() != nil ||
+		msg.GetAlbumMessage() != nil
 }
 
 // mensagensVistas é o cache de deduplicação.
@@ -101,9 +137,10 @@ func mensagemJaProcessada(userID string, info *events.Message) bool {
 
 	chave := chaveDedup(userID, info.Info.ID)
 	atual := mensagemVista{
-		Tipo:        info.Info.Type,
-		TipoDeMidia: info.Info.MediaType,
-		PushName:    info.Info.PushName,
+		Tipo:                  info.Info.Type,
+		TipoDeMidia:           info.Info.MediaType,
+		PushName:              info.Info.PushName,
+		TemConteudoUtilizavel: temConteudoDeMidiaUtilizavel(info),
 	}
 
 	anterior, existe := mensagensVistas.Get(chave)
@@ -117,6 +154,22 @@ func mensagemJaProcessada(userID string, info *events.Message) bool {
 		// Tipo inesperado no cache: trata como não-visto em vez de descartar a
 		// mensagem. O erro de deixar passar uma duplicata é recuperável; o de
 		// engolir uma mensagem legítima não é.
+		mensagensVistas.Set(chave, atual, cache.DefaultExpiration)
+		return false
+	}
+
+	// F358: a primeira cópia dizia "media" mas não tinha payload nenhum — é
+	// o envelope de estabelecimento de sessão de grupo, não o conteúdo. Isto
+	// NÃO é o caso que F103 escolheu suprimir (duas cópias com o MESMO
+	// conteúdo, uma com metadado pior); é a mídia em si chegando pela
+	// primeira vez, com o mesmo message_id de uma tentativa anterior que
+	// nunca a carregou. Deixar passar não duplica nada — a cópia suprimida
+	// nunca tinha o que baixar nem o que entregar.
+	if !primeira.TemConteudoUtilizavel && atual.TemConteudoUtilizavel {
+		log.Info().
+			Str("userid", userID).
+			Str("message_id", info.Info.ID).
+			Msg("mensagem reentregue NAO suprimida; a primeira copia nao tinha midia utilizavel (F358)")
 		mensagensVistas.Set(chave, atual, cache.DefaultExpiration)
 		return false
 	}

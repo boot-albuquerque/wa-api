@@ -82,18 +82,29 @@ type ContactRoster interface {
 
 	// GetAllContacts devolve a agenda da sessão e a contagem, que o use
 	// case usa para logar.
-	GetAllContacts(ctx context.Context, txtID string) (any, int, error)
-
-	// ContactNames devolve o roster TIPADO, por JID.
 	//
-	// Existe ao lado de GetAllContacts, que devolve `any`, porque quem
-	// precisa CASAR nomes por JID não pode receber o tipo do SDK: isso
-	// arrastaria o vendor para dentro da camada de aplicação. GetAllContacts
-	// segue servindo quem só repassa o bloco cru ao cliente.
+	// A ORDEM é responsabilidade do adaptador e tem de ser DETERMINÍSTICA:
+	// as duas implementações leem de um mapa, e a iteração de mapa em Go é
+	// aleatória por desenho — sem ordenar, a mesma agenda sairia numa ordem
+	// diferente a cada chamada.
+	GetAllContacts(ctx context.Context, txtID string) ([]domain.Contact, int, error)
+
+	// ContactNames devolve só os NOMES do roster, indexados por JID.
+	//
+	// Existe ao lado de GetAllContacts porque quem precisa CASAR nomes por
+	// JID quer o índice pronto, e não uma lista para percorrer por cada
+	// consulta.
 	ContactNames(ctx context.Context, txtID string) (map[domain.JID]domain.ContactName, error)
 
-	// GetUserInfo devolve os metadados dos JIDs informados.
-	GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error)
+	// GetUserInfo devolve os metadados dos JIDs informados, na MESMA ORDEM
+	// em que foram pedidos.
+	//
+	// Era `any` até a migração da família de utilizadores, e isso significava
+	// que o MOTOR decidia a forma do JSON: o adaptador wa-noise devolvia o
+	// map[types.JID]types.UserInfo do SDK e o headless um
+	// map[JID]ContactName — dois corpos diferentes para a mesma rota, nenhum
+	// deles declarado em lado nenhum.
+	GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) ([]domain.UserInfo, error)
 }
 
 // ContactDirectory é a composição das três, para o adaptador que satisfaz todas
@@ -147,9 +158,12 @@ type PrivacyManager interface {
 	SessionGuard
 
 	// GetPrivacySettings devolve as configurações atuais.
-	GetPrivacySettings(ctx context.Context, txtID string) (any, error)
+	GetPrivacySettings(ctx context.Context, txtID string) (domain.PrivacySettings, error)
 
-	// SetPrivacySetting altera uma configuração. A validação de name e
-	// value é do domínio (domain.ValidatePrivacySetting) e acontece antes.
-	SetPrivacySetting(ctx context.Context, txtID, name, value string) (any, error)
+	// SetPrivacySetting altera uma configuração e devolve o estado
+	// RESULTANTE de todas elas — é o que o servidor responde, e devolver só
+	// a que mudou obrigaria o cliente a uma segunda chamada para saber se
+	// alguma outra foi arrastada. A validação de name e value é do domínio
+	// (domain.ValidatePrivacySetting) e acontece antes.
+	SetPrivacySetting(ctx context.Context, txtID, name, value string) (domain.PrivacySettings, error)
 }

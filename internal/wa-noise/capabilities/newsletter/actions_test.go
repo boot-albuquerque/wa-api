@@ -508,7 +508,7 @@ func TestCreateAdminInviteSendsCorrectMutation(t *testing.T) {
 	channelJID := testJID()
 	userJID := testUserJID()
 
-	if err := CreateAdminInvite(context.Background(), f, channelJID, userJID); err != nil {
+	if _, err := CreateAdminInvite(context.Background(), f, channelJID, userJID); err != nil {
 		t.Fatalf("CreateAdminInvite: %v", err)
 	}
 	if got := mutationQueryID(t, f); got != mutationCreateAdminInvite {
@@ -524,12 +524,33 @@ func TestCreateAdminInviteSendsCorrectMutation(t *testing.T) {
 	}
 }
 
+// TestCreateAdminInviteDevolveOPayloadCru trava a F261: o servidor confirma
+// o id e a expiração do convite (`invite_expiration_time`, medido
+// 2026-08-26, epoch Unix em segundos como STRING), e até esta correção esse
+// valor era lido e descartado — a rota HTTP respondia `data:null`.
+func TestCreateAdminInviteDevolveOPayloadCru(t *testing.T) {
+	f := newFakeTransport()
+	f.iqResp = mexJSON(`{"data":{"xwa2_newsletter_admin_invite_create":{"id":"120363411706831441@newsletter","invite_expiration_time":"1788351063"}}}`)
+
+	invite, err := CreateAdminInvite(context.Background(), f, testJID(), testUserJID())
+	if err != nil {
+		t.Fatalf("CreateAdminInvite: %v", err)
+	}
+	if invite.ID != "120363411706831441@newsletter" {
+		t.Errorf("invite.ID = %q, queria o id devolvido pelo servidor", invite.ID)
+	}
+	want := time.Unix(1788351063, 0).UTC()
+	if !invite.ExpirationTime.Equal(want) {
+		t.Errorf("invite.ExpirationTime = %v, queria %v (epoch 1788351063)", invite.ExpirationTime, want)
+	}
+}
+
 func TestCreateAdminInvitePropagatesError(t *testing.T) {
 	f := newFakeTransport()
 	sentinel := errors.New("boom")
 	f.iqErr = sentinel
 
-	if err := CreateAdminInvite(context.Background(), f, testJID(), testUserJID()); !errors.Is(err, sentinel) {
+	if _, err := CreateAdminInvite(context.Background(), f, testJID(), testUserJID()); !errors.Is(err, sentinel) {
 		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
 }

@@ -306,7 +306,7 @@ func boundaryLog404AndValidationNotError(t *testing.T) {
 
 	// 400: authenticated, matched route, malformed payload — rejected by the
 	// handler's own validation before any use case runs.
-	bad := httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader("{not json"))
+	bad := httptest.NewRequest(http.MethodPost, "/chats/send/text", strings.NewReader("{not json"))
 	bad.Header.Set("token", boundaryTestToken)
 	badRec := httptest.NewRecorder()
 	router.ServeHTTP(badRec, bad)

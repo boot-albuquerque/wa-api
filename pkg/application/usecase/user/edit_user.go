@@ -34,7 +34,7 @@ func NewEditUserUseCase(users appport.UserRepository, s3Cipher appport.S3SecretC
 }
 
 // Execute edita um usuário
-func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserRequest) error {
+func (uc *EditUserUseCase) Execute(ctx context.Context, req domain.EditUserInput) error {
 	if req.UserID == "" {
 		return apperr.New("missing_user_id", apperr.CategoryValidation, "user ID is required", false, nil)
 	}

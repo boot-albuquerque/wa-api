@@ -35,7 +35,7 @@
 
       **O `200` não significa "ligado".** A ligação corre numa goroutine que
       arranca DEPOIS da resposta; o corpo diz `{"status":"connecting"}`. Quem
-      confirma o estado é `GET /session/status` (`connected` e `loggedIn`) ou
+      confirma o estado é `GET /session/status` (`connected` e `logged_in`) ou
       o evento `Connected` em `GET /session/ws`.
 
       **O que o `200` garante**: que a posse da sessão é desta réplica. A
@@ -51,7 +51,7 @@
       3. `GET /session/qr` para ler o QR **ou** `POST /session/pairphone` para
          receber um código de oito caracteres;
       4. ler o QR no telemóvel, ou digitar o código em *Aparelhos conectados*;
-      5. `GET /session/status` confirma — `loggedIn: true`.
+      5. `GET /session/status` confirma — `logged_in: true`.
 
       **Autenticação**: token de sessão.
     security:
@@ -127,7 +127,7 @@
       `400 no_session` — não um `200` silencioso.
 
       **Efeito visível depois**: `GET /session/status` passa a responder
-      `connected: false` mantendo `loggedIn: true`, e sai um evento
+      `connected: false` mantendo `logged_in: true`, e sai um evento
       `Disconnected` pelo webhook e por `GET /session/ws`.
 
       **Autenticação**: token de sessão.
@@ -179,7 +179,7 @@
         `users.connected` deixar de mentir sobre uma sessão morta (F93);
       - o sucesso solta a sessão dos registos DEPOIS de o logout passar (F80).
         Sem essa ordem, `GET /session/status` continuava a responder
-        `loggedIn: true` para uma sessão que já não existia.
+        `logged_in: true` para uma sessão que já não existia.
 
       **Autenticação**: token de sessão.
     security:
@@ -233,7 +233,7 @@
       durante a janela de emparelhamento: é gravado a cada código novo que o
       WhatsApp emite e limpo quando a janela expira. Numa sessão já
       autenticada, ou numa que ainda não chamou `GET /session/connect`, a
-      resposta é `200` com `{"QRCode": ""}`.
+      resposta é `200` com `{"qr_code": ""}`.
 
       **Como usar**: chame `GET /session/connect` primeiro e sondar esta rota
       até o campo vir preenchido. O código gira sozinho — leia sempre o mais
@@ -252,7 +252,7 @@
       '200':
         description: |
           Valor actual da coluna de QR. Medido em 2026-08-26 numa sessão já
-          autenticada: `{"QRCode": ""}`.
+          autenticada: `{"qr_code": ""}`.
         content:
           application/json:
             schema:
@@ -265,7 +265,7 @@
             example:
               code: 200
               data:
-                QRCode: ''
+                qr_code: ''
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -294,8 +294,8 @@
       2. `GET /session/connect` com esse token;
       3. `POST /session/pairphone` com o número — esta rota — **ou**
          `GET /session/qr` para o caminho por imagem;
-      4. digitar o `LinkingCode` no telemóvel;
-      5. `GET /session/status` confirma com `loggedIn: true`.
+      4. digitar o `linking_code` no telemóvel;
+      5. `GET /session/status` confirma com `logged_in: true`.
 
       **Regras**:
 
@@ -309,8 +309,8 @@
         que nomeie um transporte que não serve esta operação é recusado, nunca
         servido em silêncio pelo outro;
       - a resolução do engine corre ANTES da validação do número. Um corpo com
-        `engine` errado e sem `Phone` dá o erro do engine, não `missing_phone`;
-      - `Phone` é obrigatório: só dígitos, com código de país, sem `+` e sem
+        `engine` errado e sem `phone` dá o erro do engine, não `missing_phone`;
+      - `phone` é obrigatório: só dígitos, com código de país, sem `+` e sem
         `@s.whatsapp.net`. Vazio dá `400 missing_phone`;
       - a sessão **não pode já estar autenticada** — a guarda corre ANTES de
         pedir o código ao servidor, e uma sessão emparelhada recebe
@@ -332,7 +332,7 @@
             $ref: '#/components/schemas/PedidoPareamentoTelefone'
           example:
             engine: wa_noise
-            Phone: '554192421234'
+            phone: '554192421234'
     responses:
       '200':
         description: Código emitido. Digite-o no telemóvel antes de expirar.
@@ -348,13 +348,13 @@
             example:
               code: 200
               data:
-                LinkingCode: ABCD-EFGH
+                linking_code: ABCD-EFGH
               success: true
       '400':
         description: |
           Recusa de validação. Os códigos possíveis: `invalid_engine` (campo
           `engine` ausente, vazio ou não reconhecido — é o primeiro a ser
-          avaliado), `missing_phone` (sem o campo `Phone` nem `phone_number`),
+          avaliado), `missing_phone` (sem o campo `phone` nem `phone_number`),
           `already_paired` (a sessão já está autenticada), `no_session`
           (nenhum cliente vivo — ligue primeiro, ou a sessão alvo não existe),
           `pair_phone_failed` (o número foi recusado; a mensagem traz o motivo
@@ -383,7 +383,7 @@
     tags: [Sessões]
     summary: Consultar o estado e o registo da sessão
     description: |
-      Junta o estado AO VIVO da ligação (`connected`, `loggedIn`) com o
+      Junta o estado AO VIVO da ligação (`connected`, `logged_in`) com o
       registo persistido da sessão — JID, webhook, eventos subscritos, proxy,
       limite de histórico e resumo da configuração S3.
 
@@ -393,13 +393,14 @@
       sessão NÃO está de pé (F196). Uma sessão desligada responde `200` com
       `connected: false`.
 
-      **`connected` e `loggedIn` são coisas diferentes**: pode haver
+      **`connected` e `logged_in` são coisas diferentes**: pode haver
       credencial válida com o transporte caído — é o que
       `GET /session/disconnect` produz.
 
-      **Dois campos não são preenchidos por ninguém**: `token` sai sempre
-      vazio e `hmac_configured` sai sempre `false`, mesmo quando existe chave
-      HMAC gravada. Para a chave, pergunte a `GET /session/hmac/config`.
+      **`token` não aparece nesta resposta** — o apresentador da família sessão
+      omite-o de propósito, para não ecoar o token da sessão numa sondagem de
+      estado — e `hmac_configured` sai sempre `false`, mesmo quando existe
+      chave HMAC gravada. Para a chave, pergunte a `GET /session/hmac/config`.
 
       **Quando usar**: como confirmação depois de `/session/connect` e do
       emparelhamento, e como sonda periódica de saúde de uma sessão.
@@ -427,17 +428,16 @@
                 id: 918e37366f27e1125ee0482a793267e1
                 name: filarapida
                 connected: true
-                loggedIn: true
-                token: ''
+                logged_in: true
                 jid: '5516981818244:25@s.whatsapp.net'
                 webhook: ''
                 events: ''
                 proxy_url: ''
-                qrcode: ''
+                qr_code: ''
                 history: '100'
                 proxy_config:
                   enabled: false
-                  proxyUrl: ''
+                  proxy_url: ''
                 s3_config:
                   bucket: ''
                   enabled: false
@@ -783,7 +783,7 @@
             history: 100
     responses:
       '200':
-        description: Limite gravado. As chaves da resposta têm maiúscula inicial.
+        description: Limite gravado.
         content:
           application/json:
             schema:
@@ -796,8 +796,8 @@
             example:
               code: 200
               data:
-                Details: History configured successfully
-                History: 100
+                details: History configured successfully
+                history: 100
               success: true
       '400':
         description: |
@@ -866,7 +866,7 @@
       '200':
         description: |
           Configuração gravada. O ramo de remoção (`enable: false`) responde
-          só com `Details: "Proxy disabled successfully"`.
+          só com `details: "Proxy disabled successfully"`.
         content:
           application/json:
             schema:
@@ -879,9 +879,9 @@
             example:
               code: 200
               data:
-                Details: Proxy configured successfully
-                Set: true
-                ProxyURL: 'socks5://proxy.interno:1080'
+                details: Proxy configured successfully
+                set: true
+                proxy_url: 'socks5://proxy.interno:1080'
                 webhook_use_proxy: false
               success: true
       '400':
@@ -1027,8 +1027,8 @@
             example:
               code: 200
               data:
-                Details: S3 configuration saved successfully
-                Enabled: true
+                details: S3 configuration saved successfully
+                enabled: true
               success: true
       '400':
         description: |
@@ -1056,7 +1056,7 @@
       de mídia em `base64`.
 
       **Regras**: exige um cliente vivo (`400 no_session`). A resposta sai só
-      com `Details` — `Enabled` fica `false` e o campo é omitido.
+      com `details` — `enabled` fica `false` e o campo é omitido.
 
       **Rota irmã**: `DELETE /s3/config` (grupo de integrações), mesmo
       manipulador.
@@ -1079,7 +1079,7 @@
             example:
               code: 200
               data:
-                Details: S3 configuration deleted successfully
+                details: S3 configuration deleted successfully
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1122,7 +1122,7 @@
       - TokenSessao: []
     responses:
       '200':
-        description: A ligação ao bucket funcionou. `Bucket` e `Region` ecoam o que foi testado.
+        description: A ligação ao bucket funcionou. `bucket` e `region` ecoam o que foi testado.
         content:
           application/json:
             schema:
@@ -1136,9 +1136,9 @@
               code: 200
               data:
                 connected: true
-                Details: S3 connection test successful
-                Bucket: wa-api-media
-                Region: eu-west-1
+                details: S3 connection test successful
+                bucket: wa-api-media
+                region: eu-west-1
               success: true
       '400':
         description: '`s3_not_enabled`, `no_session` ou `missing_session_id`.'
@@ -1162,10 +1162,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 500
-              error: internal server error
+              error:
+                code: internal_error
+                message: Ocorreu um erro interno.
               success: false
 
 /session/hmac/config:
@@ -1264,8 +1266,8 @@
             example:
               code: 200
               data:
-                Details: HMAC configuration saved successfully
-                Enabled: true
+                details: HMAC configuration saved successfully
+                enabled: true
               success: true
       '400':
         description: |
@@ -1293,7 +1295,7 @@
       assinatura — um receptor que a exija deixa de os aceitar.
 
       **Regras**: exige um cliente vivo (`400 no_session`). A resposta sai só
-      com `Details` — `Enabled` fica `false` e o campo é omitido.
+      com `details` — `enabled` fica `false` e o campo é omitido.
 
       **Rota irmã**: `DELETE /hmac/config` (grupo de integrações), mesmo
       manipulador.
@@ -1316,7 +1318,7 @@
             example:
               code: 200
               data:
-                Details: HMAC configuration deleted successfully
+                details: HMAC configuration deleted successfully
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1341,11 +1343,12 @@
       `POST /status/set/image`, `/video` e `/audio`; status de TEXTO não é uma
       capacidade que exista.
 
-      **Regras**: `Body` é obrigatório — vazio é `400 missing_body`. Exige um
+      **Regras**: `body` é obrigatório — vazio é `400 missing_body`. Exige um
       cliente vivo.
 
       **Onde confirmar**: o recado aparece em `GET /session/profile/full`, no
-      campo `Status` dentro de `user_info`.
+      campo `Status` dentro de `user_info` (essa parte continua PascalCase —
+      ver F302, correcção deferida para a família utilizadores).
 
       **Autenticação**: token de sessão.
     security:
@@ -1357,7 +1360,7 @@
           schema:
             $ref: '#/components/schemas/PedidoRecado'
           example:
-            Body: Atendimento das 9h às 18h
+            body: Atendimento das 9h às 18h
     responses:
       '200':
         description: Recado alterado. `details` vem vazio.

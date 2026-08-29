@@ -67,7 +67,7 @@ func newAddUserRouteFixture(t *testing.T) *addUserRouteFixture {
 
 	// As MESMAS dependências que wiring_handlers.go:217 monta em produção:
 	// o repositório real e o cifrador real, não um dublê.
-	addUserUC := user.NewAddUserUseCase(db.NewUserRepository(database), hmacKeyEncryptor{}, s3SecretCipher{}, logger)
+	addUserUC := user.NewAddUserUseCase(db.NewUserRepository(database), hmacKeyEncryptor{}, s3SecretCipher{}, logger, true)
 	userHandlers := handlers.NewUserHandlers(
 		nil, addUserUC, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
@@ -116,7 +116,7 @@ func (f *addUserRouteFixture) storedHmacKey(t *testing.T, token string) ([]byte,
 func TestAdminAddUser_ChaveHmacGravadaCifradaEDecifraDeVolta(t *testing.T) {
 	f := newAddUserRouteFixture(t)
 
-	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestPlainKey+`","engine":"wa_noise"}`)
+	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmac_key":"`+addUserTestPlainKey+`","engine":"wa_noise"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusOK, rec.Body.String())
 	}
@@ -170,7 +170,7 @@ func TestAdminAddUser_CifraFalhaNaoCriaUsuario(t *testing.T) {
 	// (pkg/infra/auth/hmac.go:39), não um erro inventado por dublê.
 	appCtx.GlobalEncryptionKey = ""
 
-	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestPlainKey+`","engine":"wa_noise"}`)
+	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmac_key":"`+addUserTestPlainKey+`","engine":"wa_noise"}`)
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusInternalServerError, rec.Body.String())
 	}
@@ -187,7 +187,7 @@ func TestAdminAddUser_CifraFalhaNaoCriaUsuario(t *testing.T) {
 func TestAdminAddUser_ChaveHmacCurtaERecusada(t *testing.T) {
 	f := newAddUserRouteFixture(t)
 
-	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmacKey":"`+addUserTestShortKey+`"}`)
+	rec := f.postUser(t, `{"name":"alice","token":"`+addUserTestToken+`","hmac_key":"`+addUserTestShortKey+`"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}

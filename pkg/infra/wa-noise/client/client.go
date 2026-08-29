@@ -136,7 +136,7 @@ type Client interface {
 
 	// Família de blocklist
 	GetBlocklist(ctx context.Context) (*types.Blocklist, error)
-	UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
+	UpdateBlocklist(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error)
 
 	// Família de privacidade
 	SetStatusMessage(ctx context.Context, msg string) error
@@ -190,8 +190,9 @@ type Client interface {
 	NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error
 	NewsletterDelete(ctx context.Context, channelJID types.JID) error
 
-	// F233(b) — admin invite management.
-	NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error
+	// F233(b) — admin invite management. F261: CreateAdminInvite devolve o
+	// ID e a expiração do convite que o servidor confirma, em vez de só erro.
+	NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) (wanoise.NewsletterAdminInvite, error)
 	NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error
 	NewsletterRevokeAdminInvite(ctx context.Context, channelJID, userJID types.JID) error
 

@@ -135,7 +135,7 @@ func TestPairingQR_WaHeadless_CapabilityNotSupported(t *testing.T) {
 func TestPairingPhone_WaNoise_CallsOnlyNoiseProvider(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{noiseSession, domain.EngineWaNoise})
 	rec := servePairing(t, pairingRouter(t, h, noiseSession), http.MethodPost, "/session/pairphone",
-		`{"engine":"wa_noise","phone_number":"5511999999999"}`)
+		`{"engine":"wa_noise","phone":"5511999999999"}`)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
@@ -153,7 +153,7 @@ func TestPairingPhone_WaNoise_CallsOnlyNoiseProvider(t *testing.T) {
 func TestPairingPhone_WaHeadless_CapabilityNotSupported(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{headlessSession, domain.EngineWaHeadless})
 	rec := servePairing(t, pairingRouter(t, h, headlessSession), http.MethodPost, "/session/pairphone",
-		`{"engine":"wa_headless","phone_number":"5511999999999"}`)
+		`{"engine":"wa_headless","phone":"5511999999999"}`)
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, quero 422 (corpo %s)", rec.Code, rec.Body.String())
@@ -181,7 +181,7 @@ func TestPairingQR_MissingEngine_400(t *testing.T) {
 func TestPairingPhone_MissingEngine_400(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{noiseSession, domain.EngineWaNoise})
 	rec := servePairing(t, pairingRouter(t, h, noiseSession), http.MethodPost, "/session/pairphone",
-		`{"phone_number":"5511999999999"}`)
+		`{"phone":"5511999999999"}`)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, quero 400 (corpo %s)", rec.Code, rec.Body.String())

@@ -16,6 +16,7 @@ import (
 	"wa-api/pkg/domain"
 	"wa-api/pkg/domain/apperr"
 	"wa-api/pkg/pairing"
+	dtosession "wa-api/pkg/presentation/http/dto/session"
 )
 
 // Este arquivo cobre POST /session/pairphone desde o CAP-26 — o handler que
@@ -49,7 +50,13 @@ const (
 	pairPhoneWireCode = "WXYZ-2468"
 	// pairPhoneLinkingCodeKey e' a UNICA chave do corpo de sucesso, e a que
 	// o integrador le' para saber o que digitar no aparelho.
-	pairPhoneLinkingCodeKey = "LinkingCode"
+	//
+	// Era "LinkingCode" — o nome do campo Go, PascalCase no fio — ate' a
+	// migracao para DTO (docs/HTTP-DTO-CONVENTIONS.md). O teste antigo
+	// afirmava a grafia ANTIGA e ainda listava "linking_code" entre as chaves
+	// estrangeiras; um teste que protege um contrato mau nao e' requisito de
+	// compatibilidade, e foi atualizado em vez de mantido.
+	pairPhoneLinkingCodeKey = "linking_code"
 )
 
 // pairPhoneRouter registra o handler pela rota real (gorilla/mux).
@@ -119,7 +126,7 @@ func TestPairPhone_Success_ViaRegisteredRoute(t *testing.T) {
 		t.Fatalf("envelope.success=false num 200: %s", rec.Body.String())
 	}
 
-	var data domain.PairPhoneResult
+	var data dtosession.PairPhoneResponse
 	if err := json.Unmarshal(env.Data, &data); err != nil {
 		t.Fatalf("envelope.data invalido: %v", err)
 	}
@@ -246,10 +253,10 @@ func TestPairPhone_PortFailure_400_NoSilentFallback(t *testing.T) {
 var pairPhoneWireKeys = []string{pairPhoneLinkingCodeKey}
 
 // pairPhoneForeignWireKeys e' o vocabulario que NAO e' desta resposta.
-// `linkingCode` e `linking_code` sao as duas renomeacoes mais provaveis de
+// `linkingCode` e `LinkingCode` sao as duas renomeacoes mais provaveis de
 // quem "padronizar" o corpo; `Details` e `Id` sao a forma historica dos
 // envios, a troca mais provavel de quem restaurar fidelidade ao antigo.
-var pairPhoneForeignWireKeys = []string{"linkingCode", "linking_code", "code", "Details", "Id"}
+var pairPhoneForeignWireKeys = []string{"linkingCode", "LinkingCode", "code", "Details", "Id"}
 
 // TestPairPhone_WireContract_ViaRegisteredRoute trava o envelope de sempre e
 // a chave LinkingCode no JSON REAL, decodificado em map[string]any pela rota

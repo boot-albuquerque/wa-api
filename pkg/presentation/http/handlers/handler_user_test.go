@@ -70,9 +70,9 @@ func (f *uhFakes) failSession(err error) {
 func (f *uhFakes) handlers() *UserHandlers {
 	return NewUserHandlers(
 		user.NewListUsersUseCase(f.users, f.logger, f.sessions),
-		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger),
+		user.NewAddUserUseCase(f.users, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, f.logger, true),
 		user.NewEditUserUseCase(f.users, &contractsfake.S3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, f.logger),
-		user.NewDeleteUserUseCase(f.users, f.logger),
+		user.NewDeleteUserUseCase(f.users, &contractsfake.UserInfoRepublisher{}, f.logger),
 		user.NewCheckUserUseCase(f.contacts, f.logger),
 		user.NewGetUserUseCase(f.contacts, f.jids, f.logger),
 		user.NewGetUserLIDUseCase(f.contacts, f.jids, f.logger),
@@ -318,9 +318,9 @@ func uhSessionRoutes() []uhSessionRoute {
 			// exercitar um caminho impossível. Ver F202.
 			http.MethodGet, "/user/lid/5511999@s.whatsapp.net", "", false},
 		{"BlockUser", func(h *UserHandlers) http.Handler { return h.BlockUser() },
-			http.MethodPost, "/user/block", `{"Phone":"5511999@s.whatsapp.net"}`, true},
+			http.MethodPost, "/user/block", `{"phone":"5511999@s.whatsapp.net"}`, true},
 		{"UnblockUser", func(h *UserHandlers) http.Handler { return h.UnblockUser() },
-			http.MethodPost, "/user/unblock", `{"Phone":"5511999@s.whatsapp.net"}`, true},
+			http.MethodPost, "/user/unblock", `{"phone":"5511999@s.whatsapp.net"}`, true},
 	}
 }
 
@@ -403,7 +403,7 @@ func TestUserHandlers_SessionRoutes_CorpoMalformado(t *testing.T) {
 			f := uhNewFakes()
 
 			rec, capture := uhServe(tc.build(f.handlers()),
-				withUser(uhRequest(tc.method, tc.path, `{"Phone": "5511`, nil), "u-1"))
+				withUser(uhRequest(tc.method, tc.path, `{"phone": "5511`, nil), "u-1"))
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			logassert.OutcomeLogged(t, capture.Records(t), "unexpected EOF")
@@ -448,7 +448,7 @@ func TestUserHandlers_SessionRoutes_PortaFalha(t *testing.T) {
 			}
 		}},
 		{uhSessionRoutes()[1], func(f *uhFakes) {
-			f.contacts.GetUserInfoFunc = func(context.Context, string, []domain.JID) (any, error) {
+			f.contacts.GetUserInfoFunc = func(context.Context, string, []domain.JID) ([]domain.UserInfo, error) {
 				return nil, boom
 			}
 		}},
@@ -502,7 +502,7 @@ func TestUserHandlers_BlockSemAlvo(t *testing.T) {
 				withUser(uhRequest(http.MethodPost, tc.path, `{}`, nil), "u-1"))
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
-			logassert.OutcomeLogged(t, capture.Records(t), "missing Phone or JID")
+			logassert.OutcomeLogged(t, capture.Records(t), "missing phone or jid in payload")
 		})
 	}
 }

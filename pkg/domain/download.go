@@ -22,14 +22,23 @@ const (
 )
 
 // DownloadRequest representa o payload de download de mídia.
+//
+// Kind só é usado pela rota consolidada POST /chats/download/{kind}
+// (CAP-10), preenchido a partir do segmento {kind} do caminho — o campo
+// existe na struct para o caso (não usado pelo cliente HTTP) de um corpo
+// que já o traga explicitamente, que o handler não sobrescreve. Diferente
+// do Mimetype, que a CDN entrega, o kind decide qual sub-mensagem protobuf
+// montar: um sticker webp e uma imagem webp têm o MESMO Mimetype com kinds
+// diferentes — daí não dar para inferir o kind do Mimetype.
 type DownloadRequest struct {
-	URL           string `json:"Url"`
-	DirectPath    string `json:"DirectPath"`
-	MediaKey      []byte `json:"MediaKey"`
-	Mimetype      string `json:"Mimetype"`
-	FileEncSHA256 []byte `json:"FileEncSHA256"`
-	FileSHA256    []byte `json:"FileSHA256"`
-	FileLength    uint64 `json:"FileLength"`
+	Kind          MediaKind `json:"kind,omitempty"`
+	URL           string    `json:"url"`
+	DirectPath    string    `json:"direct_path"`
+	MediaKey      []byte    `json:"media_key"`
+	Mimetype      string    `json:"mimetype"`
+	FileEncSHA256 []byte    `json:"file_enc_sha256"`
+	FileSHA256    []byte    `json:"file_sha256"`
+	FileLength    uint64    `json:"file_length"`
 }
 
 // MediaDescriptor é o que a porta de download atravessa: os campos de
@@ -71,6 +80,6 @@ func (r DownloadRequest) Descriptor(kind MediaKind) MediaDescriptor {
 
 // DownloadResult representa o resultado do download de mídia.
 type DownloadResult struct {
-	Mimetype string `json:"Mimetype"`
-	Data     string `json:"Data"` // base64 data URL
+	Mimetype string
+	Data     string // base64 data URL
 }

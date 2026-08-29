@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	appport "wa-api/pkg/application/contracts"
+	"wa-api/pkg/domain"
 )
 
 // GetPrivacySettingsUseCase retrieves privacy settings
@@ -19,16 +20,16 @@ func NewGetPrivacySettingsUseCase(pm appport.PrivacyManager, logger appport.Logg
 }
 
 // Execute retrieves privacy settings with timeout
-func (uc *GetPrivacySettingsUseCase) Execute(ctx context.Context, userID string) (interface{}, error) {
+func (uc *GetPrivacySettingsUseCase) Execute(ctx context.Context, userID string) (domain.PrivacySettings, error) {
 	if err := uc.privacy.EnsureSession(ctx, userID); err != nil {
 		uc.logger.Warn(ctx, "no wanoise session", "error", err, "user_id", userID)
-		return nil, err
+		return domain.PrivacySettings{}, err
 	}
 
 	settings, err := uc.privacy.GetPrivacySettings(ctx, userID)
 	if err != nil {
 		uc.logger.Error(ctx, "failed to get privacy settings", "error", err, "user_id", userID)
-		return nil, fmt.Errorf("failed to get privacy settings: %w", err)
+		return domain.PrivacySettings{}, fmt.Errorf("failed to get privacy settings: %w", err)
 	}
 
 	return settings, nil

@@ -106,7 +106,7 @@ func seedPollWiringSession(t *testing.T) {
 // TestPollOptionsRecorderIsWiredIntoChatMessenger e' a trava.
 //
 // O que ela impede: que `.WithPollOptions(clientManager)` desapareca de
-// wiring_handlers.go:115. Com a chamada no lugar, um POST /chat/send/poll pela
+// wiring_handlers.go:115. Com a chamada no lugar, um POST /chats/send/poll pela
 // rota real atravessa handler -> use case -> ChatMessengerAdapter.SendPoll ->
 // SDK, e falha no SDK (sem device). Sem a chamada, ele para no guarda
 // fail-closed do adapter e a causa vira causaSemRegistrador — voto ilegivel,
@@ -118,7 +118,7 @@ func TestPollOptionsRecorderIsWiredIntoChatMessenger(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, httptest.NewRequest(
-		http.MethodPost, "/chat/send/poll", strings.NewReader(pollWiringBody)))
+		http.MethodPost, "/chats/send/poll", strings.NewReader(pollWiringBody)))
 
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, quero 500 (corpo: %s)", rec.Code, rec.Body.String())
@@ -129,7 +129,7 @@ func TestPollOptionsRecorderIsWiredIntoChatMessenger(t *testing.T) {
 		t.Fatalf("o envio de enquete parou no guarda fail-closed: o wiring deixou de ligar "+
 			"o registrador de opcoes ao ChatMessengerAdapter "+
 			"(wiring_handlers.go: .WithPollOptions(clientManager)). "+
-			"Enquanto ele faltar, /chat/send/poll nao envia NENHUMA enquete; se a "+
+			"Enquanto ele faltar, /chats/send/poll nao envia NENHUMA enquete; se a "+
 			"guarda tambem cair, a enquete e' criada e todo voto chega ilegivel — "+
 			"o voto vem como SHA-256 do texto da opcao, e sem as opcoes memorizadas "+
 			"eventhandler_message.go:131 nao tem com o que casar o hash. log: %s", logado)

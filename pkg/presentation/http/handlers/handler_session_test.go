@@ -508,7 +508,11 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
 	data := sessionEnvelope(t, rec)["data"].(map[string]any)
-	if data["QRCode"] != "2@codigo-de-pareamento" && data["qrcode"] != "2@codigo-de-pareamento" {
+	// A chave e' `qr_code` desde a migracao para DTO
+	// (docs/HTTP-DTO-CONVENTIONS.md). Era `QRCode` — o nome do campo Go — e o
+	// teste tolerava as duas grafias; hoje afirma UMA, que e' o que faz a
+	// grafia antiga voltar a falhar aqui.
+	if data["qr_code"] != "2@codigo-de-pareamento" {
 		t.Fatalf("o QR persistido nao chegou ao cliente: %s", rec.Body.String())
 	}
 	logassert.NoSecrets(t, recs)
@@ -791,6 +795,202 @@ func TestConnectHandler_OwnershipGranted_200(t *testing.T) {
 	}
 	if len(starter.StartSessionCalls) != 1 || starter.StartSessionCalls[0].TxtID != "user-1" {
 		t.Fatalf("StartSession: %+v", starter.StartSessionCalls)
+	}
+}
+
+// F274: a start already in flight for this user must reach the client as
+// 409, not as 200.
+//
+// Before this fix, the in-flight guard lived entirely inside Start, which
+// ran in a goroutine fired AFTER the handler already responded 200. A client
+// hitting GET /session/connect while a previous pairing flow was still
+// active — including right after /session/disconnect, which cut the
+// transport but not the flow — got 200 {"status":"connecting"} for an
+// attempt that never started.
+
+// TestConnectHandler_StartInFlight_409: when CheckStartInFlight rejects, the
+// handler responds 409 with the classified error and never fires
+// StartSession.
+func TestConnectHandler_StartInFlight_409(t *testing.T) {
+	flightErr := apperr.New(
+		"session_start_already_in_flight",
+		apperr.CategoryConflict,
+		"a session start is already in flight for this user; read the current QR from GET /session/qr",
+		false,
+		nil,
+	)
+	starter := &contractsfake.SessionStarter{
+		StartSessionFunc: func(context.Context, string, string) {
+			t.Fatal("StartSession must not be called when a start is already in flight")
+		},
+	}
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
+		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineWaNoise, Starter: starter})).
+		WithCheckStartInFlight(func(string) error { return flightErr })
+
+	rec, recs := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d, want 409 — CategoryConflict must reach the HTTP boundary (body: %s)",
+			rec.Code, rec.Body.String())
+	}
+	errObj, ok := sessionEnvelope(t, rec)["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("envelope.error is not the typed object from ADR-002: %s", rec.Body.String())
+	}
+	if errObj["code"] != "session_start_already_in_flight" {
+		t.Fatalf("error.code = %v, want session_start_already_in_flight", errObj["code"])
+	}
+	got := logassert.OutcomeLogged(t, recs, "already in flight")
+	if got.str("level") != "warn" {
+		t.Fatalf("level %q for a 409 (client-side), want warn", got.str("level"))
+	}
+	if got.str("user_id") != "user-1" {
+		t.Fatalf("log record without correlatable user_id: %s", got.Raw)
+	}
+}
+
+// TestConnectHandler_StartInFlight_CheckedBeforeOwnership: the in-flight
+// check runs BEFORE the ownership check, mirroring the order Start itself
+// uses internally (inFlight.acquire before claimOwnership). If ownership ran
+// first, a start-in-flight user owned by another replica would be
+// misclassified as an ownership problem instead of the actual cause.
+func TestConnectHandler_StartInFlight_CheckedBeforeOwnership(t *testing.T) {
+	flightErr := apperr.New(
+		"session_start_already_in_flight",
+		apperr.CategoryConflict,
+		"a session start is already in flight for this user; read the current QR from GET /session/qr",
+		false,
+		nil,
+	)
+	starter := &contractsfake.SessionStarter{
+		CheckOwnershipFunc: func(context.Context, string) error {
+			t.Fatal("CheckOwnership must not run when the in-flight check already rejected")
+			return nil
+		},
+		StartSessionFunc: func(context.Context, string, string) { t.Fatal("StartSession must not be called") },
+	}
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
+		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineWaNoise, Starter: starter})).
+		WithCheckStartInFlight(func(string) error { return flightErr })
+
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d, want 409 (body: %s)", rec.Code, rec.Body.String())
+	}
+	errObj, ok := sessionEnvelope(t, rec)["error"].(map[string]any)
+	if !ok || errObj["code"] != "session_start_already_in_flight" {
+		t.Fatalf("error = %v, want session_start_already_in_flight", sessionEnvelope(t, rec)["error"])
+	}
+}
+
+// TestConnectHandler_StartAvailable_200: when CheckStartInFlight passes, the
+// handler proceeds normally — the check must not block the happy path.
+func TestConnectHandler_StartAvailable_200(t *testing.T) {
+	started := make(chan string, 1)
+	starter := &contractsfake.SessionStarter{
+		StartSessionFunc: func(_ context.Context, userID, _ string) { started <- userID },
+	}
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
+		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineWaNoise, Starter: starter})).
+		WithCheckStartInFlight(func(string) error { return nil })
+
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	uid := <-started
+	if uid != "user-1" {
+		t.Fatalf("StartSession received userID %q, want user-1", uid)
+	}
+}
+
+// TestConnectHandler_WithoutCheckStartInFlight_200: without the check
+// installed (zero-value handler, mirrors bootstrap wiring before F274), the
+// handler behaves exactly as before — it must not panic on a nil func.
+func TestConnectHandler_WithoutCheckStartInFlight_200(t *testing.T) {
+	started := make(chan string, 1)
+	starter := &contractsfake.SessionStarter{
+		StartSessionFunc: func(_ context.Context, userID, _ string) { started <- userID },
+	}
+	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
+		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineWaNoise, Starter: starter}))
+
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	uid := <-started
+	if uid != "user-1" {
+		t.Fatalf("StartSession received userID %q, want user-1", uid)
+	}
+}
+
+// F275 — POST /session/logout on a connected-but-never-paired session
+// responded 500 with a plain-text envelope instead of the canonical
+// {code,error:{code,message}} shape at 409. The fix lives at the SDK
+// boundary (pkg/infra/wa-noise/runtime/session/guard.go's Logout, tested in
+// that package) and flows through the use case unchanged; this test proves
+// the HTTP boundary — status AND envelope shape — through the REGISTERED
+// handler, not just the use case.
+
+// TestLogoutHandler_ConectadaSemPareamento_409ComEnvelopeCanonico is the
+// defect test: before the fix, the raw wanoise.ErrNotLoggedIn was not a
+// *apperr.AppError, so RespondJSON fell into the untyped branch — genericError
+// — which HOUSEKEEP F275 measured (against an older build) as a 500 with
+// `error` as a bare string. Even against the CURRENT RespondJSON (which
+// always emits an object), the untyped fallback still means the WRONG
+// status (500) and the WRONG code ("internal_error" instead of
+// "session_not_paired") — a client cannot branch on it.
+func TestLogoutHandler_ConectadaSemPareamento_409ComEnvelopeCanonico(t *testing.T) {
+	semPar := apperr.New(
+		apperr.CodeSessionNotPaired,
+		apperr.CategoryConflict,
+		"session has a live connection but was never paired; there is no device to log out",
+		false,
+		nil,
+	)
+	sc := &contractsfake.SessionController{
+		LogoutFunc: func(context.Context, string) error { return semPar },
+	}
+	h := NewLogoutHandler(session.NewLogoutUseCase(sc, &contractsfake.SessionDetacher{}, &contractsfake.Logger{}))
+
+	rec, recs := serveSession(t, h, http.MethodPost, "/session/logout", "", "user-1", true)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d, want 409 — session_not_paired is CategoryConflict, must reach the HTTP boundary as such (body: %s)",
+			rec.Code, rec.Body.String())
+	}
+
+	env := sessionEnvelope(t, rec)
+	if success, _ := env["success"].(bool); success {
+		t.Fatalf("envelope.success = true numa resposta de erro: %s", rec.Body.String())
+	}
+	if code, _ := env["code"].(float64); int(code) != http.StatusConflict {
+		t.Fatalf("envelope.code = %v, want 409: %s", env["code"], rec.Body.String())
+	}
+	errObj, ok := env["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("envelope.error is not the typed {code,message} object — it is %T: %s", env["error"], rec.Body.String())
+	}
+	if errObj["code"] != "session_not_paired" {
+		t.Fatalf("error.code = %v, want session_not_paired", errObj["code"])
+	}
+	if _, hasMessage := errObj["message"].(string); !hasMessage {
+		t.Fatalf("error.message ausente ou não é string: %v", errObj["message"])
+	}
+	// success: false, code: 409, data ausente, error: {code,message} — a
+	// forma canônica do CONTRATO-ARQUITETURAL, não success/code/data.
+	if _, hasData := env["data"]; hasData {
+		t.Fatalf("envelope de erro carrega `data`: %s", rec.Body.String())
+	}
+
+	got := logassert.OutcomeLogged(t, recs, "never paired")
+	if got.str("level") != "warn" {
+		t.Fatalf("level %q for a 409 (client-side), want warn", got.str("level"))
 	}
 }
 

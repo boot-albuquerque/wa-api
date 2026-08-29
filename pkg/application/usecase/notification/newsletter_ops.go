@@ -83,14 +83,26 @@ type NewsletterRequest struct {
 
 // NewsletterResult carrega o que a operação devolveu.
 //
-// `Data` é `any` pela mesma razão da porta: NewsletterMetadata é tipo do
-// vendor e traduzi-lo arrastaria a árvore do protocolo para o domínio.
-// `Duration` existe separado porque só o subscribe devolve tempo, e enfiá-lo
-// em Data faria o cliente ter de adivinhar quando olhar para lá.
+// SEM ETIQUETAS `json`, e a ausência é o ponto: este tipo já não é o formato de
+// fio. Era — `Data any` ia direto para o codificador, o que fazia a forma da
+// resposta de `/newsletter/info` ser decidida pelo motor da sessão. A forma
+// pública vive agora em `pkg/presentation/http/dto/newsletter`.
+//
+// Os três campos de carga são exclusivos por operação, e são campos SEPARADOS
+// em vez de um `any` porque é isso que dá erro de compilação quando o
+// apresentador lê o campo errado: com `any`, ler `Messages` de um `info` seria
+// uma asserção de tipo que falha em runtime e serve `null`.
 type NewsletterResult struct {
-	Data            any    `json:"data,omitempty"`
-	DurationSeconds int64  `json:"duration_seconds,omitempty"`
-	Status          string `json:"status"`
+	// Metadata é preenchido por create, info e info_invite.
+	Metadata *domain.NewsletterMetadata
+	// Messages é preenchido por messages e updates.
+	Messages []domain.NewsletterMessage
+	// Duration é preenchida só por subscribe: é por quanto tempo as
+	// atualizações ao vivo valem, e vem do servidor.
+	Duration time.Duration
+	Status   string
+	// AdminInvite é preenchido só por admin_invite. F261.
+	AdminInvite *domain.NewsletterAdminInvite
 }
 
 // NewsletterOpsUseCase executa as onze operações.
@@ -116,7 +128,7 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 		return nil, err
 	}
 
-	data, dur, err := uc.dispatch(ctx, userID, req)
+	result, err := uc.dispatch(ctx, userID, req)
 	if err != nil {
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
@@ -130,71 +142,79 @@ func (uc *NewsletterOpsUseCase) Execute(ctx context.Context, userID string, req 
 	}
 
 	uc.logger.Info(ctx, "newsletter operation done", "user_id", userID, "op", string(req.Op))
-	return &NewsletterResult{Data: data, DurationSeconds: int64(dur.Seconds()), Status: domain.StatusSent}, nil
+	result.Status = domain.StatusSent
+	return &result, nil
 }
 
 // dispatch chama a porta. Separado do Execute para que a guarda de sessão, a
 // validação e a tradução de erro não fiquem enterradas num switch de onze
 // ramos — e para que o switch seja legível como a tabela que ele é.
-func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req NewsletterRequest) (any, time.Duration, error) {
+//
+// CADA RAMO ATRIBUI O ERRO ANTES DE O DEVOLVER, e a forma de duas linhas não é
+// desleixo: condensá-la em `return NewsletterResult{}, n.X(...)` custou eleven
+// caminhos de saída na medição de cobertura de log — 88,9% -> 48,1% neste
+// pacote, medido a 2026-08-27 com `go run ./cmd/logcov -by-package ./pkg`
+// antes e depois. O comportamento é idêntico; o que muda é o analisador deixar
+// de reconhecer a propagação da causa. Não volte a encurtar.
+func (uc *NewsletterOpsUseCase) dispatch(ctx context.Context, userID string, req NewsletterRequest) (NewsletterResult, error) {
 	n := uc.newsletters
 	switch req.Op {
 	case NewsletterOpCreate:
-		d, err := n.CreateNewsletter(ctx, userID, req.Name, req.Description, req.Picture)
-		return d, 0, err
+		m, err := n.CreateNewsletter(ctx, userID, req.Name, req.Description, req.Picture)
+		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpInfo:
-		d, err := n.NewsletterInfo(ctx, userID, req.JID)
-		return d, 0, err
+		m, err := n.NewsletterInfo(ctx, userID, req.JID)
+		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpInfoInvite:
-		d, err := n.NewsletterInfoWithInvite(ctx, userID, req.Invite)
-		return d, 0, err
+		m, err := n.NewsletterInfoWithInvite(ctx, userID, req.Invite)
+		return NewsletterResult{Metadata: m}, err
 	case NewsletterOpFollow:
 		err := n.FollowNewsletter(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpUnfollow:
 		err := n.UnfollowNewsletter(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpMute:
 		err := n.ToggleNewsletterMute(ctx, userID, req.JID, req.Mute)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpMessages:
-		d, err := n.NewsletterMessages(ctx, userID, req.JID, req.Count, req.Before)
-		return d, 0, err
+		msgs, err := n.NewsletterMessages(ctx, userID, req.JID, req.Count, req.Before)
+		return NewsletterResult{Messages: msgs}, err
 	case NewsletterOpUpdates:
-		d, err := n.NewsletterMessageUpdates(ctx, userID, req.JID, req.Count, req.Since, req.After)
-		return d, 0, err
+		msgs, err := n.NewsletterMessageUpdates(ctx, userID, req.JID, req.Count, req.Since, req.After)
+		return NewsletterResult{Messages: msgs}, err
 	case NewsletterOpMarkViewed:
 		err := n.MarkNewsletterViewed(ctx, userID, req.JID, req.ServerIDs)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpReact:
 		err := n.SendNewsletterReaction(ctx, userID, req.JID, req.ServerID, req.Reaction, req.MessageID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpSubscribe:
 		dur, err := n.SubscribeNewsletterLiveUpdates(ctx, userID, req.JID)
-		return nil, dur, err
+		return NewsletterResult{Duration: dur}, err
 	case NewsletterOpDemote:
 		err := n.DemoteNewsletterAdmin(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpChangeOwner:
 		err := n.ChangeNewsletterOwner(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpDelete:
 		err := n.DeleteNewsletter(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpAdminInvite:
-		err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		invite, err := n.CreateNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
+		return NewsletterResult{AdminInvite: &invite}, err
 	case NewsletterOpAdminInviteAccept:
 		err := n.AcceptNewsletterAdminInvite(ctx, userID, req.JID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	case NewsletterOpAdminInviteRevoke:
 		err := n.RevokeNewsletterAdminInvite(ctx, userID, req.JID, req.UserJID)
-		return nil, 0, err
+		return NewsletterResult{}, err
 	}
 	// Inalcançável enquanto validateNewsletter correr primeiro. Fica como erro
 	// e não como panic porque uma operação nova acrescentada ao switch da
 	// validação e esquecida aqui tem de virar 4xx, não derrubar o processo.
-	return nil, 0, apperr.New("unknown_newsletter_op", apperr.CategoryValidation,
+	return NewsletterResult{}, apperr.New("unknown_newsletter_op", apperr.CategoryValidation,
 		"unknown newsletter operation", false, nil)
 }
 
@@ -210,6 +230,8 @@ type newsletterRequirement struct {
 const (
 	codeMissingJID        = "missing_jid"
 	codeInvalidNewsletter = "invalid_newsletter_jid"
+	codeMissingUserJID    = "missing_user_jid"
+	codeInvalidUserJID    = "invalid_user_jid"
 )
 
 // requireJID é partilhado porque sete das onze operações pedem o mesmo canal:
@@ -217,7 +239,7 @@ const (
 // erro pode divergir.
 var requireJID = newsletterRequirement{
 	code:    codeMissingJID,
-	message: "jid do canal é obrigatório",
+	message: "channel jid is required",
 	missing: func(r NewsletterRequest) bool { return r.JID == "" },
 }
 
@@ -241,6 +263,22 @@ var requireNewsletterServer = newsletterRequirement{
 	missing: func(r NewsletterRequest) bool { return !r.JID.IsNewsletter() },
 }
 
+// requireValidUserJID is the same defect as requireNewsletterServer, on the
+// sibling field: the F271 fix only reached the channel jid, and a userJID that
+// is PRESENT but malformed ("   ", "nao-e-jid") still fell through to the
+// adapter and came back as `500 newsletter_failed`
+// (HOUSEKEEP.md, "O que a correcção NÃO cobriu, medido depois de integrar").
+//
+// It only runs on rows that already carry a "missing user jid" rule ahead of
+// it, so ABSENCE keeps its own code and this one only fires for a value that
+// is present and impossible — same ordering reason as requireNewsletterServer
+// next to requireJID.
+var requireValidUserJID = newsletterRequirement{
+	code:    codeInvalidUserJID,
+	message: "user jid must be a whatsapp user jid (" + domain.ServerPN + " or " + domain.ServerLID + ")",
+	missing: func(r NewsletterRequest) bool { return r.UserJID != "" && !r.UserJID.IsUserJID() },
+}
+
 // The two rules travel TOGETHER in every row of the table below: an operation
 // that listed only requireJID would go back to answering 500 for a malformed
 // jid, which is the defect F271 recorded. A helper that built the pair would
@@ -259,24 +297,24 @@ var requireNewsletterServer = newsletterRequirement{
 var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 	NewsletterOpCreate: {{
 		code:    "missing_name",
-		message: "nome do canal é obrigatório",
+		message: "channel name is required",
 		missing: func(r NewsletterRequest) bool { return r.Name == "" },
 	}},
 	NewsletterOpInfoInvite: {{
 		code:    "missing_invite",
-		message: "código de convite é obrigatório",
+		message: "invite code is required",
 		missing: func(r NewsletterRequest) bool { return r.Invite == "" },
 	}},
 	NewsletterOpMarkViewed: {requireJID, requireNewsletterServer, {
 		code:    "missing_server_ids",
-		message: "pelo menos um server_id é obrigatório",
+		message: "at least one server_id is required",
 		missing: func(r NewsletterRequest) bool { return len(r.ServerIDs) == 0 },
 	}},
 	// `reaction` NÃO entra na tabela: vazio REMOVE a reação, como no resto do
 	// protocolo. Exigi-lo tornaria impossível desfazer pelo painel.
 	NewsletterOpReact: {requireJID, requireNewsletterServer, {
 		code:    "missing_server_id",
-		message: "server_id é obrigatório",
+		message: "server_id is required",
 		missing: func(r NewsletterRequest) bool { return r.ServerID == 0 },
 	}},
 	NewsletterOpInfo:      {requireJID, requireNewsletterServer},
@@ -287,31 +325,31 @@ var newsletterRequirements = map[NewsletterOp][]newsletterRequirement{
 	NewsletterOpUpdates:   {requireJID, requireNewsletterServer},
 	NewsletterOpSubscribe: {requireJID, requireNewsletterServer},
 	NewsletterOpDemote: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "user jid is required for demote",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 	NewsletterOpChangeOwner: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "new owner jid is required",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 	NewsletterOpDelete: {requireJID, requireNewsletterServer, {
 		code:    "missing_confirm_jid",
 		message: "confirm_jid must match the channel jid",
 		missing: func(r NewsletterRequest) bool { return r.ConfirmJID == "" || r.ConfirmJID != r.JID },
 	}},
 	NewsletterOpAdminInvite: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "invitee jid is required",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 	NewsletterOpAdminInviteAccept: {requireJID, requireNewsletterServer},
 	NewsletterOpAdminInviteRevoke: {requireJID, requireNewsletterServer, {
-		code:    "missing_user_jid",
+		code:    codeMissingUserJID,
 		message: "invitee jid is required for revoke",
 		missing: func(r NewsletterRequest) bool { return r.UserJID == "" },
-	}},
+	}, requireValidUserJID},
 }
 
 // validateNewsletter exige o que CADA operação precisa.

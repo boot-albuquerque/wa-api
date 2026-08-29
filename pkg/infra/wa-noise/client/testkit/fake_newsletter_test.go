@@ -41,7 +41,7 @@ func TestFakeNewsletter_SemFuncaoInjetadaDevolveZeroSemPanico(t *testing.T) {
 		"NewsletterDemoteAdmin":          func() error { return f.NewsletterDemoteAdmin(ctx, jidVazio(), jidVazio()) },
 		"NewsletterChangeOwner":          func() error { return f.NewsletterChangeOwner(ctx, jidVazio(), jidVazio()) },
 		"NewsletterDelete":               func() error { return f.NewsletterDelete(ctx, jidVazio()) },
-		"NewsletterCreateAdminInvite":    func() error { return f.NewsletterCreateAdminInvite(ctx, jidVazio(), jidVazio()) },
+		"NewsletterCreateAdminInvite":    func() error { _, err := f.NewsletterCreateAdminInvite(ctx, jidVazio(), jidVazio()); return err },
 		"NewsletterAcceptAdminInvite":    func() error { return f.NewsletterAcceptAdminInvite(ctx, jidVazio()) },
 		"NewsletterRevokeAdminInvite":    func() error { return f.NewsletterRevokeAdminInvite(ctx, jidVazio(), jidVazio()) },
 		"SetStatusMessage":               func() error { return f.SetStatusMessage(ctx, "olá") },

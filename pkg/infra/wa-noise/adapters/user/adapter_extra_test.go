@@ -14,42 +14,6 @@ import (
 	"wa-api/internal/wa-noise/protocol/types/events"
 )
 
-// TestResolveBlocklistPNJID_HiddenUserServer_NoLIDs devolve erro.
-func TestResolveBlocklistPNJID_HiddenUserServer_NoLIDs(t *testing.T) {
-	jid := types.NewJID("5511", types.HiddenUserServer)
-	_, err := resolveBlocklistPNJID(context.Background(), &testkit.Fake{}, jid)
-	if err == nil {
-		t.Fatal("resolveBlocklistPNJID HiddenUserServer sem store = nil")
-	}
-}
-
-// TestResolveBlocklistPNJID_HiddenUserServer_NotFound devolve erro.
-func TestResolveBlocklistPNJID_HiddenUserServer_NotFound(t *testing.T) {
-	jid := types.NewJID("5511", types.HiddenUserServer)
-	fake := &testkit.Fake{StoreFn: func() *store.Device { return storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{}}, nil) }}
-	_, err := resolveBlocklistPNJID(context.Background(), fake, jid)
-	if err == nil {
-		t.Fatal("resolveBlocklistPNJID HiddenUserServer sem mapping = nil")
-	}
-}
-
-// TestResolveBlocklistPNJID_HiddenUserServer_OK devolve PN mapeado.
-func TestResolveBlocklistPNJID_HiddenUserServer_OK(t *testing.T) {
-	jid := types.NewJID("5511", types.HiddenUserServer)
-	fake := &testkit.Fake{StoreFn: func() *store.Device {
-		return storeWith(&fakeLIDStore{mapping: map[types.JID]types.JID{
-			jid: types.NewJID("1234", types.DefaultUserServer),
-		}}, nil)
-	}}
-	got, err := resolveBlocklistPNJID(context.Background(), fake, jid)
-	if err != nil {
-		t.Fatalf("resolveBlocklistPNJID = %v", err)
-	}
-	if got.User != "1234" {
-		t.Errorf("got.User = %q", got.User)
-	}
-}
-
 // TestGetCachedPNForLID_PropagatesError devolve erro.
 func TestGetCachedPNForLID_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("mapping fail")
@@ -135,7 +99,7 @@ func TestUserAdapter_GetLIDForPN_PropagatesError(t *testing.T) {
 // TestUserAdapter_UpdateBlocklist_PropagatesError.
 func TestUserAdapter_UpdateBlocklist_PropagatesError(t *testing.T) {
 	sdkErr := errors.New("block fail")
-	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	fake := &testkit.Fake{UpdateBlocklistFn: func(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
 		return nil, sdkErr
 	}}
 	a := NewUserAdapter(testkit.GetterWith(map[string]waclient.Client{"u1": fake}))

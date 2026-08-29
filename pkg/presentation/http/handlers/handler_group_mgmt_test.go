@@ -83,7 +83,7 @@ func grpMgmtCases() []grpMgmtCase {
 			body: `{"name":"squad","participants":["5511999999999"]}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.CreateGroup },
 			failOp: func(f *grpMgmtFakes, err error) {
-				f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
+				f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 					return nil, err
 				}
 			},
@@ -113,55 +113,55 @@ func grpMgmtCases() []grpMgmtCase {
 		{
 			name: "GroupLeave",
 			path: "/group/leave",
-			body: `{"groupJID":"` + grpMgmtJID + `"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.GroupLeave },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.lifecycle.LeaveGroupFunc = func(context.Context, string, domain.JID) error { return err }
 			},
 			missing: []grpMgmtMissing{
-				{"sem groupJID", `{}`, "missing groupJID"},
+				{"sem group_jid", `{}`, "missing group_jid"},
 			},
 		},
 		{
 			name: "SetGroupName",
 			path: "/group/name",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Name":"squad"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","name":"squad"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupName },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupNameFunc = func(context.Context, string, domain.JID, string) error { return err }
 			},
 			missing: []grpMgmtMissing{
-				{"sem Name", `{"GroupJID":"` + grpMgmtJID + `"}`, "missing name"},
+				{"sem Name", `{"group_jid":"` + grpMgmtJID + `"}`, "missing name"},
 			},
 		},
 		{
 			name: "SetGroupTopic",
 			path: "/group/topic",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Topic":"assunto"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","topic":"assunto"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupTopic },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupTopicFunc = func(context.Context, string, domain.JID, string) error { return err }
 			},
 			missing: []grpMgmtMissing{
-				{"sem Topic", `{"GroupJID":"` + grpMgmtJID + `"}`, "missing topic"},
+				{"sem Topic", `{"group_jid":"` + grpMgmtJID + `"}`, "missing topic"},
 			},
 		},
 		{
 			name: "SetGroupPhoto",
 			path: "/group/photo",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Photo":"anBlZy1waG90by1kYXRh"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","photo":"anBlZy1waG90by1kYXRh"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupPhoto },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupPhotoFunc = func(context.Context, string, domain.JID, []byte) error { return err }
 			},
 			missing: []grpMgmtMissing{
-				{"sem Photo", `{"GroupJID":"` + grpMgmtJID + `"}`, "missing photo"},
+				{"sem Photo", `{"group_jid":"` + grpMgmtJID + `"}`, "missing photo"},
 			},
 		},
 		{
 			name: "RemoveGroupPhoto",
 			path: "/group/photo/remove",
-			body: `{"groupjid":"` + grpMgmtJID + `"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.RemoveGroupPhoto },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupPhotoFunc = func(context.Context, string, domain.JID, []byte) error { return err }
@@ -170,7 +170,7 @@ func grpMgmtCases() []grpMgmtCase {
 		{
 			name: "SetGroupAnnounce",
 			path: "/group/announce",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Announce":true}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","announce":true}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupAnnounce },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupAnnounceFunc = func(context.Context, string, domain.JID, bool) error { return err }
@@ -179,7 +179,7 @@ func grpMgmtCases() []grpMgmtCase {
 		{
 			name: "SetGroupLocked",
 			path: "/group/locked",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Locked":true}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","locked":true}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetGroupLocked },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetGroupLockedFunc = func(context.Context, string, domain.JID, bool) error { return err }
@@ -188,7 +188,7 @@ func grpMgmtCases() []grpMgmtCase {
 		{
 			name: "SetDisappearingTimer",
 			path: "/group/disappearing",
-			body: `{"groupjid":"` + grpMgmtJID + `","duration":"24h"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","duration":"24h"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.SetDisappearingTimer },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.SetDisappearingTimerFunc = func(context.Context, string, domain.JID, time.Duration, time.Time) error {
@@ -199,7 +199,7 @@ func grpMgmtCases() []grpMgmtCase {
 		{
 			name: "UpdateGroupParticipants",
 			path: "/group/participants/update",
-			body: `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`,
+			body: `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"add"}`,
 			pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
 			failOp: func(f *grpMgmtFakes, err error) {
 				f.settings.UpdateGroupParticipantsFunc = func(context.Context, string, domain.JID, []domain.JID, domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
@@ -207,12 +207,12 @@ func grpMgmtCases() []grpMgmtCase {
 				}
 			},
 			missing: []grpMgmtMissing{
-				{"sem Phone", `{"GroupJID":"` + grpMgmtJID + `"}`, "missing phones"},
-				{"sem Action", `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"]}`, "missing action"},
-				{"phone vazio", `{"GroupJID":"` + grpMgmtJID + `","Phone":[""],"Action":"add"}`, "empty phones at index 0"},
+				{"sem Phone", `{"group_jid":"` + grpMgmtJID + `"}`, "missing phones"},
+				{"sem Action", `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"]}`, "missing action"},
+				{"phone vazio", `{"group_jid":"` + grpMgmtJID + `","phone":[""],"action":"add"}`, "empty phones at index 0"},
 				// F101: este handler nunca validou GroupJID, entao o campo
 				// ausente tambem alcancava o parser.
-				{"sem GroupJID", `{"Phone":["5511999999999"],"Action":"add"}`, "missing groupjid"},
+				{"sem group_jid", `{"phone":["5511999999999"],"action":"add"}`, "missing group_jid"},
 			},
 		},
 	}
@@ -250,7 +250,7 @@ func TestGroupMgmtHandlers_MalformedBody(t *testing.T) {
 	for _, tc := range grpMgmtCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGrpMgmtFakes()
-			rec, capture := grpMgmtServe(tc, f, `{"GroupJID": "1203`)
+			rec, capture := grpMgmtServe(tc, f, `{"group_jid": "1203`)
 
 			assertErrorEnvelope(t, rec, http.StatusBadRequest)
 			got := logassert.OutcomeLogged(t, capture.Records(t))
@@ -358,9 +358,9 @@ func TestGroupMgmtHandlers_NeverLogSecrets(t *testing.T) {
 
 			h, capture := logassert.Wrap(tc.pick(f.handlers()))
 			rec := httptest.NewRecorder()
-			body := `{"GroupJID":"` + grpMgmtJID + `","groupjid":"` + grpMgmtJID +
-				`","name":"squad","Name":"squad","Topic":"t","code":"AbCdEf",` +
-				`"participants":["5511999999999"],"Phone":["5511999999999"],"Action":"add",` +
+			body := `{"group_jid":"` + grpMgmtJID + `","group_jid":"` + grpMgmtJID +
+				`","name":"squad","name":"squad","topic":"t","code":"AbCdEf",` +
+				`"participants":["5511999999999"],"phone":["5511999999999"],"action":"add",` +
 				`"secret":"` + logassertGlobalEncryptionKey + `","hmac":"` + logassertGlobalHMACKey + `"}`
 			r := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(body))
 			r.Header.Set("Authorization", logassertAdminToken)
@@ -392,12 +392,12 @@ func grpMgmtChatAliasCases() []grpMgmtChatAliasCase {
 		},
 		{
 			name:     "SetGroupName",
-			chatBody: `{"chat":"` + grpMgmtJID + `","Name":"squad"}`,
+			chatBody: `{"chat":"` + grpMgmtJID + `","name":"squad"}`,
 			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupName },
 		},
 		{
 			name:     "SetGroupTopic",
-			chatBody: `{"chat":"` + grpMgmtJID + `","Topic":"assunto"}`,
+			chatBody: `{"chat":"` + grpMgmtJID + `","topic":"assunto"}`,
 			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupTopic },
 		},
 		{
@@ -407,12 +407,12 @@ func grpMgmtChatAliasCases() []grpMgmtChatAliasCase {
 		},
 		{
 			name:     "SetGroupAnnounce",
-			chatBody: `{"chat":"` + grpMgmtJID + `","Announce":true}`,
+			chatBody: `{"chat":"` + grpMgmtJID + `","announce":true}`,
 			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupAnnounce },
 		},
 		{
 			name:     "SetGroupLocked",
-			chatBody: `{"chat":"` + grpMgmtJID + `","Locked":true}`,
+			chatBody: `{"chat":"` + grpMgmtJID + `","locked":true}`,
 			pick:     func(h *GroupManagementHandlers) http.Handler { return h.SetGroupLocked },
 		},
 		{
@@ -422,7 +422,7 @@ func grpMgmtChatAliasCases() []grpMgmtChatAliasCase {
 		},
 		{
 			name:     "UpdateGroupParticipants",
-			chatBody: `{"chat":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`,
+			chatBody: `{"chat":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"add"}`,
 			pick:     func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
 		},
 	}
@@ -451,7 +451,7 @@ func TestGroupMgmtHandlers_ChatAlias_LegacyWins(t *testing.T) {
 		captured = string(jid)
 		return nil
 	}
-	body := `{"groupJID":"legacy@g.us","chat":"alias@g.us"}`
+	body := `{"group_jid":"legacy@g.us","chat":"alias@g.us"}`
 	h, _ := logassert.Wrap(f.handlers().GroupLeave)
 	rec := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/group/leave", strings.NewReader(body))
@@ -465,12 +465,14 @@ func TestGroupMgmtHandlers_ChatAlias_LegacyWins(t *testing.T) {
 	}
 }
 
-// F247: unknown participant action returns 400 from the handler, not 500.
+// F247/F263: unknown participant action returns 400 from the handler, not
+// 500. "promote" left this list in F263 — it is a valid action now, covered
+// by TestUpdateGroupParticipants_PromoteAndDemote below.
 func TestUpdateGroupParticipants_RejectsUnknownAction(t *testing.T) {
-	for _, action := range []string{"approve", "promote", "qualquer-coisa"} {
+	for _, action := range []string{"approve", "qualquer-coisa", "ADD"} {
 		t.Run(action, func(t *testing.T) {
 			f := newGrpMgmtFakes()
-			body := `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"` + action + `"}`
+			body := `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"` + action + `"}`
 			rec, capture := grpMgmtServe(grpMgmtCase{
 				name: "UpdateGroupParticipants",
 				path: "/group/updateparticipants",
@@ -495,11 +497,11 @@ func TestUpdateGroupParticipants_ReturnsResult(t *testing.T) {
 	f := newGrpMgmtFakes()
 	f.settings.UpdateGroupParticipantsFunc = func(_ context.Context, _ string, _ domain.JID, _ []domain.JID, _ domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
 		return domain.ParticipantsUpdate{
-			Result:    []string{"added-ok"},
-			Confirmed: true,
+			Participants: []domain.GroupParticipant{{JID: "5511999999999@s.whatsapp.net", IsAdmin: true}},
+			Confirmed:    true,
 		}, nil
 	}
-	body := `{"GroupJID":"` + grpMgmtJID + `","Phone":["5511999999999"],"Action":"add"}`
+	body := `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"add"}`
 	rec, _ := grpMgmtServe(grpMgmtCase{
 		name: "UpdateGroupParticipants",
 		path: "/group/updateparticipants",
@@ -511,18 +513,64 @@ func TestUpdateGroupParticipants_ReturnsResult(t *testing.T) {
 		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
 	}
 	respBody := rec.Body.String()
-	if !strings.Contains(respBody, "added-ok") {
-		t.Errorf("response should contain per-participant result: %s", respBody)
+	// A lista sai TIPADA e em snake_case: era aqui que o struct de protocolo
+	// do wa-noise chegava ao fio com os nomes de campo do Go.
+	if !strings.Contains(respBody, `"phone_number"`) || !strings.Contains(respBody, `"is_admin":true`) {
+		t.Errorf("response should carry the mapped participant: %s", respBody)
 	}
 	if !strings.Contains(respBody, `"confirmed":true`) {
 		t.Errorf("response should contain confirmed field: %s", respBody)
 	}
 }
 
+// F263: promote and demote reach the port with the right domain.ParticipantAction,
+// through the SAME handler chain grpMgmtServe uses for every other operation
+// in this file (production request-scoped chain, not a raw use case call) —
+// the boundary half of the F263 fix. The use-case-level translation is
+// TestGroupManagement_UpdateParticipantsTraduzAction.
+func TestUpdateGroupParticipants_PromoteAndDemote(t *testing.T) {
+	tests := []struct {
+		action string
+		want   domain.ParticipantAction
+	}{
+		{"promote", domain.ParticipantPromote},
+		{"demote", domain.ParticipantDemote},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.action, func(t *testing.T) {
+			f := newGrpMgmtFakes()
+			f.settings.UpdateGroupParticipantsFunc = func(_ context.Context, _ string, _ domain.JID, _ []domain.JID, _ domain.ParticipantAction) (domain.ParticipantsUpdate, error) {
+				return domain.ParticipantsUpdate{
+					Participants: []domain.GroupParticipant{{JID: "5511999999999@s.whatsapp.net", IsAdmin: tt.action == "promote"}},
+					Confirmed:    true,
+				}, nil
+			}
+			body := `{"group_jid":"` + grpMgmtJID + `","phone":["5511999999999"],"action":"` + tt.action + `"}`
+			rec, _ := grpMgmtServe(grpMgmtCase{
+				name: "UpdateGroupParticipants",
+				path: "/group/updateparticipants",
+				body: body,
+				pick: func(h *GroupManagementHandlers) http.Handler { return h.UpdateGroupParticipants },
+			}, f, body)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+			}
+			if len(f.settings.UpdateGroupParticipantsCalls) != 1 {
+				t.Fatalf("port called %d time(s), want 1", len(f.settings.UpdateGroupParticipantsCalls))
+			}
+			if got := f.settings.UpdateGroupParticipantsCalls[0].Action; got != tt.want {
+				t.Fatalf("Action = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // F248: SetGroupPhoto rejects non-base64 input with 400.
 func TestSetGroupPhoto_RejectsNonBase64(t *testing.T) {
 	f := newGrpMgmtFakes()
-	body := `{"GroupJID":"` + grpMgmtJID + `","Photo":"not-valid-base64!!!"}`
+	body := `{"group_jid":"` + grpMgmtJID + `","photo":"not-valid-base64!!!"}`
 	rec, capture := grpMgmtServe(grpMgmtCase{
 		name: "SetGroupPhoto",
 		path: "/group/photo",
@@ -545,7 +593,7 @@ func TestSetGroupPhoto_DecodesBase64(t *testing.T) {
 		captured = data
 		return nil
 	}
-	body := `{"GroupJID":"` + grpMgmtJID + `","Photo":"anBlZy1waG90by1kYXRh"}`
+	body := `{"group_jid":"` + grpMgmtJID + `","photo":"anBlZy1waG90by1kYXRh"}`
 	rec, _ := grpMgmtServe(grpMgmtCase{
 		name: "SetGroupPhoto",
 		path: "/group/photo",
@@ -565,9 +613,9 @@ func TestSetGroupPhoto_DecodesBase64(t *testing.T) {
 func TestCreateGroup_IsParent(t *testing.T) {
 	f := newGrpMgmtFakes()
 	var captured domain.CreateGroupOpts
-	f.lifecycle.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+	f.lifecycle.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		captured = opts
-		return "community", nil
+		return &domain.CreatedGroup{Group: &domain.GroupInfo{Name: "My Community", IsParent: true}, Created: true}, nil
 	}
 	body := `{"name":"My Community","is_parent":true}`
 	rec, _ := grpMgmtServe(grpMgmtCase{
@@ -593,9 +641,9 @@ func TestCreateGroup_IsParent(t *testing.T) {
 func TestCreateGroup_LinkedParentJID(t *testing.T) {
 	f := newGrpMgmtFakes()
 	var captured domain.CreateGroupOpts
-	f.lifecycle.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (any, error) {
+	f.lifecycle.CreateGroupFunc = func(_ context.Context, _ string, _ string, _ []domain.JID, opts domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
 		captured = opts
-		return "child-group", nil
+		return &domain.CreatedGroup{Group: &domain.GroupInfo{Name: "Sub Group"}, Created: true}, nil
 	}
 	body := `{"name":"Sub Group","participants":["5511999999999"],"linked_parent_jid":"120363@g.us"}`
 	rec, _ := grpMgmtServe(grpMgmtCase{
@@ -634,8 +682,8 @@ func TestCreateGroup_MutuallyExclusive(t *testing.T) {
 // F237: is_parent=true relaxes participants requirement.
 func TestCreateGroup_IsParent_NoParticipantsRequired(t *testing.T) {
 	f := newGrpMgmtFakes()
-	f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (any, error) {
-		return "ok", nil
+	f.lifecycle.CreateGroupFunc = func(context.Context, string, string, []domain.JID, domain.CreateGroupOpts) (*domain.CreatedGroup, error) {
+		return &domain.CreatedGroup{Group: &domain.GroupInfo{Name: "Community"}, Created: true}, nil
 	}
 	body := `{"name":"Community","is_parent":true,"participants":[]}`
 	rec, _ := grpMgmtServe(grpMgmtCase{

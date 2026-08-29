@@ -3,6 +3,7 @@ package newsletter
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	waBinary "wa-api/internal/wa-noise/protocol/binary"
@@ -211,17 +212,54 @@ func Delete(ctx context.Context, t Transport, channelJID types.JID) error {
 	return err
 }
 
+// AdminInvite is the server's confirmation of an admin-invite creation.
+// F261, reexported at the root as NewsletterAdminInvite.
+type AdminInvite struct {
+	ID             string
+	ExpirationTime time.Time
+}
+
+// respCreateAdminInvite is the raw MEX payload shape, measured 2026-08-26:
+//
+//	{"xwa2_newsletter_admin_invite_create":
+//	  {"id":"...@newsletter","invite_expiration_time":"1788351063"}}
+//
+// invite_expiration_time is Unix epoch seconds encoded as a STRING — the MEX
+// transport quotes every scalar, numeric or not.
+type respCreateAdminInvite struct {
+	Result struct {
+		ID             string `json:"id"`
+		ExpirationTime string `json:"invite_expiration_time"`
+	} `json:"xwa2_newsletter_admin_invite_create"`
+}
+
 // CreateAdminInvite creates an admin invite for a channel.
 //
 // Variables: {newsletter_id, user_id}. Measured from the SPA module
 // WAWebMexCreateNewsletterAdminInviteJobMutation (probe_chanadmin_test.go).
 // user_id MUST be LID — the caller resolves PN before calling.
-func CreateAdminInvite(ctx context.Context, t Transport, channelJID, userJID types.JID) error {
-	_, err := SendMexIQ(ctx, t, mutationCreateAdminInvite, map[string]any{
+//
+// F261 (2026-08-28): parses and returns the server's confirmation, instead
+// of discarding it. Until this correction the id and expiration above were
+// read and thrown away, and the route answered `data:null` —
+// indistinguishable from "nothing happened".
+func CreateAdminInvite(ctx context.Context, t Transport, channelJID, userJID types.JID) (AdminInvite, error) {
+	resp, err := SendMexIQ(ctx, t, mutationCreateAdminInvite, map[string]any{
 		"newsletter_id": channelJID.String(),
 		"user_id":       userJID.String(),
 	})
-	return err
+	if err != nil {
+		return AdminInvite{}, err
+	}
+	var respData respCreateAdminInvite
+	if err := json.Unmarshal(resp, &respData); err != nil {
+		return AdminInvite{}, err
+	}
+	out := AdminInvite{ID: respData.Result.ID}
+	if secs, err := strconv.ParseInt(respData.Result.ExpirationTime, 10, 64); err == nil {
+		out.ExpirationTime = time.Unix(secs, 0).UTC()
+	}
+	return out, nil
 }
 
 // AcceptAdminInvite accepts an admin invite for a channel.

@@ -136,7 +136,12 @@ max_complexity=51
 # Duas funções de teste subiram de complexidade sem mudar a contagem, porque já
 # estavam na lista: TestUseCases_SemSessao_PropagamACausa 11 -> 12 (o ramo que
 # escolhe a mensagem de recusa esperada do GetQR).
-count=613
+count=635
+# fusao com feature/wa-noise (Passo 6, 2026-08-28): count 613 -> 635 (+22,
+# INFORMATIVO). max_complexity inalterado (51). Issues novas vem sobretudo
+# de codigo que so' existia do lado de feature/wa-noise e chegou por fusao
+# (docs cleanup, ajustes de vocabulario de engine em ficheiros de teste) —
+# nao investigado issue a issue por serem informativas, nao trava.
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
 # real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e

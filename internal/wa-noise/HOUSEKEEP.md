@@ -3123,3 +3123,262 @@ decisão consciente a registar, não omissão.
 
 **Status**: não corrigido; é levantamento. Referência cruzada em `HOUSEKEEP.md`
 da raiz, porque quem consome (ou deixa de consumir) os eventos somos nós.
+
+## LIB-02 — `UpdateBlocklist` monta a forma PRÉ-LID do `<item>`, e o servidor recusa com `400 bad-request`
+
+**Data/contexto**: 2026-08-26, investigação da F264 (`/users/block` e
+`/users/unblock` ❌ na bateria de campo). Referência cruzada em `HOUSEKEEP.md`
+da raiz (F278), porque o adaptador da aplicação agrava o defeito.
+
+**Onde**: `internal/wa-noise/capabilities/user/blocklist.go:50-65`
+
+```go
+Content: []waBinary.Node{{
+    Tag: "item",
+    Attrs: waBinary.Attrs{
+        "jid":    jid,             // recebido tal como veio
+        "action": string(action),
+    },
+}},
+```
+
+**Problema**: o WhatsApp migrou a ESCRITA da blocklist para endereçamento por
+LID. O `<item>` passou a exigir `jid` em `@lid` e, no `block`, um `pn_jid` com
+o número de telefone. Nós enviamos a forma anterior.
+
+Medido em campo (F264): `422 upstream_rejected`, com
+`info query returned status 400: bad-request` por baixo, em **4 de 4**
+combinações — duas contas (Business e pessoal), número real e inexistente, PN e
+LID. `GET /users/blocklist`, que não carrega `<item>` nenhum, responde `200`.
+
+**Três referências independentes concordam** (nenhuma linha de código copiada,
+só o entendimento):
+
+| referência | o que respondeu | data |
+|---|---|---|
+| whatsmeow `8d023aa973` (PR #1137) | `jid`=LID sempre; `pn_jid`=PN só no `block`; resolve PN→LID pelo store com fallback `GetUserInfo` | 2026-08-13 |
+| Baileys `8ca9316a10` (PR #2265) | idem, e lança `400` local se o `pn_jid` faltar no `block` | 2026-04-24 |
+| whatsapp-web.js `src/structures/Contact.js:154` | converte PN→LID com `getAlternateUserWid` antes de `blockContact`, e o payload leva `phoneNumber` | — |
+
+Baileys chegou lá quatro meses antes do whatsmeow; a nossa medição é 13 dias
+depois do commit do whatsmeow. **A causa é `PROTOCOL_CHANGED`, não defeito de
+vendorização**: o código estava correcto quando foi escrito, e ficou parado.
+
+**Correção sugerida**: portar `8d023aa973`. `UpdateBlocklist` passa a resolver
+(ou receber) o LID e a emitir `pn_jid` no `block`. Exige acesso ao `LIDs` store
+e ao `GetUserInfo` como fallback, tal como o upstream.
+
+**O sub-caso barato, e é da aplicação, não daqui**: para `unblock` a forma nova
+é `<item jid='…@lid' action='unblock'/>` — sem `pn_jid`. Se o adaptador parar de
+degradar LID→PN (F278 da raiz), esta função já emite o stanza correcto **sem
+tocar na biblioteca**.
+
+**Anti-regressão exigida quando for corrigido**: teste do stanza com o
+`Transport` falso de `blocklist_test.go` (o `item.jid` tem de sair em `@lid`,
+e o `pn_jid` só no `block`), teste da DIRECÇÃO da resolução, e controlo
+negativo EXECUTADO repondo `"jid": jid` — com a saída da falha colada aqui.
+
+**Status**: CORRIGIDO em 2026-08-28 (mesma sessão que confirmou o defeito
+ao vivo pela manhã). `UpdateBlocklist`
+(`internal/wa-noise/capabilities/user/blocklist.go`) ganhou o parâmetro
+`pnJID types.JID`: quando `action` é `block` e `pnJID` não é vazio, o
+`<item>` passa a levar `pn_jid`, exatamente como `8d023aa973` (whatsmeow)
+e `8ca9316a10` (Baileys) fazem. `unblock` continua sem o atributo — a
+regra é assimétrica por desenho, não um esquecimento.
+
+A resolução do PN (de onde vem `pnJID`) fica do lado da aplicação, não
+aqui: `pkg/infra/wa-noise/adapters/user/blocklist.go`
+(`resolveBlocklistPN`, nova) resolve o PN do alvo — direto, se o pedido já
+veio em PN, ou via mapeamento LID→PN em cache, se veio em LID — e passa
+esse valor a `UpdateBlocklist`. Sem mapeamento em cache, `resolveBlocklistPN`
+devolve o JID zero, e esta biblioteca OMITE o atributo em vez de enviar um
+`pn_jid` inventado — pior que a forma completa, nunca pior que antes da
+correção.
+
+**Testes** (`internal/wa-noise/capabilities/user/blocklist_test.go`):
+`TestUpdateBlocklistBlockCarriesPNJID` (block carrega `pn_jid`),
+`TestUpdateBlocklistUnblockOmitsPNJID` (unblock nunca carrega, mesmo com
+`pnJID` preenchido), `TestUpdateBlocklistBlockWithZeroPNJIDOmitsAttribute`
+(zero-valor → atributo omitido, não um valor vazio no fio). Controlo
+negativo EXECUTADO: comentada a linha que adiciona `pn_jid`,
+`TestUpdateBlocklistBlockCarriesPNJID` falhou com `pn_jid = <nil>, want
+5511999@s.whatsapp.net`; restaurada, voltou a passar.
+
+**Verificação em campo**: sessões reais `envia`→`recebe` (projeto
+`wa-api`, sessão de 2026-08-28). `POST /users/block` antes da correção:
+`422 upstream_rejected`. Depois: `200 {details:"User blocked",
+jid:"90937376170214@lid", blocklist:["90937376170214@lid"]}`. Revertido
+com `unblock` (`200`, `blocklist:[]`) ao final. Ver `HOUSEKEEP.md` (raiz),
+F365, para o detalhe do lado da aplicação (`resolveBlocklistPN` e os
+testes do adaptador).
+
+<!-- f-status: corrigido -->
+
+## LIB-03 — `GetMessageUpdates` envia um stanza que o servidor deixou de atender: silêncio até ao timeout
+
+**Data/contexto**: 2026-08-26, investigação da F265 (`/newsletters/updates` ❌,
+`500` ao fim de 30,0 s).
+
+**Onde**: `internal/wa-noise/capabilities/newsletter/messages.go:89-97`
+
+```go
+resp, err := t.SendIQ(ctx, IQ{
+    Namespace: Namespace,          // "newsletter"
+    Type:      IQGet,
+    To:        jid,                // O CANAL, não o servidor
+    Content: []waBinary.Node{{Tag: messageUpdatesTag, Attrs: …}},
+})
+```
+
+O comentário em `messages.go:82-88` já registava a assimetria com `GetMessages`
+— *"herdada do upstream e preservada"* — sem saber que era o defeito.
+
+**Problema**: o servidor **ignora** `<message_updates>` endereçado ao JID do
+canal. Não recusa: não responde. Daí o sintoma ser `context deadline exceeded`
+ao fim dos 30 s de `waclient.RequestTimeout`, e não um `400`.
+
+Evidência de que a causa é o stanza e não a sessão, o canal ou o transporte:
+
+| controlo | resultado | o que elimina |
+|---|---|---|
+| `POST /newsletters/messages`, mesmo canal, mesmo segundo | `200 []` | sessão, canal, transporte |
+| `POST /newsletters/subscribe` — IQ `set` para o MESMO `@newsletter` JID (`actions.go:14`) | `200` | "o servidor não roteia IQ para canal" |
+
+**A forma que o WA Web usa hoje**, capturada e publicada por terceiros:
+
+```xml
+<iq to='s.whatsapp.net' xmlns='newsletter'>
+  <messages type='jid' jid='<canal>@newsletter' count='N' [before]/>
+</iq>
+```
+
+— que é **exactamente** o que `GetMessages` (`messages.go:36-45`) já envia com
+sucesso. O cursor mudou de `since` para `before`, e os contadores de
+visualização, reacção e encaminhamento vêm dentro dos filhos `<message>`.
+
+**Referências**:
+
+| referência | o que respondeu |
+|---|---|
+| Baileys issue #2555 (**aberta**, 2026-05-13) | o nosso sintoma exacto, com repro: *"newsletterFetchMessages returns no message, and timeouts"*. Tentou com e sem `since`/`after` — nenhuma variação de atributo salva |
+| Baileys PR #2620 (fechado por **stale-bot** em 2026-07-19, nunca revisto) | o stanza do WA Web, e a frase *"instead of `<message_updates>` addressed to the channel jid, **which timed out**"*; alega validação ponta-a-ponta em produção |
+| rsalcara/InfiniteAPI PR #503 (**mergeado** 2026-06-06) | port do anterior, com o detalhe do cursor `since`→`before` e a lista dos campos que voltam |
+| whatsmeow | **"eu também não resolvo"** — código idêntico ao nosso, não tocado desde 2023-10-18; uma única issue (#761, 2025-02) com campos nulos, fechada em 2025-07 sem correcção |
+| whatsapp-web.js | **"isto não é comigo"** — dirige a SPA, não emite stanza, não tem equivalente |
+
+**A hipótese anterior da F265 CAI**: *"o query ID do `updates` está
+desactualizado"*. `GetMessageUpdates` **não é uma query MEX** — é um IQ binário
+simples e não tem query ID nenhum; não passa por `queryids.go`. Correr o
+extractor de `scripts/mex-query-ids/` não teria produzido informação sobre esta
+rota. A entrada da F265 foi corrigida.
+
+**Correção sugerida**: `To: types.ServerJID` e `<messages type='jid' jid=… count=… [before]>`,
+com o cursor renomeado. Mas atenção: a correcção arrasta **duas decisões que não
+são desta camada** — (1) o parser tem de ler os contadores dos filhos
+`<message>`, que hoje se perdem; (2) se as duas rotas passam a emitir o mesmo
+stanza, `/newsletters/updates` e `/newsletters/messages` diferem só na projecção
+da resposta, e fundir ou manter é escolha de contrato.
+
+**Anti-regressão exigida**: teste do stanza (`To == types.ServerJID`, filho
+`messages` com `type="jid"`), teste do cursor (`Since` sai como `before`), e
+controlo negativo EXECUTADO repondo `To: jid` — confirmando que a mutação
+COMPILA e falha com mensagem.
+
+**Status**: CORRIGIDO em 2026-08-28 (mesma sessão que confirmou o
+sintoma exato num canal com conteúdo real). `GetMessageUpdates`
+(`internal/wa-noise/capabilities/newsletter/messages.go`) foi reescrito
+para reaproveitar o mesmo construtor de atributos e a mesma tag
+(`messagesAttrs`/`messagesTag`) que `GetMessages` já usava com sucesso —
+`To: types.ServerJID` no lugar de `To: jid`, filho `<messages type='jid'
+jid=… count=… before=…>` no lugar de `<message_updates
+count=… since=… after=…>`. `messageUpdatesAttrs` e a tag
+`message_updates` foram removidos, não só contornados.
+
+`Since` (cursor por tempo) não sobrevive à correção — a forma nova só
+entende `before` (cursor por ID de mensagem, já existia como `After` em
+`GetUpdatesParams`). Documentado no código: um chamador que só
+preenchesse `Since` passa a receber a página mais recente, sem filtro,
+em vez de um erro — decisão deliberada, não um esquecimento.
+
+**Testes** (`internal/wa-noise/capabilities/newsletter/messages_test.go`):
+`TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages` (destino,
+tag, `count`/`before`), `TestGetMessageUpdatesSinceEIgnorado` (`since`
+não vaza para o fio). Controlo negativo EXECUTADO: revertido `To:
+types.ServerJID` para `To: jid`, o teste falhou com `to =
+1234567890@newsletter, esperava s.whatsapp.net`; restaurado, voltou a
+passar.
+
+**Verificação em campo**: canal descartável (projeto `wa-api`, sessão
+`envia`, 2026-08-28), uma mensagem real publicada. `200` em ~0,15s — era
+`500` aos 30s. Ver `HOUSEKEEP.md` (raiz), F366, para o detalhe completo
+e para o achado colateral que fecha F356 (`mark-viewed`) de vez:
+`view_count` continuou `0` mesmo por este caminho corrigido, confirmando
+que o problema nunca foi a entrega da atualização.
+
+<!-- f-status: corrigido -->
+
+
+## LIB-04 — `newsletter.MarkViewed` espera a resposta do servidor e deita-a fora
+
+**Data / contexto**: 2026-08-26, campanha de observadores para as rotas 🟡 do
+wa-api (`OBSERVADORES-AMBAR.md` §4). A pergunta era: `POST /newsletters/mark-viewed`
+devolve `200` com `data: null` — existe algum sinal do servidor que confirme a
+marcação?
+
+**Onde**: `internal/wa-noise/capabilities/newsletter/actions.go:51-74`.
+
+```go
+reqID := t.GenerateRequestID()
+resp := t.WaitResponse(reqID)
+err := t.SendNode(ctx, waBinary.Node{Tag: "receipt", Attrs: ...})
+if err != nil {
+    t.CancelResponse(reqID, resp)
+    return err
+}
+// TODO handle response?
+<-resp
+return nil
+```
+
+**Problema**: a função **regista a espera, envia, e bloqueia à espera da
+resposta** — e depois descarta o nó recebido sem o olhar. O `// TODO handle
+response?` é do upstream e está por resolver.
+
+O custo não é teórico: este é o único sinal que o servidor devolve para a
+operação. A documentação do próprio fork diz que `NewsletterMarkViewed`
+"marks a channel message as viewed, **incrementing the view counter**"
+(`internal/wa-noise/core/newsletter.go:52-53`), e o contador só se lê pela via
+`GetNewsletterMessageUpdates` / `NewsletterSubscribeLiveUpdates`
+(`core/newsletter.go:206-208`) — que no wa-api está exposta como
+`POST /newsletters/updates` e **está inoperante** (achado F265 do `HOUSEKEEP.md`
+da raiz: `500` ao fim de 30 s, o servidor nunca responde).
+
+Ou seja: das duas confirmações possíveis, uma está partida do outro lado e a
+outra é recebida aqui e deitada fora. É por isso que a rota do wa-api não
+consegue subir de 🟡 a ✅.
+
+**Evidência de que o nó chega**: `<-resp` só desbloqueia quando o servidor
+responde ao `reqID`; a função retorna `nil`, logo o canal foi lido. O teste
+existente `TestMarkViewedRegistraOCanalAntesDeEnviar`
+(`actions_test.go:105-118`) já trava a ORDEM (registar antes de enviar) e a
+ausência de cancelamento, mas não olha para o conteúdo — porque não há conteúdo
+a olhar.
+
+**Correcção sugerida**: mudar a assinatura para devolver o nó, ou ao menos
+classificar um `<error>` na resposta como erro em vez de sucesso. Um `receipt`
+recusado hoje devolve `nil` e vira `200` na API acima. É divergência
+deliberada face ao upstream, logo entrada no `PATCHES.md` se for feita.
+
+**Estado**: não corrigido. É código vendorizado e a mudança altera assinatura
+pública — decisão do utilizador. Cruzamento: `HOUSEKEEP.md` da raiz, F265, e
+LIB-03 deste ficheiro.
+
+**Correcção de referência cruzada (integração de 2026-08-26)**: a versão
+original desta entrada apontava a F32 (duas query IDs de newsletter erradas no
+upstream) como hipótese mais provável para a F265. **Essa hipótese caiu.**
+`GetMessageUpdates` não é uma query MEX e não tem query ID nenhum — é um IQ
+binário com namespace `newsletter`. A causa determinada da F265 é
+`PROTOCOL_CHANGED`, registada em LIB-03 e em
+`INVESTIGATION-newsletter-updates.md`.
+
+<!-- f-status: aberto -->

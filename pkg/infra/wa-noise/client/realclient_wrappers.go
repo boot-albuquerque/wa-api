@@ -87,6 +87,24 @@ func (r RealClient) GetGroupInfoFromLink(ctx context.Context, code string) (*typ
 	return v0, errmap.ClassifyIQ(err)
 }
 
+func (r RealClient) GetSubGroups(ctx context.Context, community types.JID) ([]*types.GroupLinkTarget, error) {
+	v0, err := r.Client.GetSubGroups(ctx, community)
+	return v0, errmap.ClassifyIQ(err)
+}
+
+func (r RealClient) GetLinkedGroupsParticipants(ctx context.Context, community types.JID) ([]types.JID, error) {
+	v0, err := r.Client.GetLinkedGroupsParticipants(ctx, community)
+	return v0, errmap.ClassifyIQ(err)
+}
+
+func (r RealClient) LinkGroup(ctx context.Context, parent, child types.JID) error {
+	return errmap.ClassifyIQ(r.Client.LinkGroup(ctx, parent, child))
+}
+
+func (r RealClient) UnlinkGroup(ctx context.Context, parent, child types.JID) error {
+	return errmap.ClassifyIQ(r.Client.UnlinkGroup(ctx, parent, child))
+}
+
 func (r RealClient) GetGroupInviteLink(ctx context.Context, jid types.JID, reset bool) (string, error) {
 	v0, err := r.Client.GetGroupInviteLink(ctx, jid, reset)
 	return v0, errmap.ClassifyIQ(err)
@@ -179,8 +197,8 @@ func (r RealClient) GetBlocklist(ctx context.Context) (*types.Blocklist, error) 
 	return v0, errmap.ClassifyIQ(err)
 }
 
-func (r RealClient) UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
-	v0, err := r.Client.UpdateBlocklist(ctx, jid, action)
+func (r RealClient) UpdateBlocklist(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+	v0, err := r.Client.UpdateBlocklist(ctx, jid, pnJID, action)
 	return v0, errmap.ClassifyIQ(err)
 }
 
@@ -276,6 +294,19 @@ func (r RealClient) NewsletterDemoteAdmin(ctx context.Context, channelJID, userJ
 
 func (r RealClient) NewsletterChangeOwner(ctx context.Context, channelJID, newOwnerJID types.JID) error {
 	return errmap.ClassifyNewsletter(errmap.ClassifyIQ(r.Client.NewsletterChangeOwner(ctx, channelJID, newOwnerJID)), errmap.OpNewsletterChangeOwner)
+}
+
+func (r RealClient) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) (wanoise.NewsletterAdminInvite, error) {
+	invite, err := r.Client.NewsletterCreateAdminInvite(ctx, channelJID, userJID)
+	return invite, errmap.ClassifyIQ(err)
+}
+
+func (r RealClient) NewsletterAcceptAdminInvite(ctx context.Context, channelJID types.JID) error {
+	return errmap.ClassifyIQ(r.Client.NewsletterAcceptAdminInvite(ctx, channelJID))
+}
+
+func (r RealClient) NewsletterRevokeAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+	return errmap.ClassifyIQ(r.Client.NewsletterRevokeAdminInvite(ctx, channelJID, userJID))
 }
 
 func (r RealClient) NewsletterDelete(ctx context.Context, channelJID types.JID) error {

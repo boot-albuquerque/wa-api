@@ -2,6 +2,9 @@ package user
 
 import (
 	"context"
+	"sort"
+	"strings"
+
 	waclient "wa-api/pkg/infra/wa-noise/client"
 	wajid "wa-api/pkg/infra/wa-noise/mapping/jid"
 	wasession "wa-api/pkg/infra/wa-noise/runtime/session"
@@ -51,8 +54,14 @@ func (a *UserAdapter) IsOnWhatsApp(ctx context.Context, txtID string, phones []s
 	return out, nil
 }
 
-// GetUserInfo devolve os metadados dos JIDs informados.
-func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) (any, error) {
+// GetUserInfo devolve os metadados dos JIDs informados, já normalizados.
+//
+// A normalização acontece AQUI, que é onde o vendor tem de parar. Antes da
+// migração de DTO este método devolvia `any` com o map[types.JID]types.UserInfo
+// do SDK, e esse mapa ia inteiro para o fio: as chaves da resposta eram nomes
+// de campo Go do vendor (`VerifiedName`, `PictureID`) porque o tipo não tem
+// etiquetas `json`, e mudar o vendor mudava o contrato público em silêncio.
+func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) ([]domain.UserInfo, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
@@ -73,11 +82,54 @@ func (a *UserAdapter) GetUserInfo(ctx context.Context, txtID string, jids []doma
 		return nil, apperr.New(codeUserInfoTargetsInvalid, apperr.CategoryValidation,
 			"failed to resolve user info targets", false, err)
 	}
-	return client.GetUserInfo(ctx, parsed)
+	info, err := client.GetUserInfo(ctx, parsed)
+	if err != nil {
+		return nil, err
+	}
+
+	// The answer follows the order of the REQUEST, not the map's. Go
+	// randomizes map iteration by design, so ranging over `info` would ship a
+	// different order on every call for the same question.
+	out := make([]domain.UserInfo, 0, len(parsed))
+	for i, jid := range parsed {
+		entry, ok := info[jid]
+		if !ok {
+			continue
+		}
+		verifiedName := ""
+		if entry.VerifiedName != nil {
+			verifiedName = entry.VerifiedName.Details.GetVerifiedName()
+		}
+		devices := make([]domain.JID, 0, len(entry.Devices))
+		for _, d := range entry.Devices {
+			devices = append(devices, domain.JID(d.String()))
+		}
+		lid := ""
+		if !entry.LID.IsEmpty() {
+			lid = entry.LID.String()
+		}
+		out = append(out, domain.UserInfo{
+			// jids[i] and parsed[i] are the same target: ToJIDs preserves
+			// order. Echoing the CALLER's spelling rather than the parsed one
+			// keeps the answer matchable against the question that was asked.
+			JID:          jids[i],
+			LID:          domain.JID(lid),
+			Status:       entry.Status,
+			PictureID:    entry.PictureID,
+			VerifiedName: verifiedName,
+			Devices:      devices,
+		})
+	}
+	return out, nil
 }
 
 // GetAllContacts devolve a agenda da sessão e a contagem.
-func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) (any, int, error) {
+//
+// A saída é ORDENADA por JID. O store devolve um mapa, e a iteração de mapa em
+// Go é aleatória — sem ordenar, `GET /user/contacts` devolveria a mesma agenda
+// numa ordem diferente a cada chamada, e nenhum cliente conseguiria diffar
+// duas respostas.
+func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) ([]domain.Contact, int, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, 0, apperr.New(codeUserSessionUnavailable, apperr.CategoryValidation,
@@ -87,8 +139,36 @@ func (a *UserAdapter) GetAllContacts(ctx context.Context, txtID string) (any, in
 	if err != nil {
 		return nil, 0, err
 	}
-	return contacts, len(contacts), nil
+
+	out := make([]domain.Contact, 0, len(contacts))
+	for jid, info := range contacts {
+		c := domain.Contact{
+			JID:          domain.JID(jid.String()),
+			Found:        info.Found,
+			FirstName:    info.FirstName,
+			FullName:     info.FullName,
+			PushName:     info.PushName,
+			BusinessName: info.BusinessName,
+		}
+		// The store keys the address book by ONE identity, and which space it
+		// is depends on the contact — @lid for most people on multi-device,
+		// @s.whatsapp.net for the rest. The suffix is the only way to tell:
+		// PN and LID are the same Go type (F65).
+		if strings.HasSuffix(string(c.JID), lidServerSuffix) {
+			c.LID = c.JID
+		} else {
+			c.PN = c.JID
+		}
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].JID < out[j].JID })
+	return out, len(out), nil
 }
+
+// lidServerSuffix distingue a identidade de privacidade da de telefone. É
+// string porque PN e LID são o MESMO tipo Go (types.JID), separados só pelo
+// Server em tempo de execução — o compilador não ajuda aqui.
+const lidServerSuffix = "@lid"
 
 // GetLIDForPN resolve o LID correspondente a um número de telefone.
 func (a *UserAdapter) GetLIDForPN(ctx context.Context, txtID string, jid domain.JID) (domain.JID, error) {

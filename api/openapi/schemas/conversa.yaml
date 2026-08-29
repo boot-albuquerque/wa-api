@@ -286,8 +286,8 @@ PedidoFavoritarMensagem:
 PedidoApagarMensagem:
   type: object
   description: |
-    Revoga ("apagar para todos") uma mensagem própria. `Phone` é o destino da
-    conversa; `chat` é aceite como alias e só vale quando `Phone` faltar.
+    Revoga ("apagar para todos") uma mensagem própria. `phone` é o destino da
+    conversa; `chat` é aceite como alias e só vale quando `phone` faltar.
 
     **Ordem das recusas, medida**: `missing_phone` → `missing_id` →
     `invalid_phone`.
@@ -295,9 +295,9 @@ PedidoApagarMensagem:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Id]
+  required: [id]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       description: |
@@ -310,10 +310,10 @@ PedidoApagarMensagem:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        Nome universal do destino. Só vale quando `phone` estiver ausente,
         `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -334,7 +334,7 @@ ResultadoApagarMensagem:
       type: string
       nullable: false
       description: |
-        `message_id` da mensagem revogada — o mesmo `Id` que entrou, ecoado.
+        `message_id` da mensagem revogada — o mesmo `id` que entrou, ecoado.
         **Sempre presente**: não tem `omitempty`
         (`pkg/domain/message.go:723`). Nunca `null`.
       example: 3EB0A4B2AFD45E625C0917
@@ -371,9 +371,9 @@ PedidoReagir:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Body, Id]
+  required: [body, id]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       description: |
@@ -386,10 +386,10 @@ PedidoReagir:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        Nome universal do destino. Só vale quando `phone` estiver ausente,
         `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
-    Body:
+    body:
       type: string
       nullable: false
       description: |
@@ -406,7 +406,7 @@ PedidoReagir:
 
         Não há lista fechada: o servidor não valida o conteúdo.
       example: 👍
-    Id:
+    id:
       type: string
       nullable: false
       description: |
@@ -418,7 +418,7 @@ PedidoReagir:
         ao WhatsApp. É a única forma de dizer "a mensagem é minha" nesta
         rota; não há campo booleano para isso.
       example: 3EB0A4B2AFD45E625C0917
-    Participant:
+    participant:
       type: string
       nullable: false
       description: |
@@ -430,11 +430,11 @@ PedidoReagir:
         | `null` | sim | idêntico a ausente |
         | `""` | sim | idêntico a ausente |
         | mal formado | sim | **DESCARTADO EM SILÊNCIO** — não é `400` |
-        | válido | sim | usado, salvo se o `Id` trouxer o prefixo `me:` |
+        | válido | sim | usado, salvo se o `id` trouxer o prefixo `me:` |
 
         Duas formas de ser ignorado sem aviso: um JID que não resolve é
         descartado (comportamento preservado do upstream), e o campo inteiro
-        é ignorado quando `Id` começa por `me:`.
+        é ignorado quando `id` começa por `me:`.
       example: 554192421234@s.whatsapp.net
 
 PedidoMarcarLida:
@@ -442,23 +442,27 @@ PedidoMarcarLida:
   description: |
     Marca uma ou mais mensagens como lidas.
 
-    **Use `ChatPhone`, não `Chat`.** Os dois nomes são aceites pelo
-    desserializador, mas só `ChatPhone` é RESOLVIDO: o ramo de `Chat` está
-    por implementar (`mark_read.go:41`, `jidChat = ""`) e faz a conversa
-    seguir vazia para o WhatsApp. Sem nenhum dos dois é
-    `400 missing_chatphone`, medido.
+    **`chat_phone` e `sender_phone` são as ÚNICAS grafias aceites.** Antes da
+    migração para DTO, o manipulador decodificava `domain.MarkReadRequest`
+    directamente, que também aceitava os nomes antigos `Chat`/`Sender` — mas
+    nenhum dos dois alguma vez foi RESOLVIDO (`mark_read.go:41`,
+    `jidChat = ""`; comportamento herdado do upstream, travado por
+    `TestMarkRead_LegacyFieldsResolveToEmptyJID`). A migração para
+    `dto/message.MarkReadRequest` (HOUSEKEEP F322) tirou os dois campos do
+    DTO de pedido: continuam a existir no domínio, mas **sem forma de lá
+    chegar pelo fio** — mandar `"Chat"` ou `"Sender"` hoje é campo
+    desconhecido, ignorado como qualquer outro. Sem `chat_phone` nem `chat`
+    (nome antigo, já não aceite) é `400 missing_chatphone`, medido.
 
     **Ordem das recusas, medida**: `missing_chatphone` →
-    `invalid_chatphone` → `invalid_senderphone` → `missing_id`. Um pedido só
-    com `Chat` (o campo antigo) passa a guarda do destino e cai em
-    `missing_id`, o que confirma que `Chat` é aceite sem ser usado.
+    `invalid_chatphone` → `invalid_senderphone` → `missing_id`.
 
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [Id]
+  required: [id]
   properties:
-    Id:
+    id:
       type: array
       nullable: false
       minItems: 1
@@ -481,37 +485,21 @@ PedidoMarcarLida:
         nullable: false
         description: '`message_id` de uma mensagem. Não é verificado que exista.'
       example: [3EB0A4B2AFD45E625C0917]
-    ChatPhone:
+    chat_phone:
       type: string
       nullable: false
       description: |
-        JID ou número da conversa. É o campo que a implementação resolve.
-        Ausente, `null` e `""` são o mesmo estado e fazem cair para `Chat`;
-        sem os dois é `400 missing_chatphone` (medido), e mal formado é
+        JID ou número da conversa. Ausente, `null` e `""` são o mesmo estado
+        e dão `400 missing_chatphone` (medido); mal formado é
         `400 invalid_chatphone` (medido).
       example: 554192421234@s.whatsapp.net
-    SenderPhone:
+    sender_phone:
       type: string
       nullable: false
       description: |
         JID de quem escreveu as mensagens, em conversa de grupo. Opcional:
         ausente, `null` e `""` são o mesmo estado e a marcação segue sem
         remetente. Preenchido mal formado é `400 invalid_senderphone`.
-      example: 554192421234@s.whatsapp.net
-    Chat:
-      type: string
-      nullable: false
-      description: |
-        Nome antigo de `ChatPhone`. **Aceite, mas NÃO resolvido**: quando é
-        o único destino, o pedido passa a validação e a conversa segue VAZIA
-        para o WhatsApp. Ausente, `null` e `""` são o mesmo estado. Não use.
-      example: 554192421234@s.whatsapp.net
-    Sender:
-      type: string
-      nullable: false
-      description: |
-        Nome antigo de `SenderPhone`. Aceite, mas não resolvido — mesmo
-        buraco de `Chat`. Ausente, `null` e `""` são o mesmo estado.
       example: 554192421234@s.whatsapp.net
 
 PedidoPresencaNaConversa:
@@ -527,9 +515,9 @@ PedidoPresencaNaConversa:
     Campos desconhecidos são ignorados, mas **já não em silêncio**: o servidor
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
-  required: [State]
+  required: [state]
   properties:
-    Phone:
+    phone:
       type: string
       nullable: false
       description: |
@@ -542,10 +530,10 @@ PedidoPresencaNaConversa:
       type: string
       nullable: false
       description: |
-        Nome universal do destino. Só vale quando `Phone` estiver ausente,
+        Nome universal do destino. Só vale quando `phone` estiver ausente,
         `null` ou `""`; caso contrário é ignorado sem aviso.
       example: 554192421234@s.whatsapp.net
-    State:
+    state:
       type: string
       nullable: false
       description: |
@@ -569,9 +557,9 @@ PedidoPresencaNaConversa:
         As duas constantes que a biblioteca define são `composing` e
         `paused` (`internal/wa-noise/protocol/types/presence.go:17-18`).
         **Não existe um estado `recording`**: "a gravar" exprime-se como
-        `State: composing` com `Media: audio`.
+        `state: composing` com `media: audio`.
       example: composing
-    Media:
+    media:
       type: string
       nullable: false
       description: |
@@ -582,10 +570,10 @@ PedidoPresencaNaConversa:
         | ausente | sim | igual a `""` — mensagem de texto |
         | `null` | sim | igual a `""` |
         | `""` | sim | mensagem de texto |
-        | `audio` | sim | com `State: composing`, anuncia "a gravar" |
+        | `audio` | sim | com `state: composing`, anuncia "a gravar" |
         | qualquer outro texto | sim | não é validado; segue para o protocolo |
 
-        **Só tem efeito quando `State` é `composing`**: em qualquer outro
+        **Só tem efeito quando `state` é `composing`**: em qualquer outro
         estado o valor é descartado sem aviso
         (`internal/wa-noise/core/presence.go:142`). As duas constantes
         conhecidas são `""` (texto) e `audio`.
@@ -796,18 +784,32 @@ PedidoDescargaDeMidia:
     de `Message.imageMessage` / `videoMessage` / `audioMessage` /
     `documentMessage` / `stickerMessage`, com estes nomes de origem:
 
+    **Este esquema descrevia as etiquetas PascalCase do domínio até
+    2026-08-27**: esta rota (`POST /chats/download/{kind}`) decodifica
+    `domain.DownloadRequest` directamente — `pkg/domain/download.go` — sem
+    passar por uma camada de DTO como as outras famílias
+    (`docs/HTTP-DTO-CONVENTIONS.md`). A divergência entre este esquema e o
+    contrato canónico foi achada na auditoria final da normalização (worker
+    de mensagens, F337) e corrigida directamente nas etiquetas do struct de
+    domínio (F338) — o `encoding/json` do Go casa nomes sem distinguir
+    maiúsculas na DESCODIFICAÇÃO, então a mudança de etiqueta não altera
+    comportamento de pedido nenhum; só corrige o que este esquema, uma
+    reflexão sobre o struct, e o gate de nomenclatura relatam. Ver
+    `ResultadoDescargaDeMidia` para o lado que já migrou (a resposta), e
+    `HOUSEKEEP.md` F338 para o registo.
+
     | campo daqui | campo no `data_json` | obrigatório de verdade? |
     |---|---|---|
-    | `Url` | `URL` | um dos dois |
-    | `DirectPath` | `directPath` | um dos dois |
-    | `MediaKey` | `mediaKey` | sim, para mídia cifrada |
-    | `Mimetype` | `mimetype` | **sim** — vazio ou mal formado derruba a resposta |
-    | `FileEncSHA256` | `fileEncSha256` | sim, para mídia cifrada |
-    | `FileSHA256` | `fileSha256` | não |
-    | `FileLength` | `fileLength` | **sim** — tem de ser EXACTO |
+    | `url` | `URL` | um dos dois |
+    | `direct_path` | `directPath` | um dos dois |
+    | `media_key` | `mediaKey` | sim, para mídia cifrada |
+    | `mimetype` | `mimetype` | **sim** — vazio ou mal formado derruba a resposta |
+    | `file_enc_sha256` | `fileEncSha256` | sim, para mídia cifrada |
+    | `file_sha256` | `fileSha256` | não |
+    | `file_length` | `fileLength` | **sim** — tem de ser EXACTO |
 
-    **Só uma coisa é validada na fronteira HTTP**: pelo menos um entre `Url`
-    e `DirectPath`. Faltarem os dois — ausentes, `null` ou `""`, que são o
+    **Só uma coisa é validada na fronteira HTTP**: pelo menos um entre `url`
+    e `direct_path`. Faltarem os dois — ausentes, `null` ou `""`, que são o
     mesmo estado — é `400 missing_url_or_direct_path`, medido nas cinco
     rotas. Todos os outros campos passam sem verificação e falham depois com
     `500 media_download_failed`, que não distingue a causa.
@@ -822,19 +824,19 @@ PedidoDescargaDeMidia:
     regista `unknown field "<nome>"`, e `WA_API_STRICT_UNKNOWN_FIELDS=true`
     recusa-os com `400 unknown_field`.
   properties:
-    Url:
+    url:
       type: string
       nullable: false
       description: |
         URL da mídia na CDN do WhatsApp. Ausente, `null` e `""` são o mesmo
         estado.
 
-        Quando preenchida, é usada em vez de `DirectPath` — **excepto** se
+        Quando preenchida, é usada em vez de `direct_path` — **excepto** se
         começar por `https://web.whatsapp.net/`, caso em que é descartada e
-        a descarga cai para `DirectPath`. Com os dois vazios é
+        a descarga cai para `direct_path`. Com os dois vazios é
         `400 missing_url_or_direct_path`.
       example: https://mmg.whatsapp.net/o1/v/t24/f2/m234/exemplo
-    DirectPath:
+    direct_path:
       type: string
       nullable: false
       description: |
@@ -844,9 +846,9 @@ PedidoDescargaDeMidia:
         **Tem de começar por `/`.** Um valor sem barra inicial não é
         recusado na fronteira: devolve `500 media_download_failed` (medido
         com `"sem-barra"`). É a forma em que os metadados chegam em vários
-        eventos, e é a única alternativa a `Url`.
+        eventos, e é a única alternativa a `url`.
       example: /o1/v/t24/f2/m234/exemplo
-    MediaKey:
+    media_key:
       type: string
       format: byte
       nullable: true
@@ -863,7 +865,7 @@ PedidoDescargaDeMidia:
         | número | não | `400 could_not_decode_payload` (medido) |
         | base64 válido | sim | — |
 
-        **Perigo medido no código**: se `MediaKey` E `FileEncSHA256` vierem
+        **Perigo medido no código**: se `media_key` E `file_enc_sha256` vierem
         ambos ausentes, a biblioteca toma a mídia por NÃO CIFRADA e devolve
         `200` com os bytes tal e qual vieram da CDN — que, para mídia real
         do WhatsApp, é conteúdo cifrado inútil disfarçado de sucesso
@@ -871,7 +873,7 @@ PedidoDescargaDeMidia:
         Com apenas um dos dois em falta, o HMAC falha e a resposta é
         `500 media_download_failed`.
       example: SlpkRE1hd3FWcDFaZXhlbXBsb01lZGlhS2V5MDAwMDA=
-    Mimetype:
+    mimetype:
       type: string
       nullable: false
       description: |
@@ -887,7 +889,7 @@ PedidoDescargaDeMidia:
         `null` e `""` levam todos a esse mesmo `500` — mas só DEPOIS de os
         bytes terem sido descarregados.
       example: image/png
-    FileEncSHA256:
+    file_enc_sha256:
       type: string
       format: byte
       nullable: true
@@ -897,11 +899,11 @@ PedidoDescargaDeMidia:
         `400 could_not_decode_payload`.
 
         Não é opcional na prática: é o que faz a biblioteca separar o MAC do
-        fim do corpo descarregado. Sem ele, e com `MediaKey` presente, a
+        fim do corpo descarregado. Sem ele, e com `media_key` presente, a
         verificação de HMAC falha e a resposta é `500 media_download_failed`.
-        Sem ele E sem `MediaKey`, ver o aviso em `MediaKey`.
+        Sem ele E sem `media_key`, ver o aviso em `media_key`.
       example: ZXhlbXBsb0ZpbGVFbmNTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDA=
-    FileSHA256:
+    file_sha256:
       type: string
       format: byte
       nullable: true
@@ -915,7 +917,7 @@ PedidoDescargaDeMidia:
         tamanho a verificação é saltada sem aviso. Quando confere e não
         bate, a resposta é `500 media_download_failed`.
       example: ZXhlbXBsb0ZpbGVTSEEyNTZiYXNlNjQwMDAwMDAwMDAwMDAwMDA=
-    FileLength:
+    file_length:
       type: integer
       format: int64
       nullable: false
@@ -944,11 +946,18 @@ ResultadoDescargaDeMidia:
   type: object
   description: |
     O conteúdo binário, já decifrado e codificado como Data URL. Os dois
-    campos não têm `omitempty` (`pkg/domain/download.go:76-79`), logo
-    aparecem **sempre**, e nenhum vem `null`.
-  required: [Mimetype, Data]
+    campos não têm `omitempty` (`pkg/presentation/http/dto/message/chat.go`,
+    `DownloadResponse`), logo aparecem **sempre**, e nenhum vem `null`.
+
+    **Só a RESPOSTA passou pela migração para DTO** — `dtomessage.
+    PresentDownload` serve `mimetype`/`data` em minúsculas. O PEDIDO
+    (`PedidoDescargaDeMidia`) continua a decodificar `domain.DownloadRequest`
+    directamente, com as etiquetas antigas — os dois lados desta rota estão
+    em estados diferentes de propósito, não por descuido; ver a nota nesse
+    esquema.
+  required: [mimetype, data]
   properties:
-    Mimetype:
+    mimetype:
       type: string
       nullable: false
       description: |
@@ -957,7 +966,7 @@ ResultadoDescargaDeMidia:
         vir `""` porque um `Mimetype` vazio derruba a resposta antes de
         chegar aqui (ver o pedido).
       example: image/png
-    Data:
+    data:
       type: string
       nullable: false
       description: |

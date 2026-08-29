@@ -10,13 +10,6 @@ import (
 	"wa-api/pkg/infra/storage"
 )
 
-// ProxyConfig holds per-user proxy settings for WhatsApp and webhook delivery.
-type ProxyConfig struct {
-	Enabled         bool   `json:"enabled"`
-	ProxyURL        string `json:"proxyURL"`
-	WebhookUseProxy *bool  `json:"webhookUseProxy,omitempty"`
-}
-
 // Update entry in User map
 func updateUserInfo(values interface{}, field string, value string) interface{} {
 	log.Debug().Str("field", field).Str("value", value).Msg("User info updated")

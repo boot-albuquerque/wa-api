@@ -8,6 +8,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	appport "wa-api/pkg/application/contracts"
 	appsession "wa-api/pkg/application/session"
 	"wa-api/pkg/infra/storage"
 	"wa-api/pkg/infra/wa-noise/mapping/platform"
@@ -79,4 +80,33 @@ func (s *server) startSession(userID, token string) {
 	if err := s.SessionOrchestrator.Start(context.Background(), userID, token); err != nil {
 		log.Error().Err(err).Str("userid", userID).Msg("failed to start session")
 	}
+}
+
+// disconnectInFlightReleaser wraps appport.SessionDisconnector so a
+// successful Disconnect also clears the orchestrator's per-user "start in
+// flight" mark (F274).
+//
+// Without this, `GET /session/connect` right after `POST /session/disconnect`
+// on a session whose pairing flow was still running found the guard busy —
+// the disconnect tore down the transport but left the flow's slot held until
+// startInFlightTTL expired. Only a SUCCESSFUL disconnect releases it: a
+// failed disconnect left the transport (and therefore whatever it was doing)
+// untouched, so there is nothing stale to clear.
+type disconnectInFlightReleaser struct {
+	appport.SessionDisconnector
+	orch *appsession.Orchestrator
+}
+
+func (d disconnectInFlightReleaser) Disconnect(ctx context.Context, txtID string) error {
+	if err := d.SessionDisconnector.Disconnect(ctx, txtID); err != nil {
+		return err
+	}
+	// nil-tolerant for the same reason as connectStartInFlightCheck: some
+	// tests wire DisconnectUseCase against a *server without a
+	// SessionOrchestrator.
+	if d.orch == nil {
+		return nil
+	}
+	d.orch.ReleaseStart(txtID)
+	return nil
 }

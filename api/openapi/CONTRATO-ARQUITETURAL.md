@@ -12,6 +12,22 @@ Medições de 2026-08-26, contra o binário do `HEAD`, com duas sessões reais.
 
 ---
 
+## Onde este contrato se compara com a API oficial
+
+`docs/REFERENCIA-META-OFICIAL.md` levanta a WhatsApp Business Platform da Meta,
+com URLs verificados.
+
+A escolha de desenho que mais difere: a Cloud API envia tudo por
+`POST /{version}/{phone-number-id}/messages`, com o tipo no corpo. Este
+projecto põe o tipo no caminho. As duas são defensáveis — um endpoint dá
+contrato pequeno e corpo polimórfico; um por tipo dá contratos específicos, e
+é o que permitiu a esta API declarar, rota a rota, exactamente que campos são
+obrigatórios.
+
+**Nada neste documento deve ser mudado para se parecer com a Cloud API.** São
+protocolos diferentes, e copiar a forma sem o motivo é como se reescrevem os
+defeitos dos outros.
+
 ## 0. A ordem de confiança
 
 Quando duas fontes discordarem, esta é a ordem:
@@ -456,24 +472,29 @@ significa coisas diferentes** — está documentado assim.
 {"code": 400, "error": {"code": "missing_chat", "message": "missing chat in payload"}, "success": false}
 ```
 
-**A forma antiga**, em 14 pontos do código (F266):
+**A forma antiga** — `error` em texto simples, em 14 pontos do código — era a
+**F266**, e foi **REMOVIDA**. `error` é hoje um objecto em toda resposta de
+erro, em todo estado HTTP:
 
 ```json
-{"code": 400, "error": "bad request", "success": false}
+{"code": 400, "error": {"code": "invalid_request", "message": "Requisição inválida."}, "success": false}
 ```
 
-`error` é uma **string**. Onze desses pontos vêm de `rejectMissingField`, logo
-**toda** recusa de campo obrigatório das rotas de grupo tem este formato.
+O que não passa pela taxonomia `apperr` recebe o código genérico do estado —
+`invalid_request` (400), `unauthorized` (401), `forbidden` (403), `not_found`
+(404), `conflict` (409), `unprocessable_entity` (422), `rate_limited` (429),
+`not_implemented` (501), `bad_gateway` (502), `service_unavailable` (503),
+`gateway_timeout` (504), `internal_error` (500 e qualquer outro).
 
-**Decisão**: a forma canónica é a única para código novo. A antiga está
-documentada rota a rota com `ErroTextoSimples`, para que ninguém escreva
-`error.code` e parta. Correcção registada em **F266**.
+**Consequência para o cliente**: `error.code` pode ser lido sem verificar o
+tipo, em qualquer resposta. Era isso que a F266 impedia.
 
 ### 14.1 O que nunca sai no corpo de erro
 
 **Medido e travado por teste** (`TestRespondJSONNaoVazaDetalheDeErroInterno`):
 um erro que não seja `*apperr.AppError` **nunca** tem o seu texto serializado.
-`RespondJSON` cai em `genericErrorMessage`, que devolve só o texto do status.
+`RespondJSON` cai em `genericError`, que devolve o par código+mensagem
+genérico do status — nunca `err.Error()`.
 
 Consequência: **não há stack trace, caminho de ficheiro, consulta SQL nem
 segredo em resposta nenhuma** — em ambiente nenhum. O `panic` completo vai para
@@ -556,17 +577,25 @@ ter enviado — repetir cegamente duplica.
 
 ## 19. Paginação
 
-**Medido**, sem paginação nenhuma:
+**Corrigido em 2026-08-27 (F294)**: "nenhuma colecção é paginada" nunca foi
+verdade. `GET /chat/list` pagina desde o commit que criou a rota (`9d9dd7ec`,
+2026-08-08) — `limit` (padrão 50, tecto 500), `offset` e `total` na resposta.
+A medição original registou "`GET /chat/list` | 7 144 bytes" e leu esse número
+como a colecção inteira; era a **primeira página de 50**, distinguível de
+"isto é tudo" só pelos campos `total`/`limit`, que estavam na resposta e não
+foram olhados. Ver `HOUSEKEEP.md` F294 para a medição que corrigiu isto.
+
+**Medido, sem paginação nenhuma** (as três que sobram):
 
 | rota | devolveu | com |
 |---|---:|---|
 | `GET /user/contacts` | **61 459 bytes** | 1266 contactos |
-| `GET /chat/list` | 7 144 bytes | — |
 | `POST /group/list` | — | todos os grupos |
 | `GET /newsletter/list` | 1 654 bytes | — |
 
-`GET /chat/history` é a **única** com limite (`limit`), e mesmo essa não tem
-cursor.
+`GET /chat/list` e `GET /chat/history` são as **duas** rotas com limite
+(`limit`); `/chat/list` também devolve `offset` e `total`, `/chat/history` não
+tem cursor.
 
 `GET /user/contacts` cresce com a agenda do utilizador e não tem tecto. É o
 candidato mais claro a paginação. Alvo, para quando existir:

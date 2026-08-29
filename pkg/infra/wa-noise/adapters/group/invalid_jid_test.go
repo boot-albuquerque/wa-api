@@ -33,7 +33,8 @@ func TestGroupAdapter_InvalidJIDs(t *testing.T) {
 		}},
 		{"GetRequestParticipants", func() error { _, e := a.GetRequestParticipants(context.Background(), "u1", badJID); return e }},
 		{"UpdateRequestParticipants", func() error {
-			return a.UpdateRequestParticipants(context.Background(), "u1", badJID, []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove)
+			_, e := a.UpdateRequestParticipants(context.Background(), "u1", badJID, []domain.JID{"x@s.whatsapp.net"}, domain.RequestApprove)
+			return e
 		}},
 		{"SetJoinApprovalMode", func() error { return a.SetJoinApprovalMode(context.Background(), "u1", badJID, true) }},
 		{"LeaveGroup", func() error { return a.LeaveGroup(context.Background(), "u1", badJID) }},

@@ -20,7 +20,7 @@ func TestListUsersUseCase_Execute_RepositoryError(t *testing.T) {
 	logger := &contractsfake.Logger{}
 	uc := user.NewListUsersUseCase(repo, logger, &contractsfake.SessionStatusReader{})
 
-	users, err := uc.Execute(context.Background(), domain.ListUsersRequest{})
+	users, err := uc.Execute(context.Background(), domain.ListUsersInput{})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, queria embrulhar boom", err)
 	}
@@ -54,7 +54,7 @@ func TestListUsersUseCase_Execute(t *testing.T) {
 		wantConnected bool
 	}{
 		{
-			name:    "lista vazia devolve nil",
+			name:    "lista vazia devolve fatia vazia, não nil",
 			entries: nil,
 			wantLen: 0,
 		},
@@ -83,7 +83,7 @@ func TestListUsersUseCase_Execute(t *testing.T) {
 			sessions := &contractsfake.SessionStatusReader{SessionStatusFunc: tt.statusFunc}
 			uc := user.NewListUsersUseCase(repo, &contractsfake.Logger{}, sessions)
 
-			users, err := uc.Execute(context.Background(), domain.ListUsersRequest{UserID: "u1"})
+			users, err := uc.Execute(context.Background(), domain.ListUsersInput{UserID: "u1"})
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
@@ -94,6 +94,12 @@ func TestListUsersUseCase_Execute(t *testing.T) {
 				t.Errorf("ListUsers chamado com %+v, queria filtro u1", repo.ListUsersCalls)
 			}
 			if tt.wantLen == 0 {
+				// Fatia vazia e NUNCA nil: o apresentador serializa `[]`, e
+				// `null` é outro valor para qualquer cliente. Antes o use
+				// case fazia append num slice nil e devolvia nil.
+				if users == nil {
+					t.Error("users = nil para a listagem vazia; queria fatia vazia")
+				}
 				return
 			}
 			first := users[0]
@@ -101,14 +107,16 @@ func TestListUsersUseCase_Execute(t *testing.T) {
 			if first.Token != "" {
 				t.Errorf("Token = %q, queria vazio na listagem", first.Token)
 			}
-			if first.S3Config["access_key"] != "***" {
-				t.Errorf("access_key = %v, queria mascarada", first.S3Config["access_key"])
+			// A chave de acesso não sai do use case em forma nenhuma: o
+			// resultado não tem campo para ela, mascarada ou não.
+			if first.S3.Bucket != "b" {
+				t.Errorf("S3.Bucket = %q, queria \"b\"", first.S3.Bucket)
 			}
 			if first.Connected != tt.wantConnected || first.LoggedIn != tt.wantConnected {
 				t.Errorf("Connected/LoggedIn = %v/%v, queria %v", first.Connected, first.LoggedIn, tt.wantConnected)
 			}
-			if first.ProxyConfig["enabled"] != true {
-				t.Errorf("proxy enabled = %v, queria true", first.ProxyConfig["enabled"])
+			if !first.Proxy.Enabled {
+				t.Error("Proxy.Enabled = false, queria true")
 			}
 			// item 9: leitura administrativa devolve o engine.
 			if first.Engine != domain.EngineWaHeadless.String() {

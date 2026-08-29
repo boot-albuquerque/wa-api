@@ -19,12 +19,16 @@ func NewCheckUserUseCase(cd appport.IdentityResolver, logger appport.Logger) *Ch
 	return &CheckUserUseCase{contacts: cd, logger: logger}
 }
 
-// CheckUserResult representa o resultado da verificação
+// CheckUserResult representa o resultado da verificação.
+//
+// Sem etiquetas `json`: este tipo deixou de ser o formato de fio na migração
+// da família de utilizadores. Quem serializa é
+// pkg/presentation/http/dto/user.
 type CheckUserResult struct {
-	Query        string `json:"query"`
-	IsInWhatsapp bool   `json:"is_in_whatsapp"`
-	JID          string `json:"jid"`
-	VerifiedName string `json:"verified_name"`
+	Query        string
+	IsInWhatsapp bool
+	JID          string
+	VerifiedName string
 }
 
 // Execute verifica se um usuário está no WhatsApp

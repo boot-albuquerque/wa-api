@@ -2,6 +2,9 @@ package session
 
 import (
 	"context"
+	"errors"
+
+	wanoise "wa-api/internal/wa-noise"
 	waclient "wa-api/pkg/infra/wa-noise/client"
 
 	appport "wa-api/pkg/application/contracts"
@@ -114,7 +117,28 @@ func (a *SessionGuardAdapter) Logout(_ context.Context, txtID string) error {
 		)
 	}
 
-	return client.Logout(context.Background())
+	err := client.Logout(context.Background())
+
+	// Transporte vivo mas NUNCA emparelhado: o store não tem device JID, e o
+	// SDK devolve a sentinela crua wanoise.ErrNotLoggedIn (F275). Igual ao
+	// ramo acima, a checagem é por ESTADO (errors.Is contra a sentinela
+	// reexportada em internal/wa-noise/main.go), não por texto — a mesma
+	// regra que o comentário logo acima já enuncia.
+	//
+	// 409 e não 500: também aqui a requisição está correta, só não pode ser
+	// atendida NESTE estado — desta vez porque não há o que desemparelhar, e
+	// não porque falta transporte.
+	if errors.Is(err, wanoise.ErrNotLoggedIn) {
+		return apperr.New(
+			apperr.CodeSessionNotPaired,
+			apperr.CategoryConflict,
+			"session has a live connection but was never paired; there is no device to log out",
+			false,
+			err,
+		)
+	}
+
+	return err
 }
 
 // Disconnect derruba o transporte da sessão.

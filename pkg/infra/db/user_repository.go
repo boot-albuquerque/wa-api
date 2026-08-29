@@ -388,14 +388,20 @@ func (r *UserRepository) ListUsers(ctx context.Context, id string) ([]domain.Use
 }
 
 // userS3Config lê a configuração de S3 de um usuário.
+//
+// access_key_configured (F308) é coluna DERIVADA, não a chave em si: a
+// chave nunca sai do banco por esta leitura. `enabled: true` com a chave
+// vazia era indistinguível de uma configuração completa antes deste campo
+// — o operador só via "enabled", nunca se havia credencial.
 func (r *UserRepository) userS3Config(ctx context.Context, id string) (domain.S3Config, error) {
 	var s3 domain.S3Config
 	err := r.db.QueryRowContext(ctx,
 		`SELECT COALESCE(s3_enabled, false), COALESCE(s3_endpoint, ''), COALESCE(s3_region, ''),
 		 COALESCE(s3_bucket, ''), COALESCE(s3_path_style, false), COALESCE(s3_public_url, ''),
-		 COALESCE(media_delivery, ''), COALESCE(s3_retention_days, 0) FROM users WHERE id = $1`,
+		 COALESCE(media_delivery, ''), COALESCE(s3_retention_days, 0),
+		 COALESCE(s3_access_key, '') <> '' AS access_key_configured FROM users WHERE id = $1`,
 		id).Scan(&s3.Enabled, &s3.Endpoint, &s3.Region, &s3.Bucket, &s3.PathStyle, &s3.PublicURL,
-		&s3.MediaDelivery, &s3.RetentionDays)
+		&s3.MediaDelivery, &s3.RetentionDays, &s3.AccessKeyConfigured)
 	if err != nil {
 		log.Warn().Err(err).Str("table", "users").Str("user_id", id).
 			Str("query", "user_s3_config").Msg("failed to read s3 config for user")

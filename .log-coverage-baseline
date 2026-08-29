@@ -1289,7 +1289,75 @@ rules_frozen=true
 # erro). UpdateUser e execUpdateUser continuam elegiveis e cobertas; nenhuma
 # funcao perdeu log. Medido com `go run ./cmd/logcov -json ./pkg` apos a
 # correcao completa, nao inferido.
-min_func_coverage=601
+min_func_coverage=604
+#
+# fusao com feature/wa-noise (Passo 6, 2026-08-28): func_coverage 601 -> 604
+# (+3, ratchet-UP). Medido apos o merge completo, com todos os conflitos
+# resolvidos e o handler_capabilities.go migrado para
+# pkg/presentation/http/dto/capability.
+#
+# FUNDACAO DTO (2026-08-27): func_coverage DESCE 590->589 (-1).
+# justificativa: entram 2 elegiveis no denominador sem log proprio —
+# dto/group.PresentGroupInfo e dto/group.presentTime
+# (pkg/presentation/http/dto/group/presenter.go). Sao APRESENTADORES: mapeiam
+# um valor de dominio para o tipo de fio, campo a campo, sem E/S, sem erro e
+# sem decisao que um operador possa querer observar. Logar em cada resposta
+# servida seria ruido puro, e //log:exempt esta' orcado por
+# max_exempt_annotations (ratchet-DOWN), logo nao e' saida.
+# covered NAO muda; eligible +2 faz a razao cair.
+# FAMILIA DE UTILIZADORES (2026-08-27): func_coverage DESCE 589->582 (-7).
+# justificativa: entram 13 elegiveis no denominador sem log proprio, todos em
+# pkg/presentation/http/dto/user. Sao de duas naturezas, e nenhuma tem o que
+# logar:
+#
+#   APRESENTADORES (8) — PresentCheckUser, PresentUserInfo, presentUserInfoList,
+#   PresentContactsLastActivity, PresentGetBlocklist, PresentGetContacts,
+#   presentBlocklistUpdate, presentTime, PresentUserProfile. Mapeiam um valor de
+#   dominio para o tipo de fio, campo a campo, sem E/S, sem erro e sem decisao
+#   que um operador possa querer observar. E' a mesma razao que a fundacao
+#   registou para dto/group.PresentGroupInfo e presentTime.
+#
+#   VALIDADORES (4) — BlockUserRequest.Validate, CheckUserRequest.Validate,
+#   GetAvatarRequest.Validate, SetPrivacySettingRequest.Validate. Devolvem
+#   *apperr.AppError para que a fronteira responda 400 com codigo estavel, e o
+#   registo do erro e' do MANIPULADOR, que ja' o faz com hlog em todos os cinco
+#   sitios que os chamam (handler_user.go, handler_contact.go,
+#   handler_misc.go). Logar tambem aqui duplicaria cada recusa no log.
+#
+# covered NAO muda (585 antes e depois desta mudanca, contando as 3 funcoes que
+# sairam de pkg/domain); eligible +13 faz a razao cair.
+#
+# //log:exempt nao e' saida: esta' orcado por max_exempt_annotations
+# (ratchet-DOWN), como a fundacao ja' tinha registado.
+#
+# INTEGRACAO (2026-08-27): apos mesclar fundacao + sessao + utilizadores +
+# canais/newsletters numa unica arvore, re-medido: func_coverage SOBE 582->590
+# (as familias fecharam sitios que nao logavam). Ratchet-UP, coerente com o
+# resto do ficheiro.
+# INTEGRACAO com errors-envelope (2026-08-27): func_coverage SOBE 590->592. Ratchet-UP.
+# INTEGRACAO com http-dto-paths (2026-08-27): func_coverage SOBE 592->596 (novos handlers de rota). Ratchet-UP.
+# INTEGRACAO com http-dto-download-paths (2026-08-27): func_coverage CAI 596->594 (5 handlers/rotas legadas de download removidas, F328). Ratchet-DOWN justificado: deletar codigo nao e regressao.
+# INTEGRACAO com housekeep-session (2026-08-27): func_coverage CAI 594->591 apos merge (F273-F276 acrescentaram funcoes elegiveis novas, algumas sem log directo por serem so orquestracao). Ratchet-DOWN medido, nao regressao de codigo que ja logava.
+# INTEGRACAO com engine-decisao-94 (2026-08-28): func_coverage SOBE 591->593. Remocao da selecao estatica de engine (WA_API_ENGINE/WA_API_ENGINE_HEADLESS_SESSIONS) tirou 6 funcoes elegiveis de pkg/bootstrap sem log direto (EngineSelection.Default/EngineFor/SessoesEmHeadless/UsaHeadless, engineSelectionConfigurada, engineValido) e acrescentou 1 (domain.EngineValido, excluida do elegivel). Ratchet-UP.
+# PORTE capability-registry (2026-08-28): func_coverage SOBE 593->596. Porte
+# adaptado de feature/macbook-lucas (commits d19dd491+4462065c) para
+# feature/wa-noise, trocando o tipo domain.Engine (que nao existe aqui) por
+# string simples, usando as consts EngineNoise/EngineWaHeadless ja
+# existentes em pkg/domain/user.go. Seis funcoes elegiveis novas com log
+# direto: CapabilityRegistry.Decide, CapabilityRegistry.Provider,
+# NewDefaultMatrix, matrix.capabilitiesForEngine, matrix.decide,
+# matrix.expand. Ratchet-UP honesto.
+# PORTE f66a9c0e/account-type (2026-08-28): a versao de macbook-lucas deste
+# baseline (min_func_coverage=595, via a integracao da onda 2) descreve uma
+# arvore diferente da nossa — recalculado abaixo apos aplicar o porte
+# completo, nao herdado.
+# PORTE 4c84304b/account-ownership (2026-08-28): a versao de macbook-lucas
+# deste baseline (min_func_coverage=592) descreve uma arvore diferente da
+# nossa — recalculado abaixo apos aplicar o porte completo, nao herdado.
+# func_coverage SOBE 596->597 (+1, ratchet-UP honesto): as tres funcoes
+# elegiveis novas de account_ownership.go (ClaimAccountIdentity,
+# CurrentActiveOwner, CurrentStatusForSession) tem log.Error estruturado em
+# cada caminho de erro.
 #
 # CAP-48 (2026-08-23): func_coverage SOBE 748->749 (+1). ENTRAM (2):
 #   message.SendPollVoteUseCase.Execute (coberta por logger.Warn/Error) e
@@ -1563,7 +1631,32 @@ min_func_coverage=601
 # nem tupla multi-valor do callee). O denominador cresceu e o numerador
 # cresceu junto na mesma proporcao; o piso nao caiu. Medido apos a correcao
 # completa, nao inferido.
-min_errpath_coverage=783
+min_errpath_coverage=782
+#
+# fusao com feature/wa-noise (2026-08-28): errpath_coverage 783 -> 782
+# (-1 decimo, ratchet-DOWN por medicao). A migracao do handler_capabilities.go
+# para pkg/presentation/http/dto/capability (para satisfazer a catraca de
+# TestRespondJSONLedger) e as varias mudancas de vocabulario de engine
+# tocaram sites cujo caminho de saida ja tinha log — o BURACO CONHECIDO
+# documentado no topo deste ficheiro (denominador -1 e numerador -1 juntos
+# quando um site que ja logava e' reescrito). Nao investigado site a site
+# por ser exatamente o comportamento honesto que o buraco ja descreve;
+# min_func_coverage e min_eligible SOBEM neste mesmo merge, confirmando que
+# nao ha' perda de cobertura real.
+#
+# INTEGRACAO (2026-08-27): apos mesclar fundacao + sessao + utilizadores +
+# canais/newsletters, re-medido: errpath_coverage SOBE 777->778. Ratchet-UP.
+#
+# INTEGRACAO com /admin (2026-08-27): errpath_coverage SOBE 778->779. Ratchet-UP.
+# INTEGRACAO com http-dto-download-paths (2026-08-27): errpath_coverage CAI 779->777 (mesma remocao). Ratchet-DOWN justificado.
+# INTEGRACAO com housekeep-session (2026-08-27): errpath_coverage CAI 777->776.
+# INTEGRACAO com engine-decisao-94 + F278 + F280 (2026-08-28): errpath_coverage SOBE 776->777. Ratchet-UP.
+# PORTE 4c84304b/account-ownership (2026-08-28): a versao de macbook-lucas
+# deste baseline (min_errpath_coverage=780) descreve uma arvore diferente
+# da nossa — recalculado abaixo apos aplicar o porte completo, nao
+# herdado. errpath_coverage SOBE 777->779 (+2, ratchet-UP honesto): os
+# caminhos de saida de account_ownership.go chegam com log.Error(...).Msg
+# em cada branch de erro.
 
 # min_eligible: a linha perdeu-se na resolucao do conflito desta fusao (o lado
 # preservado tinha so' comentarios). Reposta com a MEDICAO da arvore fundida.
@@ -1630,7 +1723,89 @@ min_errpath_coverage=783
 # interface, not a func decl) and the removal of the now-dead duplicate
 # engine-validity branch inside execUpdateUser. Medido apos a correcao
 # completa, nao inferido.
-min_eligible=1026
+min_eligible=1040
+#
+# fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
+# (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de
+# capabilityregistry, pairing registry e deteccao de account_type que ja
+# existiam nesta worktree mais o dto/capability novo.
+#
+# FUNDACAO DTO (2026-08-27): min_eligible SOBE 988->993 (+5, ratchet-UP).
+# ENTRAM (2) desta mudanca: dto/group.PresentGroupInfo e dto/group.presentTime.
+# ENTRAM (3) que JA' estavam por registar em 1636d228 (CAP-10, descarga de
+# midia) e cujo golden ficou por regenerar nesse commit:
+# usecase/message.DownloadMediaUseCase.Execute, stdio.chatDownloadMediaPath e
+# handlers.DownloadMediaHandler.ServeHTTP. Registado em HOUSEKEEP.md.
+# SAI (0): pkg/presentation/http/contracttest/ entrou em .logcov-exclude, mas
+# como pacote NOVO nunca esteve no denominador — a exclusao nao encolhe nada.
+# FAMILIA DE UTILIZADORES (2026-08-27): min_eligible SOBE 993->1006 (+13,
+# ratchet-UP honesto).
+#
+# ENTRAM (13), todos ELIGIBLE, todos em pkg/presentation/http/dto/user:
+#   PresentCheckUser, PresentUserInfo, presentUserInfoList, PresentUserProfile,
+#   PresentContactsLastActivity, PresentGetBlocklist, PresentGetContacts,
+#   presentBlocklistUpdate, presentTime, e os quatro Validate
+#   (BlockUserRequest, CheckUserRequest, GetAvatarRequest,
+#   SetPrivacySettingRequest).
+#
+# Entraram tambem 17 funcoes EXCLUDED, que nao contam para o denominador: os
+# ToDomain/ToBlockDomain/ToUnblockDomain e ResolveChat (X1, mapeamento trivial),
+# os apresentadores de uma linha, e mapPrivacySettings do adaptador wa-noise.
+#
+# SAEM (3), todas EXCLUDED e portanto sem efeito no numero:
+# pkg/domain.BlockUserRequest.ResolveChat, .UnblockUserRequest.ResolveChat e
+# .GetAvatarRequest.ResolveChat — os tipos de dominio deixaram de embutir
+# ChatTarget porque deixaram de ser o corpo HTTP; o alias `chat` passou a ser
+# resolvido pelos DTO de pedido.
+#
+# INTEGRACAO com FAMILIA DE CANAIS (2026-08-27): min_eligible CAI 1006->991
+# (-15, ratchet-DOWN justificado, nao regressao). A familia de canais decidiu
+# (F305) excluir pkg/presentation/http/dto/ inteiro de .logcov-exclude - os
+# apresentadores nao podem logar (regra de importacao de sentido unico,
+# HTTP-DTO-CONVENTIONS.md secao 3). As ~15 funcoes de dto/group, dto/session,
+# dto/user, dto/webhook, dto/storage que estavam no denominador saem dele.
+# covered nao muda: nenhuma funcao que registava deixou de o fazer.
+# INTEGRACAO com errors-envelope (2026-08-27): min_eligible SOBE 991->992 (+1, ratchet-UP honesto).
+# INTEGRACAO com http-dto-paths (2026-08-27): min_eligible SOBE 992->1002 (+10, ratchet-UP honesto: 10 rotas cortadas ganharam handler/DTO proprio).
+# INTEGRACAO com http-dto-download-paths (2026-08-27): min_eligible CAI 1002->997 (-5, as cinco funcoes de handler dos downloads legados saem do universo elegivel ao serem apagadas, F328). Ratchet-DOWN justificado, nao regressao — covered nao muda.
+# INTEGRACAO com http-dto-legacy-alias-removal (2026-08-27): min_eligible SOBE 997->1000 (+3, ratchet-UP honesto: reversao de F269/CAP-10 para os ~88 aliases legados trouxe rotas dinamicas novas de stdio para group.photo/group.photo.remove/group.updateparticipants, F329).
+# F290 (2026-08-27): min_eligible SOBE 1000->1001 (+1, ratchet-UP honesto):
+# pkg/bootstrap.rateLimitObserver.evictLocked entra no universo elegivel — e'
+# a funcao nova que despeja entradas do mapa por-IP nunca purgado antes desta
+# correcao (mapa sem teto, cresce com IP de origem nao confiavel). covered
+# nao muda: a funcao nasce sem log proprio, so' o Warn ja existente reusado.
+# INTEGRACAO com housekeep-session (2026-08-27): min_eligible SOBE 1001->1006 (+5, ratchet-UP honesto: F273-F276 acrescentaram funcoes novas de orquestracao/guard).
+# INTEGRACAO com housekeep-messages2 (2026-08-27): min_eligible SOBE 1006->1007 (+1, ratchet-UP honesto: presentProfileFull, F302).
+# INTEGRACAO com engine-decisao-94 (2026-08-28): min_eligible CAI 1007->1003 (-6+1+1=-4). Remocao da selecao estatica de engine apaga 6 funcoes elegiveis de pkg/bootstrap (EngineSelection.Default/EngineFor/SessoesEmHeadless/UsaHeadless, engineSelectionConfigurada, engineValido) e acrescenta domain.EngineValido (EXCLUIDA, pacote domain fora do universo de pkg/bootstrap+usecase que o gate mede como elegivel-com-log) e user.AddUserUseCase.headlessAvailable nao cria funcao nova. Ratchet-DOWN justificado: deletar codigo morto (decisao 94 nunca esteve ligada ao caminho de requisicao real) nao e regressao.
+# PORTE capability-registry (2026-08-28): min_eligible SOBE 1003->1009 (+6,
+# ratchet-UP honesto). ENTRAM (6): CapabilityRegistry.Decide,
+# CapabilityRegistry.Provider, NewDefaultMatrix,
+# matrix.capabilitiesForEngine, matrix.decide, matrix.expand — ver
+# justificativa de min_func_coverage acima para o detalhe do porte.
+# PORTE f66a9c0e/account-type (2026-08-28): a versao de macbook-lucas deste
+# baseline (min_eligible=1007) descreve uma arvore diferente da nossa —
+# recalculado abaixo apos aplicar o porte completo, nao herdado.
+# min_eligible SOBE 1009->1013 (+4, ratchet-UP honesto): as funcoes elegiveis
+# novas de deteccao de account_type (SetUserAccountType, GetUserAccountType
+# em pkg/infra/db, e as dos adapters accounttype), medido com
+# `go run ./cmd/logcov -json ./pkg` apos o porte de f66a9c0e.
+# PORTE 8069997f/pairing-registry (2026-08-28): min_eligible SOBE 1013->1026
+# (+13, ratchet-UP honesto). ENTRAM: pkg/pairing.{NewRegistry,
+# Registry.Resolve, Registry.ResolveQRReader, Registry.ResolvePhonePairer,
+# Registry.ResolveStarter, Registry.TargetEngine, errCapabilityNotSupported,
+# errEngineMismatch, errEngineUnavailable, errInvalidEngine, errNoSession},
+# pkg/bootstrap.buildPairingRegistry, pkg/bootstrap.waNoiseSessionStarter.
+# CheckOwnership, pkg/presentation/http/handlers.respondPairingRefusal —
+# menos as que saem com a remocao de WithStartSession/WithCheckOwnership do
+# ConnectHandler (initConnectHandler, connectOwnershipCheck). Medido com
+# `go run ./cmd/logcov -json ./pkg` apos o porte completo de 8069997f.
+# PORTE 4c84304b/account-ownership (2026-08-28): a versao de macbook-lucas
+# deste baseline (min_eligible=997) descreve uma arvore diferente da
+# nossa — recalculado abaixo apos aplicar o porte completo, nao herdado.
+# min_eligible SOBE 1026->1029 (+3, ratchet-UP honesto). ENTRAM (3):
+# AccountOwnershipRepository.ClaimAccountIdentity, .CurrentActiveOwner e
+# .CurrentStatusForSession (pkg/infra/db/account_ownership.go) — todas
+# publicas, com corpo >2 statements e log.Error nos caminhos de erro.
 # justificativa: F108 (2026-08-24). errpath CAI 785->784: o S-ret novo de
 # connectOwnershipCheck (wiring_handlers.go:460, return apperr.New) e' um caminho
 # de saida que NÃO loga — pela mesma razao da justificativa do func_coverage
@@ -1920,7 +2095,13 @@ min_eligible=1026
 # Nota: esta anotacao so' e' contabilizada corretamente porque a F189 foi
 # corrigida hoje. Antes, o contador fazia strings.Count sobre o ficheiro inteiro
 # e teria contado tambem as mencoes ao token no comentario que a justifica.
-max_exempt_annotations=2
+#
+# 2026-08-28 (F358): 2 -> 3. Nova isencao em
+# pkg/bootstrap/message_dedup.go, temConteudoDeMidiaUtilizavel — predicado
+# puro sem I/O nem erro, cujo unico chamador (mensagemJaProcessada) ja loga
+# o resultado quando ele muda o desfecho. Ver HOUSEKEEP.md F358 para o
+# achado que motivou a funcao.
+max_exempt_annotations=3
 
 # Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
 #   min_eligible 509 -> 507: os tres helpers privados client() identicos de

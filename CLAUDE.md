@@ -36,6 +36,43 @@ Não "corrija de graça" bugs pré-existentes fora do escopo da tarefa atual
 sem perguntar primeiro — registre no HOUSEKEEP certo e pergunte ao usuário
 se quer que a correção seja feita agora ou fique pendente.
 
+## A API oficial da Meta NÃO é a que este projecto fala
+
+`docs/REFERENCIA-META-OFICIAL.md` tem o índice verificado da WhatsApp Business
+Platform (Cloud API), com URLs.
+
+**Leia-o antes de comparar as duas.** Este projecto fala o protocolo do
+WhatsApp Web pelo fork em `internal/wa-noise`; a Cloud API é HTTP sobre o Graph
+API, com conta registada, templates obrigatórios fora das 24 horas e custo por
+conversa. A diferença mais visível: a Cloud API envia tudo por **um** endpoint
+com o tipo no corpo; aqui o tipo está no caminho, em 16 rotas.
+
+E cerca de **60 das 141 rotas** deste projecto — grupos, comunidades, canais e
+status — **não têm equivalente** na Cloud API. Uma integração futura coexistiria
+com elas, não as substituiria.
+
+O mesmo ficheiro traz o **alvo de cobertura de mensagens** (23 folhas) com o
+estado medido: 12 ✅, 4 🟡, 1 📥, 6 ❌. As seis em falta — catálogo, produtos,
+encomendas, Flows — caem exactamente onde a Cloud API é forte, e as ~60 só
+nossas caem onde ela não chega. **As duas superfícies são quase
+complementares.**
+
+O ficheiro tem também a **matriz de capacidades por motor** (`wa-noise`,
+`wa-headless`, `meta_cloud`) e a lição que ela dá: a linha divisória tem nome.
+O que depende do **Commerce Manager e do painel da Meta** — catálogo,
+produtos, encomendas, Flows, templates aprovados — é deles. O que depende do
+**protocolo social** — grupos, comunidades, canais, status, enquetes — é
+nosso. **As 7 lacunas não se resolvem escrevendo rotas**; resolvem-se por
+integração, ou não se resolvem.
+
+Dois avisos de falso positivo que já custaram tempo:
+
+- há 59 ocorrências de `Flow` em `pkg/`, e são **todas** `NativeFlowButton` —
+  o mecanismo interno dos botões. Nada a ver com WhatsApp Flows;
+- o nosso `/chats/send/carousel` **não** é um *carousel template* da Meta. É
+  `InteractiveMessage` montado no momento; o outro é modelo aprovado antes de
+  existir conversa. Partilham a palavra e não a capacidade.
+
 ## Consultar as implementações de referência antes de resolver
 
 Antes de projetar solução para qualquer problema de protocolo WhatsApp —
@@ -332,6 +369,15 @@ qualquer raciocínio de escrivaninha:
   induzida, e a saturação do próprio mecanismo.
 - **Registre o ANTES** antes de mexer. Sem linha de base, o depois não
   significa nada.
+- **Uma colecção mede-se com dados que excedam qualquer página plausível.**
+  Uma resposta pequena não prova "não pagina" — pode ser a primeira página de
+  uma colecção maior, e só os campos `total`/`limit` (quando existem) dizem
+  qual dos dois é. Foi assim que a F294 aconteceu: `GET /chat/list` pagina
+  desde 2026-08-08, mas a medição de 7 144 bytes contra uma conta com poucas
+  conversas foi lida como "a colecção inteira" sem olhar para `total`. Regra
+  prática: semeie dados suficientes para exceder qualquer página plausível
+  (a F294 usou 2 000 conversas contra um padrão de 50) e confira `total`
+  contra a contagem real, não só o tamanho da resposta.
 
 Quando a medição contrariar a hipótese, **a hipótese cai** — inclusive se
 ela já estiver escrita num HOUSEKEEP com número. Corrija a entrada; um

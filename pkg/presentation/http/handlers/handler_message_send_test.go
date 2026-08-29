@@ -85,7 +85,7 @@ func TestSendText_Success_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, msgAuthed)
+	rec := sendTextServe(t, tm, jr, `{"phone":"5511999999999","body":"ola"}`, msgAuthed)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
@@ -123,7 +123,7 @@ func TestSendText_RejectUnauthenticated(t *testing.T) {
 	tm := &contractsfake.TextMessenger{}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, func(r *http.Request) *http.Request { return r })
+	rec := sendTextServe(t, tm, jr, `{"phone":"5511999999999","body":"ola"}`, func(r *http.Request) *http.Request { return r })
 
 	assertErrorEnvelope(t, rec, http.StatusUnauthorized)
 	if n := len(tm.SendTextCalls); n != 0 {
@@ -135,8 +135,8 @@ func TestSendText_RejectUnauthenticated(t *testing.T) {
 // porta não é tocada.
 func TestSendText_RejectMissingRequiredField(t *testing.T) {
 	bodies := map[string]string{
-		"Phone": `{"Body":"ola"}`,
-		"Body":  `{"Phone":"5511999999999"}`,
+		"phone": `{"body":"ola"}`,
+		"body":  `{"phone":"5511999999999"}`,
 	}
 	for field, body := range bodies {
 		t.Run(field, func(t *testing.T) {
@@ -161,7 +161,7 @@ func TestSendText_SessionFailure(t *testing.T) {
 	tm := &contractsfake.TextMessenger{SessionGuard: contractsfake.FailSession(errSendTextSentinel)}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, msgAuthed)
+	rec := sendTextServe(t, tm, jr, `{"phone":"5511999999999","body":"ola"}`, msgAuthed)
 
 	if rec.Code < 400 {
 		t.Fatalf("falha de sessao produziu status de sucesso %d", rec.Code)
@@ -179,7 +179,7 @@ func TestSendText_InvalidPhoneNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"lixo","Body":"ola"}`, msgAuthed)
+	rec := sendTextServe(t, tm, jr, `{"phone":"lixo","body":"ola"}`, msgAuthed)
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("JID invalido produziu 200: %s", rec.Body.String())
@@ -200,7 +200,7 @@ func TestSendText_DownstreamFailureNeverReturns200(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola"}`, msgAuthed)
+	rec := sendTextServe(t, tm, jr, `{"phone":"5511999999999","body":"ola"}`, msgAuthed)
 
 	if rec.Code == http.StatusOK {
 		t.Fatalf("falha no envio produziu 200: %s", rec.Body.String())
@@ -225,7 +225,7 @@ func TestSendText_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"ola","Id":"id-do-cliente"}`, msgAuthed)
+	rec := sendTextServe(t, tm, jr, `{"phone":"5511999999999","body":"ola","id":"id-do-cliente"}`, msgAuthed)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
@@ -272,7 +272,7 @@ func TestSendText_LinkPreview_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServeWithPreview(t, tm, jr, lpf, `{"Phone":"5511999999999","Body":"olha https://exemplo.com/artigo","LinkPreview":true}`, msgAuthed)
+	rec := sendTextServeWithPreview(t, tm, jr, lpf, `{"phone":"5511999999999","body":"olha https://exemplo.com/artigo","link_preview":true}`, msgAuthed)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (corpo: %s)", rec.Code, rec.Body.String())
@@ -312,7 +312,7 @@ func TestSendText_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendTextRouter(tm, jr))
 
-	body := `{"Phone":"` + logassertGlobalHMACKey + `","Body":"` + logassertGlobalEncryptionKey + `"}`
+	body := `{"phone":"` + logassertGlobalHMACKey + `","body":"` + logassertGlobalEncryptionKey + `"}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/text", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -342,7 +342,7 @@ func TestSendText_ReplyTo_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"5511999999999","Body":"my reply","ReplyTo":{"StanzaId":"quoted-123","Participant":"5511888888888@s.whatsapp.net","QuotedText":"original msg"}}`
+	body := `{"phone":"5511999999999","body":"my reply","reply_to":{"stanza_id":"quoted-123","participant":"5511888888888@s.whatsapp.net","quoted_text":"original msg"}}`
 	rec := sendTextServe(t, tm, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -374,7 +374,7 @@ func TestSendText_WithoutReplyTo_ViaRegisteredRoute(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	rec := sendTextServe(t, tm, jr, `{"Phone":"5511999999999","Body":"plain msg"}`, msgAuthed)
+	rec := sendTextServe(t, tm, jr, `{"phone":"5511999999999","body":"plain msg"}`, msgAuthed)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: got %d, want 200 (body: %s)", rec.Code, rec.Body.String())
@@ -412,7 +412,7 @@ func TestSendText_ErrorLogsOmitSessionID(t *testing.T) {
 		{
 			name: "use case failure",
 			tm:   &contractsfake.TextMessenger{SessionGuard: contractsfake.FailSession(errors.New("f120-cause"))},
-			body: `{"Phone":"5511999999999","Body":"ola"}`,
+			body: `{"phone":"5511999999999","body":"ola"}`,
 		},
 	}
 

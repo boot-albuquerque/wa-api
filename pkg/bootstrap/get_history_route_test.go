@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"wa-api/pkg/domain"
+	dtowebhook "wa-api/pkg/presentation/http/dto/webhook"
 )
 
 // CAP-32 — GET /webhook/history.
@@ -30,13 +30,13 @@ const literalDoStub = "History configuration retrieved"
 // getHistory chama a rota e devolve o resultado decodificado junto do corpo
 // cru — o corpo cru importa porque parte do contrato e' a PRESENCA do campo,
 // que um struct decodificado nao distingue de ausencia.
-func (f *sessionCfgFixture) getHistory(t *testing.T) (domain.WebhookHistoryResult, string) {
+func (f *sessionCfgFixture) getHistory(t *testing.T) (dtowebhook.HistoryResponse, string) {
 	t.Helper()
 	rec := f.do(t, http.MethodGet, "/webhook/history", "")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /webhook/history: status = %d, quero 200 (corpo: %s)", rec.Code, rec.Body.String())
 	}
-	var lido domain.WebhookHistoryResult
+	var lido dtowebhook.HistoryResponse
 	if err := json.Unmarshal(decodeEnvelope(t, rec).Data, &lido); err != nil {
 		t.Fatalf("data nao e' a configuracao de historico: %v (corpo: %s)", err, rec.Body.String())
 	}
@@ -89,8 +89,8 @@ func TestGetHistoryRoute_HistoryZeroApareceNoCorpo(t *testing.T) {
 	if lido.History != 0 {
 		t.Fatalf("History = %d, quero 0 (corpo: %s)", lido.History, corpo)
 	}
-	if !strings.Contains(corpo, `"History":0`) {
-		t.Fatalf("o corpo nao carrega `\"History\":0`: o `omitempty` do campo History voltou e o desligamento "+
+	if !strings.Contains(corpo, `"history":0`) {
+		t.Fatalf("o corpo nao carrega `\"history\":0`: o `omitempty` do campo History voltou e o desligamento "+
 			"do historico deixou de ecoar o valor lido (F165); corpo: %s", corpo)
 	}
 }
@@ -106,7 +106,7 @@ func TestGetHistoryRoute_FalhaDeLeitura_500SemValorInventado(t *testing.T) {
 	// Uma requisicao antes de fechar o banco, para que AuthAlice ja' tenha a
 	// entrada no cache de autenticacao: sem ela a falha viria da AUTENTICACAO,
 	// e o teste mediria outra coisa.
-	f.do(t, http.MethodGet, "/chat/history?chat_jid=index", "")
+	f.do(t, http.MethodGet, "/chats/history?chat_jid=index", "")
 
 	if err := f.db.Close(); err != nil {
 		t.Fatalf("fechar o banco: %v", err)

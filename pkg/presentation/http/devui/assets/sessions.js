@@ -370,7 +370,11 @@ async function aguardarQR(s) {
     if (card.querySelector(".qr img") || card.querySelector(".qr .over")) return;
 
     const r = await API.sessao(s.token, "GET", ROTA_QR);
-    const imagem = r.body?.data?.QRCode || "";
+    // `qr_code`: a chave era `QRCode` — o nome do campo Go, PascalCase no fio
+    // — até a migração para DTO (docs/HTTP-DTO-CONVENTIONS.md). Este painel é
+    // o ÚNICO consumidor de /session/qr dentro do repositório, e o corte a
+    // seco parte-o se ele não for corrigido junto.
+    const imagem = r.body?.data?.qr_code || "";
     if (imagem) return mostrarQR(s.id, imagem);
 
     await new Promise((r2) => setTimeout(r2, QR_SONDA_MS));
@@ -779,6 +783,10 @@ function responder(el, classe, txt) {
 
 $("btn-nova").onclick = () => {
   $("nova-nome").value = "";
+  // noise por padrão a cada abertura: é o engine canónico do projeto, e
+  // reabrir o diálogo não deve carregar a última escolha de uma tentativa
+  // anterior.
+  $("nova-engine").value = "noise";
   // Gerado a cada abertura, e não reaproveitado: se alguém abrir o diálogo,
   // desistir e voltar, o token de arranque tem de ser outro. Reusar faria dois
   // "cancelar" seguidos proporem a mesma credencial.
@@ -804,11 +812,12 @@ $("nova-criar").onclick = async () => {
   const resp = $("nova-resposta");
   const nome = $("nova-nome").value.trim();
   const token = $("nova-token").value.trim();
+  const engine = $("nova-engine").value;
 
   if (!nome) return responder(resp, "err", "Dê um nome à sessão.");
   if (!token) return responder(resp, "err", "O token não foi gerado. Feche e reabra o diálogo.");
 
-  const r = await API.admin("POST", "/admin/users", { name: nome, token, events: "All" });
+  const r = await API.admin("POST", "/admin/users", { name: nome, token, events: "All", engine });
   if (!r.ok) {
     return responder(resp, "err", r.status === 401
       ? "HTTP 401 — o servidor recusou o token de admin que ele próprio entregou. " +

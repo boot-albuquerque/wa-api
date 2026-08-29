@@ -98,9 +98,11 @@ ganha.
    confirme com uma chamada real quando o ambiente permitir.
 
 4. **Erros: só os que acontecem.** Leia o use case e o manipulador e documente
-   as recusas que existem no código. Nada de `403` por convenção. As rotas de
-   grupo que usam `rejectMissingField` devolvem o envelope ANTIGO — use
-   `ErroTextoSimples` nessas, e diga-o na descrição (F266).
+   as recusas que existem no código. Nada de `403` por convenção. `error` é
+   SEMPRE o objecto `Erro`, em qualquer estado: o que não passa pela taxonomia
+   `apperr` recebe o código genérico do estado (`invalid_request`,
+   `unauthorized`, `not_found`, `internal_error`, ...). A forma antiga, com
+   `error` em texto, era a F266 e foi removida.
 
 5. **Exemplos coerentes entre si.** Use sempre os mesmos identificadores:
    - contacto `554192421234@s.whatsapp.net` / LID `90937376170214@lid`

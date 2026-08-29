@@ -89,7 +89,6 @@ func (m *Manager) UpdateGroupParticipants(ctx context.Context, txtID string, gro
 		return domain.ParticipantsUpdate{}, err
 	}
 
-	resultados := make([]waheadless.GroupMembership, 0, len(participants))
 	// todosNoOp começa verdadeiro e só desce: uma ÚNICA mudança real torna o
 	// lote inteiro não confirmável, porque a sessão não observa nenhuma delas.
 	todosNoOp := true
@@ -115,10 +114,14 @@ func (m *Manager) UpdateGroupParticipants(ctx context.Context, txtID string, gro
 		if !r.Verified {
 			todosNoOp = false
 		}
-		resultados = append(resultados, r)
 	}
 
-	out := domain.ParticipantsUpdate{Result: resultados, Confirmed: todosNoOp}
+	// Participants fica VAZIO, e não é um palpite: este motor não lê nenhum
+	// roster de volta — o que ele mediu foram CONTAGENS por participante
+	// (antes, depois-desejado, no-op), e servi-las como participantes seria
+	// inventar identidades que ninguém observou. O que ele sabe dizer é se
+	// confirmou, e isso vai em Confirmed/Reason.
+	out := domain.ParticipantsUpdate{Confirmed: todosNoOp}
 	if !out.Confirmed {
 		out.Reason = naoObservavel
 	}

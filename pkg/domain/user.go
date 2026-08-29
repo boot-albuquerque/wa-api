@@ -2,135 +2,97 @@
 package domain
 
 import (
-	"encoding/json"
 	"time"
 )
 
-// ListUsersRequest é o request para listar usuários
-type ListUsersRequest struct {
-	UserID string // Optional: if provided, lists a single user
+// EngineValido aceita o vazio como o padrão dado e recusa qualquer valor que
+// não seja um engine conhecido — mesma regra de Engine.IsValidForCreate, mas
+// devolvendo string simples (não o tipo Engine) para os call sites que ainda
+// trabalham com string crua nesta camada.
+func EngineValido(bruto, padrao string) (string, bool) {
+	if bruto == "" {
+		return padrao, true
+	}
+	if !Engine(bruto).IsValidForCreate() {
+		return "", false
+	}
+	return bruto, true
 }
 
-// AddUserRequest é o request para adicionar um novo usuário
-type AddUserRequest struct {
-	Name        string       `json:"name"`
-	Token       string       `json:"token"`
-	Webhook     string       `json:"webhook,omitempty"`
-	Expiration  int          `json:"expiration,omitempty"`
-	Events      string       `json:"events,omitempty"`
-	ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`
-	S3Config    *S3Config    `json:"s3Config,omitempty"`
-	HmacKey     string       `json:"hmacKey,omitempty"`
-	History     int          `json:"history,omitempty"`
-
-	// Engine é o transporte que servirá esta sessão. OBRIGATÓRIO na criação
-	// (itens 4-5 do prompt arquitetural): ausente, nulo, vazio ou fora de
-	// {wa_noise, wa_headless} é 400 invalid_engine — nunca um default
-	// silencioso. Recebido como string crua; a validação/conversão para
-	// domain.Engine é do use case (ParseEngine).
-	Engine string `json:"engine"`
-}
-
-// EditUserRequest é o request para editar um usuário existente
-type EditUserRequest struct {
-	UserID      string       `json:"-"` // from URL
-	Name        string       `json:"name,omitempty"`
-	Token       string       `json:"token,omitempty"`
-	Webhook     string       `json:"webhook,omitempty"`
-	Expiration  int          `json:"expiration,omitempty"`
-	Events      string       `json:"events,omitempty"`
-	ProxyConfig *ProxyConfig `json:"proxyConfig,omitempty"`
-	S3Config    *S3Config    `json:"s3Config,omitempty"`
-	// POINTER, not int, to separate "not mentioned" from "explicitly zero" (F218).
-	//
-	// With plain int + omitempty, zero was the zero value — indistinguishable
-	// from absent. The API accepted setting history to 3, 30, or 1000, but
-	// could NEVER set it back to 0 (disable). Same pattern as
-	// SendLocationRequest.Latitude (F121): nil = not mentioned, 0 = valid value.
-	History *int `json:"history,omitempty"`
-
-	// Engine, quando presente no corpo, é comparado ao valor persistido — o
-	// motor é IMUTÁVEL depois da criação (itens 8, 61). POINTER, mesmo motivo
-	// do History acima: nil = campo não mencionado (edição normal, não mexe
-	// no motor); string presente (mesmo vazia) = tentativa de mudar, que só é
-	// aceita se for IGUAL ao valor já gravado.
-	Engine *string `json:"engine,omitempty"`
-}
-
-// --- Aliases snake_case na LEITURA (F210, decisão 49=a do canal) ------------
+// ListUsersInput is the use case input for listing users. Empty UserID means
+// "every user"; a non-empty one narrows the listing to a single user.
 //
-// A API lia estes dois campos em camelCase (`s3Config`, `proxyConfig`) e
-// devolvia-os em snake_case (`s3_config`, `proxy_config`, ver
-// session.go:66-67). O ciclo mais natural que existe — ler o utilizador, mudar
-// um campo, reenviar — chegava com o nome da RESPOSTA, o binding não o
-// reconhecia, e o pedido era ignorado em SILÊNCIO com 200.
+// Input and not Request throughout this family: `…Request` is the name the
+// convention reserves for the WIRE type, and two types with the same name —
+// one of them carrying `json` tags — is the collision a review does not catch
+// (docs/HTTP-DTO-CONVENTIONS.md §4).
 //
-// Medido em campo a 2026-08-22:
-//
-//	PUT {"name":"lucas","s3_config":{"bucket":"snake-case"}} -> 200, bucket=""
-//	PUT {"name":"lucas","s3Config":{"bucket":"camel-case"}}  -> 200, bucket="camel-case"
-//
-// A escolha foi aceitar OS DOIS na leitura e manter snake_case na resposta.
-// Alinhar tudo em snake_case seria mais limpo, mas o README documenta
-// camelCase como formato de pedido (README.md:289-311) e não documenta a forma
-// da resposta — alinhar em snake partiria o contrato escrito.
-//
-// O camelCase VENCE quando ambos vêm no mesmo corpo: é o documentado, e quem
-// envia os dois de propósito está a pedir ambiguidade, não a exprimir intenção.
-
-// aliasesDeConfig são os nomes alternativos aceites na desserialização.
-type aliasesDeConfig struct {
-	ProxyConfigSnake *ProxyConfig `json:"proxy_config,omitempty"`
-	S3ConfigSnake    *S3Config    `json:"s3_config,omitempty"`
-}
-
-// UnmarshalJSON aceita `s3_config`/`proxy_config` além de `s3Config`/`proxyConfig`.
-func (r *EditUserRequest) UnmarshalJSON(data []byte) error {
-	type semMetodo EditUserRequest // evita recursão infinita
-	aux := struct {
-		*semMetodo
-		aliasesDeConfig
-	}{semMetodo: (*semMetodo)(r)}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	if r.ProxyConfig == nil {
-		r.ProxyConfig = aux.ProxyConfigSnake
-	}
-	if r.S3Config == nil {
-		r.S3Config = aux.S3ConfigSnake
-	}
-	return nil
-}
-
-// UnmarshalJSON: o mesmo para a criação. Aplicar só à edição criaria uma
-// assimetria nova — PUT a aceitar dois nomes e POST a aceitar um.
-func (r *AddUserRequest) UnmarshalJSON(data []byte) error {
-	type semMetodo AddUserRequest
-	aux := struct {
-		*semMetodo
-		aliasesDeConfig
-	}{semMetodo: (*semMetodo)(r)}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	if r.ProxyConfig == nil {
-		r.ProxyConfig = aux.ProxyConfigSnake
-	}
-	if r.S3Config == nil {
-		r.S3Config = aux.S3ConfigSnake
-	}
-	return nil
-}
-
-// DeleteUserRequest é o request para deletar um usuário
-type DeleteUserRequest struct {
+// This one has no wire type at all: the id it carries comes from the PATH of
+// GET /admin/users/{id}, and there is no body to decode.
+type ListUsersInput struct {
 	UserID string
 }
 
-// CheckUserRequest é o request para verificar se um usuário está no WhatsApp
+// AddUserInput is the use case input for provisioning a new user.
+//
+// No `json` tags: this is no longer the wire format. The body of
+// POST /admin/users is dtoadmin.AddUserRequest, and it is the DTO that
+// validates, normalizes and builds this value.
+type AddUserInput struct {
+	Name        string
+	Token       string
+	Webhook     string
+	Expiration  int
+	Events      string
+	ProxyConfig *ProxyConfig
+	S3Config    *S3Config
+	HmacKey     string
+	History     int
+
+	// Engine is the transport the caller chose for this session
+	// (EngineWaNoise or EngineWaHeadless). It is REQUIRED (items 4-5 of the
+	// architectural prompt, F281): the DTO passes it through unmodified,
+	// and AddUserUseCase.Execute rejects an absent, null, empty or unknown
+	// value with invalid_engine — there is no silent default.
+	Engine string
+}
+
+// EditUserInput is the use case input for a partial user update.
+//
+// An empty string means "field not informed" for every string field — the
+// semantics the use case already had. History is the exception and stays a
+// POINTER (F218): nil is "not mentioned", and a pointer to 0 is "disable the
+// limit", two states a plain int cannot tell apart.
+type EditUserInput struct {
+	UserID      string
+	Name        string
+	Token       string
+	Webhook     string
+	Expiration  int
+	Events      string
+	ProxyConfig *ProxyConfig
+	S3Config    *S3Config
+	History     *int
+
+	// Engine, quando presente, é comparado ao valor persistido — o motor é
+	// IMUTÁVEL depois da criação (F279). nil = campo não mencionado (edição
+	// normal, não mexe no motor); ponteiro para string (mesmo vazia) =
+	// tentativa de mudar, que só é aceita se for IGUAL ao valor já gravado.
+	Engine *string
+}
+
+// DeleteUserInput is the use case input for removing a user.
+type DeleteUserInput struct {
+	UserID string
+}
+
+// CheckUserRequest é a entrada dos casos de uso que consultam telefones.
+//
+// Sem etiquetas `json`: deixou de ser o corpo de POST /user/check e de
+// POST /user/info na migração da família de utilizadores. Quem descodifica é
+// pkg/presentation/http/dto/user.CheckUserRequest.
 type CheckUserRequest struct {
-	Phone []string `json:"phone"`
+	Phone []string
 }
 
 // GetUserLIDRequest é o request para obter o LID de um usuário
@@ -138,23 +100,21 @@ type GetUserLIDRequest struct {
 	JID string // from URL
 }
 
-// BlockUserRequest é o request para bloquear um usuário
+// BlockUserRequest é a entrada do caso de uso de bloqueio.
+//
+// Sem etiquetas `json` e sem ChatTarget: deixou de ser o corpo de
+// POST /user/block. Quem descodifica, resolve o alias `chat` e valida é
+// pkg/presentation/http/dto/user.BlockUserRequest.
 type BlockUserRequest struct {
-	ChatTarget
-	Phone string `json:"Phone,omitempty"`
-	JID   string `json:"JID,omitempty"`
+	Phone string
+	JID   string
 }
 
-func (r *BlockUserRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
-
-// UnblockUserRequest é o request para desbloquear um usuário
+// UnblockUserRequest é a entrada do caso de uso de desbloqueio.
 type UnblockUserRequest struct {
-	ChatTarget
-	Phone string `json:"Phone,omitempty"`
-	JID   string `json:"JID,omitempty"`
+	Phone string
+	JID   string
 }
-
-func (r *UnblockUserRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAlias) }
 
 // ProxyConfig representa a configuração de proxy
 type ProxyConfig struct {
@@ -175,29 +135,85 @@ type S3Config struct {
 	PublicURL     string `json:"publicUrl"`
 	MediaDelivery string `json:"mediaDelivery"`
 	RetentionDays int    `json:"retentionDays"`
+
+	// AccessKeyConfigured (F308) is derived by the repository's SELECT
+	// (COALESCE(s3_access_key,'') <> '') for the read path only — it is
+	// never set by a write path, and AccessKey above still carries the
+	// real secret there. It exists so a caller that only ever reads this
+	// struct (the admin listing) can report whether a key is present
+	// without the key itself ever leaving the database.
+	AccessKeyConfigured bool `json:"accessKeyConfigured"`
 }
 
-// UserResponse representa um usuário na resposta
-type UserResponse struct {
-	ID             string                 `json:"id"`
-	Name           string                 `json:"name"`
-	Token          string                 `json:"token"`
-	Webhook        string                 `json:"webhook"`
-	JID            string                 `json:"jid,omitempty"`
-	QRCode         string                 `json:"qrcode,omitempty"`
-	Connected      bool                   `json:"connected"`
-	LoggedIn       bool                   `json:"loggedIn,omitempty"`
-	Expiration     int64                  `json:"expiration,omitempty"`
-	ProxyConfig    map[string]interface{} `json:"proxy_config,omitempty"`
-	S3Config       map[string]interface{} `json:"s3_config,omitempty"`
-	Events         string                 `json:"events,omitempty"`
-	HmacConfigured bool                   `json:"hmac_configured,omitempty"`
+// UserAccount is the use case RESULT describing one provisioned API user:
+// who it is, how it is configured and whether its WhatsApp session is up.
+//
+// It carries no `json` tags and no map[string]any. The wire shape is
+// dtoadmin.UserResponse, built by a hand-written presenter — before this,
+// the two configuration blocks were maps assembled inside the use case, so
+// the KEY NAMES of a public payload were decided by the application layer
+// and no type in the program declared them.
+//
+// The S3 access key is deliberately absent: the listing used to serve a
+// hardcoded "***" for it, which is the same three characters whether a key
+// was configured or not — and the repository does not even read the column
+// (pkg/infra/db/user_repository.go:277). It carried no information.
+type UserAccount struct {
+	ID      string
+	Name    string
+	Token   string
+	Webhook string
+	JID     string
+	QRCode  string
 
-	// Engine é o transporte que serve esta sessão (item 9: leituras
-	// administrativas devolvem o motor). Vazio apenas em respostas que não
-	// carregam o dado (nenhuma hoje) — AddUser e ListUsers sempre o
-	// preenchem.
-	Engine string `json:"engine,omitempty"`
+	// Connected and LoggedIn are distinct states: there can be a valid
+	// credential with the transport down.
+	Connected bool
+	LoggedIn  bool
+
+	Expiration int64
+	Events     string
+
+	// HmacConfigured reports that a per-user webhook signing key exists. The
+	// key itself never leaves the database in cleartext (F158).
+	HmacConfigured bool
+
+	// Engine is the transport this session was created with (EngineWaNoise
+	// or EngineWaHeadless).
+	Engine string
+
+	Proxy UserProxySettings
+	S3    UserS3Settings
+}
+
+// UserProxySettings is the outbound proxy configuration of one user.
+type UserProxySettings struct {
+	Enabled bool
+	URL     string
+
+	// WebhookUseProxy reports whether webhook deliveries also go through the
+	// proxy, as opposed to only the WhatsApp transport.
+	WebhookUseProxy bool
+}
+
+// UserS3Settings is the media-storage configuration of one user, minus every
+// secret: neither the access key nor the secret key belongs in a response.
+type UserS3Settings struct {
+	Enabled       bool
+	Endpoint      string
+	Region        string
+	Bucket        string
+	PathStyle     bool
+	PublicURL     string
+	MediaDelivery string
+	RetentionDays int
+
+	// AccessKeyConfigured (F308) reports whether an access key is present
+	// for this session, without exposing the key itself. Before this
+	// field, `enabled: true` and an empty key were indistinguishable from
+	// the API — an operator had no way to tell a live S3 config from a
+	// half-set-up one.
+	AccessKeyConfigured bool
 }
 
 // SessionDeviceInfo carrega os dados de identidade e estado do aparelho

@@ -441,30 +441,28 @@ func TestGetStatus(t *testing.T) {
 			}
 		}
 
-		wantProxy := map[string]any{"enabled": entry.HasProxyURL, "proxyUrl": entry.ProxyURL}
-		for k, want := range wantProxy {
-			if got := r.ProxyConfig[k]; got != want {
-				t.Errorf("ProxyConfig[%q] = %v, quero %v", k, got, want)
-			}
+		// Os dois resumos deixaram de ser map[string]any: hoje são
+		// domain.ProxySummary e domain.S3Summary, e o nome de fio deles vive
+		// em pkg/presentation/http/dto/session. Comparar a struct inteira
+		// (e não campo a campo) é o que faz um campo NOVO não preenchido
+		// aparecer aqui.
+		wantProxy := domain.ProxySummary{Enabled: entry.HasProxyURL, ProxyURL: entry.ProxyURL}
+		if r.ProxyConfig != wantProxy {
+			t.Errorf("ProxyConfig = %+v, quero %+v", r.ProxyConfig, wantProxy)
 		}
 
-		wantS3 := map[string]any{
-			"enabled":        entry.S3.Enabled,
-			"endpoint":       entry.S3.Endpoint,
-			"region":         entry.S3.Region,
-			"bucket":         entry.S3.Bucket,
-			"path_style":     entry.S3.PathStyle,
-			"public_url":     entry.S3.PublicURL,
-			"media_delivery": entry.S3.MediaDelivery,
-			"retention_days": entry.S3.RetentionDays,
+		wantS3 := domain.S3Summary{
+			Enabled:       entry.S3.Enabled,
+			Endpoint:      entry.S3.Endpoint,
+			Region:        entry.S3.Region,
+			Bucket:        entry.S3.Bucket,
+			PathStyle:     entry.S3.PathStyle,
+			PublicURL:     entry.S3.PublicURL,
+			MediaDelivery: entry.S3.MediaDelivery,
+			RetentionDays: entry.S3.RetentionDays,
 		}
-		for k, want := range wantS3 {
-			if got := r.S3Config[k]; got != want {
-				t.Errorf("S3Config[%q] = %v, quero %v", k, got, want)
-			}
-		}
-		if len(r.S3Config) != len(wantS3) {
-			t.Errorf("S3Config tem %d chaves, quero %d", len(r.S3Config), len(wantS3))
+		if r.S3Config != wantS3 {
+			t.Errorf("S3Config = %+v, quero %+v", r.S3Config, wantS3)
 		}
 	})
 

@@ -23,8 +23,8 @@ func NewGetUserLIDUseCase(cd appport.IdentityResolver, jr appport.JIDResolver, l
 
 // LIDResult representa o resultado com JID e LID
 type LIDResult struct {
-	JID string `json:"jid"`
-	LID string `json:"lid"`
+	JID string
+	LID string
 }
 
 // Execute obtém o LID para um JID

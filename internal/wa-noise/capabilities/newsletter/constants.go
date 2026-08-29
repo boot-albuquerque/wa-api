@@ -31,10 +31,10 @@ const (
 	// assinatura vale.
 	liveUpdatesDurationAttr = "duration"
 
-	// messagesTag e messageUpdatesTag sao os nos de resposta paginada de
-	// mensagens e de updates de mensagem.
-	messagesTag       = "messages"
-	messageUpdatesTag = "message_updates"
+	// messagesTag e' o no de resposta paginada de mensagens. GetMessageUpdates
+	// tambem usa esta tag desde 2026-08-28 (LIB-03) — o `<message_updates>`
+	// separado foi abandonado, o servidor parou de responder a ele.
+	messagesTag = "messages"
 	// messagesErrContext e' o campo In dos ElementMissingError dos dois
 	// getters paginados.
 	messagesErrContext = "newsletter messages response"

@@ -36,9 +36,9 @@ func (f *Fake) GetBlocklist(ctx context.Context) (*types.Blocklist, error) {
 	return nil, nil
 }
 
-func (f *Fake) UpdateBlocklist(ctx context.Context, jid types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
+func (f *Fake) UpdateBlocklist(ctx context.Context, jid types.JID, pnJID types.JID, action events.BlocklistChangeAction) (*types.Blocklist, error) {
 	if f.UpdateBlocklistFn != nil {
-		return f.UpdateBlocklistFn(ctx, jid, action)
+		return f.UpdateBlocklistFn(ctx, jid, pnJID, action)
 	}
 	return nil, nil
 }

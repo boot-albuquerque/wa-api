@@ -123,19 +123,22 @@ const (
 // nonSendAxisDownloadBody monta o payload de download com o MIME da
 // capability, como handler_download_test.go faz.
 func nonSendAxisDownloadBody(mime string) string {
-	return `{"Url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
-		`"DirectPath":"/v/t62.7118-24/12345_678_90.enc",` +
-		`"MediaKey":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
-		`"Mimetype":"` + mime + `",` +
-		`"FileEncSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
-		`"FileSHA256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
-		`"FileLength":4242}`
+	return `{"url":"https://mmg.whatsapp.net/d/f/AbCdEf.enc",` +
+		`"direct_path":"/v/t62.7118-24/12345_678_90.enc",` +
+		`"media_key":"` + base64.StdEncoding.EncodeToString([]byte{0x01, 0x02, 0x03, 0x04}) + `",` +
+		`"mimetype":"` + mime + `",` +
+		`"file_enc_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xaa, 0xbb}) + `",` +
+		`"file_sha256":"` + base64.StdEncoding.EncodeToString([]byte{0xcc, 0xdd}) + `",` +
+		`"file_length":4242}`
 }
 
-// nonSendAxisDownloadCase monta um dos cinco casos de download. As cinco
-// rotas divergem em construtor, MIME e nada mais — mas continuam CINCO
-// casos, com nome e rota proprios, e nao um caso parametrizado por indice.
-func nonSendAxisDownloadCase(nome, rota, mime string, novo func(appport.MediaDownloader, appport.Logger) http.Handler) nonSendAxisCase {
+// nonSendAxisDownloadCase monta um dos cinco casos de download, pela rota
+// consolidada /chats/download/{kind} (F297: as cinco rotas por-kind foram
+// removidas). As cinco divergem em kind e MIME e nada mais — mas continuam
+// CINCO casos, com nome e rota proprios, e nao um caso parametrizado por
+// indice.
+func nonSendAxisDownloadCase(nome string, kind domain.MediaKind, mime string) nonSendAxisCase {
+	rota := "/chats/download/" + string(kind)
 	return nonSendAxisCase{
 		nome:        nome,
 		rota:        rota,
@@ -147,7 +150,16 @@ func nonSendAxisDownloadCase(nome, rota, mime string, novo func(appport.MediaDow
 					return []byte{0x00, 0x01, 'o', 'k'}, nil
 				},
 			}
-			rec, recs := nonSendAxisServe(t, nonSendAxisRouter(rota, novo(md, silentLogger{})), rota, body, mut)
+			uc := message.NewDownloadMediaUseCase(
+				message.NewDownloadImageUseCase(md, silentLogger{}),
+				message.NewDownloadVideoUseCase(md, silentLogger{}),
+				message.NewDownloadAudioUseCase(md, silentLogger{}),
+				message.NewDownloadDocumentUseCase(md, silentLogger{}),
+				message.NewDownloadStickerUseCase(md, silentLogger{}),
+			)
+			r := mux.NewRouter()
+			r.Handle("/chats/download/{kind}", NewDownloadMediaHandler(uc)).Methods(http.MethodPost)
+			rec, recs := nonSendAxisServe(t, r, rota, body, mut)
 			out := nonSendAxisOutcome{rec: rec, recs: recs, portCalls: len(md.DownloadCalls)}
 			if out.portCalls > 0 {
 				out.portTxtID = md.DownloadCalls[0].TxtID
@@ -178,7 +190,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "SubscribePresence",
 			rota:        "/user/presence/subscribe",
-			validBody:   `{"Phone":"5511999999999"}`,
+			validBody:   `{"phone":"5511999999999"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				pc := &contractsfake.PresenceController{}
@@ -194,7 +206,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "ChatPresence",
 			rota:        "/chat/presence",
-			validBody:   `{"Phone":"5511999999999","State":"composing"}`,
+			validBody:   `{"phone":"5511999999999","state":"composing"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				pc := &contractsfake.PresenceController{}
@@ -210,7 +222,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "MarkRead",
 			rota:        "/chat/markread",
-			validBody:   `{"Id":["MSG1"],"ChatPhone":"5511999999999"}`,
+			validBody:   `{"id":["MSG1"],"chat_phone":"5511999999999"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				cm := &contractsfake.ChatMessenger{}
@@ -226,7 +238,7 @@ func nonSendAxisCases() []nonSendAxisCase {
 		{
 			nome:        "React",
 			rota:        "/chat/react",
-			validBody:   `{"Phone":"5511999999999","Body":"ok","Id":"MSG1"}`,
+			validBody:   `{"phone":"5511999999999","body":"ok","id":"MSG1"}`,
 			decodeCause: nonSendAxisDecodeCauseSentinel,
 			serve: func(t *testing.T, body string, mut func(*http.Request) *http.Request) nonSendAxisOutcome {
 				cm := &contractsfake.ChatMessenger{}
@@ -371,26 +383,11 @@ func nonSendAxisCases() []nonSendAxisCase {
 				return out
 			},
 		},
-		nonSendAxisDownloadCase("DownloadImage", "/chat/downloadimage", "image/jpeg",
-			func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadImageHandler(message.NewDownloadImageUseCase(md, l))
-			}),
-		nonSendAxisDownloadCase("DownloadVideo", "/chat/downloadvideo", "video/mp4",
-			func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadVideoHandler(message.NewDownloadVideoUseCase(md, l))
-			}),
-		nonSendAxisDownloadCase("DownloadAudio", "/chat/downloadaudio", "audio/ogg",
-			func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadAudioHandler(message.NewDownloadAudioUseCase(md, l))
-			}),
-		nonSendAxisDownloadCase("DownloadDocument", "/chat/downloaddocument", "application/pdf",
-			func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadDocumentHandler(message.NewDownloadDocumentUseCase(md, l))
-			}),
-		nonSendAxisDownloadCase("DownloadSticker", "/chat/downloadsticker", "image/webp",
-			func(md appport.MediaDownloader, l appport.Logger) http.Handler {
-				return NewDownloadStickerHandler(message.NewDownloadStickerUseCase(md, l))
-			}),
+		nonSendAxisDownloadCase("DownloadImage", domain.MediaKindImage, "image/jpeg"),
+		nonSendAxisDownloadCase("DownloadVideo", domain.MediaKindVideo, "video/mp4"),
+		nonSendAxisDownloadCase("DownloadAudio", domain.MediaKindAudio, "audio/ogg"),
+		nonSendAxisDownloadCase("DownloadDocument", domain.MediaKindDocument, "application/pdf"),
+		nonSendAxisDownloadCase("DownloadSticker", domain.MediaKindSticker, "image/webp"),
 	}
 }
 

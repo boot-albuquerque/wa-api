@@ -33,7 +33,7 @@ func (uc *ListNewsletterUseCase) Execute(ctx context.Context, userID string) (*d
 	}
 
 	collection := &domain.NewsletterCollection{
-		Newsletter: newsletter,
+		Newsletters: newsletter,
 	}
 
 	return collection, nil

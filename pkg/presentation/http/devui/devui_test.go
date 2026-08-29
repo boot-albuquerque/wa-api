@@ -391,17 +391,23 @@ func TestConfig_NaoVazaEmOutraRota(t *testing.T) {
 	}
 }
 
-// TestPainel_GeraOTokenDaSessao trava o formato pedido: wa_noise_ mais um
-// valor de crypto.getRandomValues.
+// TestPainel_GeraOTokenDaSessao trava o formato pedido: hex puro de
+// crypto.getRandomValues, SEM prefixo de engine.
+//
+// O prefixo `wa_noise_` foi removido (achado do usuário: era enganoso, uma
+// sessão podia nascer em headless e o token continuava a dizer "noise"). O
+// engine agora é um campo próprio do pedido de criação, não algo que se lê
+// do formato do token — por isso este teste também trava a AUSÊNCIA do
+// prefixo, não só a presença de crypto.getRandomValues.
 //
 // A asserção inclui getRandomValues de propósito. Um gerador que usasse
-// Math.random produziria um token com o prefixo certo e entropia previsível —
+// Math.random produziria um token com a mesma forma e entropia previsível —
 // passaria num teste de formato e falharia no que interessa.
 func TestPainel_GeraOTokenDaSessao(t *testing.T) {
 	js := servido(t, "devui.js")
 
-	if !strings.Contains(js, `"wa_noise_"`) {
-		t.Error("o gerador não usa o prefixo wa_noise_")
+	if strings.Contains(js, `"wa_noise_"`) {
+		t.Error("o gerador ainda usa o prefixo wa_noise_, que é enganoso: engine é campo próprio do pedido, não prefixo do token")
 	}
 	if !strings.Contains(js, "crypto.getRandomValues") {
 		t.Error("o token não vem de crypto.getRandomValues: Math.random é previsível por desenho")
@@ -421,6 +427,48 @@ func TestPainel_GeraOTokenDaSessao(t *testing.T) {
 	// possa reescrever à mão volta a ser um token escolhido por pessoa.
 	if !strings.Contains(servido(t, "sessions.html"), `id="nova-token" autocomplete="off" spellcheck="false" readonly`) {
 		t.Error("o campo do token não é readonly")
+	}
+}
+
+// TestPainel_CancelarDaNovaSessaoFechaMesmoSemNome trava um achado medido ao
+// vivo (Claude in Chrome + agent-browser, 2026-08-28): "Cancelar" em
+// `dlg-nova` é um `<button>` sem `type`, ou seja `type="submit"` por padrão,
+// dentro de `<form method="dialog">`. O campo `nome` é `required`.
+//
+// Todo botão `submit` roda a validação de restrições do formulário ANTES de
+// agir — inclusive um que só vai fechar o diálogo com `returnValue="cancel"`.
+// Com `nome` vazio (o estado do formulário assim que o diálogo abre), clicar
+// Cancelar dispara a validação, ela recusa por falta do campo obrigatório, e
+// a submissão — logo o fecho do diálogo — é BLOQUEADA em silêncio: sem
+// evento `submit`, sem erro no console, sem nada. Foi assim que o botão
+// "não dava feedback nenhum": abrir o modal e clicar Cancelar sem antes
+// digitar um nome parecia simplesmente não fazer nada.
+//
+// `formnovalidate` no botão Cancelar é o que separa "cancelar" de "validar
+// e enviar": ele diz ao navegador para pular a checagem de campos
+// obrigatórios só para ESTE submitter, preservando o fecho nativo do
+// `method="dialog"` sem exigir dado nenhum de quem só quer desistir.
+func TestPainel_CancelarDaNovaSessaoFechaMesmoSemNome(t *testing.T) {
+	html := servido(t, "sessions.html")
+
+	// A âncora é o próprio Cancelar de `dlg-nova` — os outros diálogos do
+	// painel (`dlg-remover`, `dlg-confirma`, `dlg-lote`, `dlg-menu`) não têm
+	// campo `required`, então só o botão desta modal precisa do atributo.
+	inicioDlgNova := strings.Index(html, `<dialog id="dlg-nova">`)
+	if inicioDlgNova < 0 {
+		t.Fatal("dlg-nova não encontrado em sessions.html")
+	}
+	fimDlgNova := strings.Index(html[inicioDlgNova:], "</dialog>")
+	if fimDlgNova < 0 {
+		t.Fatal("fecho de dlg-nova não encontrado em sessions.html")
+	}
+	blocoDlgNova := html[inicioDlgNova : inicioDlgNova+fimDlgNova]
+
+	if !strings.Contains(blocoDlgNova, `<button value="cancel" formnovalidate>`) {
+		t.Error(`o botão Cancelar de "Nova sessão" não tem formnovalidate: ` +
+			`com o campo "nome" required e vazio (estado inicial do modal), ` +
+			`a validação nativa do formulário bloqueia o fecho do diálogo em ` +
+			`silêncio — clicar Cancelar não faz nada visível`)
 	}
 }
 

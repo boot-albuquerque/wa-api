@@ -33,6 +33,17 @@ grep -oE 'registry\.Register\("(/[a-zA-Z0-9/{}._-]+)"' pkg/bootstrap/wiring_rout
   | sed 's/registry.Register("//;s/"//' | sort
 ```
 
+> **O alvo de cobertura de mensagens** — as 23 folhas que este projecto deve
+> alcançar — está em `docs/REFERENCIA-META-OFICIAL.md`, com o estado medido de
+> cada uma: **12 ✅, 4 🟡, 1 📥, 6 ❌**. As seis em falta são catálogo,
+> produtos, encomendas e Flows.
+>
+> **A referência oficial da Meta** está em
+> `docs/REFERENCIA-META-OFICIAL.md`, com os URLs verificados. As colunas de
+> concorrentes desta página são conhecimento geral e **não** medição; aquele
+> ficheiro é o levantamento a sério, e diz explicitamente o que não foi
+> verificado.
+
 ## Aviso de método
 
 As colunas de **concorrentes** são conhecimento geral, **não medição**. Não
@@ -183,15 +194,16 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | POST | `/chat/delete/message` | revogar mensagem enviada |
 | POST | `/message/star` | favoritar / desfavoritar mensagem (CAP-54) — **ver F223** |
 
-### Descarga de média (5)
+### Descarga de média (5, mais a forma canónica consolidada)
 
-| método | rota | o que faz |
-|---|---|---|
-| POST | `/chat/downloadimage` | baixa e decifra imagem recebida |
-| POST | `/chat/downloadvideo` | idem, vídeo |
-| POST | `/chat/downloadaudio` | idem, áudio |
-| POST | `/chat/downloaddocument` | idem, documento |
-| POST | `/chat/downloadsticker` | idem, autocolante |
+Canónica (CAP-10): `POST /chats/download/{kind}`, `kind` ∈
+`image, video, audio, document, sticker`.
+
+As cinco rotas por-kind que existiam antes (`/chat/downloadimage`,
+`downloadvideo`, `downloadaudio`, `downloaddocument`, `downloadsticker`)
+foram **removidas** em 2026-08-27 — não apenas do contrato, do serviço
+também (HOUSEKEEP.md F297): decisão explícita de corte-limpo, sem
+consumidores reais a proteger. Devolvem `404` agora.
 
 ### Gestão de conversa (12)
 
@@ -267,8 +279,8 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 | GET | `/session/connect` | ligar a sessão; verifica posse antes de responder (F108) |
 | GET | `/session/disconnect` | desligar |
 | POST | `/session/logout` | terminar sessão no telemóvel |
-| GET | `/session/qr` | código QR de pareamento |
-| POST | `/session/pairphone` | parear por código de telefone |
+| GET | `/session/pair/qr` | código QR de pareamento (canónico; substitui `GET /session/qr`) |
+| POST | `/session/pair/phone` | parear por código de telefone (canónico; substitui `POST /session/pairphone`) |
 | GET | `/session/status` | estado da sessão |
 | GET | `/session/profile` | perfil da própria sessão |
 | GET | `/session/profile/full` | perfil completo |
@@ -304,14 +316,14 @@ oito com texto visível aceitam **menções** (`MentionedJid`) desde a CAP-47.
 
 #### `/newsletter/demote` — despromover admin
 
-Corpo: `{"jid": "<canal>", "userJID": "<admin-a-despromover>"}`.
+Corpo: `{"jid": "<canal>", "user_jid": "<admin-a-despromover>"}`.
 
 Transforma um administrador do canal em assinante simples. Exige que o
 chamador seja dono do canal.
 
 #### `/newsletter/change-owner` — transferir posse
 
-Corpo: `{"jid": "<canal>", "userJID": "<novo-dono>"}`.
+Corpo: `{"jid": "<canal>", "user_jid": "<novo-dono>"}`.
 
 Transfere a posse do canal para outro utilizador. O chamador perde a posse;
 o alvo torna-se o novo dono. **Irreversível sem a cooperação do novo dono.**
@@ -324,11 +336,11 @@ para 0, o `info` passou a `state: non_existing`, e o link público de convite
 passou a `Link de convite inválido`.
 
 Método: **DELETE** (não POST).
-Corpo: `{"jid": "<canal>", "confirmJID": "<canal>"}`.
+Corpo: `{"jid": "<canal>", "confirm_jid": "<canal>"}`.
 
 Apaga permanentemente o canal. **IRREVERSÍVEL — o canal e todo o conteúdo
-são destruídos.** A confirmação explícita é obrigatória: `confirmJID` tem
-de ser idêntico a `jid`. Corpo sem `confirmJID`, ou com valor diferente de
+são destruídos.** A confirmação explícita é obrigatória: `confirm_jid` tem
+de ser idêntico a `jid`. Corpo sem `confirm_jid`, ou com valor diferente de
 `jid`, devolve 400.
 
 **Query IDs (F233b/c)**: os IDs iniciais vieram do Baileys e **estavam
@@ -554,27 +566,34 @@ Catálogo, produtos e Flows são superfície exclusiva da Cloud API com WABA.
 
 ## Caminhos canónicos — a padronização
 
-**2026-08-26.** As rotas passaram a ter forma canónica, e **as antigas
-continuam a funcionar**. A regra está em `api/openapi/CAMINHOS-CANONICOS.md`; a
-tabela é `api/openapi/caminhos.tsv`, e é dela que saem tanto as rotas
-registadas como a documentação — não há terceira cópia a desactualizar-se.
+**2026-08-26.** As rotas passaram a ter forma canónica. A regra está em
+`api/openapi/CAMINHOS-CANONICOS.md`; a tabela é `api/openapi/caminhos.tsv`, e
+é dela que saem tanto as rotas registadas como a documentação — não há
+terceira cópia a desactualizar-se.
 
 **91 rotas** ganharam forma canónica. O que fica singular — `/session/*`,
 `/health`, `/webhook`, `/s3/*`, `/hmac/*`, `/proxy/set`, `/status/set/*`,
 `/labels`, `/admin/users`, `/call/reject` — é singleton ou já era plural, e o
 motivo de cada uma está no documento da regra.
 
-**As antigas continuam a ser servidas — e saíram do OpenAPI.** Não há data de
-remoção; o que há é a decisão de o contrato descrever **um nome por operação**.
-Documentar as duas formas punha 232 operações para 141 capacidades, e obrigava
-quem lê a escolher entre `/chat/list` e `/chats/list` sem elemento para decidir
-— que é a ambiguidade que esta padronização existe para eliminar.
+**Reversão de 2026-08-27**: a política original mantinha a rota antiga
+registada e a responder para sempre. Foi **revertida por directiva explícita
+do utilizador** — o projecto ainda não tem consumidores reais, então não há
+cliente a proteger de um corte, e a promessa de compatibilidade permanente
+só tinha custo, sem benefício. **As formas antigas listadas abaixo já não
+respondem** (404) — a tabela abaixo é agora um **registo histórico**, para
+quem chegar com o nome antigo (visto em logs, exemplos velhos) encontrar a
+forma actual.
 
-**Esta tabela é, a partir de agora, a única referência do nome antigo.** Se tem
-um cliente a chamar `/chat/list`, ele continua a funcionar; procure aqui a
-forma nova quando quiser migrar.
+### As doze que mudaram de forma, não só de número
 
-### As nove que mudaram de forma, não só de número
+F286 (2026-08-28): o título dizia "nove" enquanto a tabela abaixo sempre
+listou doze — as doze foram re-medidas ao vivo, uma por uma, com sessões
+reais pareadas; nove responderam `200` diretamente e as outras três (link
+de comunidade, remoção de foto de grupo com imagem real, desvincular
+subgrupo) tiveram a rota e a injeção do path param confirmadas, com a
+recusa vindo do próprio WhatsApp (código de erro específico do protocolo,
+não `400`/`404` de rota mal formada). Ver `HOUSEKEEP.md`.
 
 Nestas o identificador sai do corpo e vai para o caminho, e o método passa a
 dizer a operação:
@@ -599,7 +618,7 @@ corpo ganha. É o que permite migrar um cliente de cada vez.
 
 ### As restantes, por família
 
-**`/chat` → `/chats`** (33 rotas)
+**`/chat` → `/chats`** (28 rotas)
 
 | antiga | canónica |
 |---|---|
@@ -607,11 +626,6 @@ corpo ganha. É o que permite migrar um cliente de cada vez.
 | `GET /chat/list` | `GET /chats/list` |
 | `POST /chat/archive` | `POST /chats/archive` |
 | `POST /chat/delete/message` | `POST /chats/delete/message` |
-| `POST /chat/downloadaudio` | `POST /chats/downloadaudio` |
-| `POST /chat/downloaddocument` | `POST /chats/downloaddocument` |
-| `POST /chat/downloadimage` | `POST /chats/downloadimage` |
-| `POST /chat/downloadsticker` | `POST /chats/downloadsticker` |
-| `POST /chat/downloadvideo` | `POST /chats/downloadvideo` |
 | `POST /chat/ephemeral` | `POST /chats/ephemeral` |
 | `POST /chat/ephemeral/default` | `POST /chats/ephemeral/default` |
 | `POST /chat/markread` | `POST /chats/markread` |
@@ -702,6 +716,37 @@ corpo ganha. É o que permite migrar um cliente de cada vez.
 | `POST /user/privacy` | `POST /users/privacy` |
 | `POST /user/status` | `POST /users/status` |
 | `POST /user/unblock` | `POST /users/unblock` |
+
+### Fora da tabela: duas renomeações simples e uma consolidação (CAP-10, 2026-08-27)
+
+| antiga | canónica |
+|---|---|
+| `GET /session/qr` | `GET /session/pair/qr` |
+| `POST /session/pairphone` | `POST /session/pair/phone` |
+
+As duas rotas de pareamento (QR e telefone) passam a viver sob `/session/pair/`
+— relação explícita em vez de dois nomes soltos que só a documentação
+associava.
+
+**Consolidação das cinco rotas de descarga.** As cinco `/chat/download{tipo}`
+que a F269 tinha pluralizado (`/chats/downloadimage` etc., forma
+intermédia já retirada no mesmo dia) foram substituídas por
+`POST /chats/download/{kind}`, com o `kind` (`image`, `video`, `audio`,
+`document`, `sticker`) na RELAÇÃO do caminho em vez de colado ao nome. A
+pluralização sozinha não bastava: `downloadimage` continuava a violar a
+regra 2 de `api/openapi/CAMINHOS-CANONICOS.md` (verbo colado ao tipo). Corpo
+igual (`PedidoDescargaDeMidia`, sem `Kind`); um `Kind` no corpo, se vier, não
+sobrescreve o `{kind}` do caminho.
+
+**As CINCO formas originais, singulares (`/chat/downloadimage` etc.), foram
+REMOVIDAS em 2026-08-27** (HOUSEKEEP.md F297) — não só do contrato, do
+serviço também. A decisão inicial do CAP-10 tinha sido mantê-las a
+responder, mesma política de coexistência permanente do resto desta tabela;
+essa política foi **revertida só para esta família**, por instrução
+explícita de corte-limpo ("hard cutover"): não havia consumidores reais a
+proteger antes do lançamento. As cinco devolvem `404`. O gate de cobertura
+(`openapi_coverage_test.go`, `caminhos_canonicos_test.go`) já não precisa de
+exceção para elas — deixaram de aparecer em `Routes(Deps{})`.
 
 ---
 
@@ -796,6 +841,12 @@ telemóvel (F240).
 com o CAP-54 responde `200`.
 
 ### chat — descarga de média (5)
+
+**Nota (2026-08-27, HOUSEKEEP.md F297)**: as cinco rotas medidas abaixo foram
+removidas do serviço — a medição fica como evidência histórica de que a
+lógica de descarga por-kind funcionava, herdada integralmente por
+`POST /chats/download/{kind}` (mesmos use cases, ver
+`download_media_unified.go`), não como prova de rota ainda viva.
 
 Todas ✅. O corpo é o descritor de média, tirado do `data_json` da mensagem em
 `GET /chat/history` (campos `URL`, `directPath`, `mediaKey`, `mimetype`,
@@ -912,14 +963,14 @@ F260 do HOUSEKEEP foi corrigida por causa disto.
 | `POST /newsletter/subscribe` | ✅ | `{"jid":"1203…@newsletter"}` |
 | `POST /newsletter/mute` | ✅ | `{"jid":"1203…@newsletter","mute":true}` |
 | `POST /newsletter/messages` | ✅ | `{"jid":"1203…@newsletter","count":5}` |
-| `POST /newsletter/mark-viewed` | 🟡 | `{"jid":"1203…@newsletter","serverIDs":[1]}` |
-| `POST /newsletter/react` | 🟡 | `{"jid":"1203…@newsletter","serverID":1,"reaction":"👍"}` |
-| `POST /newsletter/admin-invite` | ✅ | `{"jid":"1203…@newsletter","userJID":"90937376170214@lid"}` |
+| `POST /newsletter/mark-viewed` | 🟡 | `{"jid":"1203…@newsletter","server_ids":[1]}` |
+| `POST /newsletter/react` | 🟡 | `{"jid":"1203…@newsletter","server_id":1,"reaction":"👍"}` |
+| `POST /newsletter/admin-invite` | ✅ | `{"jid":"1203…@newsletter","user_jid":"90937376170214@lid"}` |
 | `POST /newsletter/admin-invite/accept` | ✅ | `{"jid":"1203…@newsletter"}` |
-| `POST /newsletter/admin-invite/revoke` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
-| `POST /newsletter/change-owner` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
-| `POST /newsletter/demote` | ✅ | `{"jid":"1203…@newsletter","userJID":"…@lid"}` |
-| `DELETE /newsletter/delete` | ✅ | `{"jid":"1203…@newsletter","confirmJID":"1203…@newsletter"}` |
+| `POST /newsletter/admin-invite/revoke` | ✅ | `{"jid":"1203…@newsletter","user_jid":"…@lid"}` |
+| `POST /newsletter/change-owner` | ✅ | `{"jid":"1203…@newsletter","user_jid":"…@lid"}` |
+| `POST /newsletter/demote` | ✅ | `{"jid":"1203…@newsletter","user_jid":"…@lid"}` |
+| `DELETE /newsletter/delete` | ✅ | `{"jid":"1203…@newsletter","confirm_jid":"1203…@newsletter"}` |
 | `POST /newsletter/updates` | ❌ | `{"jid":"1203…@newsletter","count":5}` → **`500` ao fim de 30 s**, `context deadline exceeded`. Ver HOUSEKEEP F265. |
 
 **A cadeia de administração de canal está fechada** (F233), e é a única forma
@@ -930,7 +981,7 @@ create → admin-invite → admin-invite/accept → change-owner → demote → 
  owner      (convite)        role=admin         role=owner    subscriber  non_existing
 ```
 
-O `userJID` pode ir em PN ou LID — a resolução PN→LID é feita antes do envio
+O `user_jid` pode ir em PN ou LID — a resolução PN→LID é feita antes do envio
 (F233c).
 
 ### user — 16 rotas
@@ -995,7 +1046,7 @@ destinatários). Detalhe em HOUSEKEEP F256.
 | `POST/DELETE /hmac/config`, `/hmac/configure` | ⬜ | idem |
 | `POST /session/history` | ⬜ | idem |
 | `POST /admin/users`, `PUT /admin/users/{id}`, `DELETE /admin/users/{id}`, `DELETE /admin/users/{id}/full` | ⬜ | cria/apaga utilizadores |
-| `GET /session/connect`, `/session/disconnect`, `POST /session/logout`, `/session/pairphone` | ⬜ | derrubaria as sessões vivas |
+| `GET /session/connect`, `/session/disconnect`, `POST /session/logout`, `/session/pair/phone` | ⬜ | derrubaria as sessões vivas |
 | `POST /proxy/set`, `POST /session/proxy` | ⬜ | mudaria a rede da sessão |
 | `GET /session/ws` | ⬜ | WebSocket, fora do alcance de `curl` |
 | `POST /call/reject` | ⬜ | exige chamada a entrar |
@@ -1046,13 +1097,13 @@ cliente que leia `error.code` parte aqui.
 
 ### `DELETE /newsletter/delete` — irreversível
 
-Exige `confirmJID` **igual** ao `jid` do canal. Sem ele, ou com valor
+Exige `confirm_jid` **igual** ao `jid` do canal. Sem ele, ou com valor
 diferente, devolve `400 missing_confirm_jid` e **não contacta o WhatsApp**.
 
 ```bash
 curl -X DELETE http://localhost:8080/newsletter/delete \
   -H 'token: <TOKEN>' -H 'Content-Type: application/json' \
-  -d '{"jid":"1203…@newsletter","confirmJID":"1203…@newsletter"}'
+  -d '{"jid":"1203…@newsletter","confirm_jid":"1203…@newsletter"}'
 ```
 
 Só o dono pode apagar. Depois de apagado:

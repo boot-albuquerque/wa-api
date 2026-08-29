@@ -28,31 +28,35 @@ type CommunityDirectoryGetLinkedGroupsParticipantsCall struct {
 type CommunityDirectory struct {
 	SessionGuard
 
-	GetSubGroupsFunc  func(ctx context.Context, txtID string, community domain.JID) (any, error)
+	GetSubGroupsFunc  func(ctx context.Context, txtID string, community domain.JID) ([]domain.CommunitySubGroup, error)
 	GetSubGroupsCalls []CommunityDirectoryGetSubGroupsCall
 
-	GetLinkedGroupsParticipantsFunc  func(ctx context.Context, txtID string, community domain.JID) (any, error)
+	GetLinkedGroupsParticipantsFunc  func(ctx context.Context, txtID string, community domain.JID) ([]domain.JID, error)
 	GetLinkedGroupsParticipantsCalls []CommunityDirectoryGetLinkedGroupsParticipantsCall
 }
 
 var _ port.CommunityDirectory = (*CommunityDirectory)(nil)
 
 // GetSubGroups implements port.CommunityDirectory.
-func (f *CommunityDirectory) GetSubGroups(ctx context.Context, txtID string, community domain.JID) (any, error) {
+func (f *CommunityDirectory) GetSubGroups(ctx context.Context, txtID string, community domain.JID) ([]domain.CommunitySubGroup, error) {
 	f.GetSubGroupsCalls = append(f.GetSubGroupsCalls, CommunityDirectoryGetSubGroupsCall{Ctx: ctx, TxtID: txtID, Community: community})
 	if f.GetSubGroupsFunc != nil {
 		return f.GetSubGroupsFunc(ctx, txtID, community)
 	}
-	return nil, nil
+	// Empty and NON-nil, because that is what the real adapter returns for a
+	// community with no children. A double that answered nil would be more
+	// permissive than production and would bless a nil check nobody needs
+	// (ARMADILHAS #1).
+	return []domain.CommunitySubGroup{}, nil
 }
 
 // GetLinkedGroupsParticipants implements port.CommunityDirectory.
-func (f *CommunityDirectory) GetLinkedGroupsParticipants(ctx context.Context, txtID string, community domain.JID) (any, error) {
+func (f *CommunityDirectory) GetLinkedGroupsParticipants(ctx context.Context, txtID string, community domain.JID) ([]domain.JID, error) {
 	f.GetLinkedGroupsParticipantsCalls = append(f.GetLinkedGroupsParticipantsCalls, CommunityDirectoryGetLinkedGroupsParticipantsCall{Ctx: ctx, TxtID: txtID, Community: community})
 	if f.GetLinkedGroupsParticipantsFunc != nil {
 		return f.GetLinkedGroupsParticipantsFunc(ctx, txtID, community)
 	}
-	return nil, nil
+	return []domain.JID{}, nil
 }
 
 // --- CommunityLifecycle --------------------------------------------------

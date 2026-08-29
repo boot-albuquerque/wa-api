@@ -17,11 +17,11 @@ func TestGetPrivacySettingsUseCase_Execute(t *testing.T) {
 	tests := []struct {
 		name     string
 		session  error
-		getFunc  func(ctx context.Context, txtID string) (any, error)
+		getFunc  func(ctx context.Context, txtID string) (domain.PrivacySettings, error)
 		wantErr  bool
 		wantIs   error
 		wantLog  string
-		wantData string
+		wantData domain.PrivacySettings
 	}{
 		{
 			name:    "sem sessão",
@@ -30,16 +30,20 @@ func TestGetPrivacySettingsUseCase_Execute(t *testing.T) {
 			wantIs:  errNoSession,
 		},
 		{
-			name:    "falha do adapter é embrulhada e logada",
-			getFunc: func(context.Context, string) (any, error) { return nil, boom },
+			name: "falha do adapter é embrulhada e logada",
+			getFunc: func(context.Context, string) (domain.PrivacySettings, error) {
+				return domain.PrivacySettings{}, boom
+			},
 			wantErr: true,
 			wantIs:  boom,
 			wantLog: "failed to get privacy settings",
 		},
 		{
-			name:     "configurações devolvidas como vieram",
-			getFunc:  func(context.Context, string) (any, error) { return "settings", nil },
-			wantData: "settings",
+			name: "configurações devolvidas como vieram",
+			getFunc: func(context.Context, string) (domain.PrivacySettings, error) {
+				return domain.PrivacySettings{LastSeen: "contacts"}, nil
+			},
+			wantData: domain.PrivacySettings{LastSeen: "contacts"},
 		},
 	}
 
@@ -84,7 +88,7 @@ func TestSetPrivacySettingUseCase_Execute(t *testing.T) {
 		name     string
 		session  error
 		req      domain.SetPrivacySettingRequest
-		setFunc  func(ctx context.Context, txtID, name, value string) (any, error)
+		setFunc  func(ctx context.Context, txtID, name, value string) (domain.PrivacySettings, error)
 		wantErr  bool
 		wantIs   error
 		wantCall bool
@@ -107,17 +111,21 @@ func TestSetPrivacySettingUseCase_Execute(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:     "falha do adapter é embrulhada",
-			req:      domain.SetPrivacySettingRequest{PrivacySetting: "online", Value: "match_last_seen"},
-			setFunc:  func(context.Context, string, string, string) (any, error) { return nil, boom },
+			name: "falha do adapter é embrulhada",
+			req:  domain.SetPrivacySettingRequest{PrivacySetting: "online", Value: "match_last_seen"},
+			setFunc: func(context.Context, string, string, string) (domain.PrivacySettings, error) {
+				return domain.PrivacySettings{}, boom
+			},
 			wantErr:  true,
 			wantIs:   boom,
 			wantCall: true,
 		},
 		{
-			name:     "configuração aplicada",
-			req:      domain.SetPrivacySettingRequest{PrivacySetting: "groupadd", Value: "contacts"},
-			setFunc:  func(context.Context, string, string, string) (any, error) { return "ok", nil },
+			name: "configuração aplicada",
+			req:  domain.SetPrivacySettingRequest{PrivacySetting: "groupadd", Value: "contacts"},
+			setFunc: func(context.Context, string, string, string) (domain.PrivacySettings, error) {
+				return domain.PrivacySettings{GroupAdd: "contacts"}, nil
+			},
 			wantCall: true,
 		},
 	}
@@ -151,8 +159,10 @@ func TestSetPrivacySettingUseCase_Execute(t *testing.T) {
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
-			if got != "ok" {
-				t.Errorf("resultado = %v, queria ok", got)
+			// The port answers with the RESULTING state of every setting, not
+			// only the one that changed — so the assertion is on that state.
+			if got.GroupAdd != "contacts" {
+				t.Errorf("resultado = %+v, queria groupadd=contacts", got)
 			}
 			call := pm.SetPrivacySettingCalls[0]
 			if call.Name != tt.req.PrivacySetting || call.Value != tt.req.Value {

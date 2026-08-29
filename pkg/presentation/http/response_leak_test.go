@@ -41,29 +41,34 @@ var segredosQueNuncaPodemSair = []string{
 
 func TestRespondJSONNaoVazaDetalheDeErroInterno(t *testing.T) {
 	casos := []struct {
-		nome   string
-		status int
-		err    error
+		nome     string
+		status   int
+		err      error
+		wantCode string
 	}{
 		{
-			nome:   "panic de runtime, como reportPanic o entrega",
-			status: http.StatusInternalServerError,
-			err:    fmt.Errorf("panic: %v", "runtime error: invalid memory address or nil pointer dereference"),
+			nome:     "panic de runtime, como reportPanic o entrega",
+			status:   http.StatusInternalServerError,
+			err:      fmt.Errorf("panic: %v", "runtime error: invalid memory address or nil pointer dereference"),
+			wantCode: "internal_error",
 		},
 		{
-			nome:   "erro com caminho de ficheiro do servidor",
-			status: http.StatusInternalServerError,
-			err:    errors.New("open /Users/operador/wa-live-data/dbdata/main.db: permission denied"),
+			nome:     "erro com caminho de ficheiro do servidor",
+			status:   http.StatusInternalServerError,
+			err:      errors.New("open /Users/operador/wa-live-data/dbdata/main.db: permission denied"),
+			wantCode: "internal_error",
 		},
 		{
-			nome:   "erro com consulta SQL",
-			status: http.StatusInternalServerError,
-			err:    errors.New(`pq: syntax error at or near "SELECT token FROM users WHERE id=$1"`),
+			nome:     "erro com consulta SQL",
+			status:   http.StatusInternalServerError,
+			err:      errors.New(`pq: syntax error at or near "SELECT token FROM users WHERE id=$1"`),
+			wantCode: "internal_error",
 		},
 		{
-			nome:   "erro com segredo embutido",
-			status: http.StatusBadGateway,
-			err:    errors.New("dial failed: proxy socks5://utilizador:segredo@interno:1080"),
+			nome:     "erro com segredo embutido",
+			status:   http.StatusBadGateway,
+			err:      errors.New("dial failed: proxy socks5://utilizador:segredo@interno:1080"),
+			wantCode: "bad_gateway",
 		},
 	}
 
@@ -86,9 +91,18 @@ func TestRespondJSONNaoVazaDetalheDeErroInterno(t *testing.T) {
 			if envelope["success"] != false {
 				t.Errorf("success = %v, esperado false", envelope["success"])
 			}
-			// O texto que sobra tem de ser o genérico do status, e nada mais.
-			if got, want := envelope["error"], strings.ToLower(http.StatusText(caso.status)); got != want {
-				t.Errorf("error = %q, esperado o texto genérico %q", got, want)
+			// O que sobra tem de ser o objecto genérico do status, e nada
+			// mais. Objecto e nunca texto: `error` é SEMPRE
+			// {"code": ..., "message": ...} — ver RespondJSON.
+			erro, ok := envelope["error"].(map[string]any)
+			if !ok {
+				t.Fatalf("error = %#v, esperado um objecto {code, message}", envelope["error"])
+			}
+			if got := erro["code"]; got != caso.wantCode {
+				t.Errorf("error.code = %v, esperado %q", got, caso.wantCode)
+			}
+			if msg, _ := erro["message"].(string); msg == "" {
+				t.Errorf("error.message vazia: um erro sem mensagem legível não é um erro utilizável")
 			}
 		})
 	}

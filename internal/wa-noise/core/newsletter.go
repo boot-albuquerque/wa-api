@@ -140,10 +140,16 @@ func (cli *Client) NewsletterDelete(ctx context.Context, channelJID types.JID) e
 	return newsletter.Delete(ctx, cli.newsletterT(), channelJID)
 }
 
+// NewsletterAdminInvite is the server's answer to an admin-invite creation:
+// the invite's own ID and how long it is valid for. F261. Alias, not a
+// copy: the parsing lives in newsletter.AdminInvite, where the rest of this
+// capability's response parsing already lives.
+type NewsletterAdminInvite = newsletter.AdminInvite
+
 // NewsletterCreateAdminInvite creates an admin invite for a channel.
-func (cli *Client) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) error {
+func (cli *Client) NewsletterCreateAdminInvite(ctx context.Context, channelJID, userJID types.JID) (NewsletterAdminInvite, error) {
 	if cli == nil {
-		return ErrClientIsNil
+		return NewsletterAdminInvite{}, ErrClientIsNil
 	}
 	return newsletter.CreateAdminInvite(ctx, cli.newsletterT(), channelJID, userJID)
 }

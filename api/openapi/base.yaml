@@ -101,7 +101,7 @@ info:
     ## O marcador no título de cada endpoint
 
     Cada título começa com um símbolo que diz **quanta prova existe de que
-    aquela rota funciona** — não o quão bem está documentada. As 141 estão
+    aquela rota funciona** — não o quão bem está documentada. As 139 estão
     documentadas; o que varia é o que foi medido.
 
     | | significa |
@@ -111,12 +111,16 @@ info:
     | ❌ | chamada real que **falhou**; o erro medido está na descrição da rota |
     | ⬜ | **não executada**, e a descrição diz porquê |
 
-    Medição de 2026-08-26, com duas sessões reais: **98 ✅, 8 🟡, 3 ❌, 32 ⬜**.
-
-    As 32 por testar não são esquecimento: escreveriam configuração de uma
-    sessão em uso, derrubariam sessões vivas, criariam ou apagariam contas, ou
-    alterariam o perfil. O detalhe rota a rota está em
-    `docs/OPENAPI-EVIDENCIAS.md`.
+    Medição de 2026-08-28, com as sessões reais `envia`/`recebe`: **135 ✅,
+    2 🟡, 0 ❌, 2 ⬜**. As 2 por testar e os 0 que falham fecham a
+    campanha — os quatro `❌` medidos ao longo do projeto foram todos
+    corrigidos nesta sessão (F275, F264, F265), e dois dos seis 🟡 também
+    (`status/set/video`/`status/set/audio`, F358). Os 2 🟡 que restam têm
+    causa determinada (não são "nunca medidos"): o detalhe rota a rota
+    está em `docs/OPENAPI-EVIDENCIAS.md`. As 2 `⬜` (`GET /admin/capabilities`,
+    `GET /session/capabilities`) chegaram via fusão com
+    `feature/wa-noise` (2026-08-28), depois desta campanha ter fechado —
+    testadas por rota registada com SQLite real, não contra servidor vivo.
 
     **Um 🟡 não é um ✅ mais fraco por descuido** — é a recusa deliberada de
     chamar confirmado aquilo que só devolveu `2xx`.
@@ -301,12 +305,16 @@ components:
           type: object
           nullable: false
           description: |
-            **Sempre presente** num corpo de erro produzido pela taxonomia
-            `apperr`. Nunca `null`, nunca `{}`.
+            **Sempre presente, e sempre um objecto** — em TODO corpo de erro,
+            em TODO estado HTTP, tenha o erro passado ou não pela taxonomia
+            `apperr`. Nunca `null`, nunca `{}`, nunca uma string.
 
-            Repare que existe uma segunda forma em que este campo é uma
-            **string** e não um objecto — ver `ErroTextoSimples`. Um cliente
-            que leia `error.code` sem verificar o tipo parte nessas rotas.
+            Houve uma segunda forma, com `error` em texto simples, para os
+            erros que não passavam pela taxonomia (F266). Ela FOI REMOVIDA: o
+            que não tem código próprio recebe agora o código genérico do
+            estado (`invalid_request`, `unauthorized`, `not_found`,
+            `internal_error`, ...). Ramificar sobre `error.code` é seguro em
+            qualquer resposta.
           required: [code, message]
           properties:
             code:
@@ -319,50 +327,13 @@ components:
             message:
               nullable: false
               type: string
-              description: Descrição legível, segura para mostrar ao utilizador.
+              description: |
+                Descrição legível em pt-BR, segura para mostrar ao utilizador.
+                Nunca traz detalhe interno — caminho de ficheiro, consulta SQL
+                ou valor de `panic` são descartados por `RespondJSON` e ficam
+                só no log. Travado por
+                `TestRespondJSONNaoVazaDetalheDeErroInterno`.
               example: missing chat in payload
-
-    ErroTextoSimples:
-      type: object
-      description: |
-        Forma ANTIGA de erro, com `error` em texto simples em vez do objecto.
-        Sobrevive em catorze pontos do código — sobretudo nas recusas de campo
-        obrigatório das rotas de grupo (`rejectMissingField`). Registado como
-        F266 no `HOUSEKEEP.md`. Um cliente que leia `error.code` parte aqui.
-      required: [code, error, success]
-      properties:
-        code:
-          nullable: false
-          type: integer
-          description: Estado HTTP, repetido no corpo. **Sempre presente.**
-          example: 400
-        error:
-          type: string
-          nullable: false
-          description: |
-            **Texto genérico do estado HTTP**, em minúsculas — `bad request`,
-            `unauthorized`, `internal server error`. **Sempre presente.**
-
-            Ao contrário da forma canónica, aqui `error` é uma **string** e não
-            um objecto: não há `error.code` nem `error.message`. É o resultado
-            de o erro não ter passado pela taxonomia `apperr` (F266).
-
-            O texto **nunca** traz detalhe interno: `RespondJSON` descarta a
-            mensagem do erro original e devolve só o texto do estado, o que
-            impede fuga de caminho de ficheiro, consulta SQL ou valor de
-            `panic`. Travado por `TestRespondJSONNaoVazaDetalheDeErroInterno`.
-          example: bad request
-        success:
-          nullable: false
-          type: boolean
-          enum: [false]
-          description: |
-            **Sempre presente e sempre `false`.** Campo legado — a forma
-            correcta de detectar erro é o estado HTTP.
-
-            Valor fora do enum não ocorre: é escrito pelo servidor, não lido
-            do pedido.
-          example: false
 
     ResultadoEnvio:
       type: object
@@ -393,7 +364,7 @@ components:
       type: object
       description: Confirmação textual de uma operação sem carga útil própria.
       properties:
-        Details:
+        details:
           nullable: true
           type: string
           description: |
@@ -448,19 +419,19 @@ components:
     ContextoResposta:
       type: object
       description: Citação — faz a mensagem enviada aparecer como resposta a outra.
-      required: [StanzaId, Participant]
+      required: [stanza_id, participant]
       properties:
-        StanzaId:
+        stanza_id:
           nullable: false
           type: string
           description: "`message_id` da mensagem citada."
           example: 3EB0A4B2AFD45E625C0917
-        Participant:
+        participant:
           nullable: false
           type: string
           description: JID de quem escreveu a mensagem citada.
           example: 554192421234@s.whatsapp.net
-        QuotedText:
+        quoted_text:
           nullable: false
           type: string
           description: Texto da mensagem citada, para o cliente desenhar a pré-visualização.
@@ -578,6 +549,28 @@ components:
               message: WhatsApp refused this request; repeating it unchanged will not help
             success: false
 
+    LimiteDeRitmo:
+      description: |
+        O WhatsApp está a limitar o ritmo desta sessão e recusou o pedido com
+        `429` (ou `419`, que o servidor também usa para o mesmo efeito). Não é
+        protecção própria deste servidor — é o relais do estrangulamento feito
+        pelo WhatsApp.
+
+        **É a única categoria de erro que o cliente deve repetir, sem alterar
+        o pedido**, depois de esperar. Todas as outras (`400`, `401`, `403`,
+        `404`, `409`, `422`) dizem "o pedido não vai funcionar assim"; esta diz
+        "tenta outra vez mais tarde".
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Erro'
+          example:
+            code: 429
+            error:
+              code: upstream_rate_limited
+              message: WhatsApp is rate limiting this session; retry later
+            success: false
+
     ErroInterno:
       description: |
         Falha não classificada, ou tempo esgotado à espera do WhatsApp (o
@@ -599,8 +592,10 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErroTextoSimples'
+            $ref: '#/components/schemas/Erro'
           example:
             code: 500
-            error: internal server error
+            error:
+              code: internal_error
+              message: Ocorreu um erro interno.
             success: false

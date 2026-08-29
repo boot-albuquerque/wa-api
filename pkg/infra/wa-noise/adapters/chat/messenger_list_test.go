@@ -89,7 +89,7 @@ func TestChatMessengerAdapter_SendList_Wrapper(t *testing.T) {
 	sent, _ := sendListCapturing(t, domain.ListPayload{
 		Body:       "Escolha",
 		ButtonText: "Select",
-		Sections:   []domain.ListSection{{Title: "Sec", Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
+		Sections:   []domain.ListSection{{Title: "Sec", Rows: []domain.ListRow{{Title: "Item", RowID: "item-1"}}}},
 	}, nil, "")
 
 	if sent.GetViewOnceMessage() != nil {
@@ -108,7 +108,7 @@ func TestChatMessengerAdapter_SendList_ListTypeIsSingleSelect(t *testing.T) {
 	sent, _ := sendListCapturing(t, domain.ListPayload{
 		Body:       "Escolha",
 		ButtonText: "Select",
-		Sections:   []domain.ListSection{{Title: "Sec", Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
+		Sections:   []domain.ListSection{{Title: "Sec", Rows: []domain.ListRow{{Title: "Item", RowID: "item-1"}}}},
 	}, nil, "")
 
 	lm := listMessage(t, sent)
@@ -127,10 +127,10 @@ func TestChatMessengerAdapter_SendList_SectionsAndRowsTranslated(t *testing.T) {
 		Footer:     "Rodape",
 		Sections: []domain.ListSection{
 			{Title: "Primeira", Rows: []domain.ListRow{
-				{Title: "Item A", Description: "desc A", RowId: "id-a"},
-				{Title: "Item B", RowId: "id-b"},
+				{Title: "Item A", Description: "desc A", RowID: "id-a"},
+				{Title: "Item B", RowID: "id-b"},
 			}},
-			{Title: "Segunda", Rows: []domain.ListRow{{Title: "Item C", RowId: "id-c"}}},
+			{Title: "Segunda", Rows: []domain.ListRow{{Title: "Item C", RowID: "id-c"}}},
 		},
 	}, nil, "")
 
@@ -177,7 +177,7 @@ func TestChatMessengerAdapter_SendList_TitleAndFooterAreOptional(t *testing.T) {
 	sent, _ := sendListCapturing(t, domain.ListPayload{
 		Body:       "Escolha",
 		ButtonText: "Select",
-		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
+		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowID: "item-1"}}}},
 	}, nil, "")
 
 	lm := listMessage(t, sent)
@@ -199,7 +199,7 @@ func TestChatMessengerAdapter_SendList_BizNodeIsAlwaysSent(t *testing.T) {
 	_, extra := sendListCapturing(t, domain.ListPayload{
 		Body:       "Escolha",
 		ButtonText: "Select",
-		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
+		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowID: "item-1"}}}},
 	}, nil, "")
 
 	if len(extra) != 1 {
@@ -231,7 +231,7 @@ func TestChatMessengerAdapter_SendList_CallerIDIsForwarded(t *testing.T) {
 	payload := domain.ListPayload{
 		Body:       "Escolha",
 		ButtonText: "Select",
-		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
+		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowID: "item-1"}}}},
 	}
 
 	_, comID := sendListCapturing(t, payload, nil, "id-do-cliente")
@@ -264,7 +264,7 @@ func TestChatMessengerAdapter_SendList_ResultComesFromTheWire(t *testing.T) {
 	got, err := listAdapter(f).SendList(context.Background(), "u1", listChatJID, domain.ListPayload{
 		Body:       "Escolha",
 		ButtonText: "Select",
-		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowId: "item-1"}}}},
+		Sections:   []domain.ListSection{{Rows: []domain.ListRow{{Title: "Item", RowID: "item-1"}}}},
 	}, nil, nil, "id-do-cliente")
 	if err != nil {
 		t.Fatalf("SendList: %v", err)

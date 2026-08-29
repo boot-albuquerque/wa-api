@@ -5,44 +5,105 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"wa-api/pkg/domain/apperr"
 
 	"github.com/rs/zerolog/log"
 )
 
-// RespondJSON escreve uma resposta JSON com envelope compatível com s.Respond() do upstream.
-// Formato: {"code": <statusCode>, "data": <data>, "success": true} em caso
-// de sucesso, ou {"code": <statusCode>, "error": <erro>, "success": false}
-// em caso de erro (ADR-002).
+// Canonical error codes for responses that have no apperr taxonomy behind
+// them. They are snake_case because every key and every enumerated value on
+// this API's wire is snake_case (docs/HTTP-DTO-CONVENTIONS.md).
+const (
+	codeInvalidRequest      = "invalid_request"
+	codeUnauthorized        = "unauthorized"
+	codeForbidden           = "forbidden"
+	codeNotFound            = "not_found"
+	codeMethodNotAllowed    = "method_not_allowed"
+	codeConflict            = "conflict"
+	codeUnprocessableEntity = "unprocessable_entity"
+	codeRateLimited         = "rate_limited"
+	codeNotImplemented      = "not_implemented"
+	codeBadGateway          = "bad_gateway"
+	codeServiceUnavailable  = "service_unavailable"
+	codeGatewayTimeout      = "gateway_timeout"
+	codeInternalError       = "internal_error"
+)
+
+// ErrorBody is the shape of the `error` key. ALWAYS an object, for every
+// status and for every kind of error — typed or not.
 //
-// Quando err é um *apperr.AppError, o statusCode passado é IGNORADO e o
-// status real é derivado de err.Category.HTTPStatus() — a taxonomia da
-// Fase 3 tem prioridade sobre o que o call site escreveu, porque é o call
-// site que historicamente errou (ex: handler_message.go passando
-// StatusInternalServerError para qualquer erro de use case). "error" vira
-// um objeto {"code": <apperr.Code>, "message": <apperr.Message>} — o
-// error.code estável e legível por máquina que o ADR-002 pede, vindo da
-// taxonomia. err.Message é seguro para retornar ao cliente por construção
-// (ver pkg/domain/apperr).
+// It is a declared type and not a map so that the shape is checked at compile
+// time: a call site cannot forget `code`, and cannot invent a third key.
+type ErrorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// genericError maps a status code to the safe, canonical error body served
+// when no apperr.AppError reached the boundary.
 //
-// Quando err é não-tipado (ou nil), o statusCode passado prevalece, e
-// "error" continua sendo a string genérica http.StatusText(statusCode) em
-// minúsculas ("unauthorized", "bad request", "internal server error", ...)
-// — nunca err.Error(), para que nenhum detalhe interno ou PII trafegue
-// para o cliente. Usecases e handlers que precisam de detalhes devem
-// logar internamente via appport.Logger.
+// The message is pt-BR because it is written for the human reading a failed
+// request; the code is what a client branches on.
+func genericError(statusCode int) ErrorBody {
+	switch statusCode {
+	case http.StatusBadRequest:
+		return ErrorBody{codeInvalidRequest, "Requisição inválida."}
+	case http.StatusUnauthorized:
+		return ErrorBody{codeUnauthorized, "Credenciais ausentes ou inválidas."}
+	case http.StatusForbidden:
+		return ErrorBody{codeForbidden, "Operação não permitida."}
+	case http.StatusNotFound:
+		return ErrorBody{codeNotFound, "Recurso não encontrado."}
+	case http.StatusMethodNotAllowed:
+		// Added when the router's own 405 branch stopped answering in plain
+		// text. Without this case the branch below would answer 405 with
+		// {"code":"internal_error"}, which reads as "we broke" for a request
+		// whose only fault is the verb.
+		return ErrorBody{codeMethodNotAllowed, "Método HTTP não permitido para este recurso."}
+	case http.StatusConflict:
+		return ErrorBody{codeConflict, "A requisição não pode ser atendida no estado atual."}
+	case http.StatusUnprocessableEntity:
+		return ErrorBody{codeUnprocessableEntity, "A requisição foi recusada pelo destino."}
+	case http.StatusTooManyRequests:
+		return ErrorBody{codeRateLimited, "Limite de requisições excedido."}
+	case http.StatusNotImplemented:
+		return ErrorBody{codeNotImplemented, "Recurso não disponível nesta configuração."}
+	case http.StatusBadGateway:
+		return ErrorBody{codeBadGateway, "Falha ao contactar um serviço externo."}
+	case http.StatusServiceUnavailable:
+		return ErrorBody{codeServiceUnavailable, "Serviço temporariamente indisponível."}
+	case http.StatusGatewayTimeout:
+		return ErrorBody{codeGatewayTimeout, "Tempo esgotado ao contactar um serviço externo."}
+	default:
+		// Includes 500 and any status this function does not enumerate. The
+		// fallback is deliberately the most conservative body: a status we did
+		// not plan for is, by definition, a case we cannot describe safely.
+		return ErrorBody{codeInternalError, "Ocorreu um erro interno."}
+	}
+}
+
+// RespondJSON escreve a resposta JSON no envelope canónico da API.
 //
-// O campo "success" é a janela de depreciação do ADR-002: o envelope
-// legado de middleware/auth.go (retirado nesta mesma fase) emitia
-// "success" em ambos os ramos, e por uma release este envelope continua
-// emitindo o mesmo campo — sem isso, um consumidor das 4 rotas /webhook
-// que checa `success === false` para detectar erro (o caminho de sucesso
-// dessas rotas não tem golden, então essa classe de consumidor não seria
-// pega por nenhum teste) passaria a ler `undefined`, que é falsy, e
-// trataria erro como sucesso silenciosamente. Remover "success" é
-// follow-up nomeado do ADR-002, não parte desta fase.
+//	sucesso: {"success": true,  "code": <status>, "data":  <data>}
+//	erro:    {"success": false, "code": <status>, "error": {"code": ..., "message": ...}}
+//
+// O envelope é PERMANENTE, não uma janela de depreciação. `success` é o campo
+// pelo qual os clientes distinguem os dois ramos sem ler o status, e `error` é
+// SEMPRE um objecto — nunca texto — para que ramificar sobre `error.code` seja
+// possível em todos os status, tipados ou não.
+//
+// Quando err é um *apperr.AppError, o statusCode passado é IGNORADO e o status
+// real vem de err.Category.HTTPStatus(): é o call site que historicamente
+// errou (handlers passando 500 para qualquer erro de use case), não a
+// taxonomia. err.Message é seguro para devolver por construção — ver
+// pkg/domain/apperr.
+//
+// Quando err é não-tipado, o statusCode prevalece e o corpo vem de
+// genericError(statusCode). NUNCA err.Error(): este ramo apanha também o que
+// `reportPanic` entrega, que é o valor cru do panic — endereços, tipos
+// internos e, num panic com dado do pedido, o próprio dado. O erro completo já
+// foi para o log, que é onde ele serve.
 func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}, err error) {
 	envelope := make(map[string]interface{})
 
@@ -50,25 +111,14 @@ func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}, err er
 		var appErr *apperr.AppError
 		if errors.As(err, &appErr) {
 			statusCode = appErr.Category.HTTPStatus()
-			envelope["code"] = statusCode
-			envelope["error"] = map[string]interface{}{
-				"code":    appErr.Code,
-				"message": appErr.Message,
-			}
+			envelope["error"] = ErrorBody{Code: appErr.Code, Message: appErr.Message}
 		} else {
-			// NUNCA `err.Error()` aqui. Este ramo apanha tudo o que não passou
-			// pela taxonomia — incluindo o que `reportPanic` entrega, que é o
-			// valor cru do panic. Esse valor traz endereços, tipos internos e,
-			// num panic com dado do pedido, o próprio dado. O texto genérico
-			// do status é a única coisa que pode sair; o erro completo já foi
-			// para o log, que é onde ele serve.
-			//
 			// Travado por TestRespondJSONNaoVazaDetalheDeErroInterno, com par
-			// de controlo — segurança que apaga a informação legítima das
+			// de controlo — segurança que apagasse a informação legítima das
 			// recusas de validação não seria segurança, seria cegueira.
-			envelope["code"] = statusCode
-			envelope["error"] = genericErrorMessage(statusCode)
+			envelope["error"] = genericError(statusCode)
 		}
+		envelope["code"] = statusCode
 		envelope["success"] = false
 	} else {
 		envelope["code"] = statusCode
@@ -90,22 +140,11 @@ func RespondJSON(w http.ResponseWriter, statusCode int, data interface{}, err er
 			Bool("had_error", err != nil).
 			Msg("failed to marshal JSON response envelope; falling back to generic body")
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"code":500,"error":"internal server error"}`))
+		_, _ = w.Write([]byte(`{"code":500,"error":{"code":"internal_error","message":"Ocorreu um erro interno."},"success":false}`))
 		return
 	}
 	_, _ = w.Write(respBytes)
 	_, _ = w.Write([]byte("\n"))
-}
-
-// genericErrorMessage returns the safe, generic error text for a status
-// code that has no apperr taxonomy behind it — http.StatusText lowercased
-// ("unauthorized", "bad request", ...), falling back to "internal server
-// error" for a status code net/http doesn't recognize.
-func genericErrorMessage(statusCode int) string {
-	if text := http.StatusText(statusCode); text != "" {
-		return strings.ToLower(text)
-	}
-	return "internal server error"
 }
 
 // Find searches for a value in a string slice.

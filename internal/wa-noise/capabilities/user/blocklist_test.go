@@ -127,7 +127,7 @@ func TestUpdateBlocklistBuildsTheIQAndParses(t *testing.T) {
 		waBinary.Node{Tag: "item", Attrs: waBinary.Attrs{"jid": userTestPNJID}},
 	)}
 
-	got, err := UpdateBlocklist(t.Context(), f, userTestPNJID, events.BlocklistChangeActionBlock)
+	got, err := UpdateBlocklist(t.Context(), f, userTestLIDJID, userTestPNJID, events.BlocklistChangeActionBlock)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -139,9 +139,67 @@ func TestUpdateBlocklistBuildsTheIQAndParses(t *testing.T) {
 		t.Errorf("envelope = %+v", iq)
 	}
 	item := iq.Content.([]waBinary.Node)[0]
-	if item.Tag != "item" || item.Attrs["jid"] != userTestPNJID ||
+	if item.Tag != "item" || item.Attrs["jid"] != userTestLIDJID ||
 		item.Attrs["action"] != string(events.BlocklistChangeActionBlock) {
 		t.Errorf("<item> = %+v", item)
+	}
+}
+
+// TestUpdateBlocklistBlockCarriesPNJID trava a causa da F264/LIB-02: o
+// WhatsApp migrou a escrita da blocklist para LID e exige, no block, um
+// `pn_jid` adicional com o número de telefone (whatsmeow 8d023aa973,
+// Baileys 8ca9316a10). Sem este atributo o servidor recusa com
+// `400 bad-request` — medido em campo antes desta correção.
+func TestUpdateBlocklistBlockCarriesPNJID(t *testing.T) {
+	f := newFakeTransport()
+	f.resp = []*waBinary.Node{blocklistResponse()}
+
+	_, err := UpdateBlocklist(t.Context(), f, userTestLIDJID, userTestPNJID, events.BlocklistChangeActionBlock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	item := f.sent[0].Content.([]waBinary.Node)[0]
+	if item.Attrs["jid"] != userTestLIDJID {
+		t.Errorf("jid = %v, want LID %v", item.Attrs["jid"], userTestLIDJID)
+	}
+	if item.Attrs["pn_jid"] != userTestPNJID {
+		t.Errorf("pn_jid = %v, want %v", item.Attrs["pn_jid"], userTestPNJID)
+	}
+}
+
+// TestUpdateBlocklistUnblockOmitsPNJID trava a outra metade da regra: o
+// stanza de unblock NÃO leva `pn_jid`, mesmo quando o chamador tem um PN
+// para oferecer — enviá-lo lá seria divergir da forma que as três
+// referências (whatsmeow, Baileys, wwebjs) concordam.
+func TestUpdateBlocklistUnblockOmitsPNJID(t *testing.T) {
+	f := newFakeTransport()
+	f.resp = []*waBinary.Node{blocklistResponse()}
+
+	_, err := UpdateBlocklist(t.Context(), f, userTestLIDJID, userTestPNJID, events.BlocklistChangeActionUnblock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	item := f.sent[0].Content.([]waBinary.Node)[0]
+	if _, has := item.Attrs["pn_jid"]; has {
+		t.Errorf("<item> = %+v, unblock nao deveria levar pn_jid", item)
+	}
+}
+
+// TestUpdateBlocklistBlockWithZeroPNJIDOmitsAttribute trava o caso sem
+// mapeamento em cache (LID sem PN conhecido): a biblioteca nao inventa um
+// pn_jid vazio, so' omite o atributo — pior que a forma completa, nunca
+// pior que o comportamento anterior a esta correcao.
+func TestUpdateBlocklistBlockWithZeroPNJIDOmitsAttribute(t *testing.T) {
+	f := newFakeTransport()
+	f.resp = []*waBinary.Node{blocklistResponse()}
+
+	_, err := UpdateBlocklist(t.Context(), f, userTestLIDJID, types.JID{}, events.BlocklistChangeActionBlock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	item := f.sent[0].Content.([]waBinary.Node)[0]
+	if _, has := item.Attrs["pn_jid"]; has {
+		t.Errorf("<item> = %+v, pn_jid zero deveria ser omitido", item)
 	}
 }
 
@@ -149,7 +207,7 @@ func TestUpdateBlocklistPropagatesError(t *testing.T) {
 	boom := errors.New("nope")
 	f := newFakeTransport()
 	f.err = []error{boom}
-	_, err := UpdateBlocklist(t.Context(), f, userTestPNJID, events.BlocklistChangeActionUnblock)
+	_, err := UpdateBlocklist(t.Context(), f, userTestPNJID, types.JID{}, events.BlocklistChangeActionUnblock)
 	if !errors.Is(err, boom) {
 		t.Errorf("got %v", err)
 	}
@@ -158,7 +216,7 @@ func TestUpdateBlocklistPropagatesError(t *testing.T) {
 func TestUpdateBlocklistMissingListIsAnError(t *testing.T) {
 	f := newFakeTransport()
 	f.resp = []*waBinary.Node{{Tag: "iq"}}
-	_, err := UpdateBlocklist(t.Context(), f, userTestPNJID, events.BlocklistChangeActionBlock)
+	_, err := UpdateBlocklist(t.Context(), f, userTestPNJID, types.JID{}, events.BlocklistChangeActionBlock)
 	var missing *testElementMissing
 	if !errors.As(err, &missing) || missing.In != "response to blocklist update" {
 		t.Errorf("got %v", err)

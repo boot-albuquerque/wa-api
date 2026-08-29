@@ -2,7 +2,6 @@ package group
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"wa-api/pkg/domain/apperr"
 
@@ -27,7 +26,7 @@ func NewGroupRequestUseCase(gr appport.GroupRequests, jr appport.JIDResolver, l 
 }
 
 // ExecuteGetGroupRequestParticipants lista os participantes que solicitaram entrar
-func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Context, userID string, req domain.GetGroupRequestParticipantsRequest) (json.RawMessage, error) {
+func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Context, userID string, req domain.GetGroupRequestParticipantsRequest) (*domain.GetGroupRequestParticipantsResult, error) {
 	if req.GroupJID == "" {
 		uc.logger.Warn(ctx, "missing groupJID in request", "user_id", userID)
 		return nil, apperr.New("missing_group_jid", apperr.CategoryValidation, "missing groupJID parameter", false, nil)
@@ -50,13 +49,7 @@ func (uc *GroupRequestUseCase) ExecuteGetGroupRequestParticipants(ctx context.Co
 		return nil, fmt.Errorf("failed to get group request participants: %w", err)
 	}
 
-	responseJson, err := json.Marshal(resp)
-	if err != nil {
-		uc.logger.Error(ctx, "failed to marshal response", "error", err, "user_id", userID)
-		return nil, fmt.Errorf("failed to marshal response: %w", err)
-	}
-
-	return responseJson, nil
+	return &domain.GetGroupRequestParticipantsResult{Requests: resp}, nil
 }
 
 // ExecuteUpdateGroupRequestParticipants aprova ou rejeita solicitações de entrada
@@ -110,13 +103,15 @@ func (uc *GroupRequestUseCase) ExecuteUpdateGroupRequestParticipants(ctx context
 		return nil, apperr.New("invalid_action", apperr.CategoryValidation, "invalid Action in payload (must be approve or reject)", false, nil)
 	}
 
-	if err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action); err != nil {
+	update, err := uc.requests.UpdateRequestParticipants(ctx, userID, group, phoneParsed, action)
+	if err != nil {
 		uc.logger.Error(ctx, "failed to update group request participants", "error", err, "user_id", userID, "group_jid", req.GroupJID, "action", req.Action)
 		return nil, fmt.Errorf("failed to update group request participants: %w", err)
 	}
 
 	return &domain.UpdateGroupRequestParticipantsResult{
-		Details: "Group request participants updated successfully",
+		Details:            "Group request participants updated successfully",
+		ParticipantsUpdate: update,
 	}, nil
 }
 

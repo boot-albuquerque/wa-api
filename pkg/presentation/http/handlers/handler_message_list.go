@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 
 	"wa-api/pkg/application/usecase/message"
 
@@ -33,7 +33,7 @@ func NewSendListHandler(uc *message.SendListUseCase) *SendListHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/list.
 func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/list"
+	const route = "/chats/send/list"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -53,7 +53,7 @@ func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.SendListRequest
+	var req dtomessage.SendListRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -66,7 +66,7 @@ func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).
 			Str("route", route).
@@ -76,5 +76,5 @@ func (h *SendListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendList(result), nil)
 }

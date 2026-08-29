@@ -57,7 +57,7 @@ func (m *Manager) EnsureSession(ctx context.Context, txtID string) error {
 // trouxeram — nunca os valores. A forma não pôde ser medida num grupo sem
 // solicitações pendentes, então a primeira solicitação viva é que diz o que
 // está mesmo lá. Achatar isso custaria a única via de descobrir.
-func (m *Manager) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) (any, error) {
+func (m *Manager) GetRequestParticipants(ctx context.Context, txtID string, group domain.JID) ([]domain.GroupJoinRequest, error) {
 	pageJID, err := adapter.ToPageJID(group)
 	if err != nil {
 		return nil, err
@@ -66,40 +66,61 @@ func (m *Manager) GetRequestParticipants(ctx context.Context, txtID string, grou
 	if err != nil {
 		return nil, err
 	}
-	return r.List(ctx, pageJID, listLabel)
+	lista, err := r.List(ctx, pageJID, listLabel)
+	if err != nil {
+		return nil, err
+	}
+	// Fields fica de fora: são os NOMES dos campos que os registros da página
+	// trouxeram, informação de diagnóstico para quem lê o log, e não parte do
+	// que um cliente pediu. Continua a sair no String() da capability.
+	out := make([]domain.GroupJoinRequest, 0, len(lista.Requests))
+	for _, req := range lista.Requests {
+		out = append(out, domain.GroupJoinRequest{
+			JID:         domain.JID(req.RequesterJID),
+			RequestedAt: req.At,
+			AddedByJID:  domain.JID(req.AddedByJID),
+			Method:      req.Method,
+		})
+	}
+	return out, nil
 }
 
 // UpdateRequestParticipants approves or rejects requesters.
 //
 // A capability faz UM RPC POR PARTICIPANTE e devolve um resultado por
 // solicitante, porque o desfecho parcial é normal: três aprovações em que a
-// segunda falha são três resultados, não um erro. Este port devolve só error,
-// e não há onde pôr essa lista.
+// segunda falha são três resultados, não um erro. F280 (2026-08-28): esse
+// resultado por solicitante agora sai no domain.ParticipantsUpdate que o
+// port devolve — mesma forma que o motor noise já usa para add/remove —
+// em vez de ser só contado e descartado.
 //
-// Então o que não pode acontecer é o silêncio (invariante 14): se qualquer
-// solicitante falhou, isto é erro, com a CONTAGEM dos que falharam e os códigos
-// que a página devolveu. Os jids dos solicitantes ficam de fora — são
-// identidade, e a mensagem de erro é registro.
-func (m *Manager) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) error {
+// O que não pode acontecer continua a não acontecer (invariante 14): se
+// qualquer solicitante falhou, ou a página respondeu por menos gente do que
+// foi pedido, isto continua erro — com a CONTAGEM dos que falharam e os
+// códigos que a página devolveu. Os jids dos solicitantes que FALHARAM
+// ficam de fora da mensagem de erro — são identidade, e a mensagem de erro
+// é registro; os que TIVERAM SUCESSO aparecem no ParticipantsUpdate
+// devolvido no caminho sem erro, que é dado do pedido, não do log.
+func (m *Manager) UpdateRequestParticipants(ctx context.Context, txtID string, group domain.JID, participants []domain.JID, action domain.RequestAction) (domain.ParticipantsUpdate, error) {
 	if len(participants) == 0 {
-		return fmt.Errorf("waheadless: no requesters to %s", action)
+		return domain.ParticipantsUpdate{}, fmt.Errorf("waheadless: no requesters to %s", action)
 	}
 	pageJID, err := adapter.ToPageJID(group)
 	if err != nil {
-		return err
+		return domain.ParticipantsUpdate{}, err
 	}
 	requesters := make([]string, 0, len(participants))
 	for _, p := range participants {
 		pageRequester, err := adapter.ToPageJID(p)
 		if err != nil {
-			return err
+			return domain.ParticipantsUpdate{}, err
 		}
 		requesters = append(requesters, pageRequester)
 	}
 
 	r, err := m.requests(ctx, txtID)
 	if err != nil {
-		return err
+		return domain.ParticipantsUpdate{}, err
 	}
 
 	var results []waheadless.GroupRequestAction
@@ -109,12 +130,19 @@ func (m *Manager) UpdateRequestParticipants(ctx context.Context, txtID string, g
 	case domain.RequestReject:
 		results, err = r.Reject(ctx, pageJID, requesters, decideLabel)
 	default:
-		return fmt.Errorf("waheadless: unknown request action %q", action)
+		return domain.ParticipantsUpdate{}, fmt.Errorf("waheadless: unknown request action %q", action)
 	}
 	if err != nil {
-		return err
+		return domain.ParticipantsUpdate{}, err
 	}
-	return partialFailure(results, len(requesters), action)
+	if err := partialFailure(results, len(requesters), action); err != nil {
+		return domain.ParticipantsUpdate{}, err
+	}
+	out := make([]domain.GroupParticipant, 0, len(results))
+	for _, res := range results {
+		out = append(out, domain.GroupParticipant{JID: domain.JID(res.RequesterJID), Error: res.Code})
+	}
+	return domain.ParticipantsUpdate{Participants: out, Confirmed: true}, nil
 }
 
 // partialFailure turns a per-requester outcome into the single error the port

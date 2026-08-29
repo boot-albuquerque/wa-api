@@ -11,7 +11,7 @@ import (
 )
 
 // GetSubGroups returns the child groups of a community.
-func (a *GroupAdapter) GetSubGroups(ctx context.Context, txtID string, community domain.JID) (any, error) {
+func (a *GroupAdapter) GetSubGroups(ctx context.Context, txtID string, community domain.JID) ([]domain.CommunitySubGroup, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -23,11 +23,25 @@ func (a *GroupAdapter) GetSubGroups(ctx context.Context, txtID string, community
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 	res, err := client.GetSubGroups(ctxWithTimeout, jid)
-	return res, errmap.ClassifyIQ(err)
+	if err := errmap.ClassifyIQ(err); err != nil {
+		return nil, err
+	}
+	out := make([]domain.CommunitySubGroup, 0, len(res))
+	for _, g := range res {
+		if g == nil {
+			continue
+		}
+		out = append(out, domain.CommunitySubGroup{
+			JID:               jidOrEmpty(g.JID),
+			Name:              g.Name,
+			IsDefaultSubGroup: g.IsDefaultSubGroup,
+		})
+	}
+	return out, nil
 }
 
 // GetLinkedGroupsParticipants returns participants across all linked groups.
-func (a *GroupAdapter) GetLinkedGroupsParticipants(ctx context.Context, txtID string, community domain.JID) (any, error) {
+func (a *GroupAdapter) GetLinkedGroupsParticipants(ctx context.Context, txtID string, community domain.JID) ([]domain.JID, error) {
 	client, err := a.Client(txtID)
 	if err != nil {
 		return nil, err
@@ -39,7 +53,14 @@ func (a *GroupAdapter) GetLinkedGroupsParticipants(ctx context.Context, txtID st
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, waclient.RequestTimeout)
 	defer cancel()
 	res, err := client.GetLinkedGroupsParticipants(ctxWithTimeout, jid)
-	return res, errmap.ClassifyIQ(err)
+	if err := errmap.ClassifyIQ(err); err != nil {
+		return nil, err
+	}
+	out := make([]domain.JID, 0, len(res))
+	for _, p := range res {
+		out = append(out, jidOrEmpty(p))
+	}
+	return out, nil
 }
 
 // LinkGroup adds an existing group as a child of a community.

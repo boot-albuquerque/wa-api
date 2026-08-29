@@ -118,31 +118,31 @@ type ProfileAccessProvider interface {
 type NewsletterReader interface {
 	SessionGuard
 
-	// ListSubscribed devolve as newsletters assinadas. O resultado é any
-	// pelo mesmo motivo das portas de grupo: o valor atravessa o use case
-	// opaco até a serialização.
-	ListSubscribed(ctx context.Context, txtID string) (any, error)
+	// ListSubscribed devolve as newsletters assinadas.
+	ListSubscribed(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error)
 
 	// As onze abaixo entraram no levantamento de paridade de 2026-08-20: a
 	// biblioteca expunha doze capacidades de newsletter e nós expúnhamos UMA.
 	//
-	// O `any` no retorno segue a mesma razão de ListSubscribed e das portas de
-	// grupo: NewsletterMetadata é um tipo do vendor, e traduzi-lo para o
-	// domínio arrastaria a árvore inteira de tipos do protocolo para dentro da
-	// camada de aplicação. O valor atravessa opaco até à serialização.
+	// O RETORNO ERA `any` E DEIXOU DE SER. A razão registada era não arrastar
+	// `types.NewsletterMetadata` para a aplicação; o efeito medido foi outro: a
+	// forma do JSON de `/newsletter/info` passava a ser decidida pelo MOTOR da
+	// sessão — a struct do vendor no wa-noise, `channel.DirectoryEntry` (sem
+	// etiquetas `json` nenhumas) no headless. Um tipo de domínio próprio resolve
+	// os dois problemas; `any` só resolvia o primeiro.
 	//
-	// Onde NÃO é `any` é porque não há tipo do vendor a atravessar: Follow,
-	// Unfollow, Mute, MarkViewed e React devolvem só sucesso ou erro.
+	// Onde não há retorno é porque não há dado a atravessar: Follow, Unfollow,
+	// Mute, MarkViewed e React devolvem só sucesso ou erro.
 
 	// CreateNewsletter cria um canal. `picture` é opcional e vai como bytes.
-	CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (any, error)
+	CreateNewsletter(ctx context.Context, txtID, name, description string, picture []byte) (*domain.NewsletterMetadata, error)
 
 	// NewsletterInfo devolve os metadados de um canal pelo JID.
-	NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (any, error)
+	NewsletterInfo(ctx context.Context, txtID string, jid domain.JID) (*domain.NewsletterMetadata, error)
 
 	// NewsletterInfoWithInvite devolve os metadados pelo CÓDIGO de convite —
 	// que é coisa diferente do JID, e é o que aparece num link partilhado.
-	NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (any, error)
+	NewsletterInfoWithInvite(ctx context.Context, txtID, inviteKey string) (*domain.NewsletterMetadata, error)
 
 	// FollowNewsletter e UnfollowNewsletter passam a seguir e a deixar de
 	// seguir. São separados em vez de um `seguir bool` porque é assim que a
@@ -156,12 +156,12 @@ type NewsletterReader interface {
 
 	// NewsletterMessages devolve mensagens do canal, paginadas para trás.
 	// `count` e `before` a zero deixam o servidor escolher o padrão dele.
-	NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) (any, error)
+	NewsletterMessages(ctx context.Context, txtID string, jid domain.JID, count int, before string) ([]domain.NewsletterMessage, error)
 
 	// NewsletterMessageUpdates devolve ATUALIZAÇÕES de mensagens já vistas —
 	// reações e edições —, e não mensagens novas. São consultas diferentes no
 	// protocolo e a distinção é do WhatsApp, não nossa.
-	NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) (any, error)
+	NewsletterMessageUpdates(ctx context.Context, txtID string, jid domain.JID, count int, since time.Time, after string) ([]domain.NewsletterMessage, error)
 
 	// MarkNewsletterViewed marca mensagens como vistas, por ID DE SERVIDOR —
 	// que é um inteiro do canal, e não o message_id das outras rotas.
@@ -182,7 +182,9 @@ type NewsletterReader interface {
 	DeleteNewsletter(ctx context.Context, txtID string, channelJID domain.JID) error
 
 	// F233(b) — admin invite management.
-	CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
+	// F261: devolve o ID e a expiração que o servidor confirma para o
+	// convite, em vez de só erro.
+	CreateNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) (domain.NewsletterAdminInvite, error)
 	AcceptNewsletterAdminInvite(ctx context.Context, txtID string, channelJID domain.JID) error
 	RevokeNewsletterAdminInvite(ctx context.Context, txtID string, channelJID, userJID domain.JID) error
 }

@@ -41,6 +41,15 @@ const (
 	// usuário já existente (itens 8, 61) — ver EditUserUseCase.Execute.
 	engineImmutableCode = "engine_immutable"
 	engineImmutableMsg  = "engine não pode ser alterado após a criação da conta"
+
+	// engineHeadlessUnavailableCode identifica um pedido de sessão em
+	// domain.EngineWaHeadless num servidor sem o Chrome do headless
+	// configurado. Recusar aqui é a mesma regra de "sem fallback silencioso"
+	// da decisão 94 (pkg/bootstrap/engine_routing.go): pedir um engine que o
+	// processo não pode servir tem de FALHAR, nunca cair para o socket em
+	// silêncio.
+	engineHeadlessUnavailableCode = "engine_headless_unavailable"
+	engineHeadlessUnavailableMsg  = "headless engine is not configured on this server"
 )
 
 // AddUserUseCase adiciona um novo usuário
@@ -49,6 +58,13 @@ type AddUserUseCase struct {
 	encryptor appport.HmacKeyEncryptor
 	s3Cipher  appport.S3SecretCipher
 	logger    appport.Logger
+
+	// headlessAvailable diz se este processo tem o Chrome do headless
+	// configurado (s.Headless.ChromePath != "" no bootstrap). Substitui a
+	// checagem estática que a decisão 94 fazia no arranque: agora é
+	// checagem por REQUISIÇÃO, porque a escolha do engine também passou a
+	// ser por requisição.
+	headlessAvailable bool
 }
 
 // NewAddUserUseCase cria uma nova instância.
@@ -59,12 +75,15 @@ type AddUserUseCase struct {
 // for. Each port matches a column writer: encryptor → users.hmac_key
 // (F158), s3Cipher → users.s3_secret_key (F163). Separate ports because
 // the two columns have different stored types (BYTEA vs TEXT envelope).
-func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, s3Cipher appport.S3SecretCipher, logger appport.Logger) *AddUserUseCase {
-	return &AddUserUseCase{users: users, encryptor: encryptor, s3Cipher: s3Cipher, logger: logger}
+//
+// headlessAvailable is whether this server has the headless engine
+// configured at all — see the field comment on AddUserUseCase.
+func NewAddUserUseCase(users appport.UserRepository, encryptor appport.HmacKeyEncryptor, s3Cipher appport.S3SecretCipher, logger appport.Logger, headlessAvailable bool) *AddUserUseCase {
+	return &AddUserUseCase{users: users, encryptor: encryptor, s3Cipher: s3Cipher, logger: logger, headlessAvailable: headlessAvailable}
 }
 
 // Execute adiciona um novo usuário
-func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest) (*domain.UserResponse, error) {
+func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserInput) (*domain.UserAccount, error) {
 	// Validate required fields
 	if req.Name == "" || req.Token == "" {
 		return nil, apperr.New("missing_name_or_token", apperr.CategoryValidation, "name and token are required", false, nil)
@@ -77,6 +96,10 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 	engine, err := domain.ParseEngine(req.Engine)
 	if err != nil {
 		return nil, apperr.New(invalidEngineCode, apperr.CategoryValidation, invalidEngineMsg, false, err)
+	}
+	if engine == domain.EngineWaHeadless && !uc.headlessAvailable {
+		return nil, apperr.New(engineHeadlessUnavailableCode, apperr.CategoryValidation,
+			engineHeadlessUnavailableMsg, false, nil)
 	}
 
 	// Set defaults
@@ -198,36 +221,33 @@ func (uc *AddUserUseCase) Execute(ctx context.Context, req domain.AddUserRequest
 		_ = storage.GetS3Manager().InitializeS3Client(id, s3Config)
 	}
 
-	// Build response
-	proxyConfig := map[string]interface{}{
-		"enabled":         req.ProxyConfig.ProxyURL != "",
-		"proxyUrl":        req.ProxyConfig.ProxyURL,
-		"webhookUseProxy": webhookUseProxy,
-	}
-
-	s3Config := map[string]interface{}{
-		"enabled":        req.S3Config.Enabled,
-		"endpoint":       req.S3Config.Endpoint,
-		"region":         req.S3Config.Region,
-		"bucket":         req.S3Config.Bucket,
-		"access_key":     "***",
-		"path_style":     req.S3Config.PathStyle,
-		"public_url":     req.S3Config.PublicURL,
-		"media_delivery": req.S3Config.MediaDelivery,
-		"retention_days": req.S3Config.RetentionDays,
-	}
-
-	return &domain.UserResponse{
+	// Build the result. It is a domain value, not a payload: the key names
+	// the caller will see are decided by dtoadmin's presenter.
+	return &domain.UserAccount{
 		ID:             id,
 		Name:           req.Name,
 		Token:          req.Token,
 		Webhook:        req.Webhook,
 		Expiration:     int64(req.Expiration),
-		ProxyConfig:    proxyConfig,
-		S3Config:       s3Config,
 		Events:         req.Events,
 		HmacConfigured: req.HmacKey != "",
 		Engine:         engine.String(),
+		Proxy: domain.UserProxySettings{
+			Enabled:         req.ProxyConfig.ProxyURL != "",
+			URL:             req.ProxyConfig.ProxyURL,
+			WebhookUseProxy: webhookUseProxy,
+		},
+		S3: domain.UserS3Settings{
+			Enabled:             req.S3Config.Enabled,
+			Endpoint:            req.S3Config.Endpoint,
+			Region:              req.S3Config.Region,
+			Bucket:              req.S3Config.Bucket,
+			PathStyle:           req.S3Config.PathStyle,
+			PublicURL:           req.S3Config.PublicURL,
+			MediaDelivery:       req.S3Config.MediaDelivery,
+			RetentionDays:       req.S3Config.RetentionDays,
+			AccessKeyConfigured: req.S3Config.AccessKey != "",
+		},
 	}, nil
 }
 

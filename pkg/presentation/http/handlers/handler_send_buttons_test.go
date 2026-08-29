@@ -37,8 +37,8 @@ const sendButtonsSentinelToken = "send-buttons-sentinel-cause-9d24af"
 const sendButtonsPhone = "5511999999999@s.whatsapp.net"
 
 // sendButtonsBody é o menor corpo VÁLIDO da rota: um botão já basta.
-const sendButtonsBody = `{"Phone":"` + sendButtonsPhone + `","Body":"Escolha",` +
-	`"Buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`
+const sendButtonsBody = `{"phone":"` + sendButtonsPhone + `","body":"Escolha",` +
+	`"buttons":[{"type":"reply","title":"Sim","id":"btn-sim"}]}`
 
 var errSendButtonsSentinel = errors.New(sendButtonsSentinelToken)
 
@@ -92,10 +92,10 @@ type sendButtonsResultBody struct {
 // pelas recusas.
 func TestSendButtons_Success_ViaRegisteredRoute(t *testing.T) {
 	sentAt := int64(1755500141)
-	body := `{"Phone":"` + sendButtonsPhone + `","Body":"Escolha uma opcao","Title":"Cabecalho","Footer":"Equipe wa-api","Buttons":[` +
+	body := `{"phone":"` + sendButtonsPhone + `","body":"Escolha uma opcao","title":"Cabecalho","footer":"Equipe wa-api","buttons":[` +
 		`{"type":"reply","title":"Sim","id":"cta-42"},` +
 		`{"type":"cta_url","text":"Site","url":"https://example.invalid/promo"},` +
-		`{"type":"cta_call","buttonText":"Ligar","buttonId":"call-1","phone_number":"+5511987654321"},` +
+		`{"type":"cta_call","button_text":"Ligar","button_id":"call-1","phone_number":"+5511987654321"},` +
 		`{"type":"COPY","title":"Copiar","copy_code":"PROMO10"}]}`
 
 	im := &contractsfake.InteractiveMessenger{
@@ -168,7 +168,7 @@ func TestSendButtons_Success_ViaRegisteredRoute(t *testing.T) {
 // cliente observa: 200 com menos botões do que ele mandou. Quem quiser
 // mudar o contrato (recusar, ou tratar como reply) falha nos dois níveis.
 func TestSendButtons_UnknownTypeIsSilentlyDiscarded_ViaRegisteredRoute(t *testing.T) {
-	body := `{"Phone":"` + sendButtonsPhone + `","Body":"Escolha","Buttons":[` +
+	body := `{"phone":"` + sendButtonsPhone + `","body":"Escolha","buttons":[` +
 		`{"type":"reply","title":"Sim"},` +
 		`{"type":"cta_urll","title":"Erro de digitacao","url":"https://example.invalid/x"},` +
 		`{"type":"reply","title":"Nao"}]}`
@@ -215,15 +215,15 @@ func TestSendButtons_RejectUnauthenticated(t *testing.T) {
 // Buttons"), e não uma por campo. A quarta é a outra recusa, a que pega o
 // payload em que todos os botões foram descartados na normalização.
 func TestSendButtons_RejectMissingRequiredField(t *testing.T) {
-	const buttons = `,"Buttons":[{"type":"reply","title":"Sim"}]`
+	const buttons = `,"buttons":[{"type":"reply","title":"Sim"}]`
 
 	cases := map[string]struct{ body, cause string }{
-		"Phone":           {`{"Body":"Escolha"` + buttons + `}`, "missing Phone, Body or Buttons"},
-		"Body":            {`{"Phone":"` + sendButtonsPhone + `"` + buttons + `}`, "missing Phone, Body or Buttons"},
-		"Buttons_ausente": {`{"Phone":"` + sendButtonsPhone + `","Body":"Escolha"}`, "missing Phone, Body or Buttons"},
-		"Buttons_vazio":   {`{"Phone":"` + sendButtonsPhone + `","Body":"Escolha","Buttons":[]}`, "missing Phone, Body or Buttons"},
+		"phone":           {`{"body":"Escolha"` + buttons + `}`, "missing Phone, Body or Buttons"},
+		"body":            {`{"phone":"` + sendButtonsPhone + `"` + buttons + `}`, "missing Phone, Body or Buttons"},
+		"Buttons_ausente": {`{"phone":"` + sendButtonsPhone + `","body":"Escolha"}`, "missing Phone, Body or Buttons"},
+		"Buttons_vazio":   {`{"phone":"` + sendButtonsPhone + `","body":"Escolha","buttons":[]}`, "missing Phone, Body or Buttons"},
 		"Buttons_todos_descartados": {
-			`{"Phone":"` + sendButtonsPhone + `","Body":"Escolha","Buttons":[{"type":"nao-existe","title":"X"}]}`,
+			`{"phone":"` + sendButtonsPhone + `","body":"Escolha","buttons":[{"type":"nao-existe","title":"X"}]}`,
 			"no valid buttons parsed"},
 	}
 	for field, tc := range cases {
@@ -267,7 +267,7 @@ func TestSendButtons_InvalidPhoneNeverSends(t *testing.T) {
 		ResolveJIDFunc: func(context.Context, string) (domain.JID, error) { return "", errors.New("jid invalido") },
 	}
 
-	body := `{"Phone":"lixo","Body":"Escolha","Buttons":[{"type":"reply","title":"Sim"}]}`
+	body := `{"phone":"lixo","body":"Escolha","buttons":[{"type":"reply","title":"Sim"}]}`
 	rec := sendButtonsServe(t, im, jr, body, msgAuthed)
 
 	if rec.Code == http.StatusOK {
@@ -311,8 +311,8 @@ func TestSendButtons_ClientSuppliedIDIsForwardedButServerIDWins(t *testing.T) {
 	}
 	jr := &contractsfake.JIDResolver{}
 
-	body := `{"Phone":"` + sendButtonsPhone + `","Body":"Escolha","Id":"id-do-cliente",` +
-		`"Buttons":[{"type":"reply","title":"Sim"}]}`
+	body := `{"phone":"` + sendButtonsPhone + `","body":"Escolha","id":"id-do-cliente",` +
+		`"buttons":[{"type":"reply","title":"Sim"}]}`
 	rec := sendButtonsServe(t, im, jr, body, msgAuthed)
 
 	if rec.Code != http.StatusOK {
@@ -338,9 +338,9 @@ func TestSendButtons_NoSecretLeak(t *testing.T) {
 
 	wrapped, capture := logassert.Wrap(sendButtonsRouter(im, jr, &contractsfake.MediaFetcher{}))
 
-	body := `{"Phone":"` + sendButtonsPhone + `","Body":"` + logassertGlobalHMACKey + `","Title":"` +
-		logassertGlobalHMACKey + `","Footer":"` + logassertGlobalHMACKey +
-		`","Buttons":[{"type":"reply","title":"` + logassertGlobalHMACKey + `"}]}`
+	body := `{"phone":"` + sendButtonsPhone + `","body":"` + logassertGlobalHMACKey + `","title":"` +
+		logassertGlobalHMACKey + `","footer":"` + logassertGlobalHMACKey +
+		`","buttons":[{"type":"reply","title":"` + logassertGlobalHMACKey + `"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/chat/send/buttons", strings.NewReader(body))
 	req = withUser(req, "no-secret-leak-session")
 	req.Header.Set("Authorization", logassertAdminToken)
@@ -372,7 +372,7 @@ func TestSendButtons_NoSecretLeak(t *testing.T) {
 // diferença está registrada em HOUSEKEEP F141 e é a forma MAIS operável das
 // duas — o erro cru diz onde o JSON quebrou.
 func TestSendButtons_MalformedBody_ViaRegisteredRoute(t *testing.T) {
-	const malformed = `{"Phone":"55119`
+	const malformed = `{"phone":"55119`
 
 	im := &contractsfake.InteractiveMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -400,7 +400,7 @@ func TestSendButtons_MalformedBody_ViaRegisteredRoute(t *testing.T) {
 // lista) é 400 do cliente, não pânico e não 200. É a forma de corpo que o
 // DTO só passou a poder receber no CAP-21.
 func TestSendButtons_MalformedButtons_ViaRegisteredRoute(t *testing.T) {
-	const body = `{"Phone":"` + sendButtonsPhone + `","Body":"Escolha","Buttons":{"title":"Sim"}}`
+	const body = `{"phone":"` + sendButtonsPhone + `","body":"Escolha","buttons":{"title":"Sim"}}`
 
 	im := &contractsfake.InteractiveMessenger{}
 	jr := &contractsfake.JIDResolver{}
@@ -411,7 +411,7 @@ func TestSendButtons_MalformedButtons_ViaRegisteredRoute(t *testing.T) {
 	// A causa nomeia o CAMPO: sem `Buttons` no DTO o decoder nem chegaria a
 	// reclamar dele, e o corpo seria aceito com a lista simplesmente
 	// ausente — que é exatamente o estado anterior ao CAP-21 (F147).
-	logassert.OutcomeLogged(t, recs, "cannot unmarshal object", "SendButtonsRequest.Buttons")
+	logassert.OutcomeLogged(t, recs, "cannot unmarshal object", "SendButtonsRequest.buttons")
 	if n := len(im.SendButtonsCalls); n != 0 {
 		t.Fatalf("Buttons malformado alcancou SendButtons %d vez(es)", n)
 	}

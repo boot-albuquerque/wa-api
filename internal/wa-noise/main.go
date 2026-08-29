@@ -72,8 +72,10 @@ type (
 )
 
 const (
-	ParticipantChangeAdd    = core.ParticipantChangeAdd
-	ParticipantChangeRemove = core.ParticipantChangeRemove
+	ParticipantChangeAdd     = core.ParticipantChangeAdd
+	ParticipantChangeRemove  = core.ParticipantChangeRemove
+	ParticipantChangePromote = core.ParticipantChangePromote
+	ParticipantChangeDemote  = core.ParticipantChangeDemote
 
 	ParticipantChangeApprove = core.ParticipantChangeApprove
 	ParticipantChangeReject  = core.ParticipantChangeReject
@@ -89,6 +91,10 @@ type (
 	CreateNewsletterParams      = core.CreateNewsletterParams
 	GetNewsletterMessagesParams = core.GetNewsletterMessagesParams
 	GetNewsletterUpdatesParams  = core.GetNewsletterUpdatesParams
+	// NewsletterAdminInvite is F261's answer to admin-invite creation: the
+	// invite's own ID and expiration, read from the server's response
+	// instead of discarded.
+	NewsletterAdminInvite = core.NewsletterAdminInvite
 )
 
 // Perfil e midia.
@@ -118,6 +124,14 @@ var (
 	ErrProfilePictureUnauthorized = core.ErrProfilePictureUnauthorized
 	ErrProfilePictureNotSet       = core.ErrProfilePictureNotSet
 	ErrQRStoreContainsID          = core.ErrQRStoreContainsID
+
+	// ErrNotLoggedIn e' devolvido por Client.Logout (e por outras operacoes)
+	// quando o store nao tem device JID — sessao com transporte vivo mas
+	// nunca emparelhada. Reexportado pela mesma razao de ErrIQBadRequest e
+	// companhia: sem isto o unico caminho para o adaptador (F275) seria casar
+	// o texto de err.Error(), que a CLAUDE.md deste projeto proibe para
+	// checagem de estado.
+	ErrNotLoggedIn = core.ErrNotLoggedIn
 
 	// Recusas do servidor do WhatsApp a um info query. Sao as sentinelas de
 	// core/errors.go, entao errors.Is contra elas casa por codigo e texto (ver

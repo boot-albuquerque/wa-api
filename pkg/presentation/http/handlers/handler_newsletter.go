@@ -2,13 +2,13 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/rs/zerolog/hlog"
 
 	"wa-api/pkg/application/usecase/notification"
 	"wa-api/pkg/domain"
 	customhttp "wa-api/pkg/presentation/http"
+	dtonewsletter "wa-api/pkg/presentation/http/dto/newsletter"
 )
 
 // NewsletterHandlers groups the eleven newsletter operation handlers.
@@ -36,34 +36,6 @@ type NewsletterHandlers struct {
 	AdminInvite       *newsletterOpHandler
 	AdminInviteAccept *newsletterOpHandler
 	AdminInviteRevoke *newsletterOpHandler
-}
-
-// newsletterBody is the wire shape shared by the eleven routes. Each operation
-// reads only the fields it needs; the use case is what enforces which of them
-// are mandatory, so a missing field fails validation there rather than being
-// silently accepted here.
-type newsletterBody struct {
-	JID    string `json:"jid"`
-	Invite string `json:"invite"`
-
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Picture     []byte `json:"picture"`
-
-	Mute bool `json:"mute"`
-
-	Count  int    `json:"count"`
-	Before string `json:"before"`
-	After  string `json:"after"`
-	Since  string `json:"since"`
-
-	ServerIDs []int  `json:"serverIDs"`
-	ServerID  int    `json:"serverID"`
-	Reaction  string `json:"reaction"`
-	MessageID string `json:"messageID"`
-
-	UserJID    string `json:"userJID"`
-	ConfirmJID string `json:"confirmJID"`
 }
 
 type newsletterOpHandler struct {
@@ -104,19 +76,17 @@ func (h *newsletterOpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var body newsletterBody
+	var body dtonewsletter.NewsletterRequest
 	if !decodeAndRespond(w, r, &body) {
 		return
 	}
-
-	req, err := body.toRequest(h.op)
-	if err != nil {
+	if err := body.Validate(); err != nil {
 		hlog.FromRequest(r).Warn().Err(err).Str("route", r.URL.Path).Msg("newsletter request rejected")
 		customhttp.RespondJSON(w, http.StatusBadRequest, nil, err)
 		return
 	}
 
-	rsp, err := h.uc.Execute(r.Context(), id, req)
+	rsp, err := h.uc.Execute(r.Context(), id, newsletterRequestFor(h.op, body.ToDomain()))
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", r.URL.Path).Msg("newsletter operation failed")
 		// 500 e' o piso, nao a decisao: RespondJSON troca-o pelo status da
@@ -125,38 +95,71 @@ func (h *newsletterOpHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
-	customhttp.RespondJSON(w, http.StatusOK, rsp.Data, nil)
+	h.respond(w, rsp)
 }
 
-// toRequest converts the wire body into the use case request. The only
-// conversion that can fail is `since`, because RFC 3339 is a format the client
-// can get wrong — everything else is a straight copy and the use case decides
-// whether it is present.
-func (b newsletterBody) toRequest(op notification.NewsletterOp) (notification.NewsletterRequest, error) {
-	req := notification.NewsletterRequest{
+// respond serves the response shape that this handler's operation answers with.
+//
+// FOUR SHAPES AND NOT ONE UNION, because they answer four different questions:
+// a union would make every route emit the keys of every other — `messages: []`
+// on a follow, `newsletter: null` on a delete — with no way for a caller to tell
+// "not applicable" from "empty".
+//
+// The RespondJSON call is repeated per branch rather than hoisted, and the
+// repetition is what the architectural gate reads: it classifies by the FORM of
+// the serialized expression, so `dtonewsletter.Present…` at each call site is
+// what proves the route no longer hands a domain value to the encoder. One
+// hoisted call over a variable would classify by that variable's name, which
+// proves nothing (respondjson_ledger_test.go).
+func (h *newsletterOpHandler) respond(w http.ResponseWriter, rsp *notification.NewsletterResult) {
+	if rsp == nil {
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterAck(""), nil)
+		return
+	}
+	switch h.op {
+	case notification.NewsletterOpCreate,
+		notification.NewsletterOpInfo,
+		notification.NewsletterOpInfoInvite:
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterInfo(rsp.Metadata), nil)
+	case notification.NewsletterOpMessages,
+		notification.NewsletterOpUpdates:
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterMessages(rsp.Messages), nil)
+	case notification.NewsletterOpSubscribe:
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterSubscribe(rsp.Status, rsp.Duration), nil)
+	case notification.NewsletterOpAdminInvite:
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterAdminInvite(rsp.AdminInvite), nil)
+	default:
+		// The acknowledgement is the right answer for every operation that
+		// changes something and reports no payload, which is what a newly added
+		// write operation is — so the default is correct rather than a gap.
+		customhttp.RespondJSON(w, http.StatusOK, dtonewsletter.PresentNewsletterAck(rsp.Status), nil)
+	}
+}
+
+// newsletterRequestFor turns the validated body into the use case request.
+//
+// The assignment lives HERE and not in the DTO package because the import rule
+// is one-way: pkg/presentation/http/dto may import pkg/domain and nothing above
+// it, so a ToDomain that returned a notification.NewsletterRequest would put an
+// application type inside the wire layer (docs/HTTP-DTO-CONVENTIONS.md §3).
+func newsletterRequestFor(op notification.NewsletterOp, in dtonewsletter.NewsletterInput) notification.NewsletterRequest {
+	return notification.NewsletterRequest{
 		Op:          op,
-		JID:         domain.JID(b.JID),
-		Invite:      b.Invite,
-		Name:        b.Name,
-		Description: b.Description,
-		Picture:     b.Picture,
-		Mute:        b.Mute,
-		Count:       b.Count,
-		Before:      b.Before,
-		After:       b.After,
-		ServerIDs:   b.ServerIDs,
-		ServerID:    b.ServerID,
-		Reaction:    b.Reaction,
-		MessageID:   b.MessageID,
-		UserJID:     domain.JID(b.UserJID),
-		ConfirmJID:  domain.JID(b.ConfirmJID),
+		JID:         domain.JID(in.JID),
+		Invite:      in.Invite,
+		Name:        in.Name,
+		Description: in.Description,
+		Picture:     in.Picture,
+		Mute:        in.Mute,
+		Count:       in.Count,
+		Before:      in.Before,
+		After:       in.After,
+		Since:       in.Since,
+		ServerIDs:   in.ServerIDs,
+		ServerID:    in.ServerID,
+		Reaction:    in.Reaction,
+		MessageID:   in.MessageID,
+		UserJID:     domain.JID(in.UserJID),
+		ConfirmJID:  domain.JID(in.ConfirmJID),
 	}
-	if b.Since != "" {
-		since, err := time.Parse(time.RFC3339, b.Since)
-		if err != nil {
-			return notification.NewsletterRequest{}, err
-		}
-		req.Since = since
-	}
-	return req, nil
 }

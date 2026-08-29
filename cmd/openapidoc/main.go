@@ -62,6 +62,8 @@ const generatedHeader = `# GERADO por "go run ./cmd/openapidoc" — NÃO EDITE �
 func main() {
 	root := flag.String("root", defaultRoot, "directory holding base.yaml, paths/ and schemas/")
 	out := flag.String("out", defaultOutput, "path of the merged document")
+	evidenceOut := flag.String("evidence-out", evidenceReportOut, "path of the generated evidence report")
+	evidenceProsa := flag.String("evidence-prosa", evidenceProsaFile, "path of the hand-written evidence report fragment")
 	check := flag.Bool("check", false, "do not write; fail if the committed file is stale")
 	flag.Parse()
 
@@ -75,6 +77,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "openapidoc: %v\n", err)
 		os.Exit(1)
 	}
+	paths, _ := merged["paths"].(map[string]any)
+	evidenceReport, err := GenerateEvidenceReport(*root, paths, *evidenceProsa)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "openapidoc: relatório de evidência: %v\n", err)
+		os.Exit(1)
+	}
 	if *check {
 		current, readErr := os.ReadFile(*out)
 		if readErr != nil {
@@ -85,6 +93,15 @@ func main() {
 			fmt.Fprintf(os.Stderr, "openapidoc: %s está desatualizado — corra `go run ./cmd/openapidoc`\n", *out)
 			os.Exit(1)
 		}
+		currentReport, readErr := os.ReadFile(*evidenceOut)
+		if readErr != nil {
+			fmt.Fprintf(os.Stderr, "openapidoc: %v\n", readErr)
+			os.Exit(1)
+		}
+		if string(currentReport) != string(evidenceReport) {
+			fmt.Fprintf(os.Stderr, "openapidoc: %s está desatualizado — corra `go run ./cmd/openapidoc`\n", *evidenceOut)
+			os.Exit(1)
+		}
 		fmt.Println("openapidoc: atualizado")
 		return
 	}
@@ -92,8 +109,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "openapidoc: %v\n", err)
 		os.Exit(1)
 	}
-	paths, _ := merged["paths"].(map[string]any)
+	if err := os.WriteFile(*evidenceOut, evidenceReport, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "openapidoc: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("openapidoc: %s escrito — %d caminhos\n", *out, len(paths))
+	fmt.Printf("openapidoc: %s escrito\n", *evidenceOut)
 }
 
 // Merge reads base.yaml and every fragment and returns the whole document.
@@ -363,9 +384,16 @@ func applyEvidence(path string, paths map[string]any) error {
 		return fmt.Errorf("tabela de evidência: %w", err)
 	}
 	marks := map[string]string{}
-	for lineNo, line := range strings.Split(string(raw), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+	for lineNo, rawLine := range strings.Split(string(raw), "\n") {
+		// TrimRight only, not TrimSpace: F239/F282 added three OPTIONAL
+		// trailing columns (data, observador, evidência), and most rows
+		// still have them empty. TrimSpace treats a tab as whitespace and
+		// would eat those trailing empty fields off the end of the line —
+		// "GET\t/x\t✅\t\t\t" becomes "GET\t/x\t✅" and Split reports 3
+		// fields instead of 6. \r survives on a file saved with CRLF; \n
+		// is already gone from the Split above.
+		line := strings.TrimRight(rawLine, "\r")
+		if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
 		fields := strings.Split(line, "\t")
@@ -421,8 +449,13 @@ func applyEvidence(path string, paths map[string]any) error {
 	return nil
 }
 
-// evidenceColumns is the shape of one line: method, path, mark.
-const evidenceColumns = 3
+// evidenceColumns is the shape of one line: method, path, mark, and (F239/
+// F282, 2026-08-28) the three columns the campaign added — data, observador,
+// evidência. applyEvidence only needs the mark for the OpenAPI summary
+// prefix; the extra three are read here (evidence_report.go re-reads the
+// same file for its own six-field shape) purely so a malformed row is
+// caught before it silently loses columns to strings.Split.
+const evidenceColumns = 6
 
 func readYAML(path string) (map[string]any, error) {
 	raw, err := os.ReadFile(path)

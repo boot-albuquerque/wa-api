@@ -45,7 +45,7 @@ func newEngineRouteFixture(t *testing.T) *engineRouteFixture {
 	logger := applog.NewZerologAdapter(zerolog.New(logs))
 
 	repo := db.NewUserRepository(database)
-	addUserUC := user.NewAddUserUseCase(repo, hmacKeyEncryptor{}, s3SecretCipher{}, logger)
+	addUserUC := user.NewAddUserUseCase(repo, hmacKeyEncryptor{}, s3SecretCipher{}, logger, true)
 	editUserUC := user.NewEditUserUseCase(repo, s3SecretCipher{}, &contractsfake.UserInfoRepublisher{}, logger)
 	listUsersUC := user.NewListUsersUseCase(repo, logger, &contractsfake.SessionStatusReader{})
 

@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	customhttp "wa-api/pkg/presentation/http"
+	dtomessage "wa-api/pkg/presentation/http/dto/message"
 
 	appport "wa-api/pkg/application/contracts"
-	"wa-api/pkg/domain"
 
 	"wa-api/pkg/application/usecase/message"
 
@@ -25,7 +25,7 @@ func NewSendContactHandler(uc *message.SendContactUseCase) *SendContactHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/contact.
 func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/contact"
+	const route = "/chats/send/contact"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -41,7 +41,7 @@ func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.SendContactRequest
+	var req dtomessage.SendContactRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -51,14 +51,14 @@ func (h *SendContactHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendContact(result), nil)
 }
 
 // SendLocationHandler é o handler HTTP para POST /chat/send/location.
@@ -73,7 +73,7 @@ func NewSendLocationHandler(uc *message.SendLocationUseCase) *SendLocationHandle
 
 // ServeHTTP implementa http.Handler para POST /chat/send/location.
 func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/location"
+	const route = "/chats/send/location"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -89,7 +89,7 @@ func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var req domain.SendLocationRequest
+	var req dtomessage.SendLocationRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -99,14 +99,14 @@ func (h *SendLocationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendLocation(result), nil)
 }
 
 // SendPollHandler é o handler HTTP para POST /chat/send/poll.
@@ -121,7 +121,7 @@ func NewSendPollHandler(uc *message.SendPollUseCase) *SendPollHandler {
 
 // ServeHTTP implementa http.Handler para POST /chat/send/poll.
 func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/poll"
+	const route = "/chats/send/poll"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -137,7 +137,7 @@ func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req domain.SendPollRequest
+	var req dtomessage.SendPollRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -147,17 +147,17 @@ func (h *SendPollHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendPoll(result), nil)
 }
 
-// SendPollVoteHandler é o handler HTTP para POST /chat/send/pollvote.
+// SendPollVoteHandler é o handler HTTP para POST /polls/{poll_message_id}/votes.
 type SendPollVoteHandler struct {
 	usecase *message.SendPollVoteUseCase
 }
@@ -167,9 +167,9 @@ func NewSendPollVoteHandler(uc *message.SendPollVoteUseCase) *SendPollVoteHandle
 	return &SendPollVoteHandler{usecase: uc}
 }
 
-// ServeHTTP implementa http.Handler para POST /chat/send/pollvote.
+// ServeHTTP implementa http.Handler para POST /polls/{poll_message_id}/votes.
 func (h *SendPollVoteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	const route = "/chat/send/pollvote"
+	const route = "/polls/{poll_message_id}/votes"
 
 	info, ok := r.Context().Value(appport.UserInfoKey).(userInfo)
 	if !ok || info == nil {
@@ -185,7 +185,7 @@ func (h *SendPollVoteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var req domain.SendPollVoteRequest
+	var req dtomessage.SendPollVoteRequest
 	if err := decodeRequest(w, r, &req); err != nil {
 		if requestAnswered(err) {
 			return
@@ -195,14 +195,14 @@ func (h *SendPollVoteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	result, err := h.usecase.Execute(r.Context(), txtID, req)
+	result, err := h.usecase.Execute(r.Context(), txtID, req.ToDomain())
 	if err != nil {
 		hlog.FromRequest(r).Error().Err(err).Str("route", route).Msg("request failed")
 		customhttp.RespondJSON(w, http.StatusInternalServerError, nil, err)
 		return
 	}
 
-	customhttp.RespondJSON(w, http.StatusOK, result, nil)
+	customhttp.RespondJSON(w, http.StatusOK, dtomessage.PresentSendPollVote(result), nil)
 }
 
 // DeleteMessageHandler é o handler HTTP para POST /chat/delete/message.

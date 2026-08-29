@@ -8,6 +8,6 @@ type RejectCallRequest struct {
 
 // RejectCallResult represents the result of rejecting a call
 type RejectCallResult struct {
-	Details string `json:"Details"`
-	CallID  string `json:"CallID"`
+	Details string `json:"details"`
+	CallID  string `json:"call_id"`
 }

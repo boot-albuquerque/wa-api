@@ -21,6 +21,14 @@
       na resposta de `POST /admin/users`, e não é recuperável depois. Perdido o
       token, cria-se outra sessão.
 
+      **Instalação sem sessões devolve `data: []`**, e nunca `null`: só uma
+      das duas formas se percorre sem verificação.
+
+      **Nomes**: esta família migrou para a camada de DTO. `loggedIn` passou a
+      `logged_in`, `proxyUrl` a `proxy_url`, `webhookUseProxy` a
+      `webhook_use_proxy`, e nenhum campo é omitido quando está vazio.
+      `s3_config.access_key`, que vinha sempre como `***`, **desapareceu**.
+
       **Quando usar**: em painéis de operação, para saber que sessões existem e
       quais estão ligadas e autenticadas.
 
@@ -32,7 +40,8 @@
       - TokenAdmin: []
     responses:
       '200':
-        description: Lista de sessões. Vazia se não houver nenhuma.
+        description: |
+          Lista de sessões. `[]` se não houver nenhuma — nunca `null`.
         content:
           application/json:
             schema:
@@ -53,11 +62,14 @@
                   engine: wa_noise
                   webhook: ''
                   jid: 5516981818244:25@s.whatsapp.net
+                  qrcode: ''
                   connected: true
-                  loggedIn: true
-                  proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                  logged_in: true
+                  expiration: 0
+                  events: All
+                  hmac_configured: false
+                  proxy_config: {enabled: false, proxy_url: '', webhook_use_proxy: true}
                   s3_config:
-                    access_key: '***'
                     bucket: ''
                     enabled: false
                     endpoint: ''
@@ -101,10 +113,16 @@
       - `events` é uma lista separada por vírgulas, e cada nome é validado:
         um nome desconhecido dá `400 invalid_event_type`, indicando qual.
         `All` recebe todos os eventos.
-      - `hmacKey`, quando presente, tem de ter pelo menos **32 caracteres**
+      - `hmac_key`, quando presente, tem de ter pelo menos **32 caracteres**
         (`400 hmac_key_too_short`). É guardada cifrada e nunca mais sai.
-      - `s3Config`/`proxyConfig` são aceites também em `snake_case`
-        (`s3_config`, `proxy_config`); o camelCase vence quando ambos vierem.
+
+      **Nomes**: o corpo é todo em `snake_case` — `hmac_key`, `proxy_config`,
+      `s3_config`, e dentro deles `proxy_url`, `access_key`, `path_style`,
+      `public_url`, `media_delivery`, `retention_days`, `webhook_use_proxy`.
+      O camelCase de antes deixou de ser lido na migração para DTO: ele
+      existia porque a RESPOSTA era snake_case, e alinhar os dois lados
+      dispensou a grafia dupla. Um corpo com os nomes antigos perde esses
+      campos, e o servidor regista `unknown field`.
 
       **Autenticação**: token de administração, no cabeçalho `Authorization`,
       sem prefixo `Bearer`. É regerado a cada arranque e fica em
@@ -123,8 +141,8 @@
             engine: wa_noise
             events: Message,Receipt,Connected
             history: 100
-            proxyConfig: {enabled: false, proxyUrl: ''}
-            s3Config: {enabled: false, mediaDelivery: base64, retentionDays: 30}
+            proxy_config: {enabled: false, proxy_url: ''}
+            s3_config: {enabled: false, media_delivery: base64, retention_days: 30}
     responses:
       '200':
         description: |
@@ -147,11 +165,15 @@
                 token: tk_EXEMPLO_NAO_USE_gere_o_seu
                 engine: wa_noise
                 webhook: ''
+                jid: ''
+                qrcode: ''
                 connected: false
+                logged_in: false
+                expiration: 0
                 events: Message,Receipt,Connected
-                proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                hmac_configured: false
+                proxy_config: {enabled: false, proxy_url: '', webhook_use_proxy: true}
                 s3_config:
-                  access_key: '***'
                   bucket: ''
                   enabled: false
                   endpoint: ''
@@ -187,10 +209,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 409
-              error: conflict
+              error:
+                code: conflict
+                message: A requisição não pode ser atendida no estado atual.
               success: false
       '500':
         $ref: '#/components/responses/ErroInterno'
@@ -203,10 +227,13 @@
       O mesmo manipulador da listagem, filtrado por `id`. Por isso **devolve um
       ARRAY**, e não um objecto — com um elemento quando a sessão existe.
 
-      **Sessão inexistente responde `200` com `data: null`, e não `404`.**
-      Medido a 2026-08-26 contra
-      `/admin/users/00000000000000000000000000000000`. Um cliente que espere
-      `404` para "não existe" não o vai receber aqui; teste `data`.
+      **Sessão inexistente responde `200` com `data: []`, e não `404`.** Um
+      cliente que espere `404` para "não existe" não o vai receber aqui; teste
+      o comprimento de `data`.
+
+      Até à migração para DTO este caso devolvia `data: null`, porque o use
+      case fazia `append` sobre uma fatia nil; hoje a colecção vazia é sempre
+      `[]`.
 
       Tal como na listagem, `token` vem sempre vazio.
 
@@ -219,7 +246,7 @@
     responses:
       '200':
         description: |
-          Array com a sessão pedida, ou `null` quando o identificador não
+          Array com a sessão pedida, ou `[]` quando o identificador não
           corresponde a nenhuma.
         content:
           application/json:
@@ -230,7 +257,7 @@
                   properties:
                     data:
                       type: array
-                      nullable: true
+                      nullable: false
                       items:
                         $ref: '#/components/schemas/UtilizadorAdmin'
             example:
@@ -242,11 +269,14 @@
                   engine: wa_noise
                   webhook: ''
                   jid: 5516981818244:25@s.whatsapp.net
+                  qrcode: ''
                   connected: true
-                  loggedIn: true
-                  proxy_config: {enabled: false, proxyUrl: '', webhookUseProxy: true}
+                  logged_in: true
+                  expiration: 0
+                  events: All
+                  hmac_configured: false
+                  proxy_config: {enabled: false, proxy_url: '', webhook_use_proxy: true}
                   s3_config:
-                    access_key: '***'
                     bucket: ''
                     enabled: false
                     endpoint: ''
@@ -277,13 +307,18 @@
       **Um pedido sem nenhum campo útil** (`{}` ou só campos vazios) responde
       `400 no_fields_to_update`, e não `500`.
 
-      **`s3Config` e `proxyConfig` são aceites também em `snake_case`**
-      (`s3_config`, `proxy_config`) porque a resposta de leitura usa
-      snake_case, e o ciclo natural — ler, alterar um campo, reenviar — chegava
-      com o nome da resposta e era **ignorado em silêncio com `200`**. O
-      camelCase vence quando os dois nomes vierem no mesmo corpo.
+      **O corpo é todo em `snake_case`** — `s3_config`, `proxy_config`, e
+      dentro deles `proxy_url`, `access_key`, `path_style`, `public_url`,
+      `media_delivery`, `retention_days`, `webhook_use_proxy`. É o mesmo nome
+      que a leitura devolve, o que torna o ciclo natural — ler, alterar um
+      campo, reenviar — simétrico por construção. O camelCase de antes deixou
+      de ser lido.
 
-      Uma alteração de `proxyConfig` com `enabled: false` limpa o `proxy_url`
+      **Não reenvie a resposta inteira como corpo**: ela não traz `access_key`
+      nem `secret_key`, e um bloco `s3_config` presente **substitui o bloco
+      todo**, gravando no valor zero o que não vier nele.
+
+      Uma alteração de `proxy_config` com `enabled: false` limpa o `proxy_url`
       gravado.
 
       **`engine` é imutável**: reenviar o mesmo valor já gravado é um no-op
@@ -408,7 +443,7 @@
       | termina a ligação ao WhatsApp | **não** | faz `logout` e `disconnect` antes |
       | ficheiros em `<datadir>/files/<id>` | **deixa** | apaga a pasta inteira |
       | objectos no S3 | não apaga | **também não apaga** — ver abaixo |
-      | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid}` |
+      | corpo da resposta | `{"status": "deleted"}` | `{id, name, jid, details}` |
 
       Ou seja: esta rota deixa para trás a sessão viva na memória do processo e
       a mídia em disco. Use `/full` quando a intenção for remover o
@@ -508,11 +543,13 @@
       '200':
         description: |
           Sessão removida. O corpo traz a identificação de quem foi apagado,
-          para o registo de auditoria de quem chamou.
+          para o registo de auditoria de quem chamou, mais o `details`.
 
-          Repare que o use case constrói também um `details` e um `success`
-          próprios que **não chegam ao fio**: o manipulador entrega apenas o
-          `data` ao envelope comum.
+          O `details` é acréscimo da migração para DTO: o use case sempre o
+          calculou e o manipulador deitava-o fora. O `code` e o `success` que
+          o mesmo resultado carregava eram uma segunda cópia do envelope
+          dentro do domínio, e saíram — o estado HTTP passou a ser escrito na
+          fronteira.
         content:
           application/json:
             schema:
@@ -528,6 +565,7 @@
                 id: 918e37366f27e1125ee0482a793267e1
                 name: filarapida
                 jid: 5516981818244:25@s.whatsapp.net
+                details: user instance removed completely
               success: true
       '400':
         description: Identificador em falta no caminho.
@@ -683,10 +721,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -764,10 +804,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -804,7 +846,7 @@
                       $ref: '#/components/schemas/Detalhes'
             example:
               code: 200
-              data: {Details: Webhook and events deleted successfully}
+              data: {details: Webhook and events deleted successfully}
               success: true
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -822,7 +864,7 @@
       conversa no banco local.
 
       `0` significa gravação **desactivada**, e é resposta legítima — o campo
-      `History` vem sempre presente, sem `omitempty`, exactamente para que o
+      `history` vem sempre presente, sem `omitempty`, exactamente para que o
       zero seja distinguível de "campo ausente".
 
       **Para LER o histórico de mensagens de uma conversa** use
@@ -848,7 +890,7 @@
                       $ref: '#/components/schemas/LimiteHistorico'
             example:
               code: 200
-              data: {History: 100}
+              data: {history: 100}
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -900,7 +942,7 @@
                       $ref: '#/components/schemas/LimiteHistorico'
             example:
               code: 200
-              data: {Details: History configured successfully, History: 100}
+              data: {details: History configured successfully, history: 100}
               success: true
       '400':
         description: |
@@ -998,8 +1040,19 @@
 
       - `media_delivery`, quando presente, tem de ser `base64`, `s3` ou `both`
         (`400 invalid_media_delivery`). Vazio assume `base64`.
-      - `endpoint`, quando presente, tem de ser um URL analisável
-        (`400 invalid_s3_endpoint`).
+      - `endpoint`, quando presente, passa pelo validador de saída partilhado
+        (`egress.ValidateOutboundURL`, sec/F24) e precisa de: esquema `http`
+        ou `https`; um host presente; e **nenhum** endereço resolvido em
+        faixa reservada ou loopback (`127.0.0.0/8`, `169.254.0.0/16`,
+        `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, multicast e
+        equivalentes IPv6). Um URL bem formado mas apontando para
+        `127.0.0.1` ou similar **é recusado** — "URL analisável" não é a
+        regra real (F277); `http://127.0.0.1:9000` é perfeitamente
+        analisável e mesmo assim devolve `400 invalid_s3_endpoint`. As duas
+        causas — "não analisei" e "recusei o destino" — devolvem o MESMO
+        código; a mensagem não distingue uma da outra. Consequência
+        prática: não é possível apontar para um MinIO ou S3 compatível em
+        `localhost`.
       - `secret_key` é cifrada antes de tocar no banco e **nunca é devolvida**
         por nenhuma rota.
 
@@ -1025,7 +1078,7 @@
             retention_days: 30
     responses:
       '200':
-        description: Configuração gravada. `Enabled` ecoa o estado pedido.
+        description: Configuração gravada. `enabled` ecoa o estado pedido.
         content:
           application/json:
             schema:
@@ -1037,7 +1090,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoS3'
             example:
               code: 200
-              data: {Details: S3 configuration saved successfully, Enabled: true}
+              data: {details: S3 configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1069,6 +1122,15 @@
       **Não apaga os objectos já guardados no bucket** — só a configuração que
       apontava para ele. A limpeza do que lá está é sua.
 
+      **`enabled: false`, mas não é o mesmo corpo de uma sessão que nunca
+      configurou S3.** Medido em 2026-08-26: depois deste DELETE,
+      `GET /s3/config` volta com `path_style: true`, `media_delivery: base64`
+      e `retention_days: 30` — os valores por OMISSÃO do schema — enquanto uma
+      sessão que nunca chamou `POST /s3/config` mostra `path_style: false`,
+      `media_delivery: ""` e `retention_days: 0`. "Apagar" e "nunca ter tido"
+      não são o mesmo corpo; quem compara os dois não é avisado por nenhum
+      outro lugar deste documento.
+
       Não recebe corpo.
 
       **Autenticação**: token de sessão.
@@ -1076,7 +1138,7 @@
       - TokenSessao: []
     responses:
       '200':
-        description: Configuração removida. `Enabled` vem `false`, logo omitido do corpo.
+        description: Configuração removida. `enabled` vem `false`.
         content:
           application/json:
             schema:
@@ -1088,7 +1150,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoS3'
             example:
               code: 200
-              data: {Details: S3 configuration deleted successfully}
+              data: {details: S3 configuration deleted successfully, enabled: false}
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1149,7 +1211,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoS3'
             example:
               code: 200
-              data: {Details: S3 configuration saved successfully, Enabled: true}
+              data: {details: S3 configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1201,7 +1263,7 @@
     responses:
       '200':
         description: |
-          O bucket respondeu. `Bucket` e `Region` ecoam a configuração
+          O bucket respondeu. `bucket` e `region` ecoam a configuração
           **testada** — é o que distingue "testei o que gravaste" de "respondi
           200". Nenhuma credencial aparece.
         content:
@@ -1217,9 +1279,9 @@
               code: 200
               data:
                 connected: true
-                Details: S3 connection test successful
-                Bucket: wa-api-midia
-                Region: sa-east-1
+                details: S3 connection test successful
+                bucket: wa-api-midia
+                region: sa-east-1
               success: true
       '400':
         description: |
@@ -1246,10 +1308,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 500
-              error: internal server error
+              error:
+                code: internal_error
+                message: Ocorreu um erro interno.
               success: false
 
 /hmac/config:
@@ -1327,7 +1391,7 @@
             hmac_key: chave-de-assinatura-com-32-carac
     responses:
       '200':
-        description: 'Chave gravada. `Enabled: true` reporta o estado DEPOIS da operação.'
+        description: 'Chave gravada. `enabled: true` reporta o estado DEPOIS da operação.'
         content:
           application/json:
             schema:
@@ -1339,7 +1403,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
             example:
               code: 200
-              data: {Details: HMAC configuration saved successfully, Enabled: true}
+              data: {details: HMAC configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1379,9 +1443,7 @@
       - TokenSessao: []
     responses:
       '200':
-        description: |
-          Chave revogada. `Enabled` vem `false` — logo, omitido do corpo, e a
-          sua ausência é a confirmação.
+        description: Chave revogada. `enabled` vem `false`.
         content:
           application/json:
             schema:
@@ -1393,7 +1455,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
             example:
               code: 200
-              data: {Details: HMAC configuration deleted successfully}
+              data: {details: HMAC configuration deleted successfully, enabled: false}
               success: true
       '400':
         $ref: '#/components/responses/SemSessao'
@@ -1444,7 +1506,7 @@
                       $ref: '#/components/schemas/ResultadoConfiguracaoHmac'
             example:
               code: 200
-              data: {Details: HMAC configuration saved successfully, Enabled: true}
+              data: {details: HMAC configuration saved successfully, enabled: true}
               success: true
       '400':
         description: |
@@ -1523,8 +1585,8 @@
       '200':
         description: |
           Configuração gravada. O corpo **difere entre os dois ramos**: ligar
-          ecoa `Set`, `ProxyURL` e `webhook_use_proxy`; desligar responde só
-          `Details`.
+          ecoa `set`, `proxy_url` e `webhook_use_proxy`; desligar responde só
+          `details`.
         content:
           application/json:
             schema:
@@ -1537,9 +1599,9 @@
             example:
               code: 200
               data:
-                Details: Proxy configured successfully
-                Set: true
-                ProxyURL: socks5://utilizador:senha@proxy.exemplo.com.br:1080
+                details: Proxy configured successfully
+                set: true
+                proxy_url: socks5://utilizador:senha@proxy.exemplo.com.br:1080
                 webhook_use_proxy: false
               success: true
       '400':
@@ -1684,10 +1746,12 @@
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ErroTextoSimples'
+              $ref: '#/components/schemas/Erro'
             example:
               code: 400
-              error: bad request
+              error:
+                code: invalid_request
+                message: Requisição inválida.
               success: false
       '401':
         $ref: '#/components/responses/NaoAutorizado'
@@ -1735,7 +1799,7 @@
     responses:
       '200':
         description: |
-          A recusa foi aceite pelo WhatsApp. O `CallID` ecoa o identificador
+          A recusa foi aceite pelo WhatsApp. O `call_id` ecoa o identificador
           recusado, para casar com o evento de origem.
         content:
           application/json:
@@ -1749,8 +1813,8 @@
             example:
               code: 200
               data:
-                Details: Call rejected
-                CallID: 3EB0A4B2AFD45E625C0917
+                details: Call rejected
+                call_id: 3EB0A4B2AFD45E625C0917
               success: true
       '400':
         description: |

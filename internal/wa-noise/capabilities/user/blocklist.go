@@ -47,20 +47,31 @@ func GetBlocklist(ctx context.Context, t Transport) (*types.Blocklist, error) {
 }
 
 // UpdateBlocklist updates the user's block list and returns the updated list.
+//
+// pnJID is the phone-number JID counterpart of jid, required by the server
+// alongside a LID `jid` when action is block (LIB-02, porting whatsmeow
+// 8d023aa973 / Baileys 8ca9316a10: the blocklist write migrated to LID
+// addressing, and a block additionally carries `pn_jid`; unblock does not).
+// Pass a zero JID when the caller has no PN to offer — the attribute is
+// then omitted, same as before this parameter existed.
 func UpdateBlocklist(
 	ctx context.Context, t Transport,
-	jid types.JID, action events.BlocklistChangeAction,
+	jid types.JID, pnJID types.JID, action events.BlocklistChangeAction,
 ) (*types.Blocklist, error) {
+	attrs := waBinary.Attrs{
+		"jid":    jid,
+		"action": string(action),
+	}
+	if action == events.BlocklistChangeActionBlock && !pnJID.IsEmpty() {
+		attrs["pn_jid"] = pnJID
+	}
 	resp, err := t.SendIQ(ctx, IQ{
 		Namespace: blocklistIQNamespace,
 		Type:      IQSet,
 		To:        types.ServerJID,
 		Content: []waBinary.Node{{
-			Tag: "item",
-			Attrs: waBinary.Attrs{
-				"jid":    jid,
-				"action": string(action),
-			},
+			Tag:   "item",
+			Attrs: attrs,
 		}},
 	})
 	if err != nil {

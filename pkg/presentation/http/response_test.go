@@ -98,17 +98,31 @@ func TestRespondJSON_AppError_ThroughWrappedError(t *testing.T) {
 	}
 }
 
-// TestRespondJSON_UntypedError_UsesGenericMessage proves the unchanged
-// path: a plain error keeps the call site's statusCode, and the message
-// is the safe generic text derived from that status — never err.Error().
-func TestRespondJSON_UntypedError_UsesGenericMessage(t *testing.T) {
+// TestRespondJSON_UntypedError_UsesCanonicalErrorObject proves the branch
+// that catches everything the taxonomy did not: the call site's statusCode is
+// kept, and `error` is the canonical OBJECT for that status — never the
+// wrapped error's own text, and never a bare string.
+//
+// The old version of this test asserted `envelope["error"] == "bad request"`,
+// a plain string. That contract is gone: a client cannot branch on a sentence,
+// and the sentence changed shape per status. See docs/HTTP-DTO-CONVENTIONS.md.
+func TestRespondJSON_UntypedError_UsesCanonicalErrorObject(t *testing.T) {
 	tests := []struct {
-		status  int
-		wantMsg string
+		status   int
+		wantCode string
 	}{
-		{http.StatusBadRequest, "bad request"},
+		{http.StatusBadRequest, "invalid_request"},
 		{http.StatusUnauthorized, "unauthorized"},
-		{http.StatusInternalServerError, "internal server error"},
+		{http.StatusForbidden, "forbidden"},
+		{http.StatusNotFound, "not_found"},
+		{http.StatusConflict, "conflict"},
+		{http.StatusUnprocessableEntity, "unprocessable_entity"},
+		{http.StatusTooManyRequests, "rate_limited"},
+		{http.StatusNotImplemented, "not_implemented"},
+		{http.StatusBadGateway, "bad_gateway"},
+		{http.StatusServiceUnavailable, "service_unavailable"},
+		{http.StatusGatewayTimeout, "gateway_timeout"},
+		{http.StatusInternalServerError, "internal_error"},
 	}
 
 	for _, tt := range tests {
@@ -122,11 +136,21 @@ func TestRespondJSON_UntypedError_UsesGenericMessage(t *testing.T) {
 				t.Errorf("status = %d, want %d", rec.Code, tt.status)
 			}
 			envelope := decodeEnvelope(t, rec)
-			if got := envelope["error"]; got != tt.wantMsg {
-				t.Errorf("envelope[\"error\"] = %v, want %q", got, tt.wantMsg)
-			}
 			if got := envelope["success"]; got != false {
 				t.Errorf("envelope[\"success\"] = %v, want false", got)
+			}
+			errObj, ok := envelope["error"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("envelope[\"error\"] = %#v, want an object {code, message} for EVERY status", envelope["error"])
+			}
+			if errObj["code"] != tt.wantCode {
+				t.Errorf("error.code = %v, want %q", errObj["code"], tt.wantCode)
+			}
+			if msg, _ := errObj["message"].(string); msg == "" {
+				t.Errorf("error.message is empty for status %d", tt.status)
+			}
+			if len(errObj) != 2 {
+				t.Errorf("error object has %d keys (%v), want exactly code+message in production", len(errObj), errObj)
 			}
 			body := rec.Body.String()
 			if strings.Contains(body, "hunter2") || strings.Contains(body, "postgres://") {
@@ -136,18 +160,55 @@ func TestRespondJSON_UntypedError_UsesGenericMessage(t *testing.T) {
 	}
 }
 
-// TestRespondJSON_UnrecognizedStatusCode_FallsBackSafely proves the
-// fallback for a status code http.StatusText doesn't recognize — no call
-// site in the repo passes one (verified: only 200/400/401/500 appear),
-// but the function must not produce an empty or malformed message if one
-// ever does.
+// TestRespondJSON_UnrecognizedStatusCode_FallsBackSafely proves the fallback
+// for a status this taxonomy does not enumerate: the most conservative body,
+// because a status nobody planned for is by definition one we cannot describe.
 func TestRespondJSON_UnrecognizedStatusCode_FallsBackSafely(t *testing.T) {
 	rec := httptest.NewRecorder()
 	RespondJSON(rec, 999, nil, errors.New("some error"))
 
 	envelope := decodeEnvelope(t, rec)
-	if got := envelope["error"]; got != "internal server error" {
-		t.Errorf("envelope[\"error\"] = %v, want %q (fallback for unrecognized status)", got, "internal server error")
+	errObj, ok := envelope["error"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("envelope[\"error\"] = %#v, want an object", envelope["error"])
+	}
+	if errObj["code"] != "internal_error" {
+		t.Errorf("error.code = %v, want %q (fallback for unrecognized status)", errObj["code"], "internal_error")
+	}
+}
+
+// TestRespondJSON_ErrorIsNeverAString is the shape assertion on its own,
+// separate from the code/message values, because it is the property the six
+// route migrations depend on: a client may ALWAYS read `error.code`.
+func TestRespondJSON_ErrorIsNeverAString(t *testing.T) {
+	casos := []struct {
+		nome string
+		err  error
+	}{
+		{"erro tipado", apperr.New("x_failed", apperr.CategoryValidation, "mensagem segura", false, nil)},
+		{"erro tipado embrulhado", fmt.Errorf("camada acima: %w", apperr.New("y_failed", apperr.CategoryNotFound, "não existe", false, nil))},
+		{"erro nu", errors.New("boom")},
+		{"erro nu embrulhado", fmt.Errorf("camada acima: %w", errors.New("boom"))},
+	}
+	for _, caso := range casos {
+		t.Run(caso.nome, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			RespondJSON(rec, http.StatusInternalServerError, nil, caso.err)
+			envelope := decodeEnvelope(t, rec)
+			if _, ehTexto := envelope["error"].(string); ehTexto {
+				t.Fatalf("error veio como TEXTO (%q): o contrato exige objecto para todo erro", envelope["error"])
+			}
+			errObj, ok := envelope["error"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("error = %#v, want object", envelope["error"])
+			}
+			if code, _ := errObj["code"].(string); code == "" {
+				t.Error("error.code vazio")
+			}
+			if msg, _ := errObj["message"].(string); msg == "" {
+				t.Error("error.message vazia")
+			}
+		})
 	}
 }
 

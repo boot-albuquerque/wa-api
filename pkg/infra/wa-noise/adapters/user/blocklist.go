@@ -55,7 +55,17 @@ func (a *UserAdapter) UpdateBlocklist(ctx context.Context, txtID string, target 
 		return domain.BlocklistUpdate{}, errmap.ClassifyIQ(err)
 	}
 
-	blocklist, err := client.UpdateBlocklist(ctx, resolved, action)
+	// LIB-02: block exige também `pn_jid` no stanza (ver UpdateBlocklist em
+	// internal/wa-noise). Zero-valor quando não há PN a oferecer — a
+	// biblioteca omite o atributo nesse caso, nunca pior que antes desta
+	// correção. unblock não usa pnJID; resolveBlocklistPN só é chamado
+	// quando block é o pedido, para não gastar um info query à toa.
+	var pnJID types.JID
+	if block {
+		pnJID = resolveBlocklistPN(ctx, client, requested)
+	}
+
+	blocklist, err := client.UpdateBlocklist(ctx, resolved, pnJID, action)
 	if err != nil {
 		// F204: medido em POST /user/block com número sem conta — o servidor
 		// respondia 400 bad-request e nós devolvíamos 500.
@@ -96,25 +106,84 @@ func normalizeBlocklistJID(jid types.JID) types.JID {
 	return jid
 }
 
-// resolveBlocklistPNJID traduz um LID para o número de telefone, que é a
-// forma que a lista de bloqueio aceita. Migrado literalmente de block_user.go,
-// menos a asserção de tipo `client.(*wanoise.Client)`, que existia só
-// porque o helper recebia interface{} — aqui o tipo é a interface waclient.Client
-// e o Store é acessado pelo método Store().
+// resolveBlocklistPNJID normaliza o JID que vai para `<item jid=…>`.
+//
+// F278/LIB-02: o WhatsApp migrou a escrita da blocklist para endereçamento
+// por LID — o `<item>` correto já usa `@lid`, não `@s.whatsapp.net`. Até
+// 2026-08-27 esta função ia no sentido ERRADO num dos dois casos: um LID já
+// recebido era traduzido de volta para PN antes de enviar, produzindo a
+// forma pré-migração que o servidor recusa com `400 bad-request` em
+// `client.UpdateBlocklist`.
+//
+// Um LID que chega aqui já é a forma que o protocolo exige — não há PN
+// nenhum a resolver, e a chamada correspondente foi REMOVIDA (não só
+// contornada): manter a chamada e ignorar o resultado esconderia a mesma
+// causa atrás de um código que parece cauteloso.
+//
+// Um PN (o caso mais comum — a maioria dos chamadores manda telefone, não
+// LID) é a metade que só ficou completa nesta revisão: tenta-se resolver o
+// LID correspondente no store local (`getCachedLIDForPN`, o par de
+// `getCachedPNForLID`); se o mapeamento já estiver em cache — normalmente
+// está, para qualquer contacto que já trocou mensagem ou já apareceu numa
+// sincronização —, o `<item>` sai em `@lid`. Sem mapeamento em cache, cai
+// para o PN tal como veio: pior que a forma correta, mas nunca pior que o
+// comportamento anterior a esta correção.
+//
+// Isto corrige `unblock` sempre que o LID (do parâmetro, ou resolvido a
+// partir do PN) estiver disponível: o stanza de unblock não leva `pn_jid`,
+// só `jid=…@lid`. `block` foi completado em 2026-08-28 (F264, mesma
+// sessão): o `pn_jid` adicional que o WhatsApp exige nesse caso é
+// resolvido por `resolveBlocklistPN`, abaixo, e passado a
+// `UpdateBlocklist` (porta de whatsmeow `8d023aa973`).
 func resolveBlocklistPNJID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
 	jid = normalizeBlocklistJID(jid)
 	switch jid.Server {
-	case types.DefaultUserServer:
-		return jid, nil
 	case types.HiddenUserServer:
-		pn, err := getCachedPNForLID(ctx, client, jid)
-		if err != nil {
-			return types.JID{}, err
+		return jid, nil
+	case types.DefaultUserServer:
+		if lid, err := getCachedLIDForPN(ctx, client, jid); err == nil {
+			return lid, nil
 		}
-		return normalizeBlocklistJID(pn), nil
+		return jid, nil
 	default:
 		return types.JID{}, fmt.Errorf("unsupported blocklist JID server %q", jid.Server)
 	}
+}
+
+// resolveBlocklistPN resolve o JID de telefone que vai no atributo
+// `pn_jid` de um pedido de block (LIB-02). Um PN já é a sua própria
+// resposta; um LID exige um mapeamento em cache. Sem mapeamento, devolve o
+// JID zero — o chamador (UpdateBlocklist) trata isso como "omitir o
+// atributo", nunca "enviar um pn_jid errado".
+func resolveBlocklistPN(ctx context.Context, client waclient.Client, jid types.JID) types.JID {
+	switch jid.Server {
+	case types.DefaultUserServer:
+		return jid
+	case types.HiddenUserServer:
+		if pn, err := getCachedPNForLID(ctx, client, jid); err == nil {
+			return pn
+		}
+	}
+	return types.JID{}
+}
+
+// getCachedLIDForPN é o par, no sentido PN→LID, de getCachedPNForLID
+// (abaixo). Erro devolvido, nunca pânico: o chamador trata "sem mapeamento
+// em cache" como esperado, não excepcional — é o caso de um contacto que
+// nunca trocou mensagem nem apareceu numa sincronização.
+func getCachedLIDForPN(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
+	store := client.Store()
+	if store == nil || store.LIDs == nil {
+		return types.JID{}, fmt.Errorf("PN-to-LID mapping store is not available")
+	}
+	lid, err := store.LIDs.GetLIDForPN(ctx, jid)
+	if err != nil {
+		return types.JID{}, fmt.Errorf("could not resolve LID JID for phone number %s: %w", jid, err)
+	}
+	if lid.IsEmpty() {
+		return types.JID{}, fmt.Errorf("could not resolve LID JID for phone number %s", jid)
+	}
+	return lid, nil
 }
 
 func getCachedPNForLID(ctx context.Context, client waclient.Client, jid types.JID) (types.JID, error) {
