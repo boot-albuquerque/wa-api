@@ -114,7 +114,12 @@ export async function listarSessoes() {
     jid: u.jid || "",
     conectado: !!u.connected,
     autenticado: !!u.logged_in,
-    engine: u.engine || "noise",
+    // "wa_noise", não "noise": é o valor do FIO (domain.Engine.String()),
+    // e sessions.js reenvia este MESMO valor em `?engine=` nas rotas de
+    // pareamento — um default que não bate com o que a API aceita faria
+    // GET /session/qr recusar com invalid_engine para qualquer sessão cuja
+    // linha ainda não tenha `engine` (legacy_unknown).
+    engine: u.engine || "wa_noise",
     token: Tokens.de(u.id),
     temToken: !!Tokens.de(u.id),
   }));

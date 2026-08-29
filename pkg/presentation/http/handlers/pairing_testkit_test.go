@@ -8,6 +8,7 @@ import (
 	"wa-api/pkg/capabilityregistry"
 	"wa-api/pkg/domain"
 	"wa-api/pkg/pairing"
+	"wa-api/pkg/qrimage"
 )
 
 // The harness the engine-explicit pairing tests share.
@@ -27,6 +28,36 @@ import (
 // wired in production — so requests naming wa_headless for those two now
 // reach the headless spy instead of being refused. request_pairing_code
 // remains unknown; a phone-pairing test still expects 422.
+
+const (
+	// qrCodeNoise / qrCodeHeadless são os códigos de pareamento que cada spy
+	// representa. Nomeados porque cada um aparece na semeadura E na asserção,
+	// e literal repetido é o mesmo bug à espera de divergir (ADR-0004).
+	qrCodeNoise    = "2@noise"
+	qrCodeHeadless = "2@headless"
+
+	// qrCodePersistido é o código que os testes da família /session usam
+	// quando o engine não é o ponto — só a forma da resposta é.
+	qrCodePersistido = "2@codigo-de-pareamento"
+)
+
+// qrImageOf é a imagem que `GET /session/pair/qr` responde para `code`,
+// construída com o codificador DA PRODUÇÃO (pkg/qrimage) e não com um literal
+// escrito à mão.
+//
+// Importa qual: a rota documenta uma imagem em data URI
+// (api/openapi/schemas/sessao.yaml), e a F373 mediu o custo de um consumidor
+// que assumiu outra coisa — desenhou o data URI como PAYLOAD de QR e produziu
+// um código impecável que o WhatsApp recusou. Uma constante à mão aqui seria
+// um dublê que não atravessa a transformação do caminho real.
+func qrImageOf(t *testing.T, code string) string {
+	t.Helper()
+	s, err := qrimage.Encode(code)
+	if err != nil {
+		t.Fatalf("qrimage.Encode(%q) = %v", code, err)
+	}
+	return s
+}
 
 // pairingSpy is a provider port that records every call.
 //
@@ -135,8 +166,16 @@ type pairingHarness struct {
 func newPairingHarness(t *testing.T, rows ...sessionRow) *pairingHarness {
 	t.Helper()
 
-	noise := &pairingSpy{engine: domain.EngineWaNoise, qr: "2@noise", code: "NOISE-CODE"}
-	headless := &pairingSpy{engine: domain.EngineWaHeadless, qr: "2@headless", code: "HEADLESS-CODE"}
+	// Os dois spies devolvem FORMAS DIFERENTES de propósito, porque os dois
+	// adapters reais devolvem formas diferentes — e foi ignorar isso que
+	// custou a F373. wa_noise lê users.qrcode, onde o orquestrador já gravou
+	// o PNG codificado (pkg/application/session/orchestrator.go, onPairingQR:
+	// "A coluna guarda a IMAGEM"); wa_headless lê a string crua da página
+	// (pkg/infra/wa-headless/pairing/qr.go). Um dublê que devolvesse a mesma
+	// forma pelos dois nunca exercitaria a normalização que existe justamente
+	// porque elas divergem.
+	noise := &pairingSpy{engine: domain.EngineWaNoise, qr: qrImageOf(t, qrCodeNoise), code: "NOISE-CODE"}
+	headless := &pairingSpy{engine: domain.EngineWaHeadless, qr: qrCodeHeadless, code: "HEADLESS-CODE"}
 
 	return &pairingHarness{
 		registry: pairing.NewRegistry(usersFor(rows...), capabilityRegistryForTest(),

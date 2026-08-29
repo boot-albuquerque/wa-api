@@ -1306,7 +1306,19 @@ rules_frozen=true
 # nao e' regressao introduzida por esta entrada, e' a MESMA lacuna ja
 # conhecida se repetindo numa terceira funcao de forma identica. Medido com
 # `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao inferido.
-min_func_coverage=607
+#
+# F373 (correcao do QR "invalido" do wa_noise) + F374 (refresh forcado por
+# tempo do QR do wa_headless), 2026-08-29: func_coverage CAI 607->604 (-3).
+# ENTRAM 5 elegiveis, nenhuma coberta: pkg/qrimage.Encode/EnsureDataURI
+# (codificador unico do QR pros dois engines) e QRReader.staleHint/
+# trackCode/forgetCode (relogio de staleness por txtID, F374). As cinco sao
+# helpers puros ou de estado em memoria (mapa/timestamp), sem caminho de
+# erro que justifique log por L1 — mesmo padrao ja' registado noutras
+# entradas deste arquivo para funcoes igualmente simples. Queda legitima,
+# nao regressao: nenhuma funcao PERDEU cobertura, so' entraram novas sem
+# log. Medido com `go run ./cmd/logcov -json` apos a
+# correcao completa, nao inferido.
+min_func_coverage=604
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): func_coverage 601 -> 604
 # (+3, ratchet-UP). Medido apos o merge completo, com todos os conflitos
@@ -1784,7 +1796,17 @@ min_errpath_coverage=783
 # 607/783 — as duas entram JA cobertas. Medido com `go run ./cmd/logcov
 # -json` e golden com `-golden` (ambos sem argumento) no mesmo commit. Nao
 # inferido.
-min_eligible=1059
+#
+# F373 + F374 (2026-08-29, mesmo dia): min_eligible SOBE 1059->1064 (+5).
+# ENTRAM: pkg/qrimage.Encode/EnsureDataURI (F373 — codificador unico do QR,
+# corrige o wa_noise devolver PNG e o wa_headless devolver a string crua no
+# mesmo campo) e QRReader.staleHint/trackCode/forgetCode (F374 — relogio de
+# staleness por txtID que forca refreshQR quando o mesmo codigo fica no ar
+# tempo demais, medido contra um gap real de 60s na rotacao da SPA). Nenhuma
+# das cinco loga (ver anotacao de min_func_coverage acima para o porque).
+# Medido com `go run ./cmd/logcov -json` e golden com `-golden` (ambos sem
+# argumento) no mesmo commit. Nao inferido.
+min_eligible=1064
 #
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): min_eligible 1026 -> 1040
 # (+14, ratchet-UP). Medido apos o merge completo — funcoes novas de

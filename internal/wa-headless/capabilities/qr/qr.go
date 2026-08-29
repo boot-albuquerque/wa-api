@@ -102,6 +102,36 @@ var (
 	refreshRetryTick = 400 * time.Millisecond
 )
 
+// StaleRefreshAfter bounds how long a CALLER may keep handing out the same
+// assembled code before Read is told to force a nudge on its next call,
+// even though the page itself sees nothing wrong (ref present, no expired
+// overlay).
+//
+// # Why this exists
+//
+// The reactive-only design above (nudge only on !ref or the expired
+// overlay) assumes the SPA's own rotation is the only signal that matters.
+// MEASURED (2026-08-29, TestProbeQRRetryPattern, 3 minutes,
+// .lab/test-account-profile) that assumption does not hold at a fixed
+// cadence: rotations landed at +10s, +70s, +90s, +110s, +130s, +150s — four
+// ~20s gaps, but ONE 60s gap between the first and second rotation. A
+// caller (the HTTP handler behind GET /session/pair/qr) that only reacts to
+// !ref/expired has no recourse during a gap like that: the code is still
+// genuinely valid from the page's own point of view, so nothing there ever
+// asks for a new one, and a poller showing a client-side countdown (devui)
+// sits with a "dead" timer and no explanation — reported by a user as "the
+// QR doesn't refresh, there's a long delay".
+//
+// 90s gives comfortable margin over the single 60s gap actually measured
+// (one sample; revisit if a longer gap is measured later) without fighting
+// the SPA's own reactive rotation on the common ~20s case.
+//
+// This constant is read by the CALLER (pkg/infra/wa-headless/pairing/qr.go),
+// which is the only layer with a place to persist "how long has this code
+// been the same" across separate HTTP polls — Read itself, and the Reader
+// it is called on, are constructed fresh per call and hold no history.
+var StaleRefreshAfter = 90 * time.Second
+
 // ErrRead is the page refusing or failing partway through the chain.
 var ErrRead = fmt.Errorf("qr: the page could not assemble the code")
 
@@ -127,16 +157,23 @@ func New(runner *engine.Runner, eval spa.Evaluator) *Reader {
 // nudge AT MOST ONCE — retrying is "did the page settle yet", not "nudge
 // it again every 400ms", which would call refreshQR far more often than a
 // human clicking the button ever would.
-func kickScript(key string, doRefresh bool) string {
+//
+// forceStale makes the script treat an otherwise-fine ref (present, not
+// expired) as unusable anyway — the CALLER's signal that this same code
+// has already been handed out for StaleRefreshAfter, not anything the page
+// itself observed. See StaleRefreshAfter's doc comment for why this exists.
+func kickScript(key string, doRefresh, forceStale bool) string {
 	return `(() => {
 	(async () => {
 		const out = { ok: false, why: "", qr: "", refreshed: false };
 		try {
+			const doRefresh = ` + strconv.FormatBool(doRefresh) + `;
+			const forceStale = ` + strconv.FormatBool(forceStale) + `;
 			const conn = window.require('WAWebConnModel');
 			const ref = (conn && conn.Conn && conn.Conn.ref) || "";
 			const expired = !!document.querySelector('` + expiredButtonSelector + `');
-			if (!ref || expired) {
-				if (` + strconv.FormatBool(doRefresh) + `) {
+			if (!ref || expired || forceStale) {
+				if (doRefresh) {
 					try {
 						const ls = window.require('WAWebLaunchSocketUtils');
 						if (ls && typeof ls.refreshQR === 'function') {
@@ -145,7 +182,7 @@ func kickScript(key string, doRefresh bool) string {
 						}
 					} catch (e) {}
 				}
-				out.why = expired ? "expired" : "no_ref";
+				out.why = !ref ? "no_ref" : (expired ? "expired" : "stale");
 				window.` + key + ` = JSON.stringify(out);
 				return;
 			}
@@ -180,20 +217,27 @@ type wireResult struct {
 // the ref has not arrived yet (a fresh pairing screen: the code arrives
 // around t+15s), the SPA's own "code expired" overlay is showing (measured
 // after every 6th automatic rotation, ~2m30s — see this package's own doc
-// comment), or the caller polled a session that finished pairing between
-// calls. All three are normal states, not failures.
+// comment), the caller polled a session that finished pairing between
+// calls, or staleHint asked for a forced nudge (see StaleRefreshAfter). All
+// four are normal states, not failures.
+//
+// staleHint is the CALLER's signal — not the page's — that the code it is
+// about to hand out again has already been on offer too long (see
+// StaleRefreshAfter's doc comment). It only affects the FIRST attempt, same
+// as the nudge itself: a forced nudge on every retry would call refreshQR
+// far more than intended.
 //
 // refreshed reports whether WAWebLaunchSocketUtils.refreshQR() was fired
-// during this call — nudged whenever the code is not usable (empty ref, or
-// the expired overlay). When it fires, Read retries up to refreshRetries
-// more times, refreshRetryTick apart (Go-side, under ctx — see
-// kickScript's own doc comment on invariant 6), giving the page a bounded
-// window to react before finally reporting no code — the same "wait then
-// answer" behaviour a single in-page loop would have had, without a page
-// script owning the decision.
-func (r *Reader) Read(ctx context.Context, label string) (code string, refreshed bool, err error) {
+// during this call — nudged whenever the code is not usable (empty ref,
+// the expired overlay, or staleHint). When it fires, Read retries up to
+// refreshRetries more times, refreshRetryTick apart (Go-side, under ctx —
+// see kickScript's own doc comment on invariant 6), giving the page a
+// bounded window to react before finally reporting no code — the same
+// "wait then answer" behaviour a single in-page loop would have had,
+// without a page script owning the decision.
+func (r *Reader) Read(ctx context.Context, label string, staleHint bool) (code string, refreshed bool, err error) {
 	for attempt := 0; ; attempt++ {
-		out, err := r.readOnce(ctx, label, attempt == 0)
+		out, err := r.readOnce(ctx, label, attempt == 0, attempt == 0 && staleHint)
 		if err != nil {
 			return "", refreshed, err
 		}
@@ -203,7 +247,7 @@ func (r *Reader) Read(ctx context.Context, label string) (code string, refreshed
 		if out.OK {
 			return out.QR, refreshed, nil
 		}
-		if out.Why != "no_ref" && out.Why != "expired" {
+		if out.Why != "no_ref" && out.Why != "expired" && out.Why != "stale" {
 			return "", refreshed, fmt.Errorf("%w: %s", ErrRead, out.Why)
 		}
 		// refreshed (the AGGREGATE across attempts), not out.Refreshed (this
@@ -224,9 +268,9 @@ func (r *Reader) Read(ctx context.Context, label string) (code string, refreshed
 
 // readOnce is a single kick-and-poll round trip, returning the page's raw
 // answer.
-func (r *Reader) readOnce(ctx context.Context, label string, doRefresh bool) (wireResult, error) {
+func (r *Reader) readOnce(ctx context.Context, label string, doRefresh, forceStale bool) (wireResult, error) {
 	key := nextStateKey()
-	raw, err := r.parked(ctx, kickScript(key, doRefresh), key, label+"/qr")
+	raw, err := r.parked(ctx, kickScript(key, doRefresh, forceStale), key, label+"/qr")
 	if err != nil {
 		return wireResult{}, fmt.Errorf("%w: %v", ErrRead, err)
 	}

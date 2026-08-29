@@ -418,13 +418,23 @@ func Main() {
 		Mode:    serverMode,
 	}
 	s.SessionOrchestrator = newSessionOrchestrator(s)
+	// setupEngineSelection ANTES de initCustomHandlers: initCustomHandlers lê
+	// s.Headless.ChromePath (wiring_handlers.go) para decidir se constrói o
+	// Disconnector/QRReader/Starter de wa_headless. Até esta correção a ordem
+	// era invertida — initCustomHandlers via' sempre o s.Headless ZERO, então
+	// TODO adapter de sessão headless (F370/H145) nunca era ligado, mesmo com
+	// WA_API_HEADLESS_CHROME configurado. Medido ao vivo (Claude in Chrome
+	// contra um servidor real): o log de arranque dizia
+	// "wa_headless_ports=0" seguido, na linha seguinte, de
+	// "headless_configured=true" — a config chegava DEPOIS de já ter sido
+	// consultada.
+	setupEngineSelection(s)
 	initCustomHandlers(s)
 	s.routes()
 
 	// A posse tem de existir ANTES do connectOnStartup: e' ela que decide
 	// quais sessoes este processo pode assumir (ADR-0005 D2).
 	setupSessionOwnership(s)
-	setupEngineSelection(s)
 
 	s.connectOnStartup()
 

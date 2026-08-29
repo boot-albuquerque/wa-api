@@ -2177,3 +2177,69 @@ conhecidos no texto (barato, e apanha o caso acima); ou fazer o gate extrair
 identificadores de qualquer campo `description` com uma heurística (caro, e
 gera falsos positivos). Aqui escolheu-se o primeiro, executado à mão, e a
 limitação ficou registada.
+
+## 30. Dois produtores da mesma `string` num campo só: o tipo não vê a diferença, e o consumidor escolhe uma
+
+**Medido em 2026-08-29** (HOUSEKEEP F373). `GET /session/pair/qr` é servido
+por dois engines pela mesma porta. `wa_noise` devolvia a **imagem** do QR
+(data URI de um PNG, porque o orquestrador grava a imagem em `users.qrcode`);
+`wa_headless` devolvia a **string crua** de pareamento. As duas são `string`,
+saem no mesmo campo `qr_code`, atravessam o mesmo `domain.GetQRResult`.
+
+Nada as distinguia: nem o tipo, nem a porta, nem o DTO, nem a revisão. A
+divergência entrou no dia em que o segundo engine chegou e ficou lá.
+
+Depois um consumidor — o painel — foi escrito para "a forma que os dois
+engines respondem", e desenhou o valor como payload de QR. Para `wa_noise`
+isso produziu um QR impecável codificando `data:image/png;base64,iVBOR…`. O
+telefone lê; o WhatsApp recusa.
+
+**Por que passou por tudo**: os 1858 caracteres do data URI **cabem** no
+limite do nível L (2953 bytes), então a biblioteca não levantou erro, o
+console ficou limpo, e a verificação ao vivo — que olhou para o ECRÃ, não
+para o conteúdo — deu verde. Quatro testes de unidade também estavam verdes,
+porque os dublês semeavam `"2@codigo-de-pareamento"` numa coluna que na
+produção guarda uma imagem (ver armadilha #1).
+
+**As regras**:
+
+1. **Quando dois produtores alimentam um campo, compare-os num teste que veja
+   os dois.** Cada adapter era coerente CONSIGO MESMO; o defeito só existe na
+   relação entre eles, e um teste por adapter nunca o encontraria. A tabela
+   sobre engines é o instrumento — não dois testes soltos.
+2. **A garantia de forma mora no ponto por onde todos passam**, não em cada
+   produtor. Normalizar dentro de cada adapter é o desenho que permitiu a
+   deriva: um produtor novo entra sem a garantia e ninguém repara. No choke
+   point, ele herda-a sem saber que existe.
+3. **Verificar um artefacto renderizado é olhar para o CONTEÚDO, não para o
+   ecrã.** "O QR aparece" e "o QR é o código certo" são afirmações
+   diferentes, e só a segunda interessa. Decodifique de volta — aqui bastou o
+   `BarcodeDetector` do próprio navegador sobre os pixels que o painel mostra.
+4. **Um contrato escrito é a arbitragem.** O schema já dizia "imagem em data
+   URI" desde antes; foi `wa_headless` que nunca o cumpriu. Ler o contrato
+   antes de escolher qual forma é "a certa" evitou mudar uma rota pública
+   para acomodar um defeito.
+
+## 31. Dois servidores no mesmo porto: a medição pode ser do binário errado
+
+**Medido em 2026-08-29** (HOUSEKEEP F373), durante a verificação da própria
+correcção acima.
+
+Um processo tinha `127.0.0.1:8099` e outro `*:8099`. **Os dois `bind`
+tiveram sucesso** — são endereços diferentes — e o SO entrega as ligações a
+`127.0.0.1` ao *bind* mais específico. Além disso, o servidor com o binário
+CORRIGIDO morreu no arranque (`another process is already using the data
+directory`, guarda de `WA_API_CLUSTER_MODE=single`) e o `curl` seguinte foi
+respondido, com `200` e corpo plausível, pelo binário ANTIGO.
+
+Nada na resposta dizia qual processo respondeu. A medição parecia boa e
+media a coisa errada.
+
+**A regra**: antes de medir, **confirme a identidade do servidor que
+responde**, com um valor que só aquele arranque tem — um `WA_API_ADMIN_TOKEN`
+único lido de volta por `GET /devui/config`, por exemplo. E confira o log do
+arranque quanto a `fatal`: um servidor de fundo que morre não avisa quem
+mandou subi-lo, e o porto continua a responder.
+
+Corolário: "porta livre" verificado ANTES de subir não basta — verifique
+`lsof -nP -iTCP:<porta> -sTCP:LISTEN` DEPOIS, e conte as linhas.

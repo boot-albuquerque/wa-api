@@ -31,21 +31,56 @@ const POLL_MS = 3000;
 const ROTA_CONNECT = "/session/connect";
 const ROTA_DISCONNECT = "/session/disconnect";
 const ROTA_LOGOUT = "/session/logout";
-const ROTA_QR = "/session/qr";
+// F269 fez corte limpo de /session/qr para /session/pair/qr — o caminho
+// antigo não responde mais (ver pkg/bootstrap/caminhos.tsv).
+const ROTA_QR = "/session/pair/qr";
+
+// comEngine anexa `?engine=` a uma rota do surface de pareamento
+// (/session/connect, /session/qr). As duas exigem o parâmetro — sem ele,
+// pairing.Registry.Resolve recusa com invalid_engine ANTES de tocar
+// qualquer provider (pkg/pairing/registry.go). `s.engine` vem de
+// GET /admin/users (devui.js:listarSessoes), sempre "wa_noise" ou
+// "wa_headless" — os únicos valores domain.ParseEngine aceita.
+function comEngine(rota, s) {
+  return `${rota}?engine=${encodeURIComponent(s.engine)}`;
+}
 
 // Janela em que o painel espera o QR depois de pedir `connect`, e o intervalo
 // entre sondagens de ROTA_QR dentro dela.
 //
 // 12s cobre com folga o pior caso medido em 2026-08-20 contra o servidor
-// real: entre o `connect` e o primeiro QR passaram-se 640ms a 1,4s em todas
-// as corridas. Passada a janela sem QR nenhum, o pedido FALHOU de facto e
-// dizê-lo é melhor do que continuar a mostrar "Pedindo QR à API…".
-const QR_ESPERA_MS = 12000;
+// real PARA wa_noise: entre o `connect` e o primeiro QR passaram-se 640ms a
+// 1,4s em todas as corridas. wa_headless não tem esse luxo — mede um boot de
+// Chrome real, não um handshake de socket. Medido ao vivo em 2026-08-29
+// (Claude in Chrome, connect→primeiro GET /session/pair/qr): 13039ms só
+// nesse pedido, com o QR ainda vazio na resposta. 12s bastava para derrubar
+// esse cartão em "falhou" ANTES do Chrome sequer montar a página — não é
+// folga, é o timeout raso vencendo a corrida contra o boot. QR_ESPERA_MS
+// passa a ser por engine; ver esperaQRMs.
+const QR_ESPERA_MS_PADRAO = 12000;
+const QR_ESPERA_MS_HEADLESS = 30000;
 const QR_SONDA_MS = 1000;
+
+// esperaQRMs devolve o teto de "nunca mostrou QR nenhum" para a sessão `s`.
+// wa_headless mede boot de Chrome real (variável, sujeito a carga da
+// máquina); wa_noise mede handshake de socket. Confundir os dois teto foi o
+// defeito medido acima.
+function esperaQRMs(s) {
+  return s.engine === "wa_headless" ? QR_ESPERA_MS_HEADLESS : QR_ESPERA_MS_PADRAO;
+}
 
 // Teto para o handshake do WebSocket. Não é o tempo até o QR: é só até o
 // socket ficar OPEN, que na mesma medição levou 5ms a 13ms.
 const WS_ABERTURA_MS = 5000;
+
+// QR_PRESO_MS é o limiar de "código preso" DEPOIS de já ter mostrado um QR
+// — diferente de QR_ESPERA_MS, que cobre "nunca mostrou nenhum". O backend
+// (internal/wa-headless/capabilities/qr, HOUSEKEEP H145) já tenta se
+// recuperar sozinho de um código vazio ou expirado — medido em ~1-4s no
+// pior caso — então 15s de sondagem vazia SEGUIDA é folga generosa antes de
+// admitir que a recuperação automática não está a resolver e mostrar o
+// botão manual.
+const QR_PRESO_MS = 15000;
 
 let sessoes = [];
 let ultimaAtualizacaoBoa = 0;
@@ -248,16 +283,60 @@ function pintar(card, s) {
 
 const ttlTimers = new Map();
 
-function mostrarQR(id, dataURI, expiraEm) {
+// QR_DATA_URI_PREFIXO é o cabeçalho que `GET /session/pair/qr` promete no
+// schema (`api/openapi/schemas/sessao.yaml:79` — "Imagem do QR code em data
+// URI"), e o painel VERIFICA em vez de assumir. Ver mostrarQR.
+const QR_DATA_URI_PREFIXO = "data:image/png;base64,";
+
+// mostrarQR desenha a IMAGEM que GET /session/pair/qr devolve — o mesmo
+// contrato para wa_noise e wa_headless desde a F373, agora que os dois
+// passam pelo mesmo `pkg/qrimage`.
+//
+// Este painel já desenhou o valor client-side, tratando-o como a string crua
+// de pareamento. Renderizava lindamente e o QR era INVÁLIDO: para wa_noise o
+// valor sempre foi o data URI, então o código desenhado codificava os 1858
+// caracteres "data:image/png;base64,iVBOR…" — um QR perfeito com o conteúdo
+// errado, que o telefone lê e o WhatsApp recusa. Nada no console acusava
+// nada, porque 1858 cabe folgado no limite de 2953 bytes do nível L.
+//
+// Daí a GUARDA: se o valor não começar pelo prefixo documentado, ele não é
+// uma imagem, e desenhá-lo num <img> falharia silenciosamente do mesmo jeito
+// que desenhá-lo como payload falhou. Melhor dizer o que se recebeu.
+function mostrarQR(id, dataURI) {
   const card = cardDe(id); if (!card) return;
   const qr = card.querySelector(".qr");
+  if (!dataURI.startsWith(QR_DATA_URI_PREFIXO)) return contratoQRQuebrado(id, dataURI);
   qr.hidden = false;
   qr.classList.remove("expirado");
   qr.querySelector(".over")?.remove();
   if (qr.firstElementChild?.tagName !== "IMG") qr.innerHTML = '<img alt="QR code de pareamento">';
   const img = qr.querySelector("img");
-  if (img.src !== dataURI) img.src = dataURI;
-  if (expiraEm) iniciarTTL(id, expiraEm);
+  if (img.src === dataURI) return;
+  img.src = dataURI;
+  // Aproximado, não autoritativo: a API não devolve expiresAt nesta rota
+  // (nunca devolveu — a barra só existia enquanto o QR chegava só por
+  // WebSocket, cujo evento carrega expiresAt à parte). 20s é a cadência de
+  // rotação MEDIDA (HOUSEKEEP H145, TestProbeQRRetryPattern, ~20s entre
+  // rotações automáticas), reiniciada a cada imagem nova — é um indicador
+  // visual de "está vivo", não uma promessa de prazo.
+  iniciarTTL(id, new Date(Date.now() + 20000).toISOString());
+}
+
+// contratoQRQuebrado é o que o painel mostra quando a rota responde algo que
+// não é a imagem documentada — um engine novo que devolva a string crua, por
+// exemplo, que foi exactamente o estado de wa_headless antes da F373.
+// Aparecer aqui é melhor do que um <img> quebrado ou, pior, um QR bonito com
+// o conteúdo errado.
+function contratoQRQuebrado(id, valor) {
+  const card = cardDe(id); if (!card) return;
+  const qr = card.querySelector(".qr");
+  qr.hidden = false;
+  qr.innerHTML = '<div class="msg"></div>';
+  qr.querySelector(".msg").textContent =
+    "GET /session/pair/qr devolveu algo que não é a imagem documentada " +
+    `(esperado "${QR_DATA_URI_PREFIXO}…", veio "${valor.slice(0, 24)}…"). ` +
+    "O engine desta sessão não está a honrar o contrato da rota.";
+  pararTTL(id);
 }
 
 function esconderQR(card) {
@@ -265,13 +344,8 @@ function esconderQR(card) {
   card.querySelector(".ttl").hidden = true;
 }
 
-// A barra usa o `expiresAt` que a PRÓPRIA API manda, e é isso que a torna
-// correta independentemente da janela — que já mudou duas vezes.
-//
-// Hoje são 20s para todos os códigos, o primeiro inclusive (medido na F195;
-// `qrCodeFirstTimeout = qrCodeTimeout` em pair_constants.go:23). O comentário
-// anterior aqui dizia 60s para o primeiro e estava errado desde que a
-// constante mudou. Não assuma nenhum dos dois: leia o `expiresAt`.
+// A barra é uma APROXIMAÇÃO da cadência medida (ver mostrarQR) — não um
+// prazo que a API garanta.
 function iniciarTTL(id, iso) {
   pararTTL(id);
   const fim = Date.parse(iso);
@@ -323,11 +397,13 @@ function abrirWS(s) {
   ws.onmessage = (m) => {
     let d; try { d = JSON.parse(m.data); } catch { return; }
     const tipo = String(d.type || d.event || "").toLowerCase();
-    // `qrCodeBase64` é OPCIONAL por contrato: se a codificação da imagem
-    // falhar, o evento ainda chega com `code`. Melhor não desenhar nada do que
-    // desenhar um <img> quebrado.
-    if (tipo === "qr" && d.qrCodeBase64) mostrarQR(s.id, d.qrCodeBase64, d.expiresAt);
-    if (tipo === "qrtimeout") marcarExpirado(s);
+    // O QR em si NÃO vem mais daqui — ver sondarQR. Os eventos `qr`/
+    // `qrtimeout` só existem para wa_noise (pkg/application/session/
+    // orchestrator.go), e nunca para wa_headless: a mesma sondagem de
+    // GET /session/qr precisa cobrir os dois de qualquer forma, então usá-la
+    // como ÚNICA fonte — em vez de WS para um engine e sondagem para o outro
+    // — é a lógica igual que os dois merecem, e o painel para de depender de
+    // um canal que o próprio código já documentava como "com perda".
     if (tipo.includes("pairsuccess") || tipo === "connected" || tipo === "loggedout") atualizar();
   };
   ws.onopen = () => marcarWS(s.id, true);
@@ -348,38 +424,83 @@ function abrirWS(s) {
   });
 }
 
-// aguardarQR sonda `GET /session/qr` até um QR aparecer ou a janela fechar.
+// sondadores: id -> objeto de controlo da sondagem em curso, para que uma
+// segunda chamada a sondarQR (reconectar / "Gerar novo QR") CANCELE a
+// anterior em vez de as duas correrem em paralelo escrevendo no mesmo
+// cartão.
+const sondadores = new Map();
+
+function pararSondaQR(id) {
+  const c = sondadores.get(id);
+  if (c) { c.parado = true; sondadores.delete(id); }
+}
+
+// sondarQR sonda `GET /session/qr` CONTINUAMENTE — não só até o primeiro QR
+// aparecer — e é a MESMA lógica para wa_noise e wa_headless: os dois
+// respondem o mesmo contrato (imagem em data URI — `pkg/qrimage`, o único
+// codificador dos dois desde a F373; a divergência que existia aqui é o que
+// tornava o QR de wa_noise inválido), e nenhum dos dois tem um canal de push que o outro não
+// tenha (ver o comentário em abrirWS: `qr`/`qrtimeout` só existiam para
+// wa_noise, e o WebSocket é "canal com perda" mesmo nesse). Sondar sempre é
+// o que os serve os dois igualmente bem.
 //
-// Existe porque o WebSocket é um canal COM PERDA e o painel não tinha mais
-// nenhuma entrada: qualquer evento perdido — socket ainda a abrir, Start a
-// falhar depois do 200, sessão já pareada — deixava o cartão preso em
-// "Pedindo QR à API…" sem prazo e sem erro. `users.qrcode`, que é o que esta
-// rota devolve, é a fonte durável do mesmo código.
+// Dois estados de falha, distintos de propósito:
+//
+//   - NUNCA mostrou QR nenhum dentro de esperaQRMs(s) (12s wa_noise, 30s
+//     wa_headless — boot de Chrome real, ver QR_ESPERA_MS_HEADLESS): o pedido
+//     falhou de facto — sessão já pareada, engine mal configurado — e
+//     falhouQR() diz isso com a mensagem certa.
+//   - JÁ mostrou um QR, mas a sondagem volta vazia por QR_PRESO_MS (15s)
+//     seguidos: o código travou apesar do backend tentar recuperar-se
+//     sozinho (HOUSEKEEP H145) — marcarExpirado() mostra o botão manual,
+//     que é o mesmo "Gerar novo QR" que existia só para o evento
+//     `qrtimeout` de wa_noise, agora acionado pela MESMA sondagem para
+//     qualquer engine.
 //
 // É o que a Evolution API faz em connectToWhatsapp: depois de conectar, ela
 // espera e LÊ o QR guardado (`await delay(2000); return instance.qrCode`) em
 // vez de confiar só no evento.
-async function aguardarQR(s) {
-  const fim = Date.now() + QR_ESPERA_MS;
-  while (Date.now() < fim) {
-    const card = cardDe(s.id);
-    // O cartão saiu da grelha (sessão removida): não há o que esperar.
-    if (!card) return;
-    // Já há QR desenhado — pelo socket ou pela sondagem anterior — ou a
-    // janela expirou e o overlay de "Gerar novo QR" já está no lugar.
-    if (card.querySelector(".qr img") || card.querySelector(".qr .over")) return;
+function sondarQR(s) {
+  pararSondaQR(s.id);
+  const ctrl = { parado: false, teveQR: false, vazioDesde: Date.now(), inicio: Date.now() };
+  sondadores.set(s.id, ctrl);
 
-    const r = await API.sessao(s.token, "GET", ROTA_QR);
+  const passo = async () => {
+    if (ctrl.parado) return;
+    const card = cardDe(s.id);
+    if (!card) { pararSondaQR(s.id); return; }
+    // A sessão pareou (por este ou por outro cartão/telefone) — nada mais a
+    // sondar. `sessoes` é repintado por `atualizar()`, que o handler de
+    // `connected`/`pairsuccess` do WS já dispara.
+    const atual = cardSessao(s.id);
+    if (atual?.autenticado) { pararSondaQR(s.id); esconderQR(card); return; }
+    if (card.querySelector(".qr .over")) { pararSondaQR(s.id); return; } // já falhou/travou
+
+    const r = await API.sessao(s.token, "GET", comEngine(ROTA_QR, s));
+    if (ctrl.parado) return; // parado enquanto o pedido estava em voo
     // `qr_code`: a chave era `QRCode` — o nome do campo Go, PascalCase no fio
     // — até a migração para DTO (docs/HTTP-DTO-CONVENTIONS.md). Este painel é
     // o ÚNICO consumidor de /session/qr dentro do repositório, e o corte a
     // seco parte-o se ele não for corrigido junto.
     const imagem = r.body?.data?.qr_code || "";
-    if (imagem) return mostrarQR(s.id, imagem);
-
-    await new Promise((r2) => setTimeout(r2, QR_SONDA_MS));
-  }
-  falhouQR(s);
+    if (imagem) {
+      ctrl.teveQR = true;
+      ctrl.vazioDesde = 0;
+      mostrarQR(s.id, imagem);
+    } else {
+      if (!ctrl.teveQR && Date.now() - ctrl.inicio >= esperaQRMs(s)) {
+        pararSondaQR(s.id); falhouQR(s); return;
+      }
+      if (ctrl.teveQR) {
+        if (!ctrl.vazioDesde) ctrl.vazioDesde = Date.now();
+        if (Date.now() - ctrl.vazioDesde >= QR_PRESO_MS) {
+          pararSondaQR(s.id); marcarExpirado(s); return;
+        }
+      }
+    }
+    setTimeout(passo, QR_SONDA_MS);
+  };
+  passo();
 }
 
 // falhouQR troca o "Pedindo QR à API…" perpétuo por um erro accionável.
@@ -447,17 +568,18 @@ async function acao(s, qual) {
     // medição do que acontece quando esta ordem se inverte — inverter as duas
     // linhas continua a passar em qualquer teste que só olhe para o fim.
     await abrirWS(s);
-    await API.sessao(s.token, "GET", ROTA_CONNECT);
+    await API.sessao(s.token, "GET", comEngine(ROTA_CONNECT, s));
     setTimeout(atualizar, 800);
     // Sem await: a sondagem corre ao lado do painel, e prender `acao` aqui
     // deixaria o botão em espera durante toda a janela.
-    aguardarQR(s);
+    sondarQR(s);
     return;
   }
 
   if (qual === "desconectar") {
     // Derruba o TRANSPORTE e mantém o pareamento: reconecta depois sem QR
     // novo. É diferente de logout.
+    pararSondaQR(s.id);
     await API.sessao(s.token, "GET", ROTA_DISCONNECT);
     fecharWS(s.id); esconderQR(card);
     setTimeout(atualizar, 800);
@@ -475,6 +597,7 @@ async function acao(s, qual) {
       okTexto: "Desvincular",
     });
     if (!ok) return;
+    pararSondaQR(s.id);
     await API.sessao(s.token, "POST", ROTA_LOGOUT);
     fecharWS(s.id); esconderQR(card);
     setTimeout(atualizar, 800);
@@ -786,7 +909,7 @@ $("btn-nova").onclick = () => {
   // noise por padrão a cada abertura: é o engine canónico do projeto, e
   // reabrir o diálogo não deve carregar a última escolha de uma tentativa
   // anterior.
-  $("nova-engine").value = "noise";
+  $("nova-engine").value = "wa_noise";
   // Gerado a cada abertura, e não reaproveitado: se alguém abrir o diálogo,
   // desistir e voltar, o token de arranque tem de ser outro. Reusar faria dois
   // "cancelar" seguidos proporem a mesma credencial.

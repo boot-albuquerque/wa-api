@@ -480,7 +480,12 @@ func TestSessionHandlers_Success_200(t *testing.T) {
 func TestGetQR_ReadsPersistedCode(t *testing.T) {
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: "user-1", QRCode: "2@codigo-de-pareamento"}}, nil
+			// A coluna guarda a IMAGEM, nao o codigo cru: e' o que o listener
+			// de QR do wa_noise escreve (pkg/application/session/
+			// orchestrator.go, onPairingQR — "A coluna guarda a IMAGEM").
+			// Semear "2@..." aqui divergia da producao na exata regra em
+			// causa, e foi a F373 que o mediu contra servidor vivo.
+			return []domain.UserListEntry{{ID: "user-1", QRCode: qrImageOf(t, qrCodePersistido)}}, nil
 		},
 	}
 	h := NewGetQRHandler(&contractsfake.Logger{}, sessionCaseRegistry(&pairing.Provider{
@@ -512,8 +517,9 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 	// (docs/HTTP-DTO-CONVENTIONS.md). Era `QRCode` — o nome do campo Go — e o
 	// teste tolerava as duas grafias; hoje afirma UMA, que e' o que faz a
 	// grafia antiga voltar a falhar aqui.
-	if data["qr_code"] != "2@codigo-de-pareamento" {
-		t.Fatalf("o QR persistido nao chegou ao cliente: %s", rec.Body.String())
+	if data["qr_code"] != qrImageOf(t, qrCodePersistido) {
+		t.Fatalf("o QR persistido nao chegou ao cliente INTACTO (recodifica-lo faz o cliente "+
+			"desenhar o proprio data URI — F373): %s", rec.Body.String())
 	}
 	logassert.NoSecrets(t, recs)
 }

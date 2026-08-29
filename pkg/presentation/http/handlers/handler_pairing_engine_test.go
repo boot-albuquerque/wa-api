@@ -97,8 +97,12 @@ func TestPairingQR_WaNoise_CallsOnlyNoiseProvider(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "2@noise") {
-		t.Errorf("corpo = %s, quero o QR do provider wa_noise (2@noise)", rec.Body.String())
+	// A imagem DO CÓDIGO do provider wa_noise, e não o código cru: a rota
+	// responde a imagem para os dois engines (pkg/qrimage). Comparar contra
+	// a imagem continua a distinguir os providers — são códigos diferentes,
+	// logo imagens diferentes — e passa a travar também a forma.
+	if !strings.Contains(rec.Body.String(), qrImageOf(t, qrCodeNoise)) {
+		t.Errorf("corpo = %s, quero a imagem do QR do provider wa_noise (%s)", rec.Body.String(), qrCodeNoise)
 	}
 	h.assertOnlyNoiseCalled(t)
 }
@@ -121,7 +125,7 @@ func TestPairingQR_WaHeadless_CallsOnlyHeadlessProvider(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "2@headless") {
+	if !strings.Contains(rec.Body.String(), qrImageOf(t, qrCodeHeadless)) {
 		t.Errorf("corpo = %s, quero o código do provider wa_headless", rec.Body.String())
 	}
 	h.assertOnlyHeadlessCalled(t)
@@ -291,15 +295,15 @@ func TestPairing_UsesTargetEngineNotActorEngine(t *testing.T) {
 			"em vez do engine do ALVO (%q). É exatamente o defeito da F273 (corpo %s)",
 			domain.EngineWaNoise, domain.EngineWaHeadless, rec.Body.String())
 	}
-	if strings.Contains(rec.Body.String(), "2@noise") {
+	if strings.Contains(rec.Body.String(), qrImageOf(t, qrCodeNoise)) {
 		t.Fatalf("corpo = %s: serviu pelo provider do ACTOR (wa_noise) em vez do ALVO (wa_headless)", rec.Body.String())
 	}
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200 — o engine do ALVO é wa_headless, que serve QR nesta build (corpo %s)",
 			rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "2@headless") {
-		t.Errorf("corpo = %s, quero o QR do provider wa_headless (2@headless)", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), qrImageOf(t, qrCodeHeadless)) {
+		t.Errorf("corpo = %s, quero a imagem do QR do provider wa_headless (%s)", rec.Body.String(), qrCodeHeadless)
 	}
 	h.assertOnlyHeadlessCalled(t)
 }

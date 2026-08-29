@@ -211,7 +211,9 @@ func TestSessionQR_ContratoPublico(t *testing.T) {
 	}
 	qr := &contractsfake.PairingQRReader{
 		PairingQRFunc: func(context.Context, string) (string, error) {
-			return "2@codigo-de-pareamento", nil
+			// Forma REAL do adapter wa_noise: le' users.qrcode, onde o
+			// orquestrador ja' gravou o PNG codificado. Ver F373.
+			return qrImageOf(t, qrCodePersistido), nil
 		},
 	}
 	reg := pairing.NewRegistry(users, capabilityregistry.NewCapabilityRegistry(),
@@ -224,7 +226,7 @@ func TestSessionQR_ContratoPublico(t *testing.T) {
 
 	contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())
 	contracttest.AssertNoKeys(t, rec.Body.Bytes(), "QRCode", "qrcode", "qrCode")
-	if data["qr_code"] != "2@codigo-de-pareamento" {
+	if data["qr_code"] != qrImageOf(t, qrCodePersistido) {
 		t.Errorf("qr_code = %#v", data["qr_code"])
 	}
 }

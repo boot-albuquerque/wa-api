@@ -38825,3 +38825,373 @@ por conveniência.
 usuário: corrigir agora (grande, não relacionado) ou manter pendente.
 
 <!-- f-status: aberto -->
+
+## F372 — `.gitignore` escondia o vendor de JS do devui; QR do painel ficava preso ao caminho legado /session/qr e a um timeout raso demais para wa_headless
+
+**Data**: 2026-08-29. **Contexto**: pedido do usuário para levar a lógica
+de refresh/retry de QR (F370/H145) ao `devui`, de forma uniforme para
+`wa_noise` e `wa_headless`, testando ao vivo com Claude in Chrome.
+
+**Onde 1**: `.gitignore:21` — regra `vendor/` (sem barra inicial), que o
+git casa em QUALQUER profundidade, não só na raiz. Escondia
+`pkg/presentation/http/devui/assets/vendor/qrcode.js` (biblioteca
+`davidshimjs/qrcodejs` vendorizada de propósito para o painel renderizar o
+QR client-side) inteiro do `git status`/`git add`.
+
+**Problema 1**: o build local funciona (o `//go:embed` só exige o arquivo
+em disco, não que esteja rastreado), então a ausência só apareceria num
+`git clone` novo ou noutra máquina — o devui carregaria
+`vendor/qrcode.js` como 404 silencioso e nenhum QR jamais apareceria,
+sem nenhum sinal no `make check` local. Descoberto só porque
+`git status --short` foi conferido manualmente antes de considerar a
+sessão pronta para commit.
+
+**Correção 1**: `.gitignore` — regra ancorada na raiz (`/vendor/`, só o
+`vendor/` de módulo Go) mais uma exceção explícita para
+`pkg/presentation/http/devui/assets/vendor/`. Verificado:
+`git check-ignore -v` deixa de casar o arquivo.
+
+**Onde 2**: `pkg/presentation/http/devui/assets/sessions.js` —
+`ROTA_QR = "/session/qr"`.
+
+**Problema 2**: F269 (corte limpo de padronização de caminhos,
+`pkg/bootstrap/caminhos.tsv`) renomeou `/session/qr` para
+`/session/pair/qr` — o caminho antigo **não responde mais** (mux nem
+registra a rota; `router.Walk` confirma). `sessions.js` nunca foi
+atualizado, então toda sondagem de QR do painel batia 404 (`"404 page not
+found"`, texto padrão do `net/http`), para os DOIS engines — não era
+específico de `wa_headless`. Medido ao vivo: `curl` a `/session/qr` e
+`/session/pair/qr` no mesmo servidor, token válido, primeiro 404 e o
+segundo 200.
+
+**Correção 2**: `ROTA_QR = "/session/pair/qr"`, com comentário citando
+F269. `devui_test.go`
+(`TestPainel_ConectarSondaARotaDeQR`) atualizado para exigir o caminho
+canónico — controlo negativo executado (reverti para `/session/qr`, teste
+falhou com a mensagem esperada; revertida a reversão, teste passou).
+
+**Onde 3**: `pkg/presentation/http/devui/assets/sessions.js` —
+`QR_ESPERA_MS = 12000` (agora `QR_ESPERA_MS_PADRAO`).
+
+**Problema 3**: o comentário original media contra `wa_noise` (handshake
+de socket, 640ms–1,4s) e o valor foi reaproveitado sem medição para
+`wa_headless`, que faz *boot de Chrome real*. Medido ao vivo (Claude in
+Chrome, 2026-08-29, connect→primeiro `GET /session/pair/qr`): 13039ms só
+nesse pedido, QR ainda vazio — 12s bastava para o painel mostrar "falhou"
+ANTES do Chrome sequer montar a página. Reproduzido na sessão: o cartão
+mostrou "A API aceitou o pedido mas não emitiu QR nenhum" por volta do
+segundo 12–13, com Chrome ainda a inicializar em segundo plano.
+
+**Correção 3**: timeout por engine — `esperaQRMs(s)` devolve
+`QR_ESPERA_MS_PADRAO` (12s) para `wa_noise` e `QR_ESPERA_MS_HEADLESS`
+(30s, folga sobre os ~13s medidos) para `wa_headless`. Verificado ao vivo:
+com o fix, o mesmo cartão ficou em "Pedindo QR à API…" além do segundo 12
+sem falhar, e o QR real renderizou pouco depois (retry manual disparou o
+`connect`+`sondarQR` de novo e o Chrome — já com perfil quente — respondeu
+dentro da janela de 30s).
+
+**Verificação ao vivo (Claude in Chrome, servidor real em
+`/tmp/wa-api-devui-test`)**: os dois engines, fim a fim, através do
+`devui`:
+- `wa_headless`: `Conectar` → QR renderizado client-side
+  (`vendor/qrcode.js`) → auto-rotação observada (QR mudou de padrão, barra
+  de TTL reiniciou) → botão "Tentar de novo" (`falhouQR`) testado e
+  funcional após matar um Chrome perfil-travado remanescente de uma
+  medição anterior da sessão (ambiente, não código).
+- `wa_noise`: sessão nova criada pelo próprio painel (`+ Nova sessão`,
+  engine `noise` por omissão — confirma o fix do dropdown do F370) →
+  `Conectar` → QR renderizado imediatamente pelo mesmo caminho unificado,
+  sem WebSocket `qrCodeBase64` nenhum envolvido.
+- Console do browser sem erros nas duas corridas.
+
+**Status**: corrigido nesta sessão. Testes:
+`go test ./pkg/presentation/http/devui/... ./pkg/bootstrap/...` (inclui
+`-race` no pacote `bootstrap`) verdes;
+`TestPainel_ConectarSondaARotaDeQR` e
+`TestPaginaSondaQRComEngineParaOsDoisMotores` são os que travam as
+correções 1–2 estruturalmente (a correção 3, de timing, não tem teste de
+unidade — é constante de UI validada só pela medição ao vivo acima,
+registrada aqui como a evidência).
+
+**Ressalva acrescentada pela F373**: a verificação ao vivo acima olhou para o
+ECRÃ e não para o CONTEÚDO do código. O QR de `wa_noise` renderizava, sem
+erro nenhum no console, e era **inválido** — ver F373. A renderização
+client-side introduzida aqui foi revertida lá.
+
+<!-- f-status: corrigido -->
+
+## F373 — o QR de `wa_noise` era inválido: os dois engines respondiam FORMAS diferentes na mesma rota, e o painel desenhou a imagem como se fosse o código
+
+**Data**: 2026-08-29. **Contexto**: relato do usuário — "o qrcode de noise
+esta invalido" — logo após a F372 unificar a renderização de QR no `devui`
+para os dois engines. A F372 verificou ao vivo que o QR "renderizava sem
+erro no console"; renderizava mesmo. Era o CONTEÚDO que estava errado.
+
+### Onde
+
+- `pkg/application/session/orchestrator.go:585` (`onPairingQR`) — grava em
+  `users.qrcode` o `payload["qrCodeBase64"]`, isto é, o **PNG já
+  codificado**. O comentário do próprio código diz: *"A coluna guarda a
+  IMAGEM, que é o que `GET /session/qr` devolve."*
+- `pkg/infra/wa-noise/adapters/pairing/qr.go:76` — `PairingQR` devolve
+  `entries[0].QRCode`, ou seja, essa imagem, tal e qual.
+- `pkg/infra/wa-headless/pairing/qr.go:61` — `PairingQR` devolve a **string
+  crua** lida de `WAWebConnModel.Conn.ref` (H145). Nunca uma imagem.
+- `pkg/presentation/http/devui/assets/sessions.js:296` (`mostrarQR`, como a
+  F372 o deixou) — desenhava o valor client-side com `vendor/qrcode.js`,
+  tratando-o como a string crua de pareamento.
+
+### Problema
+
+As duas formas são `string`, saem no mesmo campo `qr_code`, atravessam a
+mesma porta `appport.PairingQRReader` e o mesmo `domain.GetQRResult.QRCode`.
+**Nada no tipo, na porta ou no DTO conseguia distingui-las**, e a
+divergência entrou sem sinal nenhum quando o segundo engine chegou.
+
+O consumidor a quem se disse "os dois engines respondem a mesma forma"
+desenhou o que recebeu como PAYLOAD de QR. Para `wa_noise` isso significou
+um QR cujo conteúdo eram os ~1850 caracteres
+`data:image/png;base64,iVBORw0KG…`. O telefone lê o código perfeitamente e o
+WhatsApp recusa-o — que é exatamente o sintoma relatado.
+
+**Medição em campo (2026-08-29)**, servidor real, sessão `wa_noise` nova,
+`GET /session/pair/qr`:
+
+```
+prefixo : 'data:image/png;base64,iVBORw0K'
+tamanho : 1858 caracteres
+corpo   : 1375 bytes, magic b'\x89PNG\r\n\x1a\n'  -> PNG válido de 256x256
+```
+
+**O "eu não teria adivinhado"** (regra do CLAUDE.md sobre medição útil): o
+defeito é **silencioso por construção**. 1858 caracteres cabem folgados no
+limite de 2953 bytes do nível L, então `qrcodejs` não levantou exceção
+nenhuma, o console ficou limpo, e a verificação ao vivo da F372 — que olhou
+para o ECRÃ e não para o conteúdo — deu tudo verde. A hipótese inicial desta
+sessão ("talvez o `correctLevel: L` não chegue para o tamanho da string")
+**caiu**: o nível estava bem, a string é que era a errada.
+
+Reprodução do estado anterior, com o valor real medido acima:
+
+```
+$ go run before/main.go qr.json qr_antigo.png
+payload desenhado pelo devui antigo: 1854 chars, comeca com "data:image/png;base64,iVBORw0K"
+```
+
+Nota lateral medida: o decodificador do OpenCV **não conseguiu ler** esse QR
+antigo nem a 256px nem a 1024px, enquanto lê o corrigido a 256px à primeira.
+Não é prova por si só (o OpenCV tem limitações conhecidas com QRs de versão
+alta), mas é consistente com "denso demais para ser fiável" — 1854 bytes
+forçam a versão 40, 177×177 módulos em 220px de ecrã, ~1,2px por módulo.
+
+### Correção
+
+A causa não é de nenhum dos dois adapters isoladamente — cada um era
+coerente consigo mesmo. É que **ninguém comparava os dois**. Por isso a
+correção mora no único ponto por onde os dois passam:
+
+1. **`pkg/qrimage`** (novo) — o codificador ÚNICO. Traz `ImageSize` (256),
+   `DataURIPrefix`, `Encode`, `IsDataURI` e `EnsureDataURI`. O tamanho e o
+   prefixo saíram de `orchestrator.go`, que passa a chamá-lo: dois
+   codificadores em dois pacotes é como as formas divergiram da primeira vez
+   (mesma lição da F68).
+2. **`pkg/application/usecase/session/get_qr.go`** — `Execute` normaliza com
+   `qrimage.EnsureDataURI` DEPOIS da leitura ter dado certo. Idempotente: o
+   valor de `wa_noise` já é imagem e passa intacto; o de `wa_headless` é
+   renderizado. **Um engine novo herda a garantia sem saber que ela existe**,
+   que é precisamente o que faltou quando `wa_headless` chegou.
+3. **`sessions.js`** — volta a `<img src=…>`, e VERIFICA o prefixo
+   documentado antes de desenhar (`QR_DATA_URI_PREFIXO`); um valor de outra
+   forma cai em `contratoQRQuebrado()`, que diz o que recebeu em vez de
+   falhar em silêncio.
+4. **Removidos** `assets/vendor/qrcode.js`, o `<script>` que o carregava e a
+   regra CSS `.qr-canvas`: sem consumidor, e embutidos no binário pelo
+   `//go:embed`. O `.gitignore` mantém a âncora `/vendor/` da F372 (a regra
+   sem barra inicial casava em qualquer profundidade, e isso continua certo);
+   sai só a excepção para o directório que deixou de existir.
+
+**O contrato público NÃO mudou.** `api/openapi/schemas/sessao.yaml:79` já
+documentava *"Imagem do QR code em data URI"*; `go run ./cmd/openapidoc`
+não produz diff. Quem estava fora da conformidade era `wa_headless`, e a
+correção põe-no lá — em vez de mudar o contrato de uma rota `✅` com
+evidência medida, que seria quebrar clientes para acomodar um defeito.
+
+### Verificação ao vivo (servidor limpo, porta e token de admin únicos)
+
+Armadilha de método encontrada no caminho, e registada porque quase
+invalidou a medição: havia **dois `wa-api` no mesmo porto 8099** (um em
+`127.0.0.1:8099`, de outra sessão, e o meu em `*:8099`), e o segundo servidor
+que subi morreu em `another process is already using the data directory` sem
+que eu reparasse — de modo que a primeira medição "do binário corrigido" era
+na verdade do binário ANTIGO. Refeita em `/tmp/wa-qr-fixed`, porta 8123,
+`WA_API_ADMIN_TOKEN` único, com a identidade do servidor confirmada por
+`GET /devui/config` ANTES de medir o que quer que fosse.
+
+Sondagem de 8 leituras de `GET /session/pair/qr` (`wa_noise`), decodificando
+o PNG servido de volta para texto:
+
+```
+[0] data URI 1842 chars -> nao decodificou (x4/x8)
+[1] data URI 1854 chars -> QR decodifica para 277 chars:
+     https://wa.me/settings/linked_devices#2@IN8AZTLbrRT3TH5wLNrZvnI86V+gkHCBUlKlTgyodZ+G3W//Eih/UTHl6kZw...
+[2..6] idem, mesmo código
+[7] data URI 1850 chars -> QR decodifica para 277 chars:
+     https://wa.me/settings/linked_devices#2@9j4VfU2ytmR5o8QAPJ/xJVF451ecslfPXRiuMhlNjZKIUkc3Txs2hUQHxkh1...
+```
+
+Fim a fim pelo painel (Claude in Chrome, `/devui/sessions.html`), com o
+decodificador do PRÓPRIO navegador (`BarcodeDetector`) a ler os pixels que o
+cartão mostra:
+
+```
+{"dataURIMostrado":"1866 chars",
+ "qrDecodificaPara":"https://wa.me/settings/linked_devices#2@/evU/+ZtFpmFFipY1abk1SOeEL7oTDA6...",
+ "tamanhoDecodificado":277,
+ "ehDataURI":false}
+```
+
+E o estado do DOM, que confirma o caminho de renderização:
+
+```
+{"tag":"IMG","srcPrefix":"data:image/png;base64,iVBORw0K","srcLen":1842,
+ "naturalW":256,"naturalH":256,
+ "canvasNaPagina":0,"qrcodeLibCarregada":"undefined"}
+```
+
+Rotação observada: o `src` mudou sozinho em 7s, continuou a ser `IMG`,
+console sem erros.
+
+### Testes e controlos negativos (todos EXECUTADOS)
+
+| teste | trava |
+|---|---|
+| `pkg/qrimage`: `TestEncodeProduzImagemEnaoOTexto`, `TestEncodeDevolvePNGDoTamanhoDeContrato`, `TestEncodeVazioNaoDesenhaNada`, `TestIsDataURIRecusaCodigoCru` | o codificador: devolve imagem e não texto, PNG real de 256×256, `""` não vira QR |
+| `TestGetQR_OsDoisEnginesRespondemAImagemDocumentada` | **a causa**: tabela sobre os DOIS engines, com o dublê de cada um na forma REAL, exigindo a mesma imagem — mais a asserção de que não há data URI dentro do data URI |
+| `TestGetQR_OsDoisEnginesConcordamNaJanelaSemCodigo` | "ainda não há código" é `""` nos dois |
+| `TestPainelDesenhaAImagemENaoAReencoda` (devui) | o consumidor: nenhum gerador client-side, desenha por `<img src>`, confere o prefixo, tem ramo de erro visível |
+
+**Dublês corrigidos** (ARMADILHAS #1 — dublê divergente da produção): quatro
+testes semeavam `"2@codigo-de-pareamento"` / `"2@noise"` em `users.qrcode` ou
+no spy de `wa_noise` e afirmavam receber isso de volta. A coluna guarda a
+IMAGEM; o dublê divergia da produção **na exata regra em causa**, e é por
+isso que a suíte inteira estava verde com o defeito no lugar. Passam a usar
+`qrImageOf(t, …)`, que chama o codificador DA PRODUÇÃO. O spy de
+`wa_headless` continua a devolver a string crua, de propósito: é a forma real
+dele, e igualar os dois dublês apagaria a normalização que se está a medir.
+
+**Controlo negativo 1** — `Execute` devolve o código cru (divergência de
+volta). Primeira tentativa **não compilou** (`"wa-api/pkg/qrimage" imported
+and not used`), o que não prova nada (ARMADILHAS #3); ajustada até compilar E
+falhar:
+
+```
+--- FAIL: TestGetQR_OsDoisEnginesRespondemAImagemDocumentada/wa_headless
+    get_qr_contract_test.go:101: wa_headless: qr_code = "2@Ld9xK3vQpR7sT1uW5yA8bC2dE4fG6hJ0kL3mN5"…,
+    e a rota documenta uma imagem em data URI (api/openapi/schemas/sessao.yaml).
+    Devolver a string crua faz o consumidor desenhá-la como payload de QR — F373
+```
+
+**Controlo negativo 2** — `EnsureDataURI` recodifica incondicionalmente (o
+defeito EXATO):
+
+```
+--- FAIL: TestGetQR_OsDoisEnginesRespondemAImagemDocumentada/wa_noise
+    get_qr_contract_test.go:106: wa_noise: qr_code = "data:image/png;base64,…" (5570 chars),
+    quero "data:image/png;base64,…" (1514 chars)
+--- FAIL: TestGetQR/devolve_o_QR_persistido
+    session_test.go:290: QRCode = "data:image/png;base64,…", quero o data URI persistido
+    tal e qual — recodificá-lo produz um QR que desenha o próprio data URI (F373)
+```
+
+Os 5570 caracteres contra 1514 são a assinatura do defeito: o data URI do
+data URI.
+
+**Controlo negativo 3** — painel volta a desenhar client-side:
+
+```
+--- FAIL: TestPainelDesenhaAImagemENaoAReencoda
+    devui_test.go:208: o painel voltou a gerar QR client-side ("new QRCode(").
+    devui_test.go:208: o painel voltou a gerar QR client-side ("QRCode.CorrectLevel").
+    devui_test.go:216: sessions.js não atribui o data URI a um <img>
+```
+
+**Gates**: `go build ./...`, `go vet ./...`, `gofmt -l .` (limpo fora de
+`scripts/chromium-study/`, pré-existente) e `go test -race ./pkg/...` — todos
+verdes.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->
+
+## F374 — QR do `wa_headless` não tinha fallback por tempo: um gap de rotação da SPA de 60s ficava mudo até o usuário achar que travou
+
+**Data**: 2026-08-29. **Contexto**: pedido do usuário — "ao gerar o qrcode
+headless, e acabar o tempo 'timer' outro qrcode nao esta sendo gerado
+automaticamente, existe um grande delay".
+
+**Onde**: `internal/wa-headless/capabilities/qr/qr.go` — `kickScript`/`Read`
+só disparavam `refreshQR()` quando a própria página sinalizava `!ref` (sem
+código) ou o overlay `link_device_qr_expired_refresh_button` (código
+expirado). A rotação normal do QR é o SERVIDOR do WhatsApp empurrando um
+`Conn.ref` novo para o SPA — não um timer nosso — e nada no mecanismo agia
+se esse empurrão simplesmente atrasasse.
+
+**Problema, medido**: rodei `TestProbeQRRetryPattern` (3 min, contra
+`.lab/test-account-profile`) e capturei as rotações reais:
+`+10s, +70s, +90s, +110s, +130s, +150s` — gaps de **60s, 20s, 20s, 20s,
+20s**. Separadamente, instrumentei o `fetch` do devui numa sessão
+`wa_headless` real e capturei 65 sondagens seguidas de
+`GET /session/pair/qr` devolvendo o MESMO `qr_code` byte a byte — o backend
+respondia `hasQR=true` toda vez, sem nunca considerar aquilo motivo pra
+agir. Não é rate-limit da conta (o mesmo perfil rotacionou normalmente no
+probe, fora do servidor) — é a ausência de um mecanismo que reaja a "o
+código está parado há tempo demais", que é exatamente o gap de 60s medido
+contra a barra visual de 20s do devui (F372).
+
+**Correção**: `qr.Reader.Read` ganhou um parâmetro `staleHint bool` — na
+primeira tentativa, se `true`, o script trata o ref como inutilizável e
+dispara `refreshQR()` mesmo com `ref` presente e sem overlay de expirado
+(`why="stale"`, tratado exatamente como `"no_ref"`/`"expired"` no retry
+Go-side). Quem decide QUANDO está "stale" é o `pkg/infra/wa-headless/pairing.
+QRReader` (`codeSince map[string]codeTrack`), porque é o único ponto
+persistente entre polls HTTP separados — `qr.Reader` e o handler são
+reconstruídos a cada chamada. `qr.StaleRefreshAfter` (90s, com folga sobre
+o único gap de 60s medido) fica no pacote `qr`, testável via var como
+`Budget`/`Tick`/`refreshRetries` já eram.
+
+**Zero relógio novo no lado da página** (invariante 6 preservado):
+`TestNoClockInProductionPageScripts` continua verde — a decisão de "quanto
+tempo é tempo demais" mora inteiramente em Go
+(`pkg/infra/wa-headless/pairing/qr.go`), a página só executa o MESMO nudge
+já existente.
+
+**Testes** (controle negativo EXECUTADO em ambos):
+- `internal/wa-headless/capabilities/qr/qr_test.go`:
+  `TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef` (positivo) e
+  `TestRead_NoStaleHint_NeverForcesNudge` (negativo — prova que o parâmetro
+  não muda nada quando o chamador não pede). Controle negativo executado:
+  voltei `attempt == 0 && staleHint` para sempre-`false` dentro de `Read`;
+  `TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef` falhou com
+  `refreshed=false, want true`; revertido, voltou a passar.
+- `pkg/infra/wa-headless/pairing/qr_test.go`: `TestStaleHint_
+  SemHistoricoDevolveFalso`, `TestStaleHint_TornaVerdadeiroAposOLimiar`,
+  `TestTrackCode_MesmoCodigoNaoReiniciaORelogio`,
+  `TestTrackCode_CodigoDiferenteReiniciaORelogio`,
+  `TestForgetCode_ZeraOHistorico`. Controle negativo executado em
+  `TestTrackCode_MesmoCodigoNaoReiniciaORelogio`: fiz `trackCode` reiniciar o
+  relógio incondicionalmente (`_ = code`); a PRIMEIRA versão do teste (sleeps
+  simétricos: metade + metade do limiar) **passou com o defeito no lugar** —
+  controle negativo que não mordia. Corrigido: as duas janelas de sleep
+  precisam ser assimétricas o bastante pra DISTINGUIR "reiniciou" de "não
+  reiniciou" (`sleep(40ms) + retrack + sleep(20ms)` com limiar de 50ms — 60ms
+  desde o track original, só 20ms desde um retrack que tivesse reiniciado);
+  com essa correção o teste falhou com o defeito
+  (`staleHint = false, want true`) e passou revertido.
+
+**Gates**: `go build ./...`, `go vet ./...`, `gofmt -l .` (limpo fora de
+`scripts/chromium-study/`, pré-existente), `TestNoClockInProductionPageScripts`
+e `go test -race ./pkg/... ./internal/wa-headless/...` — todos verdes.
+
+**Status**: corrigido nesta sessão.
+
+<!-- f-status: corrigido -->

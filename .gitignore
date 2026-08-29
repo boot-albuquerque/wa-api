@@ -18,7 +18,12 @@ coverage.out
 coverage.html
 go.work
 go.work.sum
-vendor/
+# Ancorado na raiz DE PROPÓSITO: só o vendor/ de módulo Go. Sem a barra
+# inicial, a regra casa `vendor/` em QUALQUER profundidade, e foi assim que
+# um directório de assets vendorizados do devui ficou invisível ao
+# `git status` sem nenhum sinal (F372). O build local não acusa — //go:embed
+# só exige o ficheiro em disco, não que esteja rastreado.
+/vendor/
 
 # --- Environment & Secrets ---
 .env

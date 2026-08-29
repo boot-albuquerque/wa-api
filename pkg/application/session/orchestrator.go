@@ -7,7 +7,6 @@ package session
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"net/url"
 	"strings"
 	"sync"
@@ -15,25 +14,22 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/skip2/go-qrcode"
 
 	port "wa-api/pkg/application/contracts"
 	"wa-api/pkg/domain/apperr"
+	"wa-api/pkg/qrimage"
 )
 
 const (
 	defaultMaxConnectionRetries = 3
 	defaultConnectionRetryWait  = 5 * time.Second
 
-	// qrCodeImageSize é o lado, em pixels, do PNG do QR. Estava inline em
-	// onPairingQR; virou constante ao passar a ser usado por um construtor
-	// compartilhado, para que os dois fluxos não possam divergir no tamanho
-	// como divergiram no schema (F68).
-	qrCodeImageSize = 256
-
-	// qrCodeDataURIPrefix é o cabeçalho do data URI que o cliente coloca
-	// direto num <img src>.
-	qrCodeDataURIPrefix = "data:image/png;base64,"
+	// O tamanho e o prefixo do data URI do QR viviam aqui (qrCodeImageSize /
+	// qrCodeDataURIPrefix) e a codificação estava inline em buildQRPayload.
+	// Mudaram-se para pkg/qrimage em 2026-08-29 (F373) porque um SEGUNDO
+	// engine — wa_headless — passou a responder a mesma rota e não passava
+	// por aqui: ele devolvia a string CRUA onde o contrato promete imagem, e
+	// nada no tipo detectava a diferença. Ver o doc de pkg/qrimage.
 
 	// startInFlightTTL é o teto de tempo que uma entrada de startInFlight
 	// pode segurar um userID antes de ser considerada ESTAGNADA e cedida a
@@ -803,9 +799,9 @@ func buildQRPayload(code string, validade time.Duration) map[string]any {
 		"code":  code,
 	}
 
-	if imagem, err := qrcode.Encode(code, qrcode.Medium, qrCodeImageSize); err == nil {
-		payload["qrCodeBase64"] = qrCodeDataURIPrefix + base64.StdEncoding.EncodeToString(imagem)
-	} else {
+	if imagem, err := qrimage.Encode(code); err == nil && imagem != "" {
+		payload["qrCodeBase64"] = imagem
+	} else if err != nil {
 		// Degrada para só o `code` em vez de não despachar: o cliente ainda
 		// consegue renderizar o QR sozinho, e ficar sem evento nenhum
 		// impediria o pareamento.

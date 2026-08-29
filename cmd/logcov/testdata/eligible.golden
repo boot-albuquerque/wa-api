@@ -342,12 +342,12 @@ internal/wa-headless/capabilities/presence.onlineScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.resultScript	EXCLUDED	X1
 internal/wa-headless/capabilities/presence.setScript	EXCLUDED	X1
 internal/wa-headless/capabilities/qr.New	EXCLUDED	X1
-internal/wa-headless/capabilities/qr.Reader.Read	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,qr.go:219)
-internal/wa-headless/capabilities/qr.Reader.parked	ELIGIBLE	uncovered:L2(S-ret,qr.go:245);uncovered:L2(S-ret,qr.go:253);uncovered:L2(S-ret,qr.go:260);uncovered:L2(S-ret,qr.go:265);uncovered:L2(S-ret,qr.go:269)
+internal/wa-headless/capabilities/qr.Reader.Read	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,qr.go:263)
+internal/wa-headless/capabilities/qr.Reader.parked	ELIGIBLE	uncovered:L2(S-ret,qr.go:289);uncovered:L2(S-ret,qr.go:297);uncovered:L2(S-ret,qr.go:304);uncovered:L2(S-ret,qr.go:309);uncovered:L2(S-ret,qr.go:313)
 internal/wa-headless/capabilities/qr.Reader.parked.func1	EXCLUDED	X6
 internal/wa-headless/capabilities/qr.Reader.parked.func2	EXCLUDED	X6
 internal/wa-headless/capabilities/qr.Reader.parked.func3	EXCLUDED	X6
-internal/wa-headless/capabilities/qr.Reader.readOnce	ELIGIBLE	uncovered:L2(S-consume,qr.go:230)
+internal/wa-headless/capabilities/qr.Reader.readOnce	ELIGIBLE	uncovered:L2(S-consume,qr.go:274)
 internal/wa-headless/capabilities/qr.kickScript	EXCLUDED	X1
 internal/wa-headless/capabilities/qr.nextStateKey	EXCLUDED	X1
 internal/wa-headless/capabilities/react.New	EXCLUDED	X1
@@ -2470,10 +2470,10 @@ pkg/application/contracts/contractsfake.UserRepository.UpdateUser	EXCLUDED	X5
 pkg/application/contracts/contractsfake.UserRepository.UserExists	EXCLUDED	X5
 pkg/application/contracts/contractsfake.pareceTelefone	EXCLUDED	X5
 pkg/application/session.NewOrchestrator	ELIGIBLE	uncovered:L1
-pkg/application/session.Orchestrator.CheckStartAvailable	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,orchestrator.go:348)
+pkg/application/session.Orchestrator.CheckStartAvailable	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,orchestrator.go:344)
 pkg/application/session.Orchestrator.ReleaseStart	EXCLUDED	X1
-pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:393);uncovered:L2(S-ret,orchestrator.go:466);uncovered:L2(S-ret,orchestrator.go:468)
-pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:410)
+pkg/application/session.Orchestrator.Start	ELIGIBLE	uncovered:L2(S-ret,orchestrator.go:389);uncovered:L2(S-ret,orchestrator.go:462);uncovered:L2(S-ret,orchestrator.go:464)
+pkg/application/session.Orchestrator.Start.func1	ELIGIBLE	uncovered:L1;uncovered:L2(S-consume,orchestrator.go:406)
 pkg/application/session.Orchestrator.Start.func2	EXCLUDED	X6
 pkg/application/session.Orchestrator.Stop	EXCLUDED	X1
 pkg/application/session.Orchestrator.connectWithRetry	ELIGIBLE	covered
@@ -2483,7 +2483,7 @@ pkg/application/session.Orchestrator.onPairingQR	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingSuccess	ELIGIBLE	covered
 pkg/application/session.Orchestrator.onPairingTimeout	ELIGIBLE	covered
 pkg/application/session.Orchestrator.provision	ELIGIBLE	covered
-pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:508)
+pkg/application/session.Orchestrator.resolveProxySettings	ELIGIBLE	uncovered:L2(S-consume,orchestrator.go:504)
 pkg/application/session.Orchestrator.runPairing	ELIGIBLE	covered
 pkg/application/session.WithClock	EXCLUDED	X1
 pkg/application/session.WithClock.func1	EXCLUDED	X6
@@ -2499,7 +2499,7 @@ pkg/application/session.WithSleep	EXCLUDED	X1
 pkg/application/session.WithSleep.func1	EXCLUDED	X6
 pkg/application/session.buildQRPayload	ELIGIBLE	covered
 pkg/application/session.disconnectedPayload	ELIGIBLE	uncovered:L1
-pkg/application/session.errSessionStartAlreadyInFlight	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,orchestrator.go:254)
+pkg/application/session.errSessionStartAlreadyInFlight	ELIGIBLE	uncovered:L1;uncovered:L2(S-ret,orchestrator.go:250)
 pkg/application/session.loggedOutPayload	ELIGIBLE	uncovered:L1
 pkg/application/session.newStartInFlight	EXCLUDED	X1
 pkg/application/session.pairSuccessPayload	ELIGIBLE	uncovered:L1
@@ -3076,7 +3076,7 @@ pkg/bootstrap.setupWebhookOutbox	ELIGIBLE	covered
 pkg/bootstrap.signalKill	EXCLUDED	X1
 pkg/bootstrap.simpleBootstrapError.Error	EXCLUDED	X4
 pkg/bootstrap.startHTTPMode	ELIGIBLE	covered
-pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:477);uncovered:L3(zerolog,main.go:494)
+pkg/bootstrap.startHTTPMode.func1	ELIGIBLE	uncovered:L3(zerolog,main.go:487);uncovered:L3(zerolog,main.go:504)
 pkg/bootstrap.startHTTPMode.func2	EXCLUDED	X6
 pkg/bootstrap.startHTTPMode.func3	EXCLUDED	X1
 pkg/bootstrap.startLeaseHeartbeat	EXCLUDED	X1
@@ -3085,7 +3085,7 @@ pkg/bootstrap.startOutboxSweeper	EXCLUDED	X1
 pkg/bootstrap.startOutboxSweeper.func1	EXCLUDED	X6
 pkg/bootstrap.startSessionEventQueue	ELIGIBLE	uncovered:L1
 pkg/bootstrap.startSessionEventQueue.func1	EXCLUDED	X6
-pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:530)
+pkg/bootstrap.startStdioMode	ELIGIBLE	uncovered:L3(zerolog,main.go:540)
 pkg/bootstrap.stopSessionEventQueue	ELIGIBLE	covered
 pkg/bootstrap.stopSessionEventQueue.func1	EXCLUDED	X6
 pkg/bootstrap.sweepOutboxOnce	ELIGIBLE	covered
@@ -3557,7 +3557,10 @@ pkg/infra/wa-headless/pairing.NewQRReader	EXCLUDED	X1
 pkg/infra/wa-headless/pairing.NewStarter	EXCLUDED	X1
 pkg/infra/wa-headless/pairing.QRReader.EnsureSession	EXCLUDED	X7
 pkg/infra/wa-headless/pairing.QRReader.PairingQR	ELIGIBLE	covered
+pkg/infra/wa-headless/pairing.QRReader.forgetCode	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/pairing.QRReader.promoteIfPaired	ELIGIBLE	covered
+pkg/infra/wa-headless/pairing.QRReader.staleHint	ELIGIBLE	uncovered:L1
+pkg/infra/wa-headless/pairing.QRReader.trackCode	ELIGIBLE	uncovered:L1
 pkg/infra/wa-headless/pairing.Starter.CheckOwnership	EXCLUDED	X1
 pkg/infra/wa-headless/pairing.Starter.StartSession	EXCLUDED	X1
 pkg/infra/wa-headless/pairing.Starter.StartSession.func1	ELIGIBLE	covered
@@ -4539,3 +4542,6 @@ pkg/presentation/http/middleware.ResolveConnectEvents	ELIGIBLE	covered
 pkg/presentation/http/middleware.Values.Get	EXCLUDED	X1
 pkg/presentation/http/middleware.extractRequestToken	ELIGIBLE	covered
 pkg/presentation/http/middleware.queryTokenAllowed	EXCLUDED	X1
+pkg/qrimage.Encode	ELIGIBLE	uncovered:L1
+pkg/qrimage.EnsureDataURI	ELIGIBLE	uncovered:L1
+pkg/qrimage.IsDataURI	EXCLUDED	X1

@@ -267,9 +267,16 @@ func TestValidacaoDePayloadPrecedeAGuardaDeSessao(t *testing.T) {
 // --- GetQR --------------------------------------------------------------
 
 func TestGetQR(t *testing.T) {
+	// O valor semeado é um data URI, e não "2@abc", porque é isso que a
+	// coluna users.qrcode REALMENTE guarda: o listener de QR do wa_noise
+	// escreve o PNG já codificado (pkg/application/session/orchestrator.go,
+	// onPairingQR — "A coluna guarda a IMAGEM"). O dublê dizia "2@abc" e por
+	// isso divergia da produção na exata regra em causa; foi a F373 que o
+	// mediu em campo (GET /session/pair/qr respondeu 1858 caracteres de
+	// data URI contra um servidor vivo).
 	t.Run("devolve o QR persistido", func(t *testing.T) {
 		users := &contractsfake.UserRepository{ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
-			return []domain.UserListEntry{{ID: txtID, QRCode: "2@abc"}}, nil
+			return []domain.UserListEntry{{ID: txtID, QRCode: qrNoisePersistido}}, nil
 		}}
 		log := &contractsfake.Logger{}
 
@@ -279,8 +286,9 @@ func TestGetQR(t *testing.T) {
 		if err != nil {
 			t.Fatalf("erro inesperado: %v", err)
 		}
-		if r.QRCode != "2@abc" {
-			t.Errorf("QRCode = %q, quero %q — o valor persistido nao chegou ao resultado", r.QRCode, "2@abc")
+		if r.QRCode != qrNoisePersistido {
+			t.Errorf("QRCode = %.40q…, quero o data URI persistido tal e qual — recodificá-lo "+
+				"produz um QR que desenha o próprio data URI (F373)", r.QRCode)
 		}
 		if len(users.ListUsersCalls) != 1 || users.ListUsersCalls[0].ID != txtID {
 			t.Errorf("ListUsers: %+v", users.ListUsersCalls)

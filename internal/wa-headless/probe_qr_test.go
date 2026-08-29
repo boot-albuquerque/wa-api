@@ -215,7 +215,7 @@ func TestProbeQRReader_ProductionPackage(t *testing.T) {
 	var code string
 	var refreshed bool
 	for {
-		code, refreshed, err = reader.Read(ctx, "test/qr-reader")
+		code, refreshed, err = reader.Read(ctx, "test/qr-reader", false)
 		if err != nil {
 			t.Fatalf("Read: %v", err)
 		}

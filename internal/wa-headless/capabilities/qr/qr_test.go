@@ -35,8 +35,14 @@ type pageDouble struct {
 	// instead of "no_ref". Zero disables this simulation. Meaningless
 	// unless < refAfterKicks.
 	expiredUntilKick int
+	// staleOnFirstKick: when true, a kick #1 that asked for forceStale (the
+	// CALLER's staleHint, not anything the page observed) reports
+	// why="stale" instead of following refAfterKicks — simulating "the ref
+	// is fine, the caller just decided it has been the same code too long".
+	staleOnFirstKick bool
 	kicks            int
 	refreshKicks     int // how many kicks were asked to refresh (doRefresh=true)
+	staleKicks       int // how many kicks asked for forceStale=true
 
 	answers map[string]string
 }
@@ -59,18 +65,27 @@ func (d *pageDouble) eval(_ context.Context, expr string, out *string) error {
 	switch {
 	case strings.Contains(expr, "async () => {"):
 		d.kicks++
-		doRefresh := strings.Contains(expr, "if (true) {")
+		doRefresh := strings.Contains(expr, "const doRefresh = true;")
+		forceStale := strings.Contains(expr, "const forceStale = true;")
 		if doRefresh {
 			d.refreshKicks++
 		}
-		if d.refAfterKicks > 0 && d.kicks >= d.refAfterKicks {
+		if forceStale {
+			d.staleKicks++
+		}
+		switch {
+		case d.staleOnFirstKick && forceStale && d.kicks == 1:
+			// The CALLER forced staleness on the first attempt — same shape
+			// as "expired": ref present, page fine, caller says too old.
+			d.answers[key] = fmt.Sprintf(`{"ok":false,"why":"stale","qr":"","refreshed":%v}`, doRefresh)
+		case d.refAfterKicks > 0 && d.kicks >= d.refAfterKicks:
 			// Matches the real script: refreshQR is only ever fired inside
 			// the `if (!ref)` branch, so a kick that finds ref ALREADY
 			// present never sets refreshed, regardless of doRefresh.
 			d.answers[key] = fmt.Sprintf(`{"ok":true,"why":"","qr":"ref%d,static,identity,adv,platform","refreshed":false}`, d.kicks)
-		} else if d.expiredUntilKick > 0 && d.kicks <= d.expiredUntilKick {
+		case d.expiredUntilKick > 0 && d.kicks <= d.expiredUntilKick:
 			d.answers[key] = fmt.Sprintf(`{"ok":false,"why":"expired","qr":"","refreshed":%v}`, doRefresh)
-		} else {
+		default:
 			d.answers[key] = fmt.Sprintf(`{"ok":false,"why":"no_ref","qr":"","refreshed":%v}`, doRefresh)
 		}
 		*out = "kicked"
@@ -100,7 +115,7 @@ func compressBudgets(t *testing.T) {
 func TestRead_RefAlreadyPresent_NoRefreshNoRetry(t *testing.T) {
 	compressBudgets(t)
 	d := &pageDouble{refAfterKicks: 1}
-	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test")
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test", false)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -122,7 +137,7 @@ func TestRead_RefAlreadyPresent_NoRefreshNoRetry(t *testing.T) {
 func TestRead_RefMissingThenAppears_RefreshesOnceAndRetries(t *testing.T) {
 	compressBudgets(t)
 	d := &pageDouble{refAfterKicks: 3} // shows up on the 3rd kick
-	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test")
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test", false)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -146,7 +161,7 @@ func TestRead_RefMissingThenAppears_RefreshesOnceAndRetries(t *testing.T) {
 func TestRead_NeverAppears_GivesUpWithinRefreshRetries(t *testing.T) {
 	compressBudgets(t)
 	d := &pageDouble{refAfterKicks: 0}
-	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test")
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test", false)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -174,7 +189,7 @@ func TestRead_RespectsCallerContext(t *testing.T) {
 	d := &pageDouble{refAfterKicks: 0}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
-	_, _, err := New(engine.NewRunner(), d.eval).Read(ctx, "test")
+	_, _, err := New(engine.NewRunner(), d.eval).Read(ctx, "test", false)
 	if err == nil {
 		t.Fatal("Read returned nil error, want ctx.Err() — the caller's deadline must be honoured")
 	}
@@ -191,7 +206,7 @@ func TestRead_RespectsCallerContext(t *testing.T) {
 func TestRead_ExpiredOverlay_NudgesAndRecovers(t *testing.T) {
 	compressBudgets(t)
 	d := &pageDouble{expiredUntilKick: 2, refAfterKicks: 3}
-	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test")
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test", false)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
@@ -203,5 +218,66 @@ func TestRead_ExpiredOverlay_NudgesAndRecovers(t *testing.T) {
 	}
 	if d.refreshKicks != 1 {
 		t.Fatalf("refreshKicks=%d, want EXACTLY 1 — expired must not be nudged again on every retry", d.refreshKicks)
+	}
+}
+
+// TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef: the case StaleRefreshAfter
+// exists for — MEASURED (2026-08-29, TestProbeQRRetryPattern, 3 minutes)
+// that the SPA's own rotation has a real gap (one 60s interval among four
+// ~20s ones), during which the page sees nothing wrong: ref present, no
+// expired overlay. Without staleHint, Read would just keep handing back the
+// same code (see TestRead_RefAlreadyPresent_NoRefreshNoRetry — that IS the
+// correct behaviour when nobody asked for staleness). With staleHint=true,
+// attempt 0 must nudge anyway and wait for a genuinely new code, even
+// though the page itself never asked for a refresh.
+func TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef(t *testing.T) {
+	compressBudgets(t)
+	d := &pageDouble{refAfterKicks: 1, staleOnFirstKick: true}
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test", true)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if code == "" {
+		t.Fatal("code is empty, want a code — the second kick should have found a healthy ref")
+	}
+	if !refreshed {
+		t.Fatal("refreshed=false, want true — staleHint must fire the nudge on attempt 0")
+	}
+	if d.kicks != 2 {
+		t.Fatalf("kicks=%d, want 2 (1 forced-stale + 1 that finally returns the code)", d.kicks)
+	}
+	if d.staleKicks != 1 {
+		t.Fatalf("staleKicks=%d, want EXACTLY 1 — staleHint only applies to attempt 0, "+
+			"never on retries (same rule as doRefresh)", d.staleKicks)
+	}
+	if d.refreshKicks != 1 {
+		t.Fatalf("refreshKicks=%d, want EXACTLY 1", d.refreshKicks)
+	}
+}
+
+// TestRead_NoStaleHint_NeverForcesNudge is the NEGATIVE CONTROL for
+// TestRead_StaleHint_ForcesNudgeEvenWithHealthyRef: with staleHint=false (the
+// default a caller with no tracked history passes), a healthy ref on the
+// first kick must be returned immediately, exactly like
+// TestRead_RefAlreadyPresent_NoRefreshNoRetry — proving the new parameter
+// does not change behaviour when the caller does not ask for it.
+func TestRead_NoStaleHint_NeverForcesNudge(t *testing.T) {
+	compressBudgets(t)
+	d := &pageDouble{refAfterKicks: 1, staleOnFirstKick: true}
+	code, refreshed, err := New(engine.NewRunner(), d.eval).Read(context.Background(), "test", false)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if code == "" {
+		t.Fatal("code is empty, want a code — ref was present from the first kick")
+	}
+	if refreshed {
+		t.Fatal("refreshed=true, want false — staleHint was false, nothing should have nudged")
+	}
+	if d.kicks != 1 {
+		t.Fatalf("kicks=%d, want 1 — without staleHint, a healthy ref returns immediately", d.kicks)
+	}
+	if d.staleKicks != 0 {
+		t.Fatalf("staleKicks=%d, want 0 — forceStale must never be requested when staleHint is false", d.staleKicks)
 	}
 }
