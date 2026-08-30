@@ -125,7 +125,7 @@ const corpoDeCriacao = `{
   "events": "Message",
   "hmac_key": "chave-hmac-de-trinta-e-dois-carA",
   "history": 50,
-  "engine": "wa_noise",
+  "engine": "noise",
   "proxy_config": {"enabled": true, "proxy_url": "http://proxy.exemplo", "webhook_use_proxy": false},
   "s3_config": {
     "enabled": true, "endpoint": "http://s3.exemplo", "region": "us-east-1",
@@ -315,7 +315,7 @@ func TestAdminUsers_ContratoPublico_ListagemVaziaEhArray(t *testing.T) {
 func TestAdminUsers_ContratoPublico_CamposVaziosNaoSomem(t *testing.T) {
 	f := newAdminFixture(t)
 	// O mínimo aceite pela rota: tudo o resto fica no zero.
-	rec := f.do(t, http.MethodPost, "/admin/users", `{"name":"bob","token":"tok-bob","engine":"wa_noise"}`)
+	rec := f.do(t, http.MethodPost, "/admin/users", `{"name":"bob","token":"tok-bob","engine":"noise"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, quero 200; corpo: %s", rec.Code, rec.Body.String())
 	}

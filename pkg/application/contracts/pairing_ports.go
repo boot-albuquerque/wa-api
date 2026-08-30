@@ -16,7 +16,7 @@ import "context"
 // ports rather than direct calls into an adapter: until 2026-08-27 the HTTP
 // handlers behind /session/qr, /session/connect and /session/pairphone were
 // wired to a hardcoded wa-noise adapter, so a session persisted with
-// engine=wa_headless still paired over the socket. See HOUSEKEEP F273.
+// engine=headless still paired over the socket. See HOUSEKEEP F273.
 
 // PairingQRReader offers the QR code a human points a phone at.
 //

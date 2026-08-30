@@ -13,7 +13,7 @@ import (
 //      no DB" — comparado contra o que ClaimAccountIdentity de facto
 //      implementa (comentário da própria função: "the caller of THIS call
 //      always wins").
-//   6. sessões wa_noise e wa_headless para o MESMO número, reivindicadas
+//   6. sessões noise e headless para o MESMO número, reivindicadas
 //      QUASE SIMULTANEAMENTE, terminam as DUAS ativas (cross-engine não
 //      colide).
 //
@@ -43,7 +43,7 @@ import (
 func TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511900000001", "wa_noise"
+	const identity, engine = "wa_pn:5511900000001", "noise"
 
 	// B é a sessão logicamente MAIS NOVA (imagine: seu token foi emitido
 	// depois do de A), mas chega ao banco PRIMEIRO.
@@ -96,7 +96,7 @@ func TestAudit_AccountOwnership_ArrivalOrderNotClaimRecency(t *testing.T) {
 // TestAudit_AccountOwnership_CrossEngine_Concurrent ataca a invariante 6 na
 // forma mais adversária possível: duas goroutines disparando
 // ClaimAccountIdentity QUASE SIMULTANEAMENTE (sem sequenciamento explícito),
-// uma para wa_noise e outra para wa_headless, no MESMO
+// uma para noise e outra para headless, no MESMO
 // canonical_account_identity. A chave de exclusividade do índice parcial é
 // (canonical_account_identity, engine) — este teste confirma sob concorrência
 // real (não só sequencial, como TestAccountOwnership_CrossEngine) que os
@@ -106,7 +106,7 @@ func TestAudit_AccountOwnership_CrossEngine_Concurrent(t *testing.T) {
 	ctx := context.Background()
 	const identity = "wa_pn:5511900000002"
 
-	engines := []string{"wa_noise", "wa_headless"}
+	engines := []string{"noise", "headless"}
 	sessionIDs := []string{"session-noise-concurrent", "session-headless-concurrent"}
 	results := make([]AccountOwnership, 2)
 	errs := make([]error, 2)
@@ -140,5 +140,5 @@ func TestAudit_AccountOwnership_CrossEngine_Concurrent(t *testing.T) {
 				sessionIDs[i], engine, status.Status, status.SupersededBySessionID)
 		}
 	}
-	t.Log("RESISTIU: claims concorrentes wa_noise/wa_headless para o mesmo número terminaram AMBAS ativas")
+	t.Log("RESISTIU: claims concorrentes noise/headless para o mesmo número terminaram AMBAS ativas")
 }

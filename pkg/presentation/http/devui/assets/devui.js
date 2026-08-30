@@ -114,12 +114,12 @@ export async function listarSessoes() {
     jid: u.jid || "",
     conectado: !!u.connected,
     autenticado: !!u.logged_in,
-    // "wa_noise", não "noise": é o valor do FIO (domain.Engine.String()),
+    // "noise", não "noise": é o valor do FIO (domain.Engine.String()),
     // e sessions.js reenvia este MESMO valor em `?engine=` nas rotas de
     // pareamento — um default que não bate com o que a API aceita faria
     // GET /session/qr recusar com invalid_engine para qualquer sessão cuja
     // linha ainda não tenha `engine` (legacy_unknown).
-    engine: u.engine || "wa_noise",
+    engine: u.engine || "noise",
     token: Tokens.de(u.id),
     temToken: !!Tokens.de(u.id),
   }));
@@ -143,7 +143,7 @@ export const $ = (id) => document.getElementById(id);
 //
 // SEM prefixo de engine: o token não amarra transporte nenhum — a escolha
 // de engine é um campo próprio do pedido de criação (`engine`), não algo
-// que se lê do formato do token. Um prefixo `wa_noise_` fixo era enganoso
+// que se lê do formato do token. Um prefixo `noise_` fixo era enganoso
 // mesmo quando a sessão nascia em headless (decisão 94, removida).
 //
 // getRandomValues e NÃO Math.random: este valor é a credencial da sessão, e

@@ -43,7 +43,7 @@ const (
 	// pairPhoneBody e' o menor corpo VALIDO da rota.
 	// `engine` passou a ser OBRIGATORIO com a F281: sem ele a rota devolve
 	// 400 invalid_engine antes de tocar em provider nenhum.
-	pairPhoneBody = `{"engine":"wa_noise","Phone":"` + pairPhoneNumber + `"}`
+	pairPhoneBody = `{"engine":"noise","Phone":"` + pairPhoneNumber + `"}`
 	// pairPhoneWireCode e' o codigo que a porta devolve nos casos felizes.
 	// Formato de 8 caracteres em dois grupos, como
 	// internal/wa-noise/capabilities/pairing/paircode.go:100 monta.
@@ -61,7 +61,7 @@ const (
 
 // pairPhoneRouter registra o handler pela rota real (gorilla/mux).
 func pairPhoneRouter(pp *contractsfake.PhonePairer) http.Handler {
-	// A sessao "user-1" (msgAuthed) esta' gravada em wa_noise, e o pairer
+	// A sessao "user-1" (msgAuthed) esta' gravada em noise, e o pairer
 	// fake e' o provider desse engine. A matriz consultada e' a REAL.
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(_ context.Context, id string) ([]domain.UserListEntry, error) {
@@ -158,7 +158,7 @@ func TestPairPhone_Success_ViaRegisteredRoute(t *testing.T) {
 func TestPairPhone_MissingPhone_400_LogsCause(t *testing.T) {
 	pp := pairPhoneIssuing()
 
-	rec, recs := pairPhoneServeCapturingLog(t, pp, `{"engine":"wa_noise"}`)
+	rec, recs := pairPhoneServeCapturingLog(t, pp, `{"engine":"noise"}`)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status: got %d, want 400 (corpo: %s)", rec.Code, rec.Body.String())

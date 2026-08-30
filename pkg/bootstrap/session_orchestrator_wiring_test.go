@@ -111,7 +111,7 @@ func TestConnectStartInFlightCheckIsWired(t *testing.T) {
 	registerCustomRoutes(router, alice.New(inject), customHandlerSet)
 
 	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect?engine=wa_noise", nil))
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect?engine=noise", nil))
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 — a start already in flight must reach the HTTP "+

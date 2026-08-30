@@ -6,33 +6,34 @@ import "fmt"
 //
 // # Why this is a domain concept and not a configuration string
 //
-// Two transports serve the same ports: the socket (`wa_noise`) and the
-// browser-driven SPA (`wa_headless`). They do NOT serve the same set of
+// Two transports serve the same ports: the socket (`noise`) and the
+// browser-driven SPA (`headless`). They do NOT serve the same set of
 // capabilities, so which one runs a session is an operational decision that
 // has to be READ BACK — from the database, from the API, from a log line —
 // and not re-derived from process configuration on every startup.
 //
-// # The temporary duality with pkg/bootstrap/engine_selection.go
+// # History: the duality with pkg/bootstrap/engine_selection.go
 //
-// pkg/bootstrap declares EngineNoise = "wanoise" and EngineHeadless =
-// "headless". Those are the INFRASTRUCTURE CONFIGURATION strings, read from
-// WA_API_ENGINE and WA_API_ENGINE_HEADLESS_SESSIONS, and they predate this
-// type. The values here are the PUBLIC CONTRACT values, in snake_case, and
-// they are deliberately different text.
+// pkg/bootstrap used to declare its own infrastructure-configuration
+// strings (`WA_API_ENGINE`, `WA_API_ENGINE_HEADLESS_SESSIONS`), separate
+// from the values here, because engine selection was static per process at
+// startup (decisão 94). That vocabulary was removed once selection moved to
+// per-session, chosen by the caller at `POST /admin/users` (see
+// pkg/bootstrap/engine_selection.go) — there is only one vocabulary now.
 //
-// The two are not unified yet on purpose: unifying them means changing what
-// operators already have in their environment, and that belongs to the
-// worktree that makes routing consume domain.Engine (capability-registry /
-// routing). Until then EngineFromInfraName is the single crossing point
-// between the two vocabularies. Registered in HOUSEKEEP.md.
+// The wire values themselves were `wa_noise`/`wa_headless` until 2026-08-29
+// (HOUSEKEEP F385): a repository-wide rename dropped the redundant `wa`
+// prefix everywhere except the module name (`wa-api`) itself, including
+// here. Existing rows were migrated (`pkg/infra/db/migrations.go`,
+// migration 22).
 type Engine string
 
 const (
 	// EngineNoise is the socket transport. It is the historical default.
-	EngineNoise Engine = "wa_noise"
+	EngineNoise Engine = "noise"
 
 	// EngineHeadless is the browser-driven SPA transport.
-	EngineHeadless Engine = "wa_headless"
+	EngineHeadless Engine = "headless"
 
 	// EngineLegacyUnknown is INTERNAL ONLY: it marks a row whose engine was
 	// never recorded because the column did not exist when the row was

@@ -33,7 +33,7 @@ func TestAudit_AuthAlice_CacheHitStillEnforcesSupersede(t *testing.T) {
 	insertAuthUser(t, db, "u1", "tok-cache-hit", domain.HashToken("tok-cache-hit"))
 
 	ownership := dbpkg.NewAccountOwnershipRepository(db)
-	insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "wa_noise", "u1", "u1", "active", 1)
+	insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "noise", "u1", "u1", "active", 1)
 
 	userCache := cache.New(cache.NoExpiration, cache.NoExpiration)
 	nextRanCount := 0
@@ -60,7 +60,7 @@ func TestAudit_AuthAlice_CacheHitStillEnforcesSupersede(t *testing.T) {
 	if _, err := db.Exec(`UPDATE account_ownership SET status='superseded', superseded_by_session_id='u2' WHERE id='claim-1'`); err != nil {
 		t.Fatalf("marcando claim-1 como superseded: %v", err)
 	}
-	insertOwnershipRow(t, db, "claim-2", "5511@s.whatsapp.net", "wa_noise", "u2", "u2", "active", 2)
+	insertOwnershipRow(t, db, "claim-2", "5511@s.whatsapp.net", "noise", "u2", "u2", "active", 2)
 
 	// Requisição 2: MESMO token, agora com cache HIT garantido (Values já
 	// está no cache; não passa pelo SELECT em `users`). Se a checagem de
@@ -91,8 +91,8 @@ func TestAudit_AuthAlice_ConcurrentRequestsAfterSupersede(t *testing.T) {
 	insertAuthUser(t, db, "u1", "tok-concurrent", domain.HashToken("tok-concurrent"))
 
 	ownership := dbpkg.NewAccountOwnershipRepository(db)
-	insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "wa_noise", "u1", "u1", "superseded", 1)
-	insertOwnershipRow(t, db, "claim-2", "5511@s.whatsapp.net", "wa_noise", "u2", "u2", "active", 2)
+	insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "noise", "u1", "u1", "superseded", 1)
+	insertOwnershipRow(t, db, "claim-2", "5511@s.whatsapp.net", "noise", "u2", "u2", "active", 2)
 
 	userCache := cache.New(cache.NoExpiration, cache.NoExpiration)
 	handler := AuthAlice(db.DB, userCache, ownership)(

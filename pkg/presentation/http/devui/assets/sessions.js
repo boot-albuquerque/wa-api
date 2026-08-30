@@ -39,8 +39,8 @@ const ROTA_QR = "/session/pair/qr";
 // (/session/connect, /session/qr). As duas exigem o parâmetro — sem ele,
 // pairing.Registry.Resolve recusa com invalid_engine ANTES de tocar
 // qualquer provider (pkg/pairing/registry.go). `s.engine` vem de
-// GET /admin/users (devui.js:listarSessoes), sempre "wa_noise" ou
-// "wa_headless" — os únicos valores domain.ParseEngine aceita.
+// GET /admin/users (devui.js:listarSessoes), sempre "noise" ou
+// "headless" — os únicos valores domain.ParseEngine aceita.
 function comEngine(rota, s) {
   return `${rota}?engine=${encodeURIComponent(s.engine)}`;
 }
@@ -49,8 +49,8 @@ function comEngine(rota, s) {
 // entre sondagens de ROTA_QR dentro dela.
 //
 // 12s cobre com folga o pior caso medido em 2026-08-20 contra o servidor
-// real PARA wa_noise: entre o `connect` e o primeiro QR passaram-se 640ms a
-// 1,4s em todas as corridas. wa_headless não tem esse luxo — mede um boot de
+// real PARA noise: entre o `connect` e o primeiro QR passaram-se 640ms a
+// 1,4s em todas as corridas. headless não tem esse luxo — mede um boot de
 // Chrome real, não um handshake de socket. Medido ao vivo em 2026-08-29
 // (Claude in Chrome, connect→primeiro GET /session/pair/qr): 13039ms só
 // nesse pedido, com o QR ainda vazio na resposta. 12s bastava para derrubar
@@ -62,11 +62,11 @@ const QR_ESPERA_MS_HEADLESS = 30000;
 const QR_SONDA_MS = 1000;
 
 // esperaQRMs devolve o teto de "nunca mostrou QR nenhum" para a sessão `s`.
-// wa_headless mede boot de Chrome real (variável, sujeito a carga da
-// máquina); wa_noise mede handshake de socket. Confundir os dois teto foi o
+// headless mede boot de Chrome real (variável, sujeito a carga da
+// máquina); noise mede handshake de socket. Confundir os dois teto foi o
 // defeito medido acima.
 function esperaQRMs(s) {
-  return s.engine === "wa_headless" ? QR_ESPERA_MS_HEADLESS : QR_ESPERA_MS_PADRAO;
+  return s.engine === "headless" ? QR_ESPERA_MS_HEADLESS : QR_ESPERA_MS_PADRAO;
 }
 
 // Teto para o handshake do WebSocket. Não é o tempo até o QR: é só até o
@@ -289,11 +289,11 @@ const ttlTimers = new Map();
 const QR_DATA_URI_PREFIXO = "data:image/png;base64,";
 
 // mostrarQR desenha a IMAGEM que GET /session/pair/qr devolve — o mesmo
-// contrato para wa_noise e wa_headless desde a F373, agora que os dois
+// contrato para noise e headless desde a F373, agora que os dois
 // passam pelo mesmo `pkg/qrimage`.
 //
 // Este painel já desenhou o valor client-side, tratando-o como a string crua
-// de pareamento. Renderizava lindamente e o QR era INVÁLIDO: para wa_noise o
+// de pareamento. Renderizava lindamente e o QR era INVÁLIDO: para noise o
 // valor sempre foi o data URI, então o código desenhado codificava os 1858
 // caracteres "data:image/png;base64,iVBOR…" — um QR perfeito com o conteúdo
 // errado, que o telefone lê e o WhatsApp recusa. Nada no console acusava
@@ -324,7 +324,7 @@ function mostrarQR(id, dataURI) {
 
 // contratoQRQuebrado é o que o painel mostra quando a rota responde algo que
 // não é a imagem documentada — um engine novo que devolva a string crua, por
-// exemplo, que foi exactamente o estado de wa_headless antes da F373.
+// exemplo, que foi exactamente o estado de headless antes da F373.
 // Aparecer aqui é melhor do que um <img> quebrado ou, pior, um QR bonito com
 // o conteúdo errado.
 function contratoQRQuebrado(id, valor) {
@@ -398,8 +398,8 @@ function abrirWS(s) {
     let d; try { d = JSON.parse(m.data); } catch { return; }
     const tipo = String(d.type || d.event || "").toLowerCase();
     // O QR em si NÃO vem mais daqui — ver sondarQR. Os eventos `qr`/
-    // `qrtimeout` só existem para wa_noise (pkg/application/session/
-    // orchestrator.go), e nunca para wa_headless: a mesma sondagem de
+    // `qrtimeout` só existem para noise (pkg/application/session/
+    // orchestrator.go), e nunca para headless: a mesma sondagem de
     // GET /session/qr precisa cobrir os dois de qualquer forma, então usá-la
     // como ÚNICA fonte — em vez de WS para um engine e sondagem para o outro
     // — é a lógica igual que os dois merecem, e o painel para de depender de
@@ -436,25 +436,25 @@ function pararSondaQR(id) {
 }
 
 // sondarQR sonda `GET /session/qr` CONTINUAMENTE — não só até o primeiro QR
-// aparecer — e é a MESMA lógica para wa_noise e wa_headless: os dois
+// aparecer — e é a MESMA lógica para noise e headless: os dois
 // respondem o mesmo contrato (imagem em data URI — `pkg/qrimage`, o único
 // codificador dos dois desde a F373; a divergência que existia aqui é o que
-// tornava o QR de wa_noise inválido), e nenhum dos dois tem um canal de push que o outro não
+// tornava o QR de noise inválido), e nenhum dos dois tem um canal de push que o outro não
 // tenha (ver o comentário em abrirWS: `qr`/`qrtimeout` só existiam para
-// wa_noise, e o WebSocket é "canal com perda" mesmo nesse). Sondar sempre é
+// noise, e o WebSocket é "canal com perda" mesmo nesse). Sondar sempre é
 // o que os serve os dois igualmente bem.
 //
 // Dois estados de falha, distintos de propósito:
 //
-//   - NUNCA mostrou QR nenhum dentro de esperaQRMs(s) (12s wa_noise, 30s
-//     wa_headless — boot de Chrome real, ver QR_ESPERA_MS_HEADLESS): o pedido
+//   - NUNCA mostrou QR nenhum dentro de esperaQRMs(s) (12s noise, 30s
+//     headless — boot de Chrome real, ver QR_ESPERA_MS_HEADLESS): o pedido
 //     falhou de facto — sessão já pareada, engine mal configurado — e
 //     falhouQR() diz isso com a mensagem certa.
 //   - JÁ mostrou um QR, mas a sondagem volta vazia por QR_PRESO_MS (15s)
 //     seguidos: o código travou apesar do backend tentar recuperar-se
 //     sozinho (HOUSEKEEP H145) — marcarExpirado() mostra o botão manual,
 //     que é o mesmo "Gerar novo QR" que existia só para o evento
-//     `qrtimeout` de wa_noise, agora acionado pela MESMA sondagem para
+//     `qrtimeout` de noise, agora acionado pela MESMA sondagem para
 //     qualquer engine.
 //
 // É o que a Evolution API faz em connectToWhatsapp: depois de conectar, ela
@@ -909,7 +909,7 @@ $("btn-nova").onclick = () => {
   // noise por padrão a cada abertura: é o engine canónico do projeto, e
   // reabrir o diálogo não deve carregar a última escolha de uma tentativa
   // anterior.
-  $("nova-engine").value = "wa_noise";
+  $("nova-engine").value = "noise";
   // Gerado a cada abertura, e não reaproveitado: se alguém abrir o diálogo,
   // desistir e voltar, o token de arranque tem de ser outro. Reusar faria dois
   // "cancelar" seguidos proporem a mesma credencial.

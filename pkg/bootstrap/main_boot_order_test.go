@@ -22,7 +22,7 @@ import (
 // setupEngineSelection — initCustomHandlers via' sempre s.Headless ZERO,
 // então TODO adapter de sessão headless nunca era ligado em produção, com
 // ou sem Chrome configurado. MEDIDO ao vivo (servidor real, Claude in
-// Chrome): o log de arranque dizia "wa_headless_ports=0" numa linha e
+// Chrome): o log de arranque dizia "headless_ports=0" numa linha e
 // "headless_configured=true" na linha seguinte — a prova de que a
 // configuração chegava DEPOIS de já ter sido consultada. Nenhum teste
 // unitário deste pacote pegou isso porque todos constroem os componentes

@@ -138,7 +138,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			name:   "AddUser sucesso",
 			build:  func(h *UserHandlers) http.Handler { return h.AddUser() },
 			method: http.MethodPost, path: "/admin/users",
-			body: `{"name":"alice","token":"tok-1","engine":"wa_noise"}`, want: http.StatusOK,
+			body: `{"name":"alice","token":"tok-1","engine":"noise"}`, want: http.StatusOK,
 		},
 		{
 			name:   "AddUser corpo malformado",
@@ -163,7 +163,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			},
 			build:  func(h *UserHandlers) http.Handler { return h.AddUser() },
 			method: http.MethodPost, path: "/admin/users",
-			body: `{"name":"alice","token":"tok-1","engine":"wa_noise"}`, want: http.StatusConflict,
+			body: `{"name":"alice","token":"tok-1","engine":"noise"}`, want: http.StatusConflict,
 			wantErrSubstring: user.ErrDuplicateToken.Error(),
 		},
 		{
@@ -175,7 +175,7 @@ func TestUserHandlers_AdminRoutes(t *testing.T) {
 			},
 			build:  func(h *UserHandlers) http.Handler { return h.AddUser() },
 			method: http.MethodPost, path: "/admin/users",
-			body: `{"name":"alice","token":"tok-1","engine":"wa_noise"}`, want: http.StatusInternalServerError,
+			body: `{"name":"alice","token":"tok-1","engine":"noise"}`, want: http.StatusInternalServerError,
 			wantErrSubstring: boom.Error(),
 		},
 		{
@@ -517,7 +517,7 @@ func TestUserHandlers_NaoLogamSegredoDoPayload(t *testing.T) {
 	}
 
 	body := `{"name":"alice","token":"` + logassertAdminToken +
-		`","hmacKey":"` + logassertGlobalHMACKey + `","engine":"wa_noise"}`
+		`","hmacKey":"` + logassertGlobalHMACKey + `","engine":"noise"}`
 	rec, capture := uhServe(f.handlers().AddUser(),
 		uhRequest(http.MethodPost, "/admin/users", body, nil))
 

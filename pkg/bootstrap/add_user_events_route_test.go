@@ -92,7 +92,7 @@ func TestAdminAddUser_EventosValidosCriamUsuario(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newAddUserRouteFixture(t)
-			rec := f.postUser(t, `{"name":"alice","token":"`+addUserEventsToken+`","events":`+tt.events+`,"engine":"wa_noise"}`)
+			rec := f.postUser(t, `{"name":"alice","token":"`+addUserEventsToken+`","events":`+tt.events+`,"engine":"noise"}`)
 			if rec.Code != http.StatusOK {
 				t.Fatalf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusOK, rec.Body.String())
 			}
@@ -138,7 +138,7 @@ func TestAdminAddUser_EventoDesconhecidoERecusadoENadaEGravado(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newAddUserRouteFixture(t)
-			rec := f.postUser(t, `{"name":"alice","token":"`+addUserEventsToken+`","events":`+tt.events+`,"engine":"wa_noise"}`)
+			rec := f.postUser(t, `{"name":"alice","token":"`+addUserEventsToken+`","events":`+tt.events+`,"engine":"noise"}`)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, queria %d (corpo: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
 			}

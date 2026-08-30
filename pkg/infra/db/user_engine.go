@@ -41,7 +41,7 @@ const (
 //
 // NOT NULL with a DEFAULT is what makes this safe on a table that already has
 // rows: without a default, SQLite refuses the statement outright. The default
-// is legacy_unknown and NOT wa_noise on purpose — the ALTER must not claim to
+// is legacy_unknown and NOT noise on purpose — the ALTER must not claim to
 // know something it did not measure. BackfillUserEngines is what replaces it,
 // and it runs right after.
 const addUsersEngineSQL = `
@@ -89,8 +89,8 @@ var ErrEngineBackfillIncomplete = fmt.Errorf(
 // BackfillUserEngines writes users.engine for every row that does not have it
 // yet, reproducing EXACTLY the rule that runs in production today:
 //
-//	id listed in WA_API_ENGINE_HEADLESS_SESSIONS -> wa_headless
-//	everything else                              -> the default engine (wa_noise)
+//	id listed in WA_API_ENGINE_HEADLESS_SESSIONS -> headless
+//	everything else                              -> the default engine (noise)
 //
 // # Why this is Go and not SQL
 //
@@ -191,7 +191,7 @@ func BackfillUserEngines(
 	return report, nil
 }
 
-// backfillHeadlessSessions sets wa_headless on each listed id that is still
+// backfillHeadlessSessions sets headless on each listed id that is still
 // unrecorded, and reports which listed ids matched no row at all.
 //
 // Extracted from BackfillUserEngines so that neither function has to carry both

@@ -7,7 +7,7 @@
 // Until 2026-08-27 the handlers behind GET /session/qr, GET /session/connect
 // and POST /session/pairphone were wired, in pkg/bootstrap/wiring_handlers.go,
 // to a single hardcoded wa-noise adapter. A session created with
-// engine=wa_headless persisted correctly, reported correctly on
+// engine=headless persisted correctly, reported correctly on
 // GET /session/capabilities, and then paired over the socket anyway, because
 // nothing between the handler and the adapter ever read the persisted engine.
 // The old selection mechanism (bootstrap.EngineSelection.EngineFor /
@@ -35,7 +35,7 @@
 // # No cross-engine fallback, ever
 //
 // Question 3 answering "no" ends the request. There is deliberately no path
-// from a wa_headless request to a wa-noise provider. Falling back would pair a
+// from a headless request to a wa-noise provider. Falling back would pair a
 // session on a transport its record does not name, and the record is what every
 // later operation on that session reads.
 //

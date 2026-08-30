@@ -308,7 +308,7 @@ UtilizadorAdmin:
       type: string
       nullable: false
       readOnly: true
-      enum: [wa_noise, wa_headless]
+      enum: [noise, headless]
       description: |
         Transporte que serve esta sessão: `noise` fala o protocolo
         directamente pelo socket; `headless` conduz o Chromium por trás da
@@ -327,7 +327,7 @@ UtilizadorAdmin:
         `headless` hoje serve 17 dos 25 "ports" que `noise` serve; uma
         chamada que o headless não cobre recusa com um erro dizendo qual port
         e por quê — nunca cai para `noise` em silêncio.
-      example: wa_noise
+      example: noise
 
 PedidoCriarUtilizador:
   type: object
@@ -349,7 +349,7 @@ PedidoCriarUtilizador:
     engine:
       type: string
       nullable: false
-      enum: [wa_noise, wa_headless]
+      enum: [noise, headless]
       description: |
         Transporte que servirá a sessão. **Obrigatório** — não há default
         silencioso.
@@ -366,7 +366,7 @@ PedidoCriarUtilizador:
         (fora de `{noise, headless}`) — incluindo `legacy_unknown`, que
         é um estado interno de leitura e nunca uma escolha de criação — dão
         `400 invalid_engine`.
-      example: wa_noise
+      example: noise
     name:
       type: string
       nullable: false
@@ -521,7 +521,7 @@ PedidoEditarUtilizador:
     engine:
       type: string
       nullable: false
-      enum: [wa_noise, wa_headless]
+      enum: [noise, headless]
       description: |
         **Imutável.** O campo é aceite no corpo para permitir reenviar o
         estado actual (edição idempotente), mas qualquer valor diferente do
@@ -530,7 +530,7 @@ PedidoEditarUtilizador:
         dispara verificação nenhuma. Um valor **desconhecido** deste enum não
         tem tratamento especial: cai na mesma comparação e é recusado como
         diferente do gravado.
-      example: wa_noise
+      example: noise
     name:
       type: string
       nullable: false

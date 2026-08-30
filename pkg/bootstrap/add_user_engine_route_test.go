@@ -125,10 +125,10 @@ func TestAdminAddUser_EngineAusenteNuloVazioOuInvalidoE400(t *testing.T) {
 }
 
 // TestAdminAddUser_EngineValidoCriaEListagemMostraOMotor trava o caminho de
-// SUCESSO (item 3/9): wa_noise e wa_headless criam a conta, e GET
+// SUCESSO (item 3/9): noise e headless criam a conta, e GET
 // /admin/users devolve o campo "engine".
 func TestAdminAddUser_EngineValidoCriaEListagemMostraOMotor(t *testing.T) {
-	for _, engine := range []string{"wa_noise", "wa_headless"} {
+	for _, engine := range []string{"noise", "headless"} {
 		t.Run(engine, func(t *testing.T) {
 			f := newEngineRouteFixture(t)
 			rec := f.postUser(t, `{"name":"alice","token":"`+engineRouteToken+`","engine":"`+engine+`"}`)
@@ -163,7 +163,7 @@ func TestAdminAddUser_EngineValidoCriaEListagemMostraOMotor(t *testing.T) {
 // valor original — não é só o status HTTP que prova isso.
 func TestAdminEditUser_EngineDivergenteE409SemTocarOBanco(t *testing.T) {
 	f := newEngineRouteFixture(t)
-	createRec := f.postUser(t, `{"name":"alice","token":"`+engineRouteToken+`","engine":"wa_noise"}`)
+	createRec := f.postUser(t, `{"name":"alice","token":"`+engineRouteToken+`","engine":"noise"}`)
 	if createRec.Code != http.StatusOK {
 		t.Fatalf("create status = %d (corpo: %s)", createRec.Code, createRec.Body.String())
 	}
@@ -176,7 +176,7 @@ func TestAdminEditUser_EngineDivergenteE409SemTocarOBanco(t *testing.T) {
 		t.Fatalf("decode create: %v", err)
 	}
 
-	editRec := f.do(t, http.MethodPut, "/admin/users/"+created.Data.ID, `{"engine":"wa_headless"}`)
+	editRec := f.do(t, http.MethodPut, "/admin/users/"+created.Data.ID, `{"engine":"headless"}`)
 	if editRec.Code != http.StatusConflict {
 		t.Fatalf("edit status = %d, queria 409 (corpo: %s)", editRec.Code, editRec.Body.String())
 	}
@@ -188,7 +188,7 @@ func TestAdminEditUser_EngineDivergenteE409SemTocarOBanco(t *testing.T) {
 	if err := f.db.Get(&stored, `SELECT engine FROM users WHERE id = ?`, created.Data.ID); err != nil {
 		t.Fatalf("select engine: %v", err)
 	}
-	if stored != "wa_noise" {
-		t.Errorf("engine no banco = %q, queria %q — a tentativa recusada não pode ter tocado a coluna", stored, "wa_noise")
+	if stored != "noise" {
+		t.Errorf("engine no banco = %q, queria %q — a tentativa recusada não pode ter tocado a coluna", stored, "noise")
 	}
 }

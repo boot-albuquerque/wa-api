@@ -211,7 +211,7 @@ func TestSessionQR_ContratoPublico(t *testing.T) {
 	}
 	qr := &contractsfake.PairingQRReader{
 		PairingQRFunc: func(context.Context, string) (string, error) {
-			// Forma REAL do adapter wa_noise: le' users.qrcode, onde o
+			// Forma REAL do adapter noise: le' users.qrcode, onde o
 			// orquestrador ja' gravou o PNG codificado. Ver F373.
 			return qrImageOf(t, qrCodePersistido), nil
 		},
@@ -221,7 +221,7 @@ func TestSessionQR_ContratoPublico(t *testing.T) {
 		&pairing.Provider{Engine: domain.EngineHeadless})
 	router := familyRouter(t, "/session/qr", NewGetQRHandler(&contractsfake.Logger{}, reg), http.MethodGet)
 
-	rec := serveFamily(t, router, http.MethodGet, "/session/qr?engine=wa_noise", "")
+	rec := serveFamily(t, router, http.MethodGet, "/session/qr?engine=noise", "")
 	data := familyData(t, rec)
 
 	contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())
@@ -249,7 +249,7 @@ func TestSessionPairPhone_ContratoPublico(t *testing.T) {
 		&pairing.Provider{Engine: domain.EngineHeadless})
 	router := familyRouter(t, "/session/pairphone", NewPairPhoneHandler(&contractsfake.Logger{}, reg), http.MethodPost)
 
-	rec := serveFamily(t, router, http.MethodPost, "/session/pairphone", `{"engine":"wa_noise","phone":"5511999999999"}`)
+	rec := serveFamily(t, router, http.MethodPost, "/session/pairphone", `{"engine":"noise","phone":"5511999999999"}`)
 	data := familyData(t, rec)
 
 	contracttest.AssertPublicJSONUsesCanonicalNaming(t, rec.Body.Bytes())

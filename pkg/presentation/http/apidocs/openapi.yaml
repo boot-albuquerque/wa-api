@@ -23,7 +23,7 @@ components:
 
         `legacy_unknown` é RECUSADO com `400 invalid_engine` — descreve
         história de migração, nunca uma intenção. O valor não é aparado nem
-        normalizado: `wa_noise ` com espaço, ou `WA_NOISE`, também dão
+        normalizado: `noise ` com espaço, ou `NOISE`, também dão
         `400 invalid_engine`.
 
         **Vai na query e não no corpo** porque as duas rotas que o pedem assim
@@ -34,9 +34,9 @@ components:
       required: true
       schema:
         enum:
-          - wa_noise
-          - wa_headless
-        example: wa_noise
+          - noise
+          - headless
+        example: noise
         type: string
     IdNoCaminho:
       description: Identificador do recurso, em hexadecimal de 32 caracteres.
@@ -81,7 +81,7 @@ components:
             code: 409
             error:
               code: engine_mismatch
-              message: request names engine "wa_headless", but this session was created with engine "wa_noise"; engine is immutable after creation
+              message: request names engine "headless", but this session was created with engine "noise"; engine is immutable after creation
             success: false
           schema:
             $ref: '#/components/schemas/Erro'
@@ -103,7 +103,7 @@ components:
             code: 422
             error:
               code: capability_not_supported
-              message: capability "get_pairing_qr" is "not_implemented" on engine "wa_headless"
+              message: capability "get_pairing_qr" is "not_implemented" on engine "headless"
             success: false
           schema:
             $ref: '#/components/schemas/Erro'
@@ -2575,9 +2575,9 @@ components:
             engines que o registo tem provider, não de uma sessão gravada, e por
             isso um valor fora dos dois listados não pode aparecer aqui.
           enum:
-            - wa_noise
-            - wa_headless
-          example: wa_noise
+            - noise
+            - headless
+          example: noise
           nullable: false
           type: string
         evidence:
@@ -4702,9 +4702,9 @@ components:
             é um estado interno de leitura e nunca uma escolha de criação — dão
             `400 invalid_engine`.
           enum:
-            - wa_noise
-            - wa_headless
-          example: wa_noise
+            - noise
+            - headless
+          example: noise
           nullable: false
           type: string
         events:
@@ -5284,9 +5284,9 @@ components:
             tem tratamento especial: cai na mesma comparação e é recusado como
             diferente do gravado.
           enum:
-            - wa_noise
-            - wa_headless
-          example: wa_noise
+            - noise
+            - headless
+          example: noise
           nullable: false
           type: string
         events:
@@ -7308,13 +7308,13 @@ components:
 
             `legacy_unknown` é RECUSADO com `400 invalid_engine`: descreve
             história de migração, nunca uma intenção. Qualquer outro valor fora
-            desta lista — incluindo os nomes de configuração antigos `wanoise` e
-            `headless`, e variações de caixa ou com espaços — é igualmente
-            inválido e dá `400 invalid_engine`. O valor não é aparado nem
-            normalizado antes de ser comparado.
+            desta lista — incluindo `wa_noise`/`wa_headless` (valores antigos,
+            cortados sem transição em 2026-08-29) e variações de caixa ou com
+            espaços — é igualmente inválido e dá `400 invalid_engine`. O valor
+            não é aparado nem normalizado antes de ser comparado.
           enum:
-            - wa_noise
-            - wa_headless
+            - noise
+            - headless
           nullable: false
           type: string
         phone:
@@ -11126,9 +11126,9 @@ components:
             chamada que o headless não cobre recusa com um erro dizendo qual port
             e por quê — nunca cai para `noise` em silêncio.
           enum:
-            - wa_noise
-            - wa_headless
-          example: wa_noise
+            - noise
+            - headless
+          example: noise
           nullable: false
           readOnly: true
           type: string

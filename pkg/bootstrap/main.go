@@ -425,7 +425,7 @@ func Main() {
 	// TODO adapter de sessão headless (F370/H145) nunca era ligado, mesmo com
 	// WA_API_HEADLESS_CHROME configurado. Medido ao vivo (Claude in Chrome
 	// contra um servidor real): o log de arranque dizia
-	// "wa_headless_ports=0" seguido, na linha seguinte, de
+	// "headless_ports=0" seguido, na linha seguinte, de
 	// "headless_configured=true" — a config chegava DEPOIS de já ter sido
 	// consultada.
 	setupEngineSelection(s)

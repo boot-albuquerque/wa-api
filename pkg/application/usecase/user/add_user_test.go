@@ -83,7 +83,7 @@ func TestAddUserUseCase_Execute_DuplicateToken(t *testing.T) {
 			repo := &contractsfake.UserRepository{CreateUserFunc: tt.fn}
 			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
-			_, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok", Engine: "wa_noise"})
+			_, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok", Engine: "noise"})
 			if !errors.Is(err, user.ErrDuplicateToken) {
 				t.Fatalf("err = %v, queria user.ErrDuplicateToken", err)
 			}
@@ -101,7 +101,7 @@ func TestAddUserUseCase_Execute_RepositoryError(t *testing.T) {
 	logger := &contractsfake.Logger{}
 	uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, logger, true)
 
-	_, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok", Engine: "wa_noise"})
+	_, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok", Engine: "noise"})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, queria embrulhar boom", err)
 	}
@@ -127,7 +127,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 	}{
 		{
 			name: "mínimo, com defaults",
-			req:  domain.AddUserInput{Name: "alice", Token: "tok", Engine: "wa_noise"},
+			req:  domain.AddUserInput{Name: "alice", Token: "tok", Engine: "noise"},
 			// sem ProxyConfig, webhookUseProxy vira true por default
 			wantProxy: true,
 		},
@@ -136,20 +136,20 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 			req: domain.AddUserInput{
 				Name:        "bob",
 				Token:       "tok2",
-				Engine:      "wa_noise",
+				Engine:      "noise",
 				ProxyConfig: &domain.ProxyConfig{ProxyURL: "http://proxy:8080", WebhookUseProxy: &useProxy},
 			},
 			wantProxy: false,
 		},
 		{
 			name: "eventos com entradas vazias são ignoradas",
-			req:  domain.AddUserInput{Name: "carol", Token: "tok3", Events: "Message,, ,ReadReceipt", Engine: "wa_noise"},
+			req:  domain.AddUserInput{Name: "carol", Token: "tok3", Events: "Message,, ,ReadReceipt", Engine: "noise"},
 			// a entrada vazia entra no `continue`, não vira erro
 			wantProxy: true,
 		},
 		{
 			name:           "hmac no comprimento mínimo",
-			req:            domain.AddUserInput{Name: "dave", Token: "tok4", HmacKey: hmacKey32, Engine: "wa_noise"},
+			req:            domain.AddUserInput{Name: "dave", Token: "tok4", HmacKey: hmacKey32, Engine: "noise"},
 			wantProxy:      true,
 			wantHmacConfig: true,
 		},
@@ -158,7 +158,7 @@ func TestAddUserUseCase_Execute_Success(t *testing.T) {
 			req: domain.AddUserInput{
 				Name:   "erin",
 				Token:  "tok5",
-				Engine: "wa_noise",
+				Engine: "noise",
 				S3Config: &domain.S3Config{
 					Enabled: true, Endpoint: "http://s3:9000", Region: "us-east-1",
 					Bucket: "b", AccessKey: "ak", SecretKey: "sk", PathStyle: true,
@@ -251,7 +251,7 @@ func TestAddUserUseCase_Execute_CifraFalhaNaoCriaUsuario(t *testing.T) {
 	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, logger, true)
 
 	resp, err := uc.Execute(context.Background(),
-		domain.AddUserInput{Name: "alice", Token: "tok", HmacKey: hmacKey32, Engine: "wa_noise"})
+		domain.AddUserInput{Name: "alice", Token: "tok", HmacKey: hmacKey32, Engine: "noise"})
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, queria embrulhar boom", err)
 	}
@@ -281,7 +281,7 @@ func TestAddUserUseCase_Execute_ChaveCurtaNaoChegaAoCifrador(t *testing.T) {
 	uc := user.NewAddUserUseCase(repo, encryptor, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 	_, err := uc.Execute(context.Background(),
-		domain.AddUserInput{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1], Engine: "wa_noise"})
+		domain.AddUserInput{Name: "alice", Token: "tok", HmacKey: hmacKey32[:len(hmacKey32)-1], Engine: "noise"})
 	if err == nil {
 		t.Fatal("esperava recusa por chave curta")
 	}
@@ -321,7 +321,7 @@ func TestAddUserUseCase_Execute_EventoInvalidoNaoChegaAoRepositorio(t *testing.T
 			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			resp, err := uc.Execute(context.Background(),
-				domain.AddUserInput{Name: "alice", Token: "tok", Events: tt.events, Engine: "wa_noise"})
+				domain.AddUserInput{Name: "alice", Token: "tok", Events: tt.events, Engine: "noise"})
 			if err == nil {
 				t.Fatal("esperava recusa por tipo de evento desconhecido")
 			}
@@ -359,7 +359,7 @@ func TestAddUserUseCase_Execute_EventosValidosChegamIntactos(t *testing.T) {
 			uc := user.NewAddUserUseCase(repo, &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, &contractsfake.Logger{}, true)
 
 			resp, err := uc.Execute(context.Background(),
-				domain.AddUserInput{Name: "alice", Token: "tok", Events: tt.events, Engine: "wa_noise"})
+				domain.AddUserInput{Name: "alice", Token: "tok", Events: tt.events, Engine: "noise"})
 			if err != nil {
 				t.Fatalf("erro inesperado: %v", err)
 			}
@@ -394,7 +394,7 @@ func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
 		domain.AddUserInput{
 			Name:   "alice",
 			Token:  "tok",
-			Engine: "wa_noise",
+			Engine: "noise",
 			S3Config: &domain.S3Config{
 				Enabled: true, SecretKey: "my-s3-secret",
 			},
@@ -412,7 +412,7 @@ func TestAddUserUseCase_Execute_S3CifraFalhaNaoCriaUsuario(t *testing.T) {
 
 // TestAddUserUseCase_Execute_EngineObrigatorio trava os itens 4-5 do prompt
 // arquitetural: engine ausente, nulo (zero value da string), vazio ou fora de
-// {wa_noise, wa_headless} é recusado com invalid_engine ANTES de qualquer
+// {noise, headless} é recusado com invalid_engine ANTES de qualquer
 // escrita — nunca um default silencioso (era o comportamento antigo do
 // UserRecord.Engine zero-value, documentado em pkg/domain/user_record.go, e
 // que esta mudança fecha do lado HTTP).
@@ -426,7 +426,7 @@ func TestAddUserUseCase_Execute_EngineObrigatorio(t *testing.T) {
 		{name: "ausente (zero value)", engine: ""},
 		{name: "legacy_unknown não é escolha de criação", engine: "legacy_unknown"},
 		{name: "valor arbitrário", engine: "postgres"},
-		{name: "case errado não é normalizado", engine: "WA_NOISE"},
+		{name: "case errado não é normalizado", engine: "NOISE"},
 	}
 
 	for _, tt := range tests {
@@ -466,7 +466,7 @@ func TestAddUserUseCase_Execute_EngineObrigatorio(t *testing.T) {
 func TestAddUserUseCase_Execute_EngineValidoEhPersistido(t *testing.T) {
 	t.Parallel()
 
-	for _, engine := range []string{"wa_noise", "wa_headless"} {
+	for _, engine := range []string{"noise", "headless"} {
 		t.Run(engine, func(t *testing.T) {
 			t.Parallel()
 			repo := &contractsfake.UserRepository{}

@@ -63,14 +63,14 @@ LinhaCapacidadeAdmin:
     engine:
       type: string
       nullable: false
-      enum: [wa_noise, wa_headless]
+      enum: [noise, headless]
       description: |
         Engine desta linha da matriz. Ao contrário do `engine` de
         `UtilizadorAdmin`, este nunca é `legacy_unknown` — a matriz é
         construída a partir de `knownEngines`, uma lista fixa das duas
         engines que o registo tem provider, não de uma sessão gravada, e por
         isso um valor fora dos dois listados não pode aparecer aqui.
-      example: wa_noise
+      example: noise
     account_type:
       $ref: '#/components/schemas/TipoDeConta'
     supported:

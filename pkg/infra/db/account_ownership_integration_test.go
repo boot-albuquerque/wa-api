@@ -45,7 +45,7 @@ func TestAccountOwnership_Race(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
 
-	const identity, engine = "wa_pn:5511999999999", "wa_noise"
+	const identity, engine = "wa_pn:5511999999999", "noise"
 
 	var wg sync.WaitGroup
 	results := make([]AccountOwnership, 2)
@@ -93,7 +93,7 @@ func TestAccountOwnership_Race(t *testing.T) {
 }
 
 // TestAccountOwnership_CrossEngine (item "Cross-engine"): the SAME phone
-// number running wa_noise and wa_headless simultaneously must NOT contend —
+// number running noise and headless simultaneously must NOT contend —
 // the exclusivity key includes engine, and this proves the local constraint
 // does not accidentally derrubar one by claiming the other.
 func TestAccountOwnership_CrossEngine(t *testing.T) {
@@ -101,22 +101,22 @@ func TestAccountOwnership_CrossEngine(t *testing.T) {
 	ctx := context.Background()
 	const identity = "wa_pn:5511988888888"
 
-	noise, err := repo.ClaimAccountIdentity(ctx, identity, "wa_noise", "session-noise", "owner-noise", "claim-noise")
+	noise, err := repo.ClaimAccountIdentity(ctx, identity, "noise", "session-noise", "owner-noise", "claim-noise")
 	if err != nil {
-		t.Fatalf("wa_noise claim: %v", err)
+		t.Fatalf("noise claim: %v", err)
 	}
-	headless, err := repo.ClaimAccountIdentity(ctx, identity, "wa_headless", "session-headless", "owner-headless", "claim-headless")
+	headless, err := repo.ClaimAccountIdentity(ctx, identity, "headless", "session-headless", "owner-headless", "claim-headless")
 	if err != nil {
-		t.Fatalf("wa_headless claim: %v", err)
+		t.Fatalf("headless claim: %v", err)
 	}
 
 	noiseNow, ok, err := repo.CurrentStatusForSession(ctx, noise.SessionID)
 	if err != nil || !ok || !noiseNow.IsActive() {
-		t.Fatalf("wa_noise session got superseded by an unrelated wa_headless claim: row=%+v ok=%v err=%v", noiseNow, ok, err)
+		t.Fatalf("noise session got superseded by an unrelated headless claim: row=%+v ok=%v err=%v", noiseNow, ok, err)
 	}
 	headlessNow, ok, err := repo.CurrentStatusForSession(ctx, headless.SessionID)
 	if err != nil || !ok || !headlessNow.IsActive() {
-		t.Fatalf("wa_headless session is not active: row=%+v ok=%v err=%v", headlessNow, ok, err)
+		t.Fatalf("headless session is not active: row=%+v ok=%v err=%v", headlessNow, ok, err)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestAccountOwnership_CrossEngine(t *testing.T) {
 func TestAccountOwnership_Fencing(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511977777777", "wa_noise"
+	const identity, engine = "wa_pn:5511977777777", "noise"
 
 	a, err := repo.ClaimAccountIdentity(ctx, identity, engine, "session-A", "owner-A", "claim-A")
 	if err != nil {
@@ -173,7 +173,7 @@ func TestAccountOwnership_Restart(t *testing.T) {
 	database := openTestPostgresForOwnership(t)
 	repo := NewAccountOwnershipRepository(database)
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511966666666", "wa_noise"
+	const identity, engine = "wa_pn:5511966666666", "noise"
 
 	if _, err := repo.ClaimAccountIdentity(ctx, identity, engine, "session-A", "owner-A", "claim-A"); err != nil {
 		t.Fatalf("A claim: %v", err)
@@ -210,7 +210,7 @@ func TestAccountOwnership_StructuralConstraint(t *testing.T) {
 	database := openTestPostgresForOwnership(t)
 	repo := NewAccountOwnershipRepository(database)
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511955555555", "wa_noise"
+	const identity, engine = "wa_pn:5511955555555", "noise"
 
 	if _, err := repo.ClaimAccountIdentity(ctx, identity, engine, "session-A", "owner-A", "claim-A"); err != nil {
 		t.Fatalf("initial claim: %v", err)
@@ -243,7 +243,7 @@ func TestAccountOwnership_StructuralConstraint(t *testing.T) {
 func TestAccountOwnership_RenewalIsIdempotent(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511944444444", "wa_noise"
+	const identity, engine = "wa_pn:5511944444444", "noise"
 
 	first, err := repo.ClaimAccountIdentity(ctx, identity, engine, "session-A", "owner-A", "claim-1")
 	if err != nil {

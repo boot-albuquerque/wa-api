@@ -43,8 +43,8 @@ func TestAuthAlice_SessionSuperseded_E409(t *testing.T) {
 	// (identity, engine) — exatamente o estado que CurrentStatusForSession
 	// lê: a linha mais recente para o session_id "u1" é a superseded, não a
 	// active.
-	insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "wa_noise", "u1", "u1", "superseded", 1)
-	insertOwnershipRow(t, db, "claim-2", "5511@s.whatsapp.net", "wa_noise", "u2", "u2", "active", 2)
+	insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "noise", "u1", "u1", "superseded", 1)
+	insertOwnershipRow(t, db, "claim-2", "5511@s.whatsapp.net", "noise", "u2", "u2", "active", 2)
 
 	handler := AuthAlice(db.DB, cache.New(cache.NoExpiration, cache.NoExpiration), ownership)(
 		http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -77,7 +77,7 @@ func TestAuthAlice_SessionAtiva_NaoBloqueia(t *testing.T) {
 		insertAuthUser(t, db, "u1", "tok-ativo", domain.HashToken("tok-ativo"))
 
 		ownership := dbpkg.NewAccountOwnershipRepository(db)
-		insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "wa_noise", "u1", "u1", "active", 1)
+		insertOwnershipRow(t, db, "claim-1", "5511@s.whatsapp.net", "noise", "u1", "u1", "active", 1)
 
 		nextRan := false
 		handler := AuthAlice(db.DB, cache.New(cache.NoExpiration, cache.NoExpiration), ownership)(

@@ -39991,3 +39991,101 @@ aprovado seguem pendentes; Fase 6 (tabelas `wanoise_*`) segue sem plano
 detalhado.
 
 <!-- f-status: corrigido -->
+
+## F385 — Fase 4 da remoção do prefixo `wa` fora do módulo: corte do contrato de fio + migração 22
+
+**Data/contexto**: 2026-08-29, continuação de F382-F384. Corte limpo (mesmo
+padrão da F269): `domain.EngineNoise`/`domain.EngineHeadless` passam de
+`"wa_noise"`/`"wa_headless"` para `"noise"`/`"headless"` — sem alias, sem
+período de transição, o valor antigo passa a dar `400 invalid_engine`
+imediatamente.
+
+**Onde**:
+- `pkg/domain/engine.go`: valores das constantes mudados; comentário
+  "temporary duality with pkg/bootstrap/engine_selection.go" reescrito —
+  já não é temporário nem dual, o F342 removeu o segundo vocabulário
+  (`WA_API_ENGINE`/`WA_API_ENGINE_HEADLESS_SESSIONS`) antes desta sessão
+  começar.
+- **Migração 22** (`pkg/infra/db/engine_wire_rename.go`, nova):
+  `UPDATE users SET engine = 'noise' WHERE engine = 'wa_noise'` (e o
+  equivalente para `headless`) — corte real precisa reescrever linhas já
+  gravadas, não só mudar o que o código escreve daqui pra frente. Duas
+  entradas em `pkg/infra/db/migrations_test.go`:
+  `TestMigrationEngineWireRenameRewritesExistingRows` (semeia `wa_noise`/
+  `wa_headless`/`legacy_unknown` via SQL cru simulando o estado ANTES do
+  corte, confirma que só as duas primeiras mudam) e
+  `TestMigrationEngineWireRenameIsRecordedAndIdempotent` (roda o UpSQL uma
+  segunda vez fora do runner de migração, confirma que não reescreve o
+  que já está certo). **Controle negativo executado**: UpSQL alterado
+  para `WHERE engine = 'wa_noise_BROKEN'`, os dois testes falharam
+  citando o valor errado (`"wa_noise", want "noise"`), revertido.
+- `api/openapi/{base,schemas/capabilities,schemas/infra,schemas/sessao}.yaml`:
+  os 6 pares `enum:`/`example:` que a Fase 1 tinha deliberadamente
+  preservado como `wa_noise`/`wa_headless` — cortados agora, junto com
+  as duas descrições que citavam os valores malformados (`WA_NOISE`,
+  espaço à direita) e a nota sobre "nomes de configuração antigos".
+  `go run ./cmd/openapidoc` regenerado.
+- ~90 literais `"wa_noise"`/`"wa_headless"` em `_test.go` — fixtures,
+  corpos JSON, query strings (`?engine=wa_noise`) — viram
+  `"noise"`/`"headless"`. As listas de valores **inválidos** (ex.:
+  `TestBackfillRejectsInvalidDefaultEngine`,
+  `TestResolve_InvalidEngineIsAnsweredBeforeReadingTheTargetSession`)
+  fizeram o caminho INVERSO: valores que eram `noise`/`headless` bare
+  (inválidos ANTES do corte, porque só `wa_noise`/`wa_headless` valiam)
+  viraram `wa_noise`/`wa_headless` (inválidos DEPOIS do corte, pela razão
+  oposta) — sem essa troca os testes ficariam afirmando que o valor
+  correto é inválido.
+- `pkg/presentation/http/devui/assets/{sessions.html,devui.js,sessions.js}`:
+  os valores do `<select>`/default JS.
+
+**Um bug real de produção, encontrado só pela verificação AO VIVO, não
+pelos testes**: `pkg/application/usecase/user/add_user.go`, a constante
+`invalidEngineMsg`, guardava a string de erro
+`"engine é obrigatório e deve ser \"wa_noise\" ou \"wa_headless\""`. A
+substituição mecânica de arquivos `_test.go` não pegou esta — o valor
+estava com aspas ESCAPADAS (`\"wa_noise\"`) dentro do literal Go, um
+padrão textual diferente de `"wa_noise"` sem escape, e nenhum teste
+comparava a MENSAGEM de erro (só o código `invalid_engine`), então nada
+acusou. Só apareceu subindo o binário de verdade
+(`go build ./cmd/core`) e chamando `POST /admin/users` com
+`{"engine":"wa_noise"}`: o código HTTP e o campo `error.code` já
+respondiam certo, mas `error.message` ainda citava os valores antigos.
+Corrigido. **Lição**: substituição de string de erro precisa de teste
+que compare a mensagem, não só o código — ou de verificação ao vivo,
+como aqui.
+
+**Um segundo achado ao vivo, texto exposto na API**: `pkg/capabilityregistry/matrix.go`
+tinha ~60 notas de evidência (`"wa_noise: pkg/infra/wa-noise/adapters/...
+wa_headless: ..."`) que chegam ao cliente via `GET /admin/capabilities` e
+`GET /session/capabilities` no campo `Reason` de cada linha da matriz —
+não são só comentário interno. Cortadas junto (mesmo texto, sem o
+prefixo `wa`), incluindo os caminhos de arquivo citados dentro das notas
+que também tinham o diretório antigo (`pkg/infra/wa-noise/...`).
+
+**Verificação ao vivo executada**: subido `go build -o /tmp/.../wa-api
+./cmd/core` com SQLite local (sem Postgres configurado), `POST
+/admin/users {"engine":"noise"}` → `200`, `{"engine":"wa_noise"}` e
+`{"engine":"wa_headless"}` → `400 invalid_engine` com a mensagem NOVA
+(depois da correção acima). `{"engine":"headless"}` → `400
+engine_headless_unavailable` (chrome não configurado neste ambiente de
+teste — comportamento correto, não é `invalid_engine`).
+
+**Verificação de gate**: `go build ./... && go vet ./... && gofmt -l .`
+limpos, `go test ./pkg/... ./internal/...` completo verde, `go run
+./cmd/openapidoc` sem diff pendente.
+
+**Não corrigido nesta fase, deliberadamente**: dezenas de comentários de
+documentação (`pkg/infra/headless/pairing/{phonepairer,starter,qr}.go`,
+`pkg/infra/headless/session/disconnector.go`,
+`pkg/bootstrap/session_engine_guard.go`, `pkg/application/usecase/session/get_qr.go`,
+`pkg/qrimage/qrimage.go`, e outros) ainda citam `wa_noise`/`wa_headless`
+em prosa narrativa, sem alcançar a API nem o comportamento — puro texto
+descritivo. Ficam para a varredura final da Fase 5, que é o lugar
+correto para uma passada de comentário completa, não para o meio do
+corte de contrato.
+
+**Status**: corrigido nesta sessão (Fase 4 completa). Fase 5 (varredura
+final) segue pendente; Fase 6 (tabelas `wanoise_*`) segue sem plano
+detalhado.
+
+<!-- f-status: corrigido -->

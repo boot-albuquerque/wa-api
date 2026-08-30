@@ -32,10 +32,10 @@ const (
 	noFieldsToUpdateCode = "no_fields_to_update"
 
 	// invalidEngineCode marca a criação recusada por engine ausente, nula,
-	// vazia ou fora de {wa_noise, wa_headless} (itens 4-5). Mensagem em
+	// vazia ou fora de {noise, headless} (itens 4-5). Mensagem em
 	// pt-BR, convenção do projeto para o campo error.message do envelope.
 	invalidEngineCode = "invalid_engine"
-	invalidEngineMsg  = "engine é obrigatório e deve ser \"wa_noise\" ou \"wa_headless\""
+	invalidEngineMsg  = "engine é obrigatório e deve ser \"noise\" ou \"headless\""
 
 	// engineImmutableCode marca uma tentativa de mudar o engine de um
 	// usuário já existente (itens 8, 61) — ver EditUserUseCase.Execute.

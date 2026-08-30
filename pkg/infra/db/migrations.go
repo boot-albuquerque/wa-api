@@ -156,6 +156,12 @@ var migrations = []Migration{
 		UpSQL:   addUsersAccountTypeSQL,
 		DownSQL: addUsersAccountTypeDownSQL,
 	},
+	{
+		ID:      migrationIDEngineWireRename,
+		Name:    migrationNameEngineWireRename,
+		UpSQL:   engineWireRenameSQL,
+		DownSQL: engineWireRenameDownSQL,
+	},
 }
 
 // migrationIDBlankPlaintextToken apaga o token em texto claro das linhas

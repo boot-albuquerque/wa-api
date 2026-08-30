@@ -248,7 +248,7 @@ components:
 
         `legacy_unknown` é RECUSADO com `400 invalid_engine` — descreve
         história de migração, nunca uma intenção. O valor não é aparado nem
-        normalizado: `wa_noise ` com espaço, ou `WA_NOISE`, também dão
+        normalizado: `noise ` com espaço, ou `NOISE`, também dão
         `400 invalid_engine`.
 
         **Vai na query e não no corpo** porque as duas rotas que o pedem assim
@@ -256,8 +256,8 @@ components:
         começar. `POST /session/pairphone` recebe-o no corpo JSON.
       schema:
         type: string
-        enum: [wa_noise, wa_headless]
-        example: wa_noise
+        enum: [noise, headless]
+        example: noise
 
   schemas:
     Envelope:
@@ -488,7 +488,7 @@ components:
             code: 409
             error:
               code: engine_mismatch
-              message: request names engine "wa_headless", but this session was created with engine "wa_noise"; engine is immutable after creation
+              message: request names engine "headless", but this session was created with engine "noise"; engine is immutable after creation
             success: false
 
     EngineNaoSuporta:
@@ -512,7 +512,7 @@ components:
             code: 422
             error:
               code: capability_not_supported
-              message: capability "get_pairing_qr" is "not_implemented" on engine "wa_headless"
+              message: capability "get_pairing_qr" is "not_implemented" on engine "headless"
             success: false
 
     CorpoInvalido:

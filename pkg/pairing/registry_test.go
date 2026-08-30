@@ -89,7 +89,7 @@ func assertCode(t *testing.T, err error, want string) {
 // que é o pedido de um cliente desactualizado, portanto frequente — pagaria uma
 // ida ao banco por cada tentativa.
 func TestResolve_InvalidEngineIsAnsweredBeforeReadingTheTargetSession(t *testing.T) {
-	for _, raw := range []string{"", "foobar", "legacy_unknown", "noise", "headless", "NOISE"} {
+	for _, raw := range []string{"", "foobar", "legacy_unknown", "wa_noise", "wa_headless", "NOISE"} {
 		t.Run(raw, func(t *testing.T) {
 			reader := newReader()
 			r := registryWith(reader, bothEnginesWired()...)

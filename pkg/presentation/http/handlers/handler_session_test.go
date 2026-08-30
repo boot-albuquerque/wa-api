@@ -95,8 +95,8 @@ type sessionCase struct {
 }
 
 // sessionCaseRegistry monta o registry de pareamento para esta tabela: a
-// sessao autenticada esta' gravada em wa_noise, o provider passado serve esse
-// engine, e o wa_headless fica registado e vazio. A matriz e' a de PRODUCAO —
+// sessao autenticada esta' gravada em noise, o provider passado serve esse
+// engine, e o headless fica registado e vazio. A matriz e' a de PRODUCAO —
 // um duble permissivo abencoaria caminhos que nao existem (ARMADILHAS.md #1).
 func sessionCaseRegistry(noise *pairing.Provider) *pairing.Registry {
 	users := &contractsfake.UserRepository{
@@ -148,7 +148,7 @@ func sessionCases() []sessionCase {
 		},
 		{
 			// GetQR passou a resolver a porta por engine (F281). O provider
-			// wa_noise e' um PairingQRReader cuja guarda falha com `e`, que e'
+			// noise e' um PairingQRReader cuja guarda falha com `e`, que e'
 			// o eixo que esta tabela mede; a matriz consultada e' a REAL.
 			name: "GetQR",
 			build: func(e error) http.Handler {
@@ -161,7 +161,7 @@ func sessionCases() []sessionCase {
 				}))
 			},
 			method: http.MethodGet,
-			path:   "/session/qr?engine=wa_noise",
+			path:   "/session/qr?engine=noise",
 		},
 		{
 			name: "GetStatus",
@@ -218,7 +218,7 @@ func sessionCases() []sessionCase {
 			},
 			method:    http.MethodPost,
 			path:      "/session/pairphone",
-			body:      `{"engine":"wa_noise","Phone":"5511999999999"}`,
+			body:      `{"engine":"noise","Phone":"5511999999999"}`,
 			readsBody: true,
 		},
 		{
@@ -240,7 +240,7 @@ func sessionCases() []sessionCase {
 				}))
 			},
 			method: http.MethodPost,
-			path:   "/session/connect?engine=wa_noise",
+			path:   "/session/connect?engine=noise",
 		},
 	}
 }
@@ -393,7 +393,7 @@ func TestSessionHandlers_MissingRequiredField_400_LogsError(t *testing.T) {
 	}{
 		{
 			name: "PairPhone sem Phone",
-			body: `{"engine":"wa_noise"}`,
+			body: `{"engine":"noise"}`,
 			handler: NewPairPhoneHandler(&contractsfake.Logger{}, sessionCaseRegistry(&pairing.Provider{
 				Engine: domain.EngineNoise, PhonePairer: &contractsfake.PhonePairer{},
 			})),
@@ -482,7 +482,7 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 	users := &contractsfake.UserRepository{
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
 			// A coluna guarda a IMAGEM, nao o codigo cru: e' o que o listener
-			// de QR do wa_noise escreve (pkg/application/session/
+			// de QR do noise escreve (pkg/application/session/
 			// orchestrator.go, onPairingQR — "A coluna guarda a IMAGEM").
 			// Semear "2@..." aqui divergia da producao na exata regra em
 			// causa, e foi a F373 que o mediu contra servidor vivo.
@@ -508,7 +508,7 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 		},
 	}))
 
-	rec, recs := serveSession(t, h, http.MethodGet, "/session/qr?engine=wa_noise", "", "user-1", true)
+	rec, recs := serveSession(t, h, http.MethodGet, "/session/qr?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
@@ -544,7 +544,7 @@ func codeAgeHandler(reader *codeAgeReader) *GetQRHandler {
 
 func codeAgeOf(t *testing.T, h *GetQRHandler) (qrCode string, ageSeconds int) {
 	t.Helper()
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/qr?engine=wa_noise", "", "user-1", true)
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/qr?engine=noise", "", "user-1", true)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
 	}
@@ -666,7 +666,7 @@ func TestGetQRAndStatus_NoUserRecord_400_NoSession(t *testing.T) {
 			// contrato observado nao muda.
 			name:    "GetQR",
 			handler: NewGetQRHandler(log, pairing.NewRegistry(empty, capabilityregistry.NewCapabilityRegistry(), &pairing.Provider{Engine: domain.EngineNoise, QRReader: &contractsfake.PairingQRReader{}}, &pairing.Provider{Engine: domain.EngineHeadless})),
-			path:    "/session/qr?engine=wa_noise",
+			path:    "/session/qr?engine=noise",
 		},
 		{
 			name:    "GetStatus",
@@ -716,7 +716,7 @@ func TestGetQRAndStatus_RepositoryFailure_500_LogsError(t *testing.T) {
 			// em nivel error — respondPairingRefusal usa a mesma taxonomia.
 			name:    "GetQR",
 			handler: NewGetQRHandler(log, pairing.NewRegistry(broken, capabilityregistry.NewCapabilityRegistry(), &pairing.Provider{Engine: domain.EngineNoise, QRReader: &contractsfake.PairingQRReader{}}, &pairing.Provider{Engine: domain.EngineHeadless})),
-			path:    "/session/qr?engine=wa_noise",
+			path:    "/session/qr?engine=noise",
 		},
 		{
 			name:    "GetStatus",
@@ -762,7 +762,7 @@ func TestSessionUser_WrongTypeInContext_401(t *testing.T) {
 }
 
 // connectStarterHandler monta o ConnectHandler sobre um SessionStarter fake
-// registado como provider do wa_noise. A sessao "user-1" esta' gravada nesse
+// registado como provider do noise. A sessao "user-1" esta' gravada nesse
 // engine, e a matriz consultada e' a de PRODUCAO.
 func connectStarterHandler(starter *contractsfake.SessionStarter) http.Handler {
 	return NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
@@ -776,7 +776,7 @@ func connectStarterHandler(starter *contractsfake.SessionStarter) http.Handler {
 func TestConnectHandler_StartsClientOnce(t *testing.T) {
 	starter := &contractsfake.SessionStarter{}
 	rec, recs := serveSession(t, connectStarterHandler(starter), http.MethodPost,
-		"/session/connect?engine=wa_noise", "", "user-1", true)
+		"/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, quero 200 (corpo %s)", rec.Code, rec.Body.String())
@@ -823,7 +823,7 @@ func TestConnectHandler_NilStarter_EngineUnavailable(t *testing.T) {
 	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
 		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineNoise}))
 
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status %d, quero 409 (corpo %s)", rec.Code, rec.Body.String())
@@ -857,7 +857,7 @@ func TestConnectHandler_OwnershipDenied_409(t *testing.T) {
 	}
 
 	rec, recs := serveSession(t, connectStarterHandler(starter), http.MethodGet,
-		"/session/connect?engine=wa_noise", "", "user-1", true)
+		"/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status %d, want 409 — CategoryConflict must reach the HTTP boundary (body: %s)",
@@ -888,7 +888,7 @@ func TestConnectHandler_OwnershipGranted_200(t *testing.T) {
 	starter := &contractsfake.SessionStarter{}
 
 	rec, _ := serveSession(t, connectStarterHandler(starter), http.MethodGet,
-		"/session/connect?engine=wa_noise", "", "user-1", true)
+		"/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
@@ -931,7 +931,7 @@ func TestConnectHandler_StartInFlight_409(t *testing.T) {
 		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineNoise, Starter: starter})).
 		WithCheckStartInFlight(func(string) error { return flightErr })
 
-	rec, recs := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+	rec, recs := serveSession(t, h, http.MethodGet, "/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status %d, want 409 — CategoryConflict must reach the HTTP boundary (body: %s)",
@@ -977,7 +977,7 @@ func TestConnectHandler_StartInFlight_CheckedBeforeOwnership(t *testing.T) {
 		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineNoise, Starter: starter})).
 		WithCheckStartInFlight(func(string) error { return flightErr })
 
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status %d, want 409 (body: %s)", rec.Code, rec.Body.String())
@@ -999,7 +999,7 @@ func TestConnectHandler_StartAvailable_200(t *testing.T) {
 		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineNoise, Starter: starter})).
 		WithCheckStartInFlight(func(string) error { return nil })
 
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())
@@ -1021,7 +1021,7 @@ func TestConnectHandler_WithoutCheckStartInFlight_200(t *testing.T) {
 	h := NewConnectHandler(session.NewConnectUseCase(&contractsfake.Logger{}),
 		sessionCaseRegistry(&pairing.Provider{Engine: domain.EngineNoise, Starter: starter}))
 
-	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=wa_noise", "", "user-1", true)
+	rec, _ := serveSession(t, h, http.MethodGet, "/session/connect?engine=noise", "", "user-1", true)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d, want 200 (body: %s)", rec.Code, rec.Body.String())

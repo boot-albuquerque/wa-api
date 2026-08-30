@@ -31,7 +31,7 @@ import (
 // file's two halves are:
 //
 //  1. the production wiring still reaches an ownership-checking starter for a
-//     wa_noise session (TestConnectStarterIsWiredForNoise);
+//     noise session (TestConnectStarterIsWiredForNoise);
 //  2. through the REGISTERED ROUTE, a denial becomes 409 and StartSession is
 //     never called (TestConnectOwnershipCheckIsWired).
 //
@@ -41,7 +41,7 @@ import (
 const ownershipWiringUser = "FIX108"
 
 // TestConnectStarterIsWiredForNoise: the registry the production wiring
-// builds must resolve a starter for a wa_noise session, and it must be the one
+// builds must resolve a starter for a noise session, and it must be the one
 // that consults the lease manager.
 //
 // The type assertion is the point. `Starter != nil` would pass for any struct
@@ -59,7 +59,7 @@ func TestConnectStarterIsWiredForNoise(t *testing.T) {
 
 	starter, err := reg.ResolveStarter(context.Background(), ownershipWiringUser, domain.EngineNoise.String())
 	if err != nil {
-		t.Fatalf("ResolveStarter for a wa_noise session: %v — production wiring no longer reaches a starter, "+
+		t.Fatalf("ResolveStarter for a noise session: %v — production wiring no longer reaches a starter, "+
 			"so GET /session/connect cannot connect anything (F273/F281)", err)
 	}
 	if _, ok := starter.(*noiseSessionStarter); !ok {
@@ -88,7 +88,7 @@ func TestConnectOwnershipCheckIsWired(t *testing.T) {
 	customHandlerSet.Session.Connect = handlers.NewConnectHandler(
 		session.NewConnectUseCase(&contractsfake.Logger{}), starterRegistry(denying))
 
-	rec := serveConnect(t, http.MethodGet, "/session/connect?engine=wa_noise")
+	rec := serveConnect(t, http.MethodGet, "/session/connect?engine=noise")
 
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409 — ownership denied must reach the HTTP "+
@@ -113,7 +113,7 @@ func TestConnectOwnershipCheckGranted_200(t *testing.T) {
 	customHandlerSet.Session.Connect = handlers.NewConnectHandler(
 		session.NewConnectUseCase(&contractsfake.Logger{}), starterRegistry(granting))
 
-	rec := serveConnect(t, http.MethodGet, "/session/connect?engine=wa_noise")
+	rec := serveConnect(t, http.MethodGet, "/session/connect?engine=noise")
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
@@ -151,8 +151,8 @@ func TestConnectRouteRequiresEngine(t *testing.T) {
 	}
 }
 
-// starterRegistry builds a pairing registry whose wa_noise provider is the
-// given starter, over a session recorded as wa_noise. The capability matrix is
+// starterRegistry builds a pairing registry whose noise provider is the
+// given starter, over a session recorded as noise. The capability matrix is
 // the PRODUCTION one — a permissive stand-in would bless paths that do not
 // exist (ARMADILHAS.md #1).
 func starterRegistry(starter appport.SessionStarter) *pairing.Registry {

@@ -100,7 +100,7 @@ func (s *spyPort) CheckOwnership(context.Context, string) error {
 
 func (s *spyPort) StartSession(context.Context, string, string) { s.calls++ }
 
-// boundaryPairingRegistry liga o spy como provider do wa_noise, com uma sessao
+// boundaryPairingRegistry liga o spy como provider do noise, com uma sessao
 // "user-1" gravada nesse engine. A matriz consultada e' a REAL
 // (capabilityregistry.NewCapabilityRegistry): um duble permissivo abencoaria
 // caminhos que nao existem — ARMADILHAS.md #1.
@@ -490,7 +490,7 @@ func boundaryCases() []boundaryCase {
 			name:      "GetQR",
 			build:     func(s *spyPort) http.Handler { return NewGetQRHandler(log, boundaryPairingRegistry(s)) },
 			method:    http.MethodGet,
-			path:      "/session/qr?engine=wa_noise",
+			path:      "/session/qr?engine=noise",
 			readsBody: false,
 		},
 		{

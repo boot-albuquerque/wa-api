@@ -295,7 +295,7 @@ func (h *LogoutHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // PairPhoneHandler handles POST /session/pairphone.
 //
-// Body: {"engine":"wa_noise","phone":"5541999999999"}. `engine` is mandatory —
+// Body: {"engine":"noise","phone":"5541999999999"}. `engine` is mandatory —
 // see dtosession.PairPhoneRequest for the wire contract.
 type PairPhoneHandler struct {
 	logger  appport.Logger

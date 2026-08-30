@@ -45,8 +45,8 @@ func insertLegacyUser(t *testing.T, db *sqlx.DB, id string) {
 
 // TestMigrationAddsEngineColumnWithLegacyDefault trava o DEFAULT do ALTER.
 //
-// O default é legacy_unknown e NÃO wa_noise de propósito: a migração não pode
-// afirmar um transporte que não mediu. Se alguém trocar o default por wa_noise
+// O default é legacy_unknown e NÃO noise de propósito: a migração não pode
+// afirmar um transporte que não mediu. Se alguém trocar o default por noise
 // "para simplificar", o backfill passa a ser um no-op e a distinção entre
 // "sabemos" e "assumimos" desaparece sem que nada falhe.
 func TestMigrationAddsEngineColumnWithLegacyDefault(t *testing.T) {
@@ -206,7 +206,7 @@ func TestBackfillRejectsInvalidDefaultEngine(t *testing.T) {
 	db := newUserTestDB(t)
 	insertLegacyUser(t, db, "alpha")
 
-	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "", "noise"} {
+	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "", "wa_noise"} {
 		_, err := dbpkg.BackfillUserEngines(context.Background(), db, nil, bad)
 		if !errors.Is(err, domain.ErrInvalidEngine) {
 			t.Errorf("default %q: err = %v, want ErrInvalidEngine", bad, err)
@@ -236,7 +236,7 @@ func TestBackfillOnEmptyDatabase(t *testing.T) {
 //
 // Nenhuma rota HTTP sabe pedir engine ainda, então todo criador de hoje deixa o
 // campo vazio. Gravar legacy_unknown numa linha que está a nascer AGORA seria
-// mentira — a linha é nova e a configuração corrente diz wa_noise.
+// mentira — a linha é nova e a configuração corrente diz noise.
 func TestCreateUserDefaultsEngineToNoise(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
@@ -289,7 +289,7 @@ func TestCreateUserRejectsInvalidEngine(t *testing.T) {
 	repo := dbpkg.NewUserRepository(db)
 	ctx := context.Background()
 
-	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "noise", "headless", "foobar"} {
+	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "wa_noise", "wa_headless", "foobar"} {
 		created, err := repo.CreateUser(ctx, domain.UserRecord{
 			ID: "bad-" + bad.String(), Name: "bad", Token: "tok-bad-" + bad.String(), Engine: bad,
 		})
@@ -379,7 +379,7 @@ func TestUpdateUserRejectsInvalidEngine(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "", "headless"} {
+	for _, bad := range []domain.Engine{domain.EngineLegacyUnknown, "", "wa_headless"} {
 		e := bad
 		if err := repo.UpdateUser(ctx, "u1", domain.UserUpdate{Engine: &e}); !errors.Is(err, domain.ErrInvalidEngine) {
 			t.Errorf("UpdateUser(engine=%q) err = %v, want ErrInvalidEngine", bad, err)

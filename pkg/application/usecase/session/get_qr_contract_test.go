@@ -3,7 +3,7 @@
 //
 // O defeito da F373 não estava em nenhum dos dois adapters isoladamente:
 // cada um respondia coerentemente consigo mesmo. Estava em NINGUÉM comparar
-// os dois. wa_noise devolvia a imagem, wa_headless devolvia a string crua, as
+// os dois. noise devolvia a imagem, headless devolvia a string crua, as
 // duas são `string`, as duas saem no mesmo campo `qr_code`, e o consumidor
 // que acreditou na uniformidade desenhou uma delas como payload de QR.
 //
@@ -22,7 +22,7 @@ import (
 	"wa-api/pkg/qrimage"
 )
 
-// codigoCruDaPagina é o que o adapter wa_headless devolve pela porta:
+// codigoCruDaPagina é o que o adapter headless devolve pela porta:
 // a string de pareamento lida ao vivo de `WAWebConnModel.Conn.ref`
 // (pkg/infra/wa-headless/pairing/qr.go → internal/wa-headless/capabilities/qr).
 // Formato de quatro campos separados por vírgula, como o WhatsApp Web emite.
@@ -31,7 +31,7 @@ const codigoCruDaPagina = "2@Ld9xK3vQpR7sT1uW5yA8bC2dE4fG6hJ0kL3mN5pQ7rS9tU1vW3x
 	"pQ8sT0uW2yA4bC6dE8fG0hJ2kL4mN6pQ8sT0uW2yA4bC6d=," +
 	"T0uW2yA4bC6dE8fG0hJ2kL4mN6pQ8sT0uW2yA4bC6dE8fG="
 
-// qrNoisePersistido é o que o adapter wa_noise devolve pela MESMA porta: o
+// qrNoisePersistido é o que o adapter noise devolve pela MESMA porta: o
 // conteúdo literal da coluna users.qrcode, que o listener de QR do
 // orquestrador escreve já codificado em PNG
 // (pkg/application/session/orchestrator.go, onPairingQR: "A coluna guarda a
@@ -43,7 +43,7 @@ var qrNoisePersistido = mustEncode(codigoCruDaPagina)
 func mustEncode(code string) string {
 	s, err := qrimage.Encode(code)
 	if err != nil {
-		panic("dublê de wa_noise: " + err.Error())
+		panic("dublê de noise: " + err.Error())
 	}
 	return s
 }
@@ -60,14 +60,14 @@ func leitorFixo(valor string) *contractsfake.PairingQRReader {
 // TestGetQR_OsDoisEnginesRespondemAImagemDocumentada é o teste do defeito.
 //
 // Condição medida em campo (2026-08-29, servidor vivo em :8099, sessão
-// wa_noise recém-criada): `GET /session/pair/qr` respondeu
+// noise recém-criada): `GET /session/pair/qr` respondeu
 // `{"qr_code":"data:image/png;base64,iVBORw0KG…"}`, 1858 caracteres, cujo
 // corpo decodifica para um PNG de 1375 bytes. O painel desenhou esses 1858
 // caracteres como PAYLOAD de um QR — cabem folgados no limite de 2953 bytes
 // do nível L, então nada falhou, nada foi ao console, e o telefone leu um
 // código que o WhatsApp recusou.
 //
-// A asserção é a FORMA, para os dois engines, e mais: para wa_noise, que a
+// A asserção é a FORMA, para os dois engines, e mais: para noise, que a
 // imagem sai INTACTA. Recodificá-la é precisamente o defeito, e um teste que
 // só exigisse "é um data URI" passaria com o data URI do data URI.
 func TestGetQR_OsDoisEnginesRespondemAImagemDocumentada(t *testing.T) {
@@ -79,12 +79,12 @@ func TestGetQR_OsDoisEnginesRespondemAImagemDocumentada(t *testing.T) {
 		querRota string
 	}{
 		{
-			engine:   "wa_noise",
+			engine:   "noise",
 			daPorta:  qrNoisePersistido,
 			querRota: qrNoisePersistido, // passa intacto: já é a imagem
 		},
 		{
-			engine:   "wa_headless",
+			engine:   "headless",
 			daPorta:  codigoCruDaPagina,
 			querRota: qrNoisePersistido, // renderizado para a MESMA imagem
 		},
@@ -125,7 +125,7 @@ func TestGetQR_OsDoisEnginesRespondemAImagemDocumentada(t *testing.T) {
 // engine respondesse "" e o outro a imagem da string vazia, o painel
 // mostraria um QR ilegível para metade das sessões em vez de esperar.
 func TestGetQR_OsDoisEnginesConcordamNaJanelaSemCodigo(t *testing.T) {
-	for _, engine := range []string{"wa_noise", "wa_headless"} {
+	for _, engine := range []string{"noise", "headless"} {
 		t.Run(engine, func(t *testing.T) {
 			r, err := session.NewGetQRUseCase(leitorFixo(""), &contractsfake.Logger{}).
 				Execute(context.Background(), txtID)

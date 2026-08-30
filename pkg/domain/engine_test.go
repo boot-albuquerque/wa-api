@@ -18,13 +18,13 @@ func TestEngineIsValidForCreate(t *testing.T) {
 		{EngineLegacyUnknown, false},
 		{Engine("foobar"), false},
 		{Engine(""), false},
-		// As strings de configuração de infraestrutura NÃO são valores de
-		// domínio. Se algum dia alguém as passar direto, tem de falhar.
-		{Engine("wanoise"), false},
-		{Engine("headless"), false},
+		// Os valores de fio ANTIGOS (cortados sem transição em 2026-08-29,
+		// HOUSEKEEP F385) não voltam a ser aceites por engano.
+		{Engine("wa_noise"), false},
+		{Engine("wa_headless"), false},
 		// Sem reparo de entrada: maiúscula e espaço são recusa, não conserto.
-		{Engine("WA_NOISE"), false},
-		{Engine(" wa_noise"), false},
+		{Engine("NOISE"), false},
+		{Engine(" noise"), false},
 	}
 	for _, c := range cases {
 		if got := c.engine.IsValidForCreate(); got != c.want {
@@ -57,11 +57,11 @@ func TestEngineIsKnown(t *testing.T) {
 // renomear uma constante mudaria o que está gravado no banco sem que nenhum
 // teste morresse.
 func TestEngineValuesAreSnakeCase(t *testing.T) {
-	if EngineNoise.String() != "wa_noise" {
-		t.Errorf("EngineNoise = %q, want %q", EngineNoise, "wa_noise")
+	if EngineNoise.String() != "noise" {
+		t.Errorf("EngineNoise = %q, want %q", EngineNoise, "noise")
 	}
-	if EngineHeadless.String() != "wa_headless" {
-		t.Errorf("EngineHeadless = %q, want %q", EngineHeadless, "wa_headless")
+	if EngineHeadless.String() != "headless" {
+		t.Errorf("EngineHeadless = %q, want %q", EngineHeadless, "headless")
 	}
 	if EngineLegacyUnknown.String() != "legacy_unknown" {
 		t.Errorf("EngineLegacyUnknown = %q, want %q", EngineLegacyUnknown, "legacy_unknown")
@@ -69,7 +69,7 @@ func TestEngineValuesAreSnakeCase(t *testing.T) {
 }
 
 func TestParseEngine(t *testing.T) {
-	for _, raw := range []string{"wa_noise", "wa_headless"} {
+	for _, raw := range []string{"noise", "headless"} {
 		got, err := ParseEngine(raw)
 		if err != nil {
 			t.Fatalf("ParseEngine(%q): %v", raw, err)
@@ -79,7 +79,7 @@ func TestParseEngine(t *testing.T) {
 		}
 	}
 
-	for _, raw := range []string{"legacy_unknown", "", "foobar", "noise", "headless"} {
+	for _, raw := range []string{"legacy_unknown", "", "foobar", "wa_noise", "wa_headless"} {
 		got, err := ParseEngine(raw)
 		if !errors.Is(err, ErrInvalidEngine) {
 			t.Errorf("ParseEngine(%q) err = %v, want ErrInvalidEngine", raw, err)

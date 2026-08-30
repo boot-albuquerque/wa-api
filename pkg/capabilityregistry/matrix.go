@@ -152,14 +152,14 @@ const probableAdapter = "adapter method found with real logic (not a stub); not 
 
 // absentAdapter is the note for the common negative case: grep found no
 // method of this name under the engine's adapter tree. Absence here is
-// deliberately reported as unknown, not engine_unsupported: for wa-headless
+// deliberately reported as unknown, not engine_unsupported: for headless
 // specifically, "no adapter written" and "the SPA cannot do this at all" are
 // different claims, and this pass verified only the former.
 const absentAdapter = "no adapter method found for this engine; ambiguous between not_implemented and engine_unsupported — nobody has checked whether the transport itself could serve it"
 
 // NewDefaultMatrix builds the capability matrix this worktree could verify
 // by reading code (grep for the port's method name under
-// pkg/infra/wa-noise/... and pkg/infra/wa-headless/..., then reading the
+// pkg/infra/noise/... and pkg/infra/headless/..., then reading the
 // hit to confirm it is not a stub). It does NOT reflect field verification
 // (a real device receiving the message) except where a row's note cites a
 // specific HOUSEKEEP.md/docs/CAPACIDADES.md entry that recorded one.
@@ -172,156 +172,156 @@ func NewDefaultMatrix() *matrix {
 	m := newMatrix()
 	rows := []row{
 		// --- Messaging: new messages -------------------------------------
-		// wa-headless has no adapter under pkg/infra/wa-headless/messenger
+		// headless has no adapter under pkg/infra/headless/messenger
 		// (or any sibling package) implementing message CREATION — that
 		// package only covers actions on messages that already exist
 		// (MarkRead/SendReaction/EditMessage/RevokeMessage/SendPollVote, see
 		// its own doc comment). Every "new message" capability is therefore
-		// unknown for wa_headless, not confirmed-absent.
-		{domain.CapSendText, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: pkg/infra/wa-noise/adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendLocation, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendContact, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendPoll, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendTemplate, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendList, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendImage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendDocument, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendAudio, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendVideo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendSticker, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendButtons, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/messenger.go. wa_headless: " + absentAdapter},
-		{domain.CapSendCarousel, domain.StatusSupported, domain.EvidenceConfirmed, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: field-verified, HOUSEKEEP.md F216 (photographed on device). wa_headless: " + absentAdapter},
-		{domain.CapForwardMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/forward.go. wa_headless: " + absentAdapter},
+		// unknown for headless, not confirmed-absent.
+		{domain.CapSendText, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: pkg/infra/noise/adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendLocation, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendContact, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendPoll, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendTemplate, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendList, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendImage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendDocument, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendAudio, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendVideo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendSticker, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendButtons, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/messenger.go. headless: " + absentAdapter},
+		{domain.CapSendCarousel, domain.StatusSupported, domain.EvidenceConfirmed, domain.StatusUnknown, domain.EvidenceUnknown, "noise: field-verified, HOUSEKEEP.md F216 (photographed on device). headless: " + absentAdapter},
+		{domain.CapForwardMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/forward.go. headless: " + absentAdapter},
 
 		// --- Actions on existing messages ---------------------------------
-		{domain.CapMarkRead, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise: adapters/chat/messenger.go. wa_headless: pkg/infra/wa-headless/messenger/messenger.go (local ack only — receipt-to-sender NOT confirmed, see H160 cited in that file's doc comment)"},
-		{domain.CapSendReaction, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter},
-		{domain.CapRevokeMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter},
-		{domain.CapEditMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter},
-		{domain.CapVotePoll, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter},
-		{domain.CapStarMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go, via app-state patch (appstate.BuildStar) — NOTE this contradicts docs/CAPACIDADES.md's stale claim that StarMessage 'não existe'; that document is self-flagged desatualizado since 2026-08-24. wa_headless: " + absentAdapter},
+		{domain.CapMarkRead, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise: adapters/chat/messenger.go. headless: pkg/infra/headless/messenger/messenger.go (local ack only — receipt-to-sender NOT confirmed, see H160 cited in that file's doc comment)"},
+		{domain.CapSendReaction, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter},
+		{domain.CapRevokeMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter},
+		{domain.CapEditMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter},
+		{domain.CapVotePoll, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter},
+		{domain.CapStarMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go, via app-state patch (appstate.BuildStar) — NOTE this contradicts docs/CAPACIDADES.md's stale claim that StarMessage 'não existe'; that document is self-flagged desatualizado since 2026-08-24. headless: " + absentAdapter},
 
 		// --- Presence -------------------------------------------------------
-		{domain.CapSendPresence, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/presence)"},
-		{domain.CapSendChatPresence, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/presence)"},
-		{domain.CapSubscribePresence, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/presence/controller.go. wa_headless: " + absentAdapter},
+		{domain.CapSendPresence, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/presence)"},
+		{domain.CapSendChatPresence, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/presence)"},
+		{domain.CapSubscribePresence, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/presence/controller.go. headless: " + absentAdapter},
 
 		// --- Chat-level operations -------------------------------------
-		{domain.CapArchiveChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter},
-		{domain.CapMuteChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go, via app-state patch (appstate.BuildMute) — contradicts stale docs/CAPACIDADES.md claim, see CapStarMessage note. wa_headless: " + absentAdapter},
-		{domain.CapPinChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go, via app-state patch (appstate.BuildPin). wa_headless: " + absentAdapter},
-		{domain.CapRejectCall, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapRequestUnavailableMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapSetDisappearingTimerChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapSetDefaultDisappearingTimer, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapSetStatusMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapRequestHistorySync, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapSyncContactRoster, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/roster or appstate)"},
-		{domain.CapAccessProfileData, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/profile)"},
+		{domain.CapArchiveChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter},
+		{domain.CapMuteChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go, via app-state patch (appstate.BuildMute) — contradicts stale docs/CAPACIDADES.md claim, see CapStarMessage note. headless: " + absentAdapter},
+		{domain.CapPinChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go, via app-state patch (appstate.BuildPin). headless: " + absentAdapter},
+		{domain.CapRejectCall, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapRequestUnavailableMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapSetDisappearingTimerChat, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapSetDefaultDisappearingTimer, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapSetStatusMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapRequestHistorySync, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapSyncContactRoster, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/roster or appstate)"},
+		{domain.CapAccessProfileData, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/profile)"},
 
 		// --- Media -----------------------------------------------------
-		{domain.CapDownloadMedia, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/chat/downloader.go. wa_headless: " + absentAdapter},
+		{domain.CapDownloadMedia, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/chat/downloader.go. headless: " + absentAdapter},
 
 		// --- Newsletter (channel) ---------------------------------------
-		{domain.CapListSubscribedNewsletters, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/newsletter)"},
-		{domain.CapCreateNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/newsletter)"},
-		{domain.CapGetNewsletterInfo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapGetNewsletterInfoByInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter + " (grep matched only NewsletterInfo, not the ByInvite variant, in wa_noise too — recorded together with NewsletterInfo since both live in the same adapter method family; treat as same confidence)"},
-		{domain.CapFollowNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapUnfollowNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapMuteNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapListNewsletterMessages, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapListNewsletterMessageUpdates, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapMarkNewsletterViewed, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapReactToNewsletterMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapSubscribeNewsletterLiveUpdates, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapDemoteNewsletterAdmin, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapChangeNewsletterOwner, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapDeleteNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapInviteNewsletterAdmin, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go (CreateNewsletterAdminInvite). wa_headless: " + absentAdapter},
-		{domain.CapAcceptNewsletterAdminInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapRevokeNewsletterAdminInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/misc/adapter.go. wa_headless: " + absentAdapter},
+		{domain.CapListSubscribedNewsletters, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/newsletter)"},
+		{domain.CapCreateNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/newsletter)"},
+		{domain.CapGetNewsletterInfo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapGetNewsletterInfoByInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter + " (grep matched only NewsletterInfo, not the ByInvite variant, in noise too — recorded together with NewsletterInfo since both live in the same adapter method family; treat as same confidence)"},
+		{domain.CapFollowNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapUnfollowNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapMuteNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapListNewsletterMessages, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapListNewsletterMessageUpdates, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapMarkNewsletterViewed, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapReactToNewsletterMessage, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapSubscribeNewsletterLiveUpdates, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapDemoteNewsletterAdmin, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapChangeNewsletterOwner, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapDeleteNewsletter, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapInviteNewsletterAdmin, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go (CreateNewsletterAdminInvite). headless: " + absentAdapter},
+		{domain.CapAcceptNewsletterAdminInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
+		{domain.CapRevokeNewsletterAdminInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/misc/adapter.go. headless: " + absentAdapter},
 
 		// --- Group -------------------------------------------------------
-		{domain.CapGetGroupInfo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupdir)"},
-		{domain.CapGetGroupInfoFromInviteLink, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupdir)"},
-		{domain.CapGetGroupInviteLink, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupdir)"},
-		{domain.CapListGroupNames, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupdir)"},
-		{domain.CapListJoinedGroups, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupdir)"},
-		{domain.CapCreateGroup, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/grouplife)"},
-		{domain.CapJoinGroupViaInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/grouplife)"},
-		{domain.CapLeaveGroup, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/grouplife)"},
-		{domain.CapSetGroupName, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupset)"},
-		{domain.CapSetGroupTopic, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupset)"},
-		{domain.CapSetGroupAnnounceMode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupset)"},
-		{domain.CapSetGroupLocked, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupset)"},
-		{domain.CapUpdateGroupParticipants, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupmembers) — NOTE the port's own doc comment records that on headless the write can succeed while the acting session cannot read it back (H58/H65); Supported here means the OPERATION is served, not that every observable side effect is"},
-		{domain.CapSetGroupPhoto, domain.StatusSupported, domain.EvidenceProbable, domain.StatusEngineUnsupported, domain.EvidenceConfirmed, "wa_noise: adapters/group/adapter.go. wa_headless: CONFIRMED absent — docs/CAPACIDADES.md H140, cited verbatim in port doc comment (pkg/application/contracts/group_ports.go GroupPhotoSetter): 'no build headless os módulos de foto da página estão ausentes'"},
-		{domain.CapSetGroupEphemeralTimer, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/group/adapter.go. wa_headless: " + absentAdapter + " — port doc comment (GroupEphemeralSetter) says explicitly this one has NOT been measured on headless, unlike GroupPhotoSetter"},
-		{domain.CapGetSubGroups, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/group/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapGetLinkedGroupsParticipants, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/group/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapLinkGroupToCommunity, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/group/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapUnlinkGroupFromCommunity, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/group/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapListGroupJoinRequests, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupreq)"},
-		{domain.CapUpdateGroupJoinRequests, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupreq)"},
-		{domain.CapSetGroupJoinApprovalMode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/groupreq)"},
+		{domain.CapGetGroupInfo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupdir)"},
+		{domain.CapGetGroupInfoFromInviteLink, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupdir)"},
+		{domain.CapGetGroupInviteLink, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupdir)"},
+		{domain.CapListGroupNames, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupdir)"},
+		{domain.CapListJoinedGroups, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupdir)"},
+		{domain.CapCreateGroup, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/grouplife)"},
+		{domain.CapJoinGroupViaInvite, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/grouplife)"},
+		{domain.CapLeaveGroup, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/grouplife)"},
+		{domain.CapSetGroupName, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupset)"},
+		{domain.CapSetGroupTopic, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupset)"},
+		{domain.CapSetGroupAnnounceMode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupset)"},
+		{domain.CapSetGroupLocked, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupset)"},
+		{domain.CapUpdateGroupParticipants, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupmembers) — NOTE the port's own doc comment records that on headless the write can succeed while the acting session cannot read it back (H58/H65); Supported here means the OPERATION is served, not that every observable side effect is"},
+		{domain.CapSetGroupPhoto, domain.StatusSupported, domain.EvidenceProbable, domain.StatusEngineUnsupported, domain.EvidenceConfirmed, "noise: adapters/group/adapter.go. headless: CONFIRMED absent — docs/CAPACIDADES.md H140, cited verbatim in port doc comment (pkg/application/contracts/group_ports.go GroupPhotoSetter): 'no build headless os módulos de foto da página estão ausentes'"},
+		{domain.CapSetGroupEphemeralTimer, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/group/adapter.go. headless: " + absentAdapter + " — port doc comment (GroupEphemeralSetter) says explicitly this one has NOT been measured on headless, unlike GroupPhotoSetter"},
+		{domain.CapGetSubGroups, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/group/adapter.go. headless: " + absentAdapter},
+		{domain.CapGetLinkedGroupsParticipants, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/group/adapter.go. headless: " + absentAdapter},
+		{domain.CapLinkGroupToCommunity, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/group/adapter.go. headless: " + absentAdapter},
+		{domain.CapUnlinkGroupFromCommunity, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/group/adapter.go. headless: " + absentAdapter},
+		{domain.CapListGroupJoinRequests, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupreq)"},
+		{domain.CapUpdateGroupJoinRequests, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupreq)"},
+		{domain.CapSetGroupJoinApprovalMode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/groupreq)"},
 
 		// --- User / contacts ---------------------------------------------
-		{domain.CapCheckIsOnWhatsApp, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/identity)"},
-		{domain.CapResolveLIDForPN, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/identity)"},
-		{domain.CapResolvePNForLID, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/identity)"},
-		{domain.CapResolveManyLIDs, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/identity)"},
-		{domain.CapGetProfilePicture, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/avatar)"},
-		{domain.CapListContacts, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/roster)"},
-		{domain.CapListContactNames, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/roster)"},
-		{domain.CapGetUserInfo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/roster)"},
-		{domain.CapGetBlocklist, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/blocklist)"},
-		{domain.CapUpdateBlocklist, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/blocklist)"},
-		{domain.CapGetPrivacySettings, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/user/adapter.go. wa_headless: " + absentAdapter},
-		{domain.CapSetPrivacySetting, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/user/adapter.go. wa_headless: " + absentAdapter},
+		{domain.CapCheckIsOnWhatsApp, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/identity)"},
+		{domain.CapResolveLIDForPN, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/identity)"},
+		{domain.CapResolvePNForLID, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/identity)"},
+		{domain.CapResolveManyLIDs, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/identity)"},
+		{domain.CapGetProfilePicture, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/avatar)"},
+		{domain.CapListContacts, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/roster)"},
+		{domain.CapListContactNames, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/roster)"},
+		{domain.CapGetUserInfo, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/roster)"},
+		{domain.CapGetBlocklist, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/blocklist)"},
+		{domain.CapUpdateBlocklist, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/blocklist)"},
+		{domain.CapGetPrivacySettings, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/user/adapter.go. headless: " + absentAdapter},
+		{domain.CapSetPrivacySetting, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/user/adapter.go. headless: " + absentAdapter},
 
 		// --- Pairing / session lifecycle ----------------------------------
-		{domain.CapCheckPairingStatus, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "wa_noise: adapters/pairing/adapter.go. wa_headless: " + absentAdapter + " — plausible this is engine_unsupported (headless auth is QR/cookie-based, not a pairing code), but that has not been confirmed by reading the auth flow, so it stays unknown rather than asserted"},
-		{domain.CapRequestPairingCode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/pairing/phonepairer.go — call sequence MEASURED against a real, unpaired session, F380: reached WhatsApp's server, got a structured IQErrorBadRequest for a fake test phone number, not a crash; a full successful pairing was not completed, no real phone available to receive the code)"},
-		{domain.CapDisconnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "wa_noise+wa_headless: " + probableAdapter + " (pkg/infra/wa-headless/session)"},
+		{domain.CapCheckPairingStatus, domain.StatusSupported, domain.EvidenceProbable, domain.StatusUnknown, domain.EvidenceUnknown, "noise: adapters/pairing/adapter.go. headless: " + absentAdapter + " — plausible this is engine_unsupported (headless auth is QR/cookie-based, not a pairing code), but that has not been confirmed by reading the auth flow, so it stays unknown rather than asserted"},
+		{domain.CapRequestPairingCode, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/pairing/phonepairer.go — call sequence MEASURED against a real, unpaired session, F380: reached WhatsApp's server, got a structured IQErrorBadRequest for a fake test phone number, not a crash; a full successful pairing was not completed, no real phone available to receive the code)"},
+		{domain.CapDisconnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceProbable, "noise+headless: " + probableAdapter + " (pkg/infra/headless/session)"},
 
 		// The two rows below were measured on 2026-08-27 for the
 		// engine-explicit pairing work, and they are the only rows in this
-		// table whose wa_headless side is not_implemented rather than unknown.
+		// table whose headless side is not_implemented rather than unknown.
 		// The difference is evidence, not opinion: absentAdapter says "nobody
 		// checked whether the transport itself could serve it", and for these
 		// two somebody did.
 		//
 		//   - The SPA demonstrably shows a pairing QR: the headless session
 		//     pool has a whole quota class for it
-		//     (pkg/infra/wa-headless/registry/registry.go, KindPairing —
+		//     (pkg/infra/headless/registry/registry.go, KindPairing —
 		//     "a session showing a QR code, waiting for a human"), with its
 		//     own deadline and its own test (registry/pairing_test.go).
-		//   - The SPA demonstrably starts sessions: internal/wa-headless/
-		//     runtime plus pkg/infra/wa-headless/sessions.go (Sessions.Acquire).
+		//   - The SPA demonstrably starts sessions: internal/headless/
+		//     runtime plus pkg/infra/headless/sessions.go (Sessions.Acquire).
 		//
 		// So the transport CAN do both, and the ambiguity absentAdapter exists
 		// to preserve is resolved. What is missing is the adapter that exposes
 		// either one through pkg/application/contracts, and beyond that nothing
-		// in pkg/bootstrap constructs ANY wa-headless object at all: grep for
+		// in pkg/bootstrap constructs ANY headless object at all: grep for
 		// NewDisconnector across pkg/bootstrap returns zero non-test hits.
 		// That is why the evidence is confirmed — an absence in our own tree is
 		// something grep can settle — while the status is not_implemented, the
 		// honest name for "we could, and we have not".
-		{domain.CapGetPairingQR, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: pkg/infra/wa-noise/adapters/pairing/qr.go, reading users.qrcode as written by the QR listener in pkg/bootstrap/lifecycle.go. wa_headless (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.QRReader, over core.StartPairingSession (new boot primitive, core/session.go) and internal/wa-headless/capabilities/qr — the wwebjs-derived QR construction chain (WAWebSignalStoreApi/WAWebUserPrefsInfoStore/WABase64/WAWebUserPrefsMultiDevice/WAWebCompanionRegClientUtils/WAWebConnModel.Conn.ref) MEASURED end-to-end against .lab/test-account-profile (TestProbeQRConstructionSurface), every step resolving to a real value"},
-		{domain.CapConnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: pkg/bootstrap/pairing_providers.go (noiseSessionStarter over the SessionOrchestrator). wa_headless (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.Starter, over Sessions.EvaluatorForPairing/core.StartPairingSession — fire-and-forget boot into the registry.KindPairing quota, same contract as wa_noise's Starter"},
-		{domain.CapLogoutSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "wa_noise: adapters/user/adapter.go (or session teardown path). wa_headless: pkg/infra/wa-headless/session/disconnector.go — Socket.logout() MEASURED against a real, paired, disposable session (F381, reopening H122): called without throwing, and the page settled from CONNECTED to UNPAIRED with a fresh QR within ~18s"},
+		{domain.CapGetPairingQR, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "noise: pkg/infra/noise/adapters/pairing/qr.go, reading users.qrcode as written by the QR listener in pkg/bootstrap/lifecycle.go. headless (2026-08-29, HOUSEKEEP H145): pkg/infra/headless/pairing.QRReader, over core.StartPairingSession (new boot primitive, core/session.go) and internal/headless/capabilities/qr — the wwebjs-derived QR construction chain (WAWebSignalStoreApi/WAWebUserPrefsInfoStore/WABase64/WAWebUserPrefsMultiDevice/WAWebCompanionRegClientUtils/WAWebConnModel.Conn.ref) MEASURED end-to-end against .lab/test-account-profile (TestProbeQRConstructionSurface), every step resolving to a real value"},
+		{domain.CapConnectSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "noise: pkg/bootstrap/pairing_providers.go (noiseSessionStarter over the SessionOrchestrator). headless (2026-08-29, HOUSEKEEP H145): pkg/infra/headless/pairing.Starter, over Sessions.EvaluatorForPairing/core.StartPairingSession — fire-and-forget boot into the registry.KindPairing quota, same contract as noise's Starter"},
+		{domain.CapLogoutSession, domain.StatusSupported, domain.EvidenceProbable, domain.StatusSupported, domain.EvidenceConfirmed, "noise: adapters/user/adapter.go (or session teardown path). headless: pkg/infra/headless/session/disconnector.go — Socket.logout() MEASURED against a real, paired, disposable session (F381, reopening H122): called without throwing, and the page settled from CONNECTED to UNPAIRED with a fresh QR within ~18s"},
 
-		// wa_noise: DetectOwnAccountKind (internal/wa-noise/capabilities/user/
+		// noise: DetectOwnAccountKind (internal/noise/capabilities/user/
 		// accounttype.go) reads a verified-name certificate via usync — a
 		// structured protocol field, confirmed by unit tests with a real
-		// (marshaled) certificate fixture. wa_headless: Conn.canSetMyPushname()
+		// (marshaled) certificate fixture. headless: Conn.canSetMyPushname()
 		// (WAWebConnModel), the same getter capabilities/profile already
 		// measured live on the lab account (HOUSEKEEP.md: canSetMyPushname()
 		// = false there, confirming that account is Business) — confirmed
 		// that the getter resolves and answers, not re-confirmed against a
 		// live personal account by this worktree.
-		{domain.CapDetectAccountType, domain.StatusSupported, domain.EvidenceConfirmed, domain.StatusSupported, domain.EvidenceProbable, "wa_noise: pkg/infra/wa-noise/adapters/accounttype (internal/wa-noise/capabilities/user/accounttype.go). wa_headless: pkg/infra/wa-headless/accounttype (internal/wa-headless/capabilities/accounttype), reusing the getter measured live in capabilities/profile per HOUSEKEEP.md"},
+		{domain.CapDetectAccountType, domain.StatusSupported, domain.EvidenceConfirmed, domain.StatusSupported, domain.EvidenceProbable, "noise: pkg/infra/noise/adapters/accounttype (internal/noise/capabilities/user/accounttype.go). headless: pkg/infra/headless/accounttype (internal/headless/capabilities/accounttype), reusing the getter measured live in capabilities/profile per HOUSEKEEP.md"},
 	}
 
 	for _, r := range rows {

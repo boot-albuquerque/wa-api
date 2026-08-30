@@ -56,11 +56,11 @@ func TestAddUserRejectsDuplicateToken(t *testing.T) {
 	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 	ctx := context.Background()
 
-	if _, err := uc.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "shared", Engine: "wa_noise"}); err != nil {
+	if _, err := uc.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "shared", Engine: "noise"}); err != nil {
 		t.Fatalf("first add: %v", err)
 	}
 
-	_, err := uc.Execute(ctx, domain.AddUserInput{Name: "mallory", Token: "shared", Engine: "wa_noise"})
+	_, err := uc.Execute(ctx, domain.AddUserInput{Name: "mallory", Token: "shared", Engine: "noise"})
 	if !errors.Is(err, user.ErrDuplicateToken) {
 		t.Fatalf("second add error = %v, want user.ErrDuplicateToken", err)
 	}
@@ -89,7 +89,7 @@ func TestAddUserConcurrentSameTokenCreatesOneRow(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			_, err := uc.Execute(context.Background(),
-				domain.AddUserInput{Name: "racer", Token: "contended", Engine: "wa_noise"})
+				domain.AddUserInput{Name: "racer", Token: "contended", Engine: "noise"})
 			successes[idx] = err == nil
 		}(i)
 	}
@@ -118,7 +118,7 @@ func TestAddUserPersistsTokenHash(t *testing.T) {
 	db := newUserTestDB(t)
 	uc := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
-	resp, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok", Engine: "wa_noise"})
+	resp, err := uc.Execute(context.Background(), domain.AddUserInput{Name: "alice", Token: "tok", Engine: "noise"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -137,10 +137,10 @@ func TestEditUserRejectsTokenBelongingToAnotherUser(t *testing.T) {
 	ctx := context.Background()
 	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
-	if _, err := add.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "alice-token", Engine: "wa_noise"}); err != nil {
+	if _, err := add.Execute(ctx, domain.AddUserInput{Name: "alice", Token: "alice-token", Engine: "noise"}); err != nil {
 		t.Fatalf("add alice: %v", err)
 	}
-	bob, err := add.Execute(ctx, domain.AddUserInput{Name: "bob", Token: "bob-token", Engine: "wa_noise"})
+	bob, err := add.Execute(ctx, domain.AddUserInput{Name: "bob", Token: "bob-token", Engine: "noise"})
 	if err != nil {
 		t.Fatalf("add bob: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestEditUserUpdatesTokenHashAlongsideToken(t *testing.T) {
 	ctx := context.Background()
 
 	created, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true).
-		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "old-token", Engine: "wa_noise"})
+		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "old-token", Engine: "noise"})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestListUsersDoesNotReturnPlaintextToken(t *testing.T) {
 	ctx := context.Background()
 
 	if _, err := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true).
-		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "secret-token", Engine: "wa_noise"}); err != nil {
+		Execute(ctx, domain.AddUserInput{Name: "alice", Token: "secret-token", Engine: "noise"}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
@@ -222,14 +222,14 @@ func TestListUsersReportsS3AccessKeyConfigured(t *testing.T) {
 	add := user.NewAddUserUseCase(dbpkg.NewUserRepository(db), &contractsfake.HmacKeyEncryptor{}, &contractsfake.S3SecretCipher{}, discardLogger{}, true)
 
 	withKey, err := add.Execute(ctx, domain.AddUserInput{
-		Name: "with-key", Token: "tok-with-key", Engine: "wa_noise",
+		Name: "with-key", Token: "tok-with-key", Engine: "noise",
 		S3Config: &domain.S3Config{Enabled: true, Bucket: "b1", AccessKey: "AKIAEXAMPLE"},
 	})
 	if err != nil {
 		t.Fatalf("add with-key: %v", err)
 	}
 	withoutKey, err := add.Execute(ctx, domain.AddUserInput{
-		Name: "without-key", Token: "tok-without-key", Engine: "wa_noise",
+		Name: "without-key", Token: "tok-without-key", Engine: "noise",
 		S3Config: &domain.S3Config{Enabled: true, Bucket: "b2"},
 	})
 	if err != nil {

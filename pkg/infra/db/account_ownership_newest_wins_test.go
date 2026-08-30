@@ -57,7 +57,7 @@ import (
 func TestNewestWins_TrivialSequential(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511900000010", "wa_noise"
+	const identity, engine = "wa_pn:5511900000010", "noise"
 
 	// "A autentica" is not a call this repository models directly (auth
 	// happens upstream, before ClaimAccountIdentity is ever invoked) — it is
@@ -107,7 +107,7 @@ func TestNewestWins_TrivialSequential(t *testing.T) {
 func TestNewestWins_ClaimOrderDecidesNotAuthOrder(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511900000011", "wa_noise"
+	const identity, engine = "wa_pn:5511900000011", "noise"
 
 	// B "authenticated" more recently (logically), but claims FIRST.
 	b, err := repo.ClaimAccountIdentity(ctx, identity, engine, "session-B-newer-auth", "owner-B", "claim-B")
@@ -154,7 +154,7 @@ func TestNewestWins_ClaimOrderDecidesNotAuthOrder(t *testing.T) {
 func TestNewestWins_ConcurrentClaimsSameReplica(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511900000012", "wa_noise"
+	const identity, engine = "wa_pn:5511900000012", "noise"
 
 	var wg sync.WaitGroup
 	sessionIDs := []string{"session-X", "session-Y"}
@@ -212,7 +212,7 @@ func TestNewestWins_ConcurrentClaimsDifferentReplicas(t *testing.T) {
 	repoA := NewAccountOwnershipRepository(dbA)
 	repoB := NewAccountOwnershipRepository(dbB)
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511900000013", "wa_noise"
+	const identity, engine = "wa_pn:5511900000013", "noise"
 
 	var wg sync.WaitGroup
 	var errA, errB error
@@ -289,7 +289,7 @@ func (f *fakeFencer) Fence(_ context.Context, _ string) error {
 func TestNewestWins_CleanupFailureDoesNotReturnOwnership(t *testing.T) {
 	repo := NewAccountOwnershipRepository(openTestPostgresForOwnership(t))
 	ctx := context.Background()
-	const identity, engine = "wa_pn:5511900000014", "wa_noise"
+	const identity, engine = "wa_pn:5511900000014", "noise"
 
 	a, err := repo.ClaimAccountIdentity(ctx, identity, engine, "session-A", "owner-A", "claim-A")
 	if err != nil {

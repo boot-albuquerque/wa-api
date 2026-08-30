@@ -147,7 +147,7 @@ PedidoPareamentoTelefone:
     engine:
       type: string
       nullable: false
-      enum: [wa_noise, wa_headless]
+      enum: [noise, headless]
       description: |
         Transporte que executa este emparelhamento. Obrigatório, não-nulo e
         não-vazio.
@@ -160,10 +160,10 @@ PedidoPareamentoTelefone:
 
         `legacy_unknown` é RECUSADO com `400 invalid_engine`: descreve
         história de migração, nunca uma intenção. Qualquer outro valor fora
-        desta lista — incluindo os nomes de configuração antigos `wanoise` e
-        `headless`, e variações de caixa ou com espaços — é igualmente
-        inválido e dá `400 invalid_engine`. O valor não é aparado nem
-        normalizado antes de ser comparado.
+        desta lista — incluindo `wa_noise`/`wa_headless` (valores antigos,
+        cortados sem transição em 2026-08-29) e variações de caixa ou com
+        espaços — é igualmente inválido e dá `400 invalid_engine`. O valor
+        não é aparado nem normalizado antes de ser comparado.
     phone:
       type: string
       nullable: false

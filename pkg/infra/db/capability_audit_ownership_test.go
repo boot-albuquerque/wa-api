@@ -93,7 +93,7 @@ func TestAudit_Invariant3_SplitBrainManyRounds(t *testing.T) {
 	failures := 0
 	for round := 0; round < rounds; round++ {
 		identity := fmt.Sprintf("wa_pn:audit-split-brain-%d", round)
-		const engine = "wa_noise"
+		const engine = "noise"
 		sessionA := fmt.Sprintf("session-A-%d", round)
 		sessionB := fmt.Sprintf("session-B-%d", round)
 
@@ -187,7 +187,7 @@ func TestAudit_Invariant3_StructuralIndexRejectsBypassingTheGoLayer(t *testing.T
 		}
 	})
 
-	const identity, engine = "wa_pn:audit-raw-sql-bypass", "wa_noise"
+	const identity, engine = "wa_pn:audit-raw-sql-bypass", "noise"
 	insert := `INSERT INTO account_ownership
 		(id, canonical_account_identity, engine, session_id, owner_id, status, ownership_revision, claimed_at)
 		VALUES ($1, $2, $3, $4, $5, 'active', $6, now())`

@@ -625,7 +625,7 @@ func TestEditUser_SemS3ConfigNaoTocaNoS3(t *testing.T) {
 func TestEditUser_EngineImutavel(t *testing.T) {
 	t.Parallel()
 
-	novoEngine := "wa_headless"
+	novoEngine := "headless"
 	repo := &contractsfake.UserRepository{
 		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {
@@ -660,7 +660,7 @@ func TestEditUser_EngineImutavel(t *testing.T) {
 func TestEditUser_EngineIgualAoPersistidoEhNoop(t *testing.T) {
 	t.Parallel()
 
-	mesmoEngine := "wa_noise"
+	mesmoEngine := "noise"
 	repo := &contractsfake.UserRepository{
 		UserExistsFunc: func(context.Context, string) (bool, error) { return true, nil },
 		ListUsersFunc: func(context.Context, string) ([]domain.UserListEntry, error) {

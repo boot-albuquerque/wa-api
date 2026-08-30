@@ -172,3 +172,108 @@ func TestInitializeSchemaAppliesTokenHashOnFreshDatabase(t *testing.T) {
 		t.Error("fresh database is missing users.token_hash")
 	}
 }
+
+// engineOf lê a coluna crua, sem passar pelo repositório — o mesmo motivo do
+// helper homônimo em user_engine_test.go (package db_test, inacessível
+// daqui): o teste da migração tem de ver o que está GRAVADO.
+func engineOf(t *testing.T, db *sqlx.DB, id string) string {
+	t.Helper()
+	var got string
+	if err := db.Get(&got, `SELECT engine FROM users WHERE id = ?`, id); err != nil {
+		t.Fatalf("read engine of %q: %v", id, err)
+	}
+	return got
+}
+
+func migration22(t *testing.T) Migration {
+	t.Helper()
+	for _, m := range migrations {
+		if m.ID == migrationIDEngineWireRename {
+			return m
+		}
+	}
+	t.Fatal("migration 22 (rename_users_engine_wire_values) not found")
+	return Migration{}
+}
+
+// TestMigrationEngineWireRenameRewritesExistingRows: F385's clean cutover
+// (HOUSEKEEP) claims every row written under the old wire values
+// (`wa_noise`/`wa_headless`) is rewritten to the new ones (`noise`/
+// `headless`) — not just that new writes use the new values. The
+// measurement that matters is a row that ALREADY HELD the old value before
+// this migration ran, exactly what a database migrated from before
+// 2026-08-29 looks like.
+func TestMigrationEngineWireRenameRewritesExistingRows(t *testing.T) {
+	db := openTestDB(t)
+	migrateUpTo(t, db, 21)
+
+	insertUser(t, db, "u1", "alice", "token-alice")
+	insertUser(t, db, "u2", "bob", "token-bob")
+	insertUser(t, db, "u3", "carol", "token-carol")
+
+	// Simula o estado ANTES do corte: linhas gravadas pela API enquanto
+	// domain.EngineNoise/EngineHeadless ainda valiam "wa_noise"/"wa_headless".
+	if _, err := db.Exec(`UPDATE users SET engine = 'wa_noise' WHERE id = 'u1'`); err != nil {
+		t.Fatalf("seed u1 as wa_noise: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE users SET engine = 'wa_headless' WHERE id = 'u2'`); err != nil {
+		t.Fatalf("seed u2 as wa_headless: %v", err)
+	}
+	// u3 fica em legacy_unknown (o default da migração 19) — controle
+	// negativo: uma linha que NUNCA teve engine definido não pode virar
+	// "noise" nem "headless" só porque a migração 22 rodou por perto.
+
+	if err := applyMigration(db, migration22(t)); err != nil {
+		t.Fatalf("migration 22 failed: %v", err)
+	}
+
+	for _, tc := range []struct{ id, want string }{
+		{"u1", "noise"},
+		{"u2", "headless"},
+		{"u3", string(domain.EngineLegacyUnknown)},
+	} {
+		got := engineOf(t, db, tc.id)
+		if got != tc.want {
+			t.Errorf("engine of %s after migration 22 = %q, want %q", tc.id, got, tc.want)
+		}
+	}
+}
+
+// TestMigrationEngineWireRenameIsRecordedAndIdempotent: rodar a migração
+// duas vezes (o que InitializeSchema faz em todo arranque, verificando a
+// tabela migrations) não pode reescrever uma linha já correta nem falhar.
+func TestMigrationEngineWireRenameIsRecordedAndIdempotent(t *testing.T) {
+	db := openTestDB(t)
+	migrateUpTo(t, db, 21)
+
+	insertUser(t, db, "u1", "alice", "token-alice")
+	if _, err := db.Exec(`UPDATE users SET engine = 'wa_noise' WHERE id = 'u1'`); err != nil {
+		t.Fatalf("seed u1 as wa_noise: %v", err)
+	}
+
+	m22 := migration22(t)
+	if err := applyMigration(db, m22); err != nil {
+		t.Fatalf("first apply of migration 22: %v", err)
+	}
+	if got := engineOf(t, db, "u1"); got != "noise" {
+		t.Fatalf("engine after first apply = %q, want %q", got, "noise")
+	}
+
+	// UpSQL sozinho (sem passar por applyMigration, que recusaria reinserir
+	// o id 22 na tabela migrations) — prova que o UPDATE em si é idempotente,
+	// não só que InitializeSchema não o roda duas vezes.
+	if _, err := db.Exec(m22.UpSQL); err != nil {
+		t.Fatalf("re-running migration 22 UpSQL: %v", err)
+	}
+	if got := engineOf(t, db, "u1"); got != "noise" {
+		t.Errorf("engine after re-running UpSQL = %q, want %q (idempotency broken)", got, "noise")
+	}
+
+	var applied int
+	if err := db.Get(&applied, "SELECT COUNT(*) FROM migrations WHERE id = ?", migrationIDEngineWireRename); err != nil {
+		t.Fatalf("query migrations: %v", err)
+	}
+	if applied != 1 {
+		t.Errorf("migrations table has %d row(s) for id=22, want 1", applied)
+	}
+}

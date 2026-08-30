@@ -123,8 +123,8 @@ func buildPairingRegistry(s *server, users appport.UserRepository, getClient cli
 	// headless pairing", and a count answers it where a provider list would
 	// not.
 	log.Info().
-		Int("wa_noise_ports", 3).
-		Int("wa_headless_ports", headlessPorts).
+		Int("noise_ports", 3).
+		Int("headless_ports", headlessPorts).
 		Msg("pairing: provider registry wired")
 	return pairing.NewRegistry(users, caps, noise, headless)
 }

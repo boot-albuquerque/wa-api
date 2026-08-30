@@ -99,7 +99,7 @@ func TestStartSessionIsWiredIntoConnectHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	// `engine` e' obrigatorio desde a F281: sem ele a rota responde 400
 	// invalid_engine antes de tocar em provider nenhum.
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect?engine=wa_noise", nil))
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/session/connect?engine=noise", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
