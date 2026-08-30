@@ -4,7 +4,7 @@ import (
 	"wa-api/internal/noise/capabilities/media"
 )
 
-// Os tipos do dominio de midia vivem em internal/wa-noise/media; aqui ficam
+// Os tipos do dominio de midia vivem em internal/noise/media; aqui ficam
 // apelidos que preservam a API historica do pacote raiz (ADR-0004, Fase F/G
 // lote 1). Como sao apelidos (=), e nao definicoes novas, qualquer valor
 // atravessa a fronteira dos dois pacotes sem conversao.

@@ -53,7 +53,7 @@ const (
 // JSON.stringify, so a caller can embed it inside a larger script the way
 // realspa_test.go's readinessScript and the long-cut trail recorder already
 // do — those two call sites read the exact string this constant holds
-// (verified against internal/wa-headless/realspa_test.go, which is out of
+// (verified against internal/headless/realspa_test.go, which is out of
 // this package's write set and therefore not edited to reference this
 // constant; that consolidation is for whoever next touches that file).
 //

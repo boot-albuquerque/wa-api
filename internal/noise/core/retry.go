@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types/events"
 )
 
-// Fachadas do dominio de retry. A logica vive em internal/wa-noise/retry
+// Fachadas do dominio de retry. A logica vive em internal/noise/retry
 // (Fase F/G, lote 5); aqui ficam so' as delegacoes que preservam as
 // assinaturas usadas pelo caminho de recibo e por DangerousInternalClient.
 

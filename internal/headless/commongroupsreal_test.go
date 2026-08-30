@@ -26,7 +26,7 @@ import (
 func TestRealSPAFindsCommonGroupsWithTheLabPeer(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
-		t.Skip("set WA_HEADLESS_READ_TEST=1; this only reads")
+		t.Skip("set HEADLESS_READ_TEST=1; this only reads")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -123,7 +123,7 @@ func ownJID(ctx context.Context, t *testing.T, runner *engine.Runner,
 func TestRealSPAReadsThePeersAbout(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
-		t.Skip("set WA_HEADLESS_READ_TEST=1; this only reads")
+		t.Skip("set HEADLESS_READ_TEST=1; this only reads")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -192,7 +192,7 @@ func TestRealSPAReadsThePeersAbout(t *testing.T) {
 func TestRealSPAReadsTheAckOfAMessageItJustSent(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
-		t.Skip("set WA_HEADLESS_READ_TEST=1; this sends one short message")
+		t.Skip("set HEADLESS_READ_TEST=1; this sends one short message")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -214,7 +214,7 @@ func TestRealSPAReadsTheAckOfAMessageItJustSent(t *testing.T) {
 	}
 
 	sent, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-		fmt.Sprintf("wa-headless ack probe %d", time.Now().UnixNano()), "test/ack-send")
+		fmt.Sprintf("headless ack probe %d", time.Now().UnixNano()), "test/ack-send")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestRealSPAReadsTheAckOfAMessageItJustSent(t *testing.T) {
 func TestRealSPAReadsTheBusinessLabels(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_READ_TEST") == "" {
-		t.Skip("set WA_HEADLESS_READ_TEST=1; this only reads")
+		t.Skip("set HEADLESS_READ_TEST=1; this only reads")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -320,7 +320,7 @@ func TestRealSPAReadsTheBusinessLabels(t *testing.T) {
 func TestRealSPAAppliesAndRemovesALabel(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_LABEL_TEST") == "" {
-		t.Skip("set WA_HEADLESS_LABEL_TEST=1; this labels and unlabels the lab chat")
+		t.Skip("set HEADLESS_LABEL_TEST=1; this labels and unlabels the lab chat")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")

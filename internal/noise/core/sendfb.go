@@ -12,8 +12,8 @@ import (
 
 // As cinco constantes continuam sendo API publica da raiz com os mesmos valores
 // e o mesmo tipo (constante sem tipo). As definicoes moram em
-// internal/wa-noise/send desde a Fase F/G lote 8 — e FBMessageApplicationVersion
-// mora em internal/wa-noise/retry desde o lote 5, para que o caminho de retry e
+// internal/noise/send desde a Fase F/G lote 8 — e FBMessageApplicationVersion
+// mora em internal/noise/retry desde o lote 5, para que o caminho de retry e
 // o de envio normal nao possam divergir.
 const FBMessageVersion = send.FBMessageVersion
 const FBMessageApplicationVersion = send.FBApplicationVersion

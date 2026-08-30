@@ -27,7 +27,7 @@ import (
 func TestRealSPASendAndReceiveBetweenAccounts(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
-		t.Skip("set WA_HEADLESS_SEND_TEST=1; this SENDS a real message between the lab accounts")
+		t.Skip("set HEADLESS_SEND_TEST=1; this SENDS a real message between the lab accounts")
 	}
 	from := os.Getenv("WA_SEND_FROM_PROFILE")
 	to := os.Getenv("WA_SEND_TO_PROFILE")
@@ -68,7 +68,7 @@ func TestRealSPASendAndReceiveBetweenAccounts(t *testing.T) {
 	hTx, tx, txRunner := boot(from)
 	defer hTx.Stop(context.Background())
 
-	marker := fmt.Sprintf("wa-headless-loop-%d", time.Now().UnixNano())
+	marker := fmt.Sprintf("headless-loop-%d", time.Now().UnixNano())
 	sentAt := time.Now().Add(-2 * time.Minute)
 
 	res, err := send.Text(context.Background(), txRunner, tx.Tab().Evaluate, toJID, marker, "loop/send")

@@ -23,7 +23,7 @@ func TestUserAdapter_GetProfilePicture_NoSession(t *testing.T) {
 }
 
 // TestUserAdapter_GetProfilePicture_NilPictureInfo — o branch pic==nil,err==nil
-// do wa-noise (ExistingID/If-Modified-Since; nunca ocorre hoje na prática já
+// do noise (ExistingID/If-Modified-Since; nunca ocorre hoje na prática já
 // que ExistingID é sempre "") também devolve domain.ErrAvatarNotFound, pela
 // mesma razão do caso NotSet: nada pra mostrar, não é falha.
 func TestUserAdapter_GetProfilePicture_NilPictureInfo(t *testing.T) {

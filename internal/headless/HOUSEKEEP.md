@@ -11336,3 +11336,131 @@ posições, regenerado).
 
 **Status**: corrigido e medido de ponta a ponta — o achado do usuário
 virou teste que trava.
+
+## H146 — `WAWebUserPrefsInfoStore().noiseInfo` indefinido ao ler o QR, medido ao vivo
+
+**Data/contexto**: 2026-08-29, verificação de funcionalidade pedida pelo
+usuário ao final da renomeação `wa_noise`/`wa_headless` → `noise`/
+`headless` (F382-F385). Não é um achado da renomeação — o `git diff`
+contra `HEAD` confirma que `internal/headless/capabilities/qr/qr.go` e
+`pkg/infra/headless/pairing/qr.go` só tiveram comentário tocado nesta
+sessão; o script JS avaliado na página (nomes de módulo em maiúscula,
+`WAWebSignalStoreApi`, `WAWebUserPrefsInfoStore`, etc.) está byte a byte
+igual ao que já estava commitado.
+
+**Onde**: `internal/headless/capabilities/qr/qr.go:190`,
+`window.require('WAWebUserPrefsInfoStore').noiseInfo.get()`.
+
+**Problema**: subindo o binário real (`go build ./cmd/core`), configurando
+`WA_API_HEADLESS_CHROME`/`WA_API_HEADLESS_PROFILES` e conectando uma
+sessão `engine=headless` sobre uma cópia do perfil `.lab/conta-A`
+(desparelhado — a screenshot via CDP `Page.captureScreenshot` confirmou
+a página mostrando a tela real "Escaneie para entrar" com QR genuíno,
+não um erro de carregamento), `GET /session/pair/qr?engine=headless`
+devolveu `500 internal_error`. O log do servidor:
+
+```
+ERR failed to read QR code error="qr: the page could not assemble the
+code: Cannot read properties of undefined (reading 'get')"
+```
+
+Ou seja: a página carregou e renderiza o próprio QR nativamente (a
+screenshot prova isso), mas o script que ESTE projeto injeta para montar
+a string de pareamento (`ref + staticKeyB64 + identityKeyB64 + ...`,
+descrito no comentário do pacote, H145) não consegue ler
+`WAWebUserPrefsInfoStore().noiseInfo` — o objeto existe mas a propriedade
+`noiseInfo` não, na versão do bundle da SPA servida em 2026-08-29.
+
+**Hipótese, não confirmada**: deriva normal do bundle do WhatsApp Web —
+o mesmo tipo de achado que o comentário do pacote já registra para
+`WAWebCmd.Cmd.refreshQR` (não existe nesta build, `WAWebLaunchSocketUtils.refreshQR`
+sim). Não investiguei o nome atual do módulo/propriedade — ficaria para
+quem pegar este achado.
+
+**Correção sugerida**: repetir o processo de H145 (grep no bundle da SPA
+por `noiseInfo`/`getRegistrationInfo`/nomes vizinhos, ou abrir
+`chrome://inspect` numa sessão headless real e explorar
+`window.require('WAWebUserPrefsInfoStore')` ao vivo) para achar o
+caminho atual, e comparar contra o whatsapp-web.js upstream (issues
+abertas primeiro, per CLAUDE.md) antes de mudar o script.
+
+**Status**: corrigido — ver H147 abaixo (mesmo dia, usuário pediu a
+correção depois de ver este achado).
+
+## H147 — correção do H146: propriedade renomeada `noiseInfo` → `waNoiseInfo`
+
+**Data/contexto**: 2026-08-30, pedido explícito do usuário ("agore peciso
+que o qrcode funcione, e a rotacao do mesmo tbm, automaticamente") depois
+de ver o H146 reproduzido ao vivo pela UI real do devui via Claude in
+Chrome.
+
+**Investigação**: subi o servidor real (mesmo binário, mesmo perfil
+`.lab/conta-A`), conectei `engine=headless` e usei o Chrome DevTools
+Protocol direto (`Runtime.evaluate` via WebSocket bruto contra a instância
+do próprio Chrome que o engine headless lança — `--remote-debugging-port`,
+achado via `lsof`/`curl .../json/list`, `suppress_origin=True` para passar
+da checagem de Origin do CDP) para inspecionar
+`window.require('WAWebUserPrefsInfoStore')` ao vivo, como o H146 já
+sugeria.
+
+```
+Object.keys(store) => ["waNoiseInfo"]
+await store.waNoiseInfo.get() => {recoveryToken, staticKeyPair, certificateChainBuffer}
+Object.keys(val.staticKeyPair) => ["pubKey", "privKey"]
+```
+
+Ou seja: só o NOME da propriedade mudou (`noiseInfo` → `waNoiseInfo`) no
+bundle da SPA servida em 2026-08-30 — o formato do valor que ela devolve é
+byte-a-byte o mesmo que o comentário do pacote (H145) já documentava.
+Confirmei a cadeia INTEIRA (ref, `getRegistrationInfo`, `waNoiseInfo.get`,
+`encodeB64`, `getADVSecretKey`, `DEVICE_PLATFORM`) montando a string real
+via CDP antes de tocar no código — nunca logada, só o tamanho (239
+caracteres, formato `ref,staticKeyB64,identityKeyB64,advSecretKey,platform`
+consistente com o que H145 já media).
+
+**Correção**: `internal/headless/capabilities/qr/qr.go` — a única linha
+que lê a chave (`kickScript`, dentro do `Read`) trocou
+`.noiseInfo.get()` por `.waNoiseInfo.get()`, mais o comentário do pacote
+(cadeia de referência do wwebjs) e uma nota nova documentando a
+divergência, no mesmo padrão da nota já existente sobre
+`WAWebCmd.Cmd.refreshQR`. `internal/headless/probe_qr_test.go`
+(`TestProbeQRConstructionSurface`, o probe de superfície que mede os
+módulos individualmente) tinha a MESMA string hardcoded em dois lugares —
+corrigida junto, senão o próprio instrumento de medição ficaria medindo
+a propriedade errada. `TestProbeQRReader_ProductionPackage` não precisou
+de mudança: já delega para o pacote de produção, então herdou a correção.
+
+**Verificação — QR funcionando E rotacionando automaticamente**: subi o
+servidor real de novo (`WA_API_HEADLESS_CHROME`/`WA_API_HEADLESS_PROFILES`
+configurados, DB limpo), criei uma sessão nova `engine=headless` pela UI
+real do devui (Claude in Chrome, não curl), cliquei "Conectar" e:
+
+1. `GET /session/pair/qr?engine=headless` passou a devolver `200`, imagem
+   PNG real (~1800 bytes) — zero `500`/`Cannot read properties` no log do
+   servidor durante toda a sessão de teste (`grep -c "status=500\|Cannot
+   read properties" server2.log` → `0`).
+2. **Rotação automática, medida, não assumida**: capturei o hash do
+   `<img src>` mostrado no painel, esperei 26s (a cadência medida no H145,
+   TestProbeQRRetryPattern, é ~20s entre rotações do próprio Conn.ref da
+   SPA) e comparei — `hash0=2125271861` → `hash1=-1280850748`, `changed:
+   true`. O painel (`pkg/presentation/http/devui/assets/sessions.js`,
+   `sondarQR`) já sondava `GET /session/pair/qr` continuamente a cada 1s
+   desde antes deste achado (não precisou de mudança) — o que faltava era
+   só o backend conseguir montar o código a cada sondagem, que é
+   exatamente o que esta correção resolve.
+3. Screenshot depois da rotação confirma o novo QR desenhado limpo, sem
+   overlay de "código expirado".
+
+**Testes automatizados**: `go test ./internal/headless/capabilities/qr/...
+./pkg/infra/headless/pairing/...` verde (os dois pacotes que a mudança
+tocou). `go build ./... && go vet ./... && gofmt -l` limpo.
+`TestProbeQRConstructionSurface`/`TestProbeQRReader_ProductionPackage`
+exigem `WA_PROBE_QR=1` e Chrome real — não rodados nesta correção (a
+verificação ao vivo acima já exercitou a mesma cadeia com mais
+profundidade: montagem real + display real + rotação real, não só
+presença de módulo), mas ficam corrigidos para quem rodar a suíte de
+probe depois.
+
+**Status**: corrigido e medido de ponta a ponta — QR monta, exibe e
+rotaciona automaticamente sem intervenção manual, confirmado ao vivo via
+Claude in Chrome contra o binário real.

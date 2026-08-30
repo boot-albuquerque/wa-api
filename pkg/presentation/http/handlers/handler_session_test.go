@@ -77,7 +77,7 @@ func sessionEnvelope(t *testing.T, rec *httptest.ResponseRecorder) map[string]an
 	return env
 }
 
-// noSessionErr e' o erro tipado que a porta wa-noise produz quando nao ha
+// noSessionErr e' o erro tipado que a porta noise produz quando nao ha
 // sessao: categoria validation, logo 400 na fronteira.
 func noSessionErr() error {
 	return apperr.New("no_session", apperr.CategoryValidation, "no session", false, nil)
@@ -494,7 +494,7 @@ func TestGetQR_ReadsPersistedCode(t *testing.T) {
 		QRReader: &contractsfake.PairingQRReader{
 			PairingQRFunc: func(ctx context.Context, txtID string) (string, error) {
 				// Imita a REGRA do adaptador de producao
-				// (pkg/infra/wa-noise/adapters/pairing/qr.go): le' o registo
+				// (pkg/infra/noise/adapters/pairing/qr.go): le' o registo
 				// persistido e devolve entries[0].QRCode.
 				entries, err := users.ListUsers(ctx, txtID)
 				if err != nil {
@@ -1035,7 +1035,7 @@ func TestConnectHandler_WithoutCheckStartInFlight_200(t *testing.T) {
 // F275 — POST /session/logout on a connected-but-never-paired session
 // responded 500 with a plain-text envelope instead of the canonical
 // {code,error:{code,message}} shape at 409. The fix lives at the SDK
-// boundary (pkg/infra/wa-noise/runtime/session/guard.go's Logout, tested in
+// boundary (pkg/infra/noise/runtime/session/guard.go's Logout, tested in
 // that package) and flows through the use case unchanged; this test proves
 // the HTTP boundary — status AND envelope shape — through the REGISTERED
 // handler, not just the use case.

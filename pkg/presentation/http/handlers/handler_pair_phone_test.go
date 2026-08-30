@@ -46,7 +46,7 @@ const (
 	pairPhoneBody = `{"engine":"noise","Phone":"` + pairPhoneNumber + `"}`
 	// pairPhoneWireCode e' o codigo que a porta devolve nos casos felizes.
 	// Formato de 8 caracteres em dois grupos, como
-	// internal/wa-noise/capabilities/pairing/paircode.go:100 monta.
+	// internal/noise/capabilities/pairing/paircode.go:100 monta.
 	pairPhoneWireCode = "WXYZ-2468"
 	// pairPhoneLinkingCodeKey e' a UNICA chave do corpo de sucesso, e a que
 	// o integrador le' para saber o que digitar no aparelho.
@@ -219,9 +219,9 @@ func TestPairPhone_AlreadyPaired_400_AndDoesNotRequestCode(t *testing.T) {
 // que era exatamente o comportamento da F152.
 func TestPairPhone_PortFailure_400_NoSilentFallback(t *testing.T) {
 	// A causa e' o erro REAL do fork para numero nacional
-	// (internal/wa-noise/capabilities/pairing/errors.go:18), embrulhado pelo
+	// (internal/noise/capabilities/pairing/errors.go:18), embrulhado pelo
 	// adapter como o adapter faz em producao
-	// (pkg/infra/wa-noise/adapters/pairing/adapter.go).
+	// (pkg/infra/noise/adapters/pairing/adapter.go).
 	cause := errors.New("international phone number required (must not start with 0)")
 	pp := &contractsfake.PhonePairer{
 		RequestPairingCodeFunc: func(context.Context, string, string) (string, error) {

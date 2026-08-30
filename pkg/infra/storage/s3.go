@@ -236,8 +236,8 @@ func (m *S3Manager) generateS3KeyAt(now time.Time, userID, contactJID, messageID
 	contactJID = strings.ReplaceAll(contactJID, "@", "_")
 	contactJID = strings.ReplaceAll(contactJID, ":", "_")
 
-	// messageID comes from wa-noise's MessageInfo.ID, a raw string attribute
-	// off the incoming <message> stanza (verified against wa-noise's own
+	// messageID comes from noise's MessageInfo.ID, a raw string attribute
+	// off the incoming <message> stanza (verified against noise's own
 	// source: types/jid.go's MessageID is a plain string alias, and
 	// message.go's parseMessageInfo sets it from ag.String("id") with no
 	// format validation). For an incoming message, that attribute is set by

@@ -1,5 +1,5 @@
 // Package observability bridges this stack's logging into the application's
-// structured zerolog, the same role internal/wa-noise/observability/log plays
+// structured zerolog, the same role internal/noise/observability/log plays
 // for the protocol stack.
 //
 // It carries one requirement the other stack does not have: a browser writes to

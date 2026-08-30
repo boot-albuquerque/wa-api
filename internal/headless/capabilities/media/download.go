@@ -241,7 +241,7 @@ func downloadScript(msgID string, key string) string {
 			// lives on a QPL. Every call site in the app passes one; none of
 			// them is optional about it.
 			const Q = window.require('` + string(spa.ModuleStartMediaDownloadQpl) + `');
-			const qpl = Q.startMediaDownloadQpl({ entryPoint: 'wa-headless' });
+			const qpl = Q.startMediaDownloadQpl({ entryPoint: 'headless' });
 			const got = await DM.downloadAndMaybeDecrypt({
 				signal: new AbortController().signal,
 				downloadQpl: qpl,

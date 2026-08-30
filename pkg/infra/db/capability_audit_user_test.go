@@ -58,7 +58,7 @@ func TestAudit_Invariant1_CreateRejectsLegacyUnknown(t *testing.T) {
 
 // TestAudit_Invariant1_CreateRejectsGarbageEngine proves an unrecognized
 // engine string is rejected the same way legacy_unknown is - the rule is
-// "must be wa_noise or wa_headless", not "must not be legacy_unknown".
+// "must be noise or headless", not "must not be legacy_unknown".
 func TestAudit_Invariant1_CreateRejectsGarbageEngine(t *testing.T) {
 	db := newUserTestDB(t)
 	repo := dbpkg.NewUserRepository(db)
@@ -77,7 +77,7 @@ func TestAudit_Invariant1_CreateRejectsGarbageEngine(t *testing.T) {
 
 // TestAudit_Invariant1_CreateDefaultsEmptyToNoise documents (does not
 // attack) the DOCUMENTED zero-value behavior in engineForCreate: an absent
-// engine becomes wa_noise, not legacy_unknown and not an error. This is
+// engine becomes noise, not legacy_unknown and not an error. This is
 // the control that shows the two rejection tests above are actually
 // discriminating "invalid" from "absent", not just failing every insert.
 func TestAudit_Invariant1_CreateDefaultsEmptyToNoise(t *testing.T) {

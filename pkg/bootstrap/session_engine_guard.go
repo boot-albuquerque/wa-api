@@ -29,7 +29,7 @@ const codeSessionCapabilityNotSupported = "session_capability_not_supported"
 
 // sessionEngineGuard dispatches the four SessionController operations
 // (EnsureSession, Disconnect, Logout, SessionStatus) to the adapter of the
-// engine RECORDED for the target session, instead of always driving wa_noise.
+// engine RECORDED for the target session, instead of always driving noise.
 //
 // # Why this exists
 //
@@ -38,7 +38,7 @@ const codeSessionCapabilityNotSupported = "session_capability_not_supported"
 // and eight other use cases that only call EnsureSession (S3/HMAC/proxy/
 // history config, ListUsers, DeleteUserComplete) — was wired directly to
 // wasession.NewSessionGuardAdapter(waClientLookup), which only knows
-// wa_noise. A session recorded as wa_headless failed EnsureSession in every
+// noise. A session recorded as headless failed EnsureSession in every
 // one of those, not only in /session/disconnect|logout|status. This type is
 // a drop-in replacement for that single value: it implements
 // appport.SessionController, so every existing call site keeps compiling
@@ -67,14 +67,14 @@ type sessionEngineGuard struct {
 	noise appport.SessionController
 
 	// headlessDisconnector is nil when this process has no Chrome
-	// configured for wa_headless. A nil value is a valid, meaningful state:
+	// configured for headless. A nil value is a valid, meaningful state:
 	// it means this process has no headless session controller right now,
 	// not that headless sessions cannot exist.
 	headlessDisconnector appport.SessionDisconnector
 
 	// headlessLogouter stays nil until Socket.logout's call shape is
 	// measured against a real page (see
-	// pkg/infra/wa-headless/session/disconnector.go's package doc) — a
+	// pkg/infra/headless/session/disconnector.go's package doc) — a
 	// separate field, not the same object typed down, because
 	// SessionDisconnector existing does not imply SessionLogouter does: the
 	// two are deliberately decoupled capabilities (session_guard.go).
@@ -94,7 +94,7 @@ func newSessionEngineGuard(users pairing.SessionEngineReader, caps *capabilityre
 
 // targetEngine reports the engine recorded for txtID.
 //
-// A row whose engine reads legacy_unknown resolves to wa_noise, matching the
+// A row whose engine reads legacy_unknown resolves to noise, matching the
 // startup backfill (pkg/infra/db/user_engine.go) and pairing.Registry's own
 // fallback (pkg/pairing/registry.go:100-102) — surfacing the migration state
 // itself would be a worse answer than the default the migration picks.
@@ -108,8 +108,8 @@ func (g *sessionEngineGuard) targetEngine(ctx context.Context, txtID string) (do
 	if len(entries) == 0 {
 		// No row: callers of EnsureSession/Disconnect/Logout already treat
 		// "no session" as their own condition (e.g. GetStatusUseCase reads
-		// the row separately). Defaulting to wa_noise here matches the
-		// backfill default and lets the underlying wa_noise adapter produce
+		// the row separately). Defaulting to noise here matches the
+		// backfill default and lets the underlying noise adapter produce
 		// its own, already-tested "no session" error rather than inventing a
 		// second one.
 		return domain.EngineNoise, nil

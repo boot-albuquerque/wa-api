@@ -81,7 +81,7 @@ var inventarioFase3 = map[string]portStatus{
 	"ProfileAccessProvider": {satisfeito: true},
 
 	// AccountTypeDetector (worktree feature/account-type-detection, itens
-	// 33-35): satisfeito por pkg/infra/wa-headless/accounttype, que le
+	// 33-35): satisfeito por pkg/infra/headless/accounttype, que le
 	// Conn.canSetMyPushname() (WAWebConnModel), o mesmo getter que
 	// capabilities/profile ja mediu ao vivo (HOUSEKEEP.md — a conta de
 	// laboratorio e Business porque canSetMyPushname() = false).
@@ -121,7 +121,7 @@ var inventarioFase3 = map[string]portStatus{
 	// --- os DOIS ports que as comunidades trouxeram (F237, 2026-08-26) ---
 
 	"CommunityDirectory": {motivo: "PENDENTE, e não medido nesta engine: as comunidades " +
-		"foram expostas contra o wa-noise, que fala protocolo. Quem dirige a SPA teria " +
+		"foram expostas contra o noise, que fala protocolo. Quem dirige a SPA teria " +
 		"de encontrar o módulo equivalente na página, e isso não foi procurado. " +
 		"Classificado como pendente por HONESTIDADE — não há medição que autorize " +
 		"chamar-lhe satisfeito nem recusado."},
@@ -167,23 +167,23 @@ var inventarioFase3 = map[string]portStatus{
 
 	// As duas entradas abaixo entraram com a F281, que criou os ports
 	// PairingQRReader e SessionStarter para tirar o pareamento de um adaptador
-	// wa-noise fixo (F273). Nenhuma das duas está satisfeita nesta build, e
+	// noise fixo (F273). Nenhuma das duas está satisfeita nesta build, e
 	// isso está MEDIDO — não é "não olhei".
 	"PairingQRReader": {motivo: "PENDENTE POR MEDIR, e por medir do lado CERTO. O QR existe " +
 		"neste transporte: o pool de sessões tem uma classe de quota só para ele " +
-		"(pkg/infra/wa-headless/registry/registry.go, KindPairing — 'a session showing a QR " +
+		"(pkg/infra/headless/registry/registry.go, KindPairing — 'a session showing a QR " +
 		"code, waiting for a human'). O que não existe é caminho de EXTRAÇÃO: nenhuma " +
-		"capability devolve o conteúdo do código, e nada sob pkg/infra/wa-headless o serve. " +
+		"capability devolve o conteúdo do código, e nada sob pkg/infra/headless o serve. " +
 		"Dizer 'recusado' seria repetir o erro da H75; a página mostra-o, e eu não medi se o " +
 		"expõe a quem a dirige."},
 
 	"SessionStarter": {motivo: "PENDENTE POR LIGAR, e não por escrever. Arrancar sessão é " +
-		"exatamente o que Sessions.Acquire faz (pkg/infra/wa-headless/sessions.go), com o " +
-		"runtime por trás (internal/wa-headless/runtime). O que falta é o ADAPTADOR para a " +
+		"exatamente o que Sessions.Acquire faz (pkg/infra/headless/sessions.go), com o " +
+		"runtime por trás (internal/headless/runtime). O que falta é o ADAPTADOR para a " +
 		"porta e, antes disso, a construção: `grep -rn NewDisconnector pkg/bootstrap` devolve " +
-		"zero fora de testes — nada de wa-headless é sequer instanciado no arranque. " +
+		"zero fora de testes — nada de headless é sequer instanciado no arranque. " +
 		"Referência cruzada: pkg/capabilityregistry/matrix.go regista connect_session como " +
-		"not_implemented para wa_headless, com esta mesma evidência."},
+		"not_implemented para headless, com esta mesma evidência."},
 
 	"PhonePairer": {motivo: "RECUSADO POR DEPENDÊNCIA HUMANA: parear exige um humano com o " +
 		"telefone, e o caminho de boot da headless é de RESTAURAÇÃO — recusa página não " +
@@ -220,7 +220,7 @@ var inventarioFase3 = map[string]portStatus{
 	"MessageStarrer": {motivo: "PENDENTE. Port NOVO, chegou com a CAP-54 (2026-08-24): favoritar mensagem por app-state. Herda o veredito do ChatMuter acima e pela mesma razao — e' app-state, nao mensagem, e a emissao pela pagina nao esta medida."},
 
 	"ForwardedMessageSender": {motivo: "PENDENTE. Port NOVO, chegou com a CAP-55 (2026-08-25): " +
-		"reenvio real por chave de mensagem (datajson → proto → wire). A implementação wa-noise " +
+		"reenvio real por chave de mensagem (datajson → proto → wire). A implementação noise " +
 		"desserializa o proto e reenvia pelo socket — a headless precisaria de caminho pela SPA, " +
 		"e.g. encontrar a mensagem no DOM e acionar o forward nativo da página. Não está medido " +
 		"se a página expõe essa ação de forma programática."},

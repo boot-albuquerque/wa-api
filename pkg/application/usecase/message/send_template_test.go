@@ -21,7 +21,7 @@ import (
 // `Buttons`, e sem ele a capability não tem sentido. Por isso a asserção
 // central aqui é que os botões chegam à porta INTEIROS e na ORDEM — a
 // tradução de cada um para o protobuf é do adapter, e está medida em
-// pkg/infra/wa-noise/adapters/chat/messenger_template_test.go.
+// pkg/infra/noise/adapters/chat/messenger_template_test.go.
 
 const templatePhone = "5511987654321"
 
@@ -36,7 +36,7 @@ func templateButtons() []domain.TemplateButton {
 }
 
 // templateJIDResolver é o dublê de port.JIDResolver que imita a regra REAL de
-// pkg/infra/wa-noise/mapping/jid/parse.go:12 — número sem "@" recebe o
+// pkg/infra/noise/mapping/jid/parse.go:12 — número sem "@" recebe o
 // servidor padrão; com "@", passa intacto. O dublê padrão de contractsfake
 // devolve `raw` sem tocar, o que é MAIS PERMISSIVO que a produção e esconderia
 // exatamente o defeito de destinatário que este teste existe para pegar

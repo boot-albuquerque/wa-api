@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// A implementacao vive em internal/wa-noise/media; estes metodos sao apenas a
+// A implementacao vive em internal/noise/media; estes metodos sao apenas a
 // fachada historica de *Client (ADR-0004, Fase F/G lote 1). Todos checam o
 // receiver nil antes de tocar em qualquer campo — antes da extracao so'
 // Download e DownloadToFile faziam isso e os demais estouravam em nil deref.

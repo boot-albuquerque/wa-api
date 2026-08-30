@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// O history sync vive em internal/wa-noise/message/ desde a Fase F/G lote 9.
+// O history sync vive em internal/noise/message/ desde a Fase F/G lote 9.
 // DownloadHistorySync e SendHistorySyncServerErrorReceipt continuam na raiz por
 // serem API publica; as demais sao fachadas para internals.go (gerado) e para
 // armadillomessage.go.
@@ -31,7 +31,7 @@ func (cli *Client) SendHistorySyncServerErrorReceipt(ctx context.Context, msgID 
 // DownloadHistorySync will download and parse the history sync blob from the given history sync notification.
 //
 // You only need to call this manually if you set [Client.ManualHistorySyncDownload] to true.
-// By default, wa-noise will call this automatically and dispatch an [events.HistorySync] with the parsed data.
+// By default, noise will call this automatically and dispatch an [events.HistorySync] with the parsed data.
 func (cli *Client) DownloadHistorySync(ctx context.Context, notif *waE2E.HistorySyncNotification, synchronousStorage bool) (*waHistorySync.HistorySync, error) {
 	return message.DownloadHistorySync(ctx, cli.msgT(), notif, synchronousStorage)
 }

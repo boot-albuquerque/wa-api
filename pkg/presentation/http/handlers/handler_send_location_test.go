@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/location desde a migração do CAP-08A
 // para port.SimpleMessenger — o handler que efetivamente monta o
-// LocationMessage e o envia pelo wa-noise, e não mais um "validated" sem
+// LocationMessage e o envia pelo noise, e não mais um "validated" sem
 // fazer nada. Mesma estrutura de handler_send_video_test.go (rota
 // gorilla/mux registrada).
 

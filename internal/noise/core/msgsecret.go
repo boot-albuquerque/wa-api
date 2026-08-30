@@ -10,7 +10,7 @@ import (
 	"wa-api/internal/noise/protocol/types/events"
 )
 
-// O dominio de segredo de mensagem vive em internal/wa-noise/message/ desde a
+// O dominio de segredo de mensagem vive em internal/noise/message/ desde a
 // Fase F/G lote 9. As guardas `cli == nil -> ErrClientIsNil` continuam AQUI,
 // nas fachadas, e nao atravessaram a fronteira: um *Client nil nao produz
 // Transport, entao a checagem so' pode existir na raiz. Mesmo racional dos

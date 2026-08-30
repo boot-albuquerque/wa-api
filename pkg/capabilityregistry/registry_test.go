@@ -7,8 +7,8 @@ import (
 )
 
 // TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther exercises a
-// clear-cut pair: send_carousel is field-verified supported on wa_noise
-// (HOUSEKEEP.md F216) and unknown on wa_headless (no adapter found).
+// clear-cut pair: send_carousel is field-verified supported on noise
+// (HOUSEKEEP.md F216) and unknown on headless (no adapter found).
 func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 	r := NewCapabilityRegistry()
 
@@ -17,10 +17,10 @@ func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !noise.Supported || noise.Status != domain.StatusSupported {
-		t.Fatalf("send_carousel on wa_noise: got Supported=%v Status=%v, want Supported=true Status=supported", noise.Supported, noise.Status)
+		t.Fatalf("send_carousel on noise: got Supported=%v Status=%v, want Supported=true Status=supported", noise.Supported, noise.Status)
 	}
 	if noise.Evidence != domain.EvidenceConfirmed {
-		t.Fatalf("send_carousel on wa_noise: got Evidence=%v, want confirmed (F216)", noise.Evidence)
+		t.Fatalf("send_carousel on noise: got Evidence=%v, want confirmed (F216)", noise.Evidence)
 	}
 
 	headless, err := r.Decide(domain.CapSendCarousel, domain.EngineHeadless, domain.AccountTypeUnknown)
@@ -28,19 +28,19 @@ func TestDecide_KnownNotImplementedOnOneEngine_SupportedOnOther(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if headless.Supported {
-		t.Fatalf("send_carousel on wa_headless: got Supported=true, want false (no adapter found)")
+		t.Fatalf("send_carousel on headless: got Supported=true, want false (no adapter found)")
 	}
 	if headless.Status != domain.StatusUnknown {
-		t.Fatalf("send_carousel on wa_headless: got Status=%v, want unknown", headless.Status)
+		t.Fatalf("send_carousel on headless: got Status=%v, want unknown", headless.Status)
 	}
 	if headless.Evidence != domain.EvidenceUnknown {
-		t.Fatalf("send_carousel on wa_headless: got Evidence=%v, want unknown (grep found no adapter at all, not \"probable\" code that plausibly implements it)", headless.Evidence)
+		t.Fatalf("send_carousel on headless: got Evidence=%v, want unknown (grep found no adapter at all, not \"probable\" code that plausibly implements it)", headless.Evidence)
 	}
 }
 
 // TestDecide_ConfirmedEngineUnsupported exercises the one row this pass
 // could confirm as a documented, cited engine gap rather than a mere grep
-// absence: SetGroupPhoto on wa_headless (H140).
+// absence: SetGroupPhoto on headless (H140).
 func TestDecide_ConfirmedEngineUnsupported(t *testing.T) {
 	r := NewCapabilityRegistry()
 
@@ -49,13 +49,13 @@ func TestDecide_ConfirmedEngineUnsupported(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if d.Supported {
-		t.Fatalf("set_group_photo on wa_headless: got Supported=true, want false (H140: page photo modules absent)")
+		t.Fatalf("set_group_photo on headless: got Supported=true, want false (H140: page photo modules absent)")
 	}
 	if d.Status != domain.StatusEngineUnsupported {
-		t.Fatalf("set_group_photo on wa_headless: got Status=%v, want engine_unsupported", d.Status)
+		t.Fatalf("set_group_photo on headless: got Status=%v, want engine_unsupported", d.Status)
 	}
 	if d.Evidence != domain.EvidenceConfirmed {
-		t.Fatalf("set_group_photo on wa_headless: got Evidence=%v, want confirmed", d.Evidence)
+		t.Fatalf("set_group_photo on headless: got Evidence=%v, want confirmed", d.Evidence)
 	}
 }
 

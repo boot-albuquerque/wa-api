@@ -5,19 +5,19 @@
 // Disconnecting drops the transport: the session can come back on its own.
 // Logging out DEAUTHENTICATES — and on a page transport that unpairs the
 // account, which needs a human holding the phone to restore. H122
-// (internal/wa-headless/HOUSEKEEP.md) measured that Socket.logout EXISTS
+// (internal/headless/HOUSEKEEP.md) measured that Socket.logout EXISTS
 // and is a function, but refused to CALL it: an untested call that unpairs
 // a real account was not something to satisfy the compiler with, on policy
 // grounds — not a technical block.
 //
 // That call was finally MEASURED (F381, TestProbeSocketLogout,
-// internal/wa-headless/probe_logout_test.go), against a genuinely paired,
+// internal/headless/probe_logout_test.go), against a genuinely paired,
 // disposable profile re-paired specifically for this: Socket.logout()
 // returns without throwing, and within ~18s the page settles from
 // CONNECTED to UNPAIRED with a fresh, working QR showing — the same
 // clean "logged out, ready to re-pair" state a phone-initiated logout
 // produces, never a crash or a stuck page. See
-// internal/wa-headless/capabilities/logout for the call itself and where
+// internal/headless/capabilities/logout for the call itself and where
 // its shape comes from (whatsapp-web.js, measured, not guessed).
 package session
 
@@ -68,10 +68,10 @@ const statusLabel = "adapter/session-status"
 //     Evaluator resolved without error, i.e. this process could reach the
 //     page at all. This is a conservative signal, not full liveness: it does
 //     not yet distinguish "page slow" from "page crashed" the way
-//     internal/wa-headless/capabilities/liveness does — that needs a
+//     internal/headless/capabilities/liveness does — that needs a
 //     process-alive source this adapter does not have plumbed to it yet.
 //   - loggedIn: only asked when connected. headless.RefreshOwnIdentity
-//     (internal/wa-headless/capabilities/owner) distinguishes a probe error
+//     (internal/headless/capabilities/owner) distinguishes a probe error
 //     (nothing known, so loggedIn stays false) from owner.ErrNoOwner (page
 //     answered, showing a QR — genuinely not logged in) from a real Identity
 //     (paired).
@@ -87,7 +87,7 @@ const statusLabel = "adapter/session-status"
 // nothing here to tell a caller this was a REMOTE LOGOUT rather than a
 // session that simply never got scanned yet. Reporting (true, false) for
 // both, as before this fix, produced "conectada, não autenticada" for an
-// event wa_noise reports as fully disconnected (whatsmeow's client drops
+// event noise reports as fully disconnected (whatsmeow's client drops
 // IsConnected() on the same real-world trigger) — the same physical action
 // (unlink from the phone) read as two different states depending only on
 // which engine the session happened to use.
@@ -95,7 +95,7 @@ const statusLabel = "adapter/session-status"
 // everIdentity remembers, per txtID, whether THIS ADAPTER has ever observed
 // a present identity. Once it has, a later absence is read as "this session
 // was connected and lost its identity" and reported as disconnected — same
-// shape wa_noise already reports for the identical trigger — instead of the
+// shape noise already reports for the identical trigger — instead of the
 // misleading "still pairing" shape a session that never paired also
 // produces. In-memory, per PROCESS lifetime (not persisted): a restart
 // forgets it, and the next status poll for an actually-still-logged-out
@@ -135,7 +135,7 @@ func classifyIdentity(everHad, present bool) (connected, loggedIn, markSeen bool
 	if everHad {
 		// Was paired, now isn't — WhatsApp itself ended the session
 		// (typically: phone unlinked the device). Report it the way
-		// wa_noise already reports the identical trigger: disconnected, not
+		// noise already reports the identical trigger: disconnected, not
 		// "still pairing" (HOUSEKEEP F378).
 		return false, false, false
 	}
@@ -177,8 +177,8 @@ func (d *Disconnector) Disconnect(ctx context.Context, txtID string) error {
 // (F381, reopening H122) for what was measured and where the call comes
 // from.
 //
-// Two refusals mirror wa_noise's own SessionGuardAdapter.Logout
-// (pkg/infra/wa-noise/runtime/session/guard.go) exactly — same codes, same
+// Two refusals mirror noise's own SessionGuardAdapter.Logout
+// (pkg/infra/noise/runtime/session/guard.go) exactly — same codes, same
 // categories, same reasoning:
 //
 //   - Evaluator unreachable (page cannot be reached at all) →

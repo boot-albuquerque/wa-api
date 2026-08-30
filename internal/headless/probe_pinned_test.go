@@ -66,7 +66,7 @@ func TestProbePinnedReader(t *testing.T) {
 			"stale and the reader can be proven non-empty without pinning anything", len(before))
 	}
 
-	sent, err := send.Text(ctx, runner, eval, peer, "wa-headless pin probe", "probe/pinned/send")
+	sent, err := send.Text(ctx, runner, eval, peer, "headless pin probe", "probe/pinned/send")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

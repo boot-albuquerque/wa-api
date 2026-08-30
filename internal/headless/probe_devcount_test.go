@@ -54,7 +54,7 @@ func TestProbeDeviceCountWithPeerAwake(t *testing.T) {
 		t.Logf("BEFORE (%s): count=%d err=%v", probe.what, n, err)
 	}
 
-	if _, err := send.Text(ctx, d.RunnerA, evalA, peerB, "wa-headless device probe", "probe/devcount"); err != nil {
+	if _, err := send.Text(ctx, d.RunnerA, evalA, peerB, "headless device probe", "probe/devcount"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	time.Sleep(8 * time.Second)

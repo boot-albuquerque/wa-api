@@ -408,7 +408,7 @@ func (r SendButtonsRequest) ToDomain() domain.SendButtonsRequest {
 // SAME key, so the chain collapses to `row_id <- (the already-trimmed title)`.
 // This is not a silent pick: only RowId was ever WRITTEN by the use case after
 // normalisation and only RowId is READ by the adapter
-// (pkg/infra/wa-noise/adapters/chat/messenger_list.go), so the other three
+// (pkg/infra/noise/adapters/chat/messenger_list.go), so the other three
 // never carried a value past the boundary.
 type ListRowRequest struct {
 	Title       string `json:"title"`

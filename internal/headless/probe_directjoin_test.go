@@ -57,7 +57,7 @@ func TestProbeDirectJoin(t *testing.T) {
 	// grupo abandonado pela primeira — do qual esta conta ja' saiu. O sintoma foi
 	// "this account is not an admin of that group" sobre um grupo recem-"criado",
 	// com `created=false` na resposta dizendo exatamente isso a quem lesse.
-	subject := "wa-headless direct-join probe " + strconv.FormatInt(time.Now().Unix(), 10)
+	subject := "headless direct-join probe " + strconv.FormatInt(time.Now().Unix(), 10)
 	created, err := gA.Ensure(ctx, subject, []string{identB.JID}, "probe/directjoin/create")
 	if err != nil {
 		t.Fatalf("creating the throwaway group: %v", err)

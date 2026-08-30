@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/image desde a migração do CAP-02 para
 // port.MediaMessenger/port.MediaFetcher — o handler que efetivamente busca a
-// URL, sobe o anexo e entrega a imagem ao wa-noise, e não mais um
+// URL, sobe o anexo e entrega a imagem ao noise, e não mais um
 // "validated" sem fazer nada (o stub que este arquivo substitui).
 
 const sendImageSentinelToken = "send-image-sentinel-cause-2b7c1a"

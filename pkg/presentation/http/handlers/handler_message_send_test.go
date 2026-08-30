@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/text (SendMessage) desde a migração do
 // CAP-01 para port.TextMessenger — o handler que efetivamente entrega texto
-// ao wa-noise, e não mais um "validated" sem envio.
+// ao noise, e não mais um "validated" sem envio.
 
 const sendTextSentinelToken = "send-text-sentinel-cause-9f8e7d"
 

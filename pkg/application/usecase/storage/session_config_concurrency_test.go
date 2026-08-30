@@ -110,7 +110,7 @@ func (c *lockedProxyCache) SetProxy(_ context.Context, _, proxyURL string) {
 }
 
 // disconnectedStatus answers what the production guard answers for a session
-// that is not connected (pkg/infra/wa-noise/runtime/session/guard.go:72
+// that is not connected (pkg/infra/noise/runtime/session/guard.go:72
 // returns client.IsConnected()), which is the state in which a proxy may be
 // configured at all. It is stateless, hence safe to share.
 type disconnectedStatus struct{}

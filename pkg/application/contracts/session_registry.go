@@ -3,9 +3,9 @@ package port
 // SessionRegistry guarda os handles vivos de cada sessão. Existe por uma
 // razão estrutural, não numérica: o SessionOrchestrator vive em
 // pkg/application/session e precisa registrar/recuperar esses handles sem
-// importar pkg/infra/wa-noise, o que inverteria a direção de dependência
+// importar pkg/infra/noise, o que inverteria a direção de dependência
 // application → infra. Implementado por ClientManager
-// (pkg/infra/wa-noise/client_manager.go), que continua com a mesma
+// (pkg/infra/noise/client_manager.go), que continua com a mesma
 // responsabilidade que já tem hoje.
 //
 // Escopo deliberadamente estreito: só CRUD de handle. Nada de Start/Stop/

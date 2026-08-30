@@ -514,7 +514,7 @@ func TestUpdateGroupParticipants_ReturnsResult(t *testing.T) {
 	}
 	respBody := rec.Body.String()
 	// A lista sai TIPADA e em snake_case: era aqui que o struct de protocolo
-	// do wa-noise chegava ao fio com os nomes de campo do Go.
+	// do noise chegava ao fio com os nomes de campo do Go.
 	if !strings.Contains(respBody, `"phone_number"`) || !strings.Contains(respBody, `"is_admin":true`) {
 		t.Errorf("response should carry the mapped participant: %s", respBody)
 	}

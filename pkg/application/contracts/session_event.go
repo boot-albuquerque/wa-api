@@ -42,7 +42,7 @@ const (
 // SessionDisconnectedEvent acompanha SessionEventKindDisconnected.
 //
 // Reason espelha o que handleDisconnected hoje loga via
-// fmt.Sprintf("%+v", evt) — events.Disconnected do wa-noise não carrega
+// fmt.Sprintf("%+v", evt) — events.Disconnected do noise não carrega
 // campo estruturado, só o próprio evento vazio; o adapter formata a mesma
 // string que já ia pro log.
 type SessionDisconnectedEvent struct {

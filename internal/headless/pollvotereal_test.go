@@ -63,7 +63,7 @@ func TestPollVoteRoundTripReal(t *testing.T) {
 	}
 
 	stamp := time.Now().Unix()
-	question := fmt.Sprintf("wa-headless lab %d", stamp)
+	question := fmt.Sprintf("headless lab %d", stamp)
 	optA := fmt.Sprintf("alpha-%d", stamp)
 	optB := fmt.Sprintf("beta-%d", stamp)
 	var pollID string
@@ -83,7 +83,7 @@ func TestPollVoteRoundTripReal(t *testing.T) {
 		// One short marker message is the price, and it is a message the lab
 		// accounts exchange constantly anyway.
 		primer, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-			fmt.Sprintf("wa-headless poll primer %d", stamp), "poll/primer")
+			fmt.Sprintf("headless poll primer %d", stamp), "poll/primer")
 		if err != nil {
 			t.Fatalf("priming the chat: %v", err)
 		}
@@ -178,7 +178,7 @@ func TestPollVoteRoundTripReal(t *testing.T) {
 		// the chat's recent messages are fetched so the poll is in the
 		// collection.
 		primer, err := send.Text(ctx, runner, sess.Tab().Evaluate, selfA,
-			fmt.Sprintf("wa-headless vote primer %d", stamp), "poll/b-primer")
+			fmt.Sprintf("headless vote primer %d", stamp), "poll/b-primer")
 		if err != nil {
 			t.Fatalf("conta-B priming its chat with conta-A: %v", err)
 		}

@@ -57,7 +57,7 @@ func TestProbeClearEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving the peer: %v", err)
 	}
-	subject := "wa-headless clear-edge probe " + strconv.FormatInt(time.Now().Unix(), 10)
+	subject := "headless clear-edge probe " + strconv.FormatInt(time.Now().Unix(), 10)
 	created, err := g.Ensure(ctx, subject, []string{ident.JID}, "probe/clearedge/create")
 	if err != nil {
 		t.Fatalf("creating the throwaway group: %v", err)
@@ -105,7 +105,7 @@ func TestProbeClearEdge(t *testing.T) {
 
 	// O CASO ORDINARIO, no mesmo grupo, para contraste.
 	for i := 0; i < 2; i++ {
-		if _, err := send.Text(ctx, runner, eval, gjid, "wa-headless clear-edge "+strconv.Itoa(i), "probe/clearedge/send"); err != nil {
+		if _, err := send.Text(ctx, runner, eval, gjid, "headless clear-edge "+strconv.Itoa(i), "probe/clearedge/send"); err != nil {
 			t.Fatalf("send: %v", err)
 		}
 	}

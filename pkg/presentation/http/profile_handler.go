@@ -97,7 +97,7 @@ func (h *ProfileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// rotas de /session/*. Antes este handler escrevia `response` cru no
 	// ResponseWriter — o cliente wa-worker (que desembrulha body.data como
 	// todo o resto da API) sempre lia data=undefined e devolvia pushname/
-	// avatar vazios, mesmo com o wa-noise retornando os campos certos.
+	// avatar vazios, mesmo com o noise retornando os campos certos.
 	w.Header().Set("Cache-Control", cacheControlPerfil)
 	RespondJSON(w, http.StatusOK, json.RawMessage(response), nil)
 }

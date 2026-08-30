@@ -12,7 +12,7 @@ import (
 
 // memAppStateStore e' uma implementacao em memoria de store.AppStateStore e
 // store.AppStateSyncKeyStore, suficiente para exercitar Processor sem banco.
-// Vive so' no pacote de teste — nada em internal/wa-noise/store/ foi alterado.
+// Vive so' no pacote de teste — nada em internal/noise/store/ foi alterado.
 type memAppStateStore struct {
 	versions map[string]uint64
 	hashes   map[string][lthashLength]byte

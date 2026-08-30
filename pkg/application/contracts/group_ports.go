@@ -19,7 +19,7 @@ type GroupDirectory interface {
 	// GetGroupInfo devolve os metadados de um grupo.
 	//
 	// TIPADO, e não `any`: com `any` era o motor da sessão que decidia a
-	// forma do JSON servido ao cliente — o struct de protocolo do wa-noise
+	// forma do JSON servido ao cliente — o struct de protocolo do noise
 	// numa sessão, o struct de conversa do headless na outra — e nenhuma das
 	// duas estava declarada em lado nenhum. Cada adaptador normaliza para
 	// domain.GroupInfo, e a fronteira HTTP apresenta a partir daí.

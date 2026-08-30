@@ -5,7 +5,7 @@ import (
 	"wa-api/internal/noise"
 )
 
-// TestClientManager_wa-noiseLifecycle: Set → Get → Delete.
+// TestClientManager_noiseLifecycle: Set → Get → Delete.
 func TestClientManager_NoiseLifecycle(t *testing.T) {
 	cm := NewClientManager()
 	wac := &noise.Client{}

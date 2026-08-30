@@ -23,7 +23,7 @@ import (
 // linha: 5 níveis) e TRÊS descartes silenciosos. Uma cadeia de 5 níveis passa
 // num teste que exercite só o primeiro — por isso cada cadeia aqui é
 // percorrida NÍVEL POR NÍVEL. A tradução para waE2E.ListMessage está medida
-// no adapter (pkg/infra/wa-noise/adapters/chat/messenger_list_test.go).
+// no adapter (pkg/infra/noise/adapters/chat/messenger_list_test.go).
 
 const listPhone = "5511987654321"
 

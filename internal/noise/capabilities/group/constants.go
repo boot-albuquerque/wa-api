@@ -76,5 +76,5 @@ const (
 )
 
 // InviteLinkPrefix e' o prefixo dos links de convite de grupo. A raiz reexporta
-// este valor como wa-noise.InviteLinkPrefix.
+// este valor como noise.InviteLinkPrefix.
 const InviteLinkPrefix = "https://chat.whatsapp.com/"

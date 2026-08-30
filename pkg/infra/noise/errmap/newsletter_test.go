@@ -15,7 +15,7 @@ import (
 //
 //	fmt.Errorf("graphql error: %w", GraphQLErrors{...})
 //
-// Source: internal/wa-noise/capabilities/newsletter/mex.go, line ~111.
+// Source: internal/noise/capabilities/newsletter/mex.go, line ~111.
 func graphqlError(code int, message, severity string) error {
 	gqlErrors := types.GraphQLErrors{
 		{

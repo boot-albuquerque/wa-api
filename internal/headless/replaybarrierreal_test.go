@@ -120,7 +120,7 @@ func TestReplayBarrierReal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("conta-A boot: %v", err)
 	}
-	marker := fmt.Sprintf("wa-headless replay barrier %d", time.Now().UnixNano())
+	marker := fmt.Sprintf("headless replay barrier %d", time.Now().UnixNano())
 	if _, err := send.Text(ctx, runnerA, sessA.Tab().Evaluate, peer, marker, "barrier/send"); err != nil {
 		t.Fatalf("sending the marker: %v", err)
 	}

@@ -5,7 +5,7 @@ import "time"
 // The channel (newsletter) types the application works with.
 //
 // These are NOT the wire format. Until the DTO migration they were: the routes
-// served `types.NewsletterMetadata` from the wa-noise fork straight to the JSON
+// served `types.NewsletterMetadata` from the noise fork straight to the JSON
 // encoder, which meant the SHAPE of `POST /newsletter/info` was decided by the
 // vendor's struct tags — and, on a headless session, by an entirely different
 // struct (`channel.DirectoryEntry`, whose fields carry no tags at all and so

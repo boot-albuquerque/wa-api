@@ -1,5 +1,5 @@
 // Package client adapts a headless session to the application's client port,
-// mirroring pkg/infra/wa-noise/client.
+// mirroring pkg/infra/noise/client.
 //
 // Its job is translation, in both directions: application intent into stack
 // calls, and stack failures into apperr categories so they reach the HTTP

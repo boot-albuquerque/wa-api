@@ -19,7 +19,7 @@ type StoredMessageReader interface {
 //
 // The implementation deserializes the datajson into the wire proto, reads the
 // existing forwarding score from the proto's ContextInfo, INCREMENTS it by 1,
-// sets IsForwarded=true, and sends via the wa-noise client — no re-upload of
+// sets IsForwarded=true, and sends via the noise client — no re-upload of
 // media.
 type ForwardedMessageSender interface {
 	SessionGuard

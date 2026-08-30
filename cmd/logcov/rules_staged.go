@@ -10,7 +10,7 @@ import (
 //
 // # Por que esta regra existe, e por que ela quebra rules_frozen
 //
-// A Fase 3 fiou `internal/wa-headless` em `pkg/`, e com isso a árvore inteira
+// A Fase 3 fiou `internal/headless` em `pkg/`, e com isso a árvore inteira
 // entrou no denominador: `eligible` 571 → 660, `func_coverage` 697 → 603,
 // `errpath` 858 → 808. Foi MEDIDO com prova causal — removido o consumidor da
 // fachada, os números voltam exatamente aos anteriores.

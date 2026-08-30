@@ -54,7 +54,7 @@ func TestProbeGroupSetDescription(t *testing.T) {
 	}
 	t.Logf("baseline description present=%t source=%s", base.Description != "", base.DescriptionSource)
 
-	want := fmt.Sprintf("wa-headless parity probe %d", time.Now().Unix())
+	want := fmt.Sprintf("headless parity probe %d", time.Now().Unix())
 	got, err := m.SetDescription(ctx, gjid, want, "probe/gdesc")
 	if err != nil {
 		// THE IMMEDIATE VERDICT IS NOT THE LAST WORD. The channel description
@@ -165,7 +165,7 @@ func TestProbeGroupDescribeShapes(t *testing.T) {
 		const c = CC.get(JID);
 		const md = c && (c.groupMetadata || c.__x_groupMetadata);
 		const descId = md ? (md.descId || md.__x_descId) : undefined;
-		const TEXT = "wa-headless shape probe";
+		const TEXT = "headless shape probe";
 
 		const shapes = [
 			["groupWid+description", {groupWid: wid, description: TEXT, newId: newId, prevDescId: descId}],

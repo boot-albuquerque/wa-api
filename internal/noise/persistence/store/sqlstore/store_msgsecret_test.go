@@ -110,7 +110,7 @@ func TestPutMessageSecretsBatch(t *testing.T) {
 	}
 }
 
-// O SELECT tem um CASE que traduz LID <-> PN via wa-noise_lid_map. Um segredo
+// O SELECT tem um CASE que traduz LID <-> PN via wanoise_lid_map. Um segredo
 // gravado com o JID PN precisa ser encontrado quando o chat ja' migrou para
 // LID, senao reacoes a mensagens antigas parariam de decifrar.
 func TestGetMessageSecretResolvesLIDToPN(t *testing.T) {

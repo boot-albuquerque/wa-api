@@ -10,7 +10,7 @@ import (
 )
 
 // Fachadas do nucleo de decifragem Signal, que vive em
-// internal/wa-noise/message/ desde a Fase F/G lote 9. Existem porque
+// internal/noise/message/ desde a Fase F/G lote 9. Existem porque
 // internals.go (gerado) cita os tres nomes minusculos em
 // DangerousInternalClient.
 

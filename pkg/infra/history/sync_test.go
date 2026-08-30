@@ -21,7 +21,7 @@ import (
 // A costura aqui e' a propria assinatura: SyncHistoryForChat recebe o *sqlx.DB e
 // o SyncDeps, e SaveOutgoingMessageToHistory recebe as funcoes de persistencia.
 // Nada disto precisa de socket. O que NAO da' para exercitar sem conexao real e'
-// o retorno de sucesso de wa-noise.Client.SendMessage — um *Client nil devolve
+// o retorno de sucesso de noise.Client.SendMessage — um *Client nil devolve
 // ErrClientIsNil antes de qualquer I/O, o que cobre o ramo de erro, e o ramo de
 // sucesso fica descoberto por construcao (esta' declarado no PR da fase).
 //

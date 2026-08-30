@@ -127,7 +127,7 @@ const ArgumentProbeExpr = `(async function (moduleName, fnName, arity, maxDepth,
 		} else if (hint === 'string') {
 			// Some functions take primitives and read nothing; handing them a
 			// proxy only produces a type error that says less than a real value.
-			args.push('wa-headless-probe');
+			args.push('headless-probe');
 		} else if (hint === 'number') {
 			args.push(0);
 		} else {

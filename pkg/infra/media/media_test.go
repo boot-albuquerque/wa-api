@@ -45,7 +45,7 @@ func (f *fakeS3Manager) ProcessMediaForS3(_ context.Context, _, _, _ string, _ [
 }
 
 // mediaServer devolve `body` como midia nao criptografada. Uma mensagem sem
-// MediaKey e sem FileEncSHA256 faz o wa-noise entregar os bytes crus, o que
+// MediaKey e sem FileEncSHA256 faz o noise entregar os bytes crus, o que
 // da' um seam de download real sem sessao nem criptografia.
 func mediaServer(t *testing.T, body []byte) string {
 	t.Helper()
@@ -136,7 +136,7 @@ func TestProcessMediaFalhaNoDownload(t *testing.T) {
 	userID := userIDForTmp(t)
 
 	postmap := map[string]interface{}{}
-	// Cliente wa-noise nil: Download devolve ErrClientIsNil.
+	// Cliente noise nil: Download devolve ErrClientIsNil.
 	ProcessMedia(
 		fakeUserClient{userID: userID, wa: nil},
 		downloadableFrom("https://exemplo.invalido/x.png"),

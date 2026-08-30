@@ -26,7 +26,7 @@ import (
 	"testing"
 )
 
-// moduleRoot is where the scan starts: the whole of internal/wa-headless, not
+// moduleRoot is where the scan starts: the whole of internal/headless, not
 // just this package. The rule is about call sites, and call sites will live in
 // core/, runtime/ and capabilities/ long before they live here.
 const moduleRoot = ".."

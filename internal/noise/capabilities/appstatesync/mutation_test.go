@@ -15,7 +15,7 @@ import (
 	"wa-api/internal/noise/protocol/types/events"
 )
 
-// Testes relocados de internal/wa-noise/appstate_dispatch_test.go (Fase E lote
+// Testes relocados de internal/noise/appstate_dispatch_test.go (Fase E lote
 // 3) e adaptados ao duble de Transport. O contrato exercitado e' o mesmo; o que
 // mudou e' que nao e' mais preciso montar um *Client.
 

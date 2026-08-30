@@ -9,7 +9,7 @@ import (
 )
 
 // A logica de recepcao/decifragem de mensagem vive em
-// internal/wa-noise/message/ desde a Fase F/G lote 9. Os metodos abaixo sao
+// internal/noise/message/ desde a Fase F/G lote 9. Os metodos abaixo sao
 // fachadas sem logica: existem porque internals.go (GERADO por
 // internals_generate.go, fora do escopo do lote) cita os nomes minusculos
 // historicos em DangerousInternalClient, e porque client.go chama

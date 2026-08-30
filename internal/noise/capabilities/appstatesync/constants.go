@@ -2,7 +2,7 @@
 // buscar patches do servidor, aplica-los, traduzir cada mutacao em evento,
 // enviar patches locais e pedir as chaves que faltam.
 //
-// O nome nao e' `appstate` de proposito: `internal/wa-noise/appstate` ja' existe
+// O nome nao e' `appstate` de proposito: `internal/noise/appstate` ja' existe
 // desde a Fase B e cuida da camada de baixo (decodificacao/codificacao de
 // patches, hash chain, chaves). Este pacote e' a camada de cima, que era a
 // "cola" na raiz do fork; ele importa aquele, nunca o contrario.

@@ -43,7 +43,7 @@
 # linha 13 ("nao depende de locale") está incorreta na prática. Rode com
 # LC_NUMERIC=C LC_ALL=C make coverage-gate para medir corretamente. Reportado
 # separadamente, não corrigido aqui (fora do escopo deste plano).
-# vendor-wa-noise-native-fork (2026-08-06): 822->819. `make coverage-gate`
+# vendor-noise-native-fork (2026-08-06): 822->819. `make coverage-gate`
 # nesta branch (feature/vendor-wa-noise, baseada em 31287b9) mediu 81.9%
 # (819), abaixo do piso declarado (822) — investigado com um worktree
 # temporário no PRÓPRIO commit 31287b9 (`git worktree add /tmp/... 31287b9`)
@@ -55,13 +55,13 @@
 # import path em 45 arquivos + go.mod, sem lógica nova) é comprovadamente
 # neutro em cobertura (819 -> 819, verificado contra o commit-pai). Ajustado
 # para o número honesto e reprodutível.
-# wa-noise-clean-arch-walog-bridge (2026-08-06): 819->829. Ratchet-UP, medido
+# noise-clean-arch-walog-bridge (2026-08-06): 819->829. Ratchet-UP, medido
 # com LC_NUMERIC=C LC_ALL=C make coverage-gate (o bug de locale acima continua
 # valendo). O ganho de +10 decimos vem de tres frentes do plano
-# .omc/plans/wa-noise-clean-arch-walog-bridge.md: (1) testes novos para
+# .omc/plans/noise-clean-arch-walog-bridge.md: (1) testes novos para
 # ClientManager.ProvisionWebhookClient e para o fan-out WS (AddWSConn /
 # RemoveWSConn / BroadcastToUser), que nao tinham teste nenhum antes do split
-# de client_manager.go; (2) o pacote novo pkg/infra/wa-noise/walog, que nasce
+# de client_manager.go; (2) o pacote novo pkg/infra/noise/walog, que nasce
 # com bridge.go e level.go integralmente cobertos; (3) os testes de apperr dos
 # cinco sites de UserAdapter e o teste de integracao do seam em
 # pkg/bootstrap/walog_seam_test.go. Nenhum arquivo de producao perdeu
@@ -136,7 +136,7 @@
 # (840->839), so' pela aritmetica do denominador — nenhuma linha JA'
 # coberta regrediu. As duas funcoes novas do adapter
 # (ChatMessengerAdapter.SendLocation/SendContact,
-# pkg/infra/wa-noise/adapters/chat/messenger.go) tem suite dedicada
+# pkg/infra/noise/adapters/chat/messenger.go) tem suite dedicada
 # mirrando TestChatMessengerAdapter_SendVideo_* (NoSession, InvalidJID,
 # PropagatesError, OK com asserção de estrutura, WithCallerID) e ficam em
 # 92.9% (13/14 statements) — a UNICA linha descoberta em cada uma e' o
@@ -146,7 +146,7 @@
 # 94.1%, SendAudio 94.4%): `TestChatAdapter_InvalidJIDs` e os oito testes
 # `*_InvalidJID` irmaos usam t.Skip quando wajid.ParseJID nao falha para o
 # byte-sequence usado como JID invalido — confirmado rodando
-# `go test ./pkg/infra/wa-noise/adapters/chat/... -run InvalidJID -v`: as
+# `go test ./pkg/infra/noise/adapters/chat/... -run InvalidJID -v`: as
 # dez execucoes (a tabela generica + nove metodos, contando as duas novas)
 # pulam com "wajid.ParseJID não falhou; caminho de erro raro". send_location.go
 # e send_contact.go (camada de aplicacao) nascem cobertos pelo teste de
@@ -242,7 +242,7 @@
 # queda nao estava na newsletter e sim em label_repository, testkit e
 # user_republish. Fechadas as lacunas desses tres, o gate pediu a catraca.
 min_coverage=870
-# F14 (wa-noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
+# F14 (noise) — coberto 92.3% das 549 stmts do pacote (alvo 93%);
 # o repo sobe de 75.2% para 81.4%. O delta de +485 stmts coberto é
 # principalmente nas famílias de adapters (presence, chat, group,
 # user, misc) e no logger.from(ctx).

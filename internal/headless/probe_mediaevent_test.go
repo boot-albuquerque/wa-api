@@ -87,7 +87,7 @@ func TestProbeMediaUploadedEvent(t *testing.T) {
 	}
 	res, err := send.SendMedia(ctx, runner, eval, peer, send.Media{
 		Filename: "probe.png", MimeType: "image/png", Data: png,
-		Caption: fmt.Sprintf("wa-headless media event probe %d", time.Now().Unix()),
+		Caption: fmt.Sprintf("headless media event probe %d", time.Now().Unix()),
 	}, "probe/mediaev")
 	if err != nil {
 		t.Fatalf("SendMedia: %v", err)

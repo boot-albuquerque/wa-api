@@ -11,7 +11,7 @@ import (
 )
 
 // mediaTransport adapta *Client a media.Transport. Existe para que o pacote
-// internal/wa-noise/media possa operar sobre uma interface estreita sem
+// internal/noise/media possa operar sobre uma interface estreita sem
 // importar o pacote raiz (o que fecharia um ciclo) e sem que *Client precise
 // ganhar metodos exportados novos so' para satisfazer a interface.
 //

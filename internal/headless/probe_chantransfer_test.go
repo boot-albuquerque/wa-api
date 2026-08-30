@@ -51,7 +51,7 @@ func TestProbeChannelTransferOwnership(t *testing.T) {
 
 	mA := channel.NewManager(d.RunnerA, evalA)
 	mB := channel.NewManager(d.RunnerB, evalB)
-	made, err := mA.Create(ctx, "wa-headless transfer "+strconv.FormatInt(time.Now().Unix(), 10),
+	made, err := mA.Create(ctx, "headless transfer "+strconv.FormatInt(time.Now().Unix(), 10),
 		"", "probe/chanxfer")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -133,7 +133,7 @@ func TestProbeChannelTransferOwnership(t *testing.T) {
 			const r = await window.require("WAWebNewsletterSendMsgAction")
 				.sendNewsletterAdminInviteMessage(chat, {
 					newsletterWid: W.createWid(` + strconv.Quote(made.JID) + `),
-					invitee: userWid, inviteMessage: "wa-headless transfer probe", base64Thumb: null,
+					invitee: userWid, inviteMessage: "headless transfer probe", base64Thumb: null,
 				});
 			window.__x1 = JSON.stringify({ok:true, result:(r && r.messageSendResult) || String(r)});
 		} catch (e) { window.__x1 = JSON.stringify({ok:false, why: safe(e)}); }

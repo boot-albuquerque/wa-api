@@ -24,7 +24,7 @@ import (
 // e o DESCARTE SILENCIOSO do tipo desconhecido — é regra de contrato
 // público, não detalhe de wire. Qual `Name` e quais parâmetros cada tipo
 // vira está medido no adapter
-// (pkg/infra/wa-noise/adapters/chat/messenger_buttons_test.go).
+// (pkg/infra/noise/adapters/chat/messenger_buttons_test.go).
 
 const buttonsPhone = "5511987654321"
 
@@ -40,7 +40,7 @@ func buttonsInput() []domain.InteractiveButton {
 }
 
 // buttonsJIDResolver é o dublê de port.JIDResolver que imita a regra REAL de
-// pkg/infra/wa-noise/mapping/jid/parse.go:12 — número sem "@" recebe o
+// pkg/infra/noise/mapping/jid/parse.go:12 — número sem "@" recebe o
 // servidor padrão; com "@", passa intacto. O dublê padrão de contractsfake
 // devolve `raw` sem tocar, o que é MAIS PERMISSIVO que a produção e
 // esconderia exatamente o defeito de destinatário que este teste existe para

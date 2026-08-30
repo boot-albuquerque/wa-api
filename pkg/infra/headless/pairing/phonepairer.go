@@ -13,8 +13,8 @@ import (
 const phonePairLabel = "adapter/phonepair"
 
 // codePairingFailedCode is the SAME apperr code
-// pkg/infra/wa-noise/adapters/pairing/adapter.go uses for the identical
-// condition — a pairing-code request WhatsApp itself refused. wa_noise's
+// pkg/infra/noise/adapters/pairing/adapter.go uses for the identical
+// condition — a pairing-code request WhatsApp itself refused. noise's
 // own comment there documents this as deliberate contract fidelity (F152):
 // GET /session/pairphone answers 400 for every pairing failure, whether the
 // cause is a malformed phone number or the server's own refusal. Verified
@@ -25,9 +25,9 @@ const phonePairLabel = "adapter/phonepair"
 const codePairingFailedCode = "pair_phone_failed"
 
 // PhonePairer implements appport.PhonePairer over a headless session — the
-// wa_headless side of the same contract
-// pkg/infra/wa-noise/adapters/pairing.PhonePairerAdapter already serves for
-// wa_noise. See internal/wa-headless/capabilities/phonepair's own doc
+// headless side of the same contract
+// pkg/infra/noise/adapters/pairing.PhonePairerAdapter already serves for
+// noise. See internal/headless/capabilities/phonepair's own doc
 // comment for where the call sequence comes from and what was measured
 // (HOUSEKEEP F380).
 type PhonePairer struct {
@@ -76,7 +76,7 @@ func (p *PhonePairer) IsPaired(ctx context.Context, txtID string) (bool, error) 
 }
 
 // RequestPairingCode asks the page for a linking code for phone. See
-// internal/wa-headless/capabilities/phonepair.Reader.Request for the
+// internal/headless/capabilities/phonepair.Reader.Request for the
 // measured call sequence and error shape.
 func (p *PhonePairer) RequestPairingCode(ctx context.Context, txtID, phone string) (string, error) {
 	eval, err := p.sessions.EvaluatorForPairing(ctx, txtID)

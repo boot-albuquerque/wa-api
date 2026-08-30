@@ -100,7 +100,7 @@ type ContactRoster interface {
 	// em que foram pedidos.
 	//
 	// Era `any` até a migração da família de utilizadores, e isso significava
-	// que o MOTOR decidia a forma do JSON: o adaptador wa-noise devolvia o
+	// que o MOTOR decidia a forma do JSON: o adaptador noise devolvia o
 	// map[types.JID]types.UserInfo do SDK e o headless um
 	// map[JID]ContactName — dois corpos diferentes para a mesma rota, nenhum
 	// deles declarado em lado nenhum.
@@ -118,7 +118,7 @@ type ContactDirectory interface {
 // ChatActivityReader expõe o histórico de atividade por chat já persistido
 // localmente (message_history) — em particular o backfill automático do
 // HistorySync pós-pareamento. Não estende SessionGuard: é leitura de banco
-// local, não chamada ao wa-noise, então não exige sessão wa-noise ativa
+// local, não chamada ao noise, então não exige sessão noise ativa
 // (funciona mesmo com a sessão em standby).
 type ChatActivityReader interface {
 	// GetLastActivityByUser devolve, por JID de chat (string bruta — pode

@@ -1,21 +1,21 @@
-// Package accounttype adapts appport.AccountTypeDetector to a wa-headless
-// session, using the signal in internal/wa-headless/capabilities/accounttype:
+// Package accounttype adapts appport.AccountTypeDetector to a headless
+// session, using the signal in internal/headless/capabilities/accounttype:
 // WAWebConnModel's Conn.canSetMyPushname(), which is !getIsSMB(this) and was
 // measured live on the lab account (HOUSEKEEP.md).
 //
 // # THE REVALIDATE-ON-CONNECT HOOK (item 34) IS DOCUMENTED, NOT WIRED, HERE
 //
-// pkg/bootstrap/eventhandler_session.go wires this same idea for wa-noise
+// pkg/bootstrap/eventhandler_session.go wires this same idea for noise
 // inside handleConnected, because that transport dispatches a typed
-// events.Connected the moment a session (re)establishes. wa-headless has no
-// equivalent lifecycle event today — pkg/infra/wa-headless/sessions.go's
+// events.Connected the moment a session (re)establishes. headless has no
+// equivalent lifecycle event today — pkg/infra/headless/sessions.go's
 // Sessions type is asked for an Evaluator on demand per capability call, and
 // nothing in this worktree's scope owns "a headless session just became
 // live". Wiring a call to Detect from here would be guessing at a call site
 // this worktree did not measure.
 //
 // The gancho is this: whichever code ends up owning that lifecycle moment
-// for wa-headless (most likely wherever pkg/infra/wa-headless/sessions.go's
+// for headless (most likely wherever pkg/infra/headless/sessions.go's
 // boot path first confirms the SPA reached a paired state) should call
 // Detect(ctx, txtID) right there and persist the result with
 // pkg/infra/db.SetUserAccountType, mirroring handleConnected's fire-and-forget

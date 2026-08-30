@@ -1,6 +1,6 @@
-# Arquitetura de `internal/wa-noise/`
+# Arquitetura de `internal/noise/`
 
-`internal/wa-noise/` é o fork ativo do `wa-api/internal/wa-noise` (ADR-0002/0003/0004).
+`internal/noise/` é o fork ativo do `wa-api/internal/noise` (ADR-0002/0003/0004).
 Este documento explica **por que** a árvore tem a forma que tem, depois da
 reorganização da Fase H (7 etapas, sobre as 10 da Fase F/G).
 
@@ -47,8 +47,8 @@ Cada diretório de topo tem **uma** pergunta. Se a resposta é sim, é ali. Se d
 perguntas dão sim, você provavelmente tem dois arquivos, não um.
 
 ```
-internal/wa-noise/
-├── main.go            fachada (package wa-noise) — a única porta de entrada
+internal/noise/
+├── main.go            fachada (package noise) — a única porta de entrada
 ├── core/              Client, ciclo de conexão, socketLock, composition root
 ├── capabilities/      12 capacidades do protocolo
 ├── protocol/          binary, proto, types, argo, socket, msgpad, msgattrs, appstate
@@ -169,7 +169,7 @@ estreita com exatamente os métodos do cliente de que ela precisa. `core.Client`
 implementa todas, por adaptadores, com asserção em tempo de compilação.
 
 As interfaces concretas hoje
-(`grep -rn "type Transport interface" internal/wa-noise/capabilities/*/`):
+(`grep -rn "type Transport interface" internal/noise/capabilities/*/`):
 
 | Interface | Arquivo | Métodos |
 |---|---|---|
@@ -208,7 +208,7 @@ core/keepalive.go:44                var _ keepalive.Transport    = keepAliveTran
 **Por que este padrão e não uma interface compartilhada:** o doc comment de
 `capabilities/notification/transport.go` diz a razão real, e ela é sobre testes:
 
-> Deliberadamente não expõe nada do `*wa-noise.Client` além disso: é o que
+> Deliberadamente não expõe nada do `*noise.Client` além disso: é o que
 > permite que este pacote não importe o pacote raiz e que os testes usem um
 > dublê em vez de um cliente com socket e sessão Noise.
 
@@ -229,10 +229,10 @@ O diagrama abaixo é **verificado**, não aspiracional. As arestas foram
 conferidas por `grep` no HEAD; os comandos estão em `DEPENDENCIES.md` §5.
 
 ```
-   consumidores externos (pkg/bootstrap, pkg/infra/wa-noise/*, pkg/infra/{history,media})
+   consumidores externos (pkg/bootstrap, pkg/infra/noise/*, pkg/infra/{history,media})
                               │  importam SÓ isto
                               ▼
-                    internal/wa-noise  —  main.go, package wa-noise (fachada)
+                    internal/noise  —  main.go, package noise (fachada)
                               │  type Client = core.Client  (alias de tipo)
                               ▼
                             core/
@@ -289,7 +289,7 @@ Detalhes e os comandos de reverificação em `DEPENDENCIES.md`.
 
 ## 5. A fachada raiz
 
-`main.go` (`package wa-noise`) é a **única** porta de entrada do fork. Ela é
+`main.go` (`package noise`) é a **única** porta de entrada do fork. Ela é
 fina de propósito e **não** reexporta os ~732 símbolos de topo um a um:
 
 ```go

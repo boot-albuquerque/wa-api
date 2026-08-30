@@ -18,14 +18,14 @@ import (
 // Every registry built here uses capabilityregistry.NewCapabilityRegistry() —
 // the production matrix, not a permissive stand-in. It is the single most
 // important property of this harness: a fake matrix that answered "supported"
-// for everything would bless a wa_headless pairing path that does not exist,
+// for everything would bless a headless pairing path that does not exist,
 // and the test asserting 422 would be asserting the fake. ARMADILHAS.md #1.
 //
-// The consequence is that the wa_headless expectations in these tests are
+// The consequence is that the headless expectations in these tests are
 // MEASUREMENTS of the real matrix. Since 2026-08-29 (HOUSEKEEP H145) that
 // matrix marks get_pairing_qr and connect_session as Supported for
-// wa_headless — pkg/infra/wa-headless/pairing.QRReader/Starter exist and are
-// wired in production — so requests naming wa_headless for those two now
+// headless — pkg/infra/headless/pairing.QRReader/Starter exist and are
+// wired in production — so requests naming headless for those two now
 // reach the headless spy instead of being refused. request_pairing_code
 // remains unknown; a phone-pairing test still expects 422.
 
@@ -156,9 +156,9 @@ type pairingHarness struct {
 
 // newPairingHarness wires the registry the handlers will use.
 //
-// Both engines get a FULLY WIRED spy provider, including wa_headless — which
+// Both engines get a FULLY WIRED spy provider, including headless — which
 // this build has no real adapter for. That is deliberate and is the sharper
-// version of the test: if wa_headless is refused, it must be refused by the
+// version of the test: if headless is refused, it must be refused by the
 // capability matrix and not by the accident of an unwired port. A harness that
 // left the headless ports nil would pass the same assertions for the wrong
 // reason (engine_unavailable instead of capability_not_supported), and would
@@ -168,10 +168,10 @@ func newPairingHarness(t *testing.T, rows ...sessionRow) *pairingHarness {
 
 	// Os dois spies devolvem FORMAS DIFERENTES de propósito, porque os dois
 	// adapters reais devolvem formas diferentes — e foi ignorar isso que
-	// custou a F373. wa_noise lê users.qrcode, onde o orquestrador já gravou
+	// custou a F373. noise lê users.qrcode, onde o orquestrador já gravou
 	// o PNG codificado (pkg/application/session/orchestrator.go, onPairingQR:
-	// "A coluna guarda a IMAGEM"); wa_headless lê a string crua da página
-	// (pkg/infra/wa-headless/pairing/qr.go). Um dublê que devolvesse a mesma
+	// "A coluna guarda a IMAGEM"); headless lê a string crua da página
+	// (pkg/infra/headless/pairing/qr.go). Um dublê que devolvesse a mesma
 	// forma pelos dois nunca exercitaria a normalização que existe justamente
 	// porque elas divergem.
 	noise := &pairingSpy{engine: domain.EngineNoise, qr: qrImageOf(t, qrCodeNoise), code: "NOISE-CODE"}
@@ -185,29 +185,29 @@ func newPairingHarness(t *testing.T, rows ...sessionRow) *pairingHarness {
 	}
 }
 
-// assertOnlyNoiseCalled fails unless the wa-noise spy was touched and the
-// wa-headless one was not.
+// assertOnlyNoiseCalled fails unless the noise spy was touched and the
+// headless one was not.
 func (h *pairingHarness) assertOnlyNoiseCalled(t *testing.T) {
 	t.Helper()
 	if h.noise.calls == 0 {
-		t.Errorf("wa_noise provider calls = 0, want >0 — the request named wa_noise and nothing served it")
+		t.Errorf("noise provider calls = 0, want >0 — the request named noise and nothing served it")
 	}
 	if h.headless.calls != 0 {
-		t.Errorf("wa_headless provider calls = %d, want 0 — a wa_noise request reached the other engine (cross-engine fallback is forbidden)", h.headless.calls)
+		t.Errorf("headless provider calls = %d, want 0 — a noise request reached the other engine (cross-engine fallback is forbidden)", h.headless.calls)
 	}
 }
 
-// assertOnlyHeadlessCalled fails unless the wa-headless spy was touched and
-// the wa-noise one was not — the mirror of assertOnlyNoiseCalled, added
+// assertOnlyHeadlessCalled fails unless the headless spy was touched and
+// the noise one was not — the mirror of assertOnlyNoiseCalled, added
 // 2026-08-29 (HOUSEKEEP H145) once get_pairing_qr/connect_session became
-// reachable for wa_headless.
+// reachable for headless.
 func (h *pairingHarness) assertOnlyHeadlessCalled(t *testing.T) {
 	t.Helper()
 	if h.headless.calls == 0 {
-		t.Errorf("wa_headless provider calls = 0, want >0 — the request named wa_headless and nothing served it")
+		t.Errorf("headless provider calls = 0, want >0 — the request named headless and nothing served it")
 	}
 	if h.noise.calls != 0 {
-		t.Errorf("wa_noise provider calls = %d, want 0 — a wa_headless request reached the other engine (cross-engine fallback is forbidden)", h.noise.calls)
+		t.Errorf("noise provider calls = %d, want 0 — a headless request reached the other engine (cross-engine fallback is forbidden)", h.noise.calls)
 	}
 }
 
@@ -217,7 +217,7 @@ func (h *pairingHarness) assertOnlyHeadlessCalled(t *testing.T) {
 func (h *pairingHarness) assertNoProviderCalled(t *testing.T) {
 	t.Helper()
 	if h.noise.calls != 0 || h.headless.calls != 0 {
-		t.Errorf("provider calls: wa_noise=%d wa_headless=%d, want 0/0 — the request was refused AFTER touching a provider",
+		t.Errorf("provider calls: noise=%d headless=%d, want 0/0 — the request was refused AFTER touching a provider",
 			h.noise.calls, h.headless.calls)
 	}
 }

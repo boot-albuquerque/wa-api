@@ -194,7 +194,7 @@ func (s *spyPort) SendList(context.Context, string, domain.JID, domain.ListPaylo
 // FetchLinkPreview implementa port.LinkPreviewFetcher. Não conta como
 // "toque" em s.calls: é uma porta de resolução de metadata, não de ação
 // sobre a sessão — os testes de fronteira medem se o handler AGIU no
-// wa-noise, e uma consulta de preview isolada não é essa ação.
+// noise, e uma consulta de preview isolada não é essa ação.
 func (s *spyPort) FetchLinkPreview(context.Context, string) (domain.LinkPreviewData, bool) {
 	return domain.LinkPreviewData{}, false
 }
@@ -731,7 +731,7 @@ func TestSessionUser_AndInlineGuard_AgreeOnEveryInput(t *testing.T) {
 // TestHandlers_AppErrFromPortReachesTheClient trava o CONSERTO do defeito que
 // a versao anterior deste teste documentava.
 //
-// pkg/infra/wa-noise.ErrNoSession produz um *apperr.AppError com
+// pkg/infra/noise.ErrNoSession produz um *apperr.AppError com
 // Code="no_session" e Category=validation (=> 400). Ate' a F11, todos os use
 // cases de session/ traduziam esse erro com fmt.Errorf("no session") SEM %w:
 // o wrap se perdia, RespondJSON nao conseguia errors.As, e o cliente recebia

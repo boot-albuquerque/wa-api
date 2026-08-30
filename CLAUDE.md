@@ -11,7 +11,7 @@ São **dois** arquivos, e a escolha entre eles não é organizacional:
 
 - **`HOUSEKEEP.md`** (raiz) — o wa-api como um todo: `pkg/`, build, gates,
   configuração, rotas HTTP. É código nosso, e só nós corrigimos.
-- **`internal/wa-noise/HOUSEKEEP.md`** — a biblioteca vendorizada. Acompanha
+- **`internal/noise/HOUSEKEEP.md`** — a biblioteca vendorizada. Acompanha
   o upstream, e um achado ali é candidato a virar patch ou a sumir num
   rebase.
 
@@ -42,7 +42,7 @@ se quer que a correção seja feita agora ou fique pendente.
 Platform (Cloud API), com URLs.
 
 **Leia-o antes de comparar as duas.** Este projecto fala o protocolo do
-WhatsApp Web pelo fork em `internal/wa-noise`; a Cloud API é HTTP sobre o Graph
+WhatsApp Web pelo fork em `internal/noise`; a Cloud API é HTTP sobre o Graph
 API, com conta registada, templates obrigatórios fora das 24 horas e custo por
 conversa. A diferença mais visível: a Cloud API envia tudo por **um** endpoint
 com o tipo no corpo; aqui o tipo está no caminho, em 16 rotas.
@@ -57,8 +57,8 @@ encomendas, Flows — caem exactamente onde a Cloud API é forte, e as ~60 só
 nossas caem onde ela não chega. **As duas superfícies são quase
 complementares.**
 
-O ficheiro tem também a **matriz de capacidades por motor** (`wa-noise`,
-`wa-headless`, `meta_cloud`) e a lição que ela dá: a linha divisória tem nome.
+O ficheiro tem também a **matriz de capacidades por motor** (`noise`,
+`headless`, `meta_cloud`) e a lição que ela dá: a linha divisória tem nome.
 O que depende do **Commerce Manager e do painel da Meta** — catálogo,
 produtos, encomendas, Flows, templates aprovados — é deles. O que depende do
 **protocolo social** — grupos, comunidades, canais, status, enquetes — é

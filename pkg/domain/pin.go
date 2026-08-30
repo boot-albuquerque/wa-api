@@ -7,7 +7,7 @@ package domain
 // sent as a message with its own ID) and is deliberately NOT exposed here.
 //
 // Observable side effect we inherit and do not control: archiving a chat also
-// UNPINS it. See internal/wa-noise/protocol/appstate/patch_builders_chat.go,
+// UNPINS it. See internal/noise/protocol/appstate/patch_builders_chat.go,
 // the BuildArchive doc comment: "Archiving a chat will also unpin it
 // automatically." A caller that pins and then archives ends with an unpinned
 // chat, and nothing in this API reports that.

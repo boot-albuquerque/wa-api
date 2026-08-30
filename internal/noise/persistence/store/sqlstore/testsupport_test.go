@@ -22,7 +22,7 @@ import (
 // ON CONFLICT, os CHECK() de tamanho e os JOINs de LID <-> PN fazem o que a
 // assinatura Go promete.
 
-const testDBFileName = "wa-noise-store-test.db"
+const testDBFileName = "noise-store-test.db"
 
 // newTestContainer abre um Container SQLite novo e ja' migrado.
 func newTestContainer(t *testing.T) *Container {
@@ -43,7 +43,7 @@ func newTestContainer(t *testing.T) *Container {
 
 // newTestDevice cria e persiste um device, devolvendo o container e o SQLStore
 // ja' ligado a ele. Persistir e' obrigatorio: quase toda tabela tem FK para
-// wa-noise_device(jid).
+// wanoise_device(jid).
 func newTestDevice(t *testing.T) (*Container, *store.Device, *SQLStore) {
 	t.Helper()
 	container := newTestContainer(t)

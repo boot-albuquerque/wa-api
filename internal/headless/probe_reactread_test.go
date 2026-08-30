@@ -54,7 +54,7 @@ func TestProbeReactionRead(t *testing.T) {
 	}
 	eval := sess.Tab().Evaluate
 
-	sent, err := send.Text(ctx, runner, eval, peer, "wa-headless reaction probe", "probe/reactread")
+	sent, err := send.Text(ctx, runner, eval, peer, "headless reaction probe", "probe/reactread")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

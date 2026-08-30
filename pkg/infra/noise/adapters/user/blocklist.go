@@ -56,7 +56,7 @@ func (a *UserAdapter) UpdateBlocklist(ctx context.Context, txtID string, target 
 	}
 
 	// LIB-02: block exige também `pn_jid` no stanza (ver UpdateBlocklist em
-	// internal/wa-noise). Zero-valor quando não há PN a oferecer — a
+	// internal/noise). Zero-valor quando não há PN a oferecer — a
 	// biblioteca omite o atributo nesse caso, nunca pior que antes desta
 	// correção. unblock não usa pnJID; resolveBlocklistPN só é chamado
 	// quando block é o pedido, para não gastar um info query à toa.

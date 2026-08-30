@@ -3,7 +3,7 @@ package core
 import "wa-api/internal/noise/capabilities/retry"
 
 // Apelidos das constantes de politica de retry, que moraram aqui ate' a Fase
-// F/G lote 5 e hoje vivem em internal/wa-noise/retry.
+// F/G lote 5 e hoje vivem em internal/noise/retry.
 //
 // Continuam existindo na raiz porque o dominio de retry NAO e' o unico a
 // cita-las: maxOutgoingRetryReceipts e' lida por message_decrypt.go ao decidir

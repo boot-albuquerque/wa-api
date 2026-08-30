@@ -168,11 +168,11 @@ func initCustomHandlers(s *server) {
 	logger := applog.NewZerologAdapter(log.Logger)
 
 	// headlessSessionController is nil when this process has no Chrome
-	// configured for wa_headless (s.Headless is the zero HeadlessConfig in
+	// configured for headless (s.Headless is the zero HeadlessConfig in
 	// that case — see engine_headless.go's headlessConfigConfigurada doc on
 	// why that is silent, not fatal, at startup). sessionEngineGuard treats a
 	// nil controller as "engine not available in this process", which is the
-	// honest answer for a wa_headless session on a process nobody configured
+	// honest answer for a headless session on a process nobody configured
 	// Chrome for.
 	// headlessSessions is nil under the same condition, and for the same
 	// reason, as headlessDisconnector below — kept as its own variable
@@ -185,7 +185,7 @@ func initCustomHandlers(s *server) {
 	// Disconnector implements the full appport.SessionController since
 	// F381 (Socket.logout MEASURED, reopening H122). Kept as two variables,
 	// not one appport.SessionController, because sessionEngineGuard's
-	// constructor takes the two ports separately (mirrors how wa_noise's
+	// constructor takes the two ports separately (mirrors how noise's
 	// own single adapter is passed to both parameters too).
 	var headlessLogouter appport.SessionLogouter
 	if s.Headless.ChromePath != "" {

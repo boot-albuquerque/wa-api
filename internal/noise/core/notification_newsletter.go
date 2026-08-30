@@ -9,7 +9,7 @@ import (
 )
 
 // Fachadas do dominio de notificacao de newsletter. A logica vive em
-// internal/wa-noise/notification (Fase F/G, lote 5); aqui ficam so' as
+// internal/noise/notification (Fase F/G, lote 5); aqui ficam so' as
 // delegacoes que preservam as assinaturas usadas por handleNotification, por
 // newsletter_transport.go e por DangerousInternalClient.
 

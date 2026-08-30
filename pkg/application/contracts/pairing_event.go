@@ -6,7 +6,7 @@ import "time"
 // canal de eventos que client.GetQRChannel devolve, com seus três casos
 // observados (evt.Event == "code" | "timeout" | "success"). É a porta pela
 // qual Session.Pair (Fase 2, session_provider.go) expõe esse fluxo sem
-// vazar o tipo wa-noise.QRChannelItem.
+// vazar o tipo noise.QRChannelItem.
 //
 // Mesma escolha de design de SessionEvent: struct única com Kind + campos
 // diretos em vez de uma variante por tipo, porque os três casos aqui não têm

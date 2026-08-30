@@ -9,7 +9,7 @@ import (
 
 // Metodos finos que mantem a superficie interna historica de *Client viva para
 // DangerousInternalClient (internals.go, gerado). A implementacao esta' em
-// internal/wa-noise/media/download_transport.go.
+// internal/noise/media/download_transport.go.
 
 func (cli *Client) downloadAndDecrypt(
 	ctx context.Context,

@@ -88,7 +88,7 @@ func TestProbeUnpinAcrossSessions(t *testing.T) {
 	}
 	t.Logf("BEFORE (conta-B): %d pinned", len(before))
 
-	sent, err := send.Text(ctx, d.RunnerA, evalA, gjid, "wa-headless unpin probe", "probe/unpin/send")
+	sent, err := send.Text(ctx, d.RunnerA, evalA, gjid, "headless unpin probe", "probe/unpin/send")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

@@ -6,7 +6,7 @@
 //	protocol/ security/ persistence/ runtime/ observability/
 //
 // Este arquivo e' a fachada dessa arvore: e' o unico caminho de import que
-// consumidores fora do fork (pkg/bootstrap/, pkg/infra/wa-noise/*,
+// consumidores fora do fork (pkg/bootstrap/, pkg/infra/noise/*,
 // pkg/infra/{history,media}/) devem usar. Nenhum deles importa `core/`
 // diretamente — `core/` e' detalhe de implementacao, e a direcao de dependencia
 // declarada no inventario da Fase H
@@ -85,7 +85,7 @@ const (
 //
 // Reexportados no levantamento de paridade de 2026-08-20, quando as onze
 // capacidades de newsletter entraram na fachada estreita: o consumidor
-// (pkg/infra/wa-noise/adapters/misc) precisa de NOMEAR estes tipos para montar
+// (pkg/infra/noise/adapters/misc) precisa de NOMEAR estes tipos para montar
 // os parametros, e o gate waclient-facade proibe-o de importar core direto.
 type (
 	CreateNewsletterParams      = core.CreateNewsletterParams
@@ -102,7 +102,7 @@ type (
 	GetProfilePictureParams = core.GetProfilePictureParams
 	DownloadableMessage     = core.DownloadableMessage
 
-	// MediaType e UploadResponse expostos para CAP-02 (pkg/infra/wa-noise/
+	// MediaType e UploadResponse expostos para CAP-02 (pkg/infra/noise/
 	// adapters/chat): consumidor precisa nomear o tipo de midia ao chamar
 	// Client.Upload (alias de metodo, ja' presente via Client = core.Client)
 	// e ler os campos de UploadResponse para montar a mensagem protobuf.

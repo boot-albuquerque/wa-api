@@ -139,7 +139,7 @@ func disconnectedSession() *contractsfake.SessionStatusReader {
 }
 
 // connectedSession imita a regra REAL do adapter de produção
-// (pkg/infra/wa-noise/runtime/session/guard.go:72): SessionStatus devolve
+// (pkg/infra/noise/runtime/session/guard.go:72): SessionStatus devolve
 // `client.IsConnected()`, e é esse primeiro valor — e não o segundo, que é
 // IsLoggedIn — que a guarda histórica consultava
 // (`41bc8e2^:handlers.go:6099`). Um dublê que devolvesse "conectado" no

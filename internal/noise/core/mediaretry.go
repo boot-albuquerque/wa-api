@@ -12,7 +12,7 @@ import (
 )
 
 // A cripto do retry de midia (derivacao da chave, cifragem e decifragem do
-// receipt) vive em internal/wa-noise/media/retry.go. O que ficou aqui e' o que
+// receipt) vive em internal/noise/media/retry.go. O que ficou aqui e' o que
 // depende do pacote raiz: o envio do stanza (sendNode/getOwnID) e a leitura do
 // <notification> (que usa ElementMissingError e o dispatch de eventos).
 
@@ -26,7 +26,7 @@ import (
 //	evt, err := cli.ParseWebMessage(chatJID, historyMsg.GetMessage())
 //	imageMsg := evt.Message.GetImageMessage() // replace this with the part of the message you want to download
 //	data, err := cli.Download(imageMsg)
-//	if errors.Is(err, wa-noise.ErrMediaDownloadFailedWith404) || errors.Is(err, wa-noise.ErrMediaDownloadFailedWith410) {
+//	if errors.Is(err, noise.ErrMediaDownloadFailedWith404) || errors.Is(err, noise.ErrMediaDownloadFailedWith410) {
 //	  err = cli.SendMediaRetryReceipt(&evt.Info, imageMsg.GetMediaKey())
 //	  // You need to store the event data somewhere as it's necessary for handling the retry response.
 //	  mediaRetryCache[evt.Info.ID] = imageMsg
@@ -40,7 +40,7 @@ import (
 //	  switch evt := rawEvt.(type) {
 //	  case *events.MediaRetry:
 //	    imageMsg := mediaRetryCache[evt.MessageID]
-//	    retryData, err := wa-noise.DecryptMediaRetryNotification(evt, imageMsg.GetMediaKey())
+//	    retryData, err := noise.DecryptMediaRetryNotification(evt, imageMsg.GetMediaKey())
 //	    if err != nil || retryData.GetResult != waMmsRetry.MediaRetryNotification_SUCCESS {
 //	      return
 //	    }

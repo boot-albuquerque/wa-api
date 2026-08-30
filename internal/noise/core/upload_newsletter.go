@@ -7,7 +7,7 @@ import (
 	"wa-api/internal/noise/capabilities/media"
 )
 
-// A implementacao vive em internal/wa-noise/media/upload_newsletter.go
+// A implementacao vive em internal/noise/media/upload_newsletter.go
 // (ADR-0004, Fase F/G lote 1).
 
 // UploadNewsletter uploads the given attachment to WhatsApp servers without encrypting it first.
@@ -18,7 +18,7 @@ import (
 //
 // Example:
 //
-//	resp, err := cli.UploadNewsletter(context.Background(), yourImageBytes, wa-noise.MediaImage)
+//	resp, err := cli.UploadNewsletter(context.Background(), yourImageBytes, noise.MediaImage)
 //	// handle error
 //
 //	imageMsg := &waE2E.ImageMessage{
@@ -35,7 +35,7 @@ import (
 //	}
 //	_, err = cli.SendMessage(context.Background(), newsletterJID, &waE2E.Message{
 //		ImageMessage: imageMsg,
-//	}, wa-noise.SendRequestExtra{
+//	}, noise.SendRequestExtra{
 //		// Unlike normal media, newsletters also include a "media handle" in the send request.
 //		MediaHandle: resp.Handle,
 //	})

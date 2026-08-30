@@ -47,7 +47,7 @@ func TestProbeSeenWithStreamAvailable(t *testing.T) {
 	defer done()
 	evalA, evalB := d.A.Tab().Evaluate, d.B.Tab().Evaluate
 
-	sent, err := send.Text(ctx, d.RunnerB, evalB, selfA, "wa-headless seen-stream probe", "probe/seenstream")
+	sent, err := send.Text(ctx, d.RunnerB, evalB, selfA, "headless seen-stream probe", "probe/seenstream")
 	if err != nil {
 		t.Fatalf("B->A: %v", err)
 	}

@@ -56,7 +56,7 @@ func TestProbeChatRemovedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving the peer: %v", err)
 	}
-	subject := "wa-headless chatremoved probe " + strconv.FormatInt(time.Now().Unix(), 10)
+	subject := "headless chatremoved probe " + strconv.FormatInt(time.Now().Unix(), 10)
 	created, err := g.Ensure(ctx, subject, []string{ident.JID}, "probe/chatremoved/create")
 	if err != nil {
 		t.Fatalf("creating the throwaway group: %v", err)

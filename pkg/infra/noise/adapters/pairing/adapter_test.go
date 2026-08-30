@@ -20,7 +20,7 @@ const txtID = "user-1"
 const internationalPhone = "5541992400000"
 
 // wireCode e' o formato de codigo que
-// internal/wa-noise/capabilities/pairing/paircode.go:100 monta: 8 caracteres
+// internal/noise/capabilities/pairing/paircode.go:100 monta: 8 caracteres
 // base32 em dois grupos de 4.
 const wireCode = "WXYZ-2468"
 
@@ -73,7 +73,7 @@ func TestRequestPairingCode_ReturnsCode(t *testing.T) {
 // TestRequestPairingCode_RealPhoneRule: o dublê aplica a regra REAL de
 // validacao de telefone (ARMADILHA 1 — dublê mais permissivo que a producao
 // esconde o defeito). Os valores vem de
-// internal/wa-noise/capabilities/pairing/paircode_test.go:89-91, o teste do
+// internal/noise/capabilities/pairing/paircode_test.go:89-91, o teste do
 // proprio fork.
 func TestRequestPairingCode_RealPhoneRule(t *testing.T) {
 	cases := map[string]struct {

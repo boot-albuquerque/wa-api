@@ -406,7 +406,7 @@ func waitForAck(ctx context.Context, runner *engine.Runner, eval spa.Evaluator,
 // the double answered the ack payload to a dispatch and swallowed it, and an
 // assertion about the dispatch failed for a reason unrelated to the code under
 // test. A script that needs to be recognised should say its own name.
-const ackReadMarker = "wa-headless/ack-read"
+const ackReadMarker = "headless/ack-read"
 
 func ackScript(id string) string {
 	return `JSON.stringify((() => {

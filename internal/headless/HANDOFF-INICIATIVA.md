@@ -1,4 +1,4 @@
-# Handoff — iniciativa `wa-headless`
+# Handoff — iniciativa `headless`
 
 **Data:** 2026-08-10 · **Fase:** saindo de DECISÃO, entrando em EXECUÇÃO
 **Escrito para:** o próximo engenheiro/agente, que continua daqui sem ter vivido
@@ -6,7 +6,7 @@ a sessão.
 
 > ## O objetivo, numa frase
 >
-> **O `wa-api` precisa ter, no `wa-headless`, um motor FUNCIONALMENTE
+> **O `wa-api` precisa ter, no `headless`, um motor FUNCIONALMENTE
 > EQUIVALENTE ao `whatsapp-web.js`.**
 >
 > Tudo neste documento serve a isso. Equivalência de motor é o alvo — não
@@ -19,11 +19,11 @@ a sessão.
 
 ### O objetivo
 
-> **Ter no `wa-api` um motor `wa-headless` funcionalmente equivalente ao
+> **Ter no `wa-api` um motor `headless` funcionalmente equivalente ao
 > `whatsapp-web.js`.**
 
 Equivalência significa: tudo que o produto hoje obtém do `wwebjs`, ele passa a
-poder obter do `wa-headless`, pela mesma interface, com confiabilidade não pior.
+poder obter do `headless`, pela mesma interface, com confiabilidade não pior.
 
 Isso e nada além disso. Explicitamente **fora** deste objetivo:
 
@@ -33,12 +33,12 @@ Isso e nada além disso. Explicitamente **fora** deste objetivo:
 - superar o `wwebjs` em desempenho (o baseline dele nunca entrou no repo, então
   "superar" é objetivo, não critério).
 
-### O que é o `wa-headless`
+### O que é o `headless`
 
 O **segundo motor** do `wa-api`: conduz o SPA real de `web.whatsapp.com` num
 Chromium headless, dirigido por CDP, em Go.
 
-O primeiro motor é o `wa-noise` (`internal/wa-noise/`, 178 mil linhas), que fala
+O primeiro motor é o `noise` (`internal/noise/`, 178 mil linhas), que fala
 o protocolo nativo e **já funciona**. Os dois convivem: protocolo é a pilha
 primária e barata; browser é o motor caro que alcança o que o protocolo não
 alcança.
@@ -46,7 +46,7 @@ alcança.
 ### Que problema resolve
 
 O `wwebjs` entrega hoje recursos que exigem o SPA real, e o produto depende
-deles. O problema que o `wa-headless` resolve é **ter esse acesso sob controle
+deles. O problema que o `headless` resolve é **ter esse acesso sob controle
 nosso**, em Go, dentro do `wa-api`, em vez de depender de uma biblioteca de
 terceiro acoplada a dezenas de nomes de módulo internos da Meta (ADR-0006 D4).
 
@@ -55,7 +55,7 @@ ban — **não é entregue** e não faz parte deste objetivo.
 
 ### Estado final
 
-A iniciativa está concluída quando o `wa-headless` serve, pela interface que o
+A iniciativa está concluída quando o `headless` serve, pela interface que o
 `wa-worker` já consome, tudo que o `wwebjs` serve e que o produto usa — com
 paridade medida lado a lado — e o `wwebjs` pode ser desligado sem perda
 observável.
@@ -73,8 +73,8 @@ observável.
 |---|---|---|---|
 | `app-core`, `gateway`, `dispatcher` | `disparazaap` | produto: campanha, ritmo, quota, política | TS / Go |
 | `wa-worker` | `disparazaap` | **coordenação**: lease, fencing, shard, on-demand, spool, roteamento de comando | TS |
-| `wa-noise` | `wa-api` | provider de protocolo (whatsmeow) | Go |
-| **`wa-headless`** | `wa-api` | **provider de browser** (Chromium+CDP) | Go |
+| `noise` | `wa-api` | provider de protocolo (whatsmeow) | Go |
+| **`headless`** | `wa-api` | **provider de browser** (Chromium+CDP) | Go |
 
 **Fronteira de responsabilidade, decidida:** `wa-api` é **transporte**;
 `disparazaap` é **política**. Anti-ban, seleção de cliente, ritmo e higiene de
@@ -175,7 +175,7 @@ separáveis.**
 
 | leitura | o que muda | tamanho |
 |---|---|---|
-| **A — ADR-0038** | `wa-headless` absorve coordenação; serviço Go único | reescrever ~14 mil linhas de TS (fencing, shard-ring, quota, circuit-breaker, on-demand, spool, rebalancer) |
+| **A — ADR-0038** | `headless` absorve coordenação; serviço Go único | reescrever ~14 mil linhas de TS (fencing, shard-ring, quota, circuit-breaker, on-demand, spool, rebalancer) |
 | **B — pela costura** | `wa-api` ganha motor headless; `wa-worker` aponta `WA_ADAPTER` | implementar o motor; `wa-worker` intocado |
 
 **Com o objetivo do §1, a escolha é B.** Equivalência de motor se alcança
@@ -194,18 +194,18 @@ aquele repo é da sessão C0/C1.
 
 | item | onde | tamanho | estado |
 |---|---|--:|---|
-| `wa-noise` | `wa-api/internal/wa-noise` | 178.408 | funcionando |
+| `noise` | `wa-api/internal/noise` | 178.408 | funcionando |
 | `wa-worker` | `disparazaap/services/wa-worker/src` | 14.292 | em produção |
-| **`wa-headless`** | `wa-api/internal/wa-headless` | **2.914 (+ 8.542 de teste)** | **7 pacotes implementados** |
+| **`headless`** | `wa-api/internal/headless` | **2.914 (+ 8.542 de teste)** | **7 pacotes implementados** |
 | harness do estudo | `wa-api/scripts/chromium-study` | 9.228 | **validado, fora do produto** |
 
 > **CORREÇÃO (2026-08-18, LOOP 04.4).** A linha dizia "**132**" / "**só
 > `doc.go` — esqueleto**". Isso era verdade em 2026-08-10 e deixou de ser
 > verdade desde então: medindo agora neste worktree —
-> `find internal/wa-headless -name '*.go' ! -name '*_test.go' | xargs wc -l`
-> dá **2.914** linhas de produção, `find internal/wa-headless -name
+> `find internal/headless -name '*.go' ! -name '*_test.go' | xargs wc -l`
+> dá **2.914** linhas de produção, `find internal/headless -name
 > '*_test.go' | xargs wc -l` dá **8.542** linhas de teste, e `go list
-> ./internal/wa-headless/...` lista **7 pacotes** (`wa-headless`,
+> ./internal/headless/...` lista **7 pacotes** (`headless`,
 > `capabilities/send`, `core`, `engine`, `observability`, `runtime`, `spa`).
 > O módulo de produto **não é mais** um `doc.go` por pacote declarando
 > intenção — o parágrafo abaixo, que fazia a mesma afirmação, está corrigido
@@ -240,7 +240,7 @@ Tudo isto está **provado com controle negativo** em `scripts/chromium-study/`:
 - **Adaptado:** `adapter-selector.ts` (nenhuma mudança estrutural — só passar a
   selecionar `wa-api`), e `wa-api-adapter.ts` (talvez nada, se o contrato HTTP
   for o mesmo).
-- **Não existe:** o motor headless inteiro dentro de `internal/wa-headless`.
+- **Não existe:** o motor headless inteiro dentro de `internal/headless`.
 
 ---
 
@@ -288,7 +288,7 @@ lease com TTL e fencing token derivado da revisão do KV.
 - **Durabilidade** — `LocalAuth` vs `RemoteAuth` é injetado, não fixo.
 - **`getBrowserPid`** — específico de Puppeteer; um motor Go pode expor
   equivalente próprio ou omitir (é opcional).
-- **Estrutura interna do `wa-headless`** — os pacotes `core/engine/runtime/spa`
+- **Estrutura interna do `headless`** — os pacotes `core/engine/runtime/spa`
   são intenção declarada, não contrato.
 - **Instrumentação e métricas** — acrescentar é livre.
 
@@ -427,7 +427,7 @@ Serão critérios de validação. Cada um tem medição por trás.
    um reaproveitamento, um circuit breaker — precisa ser **auditada contra uma
    regra**, em vez de ter esta interação redescoberta por acidente. Hoje não
    existe detentor nenhum: `runtime/` é só `doc.go` e nada fora do módulo
-   importa `wa-headless`. Foi precisamente essa ausência de chamador real que
+   importa `headless`. Foi precisamente essa ausência de chamador real que
    escondeu o defeito.
 
    **Travada por dois testes, com rotas de falha diferentes** — cancelamento
@@ -519,7 +519,7 @@ ambos observáveis a cada ciclo, sem esperar o logout.
 
 ## 9. Definition of Done
 
-`wa-headless` é **equivalente ao `wwebjs`** quando **todas** forem verdadeiras:
+`headless` é **equivalente ao `wwebjs`** quando **todas** forem verdadeiras:
 
 1. Implementa **cada item da lista do CAP-01** — os obrigatórios de
    `WaClientAdapter` e os opcionais que o produto realmente chama. Equivalência
@@ -553,7 +553,7 @@ provavelmente é meia dúzia de operações.
 
 **CAP-02 · Fundação do motor dentro do módulo**
 → `DeadlinePolicy`, `Runner`, `OpLog`, `cleanStop`, `primeTab` portados do
-estudo para `internal/wa-headless`. *Observável:* `go test ./internal/wa-headless/...`
+estudo para `internal/headless`. *Observável:* `go test ./internal/headless/...`
 verde, com o teste de política de shutdown e seu controle negativo.
 
 **CAP-03 · Sessão sobe e classifica**
@@ -732,7 +732,7 @@ entra no repo.
 ## 11. Primeira fronteira executável
 
 **PRIMEIRA CAPACIDADE:** CAP-02 — fundação do motor dentro de
-`internal/wa-headless`.
+`internal/headless`.
 
 **OBJETIVO:** mover para o módulo de produto as peças do estudo que já estão
 validadas: `DeadlinePolicy`, `Runner`, `OpLog`, `cleanStop`/`closeBrowserViaCDP`,
@@ -748,7 +748,7 @@ negativo.
 - Toda capacidade seguinte precisa dela: sem prazo por operação e desligamento
   limpo, CAP-03 em diante nasce com os defeitos que o estudo já pagou para
   descobrir.
-- Blast radius **zero**: nada consome `internal/wa-headless` hoje.
+- Blast radius **zero**: nada consome `internal/headless` hoje.
 
 **PRÉ-CONDIÇÕES:** nenhuma. Não precisa de conta, nó amd64, contrato ou decisão
 A/B.
@@ -756,13 +756,13 @@ A/B.
 **ARQUIVOS/ÁREAS PROVAVELMENTE ENVOLVIDOS:**
 - origem: `scripts/chromium-study/{p4c_deadline.go, p4c_lifecycle.go,
   p4c_target.go, shutdown_policy_test.go}`
-- destino: `internal/wa-headless/{runtime,core,engine}/`
+- destino: `internal/headless/{runtime,core,engine}/`
 - o `doc.go` de cada pacote já declara a intenção — o código deve caber nela ou
   o `doc.go` muda junto, com o porquê.
 
 **COMO VALIDAR:**
 1. `go build ./...` e `go vet ./...` limpos.
-2. `go test ./internal/wa-headless/...` verde.
+2. `go test ./internal/headless/...` verde.
 3. O teste de política de shutdown roda no novo caminho.
 4. **Controle negativo executado:** reintroduzir `gracefulStop` num caminho que
    carrega credencial e comprovar que o teste reprova, colando a saída.
@@ -770,7 +770,7 @@ A/B.
    `scripts/chromium-study`, que ainda é o laboratório.
 
 **CRITÉRIO DE DONE:**
-- `internal/wa-headless` deixa de ser só `doc.go`.
+- `internal/headless` deixa de ser só `doc.go`.
 - Prazo por classe de operação e desligamento limpo disponíveis como API do
   módulo.
 - Um teste que falha se alguém desligar por sinal num caminho com credencial,

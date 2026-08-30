@@ -3,7 +3,7 @@ package core
 import "wa-api/internal/noise/capabilities/send"
 
 // As constantes de wire do stanza <message> moram em
-// internal/wa-noise/send/constants.go desde a Fase F/G lote 8. As nove abaixo
+// internal/noise/send/constants.go desde a Fase F/G lote 8. As nove abaixo
 // continuam existindo na raiz porque o caminho de ENTRADA (message_decrypt.go,
 // message_decrypt_session.go, message.go) e o de segredo de mensagem
 // (msgsecret_poll.go) as leem de volta — e por atribuicao, nao por

@@ -82,7 +82,7 @@ func compressClock(t *testing.T) {
 }
 
 const (
-	labSubject = "wa-headless-lab — nao usar"
+	labSubject = "headless-lab — nao usar"
 	labGroupID = "120363000000000000@g.us"
 	peer       = "5541992421234@c.us"
 )

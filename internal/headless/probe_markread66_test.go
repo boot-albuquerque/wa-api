@@ -37,7 +37,7 @@ func TestProbeMarkReadIdentity(t *testing.T) {
 	defer done()
 	evalA, evalB := d.A.Tab().Evaluate, d.B.Tab().Evaluate
 
-	if _, err := send.Text(ctx, d.RunnerB, evalB, selfA, "wa-headless markread-66 probe", "probe/mr66/send"); err != nil {
+	if _, err := send.Text(ctx, d.RunnerB, evalB, selfA, "headless markread-66 probe", "probe/mr66/send"); err != nil {
 		t.Fatalf("conta-B send: %v", err)
 	}
 	time.Sleep(8 * time.Second)

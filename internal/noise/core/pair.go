@@ -8,7 +8,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// A logica deste dominio vive em internal/wa-noise/pairing/. O que sobra aqui
+// A logica deste dominio vive em internal/noise/pairing/. O que sobra aqui
 // sao fachadas: elas guardam o contrato historico (nomes, assinaturas e o
 // receptor *Client) e delegam. Ver PATCHES.md, "Fase F/G — lote 4".
 

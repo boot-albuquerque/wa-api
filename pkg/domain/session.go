@@ -33,7 +33,7 @@ type DisconnectResult struct {
 // GetQRResult representa o resultado de obtenção do QR code.
 //
 // CodeAgeSeconds NÃO vem do PairingQRReader/do use case — HOUSEKEEP F375/
-// F377: nem wa_noise nem wa_headless sabem dizer quando o código atual
+// F377: nem noise nem headless sabem dizer quando o código atual
 // EXPIRA (a rotação é decidida pelo servidor do WhatsApp, com variância
 // medida de 10-60s — F374), então prometer isso seria inventar um número. O
 // que a API PODE dizer com honestidade é POR QUANTO TEMPO já devolveu o

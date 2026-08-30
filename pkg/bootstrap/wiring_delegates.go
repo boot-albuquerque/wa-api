@@ -58,7 +58,7 @@ type mediaS3Config struct {
 	MediaDelivery string
 }
 
-// GetUserID / GetWAClient make *UserEventHandler satisfy media.UserClient (= wa-noise.UserEventHandler),
+// GetUserID / GetWAClient make *UserEventHandler satisfy media.UserClient (= noise.UserEventHandler),
 // the interface pkg/infra/media.ProcessMedia consumes.
 func (evh *UserEventHandler) GetUserID() string          { return evh.UserID }
 func (evh *UserEventHandler) GetWAClient() *noise.Client { return evh.WAClient }

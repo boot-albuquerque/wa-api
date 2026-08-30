@@ -16,7 +16,7 @@ import (
 // returns, which is a LID, not under the phone number the caller typed.
 //
 // That is not a guess. Measured 2026-08-20 against the paired lab account by
-// walking the whole collection (internal/wa-headless/probe_sendjid_test.go):
+// walking the whole collection (internal/headless/probe_sendjid_test.go):
 // of 399 models in WAWebMsgCollection, 397 carry server "lid", one "c.us" and
 // one "g.us". So the double answers the verification query ONLY when asked for
 // storedUnder — a double that answered for any jid would be more permissive

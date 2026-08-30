@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// Testes relocados de internal/wa-noise/appstate_keys_test.go (Fase E lote 3) e
+// Testes relocados de internal/noise/appstate_keys_test.go (Fase E lote 3) e
 // adaptados ao duble de Transport, mais os caminhos que antes exigiriam um
 // *Client com socket.
 

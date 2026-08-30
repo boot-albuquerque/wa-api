@@ -1,4 +1,4 @@
-// Package pairing adapta o pareamento por telefone do wa-noise para a porta
+// Package pairing adapta o pareamento por telefone do noise para a porta
 // port.PhonePairer.
 package pairing
 

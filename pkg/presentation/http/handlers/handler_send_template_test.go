@@ -20,14 +20,14 @@ import (
 
 // Este arquivo cobre POST /chat/send/template desde a migração do CAP-15 para
 // port.SimpleMessenger — o handler que efetivamente monta o TemplateMessage e
-// o envia pelo wa-noise, e não mais um "validated" sem fazer nada. Mesma
+// o envia pelo noise, e não mais um "validated" sem fazer nada. Mesma
 // estrutura de handler_send_poll_test.go (rota gorilla/mux registrada).
 //
 // O eixo próprio deste bloco é `Buttons`: o DTO tinha perdido o campo que dá
 // sentido à capability (HOUSEKEEP F139), então a rota tem de recusar o corpo
 // sem botão e tem de entregar os botões INTEIROS à porta. Qual protobuf cada
 // tipo vira está medido no adapter
-// (pkg/infra/wa-noise/adapters/chat/messenger_template_test.go).
+// (pkg/infra/noise/adapters/chat/messenger_template_test.go).
 
 const sendTemplateSentinelToken = "send-template-sentinel-cause-7c31d5"
 

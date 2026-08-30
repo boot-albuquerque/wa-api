@@ -24,7 +24,7 @@ import (
 func TestRealSPAStarsAndUnstarsItsOwnMessage(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_STAR_TEST") == "" {
-		t.Skip("set WA_HEADLESS_STAR_TEST=1; this sends a message to the peer lab account")
+		t.Skip("set HEADLESS_STAR_TEST=1; this sends a message to the peer lab account")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -46,7 +46,7 @@ func TestRealSPAStarsAndUnstarsItsOwnMessage(t *testing.T) {
 	}
 
 	sent, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-		fmt.Sprintf("wa-headless star probe %d", time.Now().UnixNano()), "test/star-send")
+		fmt.Sprintf("headless star probe %d", time.Now().UnixNano()), "test/star-send")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

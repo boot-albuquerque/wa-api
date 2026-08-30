@@ -8,7 +8,7 @@ import "context"
 //
 // O handler de domínio (handleEvent, método de *bootstrap.UserEventHandler) trata
 // mensagem, presença, grupo e histórico e carrega estado de bootstrap
-// (DB, NotifyFn, mode). Registrá-lo a partir de pkg/infra/wa-noise forçaria
+// (DB, NotifyFn, mode). Registrá-lo a partir de pkg/infra/noise forçaria
 // infra → bootstrap; por isso o adapter que implementa este port fica em
 // pkg/bootstrap, onde bootstrap → infra já é direção legal.
 //

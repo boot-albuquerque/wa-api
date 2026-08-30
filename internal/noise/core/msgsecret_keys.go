@@ -8,12 +8,12 @@ import (
 )
 
 // A derivacao de chave de segredo de mensagem vive em
-// internal/wa-noise/message/ desde a Fase F/G lote 9.
+// internal/noise/message/ desde a Fase F/G lote 9.
 
 // MsgSecretType e' APELIDO de tipo, e nao um tipo novo, porque internals.go
 // (gerado) cita o nome antigo nas assinaturas de DangerousInternalClient e
 // porque e' parte da API publica do pacote. Apelido faz dos dois o MESMO tipo,
-// entao quem escrevia `wa-noise.EncSecretPollVote` continua compilando e
+// entao quem escrevia `noise.EncSecretPollVote` continua compilando e
 // continua podendo passar o valor as funcoes de message/.
 type MsgSecretType = message.SecretType
 

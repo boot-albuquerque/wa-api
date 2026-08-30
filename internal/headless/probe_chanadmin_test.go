@@ -42,7 +42,7 @@ func TestProbeChannelAdminChain(t *testing.T) {
 
 	// conta-A creates the channel. Deletion is registered immediately.
 	mA := channel.NewManager(d.RunnerA, evalA)
-	made, err := mA.Create(ctx, "wa-headless admin chain "+strconv.FormatInt(time.Now().Unix(), 10),
+	made, err := mA.Create(ctx, "headless admin chain "+strconv.FormatInt(time.Now().Unix(), 10),
 		"", "probe/chanadmin")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -128,7 +128,7 @@ func TestProbeChannelAdminChain(t *testing.T) {
 			const r = await window.require("WAWebNewsletterSendMsgAction")
 				.sendNewsletterAdminInviteMessage(chat, {
 					newsletterWid: chanWid, invitee: userWid,
-					inviteMessage: "wa-headless probe", base64Thumb: null,
+					inviteMessage: "headless probe", base64Thumb: null,
 				});
 			window.__ca1 = JSON.stringify({ok:true, result: (r && r.messageSendResult) || String(r)});
 		} catch (e) { window.__ca1 = JSON.stringify({ok:false, why: safe(e)}); }

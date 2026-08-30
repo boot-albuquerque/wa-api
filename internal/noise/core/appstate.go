@@ -11,7 +11,7 @@ import (
 )
 
 // Fachada do dominio de sincronizacao de app state. A logica vive em
-// internal/wa-noise/appstatesync; aqui ficam so' os metodos de *Client que
+// internal/noise/appstatesync; aqui ficam so' os metodos de *Client que
 // delegam para la' (ver ADR-0004 e PATCHES.md, "Fase F/G — lote 3"). Os metodos
 // nao exportados continuam existindo porque internals.go (gerado) os embrulha.
 
@@ -62,7 +62,7 @@ func (cli *Client) applyAppStatePatches(
 
 // downloadExternalAppStateBlob nao delega para o subpacote: e' a ponta que o
 // subpacote chama de volta atraves de Transport, e o download de midia ja' e'
-// dominio de internal/wa-noise/media.
+// dominio de internal/noise/media.
 func (cli *Client) downloadExternalAppStateBlob(ctx context.Context, ref *waServerSync.ExternalBlobReference) ([]byte, error) {
 	return cli.Download(ctx, ref)
 }

@@ -14,7 +14,7 @@ import (
 
 // TestProbeSocketLogout measures Socket.logout()'s real effect against a
 // PAIRED, disposable profile — the exact gap H122 left open
-// (internal/wa-headless/HOUSEKEEP.md): the function was confirmed to EXIST
+// (internal/headless/HOUSEKEEP.md): the function was confirmed to EXIST
 // and to be a function, but the call itself was never invoked, on POLICY
 // grounds (it deauthenticates the account for real, and only a human with
 // the phone can restore it). This probe is the one deliberate exception,
@@ -37,7 +37,7 @@ func TestProbeSocketLogout(t *testing.T) {
 	}
 	profile := os.Getenv("WA_HEADLESS_PROFILE_DIR")
 	if profile == "" {
-		t.Fatal("WA_HEADLESS_PROFILE_DIR is required — point it at a disposable, PAIRED profile you are willing to deauthenticate")
+		t.Fatal("HEADLESS_PROFILE_DIR is required — point it at a disposable, PAIRED profile you are willing to deauthenticate")
 	}
 	runner := engine.NewRunner()
 	h := waruntime.NewHolder(core.StartConfig{

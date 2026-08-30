@@ -10,7 +10,7 @@ import (
 // Este arquivo guarda o que sobrou dos testes de envio na raiz depois da
 // extracao do lote 8: os helpers de cache que outros testes da raiz usam, e as
 // travas da fronteira (apelidos de tipo e reexportacao de constantes/erros).
-// Os testes de COMPORTAMENTO do envio moram em internal/wa-noise/send.
+// Os testes de COMPORTAMENTO do envio moram em internal/noise/send.
 
 // msgTypeTextValue e' o valor historico do atributo `type` de uma mensagem de
 // texto. message_parse_test.go o compara ao classificar o que ENTRA; a
@@ -34,7 +34,7 @@ func getDeviceCache(cli *Client, jid types.JID) (deviceCache, bool) {
 
 // A fronteira raiz <-> send e' feita de apelidos de tipo, nao de tipos novos.
 // Se alguem trocar `=` por definicao, os quatro tipos viram tipos distintos e a
-// API publica quebra em silencio para quem monta um wa-noise.SendResponse.
+// API publica quebra em silencio para quem monta um noise.SendResponse.
 func TestSendTypesAreAliases(t *testing.T) {
 	var resp SendResponse = send.Response{}
 	var req SendRequestExtra = send.RequestExtra{}

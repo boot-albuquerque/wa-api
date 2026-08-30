@@ -76,7 +76,7 @@ func (h *GetAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // GetContactsLastActivityHandler expõe GetContactsLastActivityUseCase —
 // timestamp da mensagem mais recente por chat_jid, derivado do backfill
 // local de message_history (HistorySync pós-pareamento). Não decodifica
-// body (GET, sem payload) e não depende de sessão wa-noise ativa.
+// body (GET, sem payload) e não depende de sessão noise ativa.
 type GetContactsLastActivityHandler struct {
 	uc *user.GetContactsLastActivityUseCase
 }

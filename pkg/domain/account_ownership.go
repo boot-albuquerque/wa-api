@@ -8,7 +8,7 @@ import "context"
 // (POSTGRES ONLY, same as session_leases). This file holds the DOMAIN-level
 // vocabulary two other worktrees plug into:
 //
-//   - provider-wa-noise / provider-wa-headless implement Fence to react to
+//   - provider-noise / provider-headless implement Fence to react to
 //     losing ownership (item 7).
 //   - the HTTP auth middleware uses ErrSessionSuperseded to answer a request
 //     authenticated with a superseded session's token (item 6).
@@ -54,7 +54,7 @@ var ErrSessionSuperseded error = &sessionSupersededError{}
 // category used for "well formed, authorized, wrong owner" — see
 // apperr/codes.go) at the boundary.
 
-// Fencer is the contract a runtime provider (wa-noise, wa-headless) must
+// Fencer is the contract a runtime provider (noise, headless) must
 // satisfy so the ownership mechanism can shut down a superseded session
 // WITHOUT performing a destructive upstream logout.
 //
@@ -62,9 +62,9 @@ var ErrSessionSuperseded error = &sessionSupersededError{}
 //
 // This worktree (engine-session-ownership) owns deciding WHO the current
 // owner is and WHEN a session has been superseded. It does not own how
-// wa-noise's socket or wa-headless's browser session actually tears down —
-// those live in the provider worktrees (provider-wa-noise,
-// provider-wa-headless), and each has different physical resources to
+// noise's socket or headless's browser session actually tears down —
+// those live in the provider worktrees (provider-noise,
+// provider-headless), and each has different physical resources to
 // release. Fence is the seam: this package calls it, the provider
 // implements it.
 //

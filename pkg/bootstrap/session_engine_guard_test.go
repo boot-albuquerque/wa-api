@@ -58,47 +58,47 @@ func newTestGuard(headlessDisconnector, headlessLogouter *contractsfake.SessionC
 }
 
 // TestEnsureSessionDespachaPorEngineGravado: uma sessão gravada como
-// wa_headless tem EnsureSession respondido pelo adapter headless, não pelo
-// wa_noise — o defeito que este teste trava é a versão ANTERIOR a este
+// headless tem EnsureSession respondido pelo adapter headless, não pelo
+// noise — o defeito que este teste trava é a versão ANTERIOR a este
 // arquivo, em que sessionGuard era sempre wasession.NewSessionGuardAdapter
-// (só wa_noise) e uma sessão wa_headless falhava aqui incondicionalmente.
+// (só noise) e uma sessão headless falhava aqui incondicionalmente.
 func TestEnsureSessionDespachaPorEngineGravado(t *testing.T) {
 	headless := &contractsfake.SessionController{}
 	guard, noise := newTestGuard(headless, nil)
 
 	if err := guard.EnsureSession(context.Background(), tgHeadless); err != nil {
-		t.Fatalf("EnsureSession(wa_headless) = %v, want nil (adapter headless deveria responder)", err)
+		t.Fatalf("EnsureSession(headless) = %v, want nil (adapter headless deveria responder)", err)
 	}
 	if len(headless.EnsureSessionCalls) != 1 {
 		t.Fatalf("adapter headless recebeu %d chamadas, want 1", len(headless.EnsureSessionCalls))
 	}
 	if len(noise.EnsureSessionCalls) != 0 {
-		t.Fatalf("adapter wa_noise recebeu %d chamadas para uma sessão wa_headless, want 0", len(noise.EnsureSessionCalls))
+		t.Fatalf("adapter noise recebeu %d chamadas para uma sessão headless, want 0", len(noise.EnsureSessionCalls))
 	}
 
 	if err := guard.EnsureSession(context.Background(), tgNoise); err != nil {
-		t.Fatalf("EnsureSession(wa_noise) = %v, want nil", err)
+		t.Fatalf("EnsureSession(noise) = %v, want nil", err)
 	}
 	if len(noise.EnsureSessionCalls) != 1 {
-		t.Fatalf("adapter wa_noise recebeu %d chamadas, want 1", len(noise.EnsureSessionCalls))
+		t.Fatalf("adapter noise recebeu %d chamadas, want 1", len(noise.EnsureSessionCalls))
 	}
 }
 
 // TestLegacyUnknownCaiEmNoise: uma linha sem engine gravado (migração
-// anterior à coluna) resolve para wa_noise, o mesmo default do backfill
+// anterior à coluna) resolve para noise, o mesmo default do backfill
 // (pkg/infra/db/user_engine.go) e do pairing.Registry.TargetEngine.
 func TestLegacyUnknownCaiEmNoise(t *testing.T) {
 	guard, noise := newTestGuard(nil, nil)
 	if err := guard.EnsureSession(context.Background(), tgLegacy); err != nil {
-		t.Fatalf("EnsureSession(legacy_unknown) = %v, want nil (deveria cair em wa_noise)", err)
+		t.Fatalf("EnsureSession(legacy_unknown) = %v, want nil (deveria cair em noise)", err)
 	}
 	if len(noise.EnsureSessionCalls) != 1 {
-		t.Fatalf("adapter wa_noise recebeu %d chamadas para legacy_unknown, want 1", len(noise.EnsureSessionCalls))
+		t.Fatalf("adapter noise recebeu %d chamadas para legacy_unknown, want 1", len(noise.EnsureSessionCalls))
 	}
 }
 
 // TestSemLinhaCaiEmNoise: sessão sem linha nenhuma também cai em
-// wa_noise, deixando o adapter produzir seu próprio erro de "sem sessão" em
+// noise, deixando o adapter produzir seu próprio erro de "sem sessão" em
 // vez deste tipo inventar um segundo.
 func TestSemLinhaCaiEmNoise(t *testing.T) {
 	guard, noise := newTestGuard(nil, nil)
@@ -106,19 +106,19 @@ func TestSemLinhaCaiEmNoise(t *testing.T) {
 	noise.EnsureSessionFunc = func(context.Context, string) error { return wantErr }
 
 	if err := guard.EnsureSession(context.Background(), tgUnknown); !errors.Is(err, wantErr) {
-		t.Fatalf("EnsureSession(sem linha) = %v, want %v (do adapter wa_noise)", err, wantErr)
+		t.Fatalf("EnsureSession(sem linha) = %v, want %v (do adapter noise)", err, wantErr)
 	}
 }
 
 // TestDisconnectSemAdapterHeadlessDevolveEngineUnavailable: uma sessão
-// gravada como wa_headless num processo sem Chrome configurado (adapter
+// gravada como headless num processo sem Chrome configurado (adapter
 // nil) recusa com um erro identificável, não um nil silencioso nem um
 // crash.
 func TestDisconnectSemAdapterHeadlessDevolveEngineUnavailable(t *testing.T) {
 	guard, _ := newTestGuard(nil, nil)
 	err := guard.Disconnect(context.Background(), tgHeadless)
 	if err == nil {
-		t.Fatal("Disconnect(wa_headless, sem adapter) = nil, want erro")
+		t.Fatal("Disconnect(headless, sem adapter) = nil, want erro")
 	}
 	var appErr *apperr.AppError
 	if !errors.As(err, &appErr) || appErr.Code != codeSessionEngineUnavailable {
@@ -128,11 +128,11 @@ func TestDisconnectSemAdapterHeadlessDevolveEngineUnavailable(t *testing.T) {
 
 // TestLogoutSemLogouterHeadlessRecusa: enquanto headlessLogouter continuar
 // nil (Socket.logout não medido — ver
-// pkg/infra/wa-headless/session/disconnector.go) E a matriz continuar
-// marcando logout_session como "unknown" para wa_headless
-// (pkg/capabilityregistry/matrix.go), Logout numa sessão wa_headless recusa
+// pkg/infra/headless/session/disconnector.go) E a matriz continuar
+// marcando logout_session como "unknown" para headless
+// (pkg/capabilityregistry/matrix.go), Logout numa sessão headless recusa
 // de forma identificável — hoje pela checagem de capacidade, que roda ANTES
-// da resolução do adapter — e NÃO cai silenciosamente no wa_noise. Se a
+// da resolução do adapter — e NÃO cai silenciosamente no noise. Se a
 // matriz for atualizada para Supported sem que headlessLogouter seja
 // wired, a recusa muda de código (capability_not_supported ->
 // session_engine_unavailable) mas continua sendo uma recusa: é essa segunda
@@ -144,7 +144,7 @@ func TestLogoutSemLogouterHeadlessRecusa(t *testing.T) {
 
 	err := guard.Logout(context.Background(), tgHeadless)
 	if err == nil {
-		t.Fatal("Logout(wa_headless, sem logouter) = nil, want erro")
+		t.Fatal("Logout(headless, sem logouter) = nil, want erro")
 	}
 	var appErr *apperr.AppError
 	if !errors.As(err, &appErr) {
@@ -154,7 +154,7 @@ func TestLogoutSemLogouterHeadlessRecusa(t *testing.T) {
 		t.Fatalf("código = %q, want %q ou %q", appErr.Code, codeSessionCapabilityNotSupported, codeSessionEngineUnavailable)
 	}
 	if len(noise.LogoutCalls) != 0 {
-		t.Fatal("Logout(wa_headless) não deveria ter caído no adapter wa_noise")
+		t.Fatal("Logout(headless) não deveria ter caído no adapter noise")
 	}
 }
 
@@ -168,19 +168,19 @@ func TestSessionStatusSemLinhaDevolveFalseFalse(t *testing.T) {
 		return false, false
 	}
 	if c, l := guard.SessionStatus(context.Background(), tgHeadless); c || l {
-		t.Fatalf("SessionStatus(wa_headless, sem adapter) = (%v,%v), want (false,false)", c, l)
+		t.Fatalf("SessionStatus(headless, sem adapter) = (%v,%v), want (false,false)", c, l)
 	}
 }
 
 // TestLogoutNoiseDespachaComSucesso: o caminho de sucesso de Logout —
-// engine wa_noise, capacidade suportada, logouter presente — chega ao
+// engine noise, capacidade suportada, logouter presente — chega ao
 // adapter e devolve o que ele devolver, sem alteração.
 func TestLogoutNoiseDespachaComSucesso(t *testing.T) {
 	guard, noise := newTestGuard(nil, nil)
 	if err := guard.Logout(context.Background(), tgNoise); err != nil {
-		t.Fatalf("Logout(wa_noise) = %v, want nil", err)
+		t.Fatalf("Logout(noise) = %v, want nil", err)
 	}
 	if len(noise.LogoutCalls) != 1 {
-		t.Fatalf("adapter wa_noise recebeu %d chamadas a Logout, want 1", len(noise.LogoutCalls))
+		t.Fatalf("adapter noise recebeu %d chamadas a Logout, want 1", len(noise.LogoutCalls))
 	}
 }

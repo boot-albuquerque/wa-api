@@ -27,7 +27,7 @@ import (
 func TestRealSPADownloadsWhatItJustSent(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_MEDIA_TEST") == "" {
-		t.Skip("set WA_HEADLESS_MEDIA_TEST=1; this sends a small file to the peer lab account")
+		t.Skip("set HEADLESS_MEDIA_TEST=1; this sends a small file to the peer lab account")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -50,14 +50,14 @@ func TestRealSPADownloadsWhatItJustSent(t *testing.T) {
 
 	// A small file whose bytes are known here and nowhere else, so a match
 	// cannot be a coincidence of fixtures.
-	body := []byte(fmt.Sprintf("wa-headless download probe %d\n", time.Now().UnixNano()))
+	body := []byte(fmt.Sprintf("headless download probe %d\n", time.Now().UnixNano()))
 	for len(body) < 1024 {
 		body = append(body, byte(len(body)%251))
 	}
 	want := sha256.Sum256(body)
 
 	sent, err := send.SendMedia(ctx, runner, sess.Tab().Evaluate, peer, send.Media{
-		Filename:   "wa-headless-download-probe.bin",
+		Filename:   "headless-download-probe.bin",
 		MimeType:   "application/octet-stream",
 		Data:       body,
 		AsDocument: true,
@@ -90,7 +90,7 @@ func TestRealSPADownloadsWhatItJustSent(t *testing.T) {
 	// A TEXT MESSAGE HAS NOTHING TO DOWNLOAD, and saying so is more useful than
 	// a generic failure.
 	txt, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-		fmt.Sprintf("wa-headless not-media probe %d", time.Now().UnixNano()), "test/dl-text")
+		fmt.Sprintf("headless not-media probe %d", time.Now().UnixNano()), "test/dl-text")
 	if err != nil {
 		t.Fatalf("send.Text: %v", err)
 	}

@@ -77,7 +77,7 @@ func (f *GroupDirectory) GetGroupInfo(ctx context.Context, txtID string, group d
 		return f.GetGroupInfoFunc(ctx, txtID, group)
 	}
 	// Zero-value devolve um grupo COM o jid pedido, e nao (nil, nil).
-	// Nenhum dos dois adaptadores reais devolve nil sem erro — o wa-noise
+	// Nenhum dos dois adaptadores reais devolve nil sem erro — o noise
 	// mapeia a resposta do servidor, o headless mapeia a conversa — entao um
 	// duble que devolvesse nil abencoaria no handler um caminho que a
 	// producao nunca produz (ARMADILHAS #1).
@@ -163,7 +163,7 @@ func (f *GroupLifecycle) CreateGroup(ctx context.Context, txtID, name string, pa
 		return f.CreateGroupFunc(ctx, txtID, name, participants, opts)
 	}
 	// Zero-value devolve o grupo com o NOME pedido e Created verdadeiro: e' o
-	// que o transporte wa-noise faz sempre, e o headless quando o grupo nao
+	// que o transporte noise faz sempre, e o headless quando o grupo nao
 	// existia. Nenhum dos dois devolve nil sem erro.
 	return &domain.CreatedGroup{
 		Group:   &domain.GroupInfo{Name: name, Participants: []domain.GroupParticipant{}},

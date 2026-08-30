@@ -45,7 +45,7 @@ func format(msg string, args []any) string {
 // …) para que o log continue rastreável até o call site pelas mesmas regras
 // que valem no resto do repositório. O teste de piso vem antes de format
 // porque Sprintf no caminho de Debug desligado — o default, e onde o
-// wa-noise é mais verboso — seria custo puro.
+// noise é mais verboso — seria custo puro.
 
 func (b *Bridge) Errorf(msg string, args ...any) {
 	if zerolog.ErrorLevel < b.min {
@@ -76,7 +76,7 @@ func (b *Bridge) Debugf(msg string, args ...any) {
 }
 
 // Sub devolve um bridge para um submódulo, herdando sink e piso. O SDK chama
-// isto na construção do cliente (internal/wa-noise/client.go) para separar
+// isto na construção do cliente (internal/noise/client.go) para separar
 // Recv/Send/Pair, e o resultado tem de continuar sendo um Bridge — devolver
 // sdklog.Noop aqui reintroduziria o silêncio que este pacote elimina.
 func (b *Bridge) Sub(module string) sdklog.Logger {

@@ -77,7 +77,7 @@ func (cli *Client) handleAppStateNotification(ctx context.Context, node *waBinar
 }
 
 // handlePictureNotification e' fachada: a logica vive em
-// internal/wa-noise/notification (Fase F/G, lote 5).
+// internal/noise/notification (Fase F/G, lote 5).
 func (cli *Client) handlePictureNotification(ctx context.Context, node *waBinary.Node) {
 	if cli == nil {
 		return
@@ -106,7 +106,7 @@ func (cli *Client) handleAccountSyncNotification(ctx context.Context, node *waBi
 }
 
 // handleStatusNotification e' fachada: a logica vive em
-// internal/wa-noise/notification (Fase F/G, lote 5).
+// internal/noise/notification (Fase F/G, lote 5).
 func (cli *Client) handleStatusNotification(ctx context.Context, node *waBinary.Node) {
 	if cli == nil {
 		return

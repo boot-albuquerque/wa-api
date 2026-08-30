@@ -42,7 +42,7 @@ func TestGenerateS3KeyCurrentDate(t *testing.T) {
 	}
 }
 
-// TestGenerateS3Key_SanitizesMessageID proves sec/F28: wa-noise does not
+// TestGenerateS3Key_SanitizesMessageID proves sec/F28: noise does not
 // validate the format of MessageInfo.ID (confirmed against its source —
 // types/jid.go's MessageID is a plain string alias, and message.go sets it
 // straight from the incoming stanza's raw "id" attribute). An attacker who

@@ -19,8 +19,8 @@ import (
 // json.Marshal(evt) where evt is events.Message.
 //
 // The repository returns the raw datajson and the chat_jid. It does NOT
-// deserialize the proto — that happens in the wa-noise adapter layer, which
-// is the only layer allowed to import internal/wa-noise/protocol/proto.
+// deserialize the proto — that happens in the noise adapter layer, which
+// is the only layer allowed to import internal/noise/protocol/proto.
 type StoredMessageRepository struct {
 	db *sqlx.DB
 }

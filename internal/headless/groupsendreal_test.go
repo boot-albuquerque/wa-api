@@ -19,7 +19,7 @@ import (
 // It is also the IDEMPOTENCY KEY: Ensure looks a group up by subject, so every
 // run reuses this one instead of leaving another behind. Changing this string
 // creates a second group.
-const labGroupSubject = "wa-headless-lab — teste automatizado, pode apagar"
+const labGroupSubject = "headless-lab — teste automatizado, pode apagar"
 
 // TestRealSPASendsToAGroup is what H48 could not prove: the DISPATCH to a
 // group, not just the resolution.
@@ -34,7 +34,7 @@ const labGroupSubject = "wa-headless-lab — teste automatizado, pode apagar"
 func TestRealSPASendsToAGroup(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_GROUP_TEST") == "" {
-		t.Skip("set WA_HEADLESS_GROUP_TEST=1; this CREATES a lab group and sends to it")
+		t.Skip("set HEADLESS_GROUP_TEST=1; this CREATES a lab group and sends to it")
 	}
 	from := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -92,7 +92,7 @@ func TestRealSPASendsToAGroup(t *testing.T) {
 	sendCtx, cancelSend := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancelSend()
 	res, err := send.Text(sendCtx, runner, eval, g.JID,
-		"wa-headless: teste automatizado de envio para grupo", "group/send")
+		"headless: teste automatizado de envio para grupo", "group/send")
 	if err != nil {
 		t.Fatalf("Text to group: %v", err)
 	}

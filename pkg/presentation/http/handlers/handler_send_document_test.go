@@ -21,7 +21,7 @@ import (
 // Este arquivo cobre POST /chat/send/document desde a migração do CAP-04
 // para port.MediaMessenger/port.MediaFetcher — o handler que efetivamente
 // busca a URL ou decodifica a data URI, sobe o anexo e entrega o documento
-// ao wa-noise, e não mais um "validated" sem fazer nada (o stub que este
+// ao noise, e não mais um "validated" sem fazer nada (o stub que este
 // arquivo substitui). Mesma estrutura de handler_media_send_test.go
 // (POST /chat/send/image, CAP-02/CAP-03).
 

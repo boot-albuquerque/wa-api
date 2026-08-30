@@ -1,12 +1,12 @@
-# Mapa de locks de `internal/wa-noise/`
+# Mapa de locks de `internal/noise/`
 
 Inventário dos primitivos de concorrência do fork, **construído por inspeção do
 código no HEAD**, não de memória. Método:
 
 ```
-grep -rn "sync.Mutex\|sync.RWMutex\|sync.Map" internal/wa-noise --include="*.go" \
+grep -rn "sync.Mutex\|sync.RWMutex\|sync.Map" internal/noise --include="*.go" \
   | grep -v _test.go | grep -v "/proto/"
-grep -rn "<nome>.\(Lock\|RLock\)()" internal/wa-noise --include="*.go" | grep -v _test.go
+grep -rn "<nome>.\(Lock\|RLock\)()" internal/noise --include="*.go" | grep -v _test.go
 ```
 
 `protocol/proto/` e `protocol/binary/proto/` ficam de fora: são gerados e não

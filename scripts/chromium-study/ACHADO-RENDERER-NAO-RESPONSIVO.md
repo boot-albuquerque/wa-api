@@ -8,7 +8,7 @@
 sessão do WhatsApp pareada e viva.
 
 > Documento avulso de propósito: o achado **não pertence ao nó que o encontrou** e
-> vale para as duas pilhas — `wa-worker` (`whatsapp-web.js`) e `wa-headless`
+> vale para as duas pilhas — `wa-worker` (`whatsapp-web.js`) e `headless`
 > (Chromium + CDP). Portável para o `disparazaap`, onde não posso escrever.
 
 ---

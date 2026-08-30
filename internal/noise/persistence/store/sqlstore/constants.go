@@ -45,7 +45,7 @@ const (
 	privacyTokenValuesTemplate = "($1, $2, $3, $4, $5)"
 )
 
-// Nomes de coluna de wa-noise_chat_settings interpolados em
+// Nomes de coluna de wanoise_chat_settings interpolados em
 // putChatSettingQuery. Sao interpolados (e nao passados como parametro) porque
 // SQL nao aceita nome de coluna parametrizado; por isso precisam ser literais
 // controlados por nos, nunca entrada externa.

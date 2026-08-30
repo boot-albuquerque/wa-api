@@ -129,15 +129,15 @@ func TestHandler_NaoDeixaCachear(t *testing.T) {
 }
 
 // TestPaginaSondaQRComEngineParaOsDoisMotores trava o que a página precisa
-// saber sobre a API DEPOIS de wa_headless passar a servir QR (HOUSEKEEP
+// saber sobre a API DEPOIS de headless passar a servir QR (HOUSEKEEP
 // H145): o QR chega pela MESMA sondagem REST para os dois engines, e não
-// mais por dois esquemas — WebSocket (só existia para wa_noise) e sondagem.
+// mais por dois esquemas — WebSocket (só existia para noise) e sondagem.
 //
 // # Por que substitui TestPaginaTrataOsDoisSchemasDeQR
 //
 // Aquele teste travava `qrCodeBase64`/`qrtimeout` — o esquema que só o
-// EVENTO de WebSocket de wa_noise (pkg/application/session/orchestrator.go)
-// carrega, e que wa_headless nunca emitiu nem vai emitir (não há
+// EVENTO de WebSocket de noise (pkg/application/session/orchestrator.go)
+// carrega, e que headless nunca emitiu nem vai emitir (não há
 // orquestrador de socket do lado headless). Manter esse teste depois da
 // correção estaria a travar exatamente o desenho que causava o problema: um
 // engine servido por WS, o outro por sondagem, duas lógicas para manter
@@ -168,15 +168,15 @@ func TestPaginaSondaQRComEngineParaOsDoisMotores(t *testing.T) {
 				"(pkg/pairing/registry.go)", chamada)
 		}
 	}
-	// O esquema ANTIGO era WebSocket-only e específico de wa_noise
-	// (pkg/application/session/orchestrator.go nunca emite para wa_headless).
+	// O esquema ANTIGO era WebSocket-only e específico de noise
+	// (pkg/application/session/orchestrator.go nunca emite para headless).
 	// Não deve voltar como caminho de RENDERIZAÇÃO do QR em sessions.js —
 	// eventos.js continua a mencionar qrCodeBase64 à parte, só para redigir
 	// o campo num log genérico, o que é outra coisa.
 	for _, marcaAntiga := range []string{`mostrarQR(s.id, d.qrCodeBase64`, `if (tipo === "qrtimeout")`} {
 		if strings.Contains(body, marcaAntiga) {
 			t.Errorf("sessions.js voltou a desenhar o QR a partir do evento de WebSocket "+
-				"(%q) — esse esquema só existe para wa_noise; wa_headless nunca o emite, e a "+
+				"(%q) — esse esquema só existe para noise; headless nunca o emite, e a "+
 				"correção substituiu por sondagem única para os dois engines", marcaAntiga)
 		}
 	}
@@ -187,7 +187,7 @@ func TestPaginaSondaQRComEngineParaOsDoisMotores(t *testing.T) {
 //
 // O que aconteceu: durante um dia o painel renderizou o QR client-side, com
 // uma biblioteca vendorizada, tratando `qr_code` como a string CRUA de
-// pareamento. Para wa_noise `qr_code` sempre foi o data URI da imagem, então
+// pareamento. Para noise `qr_code` sempre foi o data URI da imagem, então
 // o painel desenhou um QR cujo payload eram os 1858 caracteres
 // "data:image/png;base64,iVBORw0KG…" — medido contra servidor vivo em
 // 2026-08-29. O código era impecável e o WhatsApp recusou-o.
@@ -478,7 +478,7 @@ func TestConfig_NaoVazaEmOutraRota(t *testing.T) {
 // TestPainel_GeraOTokenDaSessao trava o formato pedido: hex puro de
 // crypto.getRandomValues, SEM prefixo de engine.
 //
-// O prefixo `wa_noise_` foi removido (achado do usuário: era enganoso, uma
+// O prefixo `noise_` foi removido (achado do usuário: era enganoso, uma
 // sessão podia nascer em headless e o token continuava a dizer "noise"). O
 // engine agora é um campo próprio do pedido de criação, não algo que se lê
 // do formato do token — por isso este teste também trava a AUSÊNCIA do
@@ -490,8 +490,8 @@ func TestConfig_NaoVazaEmOutraRota(t *testing.T) {
 func TestPainel_GeraOTokenDaSessao(t *testing.T) {
 	js := servido(t, "devui.js")
 
-	if strings.Contains(js, `"wa_noise_"`) {
-		t.Error("o gerador ainda usa o prefixo wa_noise_, que é enganoso: engine é campo próprio do pedido, não prefixo do token")
+	if strings.Contains(js, `"noise_"`) {
+		t.Error("o gerador ainda usa o prefixo noise_, que é enganoso: engine é campo próprio do pedido, não prefixo do token")
 	}
 	if !strings.Contains(js, "crypto.getRandomValues") {
 		t.Error("o token não vem de crypto.getRandomValues: Math.random é previsível por desenho")
@@ -786,9 +786,9 @@ func TestPainel_ConectarEsperaOSocketAntesDePedirQR(t *testing.T) {
 
 // TestPainel_ConectarSondaARotaDeQR: `users.qrcode` — servido por
 // GET /session/qr — é a fonte durável do QR para os DOIS engines (H145: o
-// WebSocket nunca teve esse papel para wa_headless, e para wa_noise é canal
+// WebSocket nunca teve esse papel para headless, e para noise é canal
 // com perda mesmo). Sem esta sondagem, todo evento perdido — ou todo
-// wa_headless — é um cartão preso para sempre.
+// headless — é um cartão preso para sempre.
 //
 // É o que a Evolution API faz em connectToWhatsapp: depois de conectar, ela
 // LÊ o QR guardado em vez de confiar só no evento.
@@ -803,7 +803,7 @@ func TestPainel_ConectarSondaARotaDeQR(t *testing.T) {
 	// explicam a sondagem, e "/session/pair/qr" casa a própria declaração.
 	if !strings.Contains(js, `await API.sessao(s.token, "GET", comEngine(ROTA_QR, s));`) {
 		t.Error("o painel nunca busca o QR pela rota REST com o engine certo: um evento perdido " +
-			"no WebSocket, ou uma sessão wa_headless (que nunca teve evento nenhum), deixa o " +
+			"no WebSocket, ou uma sessão headless (que nunca teve evento nenhum), deixa o " +
 			"cartão preso em \"Pedindo QR à API…\" sem prazo")
 	}
 	if !strings.Contains(js, "sondarQR(s);") {

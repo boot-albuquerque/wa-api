@@ -1,5 +1,5 @@
 // Package session contém a orquestração de ciclo de vida de sessão WhatsApp
-// do wa-api, agnóstica de provider. Nada aqui conhece wa-noise nem
+// do wa-api, agnóstica de provider. Nada aqui conhece noise nem
 // pkg/bootstrap: tudo que atravessa a fronteira passa pelos ports de
 // pkg/application/contracts.
 package session
@@ -27,7 +27,7 @@ const (
 	// O tamanho e o prefixo do data URI do QR viviam aqui (qrCodeImageSize /
 	// qrCodeDataURIPrefix) e a codificação estava inline em buildQRPayload.
 	// Mudaram-se para pkg/qrimage em 2026-08-29 (F373) porque um SEGUNDO
-	// engine — wa_headless — passou a responder a mesma rota e não passava
+	// engine — headless — passou a responder a mesma rota e não passava
 	// por aqui: ele devolvia a string CRUA onde o contrato promete imagem, e
 	// nada no tipo detectava a diferença. Ver o doc de pkg/qrimage.
 
@@ -528,7 +528,7 @@ func proxyConfigFor(proxyURL string) port.ProxyConfig {
 // everything down, as it always has (F98).
 //
 // Why the guard does not use this channel's own "success": the vendored SDK
-// (internal/wa-noise/core/qrchan.go) delivers only ONE terminal item per
+// (internal/noise/core/qrchan.go) delivers only ONE terminal item per
 // channel — success XOR timeout, never both — through a single CAS. But
 // that CAS is raced by two independent goroutines: the local expiry timer
 // of the last QR code (emitQRs) and the real PairSuccess arriving from the
@@ -815,7 +815,7 @@ func buildQRPayload(code string, validade time.Duration) map[string]any {
 	// afirmação anterior ("20s no primeiro, 60s nos demais") para "60s no
 	// primeiro", e depois disso a CONSTANTE mudou e este texto não acompanhou:
 	// `qrCodeFirstTimeout = qrCodeTimeout` em
-	// internal/wa-noise/core/pair_constants.go:23, com o comentário a dizer
+	// internal/noise/core/pair_constants.go:23, com o comentário a dizer
 	// que a igualdade é deliberada — um QR de pareamento é uma credencial, e
 	// triplicar a janela de exposição do primeiro código não compra nada.
 	//

@@ -5,7 +5,7 @@ package headless
 // They live in the facade package because they are statements about the TREE,
 // not about any one layer, and because the rule that produced them is written
 // at the top of main.go: a rule that does not fail the build is a comment, not
-// a rule. internal/wa-noise/ learned that the expensive way and now has
+// a rule. internal/noise/ learned that the expensive way and now has
 // scripts/waclient-facade-check.sh; this module gets its version before the
 // code arrives rather than after.
 //
@@ -229,7 +229,7 @@ var untypedFieldTypes = map[string]bool{
 //
 // NEVER: `type Foo = <the object the SPA returned>`. The translation has to be
 //
-//	META INTERNAL OBJECT -> small internal DTO -> WA-HEADLESS DOMAIN
+//	META INTERNAL OBJECT -> small internal DTO -> HEADLESS DOMAIN
 //
 // so that a change on Meta's side is confined to one package. The failure mode
 // is not usually someone writing that alias on purpose — it is an untyped blob

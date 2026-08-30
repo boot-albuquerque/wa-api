@@ -59,7 +59,7 @@ func TestProbeGroupDescriptionRead(t *testing.T) {
 	}
 	t.Logf("BEFORE: descLen=%d source=%q", len(before.Description), before.DescriptionSource)
 
-	const want = "wa-headless lab fixture description"
+	const want = "headless lab fixture description"
 	set, err := mgr.SetDescription(ctx, gjid, want, "probe/gdesc2/set")
 	if err != nil {
 		// A ESCRITA E' `BLOCKED` DESDE A H126, e reencontrar o bloqueio nao e'

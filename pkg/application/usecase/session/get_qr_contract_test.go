@@ -24,7 +24,7 @@ import (
 
 // codigoCruDaPagina é o que o adapter headless devolve pela porta:
 // a string de pareamento lida ao vivo de `WAWebConnModel.Conn.ref`
-// (pkg/infra/wa-headless/pairing/qr.go → internal/wa-headless/capabilities/qr).
+// (pkg/infra/headless/pairing/qr.go → internal/headless/capabilities/qr).
 // Formato de quatro campos separados por vírgula, como o WhatsApp Web emite.
 const codigoCruDaPagina = "2@Ld9xK3vQpR7sT1uW5yA8bC2dE4fG6hJ0kL3mN5pQ7rS9tU1vW3xY5zA7bC9dE1f=," +
 	"kR4mN6pQ8sT0uW2yA4bC6dE8fG0hJ2kL4mN6pQ8sT0uW2y=," +

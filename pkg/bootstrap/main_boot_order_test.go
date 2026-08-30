@@ -16,7 +16,7 @@ import (
 // setupEngineSelection(s) é quem lê WA_API_HEADLESS_CHROME e popula
 // s.Headless (engine_selection.go). initCustomHandlers(s)
 // (wiring_handlers.go) lê s.Headless.ChromePath para decidir se constrói o
-// Disconnector/QRReader/Starter de wa_headless (F370/H145).
+// Disconnector/QRReader/Starter de headless (F370/H145).
 //
 // Até esta correção, Main() chamava initCustomHandlers ANTES de
 // setupEngineSelection — initCustomHandlers via' sempre s.Headless ZERO,
@@ -52,7 +52,7 @@ func TestSetupEngineSelectionAntesDeInitCustomHandlers(t *testing.T) {
 	}
 	if iSelecao >= iHandlers {
 		t.Errorf("%q (offset %d) sai DEPOIS de %q (offset %d): initCustomHandlers "+
-			"leria s.Headless ainda zerado, e nenhum adapter de sessão wa_headless seria "+
+			"leria s.Headless ainda zerado, e nenhum adapter de sessão headless seria "+
 			"construído — o defeito medido ao vivo que esta correção resolveu",
 			chamadaSelecao, iSelecao, chamadaHandlers, iHandlers)
 	}

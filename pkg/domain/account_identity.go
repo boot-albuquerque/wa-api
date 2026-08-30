@@ -30,7 +30,7 @@ import "strings"
 //     LID (device suffix stripped) tagged as unresolved. It is NOT upgraded
 //     to a guessed PN — inventing one would let two different real accounts
 //     collide on a wrong guess, which is worse than not deduplicating them.
-//   - When a caller later learns a reliable PN for a LID (from the wa-noise
+//   - When a caller later learns a reliable PN for a LID (from the noise
 //     store, USync, or an event that ties the two), it calls
 //     WithResolvedPN to update the identity. The zero-value rule ("do not
 //     invent") only governs how the identity is CREATED; resolution is an
@@ -71,7 +71,7 @@ func NewCanonicalAccountIdentity(j JID) (CanonicalAccountIdentity, bool) {
 	}
 }
 
-// stripDevice removes the ":device" suffix wa-noise appends to a JID's user
+// stripDevice removes the ":device" suffix noise appends to a JID's user
 // part (e.g. "5511999999999:12" -> "5511999999999"). Two JIDs that differ
 // only by device are the SAME account — the device index names which of a
 // person's linked devices sent a message, not which person it is.

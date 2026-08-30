@@ -19,7 +19,7 @@ import (
 // handler_pairing_engine_test.go — o defeito da F273 e a sua trava.
 //
 // O defeito medido: GetQR, Connect e PairPhone estavam ligados em
-// pkg/bootstrap/wiring_handlers.go:165 a UM adaptador wa-noise fixo
+// pkg/bootstrap/wiring_handlers.go:165 a UM adaptador noise fixo
 // (wasession.NewSessionGuardAdapter), sem condicional nenhuma por engine. Uma
 // sessão criada com engine=headless persistia certo, aparecia certo em
 // GET /session/capabilities, e parava a parear pelo socket — porque nada entre
@@ -88,7 +88,7 @@ func servePairing(t *testing.T, router *mux.Router, method, path, body string) *
 // --- 1 e 2: QR por engine ------------------------------------------------
 
 // TestPairingQR_Noise_CallsOnlyNoiseProvider é a metade positiva do defeito:
-// o pedido nomeia noise, a sessão alvo é noise, e SÓ o provider wa-noise
+// o pedido nomeia noise, a sessão alvo é noise, e SÓ o provider noise
 // é tocado.
 func TestPairingQR_Noise_CallsOnlyNoiseProvider(t *testing.T) {
 	h := newPairingHarness(t, sessionRow{noiseSession, domain.EngineNoise})
@@ -109,7 +109,7 @@ func TestPairingQR_Noise_CallsOnlyNoiseProvider(t *testing.T) {
 
 // TestPairingQR_Headless_CallsOnlyHeadlessProvider é o caso REAL medido.
 //
-// Medição (2026-08-29, HOUSEKEEP H145): pkg/infra/wa-headless/pairing.QRReader
+// Medição (2026-08-29, HOUSEKEEP H145): pkg/infra/headless/pairing.QRReader
 // existe, é construído em pkg/bootstrap (buildPairingRegistry) quando
 // s.Headless.ChromePath está configurado, e get_pairing_qr é Supported para
 // headless na matriz real. Um pedido headless legítimo é servido — pelo
@@ -149,7 +149,7 @@ func TestPairingPhone_Noise_CallsOnlyNoiseProvider(t *testing.T) {
 
 // TestPairingPhone_Headless_CallsOnlyHeadlessProvider é o caso REAL medido.
 //
-// Medição (2026-08-29, HOUSEKEEP F380): pkg/infra/wa-headless/pairing.
+// Medição (2026-08-29, HOUSEKEEP F380): pkg/infra/headless/pairing.
 // PhonePairer existe, é construído em pkg/bootstrap (buildPairingRegistry)
 // quando s.Headless.ChromePath está configurado, e request_pairing_code é
 // Supported para headless na matriz real — o sequência de chamadas
@@ -381,7 +381,7 @@ func TestPairingConnect_Noise_CallsOnlyNoiseProvider(t *testing.T) {
 
 // TestPairingConnect_Headless_CallsOnlyHeadlessProvider: connect_session é
 // Supported para headless na matriz real desde 2026-08-29 (HOUSEKEEP
-// H145) — pkg/infra/wa-headless/pairing.Starter existe e é construído em
+// H145) — pkg/infra/headless/pairing.Starter existe e é construído em
 // pkg/bootstrap. 200, e só o starter headless é chamado.
 //
 // Até 2026-08-27 este teste esperava 422 capability_not_supported; ver o

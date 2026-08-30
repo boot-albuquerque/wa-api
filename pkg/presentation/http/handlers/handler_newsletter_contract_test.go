@@ -32,7 +32,7 @@ import (
 //  4. os VALORES foram mapeados, e não só as chaves;
 //  5. tempo desconhecido é `null` e colecção vazia é `[]`.
 
-// canalDeReferencia é o domain.NewsletterMetadata que o adaptador wa-noise
+// canalDeReferencia é o domain.NewsletterMetadata que o adaptador noise
 // produz para um canal real e completo: dono, nome e descrição datados, imagem
 // e pré-visualização, relação do chamador. Todos os campos preenchidos de
 // propósito — um dublê com metade dos campos no zero deixaria metade do

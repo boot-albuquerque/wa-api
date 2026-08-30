@@ -9,7 +9,7 @@ import (
 )
 
 // TestVocabularioCompartilhadoBateComAsConstantesReaisDaPagina é o par do teste
-// de mesmo nome em pkg/infra/wa-noise/mapping/jid: cada metade vive no pacote
+// de mesmo nome em pkg/infra/noise/mapping/jid: cada metade vive no pacote
 // que legalmente enxerga as SUAS constantes, e as duas apontam para o mesmo
 // vocabulário em domain.
 //

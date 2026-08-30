@@ -21,7 +21,7 @@ var ErrInvalidLength = errors.New("database returned byte array with illegal len
 //
 // When using github.com/lib/pq, you should set
 //
-//	wa-noise.PostgresArrayWrapper = pq.Array
+//	noise.PostgresArrayWrapper = pq.Array
 var PostgresArrayWrapper func(any) interface {
 	driver.Valuer
 	sql.Scanner

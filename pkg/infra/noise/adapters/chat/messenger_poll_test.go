@@ -25,9 +25,9 @@ import (
 //
 // O fake NÃO monta um protobuf próprio: testkit.Fake.BuildPollCreation
 // delega para o construtor REAL
-// (internal/wa-noise/capabilities/message/poll.go:65), que é para onde
+// (internal/noise/capabilities/message/poll.go:65), que é para onde
 // (*core.Client).BuildPollCreation também delega
-// (internal/wa-noise/core/msgsecret_poll.go:65). ARMADILHA 1: um dublê mais
+// (internal/noise/core/msgsecret_poll.go:65). ARMADILHA 1: um dublê mais
 // permissivo esconderia exatamente a troca de argumento que este arquivo
 // existe para pegar.
 
@@ -45,7 +45,7 @@ type pollRecorderCall struct {
 }
 
 // pollRecorder é o dublê de PollOptionRecorder. Guarda o que o registrador de
-// produção guarda — ver pkg/infra/wa-noise/registry/manager.go:154 e
+// produção guarda — ver pkg/infra/noise/registry/manager.go:154 e
 // registry/userclients/userclients.go:70 — e nada além disso.
 type pollRecorder struct {
 	Calls []pollRecorderCall
@@ -203,7 +203,7 @@ func TestChatMessengerAdapter_SendPoll_RemembersOptionsUnderServerID(t *testing.
 // pkg/bootstrap/eventhandler_message.go:130 faz. Refaz aqui a mesma
 // aritmética que o handler de eventos faz — SHA-256 do texto guardado — e
 // exige que ela resolva os hashes que o wire produz para essas opções
-// (internal/wa-noise/capabilities/message/poll.go:38, HashPollOptions).
+// (internal/noise/capabilities/message/poll.go:38, HashPollOptions).
 //
 // Se as opções não forem guardadas, ou forem guardadas alteradas (trim,
 // normalização de acento, ordem trocada por um mapa), este teste morde: um
@@ -236,7 +236,7 @@ func TestChatMessengerAdapter_SendPoll_StoredOptionsResolveTheVoteHashes(t *test
 	}
 
 	// Os hashes que o wire produz para essas opções — a função REAL do
-	// fork (internal/wa-noise/capabilities/message/poll.go:38), a mesma que
+	// fork (internal/noise/capabilities/message/poll.go:38), a mesma que
 	// BuildPollVote usa para montar o voto. Não uma reimplementação local:
 	// ARMADILHA 1, o dublê da regra tem de ser a regra.
 	for i, h := range wamessage.HashPollOptions(options) {

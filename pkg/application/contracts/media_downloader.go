@@ -11,7 +11,7 @@ import (
 //
 // Porta ÚNICA para os cinco tipos de mídia (CAP-09B), e não cinco portas:
 // a primitive do SDK é uma só — `Client.Download(ctx, DownloadableMessage)`,
-// internal/wa-noise/core/download.go:62 — e o que varia entre imagem, vídeo,
+// internal/noise/core/download.go:62 — e o que varia entre imagem, vídeo,
 // áudio, documento e figurinha é apenas QUAL sub-mensagem protobuf embrulha os
 // mesmos sete campos de cifragem/localização. Esse "qual" é
 // domain.MediaDescriptor.Kind, e a montagem correspondente
@@ -25,8 +25,8 @@ import (
 // `Download` para gravar bytes num arquivo temporário.
 //
 // SessionGuard embutido porque download é operação PROTOCOLAR: sem cliente
-// wa-noise não há media connection para resolver os hosts de download
-// (internal/wa-noise/capabilities/media/download.go, DownloadWithPath ->
+// noise não há media connection para resolver os hosts de download
+// (internal/noise/capabilities/media/download.go, DownloadWithPath ->
 // RefreshConn), então a checagem de sessão não é cerimônia — é pré-condição.
 type MediaDownloader interface {
 	SessionGuard

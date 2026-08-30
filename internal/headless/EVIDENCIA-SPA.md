@@ -5,7 +5,7 @@ Tudo aqui foi **observado** em `https://web.whatsapp.com/`, não deduzido do
 nomes internos; **não** é verdade automática sobre formato, invariante,
 comportamento, ciclo de vida ou erro. O que a página faz é o que vale.
 
-Reproduzir: `WA_HEADLESS_REAL_SPA=1 go test -run TestRealSPA ./internal/wa-headless/ -v`
+Reproduzir: `WA_HEADLESS_REAL_SPA=1 go test -run TestRealSPA ./internal/headless/ -v`
 (a sonda vive em `realspa_test.go` e é pulada por padrão).
 
 **Zero PII neste arquivo.** As medições são booleanos, contagens, nomes de tag e
@@ -1061,7 +1061,7 @@ Comando:
 ```
 WA_HEADLESS_REAL_SPA=1 \
 WA_HEADLESS_PROFILE_DIR=<repo>/scripts/chromium-study/wa-session/profile \
-go test -run TestRealSPABootUnderStress ./internal/wa-headless/ -v -timeout 120m
+go test -run TestRealSPABootUnderStress ./internal/headless/ -v -timeout 120m
 ```
 
 ### M7.1 — Os três resultados, nomeados ANTES da corrida
@@ -1476,12 +1476,12 @@ Comandos, os dois:
 # execução A — as quatro pernas
 WA_HEADLESS_REAL_SPA=1 \
 WA_HEADLESS_PROFILE_DIR=<repo>/scripts/chromium-study/wa-session/profile \
-go test -run TestRealSPAOpeningPersistenceUnderLongCut ./internal/wa-headless/ -v -timeout 150m
+go test -run TestRealSPAOpeningPersistenceUnderLongCut ./internal/headless/ -v -timeout 150m
 
 # execução B — a REPOSIÇÃO da perna que a rede da casa desqualificou (M8.6)
 WA_HEADLESS_REAL_SPA=1 \
 WA_HEADLESS_PROFILE_DIR=<repo>/scripts/chromium-study/wa-session/profile \
-go test -run 'TestRealSPAOpeningPersistenceUnderLongCut/long-cut-2$' ./internal/wa-headless/ -v -timeout 60m
+go test -run 'TestRealSPAOpeningPersistenceUnderLongCut/long-cut-2$' ./internal/headless/ -v -timeout 60m
 ```
 
 ### M8.1 — Por que esta era a metade que faltava

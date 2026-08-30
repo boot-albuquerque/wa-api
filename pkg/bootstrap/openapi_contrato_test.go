@@ -442,7 +442,7 @@ const minimoDeCodigosCitados = 20
 func lerFonteGo(t *testing.T) string {
 	t.Helper()
 	var sb strings.Builder
-	raizes := []string{"../../pkg", "../../internal/wa-noise", "../../cmd"}
+	raizes := []string{"../../pkg", "../../internal/noise", "../../cmd"}
 	for _, raiz := range raizes {
 		err := filepath.Walk(raiz, func(caminho string, info os.FileInfo, err error) error {
 			if err != nil || info.IsDir() {

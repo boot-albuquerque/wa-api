@@ -149,12 +149,12 @@ func TestAMissingChatIsNotAReadFailure(t *testing.T) {
 
 // The rendering carries no identity.
 func TestTheMetadataRenderingIsQuiet(t *testing.T) {
-	m := Metadata{JID: labGroupID, Subject: "wa-headless-lab", Owner: "5541999999999@lid",
+	m := Metadata{JID: labGroupID, Subject: "headless-lab", Owner: "5541999999999@lid",
 		Description: "segredo", DescriptionSource: "none",
 		Participants: []Participant{{JID: "1@lid", Admin: true}}}
 	s := m.String()
 	if strings.Contains(s, "5541") || strings.Contains(s, "segredo") ||
-		strings.Contains(s, "wa-headless-lab") || strings.Contains(s, labGroupID) {
+		strings.Contains(s, "headless-lab") || strings.Contains(s, labGroupID) {
 		t.Errorf("Metadata.String carries content: %s", s)
 	}
 	if !strings.Contains(s, "admins=1") {

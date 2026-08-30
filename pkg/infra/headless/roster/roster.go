@@ -115,7 +115,7 @@ func (r *Roster) ContactNames(ctx context.Context, txtID string) (map[domain.JID
 // Status, PictureID and Devices stay EMPTY here, and that is a property of the
 // engine rather than a gap: this adapter reads the page's contact collection,
 // which carries names and identities and nothing the server would have to be
-// asked for. The wa-noise adapter fills exactly the complementary half.
+// asked for. The noise adapter fills exactly the complementary half.
 func (r *Roster) GetUserInfo(ctx context.Context, txtID string, jids []domain.JID) ([]domain.UserInfo, error) {
 	names, err := r.ContactNames(ctx, txtID)
 	if err != nil {

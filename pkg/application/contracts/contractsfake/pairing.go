@@ -19,7 +19,7 @@ type PairingQRReaderCall struct {
 // Zero-value: a sessão é válida (SessionGuard embutido) e o QR é a string
 // vazia SEM erro — que é o estado real entre duas rotações do código, e não
 // uma falha. Um dublê que devolvesse erro aí seria mais estrito que a
-// produção (pkg/infra/wa-noise/adapters/pairing/qr.go), e esconderia o
+// produção (pkg/infra/noise/adapters/pairing/qr.go), e esconderia o
 // caminho que os testes precisam de exercitar.
 type PairingQRReader struct {
 	SessionGuard

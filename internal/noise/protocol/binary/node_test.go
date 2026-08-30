@@ -32,7 +32,7 @@ func TestGetChildrenByTagFilters(t *testing.T) {
 }
 
 // GetOptionalChildByTag desce um nivel por tag. E' como todo o resto do
-// wa-noise navega a arvore, e o ok=false tem que distinguir "nao achei" de
+// noise navega a arvore, e o ok=false tem que distinguir "nao achei" de
 // "achei um no' vazio".
 func TestGetOptionalChildByTagRecursesPerTag(t *testing.T) {
 	root := &Node{Tag: "iq", Content: []Node{

@@ -43,7 +43,7 @@ func TestProbeRejectMembershipRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving conta-B: %v", err)
 	}
-	subject := "wa-headless reject probe " + strconv.FormatInt(time.Now().Unix(), 10)
+	subject := "headless reject probe " + strconv.FormatInt(time.Now().Unix(), 10)
 	created, err := gA.Ensure(ctx, subject, []string{identB.JID}, "probe/reject/create")
 	if err != nil {
 		t.Fatalf("creating the throwaway group: %v", err)

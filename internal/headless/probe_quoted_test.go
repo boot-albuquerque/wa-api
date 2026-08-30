@@ -52,7 +52,7 @@ func TestProbeQuotedOf(t *testing.T) {
 	// FIRST: an ordinary message must report NO quote. Without this leg, a reader
 	// that reported "quotes" for everything would pass the second leg.
 	first, err := send.Text(ctx, runner, eval, peer,
-		fmt.Sprintf("wa-headless quoted probe target %d", time.Now().Unix()), "probe/quotedof")
+		fmt.Sprintf("headless quoted probe target %d", time.Now().Unix()), "probe/quotedof")
 	if err != nil {
 		t.Fatalf("Text: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestProbeQuotedOf(t *testing.T) {
 
 	// THEN: a reply must report the quote, and point at the right message.
 	reply, err := send.Reply(ctx, runner, eval, peer, first.ID.ID,
-		"wa-headless quoted probe reply", "probe/quotedof")
+		"headless quoted probe reply", "probe/quotedof")
 	if err != nil {
 		t.Fatalf("Reply: %v", err)
 	}

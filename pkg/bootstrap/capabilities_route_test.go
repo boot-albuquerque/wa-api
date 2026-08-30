@@ -26,10 +26,10 @@ import (
 // authAlice/authAdmin de produção — não o handler cru.
 
 const (
-	capRouteTokenNoise    = "token-cap-wa-noise"
-	capRouteUserNoise     = "user-cap-wa-noise"
-	capRouteTokenHeadless = "token-cap-wa-headless"
-	capRouteUserHeadless  = "user-cap-wa-headless"
+	capRouteTokenNoise    = "token-cap-noise"
+	capRouteUserNoise     = "user-cap-noise"
+	capRouteTokenHeadless = "token-cap-headless"
+	capRouteUserHeadless  = "user-cap-headless"
 	capRouteAdminToken    = "admin-token-cap"
 )
 
@@ -89,44 +89,44 @@ func TestCapabilitiesRoute_Session_SemAuth401(t *testing.T) {
 	}
 }
 
-// TESTE 2 — GET /session/capabilities autenticado com sessão wa_noise vs
-// wa_headless: mapas DIFERENTES, refletindo a engine certa.
+// TESTE 2 — GET /session/capabilities autenticado com sessão noise vs
+// headless: mapas DIFERENTES, refletindo a engine certa.
 //
 // Casos concretos, medidos no matrix.go (não suposição):
-//   - send_carousel é supported no wa_noise (F216, confirmado).
-//   - set_group_photo é engine_unsupported no wa_headless (H140, confirmado).
+//   - send_carousel é supported no noise (F216, confirmado).
+//   - set_group_photo é engine_unsupported no headless (H140, confirmado).
 func TestCapabilitiesRoute_Session_RefleteAEngineDaSessao(t *testing.T) {
 	f := newCapabilitiesFixtureReal(t)
 
 	recNoise := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenNoise)
 	if recNoise.Code != http.StatusOK {
-		t.Fatalf("wa_noise: status = %d, quero 200 (corpo: %s)", recNoise.Code, recNoise.Body.String())
+		t.Fatalf("noise: status = %d, quero 200 (corpo: %s)", recNoise.Code, recNoise.Body.String())
 	}
 	var envNoise sessionCapabilitiesEnvelope
 	if err := json.Unmarshal(recNoise.Body.Bytes(), &envNoise); err != nil {
-		t.Fatalf("decode wa_noise: %v (corpo: %s)", err, recNoise.Body.String())
+		t.Fatalf("decode noise: %v (corpo: %s)", err, recNoise.Body.String())
 	}
 	if envNoise.Data.AccountType != domain.AccountTypeUnknown.String() {
 		t.Errorf("account_type = %q, quero %q (detecção real ainda não existe)", envNoise.Data.AccountType, domain.AccountTypeUnknown.String())
 	}
 	if got := envNoise.Data.Capabilities[domain.CapSendCarousel.String()]; got != domain.StatusSupported.String() {
-		t.Errorf("wa_noise send_carousel = %q, quero %q (F216)", got, domain.StatusSupported.String())
+		t.Errorf("noise send_carousel = %q, quero %q (F216)", got, domain.StatusSupported.String())
 	}
 
 	recHeadless := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenHeadless)
 	if recHeadless.Code != http.StatusOK {
-		t.Fatalf("wa_headless: status = %d, quero 200 (corpo: %s)", recHeadless.Code, recHeadless.Body.String())
+		t.Fatalf("headless: status = %d, quero 200 (corpo: %s)", recHeadless.Code, recHeadless.Body.String())
 	}
 	var envHeadless sessionCapabilitiesEnvelope
 	if err := json.Unmarshal(recHeadless.Body.Bytes(), &envHeadless); err != nil {
-		t.Fatalf("decode wa_headless: %v (corpo: %s)", err, recHeadless.Body.String())
+		t.Fatalf("decode headless: %v (corpo: %s)", err, recHeadless.Body.String())
 	}
 	if got := envHeadless.Data.Capabilities[domain.CapSetGroupPhoto.String()]; got != domain.StatusEngineUnsupported.String() {
-		t.Errorf("wa_headless set_group_photo = %q, quero %q (H140)", got, domain.StatusEngineUnsupported.String())
+		t.Errorf("headless set_group_photo = %q, quero %q (H140)", got, domain.StatusEngineUnsupported.String())
 	}
 
 	if len(envNoise.Data.Capabilities) != len(envHeadless.Data.Capabilities) {
-		t.Fatalf("tamanhos diferentes: wa_noise=%d wa_headless=%d — as duas devem cobrir as mesmas 88 capabilities",
+		t.Fatalf("tamanhos diferentes: noise=%d headless=%d — as duas devem cobrir as mesmas 88 capabilities",
 			len(envNoise.Data.Capabilities), len(envHeadless.Data.Capabilities))
 	}
 	if envNoise.Data.Capabilities[domain.CapSendCarousel.String()] == envHeadless.Data.Capabilities[domain.CapSendCarousel.String()] {
@@ -136,7 +136,7 @@ func TestCapabilitiesRoute_Session_RefleteAEngineDaSessao(t *testing.T) {
 }
 
 // TESTE 3 — nenhuma capability em status "unknown" faz a rota travar/panicar.
-// unknown é o caso mais comum hoje (~40 capabilities no wa_headless).
+// unknown é o caso mais comum hoje (~40 capabilities no headless).
 func TestCapabilitiesRoute_Session_StatusUnknownNaoPanica(t *testing.T) {
 	f := newCapabilitiesFixtureReal(t)
 	rec := f.do(t, http.MethodGet, "/session/capabilities", capRouteTokenHeadless)
@@ -154,7 +154,7 @@ func TestCapabilitiesRoute_Session_StatusUnknownNaoPanica(t *testing.T) {
 		}
 	}
 	if unknownCount == 0 {
-		t.Fatalf("esperava capabilities unknown no wa_headless (linha de base do matrix), veio 0 — a fixture mudou?")
+		t.Fatalf("esperava capabilities unknown no headless (linha de base do matrix), veio 0 — a fixture mudou?")
 	}
 }
 
@@ -235,25 +235,25 @@ func TestCapabilitiesRoute_Admin_ComAuthContemAMatrizCompleta(t *testing.T) {
 		}
 		if row.Capability == domain.CapSendCarousel.String() && row.Engine == domain.EngineNoise.String() {
 			if row.Status != domain.StatusSupported.String() || row.Evidence != domain.EvidenceConfirmed.String() {
-				t.Errorf("send_carousel/wa_noise/unknown = status=%q evidence=%q, quero supported/confirmed (F216)", row.Status, row.Evidence)
+				t.Errorf("send_carousel/noise/unknown = status=%q evidence=%q, quero supported/confirmed (F216)", row.Status, row.Evidence)
 			}
 			if row.Reason == "" {
-				t.Error("send_carousel/wa_noise veio sem reason — a superfície admin precisa dele")
+				t.Error("send_carousel/noise veio sem reason — a superfície admin precisa dele")
 			}
 			foundConfirmedSupported = true
 		}
 		if row.Capability == domain.CapSetGroupPhoto.String() && row.Engine == domain.EngineHeadless.String() {
 			if row.Status != domain.StatusEngineUnsupported.String() || row.Evidence != domain.EvidenceConfirmed.String() {
-				t.Errorf("set_group_photo/wa_headless/unknown = status=%q evidence=%q, quero engine_unsupported/confirmed (H140)", row.Status, row.Evidence)
+				t.Errorf("set_group_photo/headless/unknown = status=%q evidence=%q, quero engine_unsupported/confirmed (H140)", row.Status, row.Evidence)
 			}
 			foundEngineUnsupported = true
 		}
 	}
 	if !foundConfirmedSupported {
-		t.Error("não encontrei a linha send_carousel/wa_noise na matriz")
+		t.Error("não encontrei a linha send_carousel/noise na matriz")
 	}
 	if !foundEngineUnsupported {
-		t.Error("não encontrei a linha set_group_photo/wa_headless na matriz")
+		t.Error("não encontrei a linha set_group_photo/headless na matriz")
 	}
 }
 

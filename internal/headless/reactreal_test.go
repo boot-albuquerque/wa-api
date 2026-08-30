@@ -27,7 +27,7 @@ import (
 func TestRealSPAReactsToItsOwnMessage(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
-		t.Skip("set WA_HEADLESS_SEND_TEST=1; this sends a real message and reacts to it")
+		t.Skip("set HEADLESS_SEND_TEST=1; this sends a real message and reacts to it")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	toJID := os.Getenv("WA_SEND_TO_JID")
@@ -50,7 +50,7 @@ func TestRealSPAReactsToItsOwnMessage(t *testing.T) {
 	eval := sess.Tab().Evaluate
 
 	sent, err := send.Text(ctx, runner, eval, toJID,
-		"wa-headless: mensagem de teste para reagir", "react/seed")
+		"headless: mensagem de teste para reagir", "react/seed")
 	if err != nil {
 		t.Fatalf("seeding a message to react to: %v", err)
 	}

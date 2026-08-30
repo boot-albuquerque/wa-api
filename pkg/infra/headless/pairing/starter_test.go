@@ -19,7 +19,7 @@ func TestStarterSatisfazAPorta(t *testing.T) {
 	}
 }
 
-// TestCheckOwnership_SempreAceita: wa_headless não tem lease entre réplicas
+// TestCheckOwnership_SempreAceita: headless não tem lease entre réplicas
 // hoje — ver o comentário do próprio método sobre por quê. A checagem nunca
 // recusa.
 func TestCheckOwnership_SempreAceita(t *testing.T) {

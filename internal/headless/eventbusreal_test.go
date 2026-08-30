@@ -25,7 +25,7 @@ import (
 func TestRealSPAEventBusFoundation(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_EVENTS_TEST") == "" {
-		t.Skip("set WA_HEADLESS_EVENTS_TEST=1; this sends messages to the peer lab account")
+		t.Skip("set HEADLESS_EVENTS_TEST=1; this sends messages to the peer lab account")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -107,7 +107,7 @@ func TestRealSPAEventBusFoundation(t *testing.T) {
 
 	// --- 1 and 2: single install, and LIVE delivery -----------------------
 	sent, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-		fmt.Sprintf("wa-headless event probe %d", time.Now().UnixNano()), "events/send-1")
+		fmt.Sprintf("headless event probe %d", time.Now().UnixNano()), "events/send-1")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestRealSPAEventBusFoundation(t *testing.T) {
 	mu.Unlock()
 
 	second, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-		fmt.Sprintf("wa-headless event probe %d", time.Now().UnixNano()), "events/send-2")
+		fmt.Sprintf("headless event probe %d", time.Now().UnixNano()), "events/send-2")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestRealSPAEventBusFoundation(t *testing.T) {
 	sendDeadline := time.Now().Add(90 * time.Second)
 	for {
 		third, err = send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-			fmt.Sprintf("wa-headless event probe %d", time.Now().UnixNano()), "events/send-3")
+			fmt.Sprintf("headless event probe %d", time.Now().UnixNano()), "events/send-3")
 		if err == nil {
 			break
 		}

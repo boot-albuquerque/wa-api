@@ -7,7 +7,7 @@ import (
 	"wa-api/internal/noise/capabilities/media"
 )
 
-// A implementacao vive em internal/wa-noise/media/upload.go
+// A implementacao vive em internal/noise/media/upload.go
 // (ADR-0004, Fase F/G lote 1).
 
 // UploadResponse contains the data from the attachment upload, which can be put into a message to send the attachment.
@@ -19,7 +19,7 @@ type UploadResponse = media.UploadResponse
 //
 // For example, to send an image:
 //
-//	resp, err := cli.Upload(context.Background(), yourImageBytes, wa-noise.MediaImage)
+//	resp, err := cli.Upload(context.Background(), yourImageBytes, noise.MediaImage)
 //	// handle error
 //
 //	imageMsg := &waE2E.ImageMessage{

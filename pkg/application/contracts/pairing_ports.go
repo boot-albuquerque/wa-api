@@ -15,7 +15,7 @@ import "context"
 // Every one of them is engine-conditioned. That is the whole reason they are
 // ports rather than direct calls into an adapter: until 2026-08-27 the HTTP
 // handlers behind /session/qr, /session/connect and /session/pairphone were
-// wired to a hardcoded wa-noise adapter, so a session persisted with
+// wired to a hardcoded noise adapter, so a session persisted with
 // engine=headless still paired over the socket. See HOUSEKEEP F273.
 
 // PairingQRReader offers the QR code a human points a phone at.
@@ -25,7 +25,7 @@ import "context"
 // The code lives in users.qrcode, which is engine-agnostic storage, so reading
 // it looks like it belongs to the user repository. It does not. The column only
 // ever holds a value because ONE engine's lifecycle listener writes it there
-// (pkg/bootstrap/lifecycle.go, on every "code" event of the wa-noise QR
+// (pkg/bootstrap/lifecycle.go, on every "code" event of the noise QR
 // channel). An engine with no such writer would serve an empty string forever
 // and answer 200, which is the exact shape of failure this repository keeps
 // paying for: a truthful-looking success for something that never happened.
@@ -48,7 +48,7 @@ type PairingQRReader interface {
 // Every other provider-dependent port in this package embeds it, because
 // nearly all of them ask "is there a session for this txtID?" before doing
 // anything. This one cannot: it is what MAKES the session, so requiring one to
-// already exist is a contradiction. On wa-noise, EnsureSession fails with
+// already exist is a contradiction. On noise, EnsureSession fails with
 // exactly the state connect is called in.
 //
 // The consequence is deliberate and visible: coverage_gate_test.go enumerates

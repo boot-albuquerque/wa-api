@@ -64,7 +64,7 @@ func (evh *UserEventHandler) handleEvent(rawEvt interface{}) {
 	// F76.
 	//
 	// A entrega do QR ao cliente nao passa por aqui: quem a faz e'
-	// pkg/infra/wa-noise/runtime/session/events.go:54, pelo canal da sessao.
+	// pkg/infra/noise/runtime/session/events.go:54, pelo canal da sessao.
 	// Este ramo so' existia como log.
 	//
 	// Fica em Debug, e nao em Info, porque o evento e' rotineiro (um por

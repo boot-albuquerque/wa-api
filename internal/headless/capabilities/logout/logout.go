@@ -1,4 +1,4 @@
-// Package logout deauthenticates a live wa_headless session — the
+// Package logout deauthenticates a live headless session — the
 // counterpart to a phone owner choosing "Log out" under Linked Devices.
 //
 // # Where the call comes from, and what was measured
@@ -12,13 +12,13 @@
 // puppeteer browser, waiting up to 1s) are specific to ITS process
 // lifecycle, not to the page call itself.
 //
-// H122 (internal/wa-headless/HOUSEKEEP.md, 2026-08-22) had only confirmed
+// H122 (internal/headless/HOUSEKEEP.md, 2026-08-22) had only confirmed
 // Socket.logout EXISTS and is a function — refusing to CALL it on policy
 // grounds, since it deauthenticates a real account and only a human with
 // the phone can restore it. That policy was revisited on explicit request
 // (F380/this package), and the call was finally MEASURED — not guessed —
 // against a genuinely paired, disposable profile
-// (TestProbeSocketLogout, internal/wa-headless/probe_logout_test.go):
+// (TestProbeSocketLogout, internal/headless/probe_logout_test.go):
 //
 //	BEFORE: socket=CONNECTED, hasOwner=true
 //	Socket.logout() returns without throwing

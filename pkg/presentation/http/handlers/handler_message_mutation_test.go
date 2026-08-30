@@ -21,7 +21,7 @@ import (
 // Este arquivo cobre as duas capabilities de MUTAÇÃO de mensagem desde o
 // CAP-10 — POST /chat/delete/message, POST /chat/delete e POST
 // /chat/send/edit — que deixaram de devolver Status="validated" sem revogar
-// nem editar nada e passaram a mutar de verdade pelo wa-noise.
+// nem editar nada e passaram a mutar de verdade pelo noise.
 //
 // Herda os eixos que handler_message_test.go cobria para as duas antes da
 // migração (não autenticado, session id vazio, corpo malformado, campo

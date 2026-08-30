@@ -9,7 +9,7 @@ import (
 )
 
 // As tres constantes abaixo sao a regra REAL de validacao de telefone do
-// fork, copiada de internal/wa-noise/capabilities/pairing/paircode.go:57-62
+// fork, copiada de internal/noise/capabilities/pairing/paircode.go:57-62
 // com os valores de constants.go:67-69:
 //
 //	phone = notNumbers.ReplaceAllString(phone, "")
@@ -28,7 +28,7 @@ const (
 
 var pairPhoneNotNumbers = regexp.MustCompile("[^0-9]")
 
-// PairPhone imita Client.PairPhone (internal/wa-noise/core/pair-code.go:50).
+// PairPhone imita Client.PairPhone (internal/noise/core/pair-code.go:50).
 //
 // A validacao roda SEMPRE, antes de PairPhoneFn: ela e' da producao, nao do
 // caso de teste, e um teste nao pode desliga-la sem deixar o dublê mais

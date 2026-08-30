@@ -32,7 +32,7 @@ const msgSessionOwnedByAnotherReplica = "this session is owned by another replic
 // It is a thin adapter and not new behaviour: both methods do exactly what the
 // two closures injected into ConnectHandler did until 2026-08-27
 // (WithStartSession / WithCheckOwnership). What changed is that they are now
-// reached THROUGH an engine, so a session recorded as wa_headless cannot arrive
+// reached THROUGH an engine, so a session recorded as headless cannot arrive
 // here by default any more. See HOUSEKEEP F273/F281.
 type noiseSessionStarter struct {
 	server *server
@@ -80,22 +80,22 @@ var _ appport.SessionStarter = (*noiseSessionStarter)(nil)
 // buildPairingRegistry wires the pairing surface: which provider serves which
 // engine, for QR, phone code and connect.
 //
-// # wa_headless: all three pairing ports are wired (HOUSEKEEP F370/F380)
+// # headless: all three pairing ports are wired (HOUSEKEEP F370/F380)
 //
-// Until 2026-08-29 (H145) wa_headless had an entry with three nil ports on
+// Until 2026-08-29 (H145) headless had an entry with three nil ports on
 // purpose: no PairingQRReader, PhonePairer or SessionStarter implementation
-// existed anywhere in the tree, and nothing under pkg/infra/wa-headless was
+// existed anywhere in the tree, and nothing under pkg/infra/headless was
 // even constructed in pkg/bootstrap. QR/connect were wired first —
-// pkg/infra/wa-headless/pairing.QRReader/Starter, built over
+// pkg/infra/headless/pairing.QRReader/Starter, built over
 // core.StartPairingSession (a new boot primitive; core.StartSession itself
 // stays restoration-only) and the wwebjs-derived QR construction MEASURED
-// against this build (internal/wa-headless/capabilities/qr, H145).
+// against this build (internal/headless/capabilities/qr, H145).
 // PhonePairer followed the same day (F380): the same UNPAIRED-state gate
-// H122 found for wa_noise's own phone pairing was measured against a
+// H122 found for noise's own phone pairing was measured against a
 // genuinely unpaired session this time — H122 had only probed presence
 // against an already-paired one, where the reference's own gate stops it
 // before anything runs — and the call sequence
-// (internal/wa-headless/capabilities/phonepair) reached WhatsApp's real
+// (internal/headless/capabilities/phonepair) reached WhatsApp's real
 // server (a structured IQErrorBadRequest for a fake test number, not a
 // crash).
 //

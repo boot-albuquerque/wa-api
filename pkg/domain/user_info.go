@@ -1,7 +1,7 @@
 package domain
 
 // This file holds the contact/user metadata that used to cross the ports as
-// `any`, which meant the ENGINE decided the JSON shape: the wa-noise adapter
+// `any`, which meant the ENGINE decided the JSON shape: the noise adapter
 // handed the SDK's map[types.JID]types.UserInfo straight through, and the
 // headless adapter handed a map[JID]ContactName. Two different bodies for the
 // same route, neither declared anywhere. See docs/HTTP-DTO-CONVENTIONS.md §1.
@@ -14,7 +14,7 @@ package domain
 //
 // Fields an engine cannot know stay at their zero value. That is a measured
 // property, not a gap: the headless build reads the page's contact collection,
-// which carries no status and no device list, while wa-noise asks the server
+// which carries no status and no device list, while noise asks the server
 // and gets both but knows no local names.
 type UserInfo struct {
 	// JID is the identity the caller asked about, echoed so a client that
@@ -69,7 +69,7 @@ type Contact struct {
 	PushName     string
 	BusinessName string
 
-	// IsBusiness is only answered by the headless engine today; wa-noise's
+	// IsBusiness is only answered by the headless engine today; noise's
 	// contact store does not carry the flag.
 	IsBusiness bool
 }

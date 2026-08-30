@@ -12,7 +12,7 @@ import (
 	"wa-api/internal/noise/protocol/proto/waE2E"
 )
 
-// A logica de midia mora em internal/wa-noise/media e e' testada la'. O que
+// A logica de midia mora em internal/noise/media e e' testada la'. O que
 // este arquivo cobre e' a camada fina do pacote raiz: o adaptador
 // *Client -> media.Transport e as guardas de receiver nil dos wrappers.
 

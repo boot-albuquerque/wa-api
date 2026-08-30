@@ -5,7 +5,7 @@ package main
 // # O defeito que esta regra corrige, medido e não suposto
 //
 // Elegibilidade exige ALCANCE DE PRODUÇÃO: uma capability de
-// `internal/wa-headless` só entra no denominador quando `pkg/` a liga. Como as
+// `internal/headless` só entra no denominador quando `pkg/` a liga. Como as
 // capabilities foram escritas antes de serem ligadas, cada port novo acordava
 // de uma vez a dívida inteira de uma capability — e `min_func_coverage`, que o
 // baseline declara ratchet-UP, DESCEU nos seis commits anteriores a este:

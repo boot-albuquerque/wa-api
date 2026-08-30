@@ -83,9 +83,9 @@ func TestEnsureSessionRespondePosseSemBootar(t *testing.T) {
 }
 
 // TestEnsureSession_ErroENoSessionTipado é o achado da F379, medido ao
-// vivo: uma sessão wa_headless nunca conectada devolvia 500 internal_error
+// vivo: uma sessão headless nunca conectada devolvia 500 internal_error
 // em GET /session/hmac/config, POST /session/history e GET
-// /session/disconnect — a MESMA situação que, em wa_noise, já devolvia 400
+// /session/disconnect — a MESMA situação que, em noise, já devolvia 400
 // no_session. A causa era EnsureSession devolver um erro CRU
 // (fmt.Errorf envolvendo registry.ErrUnknownSession), não um
 // *apperr.AppError — e RespondJSON (pkg/presentation/http/response.go) só
@@ -118,7 +118,7 @@ func TestEnsureSession_ErroENoSessionTipado(t *testing.T) {
 
 // TestRelease_SessaoDesconhecidaDevolveNoSessionTipado é o mesmo achado da
 // F379, mas em Release (o outro lado do mesmo bug — GET /session/disconnect
-// numa sessão wa_headless nunca conectada também devolvia 500).
+// numa sessão headless nunca conectada também devolvia 500).
 func TestRelease_SessaoDesconhecidaDevolveNoSessionTipado(t *testing.T) {
 	s := NewSessions(registry.New(1), cfgOK)
 

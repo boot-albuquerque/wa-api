@@ -1,6 +1,6 @@
-// Package qr assembles the pairing QR string from a live wa_headless
-// session, the same contract pkg/infra/wa-noise/adapters/pairing/qr.go
-// already serves for wa_noise: a raw string, never rendered here — the
+// Package qr assembles the pairing QR string from a live headless
+// session, the same contract pkg/infra/noise/adapters/pairing/qr.go
+// already serves for noise: a raw string, never rendered here — the
 // caller (or the eventual HTTP consumer) draws the code, this package only
 // answers "what does the code say right now".
 //
@@ -10,7 +10,7 @@
 // raw.githubusercontent.com on 2026-08-29 — HOUSEKEEP H145):
 //
 //	registrationInfo = await window.require('WAWebSignalStoreApi').waSignalStore.getRegistrationInfo()
-//	noiseKeyPair     = await window.require('WAWebUserPrefsInfoStore').noiseInfo.get()
+//	noiseKeyPair     = await window.require('WAWebUserPrefsInfoStore').waNoiseInfo.get()
 //	staticKeyB64     = window.require('WABase64').encodeB64(noiseKeyPair.staticKeyPair.pubKey)
 //	identityKeyB64   = window.require('WABase64').encodeB64(registrationInfo.identityKeyPair.pubKey)
 //	advSecretKey     = await window.require('WAWebUserPrefsMultiDevice').getADVSecretKey()
@@ -38,6 +38,18 @@
 // a human clicking "refresh code" on the real page triggers, and wwebjs's
 // own reference calls the equivalent path unconditionally on its
 // UNPAIRED_IDLE transition, not behind a "does this look necessary" check.
+//
+// A second divergence, found the same way: WAWebUserPrefsInfoStore's own
+// property is `waNoiseInfo`, not `noiseInfo` — MEASURED live via CDP
+// (2026-08-30, HOUSEKEEP H147, .lab profile "conta-A" copy) against the
+// bundle wwebjs's own source names `noiseInfo`. `Object.keys(store)` on
+// this build returns exactly `["waNoiseInfo"]`; `.get()` on it resolves
+// to the same shape as before (`staticKeyPair.{pubKey,privKey}`,
+// `recoveryToken`, `certificateChainBuffer`), so only the property name
+// moved, not the contract. H146 first measured this as a 500 on
+// `GET /session/pair/qr` (`Cannot read properties of undefined (reading
+// 'get')`); H147 found the renamed property and confirmed the full
+// assembly chain end-to-end via CDP before this file changed.
 //
 // # The code does not stay valid forever, and Conn.ref does not say so
 //
@@ -126,7 +138,7 @@ var (
 // (one sample; revisit if a longer gap is measured later) without fighting
 // the SPA's own reactive rotation on the common ~20s case.
 //
-// This constant is read by the CALLER (pkg/infra/wa-headless/pairing/qr.go),
+// This constant is read by the CALLER (pkg/infra/headless/pairing/qr.go),
 // which is the only layer with a place to persist "how long has this code
 // been the same" across separate HTTP polls — Read itself, and the Reader
 // it is called on, are constructed fresh per call and hold no history.
@@ -187,7 +199,7 @@ func kickScript(key string, doRefresh, forceStale bool) string {
 				return;
 			}
 			const registrationInfo = await window.require('WAWebSignalStoreApi').waSignalStore.getRegistrationInfo();
-			const noiseKeyPair = await window.require('WAWebUserPrefsInfoStore').noiseInfo.get();
+			const noiseKeyPair = await window.require('WAWebUserPrefsInfoStore').waNoiseInfo.get();
 			const b64 = window.require('WABase64').encodeB64;
 			const staticKeyB64 = b64(noiseKeyPair.staticKeyPair.pubKey);
 			const identityKeyB64 = b64(registrationInfo.identityKeyPair.pubKey);

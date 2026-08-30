@@ -1,4 +1,4 @@
-# Dependências de `internal/wa-noise/`
+# Dependências de `internal/noise/`
 
 Documento de arestas **reais**, verificadas por `grep` no HEAD. Nada aqui é
 aspiracional: onde a árvore não é uma camada limpa, este documento diz isso em
@@ -14,16 +14,16 @@ camadas **por pacote-folha**, e afirmar só o que é verificável. São duas:
 ### Invariante A — nada importa `core/`, exceto a fachada raiz
 
 ```
-$ grep -rn '"wa-api/internal/wa-noise/core"' --include="*.go" . | grep -v '^./internal/wa-noise/core/'
-internal/wa-noise/main.go:39:   core "wa-api/internal/wa-noise/core"
-internal/wa-noise/core/client_test.go:16:       "wa-api/internal/wa-noise/core"
+$ grep -rn '"wa-api/internal/noise/core"' --include="*.go" . | grep -v '^./internal/noise/core/'
+internal/noise/main.go:39:   core "wa-api/internal/noise/core"
+internal/noise/core/client_test.go:16:       "wa-api/internal/noise/core"
 ```
 
 Dois resultados, ambos legítimos: a fachada, e o teste externo
 (`package core_test`) que vive dentro do próprio `core/`.
 
 **Isto é travado por gate**, não por convenção: `scripts/waclient-facade-check.sh`
-falha o build se qualquer `.go` **fora** de `internal/wa-noise/` importar `core`.
+falha o build se qualquer `.go` **fora** de `internal/noise/` importar `core`.
 O racional do próprio script vale citar, porque é a lição da etapa 5:
 
 > A etapa 5 é a prova: ao mover os 114 arquivos da raiz para `core/`, os 44
@@ -31,18 +31,18 @@ O racional do próprio script vale citar, porque é a lição da etapa 5:
 > a árvore tinha perdido a fachada. Uma regra de arquitetura que não falha o
 > build não é uma regra, é um comentário.
 
-Os ~44 consumidores externos (`pkg/bootstrap/`, `pkg/infra/wa-noise/*`,
-`pkg/infra/{history,media}/`) importam `wa-api/internal/wa-noise` — a fachada
-`main.go`, `package wa-noise`. `Client` chega lá por **alias de tipo**
+Os ~44 consumidores externos (`pkg/bootstrap/`, `pkg/infra/noise/*`,
+`pkg/infra/{history,media}/`) importam `wa-api/internal/noise` — a fachada
+`main.go`, `package noise`. `Client` chega lá por **alias de tipo**
 (`type Client = core.Client`), que preserva o method set inteiro, inclusive os
 178 wrappers de `DangerousInternals`, em uma linha.
 
 ### Invariante B — as camadas de baixo nunca importam capacidade nem núcleo
 
 ```
-$ grep -rn 'wa-api/internal/wa-noise/\(capabilities\|core\)' --include="*.go" \
-    internal/wa-noise/protocol internal/wa-noise/security \
-    internal/wa-noise/persistence internal/wa-noise/observability
+$ grep -rn 'wa-api/internal/noise/\(capabilities\|core\)' --include="*.go" \
+    internal/noise/protocol internal/noise/security \
+    internal/noise/persistence internal/noise/observability
 (nenhum resultado)
 ```
 
@@ -51,7 +51,7 @@ $ grep -rn 'wa-api/internal/wa-noise/\(capabilities\|core\)' --include="*.go" \
 
 `runtime/` satisfaz a mesma propriedade e foi verificado na etapa 7:
 `runtime/keepalive/` importa apenas `protocol/binary`, `protocol/types/events` e
-`observability/log`; `runtime/proxy/` não importa **nada** de `wa-noise`. A
+`observability/log`; `runtime/proxy/` não importa **nada** de `noise`. A
 direção `core -> runtime` (e nunca o inverso) se mantém.
 
 ### Direção de dependência, como ela realmente é
@@ -60,7 +60,7 @@ direção `core -> runtime` (e nunca o inverso) se mantém.
                     consumidores externos (pkg/…)
                               │
                               ▼
-                    internal/wa-noise  (main.go — fachada, package wa-noise)
+                    internal/noise  (main.go — fachada, package noise)
                               │  alias de tipo
                               ▼
                           core/  ──────────────┐
@@ -91,7 +91,7 @@ quem declara a interface). Ver `ARCHITECTURE.md`.
 capacidade→capacidade em código de produção no HEAD:
 
 ```
-$ grep -rn 'wa-noise/capabilities/' --include="*.go" internal/wa-noise/capabilities | grep -v _test.go
+$ grep -rn 'noise/capabilities/' --include="*.go" internal/noise/capabilities | grep -v _test.go
 ```
 
 | De | Para | Arquivo |
@@ -170,18 +170,18 @@ concreto que a regra 7 do `CONTRIBUTING.md` cobre.
 Levantado na etapa 1 (`FASE_H_INVENTORY.md` §6.3) e confirmado no HEAD:
 
 ```
-$ grep -rn 'wa-noise/security/' --include="*.go" internal/wa-noise/protocol | grep -v _test.go
-protocol/socket/noisehandshake.go:20:   "wa-api/internal/wa-noise/security/gcm"
-protocol/appstate/encode.go:14:         "wa-api/internal/wa-noise/security/cbc"
-protocol/appstate/decode_mutation.go:23:"wa-api/internal/wa-noise/security/cbc"
-protocol/appstate/keys.go:16:           "wa-api/internal/wa-noise/security/hkdf"
-protocol/appstate/lthash/lthash.go:16:  "wa-api/internal/wa-noise/security/hkdf"
+$ grep -rn 'noise/security/' --include="*.go" internal/noise/protocol | grep -v _test.go
+protocol/socket/noisehandshake.go:20:   "wa-api/internal/noise/security/gcm"
+protocol/appstate/encode.go:14:         "wa-api/internal/noise/security/cbc"
+protocol/appstate/decode_mutation.go:23:"wa-api/internal/noise/security/cbc"
+protocol/appstate/keys.go:16:           "wa-api/internal/noise/security/hkdf"
+protocol/appstate/lthash/lthash.go:16:  "wa-api/internal/noise/security/hkdf"
 
-$ grep -rn 'wa-noise/protocol/' --include="*.go" internal/wa-noise/security | grep -v _test.go
-security/handshake/handshake.go:16:     "wa-api/internal/wa-noise/protocol/proto/waWa6"
-security/handshake/handshake.go:17:     "wa-api/internal/wa-noise/protocol/socket"
-security/handshake/cert.go:17:          "wa-api/internal/wa-noise/protocol/proto/waCert"
-security/paircrypto/signature.go:12:    "wa-api/internal/wa-noise/protocol/proto/waAdv"
+$ grep -rn 'noise/protocol/' --include="*.go" internal/noise/security | grep -v _test.go
+security/handshake/handshake.go:16:     "wa-api/internal/noise/protocol/proto/waWa6"
+security/handshake/handshake.go:17:     "wa-api/internal/noise/protocol/socket"
+security/handshake/cert.go:17:          "wa-api/internal/noise/protocol/proto/waCert"
+security/paircrypto/signature.go:12:    "wa-api/internal/noise/protocol/proto/waAdv"
 ```
 
 As duas arestas nomeadas pelo inventário:
@@ -209,7 +209,7 @@ e são as que realmente se sustentam.
 
 ```
 protocol/appstate/keys.go:15, decode_mutation.go:22, recovery.go:23
-    "wa-api/internal/wa-noise/persistence/store"
+    "wa-api/internal/noise/persistence/store"
 ```
 
 A especificação original da Fase H não declarava `protocol → persistence`. A
@@ -252,15 +252,15 @@ representação**, `appstatesync` **fala**.
 bash scripts/waclient-facade-check.sh
 
 # Invariante B
-grep -rn 'wa-api/internal/wa-noise/\(capabilities\|core\)' --include="*.go" \
-  internal/wa-noise/{protocol,security,persistence,observability,runtime}
+grep -rn 'wa-api/internal/noise/\(capabilities\|core\)' --include="*.go" \
+  internal/noise/{protocol,security,persistence,observability,runtime}
 
 # Arestas entre capacidades
-grep -rn 'wa-noise/capabilities/' --include="*.go" internal/wa-noise/capabilities | grep -v _test.go
+grep -rn 'noise/capabilities/' --include="*.go" internal/noise/capabilities | grep -v _test.go
 
 # Arestas protocol <-> security
-grep -rn 'wa-noise/security/'  --include="*.go" internal/wa-noise/protocol | grep -v _test.go
-grep -rn 'wa-noise/protocol/'  --include="*.go" internal/wa-noise/security | grep -v _test.go
+grep -rn 'noise/security/'  --include="*.go" internal/noise/protocol | grep -v _test.go
+grep -rn 'noise/protocol/'  --include="*.go" internal/noise/security | grep -v _test.go
 
 # Ciclo de verdade (o único que importa para o compilador)
 go build ./...

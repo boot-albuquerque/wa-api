@@ -196,7 +196,7 @@ func EncryptForDeviceV3(
 	// MANTIDO COMO ESTA', e a razao mudou depois da medicao de 2026-08-07:
 	// este ramo e' INALCANCAVEL a partir do wa-api. Client.SendFBMessage
 	// (core/sendfb.go:25) e' o unico caminho ate' aqui, tem ZERO chamadores em
-	// pkg/ e cmd/, e a fachada internal/wa-noise/main.go nao o reexporta.
+	// pkg/ e cmd/, e a fachada internal/noise/main.go nao o reexporta.
 	// Nenhuma rota HTTP alcanca o envio v3/FB.
 	//
 	// Nao se uniformiza porque nao se pode verificar: sem o ramo rodar,

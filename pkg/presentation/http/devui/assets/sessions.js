@@ -75,7 +75,7 @@ const WS_ABERTURA_MS = 5000;
 
 // QR_PRESO_MS é o limiar de "código preso" DEPOIS de já ter mostrado um QR
 // — diferente de QR_ESPERA_MS, que cobre "nunca mostrou nenhum". O backend
-// (internal/wa-headless/capabilities/qr, HOUSEKEEP H145) já tenta se
+// (internal/headless/capabilities/qr, HOUSEKEEP H145) já tenta se
 // recuperar sozinho de um código vazio ou expirado — medido em ~1-4s no
 // pior caso — então 15s de sondagem vazia SEGUIDA é folga generosa antes de
 // admitir que a recuperação automática não está a resolver e mostrar o

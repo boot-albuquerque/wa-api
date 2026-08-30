@@ -10,7 +10,7 @@ package handshake
 import "time"
 
 // ResponseTimeout e' quanto tempo Do espera pelo <ServerHello> antes de
-// desistir. Era wa-noise.NoiseHandshakeResponseTimeout.
+// desistir. Era noise.NoiseHandshakeResponseTimeout.
 const ResponseTimeout = 20 * time.Second
 
 // WACertIssuerSerial e' o serial esperado do emissor do certificado

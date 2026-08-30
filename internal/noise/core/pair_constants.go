@@ -3,7 +3,7 @@ package core
 import "time"
 
 // As constantes do fluxo de pareamento em si (QR data format, codigos de erro,
-// parametros do link code) foram para internal/wa-noise/pairing/constants.go na
+// parametros do link code) foram para internal/noise/pairing/constants.go na
 // Fase F/G lote 4. O que sobrou aqui e' o canal de QR, que continua na raiz.
 
 // Politica de emissao de QR codes por GetQRChannel.

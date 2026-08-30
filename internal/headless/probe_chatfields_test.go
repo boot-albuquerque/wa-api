@@ -104,7 +104,7 @@ func TestProbeChatChangedFields(t *testing.T) {
 	// Uma so' acao produziria uma lista de campos sem como saber qual acao a
 	// causou — e a pergunta aqui e' exatamente essa correspondencia.
 	phase("send")
-	if _, err := send.Text(ctx, runner, eval, peer, "wa-headless chat-field probe", "probe/chatfields"); err != nil {
+	if _, err := send.Text(ctx, runner, eval, peer, "headless chat-field probe", "probe/chatfields"); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	time.Sleep(6 * time.Second)

@@ -1,6 +1,6 @@
 // Package phonepair requests a phone-number linking code from a live
-// wa_headless session — the alternative to scanning a QR code
-// (internal/wa-headless/capabilities/qr).
+// headless session — the alternative to scanning a QR code
+// (internal/headless/capabilities/qr).
 //
 // # Where the algorithm comes from
 //
@@ -31,7 +31,7 @@
 // "no page clock" reasoning as qr.Reader, invariant 6), but it reads the
 // state BEFORE calling, purely for diagnostics: a request against an
 // already-paired session is refused one layer up, by
-// appport.PhonePairer.IsPaired (see pkg/infra/wa-headless/pairing), so this
+// appport.PhonePairer.IsPaired (see pkg/infra/headless/pairing), so this
 // package never needs to interpret the state itself to decide whether to
 // proceed.
 //

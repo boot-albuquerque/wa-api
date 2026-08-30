@@ -38,21 +38,21 @@ func NewGetQRUseCase(qr appport.PairingQRReader, l appport.Logger) *GetQRUseCase
 //
 // # Por que a normalização acontece AQUI, e não em cada adapter
 //
-// Os dois engines entregam formas diferentes pela mesma porta — wa_noise já
-// tem a imagem (o orquestrador escreve o PNG em users.qrcode), wa_headless só
+// Os dois engines entregam formas diferentes pela mesma porta — noise já
+// tem a imagem (o orquestrador escreve o PNG em users.qrcode), headless só
 // tem a string crua que leu da página. As duas são `string`, no mesmo campo
 // `qr_code`, então nada no tipo, na porta ou em domain.GetQRResult conseguia
 // distingui-las, e a divergência entrou em produção sem sinal nenhum.
 //
 // O custo foi medido na F373: um consumidor a quem se disse "os dois engines
 // respondem a mesma forma" desenhou o que recebeu como PAYLOAD de QR, e para
-// wa_noise isso deu um código impecável codificando os 1858 caracteres do
+// noise isso deu um código impecável codificando os 1858 caracteres do
 // próprio data URI — o telefone lê, o WhatsApp recusa. Nada no console
 // acusava nada.
 //
 // Este é o ÚNICO ponto por onde os dois engines passam, e é por isso que a
 // garantia mora aqui: um engine novo herda-a sem precisar de saber que ela
-// existe, que é exatamente o que faltou quando wa_headless chegou.
+// existe, que é exatamente o que faltou quando headless chegou.
 func (uc *GetQRUseCase) Execute(ctx context.Context, txtID string) (*domain.GetQRResult, error) {
 	if err := uc.qr.EnsureSession(ctx, txtID); err != nil {
 		uc.logger.Warn(ctx, "no session for QR read", "txtID", txtID, "error", err)

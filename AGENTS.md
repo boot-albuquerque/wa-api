@@ -11,7 +11,7 @@ São **dois** arquivos, e a escolha entre eles não é organizacional:
 
 - **`HOUSEKEEP.md`** (raiz) — o wa-api como um todo: `pkg/`, build, gates,
   configuração, rotas HTTP. É código nosso, e só nós corrigimos.
-- **`internal/wa-noise/HOUSEKEEP.md`** — a biblioteca vendorizada. Acompanha
+- **`internal/noise/HOUSEKEEP.md`** — a biblioteca vendorizada. Acompanha
   o upstream, e um achado ali é candidato a virar patch ou a sumir num
   rebase.
 

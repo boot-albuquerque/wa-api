@@ -31,7 +31,7 @@ func NewGetStatusUseCase(status appport.SessionStatusReader, users appport.UserR
 }
 
 // Execute valida se o cliente está disponível e devolve o status ao vivo da
-// sessão (connected/loggedIn, via wa-noise) somado ao registro persistido
+// sessão (connected/loggedIn, via noise) somado ao registro persistido
 // (jid, webhook, qrcode, ...). Antes, Execute só validava a sessão e devolvia
 // GetStatusResult{} vazio — todo caller via connected=false/loggedIn=false
 // sempre, mesmo com a sessão pareada; um adapter cliente que dependa deste

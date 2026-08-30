@@ -24,7 +24,7 @@ import (
 //
 // O fake NÃO monta um protobuf próprio: testkit.Fake.BuildRevoke/BuildEdit
 // delegam para os construtores REAIS
-// (internal/wa-noise/capabilities/message/builders.go), que é para onde
+// (internal/noise/capabilities/message/builders.go), que é para onde
 // (*core.Client).BuildRevoke/BuildEdit também delegam. ARMADILHA 1: um dublê
 // mais permissivo que a produção esconderia justamente a troca de argumento
 // que este arquivo existe para pegar.
@@ -275,7 +275,7 @@ func TestChatMessengerAdapter_Mutation_InvalidJID(t *testing.T) {
 // TestChatMessengerAdapter_Mutation_UnknownIDIsNotValidated documenta o que
 // a primitiva FAZ com um Id inexistente ou sintaticamente lixo: nada. Nem
 // BuildRevoke nem BuildEdit consultam armazenamento algum
-// (internal/wa-noise/capabilities/message/builders.go:39 e :101 só montam
+// (internal/noise/capabilities/message/builders.go:39 e :101 só montam
 // protobuf a partir da string recebida), e types.MessageID é um alias de
 // string sem validação. O resultado é uma mensagem BEM FORMADA para um alvo
 // que não existe, que o envio aceita e a rota devolve como sucesso.

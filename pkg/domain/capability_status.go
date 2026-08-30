@@ -7,8 +7,8 @@ package domain
 //
 //   - not_implemented: wa-api never wrote the port/use case/route for this
 //     capability, even though nothing blocks it. Fix: write it here.
-//   - engine_unsupported: the underlying transport (wa-noise socket or the
-//     wa-headless SPA) has no way to perform this operation at all. Fix:
+//   - engine_unsupported: the underlying transport (noise socket or the
+//     headless SPA) has no way to perform this operation at all. Fix:
 //     implement it in that transport, or accept the gap (see
 //     docs/CAPACIDADES.md "o que falta no próprio protocolo").
 //   - upstream_unsupported: WhatsApp itself does not offer this operation

@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// O caminho de decifragem vive em internal/wa-noise/message/ desde a Fase F/G
+// O caminho de decifragem vive em internal/noise/message/ desde a Fase F/G
 // lote 9. As fachadas abaixo existem porque client.go chama
 // handleEncryptedMessage direto, porque internals.go (gerado) cita os nomes
 // minusculos, e porque retry_transport.go e send_adapter.go chamam

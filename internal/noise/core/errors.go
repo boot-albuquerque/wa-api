@@ -58,7 +58,7 @@ var (
 
 // PairProtoError is included in an events.PairError if the pairing failed due to a protobuf error.
 //
-// Apelido de tipo: a definicao vive em internal/wa-noise/pairing/. A ordem dos
+// Apelido de tipo: a definicao vive em internal/noise/pairing/. A ordem dos
 // campos (Message, ProtoErr) e' preservada porque ha' literais compostos
 // posicionais no codigo movido.
 type PairProtoError = pairing.ProtoError
@@ -118,12 +118,12 @@ var (
 // DownloadHTTPError is returned when the media server answers with an
 // unexpected status code.
 //
-// A definicao vive em internal/wa-noise/media (ADR-0004, Fase F/G lote 1); aqui
+// A definicao vive em internal/noise/media (ADR-0004, Fase F/G lote 1); aqui
 // fica um apelido para preservar a API historica do pacote raiz.
 type DownloadHTTPError = media.DownloadHTTPError
 
 // Some errors that Client.Download can return. Sao os mesmos valores do pacote
-// internal/wa-noise/media — nao copias — entao errors.Is atravessa a fronteira.
+// internal/noise/media — nao copias — entao errors.Is atravessa a fronteira.
 //
 // NAO troque nenhuma destas linhas por um errors.New proprio. A identidade e'
 // load-bearing: DownloadMediaWithPath decide encerrar o laco de hosts com

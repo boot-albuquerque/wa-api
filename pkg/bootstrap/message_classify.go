@@ -190,7 +190,7 @@ type unwrapResult struct {
 }
 
 // unwrapFutureProof mirrors events.Message.UnwrapRaw
-// (internal/wa-noise/protocol/types/events/message.go:119-162) for a plain
+// (internal/noise/protocol/types/events/message.go:119-162) for a plain
 // *waE2E.Message that did NOT come through the event pipeline — i.e., the
 // history sync path, where msg.Message.GetMessage() returns the raw proto.
 //

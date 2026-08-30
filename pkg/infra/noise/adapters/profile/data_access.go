@@ -49,7 +49,7 @@ func (d *ProfileDataAccess) OwnJID() (domain.JID, bool) {
 	return "", false
 }
 
-// toTypesJID converte domain.JID para types.JID (wa-noise).
+// toTypesJID converte domain.JID para types.JID (noise).
 func toTypesJID(jid domain.JID) (types.JID, error) {
 	return types.ParseJID(string(jid))
 }

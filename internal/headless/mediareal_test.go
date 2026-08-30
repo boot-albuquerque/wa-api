@@ -34,7 +34,7 @@ const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP
 func TestRealSPASendsMediaBetweenAccounts(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
-		t.Skip("set WA_HEADLESS_SEND_TEST=1; this SENDS a real image between the lab accounts")
+		t.Skip("set HEADLESS_SEND_TEST=1; this SENDS a real image between the lab accounts")
 	}
 	from := os.Getenv("WA_SEND_FROM_PROFILE")
 	to := os.Getenv("WA_SEND_TO_PROFILE")
@@ -77,7 +77,7 @@ func TestRealSPASendsMediaBetweenAccounts(t *testing.T) {
 		t.Fatalf("decode fixture: %v", err)
 	}
 	media := send.Media{
-		Filename: "wa-headless-probe.png",
+		Filename: "headless-probe.png",
 		MimeType: "image/png",
 		Data:     data,
 	}
@@ -165,7 +165,7 @@ func TestRealSPASendsMediaBetweenAccounts(t *testing.T) {
 func TestRealSPASendsADocumentAndTheKindIsObservable(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
-		t.Skip("set WA_HEADLESS_SEND_TEST=1; this SENDS real messages between the lab accounts")
+		t.Skip("set HEADLESS_SEND_TEST=1; this SENDS real messages between the lab accounts")
 	}
 	from := os.Getenv("WA_SEND_FROM_PROFILE")
 	toJID := os.Getenv("WA_SEND_TO_JID")
@@ -196,10 +196,10 @@ func TestRealSPASendsADocumentAndTheKindIsObservable(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		m := send.Media{
-			Filename:   "wa-headless-probe.png",
+			Filename:   "headless-probe.png",
 			MimeType:   "image/png",
 			Data:       data,
-			Caption:    "wa-headless",
+			Caption:    "headless",
 			AsDocument: asDocument,
 		}
 		res, err := send.SendMedia(ctx, runner, eval, toJID, m, label)

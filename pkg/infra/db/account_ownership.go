@@ -14,11 +14,11 @@ import (
 // Account-identity ownership (feature/engine-session-ownership).
 //
 // session_leases (session_lease.go, ADR-0005) keys ownership by user_id
-// alone, and only ever covered wa_noise (F274). This file extends the SAME
+// alone, and only ever covered noise (F274). This file extends the SAME
 // concept — "which process may serve this" — to a KEY that includes the
-// engine, so the same phone number running wa_noise AND wa_headless
+// engine, so the same phone number running noise AND headless
 // simultaneously is two independent owners, not one contending pair. It does
-// NOT touch session_leases: that table keeps deciding wa_noise's per-process
+// NOT touch session_leases: that table keeps deciding noise's per-process
 // heartbeat/renewal (pkg/bootstrap/lease.go), a concern this table does not
 // have. This table decides something session_leases never had to: WHICH
 // authenticated claim, across possibly many for the same account+engine, is

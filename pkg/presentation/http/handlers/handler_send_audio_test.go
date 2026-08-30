@@ -21,7 +21,7 @@ import (
 // Este arquivo cobre POST /chat/send/audio desde a migração do CAP-05 para
 // port.MediaMessenger/port.MediaFetcher — o handler que efetivamente busca
 // a URL ou decodifica a data URI, resolve PTT/MIME pela precedência
-// histórica, sobe o anexo e entrega o áudio ao wa-noise, e não mais um
+// histórica, sobe o anexo e entrega o áudio ao noise, e não mais um
 // "validated" sem fazer nada. Mesma estrutura de handler_send_document_test.go
 // (POST /chat/send/document, CAP-04).
 

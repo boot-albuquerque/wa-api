@@ -54,7 +54,7 @@ func (a *SessionGuardAdapter) Client(txtID string) (client.Client, error) {
 	return client, nil
 }
 
-// EnsureSession reporta se há cliente wa-noise para txtID, sem devolvê-lo.
+// EnsureSession reporta se há cliente noise para txtID, sem devolvê-lo.
 func (a *SessionGuardAdapter) EnsureSession(_ context.Context, txtID string) error {
 	if a.getClient(txtID) == nil {
 		return ErrNoSession(txtID, nil)
@@ -122,7 +122,7 @@ func (a *SessionGuardAdapter) Logout(_ context.Context, txtID string) error {
 	// Transporte vivo mas NUNCA emparelhado: o store não tem device JID, e o
 	// SDK devolve a sentinela crua noise.ErrNotLoggedIn (F275). Igual ao
 	// ramo acima, a checagem é por ESTADO (errors.Is contra a sentinela
-	// reexportada em internal/wa-noise/main.go), não por texto — a mesma
+	// reexportada em internal/noise/main.go), não por texto — a mesma
 	// regra que o comentário logo acima já enuncia.
 	//
 	// 409 e não 500: também aqui a requisição está correta, só não pode ser

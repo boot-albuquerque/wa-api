@@ -81,7 +81,7 @@ func TestProbeProduceMention(t *testing.T) {
 			// pagina renderiza no lugar da mencao.
 			const subject = String((chat.contact && chat.contact.name) || chat.name || chat.formattedTitle || "grupo");
 			await window.require("WAWebSendTextMsgChatAction")
-				.sendTextMsgToChat(chat, "wa-headless mention probe", {
+				.sendTextMsgToChat(chat, "headless mention probe", {
 					mentionedJidList: [wid],
 					groupMentions: [{ groupSubject: subject, groupJid: W.createWid(` + strconv.Quote(gjid) + `) }],
 				});

@@ -69,7 +69,7 @@ func TestProbeDeleteForMe(t *testing.T) {
 	}()
 	time.Sleep(6 * time.Second)
 
-	sent, err := send.Text(ctx, runner, eval, peer, "wa-headless local delete probe", "probe/delme")
+	sent, err := send.Text(ctx, runner, eval, peer, "headless local delete probe", "probe/delme")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

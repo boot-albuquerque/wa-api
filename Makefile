@@ -9,11 +9,11 @@ GOFMT := $(GOCMD) fmt
 GOMOD := $(GOCMD) mod
 BINARY := wa-api
 
-# internal/wa-noise/ é o módulo de protocolo do projeto. Historicamente
+# internal/noise/ é o módulo de protocolo do projeto. Historicamente
 # ficou fora dos gates que medem o que escrevemos (cobertura, lint, vet,
 # test) por ter nascido como cópia; hoje é código mantido aqui e a inclusão
 # progressiva nos gates está registrada como F17 em HOUSEKEEP.md.
-# pkg/infra/wa-noise/client — a FACHADA, e só ela (o `$$` casa o pacote exato,
+# pkg/infra/noise/client — a FACHADA, e só ela (o `$$` casa o pacote exato,
 # não os subpacotes). Sai do denominador de cobertura pela mesma decisão de
 # arquitetura que a tirou do .logcov-exclude (F204, 2026-08-21): não é ponto de
 # instrumentação, é delegação.
@@ -38,13 +38,13 @@ BINARY := wa-api
 # le a interface e os wrappers por AST e falha se algum metodo com erro nao
 # tiver wrapper QUE CHAME ClassifyIQ — propriedade mais forte que executar 50
 # delegacoes de uma linha.
-COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' | grep -v '^wa-api/pkg/infra/wa-noise/client$$')
-# vet e lint, ao contrario da cobertura, JA' incluem internal/wa-noise/ (F17).
+COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/noise' | grep -v '^wa-api/pkg/infra/noise/client$$')
+# vet e lint, ao contrario da cobertura, JA' incluem internal/noise/ (F17).
 #
 # A F17 supunha que incluir o modulo quebraria o gate de lint, porque o gocyclo
 # maximo dele estaria "muito acima do baseline do repo". Medido em 2026-08-07:
-# a maior funcao de internal/wa-noise/ tem complexidade 46, e o baseline e' 56 —
-# o gate aguenta sem afrouxar nada. E `go vet ./internal/wa-noise/...` ja' saia
+# a maior funcao de internal/noise/ tem complexidade 46, e o baseline e' 56 —
+# o gate aguenta sem afrouxar nada. E `go vet ./internal/noise/...` ja' saia
 # limpo (exit 0).
 #
 # A CONTAGEM de issues sobe (83 -> ~284), mas ela e' informativa: o que trava e'
@@ -52,7 +52,7 @@ COVER_PKGS := $(shell $(GOCMD) list ./... | grep -v '^wa-api/internal/wa-noise' 
 # denominador e obrigaria a BAIXAR min_coverage, que e' afrouxar a catraca em
 # troca de um numero maior de pacotes medidos.
 ALL_PKGS := $(shell $(GOCMD) list ./...)
-# pkg/infra/wa-noise/ ficava de fora de TEST_PKGS por uma data race real em
+# pkg/infra/noise/ ficava de fora de TEST_PKGS por uma data race real em
 # safe_go_test.go (commit b426885). O teste foi corrigido junto da quebra do
 # pacote em subpacotes: `go test -race` passa em toda a árvore, e a exclusão
 # saiu — manter uma trava que não trava é pior que não ter trava.
@@ -78,10 +78,10 @@ TEST_PKGS := $(COVER_PKGS)
 # paralelismo entre processos do `go test` exigiria — seria complexidade sem
 # problema a resolver.
 BROWSER_PKGS := \
-	wa-api/internal/wa-headless \
-	wa-api/internal/wa-headless/core \
-	wa-api/internal/wa-headless/engine \
-	wa-api/internal/wa-headless/runtime
+	wa-api/internal/headless \
+	wa-api/internal/headless/core \
+	wa-api/internal/headless/engine \
+	wa-api/internal/headless/runtime
 SERIAL_TEST_PKGS := $(filter $(BROWSER_PKGS),$(TEST_PKGS))
 PARALLEL_TEST_PKGS := $(filter-out $(BROWSER_PKGS),$(TEST_PKGS))
 VET_TARGETS := $(ALL_PKGS)
@@ -107,7 +107,7 @@ BASELINE_FILE := .golangci-baseline
 # Nenhuma release resolve isso: ate a v2.12.2 (a mais nova em 2026-05) declara
 # `go 1.25.0` no proprio go.mod, e os binarios publicados sao compilados com
 # 1.25.x. Como este modulo esta em Go 1.26 (exigencia do chromedp v0.16.0, o
-# motor do internal/wa-headless/), o binario pronto nao consegue nem carregar
+# motor do internal/headless/), o binario pronto nao consegue nem carregar
 # o pacote — o type checker panica dentro da dependencia.
 #
 # GOTOOLCHAIN e' obrigatorio aqui: o go.mod do golangci-lint traz um
@@ -444,43 +444,43 @@ log-coverage-gate: ## Cobertura de log (METRIC.md): advisory imprime; ratchet/fl
 	   fi; \
 	 fi
 
-##@ Modulo de protocolo (internal/wa-noise/)
+##@ Modulo de protocolo (internal/noise/)
 
 handler-route: ## Falha se alguma constante `route` de handler HTTP carimbar no log um caminho que nao esta registrado (F146)
 	@bash scripts/handler-route-check.sh
 
-waclient-facade: ## Falha se algum .go fora de internal/wa-noise/ importar .../core direto em vez da fachada internal/wa-noise/main.go (Fase H etapa 6)
+waclient-facade: ## Falha se algum .go fora de internal/noise/ importar .../core direto em vez da fachada internal/noise/main.go (Fase H etapa 6)
 	@bash scripts/waclient-facade-check.sh
 
-waclient-filesize: ## Falha se algum .go de producao de internal/wa-noise/ (exceto protocol/proto/ e binary/proto/, gerados) passar de 300 linhas (ADR-0004, Fases A/B/C)
+waclient-filesize: ## Falha se algum .go de producao de internal/noise/ (exceto protocol/proto/ e binary/proto/, gerados) passar de 300 linhas (ADR-0004, Fases A/B/C)
 	@bash scripts/waclient-filesize-check.sh
 
-# internal/wa-noise/ esta fora de TEST_PKGS (ver comentario no topo e o achado
+# internal/noise/ esta fora de TEST_PKGS (ver comentario no topo e o achado
 # F17 em HOUSEKEEP.md), entao um _test.go escrito la' nunca rodaria por `make
 # check` — seria uma trava que nao trava. WACLIENT_TEST_PKGS lista, um a um, os
 # subpacotes do fork que ja' tem teste real nosso; a lista cresce conforme as
 # fases do ADR-0004 forem cobrindo o resto.
-WACLIENT_TEST_PKGS := ./internal/wa-noise/core/ \
-	./internal/wa-noise/protocol/msgpad/ ./internal/wa-noise/security/paircrypto/ \
-	./internal/wa-noise/protocol/msgattrs/ ./internal/wa-noise/capabilities/media/ \
-	./internal/wa-noise/capabilities/newsletter/ ./internal/wa-noise/capabilities/appstatesync/ \
-	./internal/wa-noise/capabilities/prekeys/ ./internal/wa-noise/capabilities/pairing/ ./internal/wa-noise/capabilities/tctoken/ \
-	./internal/wa-noise/capabilities/notification/ ./internal/wa-noise/capabilities/retry/ \
-	./internal/wa-noise/capabilities/group/ ./internal/wa-noise/capabilities/user/ \
-	./internal/wa-noise/capabilities/send/ ./internal/wa-noise/capabilities/message/ \
-	./internal/wa-noise/security/handshake/ ./internal/wa-noise/runtime/keepalive/ \
-	./internal/wa-noise/runtime/proxy/ \
-	./internal/wa-noise/protocol/socket/ ./internal/wa-noise/protocol/appstate/ \
-	./internal/wa-noise/persistence/store/ ./internal/wa-noise/persistence/store/sqlstore/ \
-	./internal/wa-noise/protocol/binary/ ./internal/wa-noise/protocol/proto/ ./internal/wa-noise/protocol/types/ ./internal/wa-noise/protocol/types/events/ \
-	./internal/wa-noise/security/cbc/ ./internal/wa-noise/security/gcm/ \
-	./internal/wa-noise/security/hkdf/ ./internal/wa-noise/security/keys/ ./internal/wa-noise/observability/log/ \
-	./internal/wa-noise/protocol/argo/
+WACLIENT_TEST_PKGS := ./internal/noise/core/ \
+	./internal/noise/protocol/msgpad/ ./internal/noise/security/paircrypto/ \
+	./internal/noise/protocol/msgattrs/ ./internal/noise/capabilities/media/ \
+	./internal/noise/capabilities/newsletter/ ./internal/noise/capabilities/appstatesync/ \
+	./internal/noise/capabilities/prekeys/ ./internal/noise/capabilities/pairing/ ./internal/noise/capabilities/tctoken/ \
+	./internal/noise/capabilities/notification/ ./internal/noise/capabilities/retry/ \
+	./internal/noise/capabilities/group/ ./internal/noise/capabilities/user/ \
+	./internal/noise/capabilities/send/ ./internal/noise/capabilities/message/ \
+	./internal/noise/security/handshake/ ./internal/noise/runtime/keepalive/ \
+	./internal/noise/runtime/proxy/ \
+	./internal/noise/protocol/socket/ ./internal/noise/protocol/appstate/ \
+	./internal/noise/persistence/store/ ./internal/noise/persistence/store/sqlstore/ \
+	./internal/noise/protocol/binary/ ./internal/noise/protocol/proto/ ./internal/noise/protocol/types/ ./internal/noise/protocol/types/events/ \
+	./internal/noise/security/cbc/ ./internal/noise/security/gcm/ \
+	./internal/noise/security/hkdf/ ./internal/noise/security/keys/ ./internal/noise/observability/log/ \
+	./internal/noise/protocol/argo/
 
-waclient-test: ## Roda os testes dos subpacotes de internal/wa-noise/ ja' cobertos (ADR-0004)
+waclient-test: ## Roda os testes dos subpacotes de internal/noise/ ja' cobertos (ADR-0004)
 	$(GOTEST) -race -count=1 $(WACLIENT_TEST_PKGS)
 
-check: build vet fmt-gate test lint coverage-gate log-coverage-gate handler-route waclient-facade waclient-filesize waclient-test ## build + vet + formatacao + test + lint + cobertura + cobertura de log + carimbo de rota dos handlers + fachada/tamanho/testes de internal/wa-noise/
+check: build vet fmt-gate test lint coverage-gate log-coverage-gate handler-route waclient-facade waclient-filesize waclient-test ## build + vet + formatacao + test + lint + cobertura + cobertura de log + carimbo de rota dos handlers + fachada/tamanho/testes de internal/noise/
 
 fmt-gate: ## Falha se algum .go de pkg/ ou cmd/ divergir do gofmt (F133)
 	@# Por que este gate existe: ate' 2026-08-20 o `make check` NAO verificava
@@ -490,7 +490,7 @@ fmt-gate: ## Falha se algum .go de pkg/ ou cmd/ divergir do gofmt (F133)
 	@# tocar o arquivo mistura reformatacao com mudanca de comportamento, e a
 	@# revisao deixa de conseguir separar as duas.
 	@#
-	@# So' pkg/ e cmd/: internal/wa-noise/ e' vendorizado e acompanha o upstream.
+	@# So' pkg/ e cmd/: internal/noise/ e' vendorizado e acompanha o upstream.
 	@out=$$($(GOCMD)fmt -l pkg cmd 2>/dev/null); \
 	 if [ -n "$$out" ]; then \
 	   echo "FALHA: arquivos fora do formato gofmt:"; \

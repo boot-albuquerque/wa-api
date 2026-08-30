@@ -8,7 +8,7 @@ import (
 	"wa-api/internal/noise/protocol/proto/waMediaTransport"
 )
 
-// A implementacao vive em internal/wa-noise/media/download_file.go
+// A implementacao vive em internal/noise/media/download_file.go
 // (ADR-0004, Fase F/G lote 1).
 
 // File is the destination of a download-to-file. *os.File satisfies it.

@@ -60,7 +60,7 @@ func TestProbeChatLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving the peer: %v", err)
 	}
-	subject := "wa-headless lifecycle probe " + strconv.FormatInt(time.Now().Unix(), 10)
+	subject := "headless lifecycle probe " + strconv.FormatInt(time.Now().Unix(), 10)
 	created, err := g.Ensure(ctx, subject, []string{ident.JID}, "probe/lifecycle/create")
 	if err != nil {
 		t.Fatalf("creating the throwaway group: %v", err)
@@ -77,7 +77,7 @@ func TestProbeChatLifecycle(t *testing.T) {
 	t.Logf("created: %s", created)
 
 	for i := 0; i < 2; i++ {
-		if _, err := send.Text(ctx, runner, eval, gjid, "wa-headless lifecycle "+strconv.Itoa(i), "probe/lifecycle/send"); err != nil {
+		if _, err := send.Text(ctx, runner, eval, gjid, "headless lifecycle "+strconv.Itoa(i), "probe/lifecycle/send"); err != nil {
 			t.Fatalf("send %d: %v", i, err)
 		}
 	}

@@ -79,7 +79,7 @@ func NewRegistry(sessions SessionEngineReader, caps *capabilityregistry.Capabili
 // the actor/target distinction visible at every call site: there is no
 // ActorEngine, and there is not going to be one.
 //
-// A row whose engine reads legacy_unknown is reported as wa_noise, matching
+// A row whose engine reads legacy_unknown is reported as noise, matching
 // what the startup backfill would assign (pkg/infra/db/user_engine.go) and what
 // CapabilityHandlers.sessionEngine already does for the same state. Surfacing an
 // internal migration state to a client would be a worse answer than the default

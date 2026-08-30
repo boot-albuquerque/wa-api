@@ -9,7 +9,7 @@ import (
 )
 
 // Fachada da traducao de mutacoes em eventos. A logica vive em
-// internal/wa-noise/appstatesync (dispatch.go e mutation.go); estes metodos
+// internal/noise/appstatesync (dispatch.go e mutation.go); estes metodos
 // continuam existindo porque internals.go (gerado) os embrulha.
 
 func (cli *Client) collectEventsToDispatch(

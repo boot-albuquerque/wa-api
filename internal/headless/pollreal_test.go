@@ -26,7 +26,7 @@ func TestRealSPASendsAPollToTheLabPeer(t *testing.T) {
 	// createPollCreationMsgData. It stays here, behind its own switch, so the
 	// next attempt has a harness instead of a blank page.
 	if os.Getenv("WA_HEADLESS_POLL_TEST") == "" {
-		t.Skip("set WA_HEADLESS_POLL_TEST=1; NOT PROVEN — see H69, this currently fails")
+		t.Skip("set HEADLESS_POLL_TEST=1; NOT PROVEN — see H69, this currently fails")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -52,7 +52,7 @@ func TestRealSPASendsAPollToTheLabPeer(t *testing.T) {
 		t.Skip("no loaded chat with the peer")
 	}
 
-	question := fmt.Sprintf("wa-headless poll probe %d", time.Now().Unix())
+	question := fmt.Sprintf("headless poll probe %d", time.Now().Unix())
 	got, err := send.PollTo(ctx, runner, sess.Tab().Evaluate, chatJID,
 		question, []string{"alpha", "beta", "gamma"}, false, "test/poll")
 	if err != nil {

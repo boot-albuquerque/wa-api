@@ -5,7 +5,7 @@ import (
 	"wa-api/pkg/domain"
 )
 
-// toDomainGroupInfo maps the wa-noise protocol struct onto the domain type.
+// toDomainGroupInfo maps the noise protocol struct onto the domain type.
 //
 // Hand-written on purpose. A reflection-based copy would keep compiling after
 // an upstream rename and silently drop the field from every response; this

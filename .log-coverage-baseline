@@ -62,7 +62,7 @@
 
 # --- F193 (2026-08-21): o extrato de adaptadores saiu do denominador ---
 #
-# `.logcov-exclude` passou a excluir `pkg/infra/wa-noise/adapters/` por DECISÃO
+# `.logcov-exclude` passou a excluir `pkg/infra/noise/adapters/` por DECISÃO
 # DE ARQUITETURA (a razão de layering está escrita lá, não aqui). As quatro
 # travas mudaram todas na mesma passagem, porque a exclusão move o denominador
 # das duas métricas ao mesmo tempo:
@@ -166,7 +166,7 @@ rules_frozen=true
 # A remocao de startClient deixou orfa a var webhookTLSSkipVerify em
 # pkg/bootstrap/lifecycle.go (seu unico consumidor era o setup inline de
 # resty dentro de startClient); a copia viva migrou para
-# pkg/infra/wa-noise/client_manager.go junto com ProvisionWebhookClient.
+# pkg/infra/noise/client_manager.go junto com ProvisionWebhookClient.
 # Deletar a orfa tira 1 funcao do denominador E 1 do numerador (ela logava o
 # Warn de opt-in inseguro), entao a razao cai 1 decimo sem que nenhum site
 # tenha deixado de logar — o log continua existindo, no arquivo novo.
@@ -192,7 +192,7 @@ rules_frozen=true
 # descoberto (so' repassa o retorno de baixo).
 # justificativa: merge de feature/vendor-whatsmeow em feature/macbook-lucas
 # (2026-08-07). min_eligible 507->509 (+2, ratchet-UP honesto): o port de
-# UserAdapter.GetManyLIDsForPNs para pkg/infra/wa-noise/adapters/user/ e o
+# UserAdapter.GetManyLIDsForPNs para pkg/infra/noise/adapters/user/ e o
 # normalizeToLID do use case, ambos vindos de 3ac8073. func_coverage cai
 # 710->709 pelo MESMO motivo que o proprio 3ac8073 ja' havia justificado no
 # develop: o adapter fino nao loga (padrao aceito neste pacote — adapter nao
@@ -646,11 +646,11 @@ rules_frozen=true
 # texto claro saiu do disco — que e o unico registro de que a operacao
 # aconteceu, porque depois dela nao ha como distinguir "apagou" de "nunca teve".
 # justificativa: CAP-01 (2026-08-18), POST /chat/send/text passou a enviar de
-# verdade pelo wa-noise. min_eligible 605->606 (+1: ChatMessengerAdapter.SendText,
-# em pkg/infra/wa-noise/adapters/chat/messenger.go). `covered` fica em 419 —
+# verdade pelo noise. min_eligible 605->606 (+1: ChatMessengerAdapter.SendText,
+# em pkg/infra/noise/adapters/chat/messenger.go). `covered` fica em 419 —
 # SendText nasce DESCOBERTA, no mesmo padrao ja aceito de SendReaction (a
 # funcao irma que ela imita, molde da task): adapter nao loga, quem loga e o
-# usecase (SendMessageUseCase.Execute ja loga "no wanoise session",
+# usecase (SendMessageUseCase.Execute ja loga "no noise session",
 # "invalid phone in send text payload" e "failed to send text message"), e
 # ambas retornam so' o que o client.SendMessage(ctx, ...) devolveu. func_coverage
 # cai 693->691 so' pela aritmetica do denominador (419/606), sem nenhuma
@@ -667,11 +667,11 @@ rules_frozen=true
 # `go run ./cmd/logcov -golden`, que so' acrescentou linhas novas (nenhuma
 # ELIGIBLE virou EXCLUDED nem uma funcao coberta virou uncovered).
 # justificativa: CAP-02 (2026-08-18), POST /chat/send/image passou a buscar a
-# URL, subir o anexo e enviar de verdade pelo wa-noise (ramo URL; data URI
+# URL, subir o anexo e enviar de verdade pelo noise (ramo URL; data URI
 # fica para CAP-03). min_eligible 607->610 (+3, todas nascem DESCOBERTAS pelo
 # MESMO padrao ja aceito acima — "adapter/helper puro nao loga, quem loga e o
 # usecase"):
-#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendImage — o
+#   - pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendImage — o
 #     adapter que sobe o anexo (client.Upload) e envia (client.SendMessage);
 #     nenhum dos dois falha logado no adapter, igual a SendText/SendReaction.
 #   - pkg/infra/media/opengraph.URLFetcher.FetchBytes — delega inteiro para
@@ -689,10 +689,10 @@ rules_frozen=true
 # (419/610 = 68.69% vs 419/607 = 69.03%).
 # justificativa: CAP-04 (2026-08-18), POST /chat/send/document passou a
 # buscar a URL ou decodificar a data URI, subir o anexo e enviar de verdade
-# pelo wa-noise (os dois transportes, no mesmo slice — data URI generica
+# pelo noise (os dois transportes, no mesmo slice — data URI generica
 # "data:", nao so' "data:image" como em Image). min_eligible 611->615 (+4):
-#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendDocument — o
-#     adapter que sobe o anexo (client.Upload, wanoise.MediaDocument) e envia
+#   - pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendDocument — o
+#     adapter que sobe o anexo (client.Upload, noise.MediaDocument) e envia
 #     (client.SendMessage); nasce DESCOBERTA pelo MESMO padrao ja' aceito de
 #     SendImage/SendText/SendReaction acima ("adapter nao loga, quem loga e'
 #     o usecase").
@@ -721,9 +721,9 @@ rules_frozen=true
 # buscar a URL ou decodificar a data URI ("data:audio/", discriminacao
 # ESTREITA como Image — nao "data:" generico como Document), resolver PTT
 # (default TRUE quando ausente) e MIME (precedencia de 4 niveis, exclusiva
-# de Audio) e enviar de verdade pelo wa-noise. min_eligible 615->620 (+5):
-#   - pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendAudio — o
-#     adapter que sobe o anexo (client.Upload, wanoise.MediaAudio) e envia
+# de Audio) e enviar de verdade pelo noise. min_eligible 615->620 (+5):
+#   - pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendAudio — o
+#     adapter que sobe o anexo (client.Upload, noise.MediaAudio) e envia
 #     (client.SendMessage); nasce DESCOBERTA pelo MESMO padrao ja' aceito de
 #     SendDocument/SendImage acima ("adapter nao loga, quem loga e' o
 #     usecase").
@@ -775,7 +775,7 @@ rules_frozen=true
 #
 # FIX-07 (2026-08-18): REQUIRED_FIX da avaliacao adversarial independente de
 # CAP-07. O `min_func_coverage=678` acima so' era alcancavel porque
-# ChatMessengerAdapter.SendSticker (pkg/infra/wa-noise/adapters/chat/
+# ChatMessengerAdapter.SendSticker (pkg/infra/noise/adapters/chat/
 # messenger.go) tinha um `log.Warn` plantado no ramo de upload-fail —
 # medido pelo avaliador como matematica e suficiente para o piso: remover
 # essa UNICA linha derruba func_coverage de 678 para 676, e reintroduzi-la
@@ -808,7 +808,7 @@ rules_frozen=true
 # para Image/Document/Audio/Video/Sticker (ver FIX-07 acima — quem loga e' o
 # USE CASE via appport.Logger, o adapter so' monta e propaga):
 # ChatMessengerAdapter.SendLocation e ChatMessengerAdapter.SendContact
-# (pkg/infra/wa-noise/adapters/chat/messenger.go), ambas uncovered por
+# (pkg/infra/noise/adapters/chat/messenger.go), ambas uncovered por
 # design. `covered` NAO muda (424->424); so' o denominador cresce
 # (627->629). func_coverage cai 676->674 so' pela aritmetica
 # (424/629 = 67.41% vs 424/627 = 67.62%) — nenhuma funcao ja' coberta
@@ -839,8 +839,8 @@ rules_frozen=true
 #     pkg/infra/db.ChatHistoryRepository.HistoryLimit                 (coberta)
 #     pkg/infra/db.ChatHistoryRepository.ListChatMessages             (coberta)
 #     pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP  (coberta)
-#     pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download (UNCOVERED)
-#     pkg/infra/wa-noise/adapters/chat.downloadableFor                 (UNCOVERED)
+#     pkg/infra/noise/adapters/chat.MediaDownloaderAdapter.Download (UNCOVERED)
+#     pkg/infra/noise/adapters/chat.downloadableFor                 (UNCOVERED)
 #   SAEM (5), todas COBERTAS, colapsadas no mediaDownloadFlow.execute:
 #     pkg/application/usecase/message.DownloadAudioUseCase.Execute
 #     pkg/application/usecase/message.DownloadDocumentUseCase.Execute
@@ -851,7 +851,7 @@ rules_frozen=true
 # As duas UNCOVERED sao o padrao "adapter delegante nao loga", ja' aceito neste
 # repositorio (ver FIX-07 e CAP-08A/08B acima). Confirmado por medicao, nao por
 # opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
-# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os dez irmaos do
+# pkg/infra/noise/adapters/chat/messenger.go` devolve 0 — os dez irmaos do
 # mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
 # SendAudio, SendVideo, SendSticker, SendLocation, SendContact) tambem constam
 # como uncovered:L1 em `logcov -list-uncovered`. NAO foi plantado log para
@@ -869,8 +869,8 @@ rules_frozen=true
 # enumeradas aqui pela invariante ENUMERATE THE SET (diff de `logcov -golden`
 # HEAD vs atual, coluna ELIGIBLE):
 #   ENTRAM (2), as duas UNCOVERED:
-#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.RevokeMessage
-#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.EditMessage
+#     pkg/infra/noise/adapters/chat.ChatMessengerAdapter.RevokeMessage
+#     pkg/infra/noise/adapters/chat.ChatMessengerAdapter.EditMessage
 #   SAEM (0).
 #   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
 # (O diff do golden traz mais 4 linhas, todas EXCLUDED X5 e portanto FORA do
@@ -879,7 +879,7 @@ rules_frozen=true
 # As duas UNCOVERED sao o padrao "adapter delegante nao loga", ja' aceito neste
 # repositorio (ver FIX-07 e CAP-08A/08B/CAP-09 acima). Confirmado por medicao,
 # nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
-# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os DOZE irmaos do
+# pkg/infra/noise/adapters/chat/messenger.go` devolve 0 — os DOZE irmaos do
 # mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
 # SendAudio, SendVideo, SendSticker, SendLocation, SendContact, e agora
 # RevokeMessage e EditMessage) constam todos como uncovered:L1 em
@@ -898,7 +898,7 @@ rules_frozen=true
 # enumeradas aqui pela invariante ENUMERATE THE SET (diff de `logcov -golden`
 # HEAD vs atual, coluna ELIGIBLE):
 #   ENTRAM (1), UNCOVERED:
-#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendPoll
+#     pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendPoll
 #   SAEM (0).
 #   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
 # (O diff do golden traz mais 3 linhas, todas FORA do denominador:
@@ -911,7 +911,7 @@ rules_frozen=true
 # A UNCOVERED e' o padrao "adapter delegante nao loga", ja' aceito neste
 # repositorio (ver FIX-07, CAP-08A/08B, CAP-09 e CAP-10 acima). Confirmado por
 # medicao, nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
-# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os TREZE irmaos do
+# pkg/infra/noise/adapters/chat/messenger.go` devolve 0 — os TREZE irmaos do
 # mesmo arquivo (MarkRead, SendReaction, SendText, SendImage, SendDocument,
 # SendAudio, SendVideo, SendSticker, SendLocation, SendContact, RevokeMessage,
 # EditMessage e agora SendPoll) constam todos como uncovered:L1 em
@@ -925,8 +925,8 @@ rules_frozen=true
 # ja' registrado no CAP-10 e no CAP-14. Enumerado a partir do diff do golden,
 # linha por linha:
 #   ENTRAM no denominador (2), as duas uncovered:L1:
-#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendTemplate
-#     pkg/infra/wa-noise/adapters/chat.templateButtons
+#     pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendTemplate
+#     pkg/infra/noise/adapters/chat.templateButtons
 #   SAEM (0).
 #   0 entradas cobertas - 0 saidas cobertas = 0 => covered 425->425. Confere.
 # (O diff do golden traz mais 1 linha FORA do denominador:
@@ -939,7 +939,7 @@ rules_frozen=true
 # A UNCOVERED e' o padrao "adapter delegante nao loga", ja' aceito neste
 # repositorio (ver FIX-07, CAP-08A/08B, CAP-09, CAP-10 e CAP-14 acima).
 # Confirmado por medicao, nao por opiniao: `grep -cE 'log\.|hlog\.|logger|Logger'
-# pkg/infra/wa-noise/adapters/chat/messenger.go` devolve 0 — os QUATORZE
+# pkg/infra/noise/adapters/chat/messenger.go` devolve 0 — os QUATORZE
 # irmaos do mesmo arquivo (MarkRead, SendReaction, SendText, SendImage,
 # SendDocument, SendAudio, SendVideo, SendSticker, SendLocation, SendContact,
 # SendPoll, RevokeMessage, EditMessage e agora SendTemplate) constam todos como
@@ -959,8 +959,8 @@ rules_frozen=true
 #       pkg/application/usecase/message.SendButtonsUseCase.headerImageBytes
 #     UNCOVERED:L1 (3):
 #       pkg/application/usecase/message.normalizeInteractiveButtons
-#       pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendButtons
-#       pkg/infra/wa-noise/adapters/chat.nativeFlowButtons
+#       pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendButtons
+#       pkg/infra/noise/adapters/chat.nativeFlowButtons
 #   SAEM (0).
 #   1 entrada coberta - 0 saidas cobertas = +1 => covered 425->426. Confere
 #   com a medicao: `go run ./cmd/logcov` imprime 66.5% (426/641 elegiveis).
@@ -976,7 +976,7 @@ rules_frozen=true
 #     "adapter delegante nao loga", ja' aceito neste repositorio (ver FIX-07,
 #     CAP-08A/08B, CAP-09, CAP-10, CAP-14 e CAP-15 acima). Confirmado por
 #     medicao: `grep -cE 'log\.|hlog\.|logger|Logger'
-#     pkg/infra/wa-noise/adapters/chat/messenger_buttons.go` devolve 0, igual
+#     pkg/infra/noise/adapters/chat/messenger_buttons.go` devolve 0, igual
 #     ao messenger.go, onde os QUINZE irmaos (MarkRead, SendReaction,
 #     SendText, SendImage, SendDocument, SendAudio, SendVideo, SendSticker,
 #     SendLocation, SendContact, SendPoll, SendTemplate, templateButtons,
@@ -997,9 +997,9 @@ rules_frozen=true
 #   ENTRAM no denominador (5), TODAS UNCOVERED:L1:
 #     pkg/application/usecase/message.normalizeListSections
 #     pkg/application/usecase/message.normalizeRows
-#     pkg/infra/wa-noise/adapters/chat.ChatMessengerAdapter.SendList
-#     pkg/infra/wa-noise/adapters/chat.listRows
-#     pkg/infra/wa-noise/adapters/chat.listSections
+#     pkg/infra/noise/adapters/chat.ChatMessengerAdapter.SendList
+#     pkg/infra/noise/adapters/chat.listRows
+#     pkg/infra/noise/adapters/chat.listSections
 #   SAEM (0).
 #   0 entradas cobertas - 0 saidas cobertas = 0 => covered 426->426. Confere
 #   com a medicao: `go run ./cmd/logcov` imprime 65.9% (426/646 elegiveis).
@@ -1030,14 +1030,14 @@ rules_frozen=true
 # CAP-23 (2026-08-19): 659->660 (426/646=65.9% -> 426/645=66.0%). Andaime
 # orfao removido apos o CAP-22 migrar o ultimo consumidor de
 # port.MessageComposer: a interface, o MessageComposerAdapter.NewMessageID
-# (infra/wa-noise/adapters/chat) e o dublê contractsfake.MessageComposer.
+# (infra/noise/adapters/chat) e o dublê contractsfake.MessageComposer.
 # covered fica em 426 — a unica funcao elegivel removida
 # (MessageComposerAdapter.NewMessageID) ja' estava descoberta
 # (golden: "uncovered:L1"), entao numerador nao muda, so' o denominador cai.
 # CAP-26 (2026-08-19): 660->658 (426/645=66.0% -> 426/647=65.8%). Duas
 # funcoes ELIGIBLE novas e DESCOBERTAS entram no denominador:
 # PhonePairerAdapter.IsPaired e PhonePairerAdapter.RequestPairingCode
-# (pkg/infra/wa-noise/adapters/pairing). Nenhum adapter deste repo loga —
+# (pkg/infra/noise/adapters/pairing). Nenhum adapter deste repo loga —
 # nenhum recebe port.Logger —, entao acrescentar capability de adapter baixa
 # a razao por construcao; foi o que o CAP-21 (667->665) e o CAP-22 (665->659)
 # ja' fizeram. covered fica em 426: nenhuma funcao coberta regrediu, e o diff
@@ -1195,13 +1195,13 @@ rules_frozen=true
 # dentro do denominador — eligible 631 -> 921, +290.
 #
 # O que dilui, medido e ja' documentado em cmd/logcov/METRIC.md: os adaptadores
-# de pkg/infra/wa-headless sao tradutores finos que chamam a capability por uma
+# de pkg/infra/headless sao tradutores finos que chamam a capability por uma
 # INTERFACE local, e L1-e nao credita delegacao atraves de interface porque qual
 # implementacao la' vai parar decide-se no ponto de montagem. Nao e' defeito do
 # instrumento; e' limite dele, e um limite escreve-se em vez de se contornar.
 #
 # O CONSERTO melhor existe e tem precedente NESTE arquivo: a fachada
-# pkg/infra/wa-noise/client saiu do denominador pela F204 com a mesma razao —
+# pkg/infra/noise/client saiu do denominador pela F204 com a mesma razao —
 # "nao e' ponto de instrumentacao, e' delegacao". Aplicar isso aos adaptadores
 # headless e' decisao de arquitetura, nao de merge, e fazer as duas coisas no
 # mesmo diff impediria a revisao de separar uma da outra.
@@ -1213,7 +1213,7 @@ rules_frozen=true
 # adaptador headless passou a implementa-lo sobre capabilities/poll.Vote, entao
 # os numeros abaixo sao a medicao da arvore com as DUAS coisas dentro — nao a
 # soma aritmetica das duas notas acima, que descrevem cada metade isolada.
-# FUSAO 2026-08-24: paridade wa-noise <-> macbook-lucas. A arvore passou a ter
+# FUSAO 2026-08-24: paridade noise <-> macbook-lucas. A arvore passou a ter
 # a stack headless E as CAP-49/50. Os tres numeros abaixo sao a MEDICAO desta
 # arvore, nao a soma das notas anteriores: func 585->588, errpath 783->785,
 # eligible 930->936. As linhas que mediam a arvore SEM headless (751/869/639)
@@ -1246,7 +1246,7 @@ rules_frozen=true
 # nela e' o marshal failure, que logcov nao conta como cobertura de
 # funcao porque so' atinge um ramo de erro — covered/eligible sobe 1/2.
 # F233a (2026-08-25): func_coverage SOBE 594->595 (+1). ENTRA (1):
-# errmap.ClassifyNewsletter (pkg/infra/wa-noise/errmap/newsletter.go) — coberta
+# errmap.ClassifyNewsletter (pkg/infra/noise/errmap/newsletter.go) — coberta
 # por log.Debug que registra a traducao do GraphQL 405 para CategoryForbidden.
 # covered SOBE 1 e eligible SOBE 1; a razao sobe.
 # F225 (2026-08-25): func_coverage DESCE 595->593 (-2). min_eligible SOBE
@@ -1264,7 +1264,7 @@ rules_frozen=true
 #
 # feature/engine-capability-integration (2026-08-26): merge das quatro
 # branches da onda 2 (engine-session-ownership, capability-registry,
-# provider-wa-noise, provider-wa-headless) sobre o checkpoint da foundation.
+# provider-noise, provider-headless) sobre o checkpoint da foundation.
 # func_coverage SOBE 592->594 (+2, ratchet-UP): capability-registry
 # instrumentou 6 funcoes elegiveis novas em pkg/capabilityregistry/*.go com
 # zerolog direto (mesmo padrao de pkg/domain/privacy.go). Cada branch bumpou
@@ -1297,9 +1297,9 @@ rules_frozen=true
 # errEngineUnavailable (dispatch de /session/* por engine gravado, F370),
 # todas cobertas por log.Warn/Error estruturado nos ramos de erro (mesmo
 # padrao de pairing/errors.go: builder loga Debug, resolve-call-site loga
-# Warn). pkg/infra/wa-headless/session.Disconnector.SessionStatus mudou de
+# Warn). pkg/infra/headless/session.Disconnector.SessionStatus mudou de
 # EXCLUDED (corpo trivial) para ELIGIBLE (agora le' a pagina de verdade) e
-# ja' nasce coberta. pkg/infra/wa-headless.Sessions.EvaluatorForPairing
+# ja' nasce coberta. pkg/infra/headless.Sessions.EvaluatorForPairing
 # (nova) fica DESCOBERTA por L1, mesmo padrao pre-existente de
 # Sessions.Evaluator/EnsureSession (o unico caminho que o teste unitario nao
 # alcanca honestamente e' o boot do browser — ver comentario do arquivo);
@@ -1307,8 +1307,8 @@ rules_frozen=true
 # conhecida se repetindo numa terceira funcao de forma identica. Medido com
 # `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao inferido.
 #
-# F373 (correcao do QR "invalido" do wa_noise) + F374 (refresh forcado por
-# tempo do QR do wa_headless), 2026-08-29: func_coverage CAI 607->604 (-3).
+# F373 (correcao do QR "invalido" do noise) + F374 (refresh forcado por
+# tempo do QR do headless), 2026-08-29: func_coverage CAI 607->604 (-3).
 # ENTRAM 5 elegiveis, nenhuma coberta: pkg/qrimage.Encode/EnsureDataURI
 # (codificador unico do QR pros dois engines) e QRReader.staleHint/
 # trackCode/forgetCode (relogio de staleness por txtID, F374). As cinco sao
@@ -1323,21 +1323,21 @@ rules_frozen=true
 # elegiveis, nenhuma coberta: Disconnector.classifyIdentity (a tabela de
 # decisao pura que distingue "nunca pareou" de "pareou e perdeu a
 # identidade" — achado do usuario: desconectar pelo APARELHO deixava o
-# wa_headless em "conectada, nao autenticada" em vez de "desconectada",
-# diferente do wa_noise para o MESMO evento) e os tres helpers de estado
+# headless em "conectada, nao autenticada" em vez de "desconectada",
+# diferente do noise para o MESMO evento) e os tres helpers de estado
 # (markIdentitySeen/hadIdentity/forgetIdentity) que sustentam o relogio por
 # txtID. Mesmo criterio das entradas F373/F374/F377 acima: helpers puros ou
 # de mapa em memoria, sem caminho de erro que justifique log por L1. Medido
 # com `go run ./cmd/logcov -json` apos a correcao completa, nao inferido.
 #
 # F379 (2026-08-29, mesmo dia): func_coverage CAI 601->600 (-1). ENTRA:
-# pkg/infra/wa-headless.ErrNoSession — o construtor que faz EnsureSession/
+# pkg/infra/headless.ErrNoSession — o construtor que faz EnsureSession/
 # Release devolverem *apperr.AppError (code=no_session) em vez de um erro
 # cru, corrigindo GET /session/hmac|s3/config, POST /session/history e GET
-# /session/disconnect devolvendo 500 internal_error para wa_headless onde
-# wa_noise ja' devolvia 400 no_session para a mesma condicao. Nao loga —
+# /session/disconnect devolvendo 500 internal_error para headless onde
+# noise ja' devolvia 400 no_session para a mesma condicao. Nao loga —
 # mesmo padrao do seu equivalente ja' existente,
-# pkg/infra/wa-noise/runtime/session.ErrNoSession (tambem uncovered no
+# pkg/infra/noise/runtime/session.ErrNoSession (tambem uncovered no
 # golden, ha' muito tempo — nao e' regressao nova, e' o mesmo criterio se
 # repetindo). Medido com `go run ./cmd/logcov -json` apos a correcao
 # completa, nao inferido.
@@ -1394,7 +1394,7 @@ min_func_coverage=600
 # PORTE capability-registry (2026-08-28): func_coverage SOBE 593->596. Porte
 # adaptado de feature/macbook-lucas (commits d19dd491+4462065c) para
 # feature/wa-noise, trocando o tipo domain.Engine (que nao existe aqui) por
-# string simples, usando as consts EngineNoise/EngineWaHeadless ja
+# string simples, usando as consts EngineNoise/EngineHeadless ja
 # existentes em pkg/domain/user.go. Seis funcoes elegiveis novas com log
 # direto: CapabilityRegistry.Decide, CapabilityRegistry.Provider,
 # NewDefaultMatrix, matrix.capabilitiesForEngine, matrix.decide,
@@ -1536,7 +1536,7 @@ min_func_coverage=600
 #   pkg/application/usecase/chat        20 -> 25 (+5), cobertos  6 ->  11 (+5)
 #   pkg/application/usecase/message    161 -> 155 (-6), cobertos 83 ->  81 (-2)
 #   pkg/infra/db                        88 ->  91 (+3), cobertos 83 ->  86 (+3)
-#   pkg/infra/wa-noise/adapters/chat    37 ->  41 (+4), cobertos 36 ->  39 (+3)
+#   pkg/infra/noise/adapters/chat    37 ->  41 (+4), cobertos 36 ->  39 (+3)
 #   pkg/presentation/http/handlers     385 -> 391 (+6), cobertos 382 -> 388 (+6)
 #   soma: +5 -6 +3 +4 +6 = +12 ; cobertos +5 -2 +3 +3 +6 = +15. Fecha.
 #
@@ -1584,7 +1584,7 @@ min_func_coverage=600
 # EnsureSession (Warn + `return err` — coberto).
 # ENTRA no lugar mediaDownloadFlow.execute (download_media.go), 4 caminhos,
 # 3 cobertos: missing_url (:40) segue descoberto pelo mesmo motivo de sempre,
-# no wanoise session (:44/:45) coberto por (a) e (b), download falhou
+# no noise session (:44/:45) coberto por (a) e (b), download falhou
 # (:50/:51) coberto por (a) e (b), e empty_media (:70/:71) coberto por (a).
 # Ou seja: 4 descobertos a MENOS no pacote message, que e' de onde vem o ganho.
 #
@@ -1760,7 +1760,7 @@ min_errpath_coverage=780
 # em marshal failure. Ambas sao funcoes publicas/exportadas com log.
 # NewOutgoingRecorder e' EXCLUIDO (construtor sem log).
 # F233a (2026-08-25): min_eligible SOBE 961->962 (+1, ratchet-UP honesto).
-# ENTRA (1): errmap.ClassifyNewsletter (pkg/infra/wa-noise/errmap/newsletter.go)
+# ENTRA (1): errmap.ClassifyNewsletter (pkg/infra/noise/errmap/newsletter.go)
 # — funcao publica com 3 caminhos de saida e log.Debug, elegivel por todas as
 # regras (>2 statements, nao e' construtor, nao e' teste).
 # F225 (2026-08-25): min_eligible SOBE 962->964 (+2, ratchet-UP honesto).
@@ -1816,33 +1816,33 @@ min_errpath_coverage=780
 # feature/wa-headless-foundation (2026-08-29, HOUSEKEEP F370): min_eligible
 # SOBE 1040->1051 (+11, so nunca cai). ENTRAM: as 9 funcoes novas de
 # pkg/bootstrap.sessionEngineGuard e errEngineUnavailable (ver
-# min_func_coverage acima), pkg/infra/wa-headless.Sessions.
-# EvaluatorForPairing, e pkg/infra/wa-headless/session.Disconnector.
+# min_func_coverage acima), pkg/infra/headless.Sessions.
+# EvaluatorForPairing, e pkg/infra/headless/session.Disconnector.
 # SessionStatus (mudou de EXCLUDED para ELIGIBLE — corpo deixou de ser
 # trivial). Golden regenerado (`go run ./cmd/logcov -golden >
 # cmd/logcov/testdata/eligible.golden`) no mesmo commit. Medido com
 # `go run ./cmd/logcov -json ./pkg` apos a correcao completa, nao inferido.
 #
 # feature/wa-headless-foundation (2026-08-29, HOUSEKEEP H145, mesmo dia):
-# min_eligible SOBE 1051->1057 (+6, ratchet-UP). ENTRAM: internal/wa-headless/
+# min_eligible SOBE 1051->1057 (+6, ratchet-UP). ENTRAM: internal/headless/
 # capabilities/qr.Reader.{Read,parked} (novo pacote, construcao do QR),
-# internal/wa-headless/core.StartPairingSession, internal/wa-headless/
+# internal/headless/core.StartPairingSession, internal/headless/
 # runtime.Holder.PairingSession (o novo primitivo de boot tolerante a QR),
-# pkg/infra/wa-headless/pairing.QRReader.PairingQR e
-# pkg/infra/wa-headless/pairing.Starter.StartSession.func1 (a goroutine
+# pkg/infra/headless/pairing.QRReader.PairingQR e
+# pkg/infra/headless/pairing.Starter.StartSession.func1 (a goroutine
 # fire-and-forget, promovida a X6). func_coverage e errpath_coverage
 # permanecem 607/783 — as seis entram JA cobertas, nenhuma dilui a razao.
 # Medido com `go run ./cmd/logcov -json` (sem argumento — e' o que
 # TestBaselineBateComAMedicao usa; da' o mesmo numero de `-json ./pkg` neste
-# commit porque nada elegivel existe fora de pkg/ e internal/wa-headless/) e
+# commit porque nada elegivel existe fora de pkg/ e internal/headless/) e
 # golden regenerado (`go run ./cmd/logcov -golden`, tambem sem argumento —
 # TestGoldenBate idem) no mesmo commit. Nao inferido.
 #
 # feature/wa-headless-foundation (2026-08-29, mesmo dia, refresh automatico
 # do QR + promocao pairing->operational): min_eligible SOBE 1057->1059 (+2,
-# ratchet-UP). ENTRAM: internal/wa-headless/capabilities/qr.Reader.readOnce
+# ratchet-UP). ENTRAM: internal/headless/capabilities/qr.Reader.readOnce
 # (extraido de Read ao mover a decisao de espera do refresh para o lado Go —
-# invariante 6, gate_pageclock_test.go) e pkg/infra/wa-headless/
+# invariante 6, gate_pageclock_test.go) e pkg/infra/headless/
 # pairing.QRReader.promoteIfPaired (chama registry.Promote quando a
 # identidade do dono aparece). func_coverage e errpath_coverage permanecem
 # 607/783 — as duas entram JA cobertas. Medido com `go run ./cmd/logcov
@@ -1851,7 +1851,7 @@ min_errpath_coverage=780
 #
 # F373 + F374 (2026-08-29, mesmo dia): min_eligible SOBE 1059->1064 (+5).
 # ENTRAM: pkg/qrimage.Encode/EnsureDataURI (F373 — codificador unico do QR,
-# corrige o wa_noise devolver PNG e o wa_headless devolver a string crua no
+# corrige o noise devolver PNG e o headless devolver a string crua no
 # mesmo campo) e QRReader.staleHint/trackCode/forgetCode (F374 — relogio de
 # staleness por txtID que forca refreshQR quando o mesmo codigo fica no ar
 # tempo demais, medido contra um gap real de 60s na rotacao da SPA). Nenhuma
@@ -1879,7 +1879,7 @@ min_errpath_coverage=780
 # ./cmd/logcov -json` e golden com `-golden` no mesmo commit. Nao inferido.
 #
 # F379 (2026-08-29, mesmo dia): min_eligible SOBE 1069->1071 (+2). ENTRAM:
-# pkg/infra/wa-headless.ErrNoSession (nova) e Sessions.Release (mudou de
+# pkg/infra/headless.ErrNoSession (nova) e Sessions.Release (mudou de
 # EXCLUDED — corpo trivial de uma linha — para ELIGIBLE, porque ganhou um
 # `if`). func_coverage/errpath_coverage: ver anotacoes correspondentes
 # acima (600/782). Medido com `go run ./cmd/logcov -json` e golden com
@@ -1887,7 +1887,7 @@ min_errpath_coverage=780
 #
 # F380 (2026-08-29, mesmo dia): min_eligible SOBE 1071->1075 (+4). ENTRAM:
 # phonepair.Reader.Request/parked (nova capacidade — pedido de codigo de
-# pareamento por telefone para wa_headless, sequencia de chamadas MEDIDA
+# pareamento por telefone para headless, sequencia de chamadas MEDIDA
 # contra whatsapp-web.js e contra uma sessao real desemparelhada) e
 # PhonePairer.IsPaired/RequestPairingCode (o adapter que a expoe).
 # func_coverage permanece 600 (Request/parked entram cobertos por
@@ -1931,7 +1931,7 @@ min_eligible=1077
 #
 # Entraram tambem 17 funcoes EXCLUDED, que nao contam para o denominador: os
 # ToDomain/ToBlockDomain/ToUnblockDomain e ResolveChat (X1, mapeamento trivial),
-# os apresentadores de uma linha, e mapPrivacySettings do adaptador wa-noise.
+# os apresentadores de uma linha, e mapPrivacySettings do adaptador noise.
 #
 # SAEM (3), todas EXCLUDED e portanto sem efeito no numero:
 # pkg/domain.BlockUserRequest.ResolveChat, .UnblockUserRequest.ResolveChat e
@@ -1975,7 +1975,7 @@ min_eligible=1077
 # Registry.Resolve, Registry.ResolveQRReader, Registry.ResolvePhonePairer,
 # Registry.ResolveStarter, Registry.TargetEngine, errCapabilityNotSupported,
 # errEngineMismatch, errEngineUnavailable, errInvalidEngine, errNoSession},
-# pkg/bootstrap.buildPairingRegistry, pkg/bootstrap.waNoiseSessionStarter.
+# pkg/bootstrap.buildPairingRegistry, pkg/bootstrap.noiseSessionStarter.
 # CheckOwnership, pkg/presentation/http/handlers.respondPairingRefusal —
 # menos as que saem com a remocao de WithStartSession/WithCheckOwnership do
 # ConnectHandler (initConnectHandler, connectOwnershipCheck). Medido com
@@ -2102,7 +2102,7 @@ min_eligible=1077
 # +4 elegiveis novos: SendStickerUseCase.Execute, checkStickerDataURISize
 # (application/usecase/message), Processor.ProcessSticker
 # (infra/media/sticker), ChatMessengerAdapter.SendSticker
-# (infra/wa-noise/adapters/chat). classifyStickerProcessError e
+# (infra/noise/adapters/chat). classifyStickerProcessError e
 # isHTTPStickerURL foram cogitados como funcoes proprias e descartados
 # antes do commit: o mapeamento de erro foi embutido em Execute (nao havia
 # reuso a proteger) e a checagem de URL reaproveita isHTTPImageURL
@@ -2144,8 +2144,8 @@ min_eligible=1077
 #     pkg/presentation/http/handlers.GetChatHistoryHandler.ServeHTTP  (coberta)
 #   CAP-09B (2 + 1)
 #     pkg/application/usecase/message.mediaDownloadFlow.execute        (coberta)
-#     pkg/infra/wa-noise/adapters/chat.MediaDownloaderAdapter.Download (DESCOBERTA)
-#     pkg/infra/wa-noise/adapters/chat.downloadableFor                 (DESCOBERTA)
+#     pkg/infra/noise/adapters/chat.MediaDownloaderAdapter.Download (DESCOBERTA)
+#     pkg/infra/noise/adapters/chat.downloadableFor                 (DESCOBERTA)
 #   (5 do CAP-09A + 3 do CAP-09B = 8; as duas DESCOBERTAS sao a convencao
 #   "adapter delegante nao loga", ver a justificativa de min_func_coverage.)
 #
@@ -2164,10 +2164,10 @@ min_eligible=1077
 #     pkg/infra/db.NewChatHistoryRepository
 #     pkg/application/usecase/chat.NewGetChatHistoryUseCase
 #     pkg/presentation/http/handlers.NewGetChatHistoryHandler
-#     pkg/infra/wa-noise/adapters/chat.NewMediaDownloaderAdapter
+#     pkg/infra/noise/adapters/chat.NewMediaDownloaderAdapter
 #     pkg/domain.DownloadRequest.Descriptor
 #   X5 (pacote em .logcov-exclude, dublê de teste):
-#     pkg/infra/wa-noise/client/testkit.Fake.Download
+#     pkg/infra/noise/client/testkit.Fake.Download
 #     pkg/application/contracts/contractsfake.MediaDownloader.Download
 #
 # 6 entradas cobertas - 5 saidas cobertas = +1 => covered 424 -> 425, que e'
@@ -2284,7 +2284,7 @@ min_eligible=1077
 # achado que motivou a funcao.
 max_exempt_annotations=3
 
-# Quebra de pkg/infra/wa-noise/ em subpacotes por dominio (2026-08-06):
+# Quebra de pkg/infra/noise/ em subpacotes por dominio (2026-08-06):
 #   min_eligible 509 -> 507: os tres helpers privados client() identicos de
 #     GroupAdapter/MiscAdapter/UserAdapter viraram um unico
 #     SessionGuardAdapter.Client exportado (-3 +1). waclienttest/ entrou em
@@ -2399,7 +2399,7 @@ max_exempt_annotations=3
 # max_exempt_annotations NAO muda (2).
 # F273/F281 (2026-08-27, worktree feature/pairing-explicit-engine): engine
 # explicito no pareamento, resolvido por pkg/pairing em vez de um adaptador
-# wa-noise fixo.
+# noise fixo.
 #
 # Numeros MEDIDOS: `go run ./cmd/logcov`
 #   ANTES:  eligible=1013, covered=610, func_coverage=59.5% (595), errpath=78.2% (782)
@@ -2421,7 +2421,7 @@ max_exempt_annotations=3
 #   pkg/pairing.errEngineUnavailable                   (covered)
 #   pkg/pairing.errNoSession                           (covered)
 #   pkg/bootstrap.buildPairingRegistry                 (covered)
-#   pkg/bootstrap.waNoiseSessionStarter.CheckOwnership (covered)
+#   pkg/bootstrap.noiseSessionStarter.CheckOwnership (covered)
 #   pkg/presentation/http/handlers.respondPairingRefusal (covered)
 #
 # SAEM (5, porque a fiacao que as continha deixou de existir):
@@ -2433,7 +2433,7 @@ max_exempt_annotations=3
 #
 # Os cinco eram o mecanismo de injecao por closure que o `.With...` usava. A
 # verificacao de posse nao desapareceu — mudou de casa para
-# waNoiseSessionStarter.CheckOwnership, que entra na lista acima E loga.
+# noiseSessionStarter.CheckOwnership, que entra na lista acima E loga.
 #
 # func_coverage SOBE 595->601, e isso merece explicacao porque nao foi de
 # graca. As catorze funcoes novas nasceram TODAS cobertas, e cinco delas

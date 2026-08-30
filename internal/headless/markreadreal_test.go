@@ -25,7 +25,7 @@ import (
 func TestRealSPAMarksAConversationRead(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
-		t.Skip("set WA_HEADLESS_SEND_TEST=1; this sends a real read receipt to the peer lab account")
+		t.Skip("set HEADLESS_SEND_TEST=1; this sends a real read receipt to the peer lab account")
 	}
 	profile := os.Getenv("WA_MARKREAD_PROFILE")
 	peer := os.Getenv("WA_MARKREAD_PEER")
@@ -77,7 +77,7 @@ func TestRealSPAMarksAConversationRead(t *testing.T) {
 	}
 	sendCtx, cancelSend := context.WithTimeout(context.Background(), 5*time.Minute)
 	if _, err := send.Text(sendCtx, sendRunner, ssess.Tab().Evaluate, self,
-		"wa-headless: mensagem de teste para marcar como lida", "real/markread/send"); err != nil {
+		"headless: mensagem de teste para marcar como lida", "real/markread/send"); err != nil {
 		cancelSend()
 		t.Fatalf("seeding the unread: %v", err)
 	}

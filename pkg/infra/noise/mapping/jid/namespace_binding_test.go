@@ -24,7 +24,7 @@ func TestVocabularioCompartilhadoBateComAsConstantesReaisDoSocket(t *testing.T) 
 		{types.DefaultUserServer, domain.NamespacePhone},
 		// c.us é LegacyUserServer AQUI e corrente na página. Ele não está
 		// morto no socket: é o sufixo de consulta do USync
-		// (internal/wa-noise/capabilities/user/info.go:46).
+		// (internal/noise/capabilities/user/info.go:46).
 		{types.LegacyUserServer, domain.NamespacePhone},
 		{types.HiddenUserServer, domain.NamespaceLID},
 	}

@@ -18,7 +18,7 @@ import (
 var RequestFromPhoneDelay = 5 * time.Second
 
 // Fachadas do reenvio pelo telefone. A logica e o estado vivem em
-// internal/wa-noise/retry (Fase F/G, lote 5).
+// internal/noise/retry (Fase F/G, lote 5).
 
 // retryMessageRef traduz o types.MessageInfo da raiz para a fatia dele que o
 // subpacote usa.

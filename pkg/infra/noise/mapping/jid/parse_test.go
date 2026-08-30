@@ -36,7 +36,7 @@ func TestParseJID_Qualified(t *testing.T) {
 }
 
 // TestParseJID_NoServer: entrada com @ mas sem servidor. ParseJID do
-// wa-noise é leniente e pode ou não falhar — apenas verificamos que
+// noise é leniente e pode ou não falhar — apenas verificamos que
 // não panic.
 func TestParseJID_NoServer(t *testing.T) {
 	defer func() {

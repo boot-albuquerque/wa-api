@@ -1,4 +1,4 @@
-// Package types contains various structs and other types used by wa-noise.
+// Package types contains various structs and other types used by noise.
 package types
 
 import (

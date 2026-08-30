@@ -16,8 +16,8 @@ import (
 // TestWalogSeam_ErroDoSDKSaiSemWadebug exercita os dois lados do seam de log
 // numa execução só, sem mock de logger nenhum:
 //
-//  1. O caminho que o wa-noise percorre: bridge.Sub(...).Errorf(...), que é
-//     literalmente o que internal/wa-noise/client.go faz com o sublogger que
+//  1. O caminho que o noise percorre: bridge.Sub(...).Errorf(...), que é
+//     literalmente o que internal/noise/client.go faz com o sublogger que
 //     recebe em NewClient. Sem --wadebug — ou seja, no default de produção,
 //     que antes desta mudança era log.Noop e descartava o registro.
 //

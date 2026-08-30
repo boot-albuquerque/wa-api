@@ -72,7 +72,7 @@ func groupInfoRouter(t *testing.T, f *grpFakes) *mux.Router {
 	return router
 }
 
-// grupoDeReferencia é o domain.GroupInfo que o adaptador wa-noise produz para
+// grupoDeReferencia é o domain.GroupInfo que o adaptador noise produz para
 // um grupo real: dono, nome e tópico datados, dois participantes, um deles
 // administrador. Todos os campos preenchidos de propósito — um dublê com
 // metade dos campos no zero deixaria metade do mapeamento por medir.
@@ -139,7 +139,7 @@ func TestGetGroupInfo_ContratoPublico_NomesCanonicos(t *testing.T) {
 // TestGetGroupInfo_ContratoPublico_ChavesAntigasSumiram é a afirmação (3).
 //
 // `JID`, `Name`, `Participants`, `IsAdmin` e companhia eram o que o struct de
-// protocolo do wa-noise emitia quando era serializado directamente — sem tags
+// protocolo do noise emitia quando era serializado directamente — sem tags
 // `json`, o codificador usa o nome do campo Go. São essas as chaves que a
 // migração tinha de FAZER DESAPARECER, e "a chave nova existe" não o prova.
 func TestGetGroupInfo_ContratoPublico_ChavesAntigasSumiram(t *testing.T) {

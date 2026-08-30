@@ -21,7 +21,7 @@ import (
 // Este arquivo cobre POST /chat/send/video desde a migração do CAP-06 para
 // port.MediaMessenger/port.MediaFetcher — o handler que efetivamente busca
 // a URL ou decodifica a data URI, resolve o MIME pela precedência de dois
-// níveis (igual a Image), sobe o anexo e entrega o vídeo ao wa-noise, e não
+// níveis (igual a Image), sobe o anexo e entrega o vídeo ao noise, e não
 // mais um "validated" sem fazer nada. Mesma estrutura de
 // handler_send_audio_test.go (POST /chat/send/audio, CAP-05).
 

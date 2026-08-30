@@ -5,9 +5,9 @@ import "time"
 // GroupInfo is the engine-independent view of a WhatsApp group's metadata.
 //
 // It exists because appport.GroupDirectory.GetGroupInfo used to return `any`,
-// and the two engines put DIFFERENT concrete types in it: the wa-noise
-// protocol struct (internal/wa-noise/protocol/types.GroupInfo) and the
-// headless conversation struct (internal/wa-headless/capabilities/chats.Chat).
+// and the two engines put DIFFERENT concrete types in it: the noise
+// protocol struct (internal/noise/protocol/types.GroupInfo) and the
+// headless conversation struct (internal/headless/capabilities/chats.Chat).
 // With `any`, whichever engine served the session decided the JSON the client
 // received, and neither shape was ever declared anywhere. A named domain type
 // makes the union explicit and gives the presenter something it can map field

@@ -2,7 +2,7 @@
 
 DisparaZap expõe o protocolo multidevice do WhatsApp como um serviço RESTful,
 com suporte a múltiplos dispositivos e sessões concorrentes. A implementação do
-protocolo vive em `internal/wa-noise/`.
+protocolo vive em `internal/noise/`.
 
 O módulo de protocolo não usa Puppeteer no Chrome headless, nem emulador Android. Comunica-se diretamente com os servidores
 WebSocket do WhatsApp, tornando-o significativamente mais rápido e muito menos exigente em memória e CPU do que
@@ -57,7 +57,7 @@ Quando HMAC está configurado, todos os webhooks incluem o header `x-hmac-signat
 ## Atualizando dependências
 
 O protocolo do WhatsApp é implementado dentro do repositório, em
-`internal/wa-noise/` — não há dependência externa a atualizar para isso. Para as
+`internal/noise/` — não há dependência externa a atualizar para isso. Para as
 demais dependências:
 
 ```bash

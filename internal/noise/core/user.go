@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// Fachada do dominio de usuario. A logica vive em internal/wa-noise/user e
+// Fachada do dominio de usuario. A logica vive em internal/noise/user e
 // opera sobre user.Transport; aqui ficam so' os metodos de *Client que delegam,
 // mais os apelidos de tipo que preservam a API historica do pacote.
 //
@@ -150,6 +150,6 @@ func parseFBDeviceList(jid types.JID, deviceList waBinary.Node) deviceCache {
 
 // A fachada parseVerifiedNameContent foi REMOVIDA na Fase F/G lote 9. Ela
 // existia so' para message_parse.go, que era o unico chamador; agora o dominio
-// de mensagem vive em internal/wa-noise/message/ e chama
+// de mensagem vive em internal/noise/message/ e chama
 // user.ParseVerifiedNameContent por import direto, por ser funcao pura. Divida
 // do lote 7 fechada.

@@ -11,7 +11,7 @@ import (
 
 // GetContactsLastActivityUseCase devolve o timestamp da última mensagem por
 // chat, derivado do backfill local de message_history (HistorySync
-// pós-pareamento + mensagens correntes). Não exige sessão wa-noise ativa
+// pós-pareamento + mensagens correntes). Não exige sessão noise ativa
 // pro READ em si — é leitura de banco local — mas a NORMALIZAÇÃO de
 // identidade (ver normalizeToLID) precisa da sessão pra consultar o mapa
 // LID↔PN do módulo de protocolo; sem sessão ativa, devolve o dado cru sem

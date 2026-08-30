@@ -54,7 +54,7 @@ type SimpleMessenger interface {
 	// o texto em claro de Options associado ao ID que a sessão realmente
 	// usou. Isto não é detalhe de implementação opcional: o voto chega
 	// como SHA-256 do texto da opção (ver
-	// internal/wa-noise/capabilities/message/poll.go:38), e sem o texto
+	// internal/noise/capabilities/message/poll.go:38), e sem o texto
 	// guardado o consumidor do webhook recebe hashes sem significado (ver
 	// pkg/bootstrap/eventhandler_message.go:130). Onde essa memória vive é
 	// escolha da infra; QUE ela exista é contrato desta porta.

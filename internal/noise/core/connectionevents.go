@@ -209,7 +209,7 @@ func (cli *Client) handleConnectSuccess(ctx context.Context, node *waBinary.Node
 // SetPassive tells the WhatsApp server whether this device is passive or not.
 //
 // This seems to mostly affect whether the device receives certain events.
-// By default, wa-noise will automatically do SetPassive(false) after connecting.
+// By default, noise will automatically do SetPassive(false) after connecting.
 func (cli *Client) SetPassive(ctx context.Context, passive bool) error {
 	tag := "active"
 	if passive {

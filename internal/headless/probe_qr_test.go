@@ -23,7 +23,7 @@ import (
 //
 // # Why this stays read-only despite calling the getters
 //
-// It calls getRegistrationInfo/noiseInfo.get/getADVSecretKey/encodeB64 —
+// It calls getRegistrationInfo/waNoiseInfo.get/getADVSecretKey/encodeB64 —
 // not just checks their presence — because presence alone does not prove the
 // chain composes (CLAUDE.md's own lesson: measure the real thing, a caricature
 // measures something else). None of these MUTATE the profile: they are
@@ -36,7 +36,7 @@ import (
 // wwebjs's construction (Client.js, current main branch):
 //
 //	registrationInfo = await window.require('WAWebSignalStoreApi').waSignalStore.getRegistrationInfo()
-//	noiseKeyPair     = await window.require('WAWebUserPrefsInfoStore').noiseInfo.get()
+//	noiseKeyPair     = await window.require('WAWebUserPrefsInfoStore').waNoiseInfo.get()
 //	staticKeyB64     = window.require('WABase64').encodeB64(noiseKeyPair.staticKeyPair.pubKey)
 //	identityKeyB64   = window.require('WABase64').encodeB64(registrationInfo.identityKeyPair.pubKey)
 //	advSecretKey     = await window.require('WAWebUserPrefsMultiDevice').getADVSecretKey()
@@ -121,7 +121,7 @@ func TestProbeQRConstructionSurface(t *testing.T) {
 		out.chain.identityKeyPair_pubKey_present = !!(registrationInfo && registrationInfo.identityKeyPair && registrationInfo.identityKeyPair.pubKey);
 	} catch (e) { out.chain.getRegistrationInfo_error = String((e && e.message) || e).slice(0, 140); }
 	try {
-		const noiseKeyPair = await window.require('WAWebUserPrefsInfoStore').noiseInfo.get();
+		const noiseKeyPair = await window.require('WAWebUserPrefsInfoStore').waNoiseInfo.get();
 		out.chain.noiseInfo_get_ok = !!noiseKeyPair;
 		out.chain.staticKeyPair_pubKey_present = !!(noiseKeyPair && noiseKeyPair.staticKeyPair && noiseKeyPair.staticKeyPair.pubKey);
 	} catch (e) { out.chain.noiseInfo_error = String((e && e.message) || e).slice(0, 140); }

@@ -657,7 +657,7 @@ func TestStart_PairingTimeoutWithoutOwnershipCheck(t *testing.T) {
 //	qrcode cleared, stable for 30s+, no "QR timeout killing channel" line.
 //	(Log preserved at /tmp/waapi-live/server.log.)
 //
-// Root cause traced to internal/wa-noise/core/qrchan.go: emitQRs (a
+// Root cause traced to internal/noise/core/qrchan.go: emitQRs (a
 // goroutine driven by a purely LOCAL per-QR-code timer) and handleEvent (a
 // goroutine driven by the REAL PairSuccess arriving over the websocket) both
 // race for a single atomic CAS on qrc.closed. Only the CAS winner's item

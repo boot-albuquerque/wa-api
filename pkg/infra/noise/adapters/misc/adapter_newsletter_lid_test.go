@@ -13,7 +13,7 @@ import (
 
 // fakeLIDStore implements store.LIDStore with configurable PN↔LID mappings.
 // Mirrors the REAL GetLIDForPN/GetPNForLID contract from
-// internal/wa-noise/persistence/store/sqlstore/lidmap.go:113-125.
+// internal/noise/persistence/store/sqlstore/lidmap.go:113-125.
 type fakeLIDStore struct {
 	store.NoopStore
 	pnToLID map[string]types.JID

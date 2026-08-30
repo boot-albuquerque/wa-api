@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/contact desde a migração do CAP-08B
 // para port.SimpleMessenger — o handler que efetivamente monta o
-// ContactMessage e o envia pelo wa-noise, e não mais um "validated" sem
+// ContactMessage e o envia pelo noise, e não mais um "validated" sem
 // fazer nada. Mesma estrutura de handler_send_video_test.go (rota
 // gorilla/mux registrada).
 

@@ -225,7 +225,7 @@ deliberada e não efeito colateral; esta é deliberada, e o motivo fica aqui.
 
 ### O que a obrigou
 
-A Fase 3 fiou `internal/wa-headless` em `pkg/`, e a árvore inteira entrou no
+A Fase 3 fiou `internal/headless` em `pkg/`, e a árvore inteira entrou no
 denominador — `packages.Visit` inclui qualquer pacote transitivamente importado
 sob `wa-api/`. Medido com prova causal, removendo e repondo o consumidor da
 fachada:
@@ -240,9 +240,9 @@ aquela árvore com o critério da camada de aplicação.
 
 ### Por que não bastava excluir nem instrumentar
 
-Excluir `internal/wa-headless/` seria encolher o denominador para embelezar o
+Excluir `internal/headless/` seria encolher o denominador para embelezar o
 número, que é exatamente o que `min_eligible` existe para impedir. A exclusão
-do `internal/wa-noise/` tem outro fundamento — é terceiro vendorizado, não é
+do `internal/noise/` tem outro fundamento — é terceiro vendorizado, não é
 código nosso.
 
 Instrumentar as funções com log contradiria o desenho da árvore. Ela observa
@@ -307,7 +307,7 @@ rastro, que é exatamente o que L1 promete. No idioma da árvore isto lê-se
 ### O defeito que a regra corrige, medido
 
 Elegibilidade exige **alcance de produção**: uma capability de
-`internal/wa-headless` só entra no denominador quando `pkg/` a liga. Como as
+`internal/headless` só entra no denominador quando `pkg/` a liga. Como as
 capabilities foram escritas antes de serem ligadas, cada port novo acordava de
 uma vez a dívida inteira de uma capability, e `min_func_coverage` — declarado
 ratchet-UP — **desceu nos seis commits anteriores** à decisão 91:
@@ -335,7 +335,7 @@ ajudante rastreado.
 Medido ao ligar o `GroupInfoSettings` (2026-08-23), e o resultado foi negativo
 de propósito registado.
 
-Os adaptadores de `pkg/infra/wa-headless` chamam a capability por uma interface
+Os adaptadores de `pkg/infra/headless` chamam a capability por uma interface
 local declarada no próprio adaptador (é assim que ficam testáveis sem página).
 `group.Manager.SetSubject` **rastreia direto**, e o adaptador passa-lhe um
 rótulo constante — pelo argumento acima, pareceria creditável.

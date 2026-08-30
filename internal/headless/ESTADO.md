@@ -1,4 +1,4 @@
-# Estado da iniciativa `wa-headless`
+# Estado da iniciativa `headless`
 
 Consolidação de 2026-08-19, pedida pela orquestração depois de a matriz de
 paridade fechar. É um retrato: o que existe, o que está PROVADO, o que está
@@ -80,7 +80,7 @@ ser usado para encolher escopo.
 > **O alvo declarado (2026-08-20)**: implementar neste projeto as
 > funcionalidades do `whatsapp-web.js`, fazendo **engenharia reversa de JS para
 > Go sobre a SPA**. As seis capacidades abaixo são o piso dessa paridade — o que
-> o `wa-noise` não cobre pelo protocolo — e não o teto.
+> o `noise` não cobre pelo protocolo — e não o teto.
 >
 > A H34/H35 mostrou como cada método portado tende a custar: o wwebjs dá o NOME
 > do módulo e a ORDEM das chamadas, mas nem os nomes nem o comportamento
@@ -88,7 +88,7 @@ ser usado para encolher escopo.
 > aqui; `queryWidExists` existe mas ele a chama no lugar errado; `_serialized`
 > da mensagem é `NULL`. **Portar é medir, não traduzir.**
 
-Seis capacidades, não catorze: as outras oito o `wa-noise` já serve pelo
+Seis capacidades, não catorze: as outras oito o `noise` já serve pelo
 protocolo (`PARIDADE-WWEBJS.md` §2–3). Todas com prova contra a SPA real.
 
 | capacidade | onde | prova real |
@@ -492,7 +492,7 @@ soarem bem.
 
 Enunciado recebido da orquestração, verbatim:
 
-> **Fase 2 é ENDURECIMENTO DE PRODUÇÃO do `wa-headless`**: fechar primeiro as
+> **Fase 2 é ENDURECIMENTO DE PRODUÇÃO do `headless`**: fechar primeiro as
 > dívidas internas acionáveis e depois provar reconexão, perfil sujo,
 > long-running, concorrência/multi-sessão, carga, limites de CPU/RAM, teardown,
 > event-bus, recuperação e observabilidade sem sucesso silencioso; **não inclui
@@ -502,7 +502,7 @@ Enunciado recebido da orquestração, verbatim:
 > provadas **sob falha e carga**, sem leaks/orphans/races, com recursos
 > *bounded*, recuperação determinística e **nenhum achado acionável de
 > severidade alta aberto**. Só depois disso o foco passa para integração ampla no
-> `wa-api` ou para `wa-noise`.
+> `wa-api` ou para `noise`.
 
 ### O que isso muda no método
 
@@ -585,10 +585,10 @@ Enunciado recebido, verbatim:
 
 **0 de 35.** Não "algumas faltando" — nenhuma:
 
-- `internal/wa-headless/main.go`, que é a FACHADA e o único caminho de import
+- `internal/headless/main.go`, que é a FACHADA e o único caminho de import
   permitido, tem **31 linhas e zero símbolos exportados**. O próprio doc dele diz
   que a fachada ainda está vazia.
-- `pkg/infra/wa-headless/` tem três arquivos e **todos são `doc.go`**, inclusive
+- `pkg/infra/headless/` tem três arquivos e **todos são `doc.go`**, inclusive
   em `client/` e `registry/`.
 
 Eu havia relatado à orquestração que o `pkg/` "não expõe todas"; medi depois e
@@ -604,16 +604,16 @@ Do doc da fachada:
 > símbolo falta, a correção é **acrescentar a linha na fachada**, nunca alcançar
 > por trás dela.
 
-E do doc de `pkg/infra/wa-headless`:
+E do doc de `pkg/infra/headless`:
 
 > O que vive aqui é esperado satisfazer os MESMOS ports que
-> `pkg/infra/wa-noise` satisfaz onde um caso de uso não deveria se importar com
+> `pkg/infra/noise` satisfaz onde um caso de uso não deveria se importar com
 > qual transporte está atrás. Onde uma capacidade existe em só um dos dois, essa
 > assimetria é decisão de produto e pertence a um ADR, **não a uma diferença
 > silenciosa entre dois adaptadores**.
 
 Isso já responde três das cinco cláusulas do critério: *fronteira correta* é a
-fachada, *contratos equivalentes* são os ports do `wa-noise`, e *sem capability
+fachada, *contratos equivalentes* são os ports do `noise`, e *sem capability
 órfã* é a proibição de assimetria silenciosa.
 
 
@@ -623,7 +623,7 @@ O plano era provar o padrão ponta a ponta pelo menor port, `JIDResolver`. O
 mapeamento óbvio seria `JIDResolver → capabilities/lookup.NumberID`, que
 resolve identidade perguntando à página.
 
-Fui ler o adaptador do `wa-noise` antes de escrever, e ele **ignora o
+Fui ler o adaptador do `noise` antes de escrever, e ele **ignora o
 contexto**: `ResolveJID(_ context.Context, raw string)` é parsing puro, sem E/S.
 Implementar o headless com `lookup` teria posto **rede atrás de um contrato
 puro**, fazendo todo chamador pagar ida-e-volta — exatamente o que a decisão 66
@@ -631,7 +631,7 @@ recusou ao proibir rede oculta dentro de leitor.
 
 Fica a regra, porque ela vale para os 35: **contrato equivalente é sobre a
 NATUREZA do contrato — puro ou de transporte — e não sobre a capability de nome
-parecido.** Dos adaptadores do `wa-noise`, 10 ignoram o contexto e 166 o usam;
+parecido.** Dos adaptadores do `noise`, 10 ignoram o contexto e 166 o usam;
 a fronteira entre os dois grupos é onde o mapeamento mecânico erra.
 
 ### Decisão 72, e a premissa que eu tinha errada
@@ -642,7 +642,7 @@ independente de transporte, migrando os dois adaptadores em commit isolado**.
 
 Eu havia relatado que o parser era o `types.ParseJID` vendorizado. **Estava
 errado**: `ResolveJID` usa um `ParseJID` LOCAL e nosso, em
-`pkg/infra/wa-noise/mapping/jid/parse.go`. A regra pura já era código wa-api.
+`pkg/infra/noise/mapping/jid/parse.go`. A regra pura já era código wa-api.
 Corrigi a premissa com a orquestração antes de seguir — a escolha não mudou,
 o custo sim.
 
@@ -668,8 +668,8 @@ não concordam**, e não de um jeito cosmético:
 
 | | número nu vira | identidade de pessoa |
 | --- | --- | --- |
-| socket (`wa-noise`) | `5511…@s.whatsapp.net` | `s.whatsapp.net` / `lid` |
-| página (`wa-headless`) | — | `c.us` / `lid` |
+| socket (`noise`) | `5511…@s.whatsapp.net` | `s.whatsapp.net` / `lid` |
+| página (`headless`) | — | `c.us` / `lid` |
 
 O `types` vendorizado do socket chama `c.us` de **`LegacyUserServer`** — o que
 o socket considera legado é o namespace **corrente** da SPA que dirigimos. E
@@ -874,8 +874,8 @@ case loga" que o `.log-coverage-baseline` já aceitou dezenas de vezes, agora em
 escala de biblioteca.
 
 A orquestração recusou as duas saídas fáceis e escolheu a cara (**78**): ensinar
-a régua, preservando denominador e ratchets. Excluir `internal/wa-headless/`
-seria encolher a base para embelezar o número — o `internal/wa-noise/` está
+a régua, preservando denominador e ratchets. Excluir `internal/headless/`
+seria encolher a base para embelezar o número — o `internal/noise/` está
 excluído por ser terceiro vendorizado, e este é código nosso.
 
 ### Três coisas que a implementação ensinou
@@ -1671,7 +1671,7 @@ o `GroupRequests` fez o gate reprovar.
 O golden estava desatualizado e `min_eligible` saltou 811→824. A causa não era
 código novo demais — era **alcance de produção**. Elegibilidade no `logcov`
 exige que a função seja alcançável a partir de `pkg/`, e as capabilities de
-`internal/wa-headless` foram todas escritas ANTES de serem ligadas. Cada port
+`internal/headless` foram todas escritas ANTES de serem ligadas. Cada port
 novo, portanto, acorda de uma vez a dívida de log inteira de uma capability.
 
 `min_func_coverage` é declarado **ratchet-UP** na linha de base. Ele desceu nos
@@ -1816,7 +1816,7 @@ a fronteira de pacote. Um limite escreve-se; não se contorna.
 
 ### A contagem, pela medição e não por prosa
 
-`go test ./pkg/infra/wa-headless/ -run Total -v` — é ele que diz. Depois da
+`go test ./pkg/infra/headless/ -run Total -v` — é ele que diz. Depois da
 H141 não volto a escrever o número à mão ao lado do teste que o imprime.
 
 ## A varredura de bundles — e duas ausências que não eram ausências
@@ -1896,7 +1896,7 @@ stack headless alcançável a partir de `pkg/` pela fachada"* — e o resultado 
 desconfortável:
 
 ```
-grep de "wa-headless" em pkg/bootstrap/   → ZERO
+grep de "headless" em pkg/bootstrap/   → ZERO
 pacotes de adaptador headless escritos    → 18
 ```
 
@@ -1921,7 +1921,7 @@ outro"*.
 
 ### O idioma da casa, reusado de propósito
 
-Ausente vira o padrão seguro (`wanoise`, que é o comportamento de antes desta
+Ausente vira o padrão seguro (`noise`, que é o comportamento de antes desta
 decisão); **valor desconhecido é erro e não cai no padrão**. É a mesma regra do
 `clusterModeConfigurado`, e pela mesma razão: um typo em
 `WA_API_ENGINE=headles` não pode virar em silêncio um processo que serve tudo
@@ -2029,7 +2029,7 @@ Pergunta: o que o `noise` faz com mensagens interativas, a headless faz?
 
 Eu disse que "o `SendButtonsUseCase` não envia nada". Isso está certo **nesta
 worktree** e errado como afirmação sobre o `noise`: eu li a camada de use case e
-falei do módulo. O módulo `internal/wa-noise` tem a capacidade inteira —
+falei do módulo. O módulo `internal/noise` tem a capacidade inteira —
 `core.Client.SendMessage(ctx, to, *waE2E.Message)` é **genérico sobre o proto
 E2E**, e `msgattrs` já classifica `ButtonsMessage`, `ListMessage`,
 `InteractiveMessage`. Botões saem montando o proto; não há caminho especial.

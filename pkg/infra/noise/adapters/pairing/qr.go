@@ -30,7 +30,7 @@ func errNoSessionRow(txtID string) error {
 // The pairing code is stored in users.qrcode, and reading it is one repository
 // call — which makes this look like an adapter with nothing engine-specific in
 // it. What is engine-specific is the WRITE: users.qrcode only ever holds a
-// value because the wa-noise lifecycle listener puts one there, on every "code"
+// value because the noise lifecycle listener puts one there, on every "code"
 // event of the SDK's QR channel (pkg/bootstrap/lifecycle.go). No other engine in
 // this build writes that column.
 //

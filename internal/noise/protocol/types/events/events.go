@@ -1,4 +1,4 @@
-// Package events contains all the events that wa-noise.Client emits to functions registered with AddEventHandler.
+// Package events contains all the events that noise.Client emits to functions registered with AddEventHandler.
 package events
 
 import (

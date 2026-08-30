@@ -27,7 +27,7 @@ type MediaS3Config struct {
 	MediaDelivery string
 }
 
-// UserClient is an alias to the wa-noise package's UserClient interface
+// UserClient is an alias to the noise package's UserClient interface
 type UserClient = wamgr.UserClient
 
 // S3Manager interface for S3 operations

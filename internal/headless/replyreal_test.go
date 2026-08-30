@@ -26,7 +26,7 @@ import (
 func TestRealSPARepliesToAMessage(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_SEND_TEST") == "" {
-		t.Skip("set WA_HEADLESS_SEND_TEST=1; this sends real messages to the peer lab account")
+		t.Skip("set HEADLESS_SEND_TEST=1; this sends real messages to the peer lab account")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	toJID := os.Getenv("WA_SEND_TO_JID")
@@ -51,14 +51,14 @@ func TestRealSPARepliesToAMessage(t *testing.T) {
 	// Something to reply TO, sent by this account so nobody else's message is
 	// quoted in a test.
 	original, err := send.Text(ctx, runner, eval, toJID,
-		"wa-headless: mensagem original", "reply/seed")
+		"headless: mensagem original", "reply/seed")
 	if err != nil {
 		t.Fatalf("seeding the original: %v", err)
 	}
 	t.Logf("original: %s", original)
 
 	res, err := send.Reply(ctx, runner, eval, toJID, original.ID.ID,
-		"wa-headless: esta e uma resposta", "reply/send")
+		"headless: esta e uma resposta", "reply/send")
 	if err != nil {
 		t.Fatalf("Reply: %v\n\nIf this is ErrNotAReply, the message WENT OUT but "+
 			"without a quote — meaning passing {quotedMsg} through "+

@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// --- fachadas para internal/wa-noise/notification ---
+// --- fachadas para internal/noise/notification ---
 
 // A logica de blocklist/picture/status/newsletter/mex vive no subpacote
 // (Fase F/G, lote 5) e e' testada la'. O que a raiz precisa travar e' a

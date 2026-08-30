@@ -19,7 +19,7 @@ import (
 )
 
 // A cripto do retry (derivacao da chave, cifragem do receipt e decifragem da
-// notificacao) e' testada em internal/wa-noise/media/retry_test.go. Aqui fica o
+// notificacao) e' testada em internal/noise/media/retry_test.go. Aqui fica o
 // que so' existe no pacote raiz.
 
 const testMediaRetryErrCodeNotAvailable = 2

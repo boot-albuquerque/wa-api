@@ -28,7 +28,7 @@ import (
 func TestRealSPAForwardsItsOwnMessage(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_FORWARD_TEST") == "" {
-		t.Skip("set WA_HEADLESS_FORWARD_TEST=1; this sends two messages to the peer lab account")
+		t.Skip("set HEADLESS_FORWARD_TEST=1; this sends two messages to the peer lab account")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -49,7 +49,7 @@ func TestRealSPAForwardsItsOwnMessage(t *testing.T) {
 		t.Fatalf("boot: %v", err)
 	}
 
-	body := fmt.Sprintf("wa-headless forward probe %d", time.Now().UnixNano())
+	body := fmt.Sprintf("headless forward probe %d", time.Now().UnixNano())
 	sent, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer, body, "test/fwd-send")
 	if err != nil {
 		t.Fatalf("send: %v", err)

@@ -72,10 +72,10 @@ func TestProbeMessageCreateBothDirections(t *testing.T) {
 	mu.Unlock()
 	t.Logf("baseline: fromMe=%d notFromMe=%d", baseMine, baseTheirs)
 
-	if _, err := send.Text(ctx, d.RunnerA, evalA, peerB, "wa-headless create probe A->B", "probe/msgcreate/a"); err != nil {
+	if _, err := send.Text(ctx, d.RunnerA, evalA, peerB, "headless create probe A->B", "probe/msgcreate/a"); err != nil {
 		t.Fatalf("A->B: %v", err)
 	}
-	if _, err := send.Text(ctx, d.RunnerB, evalB, selfA, "wa-headless create probe B->A", "probe/msgcreate/b"); err != nil {
+	if _, err := send.Text(ctx, d.RunnerB, evalB, selfA, "headless create probe B->A", "probe/msgcreate/b"); err != nil {
 		t.Fatalf("B->A: %v", err)
 	}
 

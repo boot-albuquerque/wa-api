@@ -54,7 +54,7 @@ func TestProbePinAcrossSessions(t *testing.T) {
 	}
 	t.Logf("BEFORE (seen by conta-B): %d pinned", len(before))
 
-	sent, err := send.Text(ctx, d.RunnerA, evalA, gjid, "wa-headless pin-dual probe", "probe/pindual/send")
+	sent, err := send.Text(ctx, d.RunnerA, evalA, gjid, "headless pin-dual probe", "probe/pindual/send")
 	if err != nil {
 		t.Fatalf("conta-A send: %v", err)
 	}

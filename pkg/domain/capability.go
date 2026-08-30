@@ -167,7 +167,7 @@ const (
 	// CapDetectAccountType asks the transport whether the session's own
 	// account is personal or Business (worktree feature/account-type-
 	// detection, items 33-35). It is engine-conditioned like every other
-	// entry in this block — wa-noise and wa-headless each read a different
+	// entry in this block — noise and headless each read a different
 	// real signal — which is exactly the coverage_gate_test.go boundary for
 	// belonging in this registry, even though it has no HTTP route today.
 	CapDetectAccountType Capability = "detect_account_type"
@@ -176,7 +176,7 @@ const (
 // AccountType names the kind of WhatsApp account a session runs as.
 //
 // It is a plain domain enum with NO detection logic behind it — detecting the
-// real account type from wa-noise/wa-headless data is explicitly out of scope
+// real account type from noise/headless data is explicitly out of scope
 // for the capability-registry worktree (it depends on data this worktree does
 // not have access to). Callers that know the account type pass it in; callers
 // that do not pass AccountTypeUnknown, which the registry treats as

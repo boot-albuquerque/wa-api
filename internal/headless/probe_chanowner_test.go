@@ -51,7 +51,7 @@ func TestProbeChannelOwnership(t *testing.T) {
 	r := channel.New(runner, eval)
 
 	// The name says what it is, in case a human ever sees it before the delete.
-	name := fmt.Sprintf("wa-headless probe %d", time.Now().Unix())
+	name := fmt.Sprintf("headless probe %d", time.Now().Unix())
 	made, err := m.Create(ctx, name, "created by an automated parity probe", "probe/chanowner")
 	if err != nil {
 		t.Fatalf("Create: %v", err)

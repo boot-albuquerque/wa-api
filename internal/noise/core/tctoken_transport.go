@@ -10,7 +10,7 @@ import (
 )
 
 // tcTokenTransport adapta *Client a tctoken.Transport. Existe para que o pacote
-// internal/wa-noise/tctoken possa operar sobre uma interface estreita sem
+// internal/noise/tctoken possa operar sobre uma interface estreita sem
 // importar o pacote raiz (o que fecharia um ciclo).
 //
 // Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 4".

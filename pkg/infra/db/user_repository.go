@@ -432,7 +432,7 @@ var _ appport.UserRepository = (*UserRepository)(nil)
 // engineForCreate decides what goes into users.engine on INSERT.
 //
 // The empty value is the DOCUMENTED zero value of domain.UserRecord.Engine, not
-// an unknown one: no caller can express an engine yet, and wa_noise is exactly
+// an unknown one: no caller can express an engine yet, and noise is exactly
 // what WA_API_ENGINE defaults to today, so writing it keeps new rows agreeing
 // with the running configuration instead of inventing legacy_unknown for a row
 // that is being created right now.

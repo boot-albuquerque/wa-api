@@ -11,7 +11,7 @@ import (
 )
 
 // newsletterTransport adapta *Client a newsletter.Transport. Existe para que o
-// pacote internal/wa-noise/newsletter possa operar sobre uma interface estreita
+// pacote internal/noise/newsletter possa operar sobre uma interface estreita
 // sem importar o pacote raiz (o que fecharia um ciclo) e sem que *Client precise
 // ganhar metodos exportados novos so' para satisfazer a interface.
 //

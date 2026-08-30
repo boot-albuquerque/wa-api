@@ -10,7 +10,7 @@ import (
 
 // sendRetryReceipt sends a retry receipt for an incoming message.
 //
-// Fachada: a logica vive em internal/wa-noise/retry (Fase F/G, lote 5).
+// Fachada: a logica vive em internal/noise/retry (Fase F/G, lote 5).
 func (cli *Client) sendRetryReceipt(ctx context.Context, node *waBinary.Node, info *types.MessageInfo, forceIncludeIdentity bool) {
 	if cli == nil {
 		return

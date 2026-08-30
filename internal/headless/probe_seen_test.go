@@ -44,7 +44,7 @@ func TestProbeSeenAcrossSessions(t *testing.T) {
 	evalA, evalB := d.A.Tab().Evaluate, d.B.Tab().Evaluate
 
 	// conta-B manda para conta-A.
-	sent, err := send.Text(ctx, d.RunnerB, evalB, selfA, "wa-headless seen probe", "probe/seen")
+	sent, err := send.Text(ctx, d.RunnerB, evalB, selfA, "headless seen probe", "probe/seen")
 	if err != nil {
 		t.Fatalf("B->A: %v", err)
 	}
@@ -162,7 +162,7 @@ func reverseSeen(t *testing.T, d *dualSession, ctx context.Context) {
 	peerB := os.Getenv("WA_PEER_B_JID")
 	selfA := os.Getenv("WA_SELF_A_JID")
 
-	sent, err := send.Text(ctx, d.RunnerA, evalA, peerB, "wa-headless reverse seen probe", "probe/seen/rev")
+	sent, err := send.Text(ctx, d.RunnerA, evalA, peerB, "headless reverse seen probe", "probe/seen/rev")
 	if err != nil {
 		t.Logf("REVERSE: conta-A could not send: %v", err)
 		return

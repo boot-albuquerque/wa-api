@@ -12,7 +12,7 @@ import (
 // codigoDeParUmMedido é uma string de pareamento no formato que o WhatsApp
 // Web emite: quatro campos separados por vírgula (ref, chave pública Curve25519
 // em base64, chave de identidade, segredo ADV). Comprimento e alfabeto batem
-// com o que `internal/wa-headless/capabilities/qr` lê de
+// com o que `internal/headless/capabilities/qr` lê de
 // `WAWebConnModel.Conn.ref` + `WAWebCompanionRegClientUtils` — não é uma
 // abreviação, porque o que se está a medir aqui é justamente se o valor
 // atravessa a codificação inteiro.
@@ -24,8 +24,8 @@ const codigoDeParUmMedido = "2@Ld9xK3vQpR7sT1uW5yA8bC2dE4fG6hJ0kL3mN5pQ7rS9tU1vW
 // TestEncodeProduzImagemEnaoOTexto é o teste do defeito da F373, na fronteira
 // onde ele nasce.
 //
-// O defeito medido: `GET /session/pair/qr` respondia a IMAGEM para wa_noise e
-// a STRING CRUA para wa_headless, ambas como `string`, ambas no mesmo campo
+// O defeito medido: `GET /session/pair/qr` respondia a IMAGEM para noise e
+// a STRING CRUA para headless, ambas como `string`, ambas no mesmo campo
 // `qr_code`. O painel, tratando as duas como crua, desenhou os 1858
 // caracteres do data URI como PAYLOAD de um QR — código perfeito, conteúdo
 // errado, WhatsApp recusa.
@@ -52,7 +52,7 @@ func TestEncodeProduzImagemEnaoOTexto(t *testing.T) {
 // TestEncodeDevolvePNGDoTamanhoDeContrato desembrulha o data URI até ao PNG e
 // confere as dimensões.
 //
-// Não é decoração: o valor de wa_noise que o painel serviu durante um dia era
+// Não é decoração: o valor de noise que o painel serviu durante um dia era
 // um data URI PERFEITAMENTE válido, e o problema estava a um nível acima. Um
 // teste que só olhasse para o prefixo aceitaria `data:image/png;base64,` +
 // lixo. Este exige que os bytes sejam mesmo um PNG de ImageSize×ImageSize —
@@ -96,7 +96,7 @@ func TestEncodeVazioNaoDesenhaNada(t *testing.T) {
 }
 
 // TestIsDataURIRecusaCodigoCru fecha a guarda pelo lado negativo: a função que
-// distingue imagem de texto tem de recusar justamente o valor que wa_headless
+// distingue imagem de texto tem de recusar justamente o valor que headless
 // devolvia antes da correção.
 func TestIsDataURIRecusaCodigoCru(t *testing.T) {
 	if IsDataURI(codigoDeParUmMedido) {

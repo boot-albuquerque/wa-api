@@ -52,7 +52,7 @@ type SendMessageResult struct {
 // LinkPreviewData é a metadata de Open Graph resolvida para a primeira URL
 // encontrada no corpo de uma mensagem de texto quando
 // SendMessageRequest.LinkPreview é true. Compõe o ExtendedTextMessage que
-// o wa-noise envia no lugar do Conversation simples — CAP-01.1 recuperou a
+// o noise envia no lugar do Conversation simples — CAP-01.1 recuperou a
 // semântica original do campo LinkPreview no histórico do wuzapi (commit
 // 542e707: "Add LinkPreview support to SendMessage and improve Open Graph
 // data fetching").
@@ -73,12 +73,12 @@ type LinkPreviewData struct {
 }
 
 // StatusSent é o valor de SendMessageResult.Status para uma mensagem de
-// texto que o wa-noise efetivamente entregou ao transporte — só aparece
+// texto que o noise efetivamente entregou ao transporte — só aparece
 // DEPOIS que client.SendMessage retorna sucesso (CAP-01).
 const StatusSent = "sent"
 
 // StatusDeleted é o valor de DeleteMessageResult.Status para uma mensagem
-// que o wa-noise efetivamente revogou — só aparece DEPOIS que o envio da
+// que o noise efetivamente revogou — só aparece DEPOIS que o envio da
 // revogação retorna sucesso (CAP-10).
 //
 // É um valor próprio, e não StatusSent, porque o histórico distinguia os
@@ -175,7 +175,7 @@ type SendDocumentResult struct {
 // (`git show 41bc8e2^:handlers.go`, em torno da linha 1148) nunca monta um
 // campo Caption em AudioMessage, e o protobuf waE2E.AudioMessage não tem
 // esse campo (confirmado: nenhum campo Caption em
-// internal/wa-noise/protocol/proto/waE2E, struct AudioMessage). Achado do
+// internal/noise/protocol/proto/waE2E, struct AudioMessage). Achado do
 // CAP-05, reportado — não implementado por conta própria (decisão de
 // contrato não é do executor).
 type SendAudioRequest struct {
@@ -458,7 +458,7 @@ type SendButtonsResult struct {
 // HeaderImage são os bytes JÁ OBTIDOS do header opcional (o use case decide
 // entre data URI e URL externa, como em SendImageUseCase); vazio significa
 // "sem imagem no header", e nesse caso o header carrega Title, se houver. O
-// upload é do adapter — é ele que tem o cliente do wa-noise.
+// upload é do adapter — é ele que tem o cliente do noise.
 type ButtonsPayload struct {
 	Body                string
 	Title               string
@@ -689,7 +689,7 @@ func (r *SendForwardRequest) ResolveChat() { ResolveChatField(&r.Phone, r.ChatAl
 // datajson blob (which the adapter deserializes into the wire proto) and the
 // chat where the message was originally received. The forwarding score is
 // extracted by the adapter at send time, not here — it requires proto
-// deserialization that belongs in the wa-noise layer.
+// deserialization that belongs in the noise layer.
 type StoredMessageData struct {
 	DataJSON string
 	ChatJID  string
@@ -853,7 +853,7 @@ type TemplatePayload struct {
 
 // CarouselCardType escolhe a APRESENTAÇÃO do carrossel no cliente do
 // WhatsApp. Mapeia InteractiveMessage.CarouselMessage.CarouselCardType do
-// protobuf (`internal/wa-noise/protocol/proto/waE2E/WAWebProtobufsE2E.proto`).
+// protobuf (`internal/noise/protocol/proto/waE2E/WAWebProtobufsE2E.proto`).
 //
 // O tipo é do CARROSSEL, não de cada cartão: um envio é inteiro HSCROLL ou
 // inteiro ÁLBUM, e não há mistura.

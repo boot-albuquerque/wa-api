@@ -8,14 +8,14 @@ import "strings"
 // It exists because the two transports do NOT agree on the canonical suffix for
 // the same person, and that was measured, not assumed:
 //
-//	socket (wa-noise)   a bare number becomes 5511…@s.whatsapp.net
-//	page   (wa-headless) a phone identity is filed under 5511…@c.us
+//	socket (noise)   a bare number becomes 5511…@s.whatsapp.net
+//	page   (headless) a phone identity is filed under 5511…@c.us
 //
 // The irony is on the record: the vendored socket types call c.us
-// LegacyUserServer (internal/wa-noise/protocol/types/jid.go:19), yet c.us is
+// LegacyUserServer (internal/noise/protocol/types/jid.go:19), yet c.us is
 // the CURRENT namespace of the build we drive — and it is not dead on the
 // socket either, where it is the USync query suffix
-// (internal/wa-noise/capabilities/user/info.go:46).
+// (internal/noise/capabilities/user/info.go:46).
 //
 // So there is no shared canonical form to extract, and pretending otherwise is
 // how a JID produced by one adapter becomes silently wrong in the other. What

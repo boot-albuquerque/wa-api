@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/poll desde a migração do CAP-14 para
 // port.SimpleMessenger — o handler que efetivamente monta o
-// PollCreationMessage e o envia pelo wa-noise, e não mais um "validated" sem
+// PollCreationMessage e o envia pelo noise, e não mais um "validated" sem
 // fazer nada. Mesma estrutura de handler_send_location_test.go (rota
 // gorilla/mux registrada).
 

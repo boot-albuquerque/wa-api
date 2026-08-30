@@ -14,7 +14,7 @@ import (
 
 // TestProbeRequestPairingCode measures requestPairingCode's real call shape
 // against an UNPAIRED session — the exact gap H122 left open
-// (internal/wa-headless/HOUSEKEEP.md): the module surface was confirmed
+// (internal/headless/HOUSEKEEP.md): the module surface was confirmed
 // present, but the call itself was only ever exercised against a PAIRED lab
 // session (socket state CONNECTED), where the reference's own state gate
 // stops it before anything runs. Never invoked, only probed for presence.
@@ -38,7 +38,7 @@ func TestProbeRequestPairingCode(t *testing.T) {
 	}
 	profile := os.Getenv("WA_HEADLESS_PROFILE_DIR")
 	if profile == "" {
-		t.Fatal("WA_HEADLESS_PROFILE_DIR is required — point it at a disposable, UNPAIRED profile")
+		t.Fatal("HEADLESS_PROFILE_DIR is required — point it at a disposable, UNPAIRED profile")
 	}
 	phone := os.Getenv("WA_PROBE_PAIRPHONE_NUMBER")
 	if phone == "" {

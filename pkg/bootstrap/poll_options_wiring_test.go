@@ -44,15 +44,15 @@ import (
 // e' que a execucao REAL atravessou o guarda fail-closed.
 
 // causaSemRegistrador e' a mensagem de errNoPollOptionRecorder
-// (pkg/infra/wa-noise/adapters/chat/messenger.go:494) — a recusa de enviar sem
+// (pkg/infra/noise/adapters/chat/messenger.go:494) — a recusa de enviar sem
 // onde guardar as opcoes em claro. E' a assinatura do wiring quebrado.
 const causaSemRegistrador = "poll option recorder not configured"
 
 // causaNaoLogado e' core.ErrNotLoggedIn
-// (internal/wa-noise/core/errors.go:22), o erro que o SDK devolve quando o
+// (internal/noise/core/errors.go:22), o erro que o SDK devolve quando o
 // envio chega ate' ele com um device sem JID. E' a assinatura do wiring
 // INTEIRO percorrido: so' se chega ali DEPOIS do guarda de registrador. A
-// fachada (internal/wa-noise/main.go) nao reexporta o sentinel, e alargar a
+// fachada (internal/noise/main.go) nao reexporta o sentinel, e alargar a
 // fachada seria mudanca de producao — por isso o literal, com a origem citada.
 const causaNaoLogado = "the store doesn't contain a device JID"
 
@@ -90,7 +90,7 @@ func newPollWiringRouter(t *testing.T) *mux.Router {
 	return router
 }
 
-// seedPollWiringSession registra um cliente wa-noise para pollWiringUser.
+// seedPollWiringSession registra um cliente noise para pollWiringUser.
 //
 // Nao e' um duble: e' um *noise.Client de verdade, sem device. E' o minimo
 // que faz EnsureSession (guard.go:57) passar — sem ele o use case para ANTES

@@ -15,7 +15,7 @@ import (
 //
 //	fmt.Errorf("failed to download media from last host: %w", DownloadHTTPError{...})
 //
-// Source: internal/wa-noise/capabilities/media/download.go, line ~149.
+// Source: internal/noise/capabilities/media/download.go, line ~149.
 func cdnError(statusCode int) error {
 	return fmt.Errorf("failed to download media from last host: %w",
 		media.DownloadHTTPError{Response: &http.Response{StatusCode: statusCode}},

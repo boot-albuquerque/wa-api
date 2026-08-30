@@ -53,7 +53,7 @@ func (f *fakeContactStore) GetAllContacts(ctx context.Context) (map[types.JID]ty
 // clientWithContacts monta um *noise.Client real (sem conexão de rede)
 // cujo Store.Contacts é o fake acima. NewClient só popula campos internos a
 // partir do deviceStore — não conecta a nada — então isso é seguro em teste
-// unitário, no mesmo espírito de pkg/infra/wa-noise/user_adapters_test.go.
+// unitário, no mesmo espírito de pkg/infra/noise/user_adapters_test.go.
 func clientWithContacts(cs store.ContactStore) *noise.Client {
 	return noise.NewClient(&store.Device{Contacts: cs}, nil)
 }

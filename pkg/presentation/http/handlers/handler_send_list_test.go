@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/list desde a migração do CAP-22 para
 // port.SimpleMessenger — o handler que efetivamente monta o ListMessage e o
-// envia pelo wa-noise, e não mais um "validated" sem fazer nada. Mesma
+// envia pelo noise, e não mais um "validated" sem fazer nada. Mesma
 // estrutura de handler_send_buttons_test.go/handler_send_template_test.go
 // (rota gorilla/mux registrada). É o ÚLTIMO stub da superfície de envio
 // (HOUSEKEEP F149).

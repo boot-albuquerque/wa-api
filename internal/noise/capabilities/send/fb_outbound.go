@@ -22,9 +22,9 @@ import (
 )
 
 // FBApplicationVersion e' o `version` do SubProtocol de aplicacao FB. O valor
-// mora em internal/wa-noise/retry desde a Fase F/G lote 5, para que o caminho
+// mora em internal/noise/retry desde a Fase F/G lote 5, para que o caminho
 // de retry e o de envio normal nao possam divergir; a raiz o reexporta como
-// wa-noise.FBMessageApplicationVersion.
+// noise.FBMessageApplicationVersion.
 const FBApplicationVersion = retry.FBApplicationVersion
 
 // GroupV3 envia uma mensagem v3/FB a um grupo. Era Client.sendGroupV3.

@@ -194,7 +194,7 @@ func DownloadHistorySync(ctx context.Context, t Transport, notif *waE2E.HistoryS
 //
 // O lock de leitura fica segurado pelo laco inteiro, incluindo as gravacoes no
 // store — e' o que o RLock/RUnlock manual daqui fazia antes da extracao do
-// dominio para internal/wa-noise/appstatesync. `appstate.AllPatchNames` e'
+// dominio para internal/noise/appstatesync. `appstate.AllPatchNames` e'
 // importado direto por ser DADO.
 func HandleAppStateSyncKeyShare(ctx context.Context, t Transport, keys *waE2E.AppStateSyncKeyShare) {
 	onlyResyncIfNotSynced := true

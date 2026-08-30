@@ -62,7 +62,7 @@ func buildLeaseManager(s *server) (*leaseManager, error) {
 // hasLiveSessionLocally reports whether this process still has a session for a
 // user.
 //
-// The wa-noise client is the right thing to ask. It is registered while the
+// The noise client is the right thing to ask. It is registered while the
 // session is being created — so it is already there DURING a QR pairing, and
 // holding the lease through the pairing is correct, not a leak — and the
 // kill-channel path removes it when the session dies, from the QR timing out to

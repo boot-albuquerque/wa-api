@@ -70,7 +70,7 @@ func (f *JIDResolver) ResolveJID(ctx context.Context, raw string) (domain.JID, e
 }
 
 // pareceTelefone espelha `ehTelefonePlausivel` de
-// pkg/infra/wa-noise/mapping/jid/parse.go. Os limites vivem lá; se mudarem,
+// pkg/infra/noise/mapping/jid/parse.go. Os limites vivem lá; se mudarem,
 // mudam aqui — é duplicação consciente, porque o dublê não pode importar infra.
 func pareceTelefone(raw string) bool {
 	if len(raw) < 5 || len(raw) > 15 {
@@ -92,7 +92,7 @@ func (f *JIDResolver) ResolveQualifiedJID(ctx context.Context, raw string) (doma
 	}
 	// IMITA A REGRA REAL, e não uma mais simples. O
 	// JIDResolverAdapter.ResolveQualifiedJID de
-	// pkg/infra/wa-noise/mapping/jid/resolver.go:42 RECUSA string sem
+	// pkg/infra/noise/mapping/jid/resolver.go:42 RECUSA string sem
 	// servidor — "qualificado" no nome existe precisamente para isso, e o
 	// comentário de lá explica porquê: o adapter que reparseia usa um
 	// ParseJID leniente que aplicaria o servidor padrão, adivinhando a
@@ -545,7 +545,7 @@ var _ port.NewsletterReader = (*NewsletterReader)(nil)
 // ListSubscribed implementa port.NewsletterReader.
 //
 // The zero value answers an EMPTY SLICE and not nil, because neither real
-// adapter can answer nil: the wa-noise one builds the slice with make(), and the
+// adapter can answer nil: the noise one builds the slice with make(), and the
 // headless one does too. A double that answered nil would bless a nil branch no
 // production path can reach (ARMADILHAS #1).
 func (f *NewsletterReader) ListSubscribed(ctx context.Context, txtID string) ([]domain.NewsletterMetadata, error) {

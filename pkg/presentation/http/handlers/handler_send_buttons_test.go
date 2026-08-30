@@ -20,7 +20,7 @@ import (
 
 // Este arquivo cobre POST /chat/send/buttons desde a migração do CAP-21 para
 // port.InteractiveMessenger — o handler que efetivamente monta o
-// InteractiveMessage/NativeFlow e o envia pelo wa-noise, e não mais um
+// InteractiveMessage/NativeFlow e o envia pelo noise, e não mais um
 // "validated" sem fazer nada. Mesma estrutura de
 // handler_send_template_test.go (rota gorilla/mux registrada).
 //
@@ -30,7 +30,7 @@ import (
 // botões NORMALIZADOS à porta e tem de DESCARTAR EM SILÊNCIO o de tipo
 // desconhecido — comportamento histórico preservado por decisão (F148). Qual
 // `Name` e quais parâmetros cada tipo vira está medido no adapter
-// (pkg/infra/wa-noise/adapters/chat/messenger_buttons_test.go).
+// (pkg/infra/noise/adapters/chat/messenger_buttons_test.go).
 
 const sendButtonsSentinelToken = "send-buttons-sentinel-cause-9d24af"
 

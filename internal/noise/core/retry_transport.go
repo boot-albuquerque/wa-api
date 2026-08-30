@@ -20,7 +20,7 @@ import (
 )
 
 // retryTransport adapta *Client a retry.Transport. Existe para que o pacote
-// internal/wa-noise/retry possa operar sobre uma interface estreita sem
+// internal/noise/retry possa operar sobre uma interface estreita sem
 // importar o pacote raiz (o que fecharia um ciclo) e sem que *Client precise
 // ganhar metodos exportados novos so' para satisfazer a interface.
 //

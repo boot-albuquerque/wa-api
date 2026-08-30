@@ -9,10 +9,10 @@ import (
 
 // Response is the result of a message send.
 //
-// A raiz a reexporta como wa-noise.SendResponse por APELIDO DE TIPO
+// A raiz a reexporta como noise.SendResponse por APELIDO DE TIPO
 // (`type SendResponse = send.Response`), nao por definicao de tipo novo: o
 // apelido faz dos dois o MESMO tipo, entao todo chamador externo que ja'
-// escrevia `wa-noise.SendResponse{...}` ou fazia type switch continua
+// escrevia `noise.SendResponse{...}` ou fazia type switch continua
 // compilando e casando. Uma definicao nova seria um tipo distinto e quebraria
 // a API publica.
 type Response struct {
@@ -41,11 +41,11 @@ type Response struct {
 //
 // When providing optional parameters, add a single instance of this struct as the last parameter:
 //
-//	cli.SendMessage(ctx, to, message, wa-noise.SendRequestExtra{...})
+//	cli.SendMessage(ctx, to, message, noise.SendRequestExtra{...})
 //
 // Trying to add multiple extra parameters will return an error.
 //
-// Reexportada pela raiz como wa-noise.SendRequestExtra, por apelido de tipo —
+// Reexportada pela raiz como noise.SendRequestExtra, por apelido de tipo —
 // ver o doc de Response.
 type RequestExtra struct {
 	// The message ID to use when sending. If this is not provided, a random message ID will be generated

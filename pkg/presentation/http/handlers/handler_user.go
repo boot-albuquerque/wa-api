@@ -423,7 +423,7 @@ func (h *UserHandlers) ListChats() http.Handler {
 // isPlausibleJIDOrPhone rejects inputs that are clearly neither a phone
 // number nor a qualified JID.  A phone is digits only with 7-20 chars; a
 // JID contains '@'.  The check is deliberately lenient — deep validation
-// happens in the use case / wa-noise layer — but it catches the measured
+// happens in the use case / noise layer — but it catches the measured
 // case (F238): a garbage string that triggers a 500 in the downstream.
 func isPlausibleJIDOrPhone(s string) bool {
 	if strings.ContainsRune(s, '@') {

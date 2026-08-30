@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const testHost = "wa-headless-pod-7"
+const testHost = "headless-pod-7"
 
 // writeSingletons builds a profile in the shape Chromium leaves behind.
 //
@@ -137,7 +137,7 @@ func TestReclaimAllowsAForeignHostWhenAuthorised(t *testing.T) {
 // on the first would read the pod name as a pid and never parse.
 func TestLockHolderSplitsOnTheLastHyphen(t *testing.T) {
 	dir := t.TempDir()
-	writeSingletons(t, dir, "wa-headless-pod-7-8899")
+	writeSingletons(t, dir, "headless-pod-7-8899")
 
 	got, err := readLockHolder(dir)
 	if err != nil {
@@ -146,8 +146,8 @@ func TestLockHolderSplitsOnTheLastHyphen(t *testing.T) {
 	if !got.parsed {
 		t.Fatal("a well-formed lock did not parse")
 	}
-	if got.host != "wa-headless-pod-7" || got.pid != 8899 {
-		t.Fatalf("parsed host=%q pid=%d, want host=%q pid=8899", got.host, got.pid, "wa-headless-pod-7")
+	if got.host != "headless-pod-7" || got.pid != 8899 {
+		t.Fatalf("parsed host=%q pid=%d, want host=%q pid=8899", got.host, got.pid, "headless-pod-7")
 	}
 }
 

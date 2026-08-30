@@ -9,9 +9,9 @@
 //	  "Imagem do QR code em data URI (`data:image/png;base64,…`), lida da
 //	   coluna `users.qrcode`."
 //
-// Until 2026-08-29 only ONE engine honoured it. wa_noise did, because
+// Until 2026-08-29 only ONE engine honoured it. noise did, because
 // pkg/application/session/orchestrator.go encoded the PNG before writing
-// users.qrcode. wa_headless (HOUSEKEEP H145) returned the RAW pairing string
+// users.qrcode. headless (HOUSEKEEP H145) returned the RAW pairing string
 // from the same port, and nothing in the type system noticed: both are
 // `string`, both flow through appport.PairingQRReader into
 // domain.GetQRResult.QRCode, and both serialise to the same `qr_code` JSON
@@ -19,7 +19,7 @@
 //
 // That silent divergence is what F373 measured in the field: the dev panel,
 // having been told the two engines answered the same shape, drew the string
-// it got as QR PAYLOAD — so wa_noise produced a picture-perfect QR code
+// it got as QR PAYLOAD — so noise produced a picture-perfect QR code
 // encoding the 1858 characters "data:image/png;base64,iVBORw0KG…", which a
 // phone decodes successfully and WhatsApp then rejects as invalid.
 //
@@ -39,10 +39,10 @@ const (
 	// ImageSize is the side, in pixels, of the rendered PNG.
 	//
 	// 256 is the value pkg/application/session/orchestrator.go has always
-	// used for wa_noise, and the measured payload it produces is 1375 bytes
+	// used for noise, and the measured payload it produces is 1375 bytes
 	// of PNG / 1858 characters of data URI (F373, live measurement against
-	// GET /session/pair/qr). Keeping it means wa_headless answers the same
-	// size as wa_noise, and no existing consumer sees its images change.
+	// GET /session/pair/qr). Keeping it means headless answers the same
+	// size as noise, and no existing consumer sees its images change.
 	ImageSize = 256
 
 	// DataURIPrefix is the data URI header a client drops straight into an
@@ -50,7 +50,7 @@ const (
 	// tell a rendered image from a raw pairing string — see IsDataURI.
 	DataURIPrefix = "data:image/png;base64,"
 
-	// correction is the error-correction level. Medium is what wa_noise has
+	// correction is the error-correction level. Medium is what noise has
 	// always used; a pairing string is a couple of hundred bytes, three
 	// orders of magnitude under Medium's ~2331-byte ceiling, so the level is
 	// chosen for scan robustness and not for capacity.
@@ -88,15 +88,15 @@ func IsDataURI(s string) bool {
 //
 // Both branches are MEASURED reality, not defensive padding:
 //
-//   - already an image — wa_noise. Its adapter reads users.qrcode, and the
+//   - already an image — noise. Its adapter reads users.qrcode, and the
 //     orchestrator's QR listener writes the encoded PNG into that column
 //     (pkg/application/session/orchestrator.go, onPairingQR). Re-encoding it
 //     would render a QR code whose payload is the 1858 characters
 //     "data:image/png;base64,iVBORw0KG…" — a code that scans perfectly and
 //     that WhatsApp rejects. That is F373, verbatim, and it is why this
 //     function checks instead of encoding unconditionally.
-//   - raw string — wa_headless. Its adapter reads the live pairing code out
-//     of the page (pkg/infra/wa-headless/pairing.QRReader) and has no image
+//   - raw string — headless. Its adapter reads the live pairing code out
+//     of the page (pkg/infra/headless/pairing.QRReader) and has no image
 //     to hand over.
 //
 // Idempotent by construction: EnsureDataURI(EnsureDataURI(x)) == EnsureDataURI(x).

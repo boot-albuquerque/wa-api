@@ -105,7 +105,7 @@ func TestStartSessionIsWiredIntoConnectHandler(t *testing.T) {
 		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
 	}
 
-	// The wa-noise provider fires StartSession with `go`
+	// The noise provider fires StartSession with `go`
 	// (pkg/bootstrap/pairing_providers.go), so the wait stays even though this
 	// double is synchronous: the production path is the one being described.
 	select {

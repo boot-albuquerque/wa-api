@@ -18,7 +18,7 @@ import (
 // labContactName is what the proof writes, and it is written to be recognised
 // by a human who finds it on the account: this is a test artifact, and it is
 // deleted at the end of the run that made it.
-const labContactName = "wa-headless-lab"
+const labContactName = "headless-lab"
 
 // TestAddressbookSaveReal proves the address-book family AND the one event that
 // had a listener and no proof.

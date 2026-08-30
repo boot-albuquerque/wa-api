@@ -22,7 +22,7 @@ import (
 // handler que efetivamente busca a URL (normalizando para data URI) ou
 // aceita a data URI do cliente, converte via appport.StickerProcessor
 // (pipeline real de pkg/infra/media/sticker por trás do fake nestes
-// testes), sobe o WebP CONVERTIDO e entrega o sticker ao wa-noise — não
+// testes), sobe o WebP CONVERTIDO e entrega o sticker ao noise — não
 // mais um "validated" sem fazer nada. Mesma estrutura de
 // handler_send_video_test.go (POST /chat/send/video, CAP-06).
 

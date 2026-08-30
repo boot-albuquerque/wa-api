@@ -1,4 +1,4 @@
-# wa-headless — diário de execução
+# headless — diário de execução
 
 Checkpoint operacional do autopilot. **Não substitui** o `HANDOFF-INICIATIVA.md`,
 que é a fonte de verdade de objetivo, arquitetura, invariantes e Definition of
@@ -263,8 +263,8 @@ quanto a efeitos destrutivos. O trace mostrou outra coisa: não havia nenhuma
 leitura do enum de socket em código de produção, só em comentários e no
 instrumento de teste, e o único limiar existente era o
 `DefaultUnresponsiveAfter = 3` da `liveness.go`, que conta falhas consecutivas
-de sonda e é **outro eixo**. Além disso, `internal/wa-headless` não é importado
-por nada fora dele — `pkg/infra/wa-headless/{client,registry}` são só `doc.go`.
+de sonda e é **outro eixo**. Além disso, `internal/headless` não é importado
+por nada fora dele — `pkg/infra/headless/{client,registry}` são só `doc.go`.
 Consequência dupla, e as duas foram registradas em vez de silenciadas: a prova
 de "o corte não derruba sessão" sai **por construção**, porque não existe
 caminho por onde derrubar; e a auditoria de downstream de `Alive` que a
@@ -548,7 +548,7 @@ medição acrescenta àquele arquivo é que o dublê dele **não é mais permiss
 a produção** — ARMADILHA 1 verificada em vez de presumida. E o argumento mais
 forte, que faltava: a regra do último hífen já está travada de forma **durável e
 não-gated** por `engine/profile_test.go:136-150`
-(`TestLockHolderSplitsOnTheLastHyphen`, dublê controlado `wa-headless-pod-7-8899`),
+(`TestLockHolderSplitsOnTheLastHyphen`, dublê controlado `headless-pod-7-8899`),
 que morde em qualquer host. A sonda é instrumento de medição; a trava é aquele
 teste. As GUARDAS acrescentadas depois, essas sim, têm controle executado —
 abaixo.
@@ -658,7 +658,7 @@ variável — o repositório não foi tocado em nenhum momento:
 M1 = mutação strings.LastIndex -> strings.Index em engine/profile.go
 
 host=buildbox           M1: assertion PASS  (vácuo — reproduz o achado)  guarda: --- SKIP
-host=wa-headless-pod-7  M1: assertion FAIL  (DIVERGENCE, err=nil e 3 apagados)
+host=headless-pod-7  M1: assertion FAIL  (DIVERGENCE, err=nil e 3 apagados)
 host=buildbox           M1 + guarda REMOVIDO (estado pré-correção): --- PASS, sem sinal
                         e ainda imprimindo "DISCRIMINATING ... could not survive"
 ```
@@ -679,7 +679,7 @@ fora da condição que a produziu. Do outro lado, "nunca sinalizar" tem custo
 medido e certo — o `reclaimVerdict` recusa enquanto o pid viver.
 
 **O preço é pago por mecanismo** (`engine/suspect.go`): toda parada suja escreve
-`.wa-headless-session-suspect` DENTRO do perfil, com o `StopVia` que a causou. A
+`.headless-session-suspect` DENTRO do perfil, com o `StopVia` que a causou. A
 marca é escrita pelo `CleanStop`, não pelo chamador — `ProfileDir()` entrou na
 interface `BrowserProcess` exatamente para que nenhum call site possa esquecer.
 Ler não limpa; só `ClearSessionSuspect` limpa, depois de verificação real.
@@ -895,8 +895,8 @@ reproduziu esse número**: mediu **283** para o mesmo commit, por dois métodos.
 Reconferido nesta sessão, neste worktree, com `git stash`:
 
 ```
-437316e (pai, árvore limpa)   269 issues   internal/wa-headless: 2 gocyclo
-HEAD + as mudanças deste loop 269 issues   internal/wa-headless: as MESMAS 2
+437316e (pai, árvore limpa)   269 issues   internal/headless: 2 gocyclo
+HEAD + as mudanças deste loop 269 issues   internal/headless: as MESMAS 2
 ```
 
 As duas gocyclo são `(*readinessMarks).record` (14) e `logTimeline` (11), ambas
@@ -922,12 +922,12 @@ deve ser afirmado daqui em diante, são duas coisas:
 ```
 go build ./...                                   OK
 go vet ./...                                     OK
-gofmt -l internal/wa-headless/                   vazio
-go test -race -count=1 ./internal/wa-headless/...
-  wa-api/internal/wa-headless               ok  97.559s
-  wa-api/internal/wa-headless/engine        ok   5.263s
-  wa-api/internal/wa-headless/observability ok   1.603s
-  wa-api/internal/wa-headless/spa           ok   1.953s
+gofmt -l internal/headless/                   vazio
+go test -race -count=1 ./internal/headless/...
+  wa-api/internal/headless               ok  97.559s
+  wa-api/internal/headless/engine        ok   5.263s
+  wa-api/internal/headless/observability ok   1.603s
+  wa-api/internal/headless/spa           ok   1.953s
 as 6 sondas TestRealSPA* continuam puladas por padrão
 make lint                                        269 (pai: 269, idêntico)
 ```
@@ -969,12 +969,12 @@ bateu com a primeira em 60 ms no painel e 0 ms no socket. A variância de
 ```
 go build ./...                                   OK
 go vet ./...                                     OK
-gofmt -l internal/wa-headless/                   vazio
-go test -race -count=1 ./internal/wa-headless/...
-  wa-api/internal/wa-headless              ok  83.108s
-  wa-api/internal/wa-headless/engine       ok   4.829s
-  wa-api/internal/wa-headless/observability ok  1.163s
-  wa-api/internal/wa-headless/spa          ok   2.026s
+gofmt -l internal/headless/                   vazio
+go test -race -count=1 ./internal/headless/...
+  wa-api/internal/headless              ok  83.108s
+  wa-api/internal/headless/engine       ok   4.829s
+  wa-api/internal/headless/observability ok  1.163s
+  wa-api/internal/headless/spa          ok   2.026s
 as 5 sondas TestRealSPA* continuam puladas por padrão
 ```
 
@@ -1002,10 +1002,10 @@ Cresceu em todas as corridas; `stopped_via=browser.close` em todas.
 ```
 go build ./...                          OK
 go vet ./...                            OK
-go test -race ./internal/wa-headless/...
-  wa-api/internal/wa-headless              ok  1.345s
-  wa-api/internal/wa-headless/engine       ok  2.800s
-  wa-api/internal/wa-headless/observability ok 1.315s
+go test -race ./internal/headless/...
+  wa-api/internal/headless              ok  1.345s
+  wa-api/internal/headless/engine       ok  2.800s
+  wa-api/internal/headless/observability ok 1.315s
 scripts/chromium-study: build+vet+test  ok  0.193s
 ```
 
@@ -1291,7 +1291,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   mecanismo `engine/suspect.go`. Bookkeeping; a numeração de invariantes NÃO
   foi tocada.)*
   O que segue aberto não é a H5: é **quem CONSOME** a marca
-  `.wa-headless-session-suspect`. Nenhum caminho de boot age sobre ela, e o
+  `.headless-session-suspect`. Nenhum caminho de boot age sobre ela, e o
   ciclo que agiria é a **CAP-05**.
 
 ## Findings
@@ -1520,7 +1520,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   orçamento de latência cravado como constante no consumidor TypeScript
   (abaixo). E o SIM cobre a ESCOLHA de motor; ele NÃO licencia "adaptador TS
   inalterado" para a iniciativa inteira: as seis capacidades que a
-  `PARIDADE-WWEBJS.md` §3 atribui ao `wa-headless` não são consumidas hoje pelo
+  `PARIDADE-WWEBJS.md` §3 atribui ao `headless` não são consumidas hoje pelo
   `WaApiAdapter`, e no momento em que a iniciativa as ENTREGAR o worker terá de
   consumi-las — aí o write set dele deixa de ser vazio.** Investigação da
   CAP-09 em 2026-08-12, contra o código dos dois repositórios — `wa-api` em
@@ -1546,7 +1546,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   | eixo | quem decide | onde vive o dado | o outro lado enxerga? |
   |---|---|---|---|
   | **serviço** — `wwebjs` \| `wa-api` | `wa-worker` | `whatsapp_accounts.provider` (app-core) | o `wa-api` não precisa saber |
-  | **motor** — `wa-noise` \| `wa-headless` | `wa-api` | `users.<coluna nova>` (banco do `wa-api`) | o `wa-worker` **não enxerga, e não precisa** |
+  | **motor** — `noise` \| `headless` | `wa-api` | `users.<coluna nova>` (banco do `wa-api`) | o `wa-worker` **não enxerga, e não precisa** |
 
   **Lado `wa-worker` — o eixo que ele controla, e onde ele para.**
   `AdapterKind` é `'wwebjs' | 'wa-api' | 'fake' | 'fake-single'`
@@ -1604,8 +1604,8 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   ponto (`application/session/orchestrator.go:187`), e o provider concreto é
   montado num único lugar (`session_orchestrator_wiring.go:32-34`). Os handles
   vivos já são indexados por `userID` (`registry/manager.go:86-96`), e
-  `pkg/infra/wa-headless/registry/` e `pkg/infra/wa-headless/client/` já existem
-  como `doc.go` espelhando os do `wa-noise` — a intenção está registrada, a
+  `pkg/infra/headless/registry/` e `pkg/infra/headless/client/` já existem
+  como `doc.go` espelhando os do `noise` — a intenção está registrada, a
   implementação não.
 
   **Write set, por lado — nomeado, inclusive quando vazio.**
@@ -1655,10 +1655,10 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   5. `pkg/bootstrap/session_orchestrator_wiring.go:32-34` — o provider passa a
      ser um composto que escolhe por `userID`; alternativa equivalente é o
      ponto único de `orchestrator.go:187`.
-  6. `pkg/infra/wa-headless/registry/` e `pkg/infra/wa-headless/client/` — hoje
+  6. `pkg/infra/headless/registry/` e `pkg/infra/headless/client/` — hoje
      só `doc.go`; é onde a `Session` headless nasce.
   7. `pkg/bootstrap/wiring_handlers.go:103` —
-     `waclient.ClientForGetter(clientManager.GetWaNoiseClient)`, e o
+     `waclient.ClientForGetter(clientManager.GetNoiseClient)`, e o
      `sessionGuard` construído a partir dele em `:115`
      (`wasession.NewSessionGuardAdapter(waClientLookup)`), injetado nos use
      cases em `:130`. **Este é o ponto caro, e não deve ser escondido**:
@@ -1666,35 +1666,35 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
      (`types.JID`, `appstate.PatchInfo`, `Store() *store.Device`), e é por ela
      que passam contatos, avatar, envio e status. Um motor de browser não a
      satisfaz inteira. *(Correção da citação: a interface começa em
-     `pkg/infra/wa-noise/client/client.go:**28**` — `type Client interface {` —
+     `pkg/infra/noise/client/client.go:**28**` — `type Client interface {` —
      e fecha em `:92`. A redação original citava `:60-92`, cortando 32 linhas do
      MEIO da interface. O erro era **a favor** do próprio argumento dela — a
      interface é ainda maior do que ela dizia —, e por isso mesmo foi
      corrigido.)*
   8. `pkg/bootstrap/session_attach_hook_adapter.go:40` — **o pior dos pontos
      novos, e o único que não é custo difuso mas CAMINHO OBRIGATÓRIO QUE
-     QUEBRA.** `Attach` faz `client := clientManager.GetWaNoiseClient(userID)` e
+     QUEBRA.** `Attach` faz `client := clientManager.GetNoiseClient(userID)` e
      retorna erro se `nil`
-     (`"sessionAttachHook: no wanoise client registered for userID %s"`,
+     (`"sessionAttachHook: no noise client registered for userID %s"`,
      `:41-43`). O comentário do próprio arquivo (`:46-47`) diz que *"Attach é o
      ponto por onde TODA sessão passa — tanto o pareamento novo quanto a
      reconexão de quem já tinha credenciais"*. Tracei o mecanismo até o fim, e
      ele fecha: o registro só publica o cliente concreto quando a `port.Session`
-     satisfaz `interface{ WaNoiseClient() *wanoise.Client }`
-     (`pkg/infra/wa-noise/registry/clients/clients.go:38-47`) — uma `Session`
-     headless não satisfaz, logo `GetWaNoiseClient` devolve `nil`, logo `Attach`
+     satisfaz `interface{ NoiseClient() *noise.Client }`
+     (`pkg/infra/noise/registry/clients/clients.go:38-47`) — uma `Session`
+     headless não satisfaz, logo `GetNoiseClient` devolve `nil`, logo `Attach`
      erra; e o erro **aborta o start**:
      `pkg/application/session/orchestrator.go:197-200` faz
      `o.registry.Unregister(userID); return aerr` antes de qualquer
      `Pair`/`Connect`. **Não há bypass.** Sem tratar este ponto, uma conta em
      motor headless não inicia sessão nenhuma.
   9. `pkg/bootstrap/wiring_delegates.go:133-134` —
-     `GetWA: func(uid string) interface{} { return clientManager.GetWaNoiseClient(uid) }`
+     `GetWA: func(uid string) interface{} { return clientManager.GetNoiseClient(uid) }`
      e `GetMC: … clientManager.GetUserClient(uid)`, que injetam o cliente
      concreto no `wahistory.SyncHistoryForChat`.
   10. `pkg/bootstrap/lease_wiring.go:94-98` — `releaseSessionLocally` resolve o
       cliente concreto para `Disconnect()` e depois limpa os três registros
-      (`DeleteWaNoiseClient`, `DeleteUserClient`, `DeleteHTTPClient`). É a
+      (`DeleteNoiseClient`, `DeleteUserClient`, `DeleteHTTPClient`). É a
       liberação de sessão ao perder o lease: para uma conta headless ela hoje
       não desliga nada.
   11. `pkg/bootstrap/session_event_dispatcher_adapter.go:32` —
@@ -1704,16 +1704,16 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
       grep e tem o mesmo problema, só que degrada em silêncio em vez de falhar.
 
   **Nota de cobertura — este write set é PARCIAL, e é por construção.** Re-rodei
-  `grep -rn "GetWaNoiseClient\|GetUserClient" pkg/`. Descontando testes,
-  comentários e as próprias definições em `pkg/infra/wa-noise/registry/manager.go`
+  `grep -rn "GetNoiseClient\|GetUserClient" pkg/`. Descontando testes,
+  comentários e as próprias definições em `pkg/infra/noise/registry/manager.go`
   (`:111`, `:126`, `:144`), sobram **sete linhas de produção**: as dos pontos 7
-  a 11 acima, mais `pkg/infra/wa-noise/adapters/sessioncount/adapter.go:34`
-  (`GetWaNoiseClientsCount`, casamento por substring) — que conta sessões vivas
-  para o `/health` iterando sobre `*wanoise.Client`
-  (`ClientHealthProvider`, `:15-17`; `IterateWaNoiseClients` em `:36`), e onde
+  a 11 acima, mais `pkg/infra/noise/adapters/sessioncount/adapter.go:34`
+  (`GetNoiseClientsCount`, casamento por substring) — que conta sessões vivas
+  para o `/health` iterando sobre `*noise.Client`
+  (`ClientHealthProvider`, `:15-17`; `IterateNoiseClients` em `:36`), e onde
   uma conta headless simplesmente **não seria contada**. Mas o grep é mais
-  estreito que a pergunta: ele não pega `SetWaNoiseClient`, `GetAllClients`,
-  `IterateWaNoiseClients` nem `Snapshot`, e não pega os seis adapters de
+  estreito que a pergunta: ele não pega `SetNoiseClient`, `GetAllClients`,
+  `IterateNoiseClients` nem `Snapshot`, e não pega os seis adapters de
   capacidade que recebem o `waclient.Getter` já pronto do ponto 7
   (`adapters/{misc,chat/messenger,chat/composer,group,presence,user}`). **Não
   afirmo que a lista está completa** — a redação original afirmava, com um
@@ -1740,7 +1740,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   função, `contracts/user_repository.go:49-52`). Um motor headless serve essa
   rota implementando duas assinaturas, **não cobrindo a interface larga**. Que
   hoje quem as implementa seja um adapter construído sobre o getter concreto
-  (`SessionGuardAdapter`, `pkg/infra/wa-noise/runtime/session/guard.go:28-36` e
+  (`SessionGuardAdapter`, `pkg/infra/noise/runtime/session/guard.go:28-36` e
   `:72-78`, montado em `wiring_handlers.go:115`) é acidente da implementação
   atual, não do contrato — e é exatamente por isso que o ponto 7 do write set
   tem de citar `:115` junto com `:103`.
@@ -1758,9 +1758,9 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
 
   - **OLD_CONTRACT** — `POST /admin/users` aceita `{name, token, webhook,
     events}` (`wa-api-http-client.ts:138-154`); o motor não é conceito da API.
-    As 11 rotas C3 respondem sempre pelo `wa-noise`.
+    As 11 rotas C3 respondem sempre pelo `noise`.
   - **NEW_CONTRACT** — `AddUserRequest`/`EditUserRequest` ganham um campo
-    opcional de motor; ausente ⇒ `wa-noise`. As rotas C3 mantêm path, método,
+    opcional de motor; ausente ⇒ `noise`. As rotas C3 mantêm path, método,
     auth e envelope; muda só quem está atrás.
   - **COMPATIBILITY** — total **na FORMA**, nos dois sentidos; **condicional no
     TEMPO** (ver o bloco de orçamento de latência logo abaixo). O `wa-worker` não manda o
@@ -1781,7 +1781,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
     `PUT /admin/users/{id}` na troca. Ambas já existem
     (`router.go:275-276`).
   - **ROLLBACK** — pôr a coluna de volta no default reverte conta a conta, sem
-    deploy: a linha volta a resolver `wa-noise` no `NewSession` seguinte. A
+    deploy: a linha volta a resolver `noise` no `NewSession` seguinte. A
     coluna pode ficar no banco sem efeito. Nenhum passo de rollback atravessa a
     fronteira para o `disparazaap`.
 
@@ -1865,9 +1865,9 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   no app-core, não no `wa-worker`; (d) a latência real das rotas C3 sob motor
   headless, contra os tetos de 15 s / 50 s / polling de 2 s — não medida, e a
   variável de que depende a condição do SIM. Buscas feitas: `grep` por `engine`
-  em `pkg/`, `cmd/` e `internal/wa-headless/` (só o pacote
-  `internal/wa-headless/engine`, sem relação), `grep` por
-  `GetWaNoiseClient|GetUserClient` em `pkg/` — **cujo alcance está enunciado na
+  em `pkg/`, `cmd/` e `internal/headless/` (só o pacote
+  `internal/headless/engine`, sem relação), `grep` por
+  `GetNoiseClient|GetUserClient` em `pkg/` — **cujo alcance está enunciado na
   nota de cobertura do write set, e que NÃO cobre todos os acoplamentos ao
   cliente concreto** —, e enumeração das rotas C3 por `wiring_routes.go`.
 
@@ -2084,7 +2084,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   investigativo, sem implementação. Complementa **F-15** e **F-16**.
 
   ```
-  CONTROL PROFILE: internal/wa-headless/.lab/test-account-profile (mesmo da
+  CONTROL PROFILE: internal/headless/.lab/test-account-profile (mesmo da
     F-16; UNPAIRED por EVIDENCIA-SPA.md M1/M2). O SOURCE nunca foi montado
     diretamente: uma cópia descartável foi feita com `cp -R` para
     /tmp/wa-control-profile-<timestamp> (fora do repositório, impossível de
@@ -2154,10 +2154,10 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   **F-15**.
 
   ```
-  CONTROL PROFILE: internal/wa-headless/.lab/test-account-profile — o path
+  CONTROL PROFILE: internal/headless/.lab/test-account-profile — o path
     exato que produziu a evidência limpa de UNPAIRED em EVIDENCIA-SPA.md
     (M1: QR aos ~15s; M2.3: socket_state=UNPAIRED aos 6,08s) e é o
-    `labProfileDir` de internal/wa-headless/realspa_test.go:51. Confirmado
+    `labProfileDir` de internal/headless/realspa_test.go:51. Confirmado
     existente e não estava em uso (sem SingletonLock, sem processo Chrome
     aberto) antes deste loop.
   KNOWN STATE: UNPAIRED, medido por TestRealSPAUnpairedBootObservation /
@@ -2209,7 +2209,7 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
     "/session/profile") apontado para o profile candidato, e CHROME_BIN
     (p3_launcher.go:87, default "/usr/bin/chromium") apontado para o Chrome
     151.0.7922.76 local. UA explícito reaproveitado de
-    internal/wa-headless/realspa_test.go's `realSPAUserAgent` (mesmo texto,
+    internal/headless/realspa_test.go's `realSPAUserAgent` (mesmo texto,
     nenhuma variável nova). Três execuções, `-soak 3s` (mínimo):
       1ª: falhou em segundos com erro CDP "Inspected target navigated or
           closed (-32000)" — não é o "session not restored" limpo que a
@@ -2308,16 +2308,16 @@ dizia "trabalho seguro esgotado" — estava errado, e por quê está na **F-19**
   `wa-api`.** O `wa-api` já é `AdapterKind` de primeira classe
   (`disparazaap` `services/wa-worker/src/index.ts:279`, flag
   `WA_WA_API_ENABLED`) e o adapter TS já fala HTTP/WS com este serviço, hoje
-  servido pelo `wa-noise`. O `wa-headless` vira um **segundo motor atrás de
+  servido pelo `noise`. O `headless` vira um **segundo motor atrás de
   rotas que já existem e já têm consumidor**. Fecha a incerteza nº 1 do handoff
   §7 na **leitura B**, por evidência. Reorganiza a CAP-09: não é fachada nova,
   é servir contrato existente.
 * **F-05 · o escopo real são SEIS capacidades, não catorze.** Oito das 14 já
-  são servidas pelo `wa-noise`. Só `fetchMessages`, `onMessageMeta`,
+  são servidas pelo `noise`. Só `fetchMessages`, `onMessageMeta`,
   `livenessCheck`, `refreshOwner`, `getBrowserPid` e `backupNow` exigem o motor
   de browser. Detalhe e ordem em `PARIDADE-WWEBJS.md` §3.
 * **F-06 · `sendText` deixa de ser a primeira capacidade de produto.** O
-  `wa-api` já envia pelo `wa-noise`; o envio pelo `wa-headless` só é necessário
+  `wa-api` já envia pelo `noise`; o envio pelo `headless` só é necessário
   quando uma conta rodar no motor de browser, ou seja, é consequência da
   CAP-09. O fluxo Resolve → Validate → Act → Verify continua obrigatório quando
   chegar.
@@ -2505,7 +2505,7 @@ ainda carregava o exagero da **F-28**, corrigido antes só nas minhas falas.
 
 **F-31 — o canal de orquestração truncou três vezes seguidas.** Respostas longas
 chegavam cortadas no meio da palavra (`'E autoriz'`, `'Autorização reen'`,
-`` '`internal/wa-headless_' ``). Recusei inferir o resto de uma frase de
+`` '`internal/headless_' ``). Recusei inferir o resto de uma frase de
 autorização cortada — metade de uma autorização não é autorização. A saída foi
 um **protocolo de token único**: perguntas de resposta fechada, um token cada.
 Funcionou de primeira (`SIM`, depois `UMA SIM SORUNTIME`). Enquanto o canal

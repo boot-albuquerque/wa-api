@@ -1,6 +1,6 @@
 # Fase H — Inventário (etapa 1)
 
-Levantamento factual do estado de `internal/wa-noise/` **antes** de qualquer
+Levantamento factual do estado de `internal/noise/` **antes** de qualquer
 movimentação da Fase H. Nada foi movido para produzir este documento; todos os
 números vêm de `grep`/`ls`/leitura dos arquivos no commit corrente da branch
 `feature/vendor-wa-noise`.
@@ -13,8 +13,8 @@ correspondente.
 Árvore-alvo (resumo da especificação):
 
 ```
-internal/wa-noise/
-├── main.go            (fachada, package wa-noise)
+internal/noise/
+├── main.go            (fachada, package noise)
 ├── core/              client.go, client_connection.go, request.go, internals*.go
 ├── capabilities/      group user media message newsletter notification pairing
 │                      prekeys retry send tctoken appstatesync
@@ -78,15 +78,15 @@ Direção de dependência declarada:
 
 ### 1.2 Arquivos não-Go na raiz (não movem)
 
-`PATCHES.md`, `PROVENANCE.md`, `UPSTREAM`, `LICENSE-wa-noise`,
+`PATCHES.md`, `PROVENANCE.md`, `UPSTREAM`, `LICENSE-noise`,
 `reportingfields.json` (lido por `reportingtoken.go`).
 
 ---
 
 ## 2. Inventário dos arquivos `.go` da raiz
 
-114 arquivos: **92 de produção + 22 de teste**. Pacote: `wa-noise` (exceto
-`client_test.go`, que é `wa-noise_test`).
+114 arquivos: **92 de produção + 22 de teste**. Pacote: `noise` (exceto
+`client_test.go`, que é `core_test`).
 
 Legenda de risco:
 - **F** = fachada/adaptador fino sobre um subpacote — movimentação mecânica
@@ -114,7 +114,7 @@ Legenda de risco:
 | `keepalive.go` | 104 | F | Fachada sobre `keepalive/` |
 | `handshake.go` | 60 | F | Fachada sobre `handshake/`; contém `cli.socket = ns` |
 
-Testes pareados: `client_test.go` (80, `wa-noise_test`), `client_connection_test.go` (241),
+Testes pareados: `client_test.go` (80, `core_test`), `client_connection_test.go` (241),
 `client_events_test.go` (327), `client_proxy_test.go` (193), `client_session_test.go` (403),
 `connectionevents_test.go` (386), `errors_test.go` (293), `keepalive_test.go` (118).
 
@@ -240,7 +240,7 @@ em `docs/LOCKS.md`.
 
 São ~70 arquivos, cada um importando exatamente o seu subpacote. Movem em bloco
 com a capacidade; o import path muda de
-`wa-api/internal/wa-noise/<cap>` para `wa-api/internal/wa-noise/capabilities/<cap>`.
+`wa-api/internal/noise/<cap>` para `wa-api/internal/noise/capabilities/<cap>`.
 Os call sites reversos que a Fase F/G teve de corrigir de fato
 (`PATCHES.md:7135-7146`, `:7455-7469`) já estão resolvidos — hoje são chamadas a
 métodos, não acessos a campo. **Nada a refazer, só reescrita de import path.**
@@ -275,13 +275,13 @@ Mover fora dessa ordem quebra o build entre etapas.
 
 ## 6. Checagem de ciclos — verificada contra os imports reais
 
-Método: `grep -rho '"…wa-noise/…"'` por pacote, agrupado. Resultado por aresta
+Método: `grep -rho '"…noise/…"'` por pacote, agrupado. Resultado por aresta
 proibida:
 
 ### 6.1 ⚠ VIOLAÇÃO REAL ENCONTRADA — `types/events` → `appstate`
 
 ```
-types/events/appstate.go:12   "wa-api/internal/wa-noise/appstate"
+types/events/appstate.go:12   "wa-api/internal/noise/appstate"
 types/events/appstate.go:187  Name  appstate.WAPatchName
 types/events/appstate.go:193  Name  appstate.WAPatchName
 ```
@@ -355,8 +355,8 @@ que realmente importam e são verificáveis:
 - `protocol/argo`, `runtime/proxy` (`proxyconf/`), `observability/log`,
   `security/{cbc,gcm,hkdf,keys}`: **zero** imports de capacidade. ✅
 - `runtime/keepalive` importa `binary`, `types/events`, `util/log`. ✅
-- **Nada, em pacote nenhum, importa a raiz `wa-api/internal/wa-noise`** exceto
-  `client_test.go` (que é `package wa-noise_test`, na própria raiz). ✅
+- **Nada, em pacote nenhum, importa a raiz `wa-api/internal/noise`** exceto
+  `client_test.go` (que é `package core_test`, na própria raiz). ✅
   Portanto a invariante "nada importa `core`" é satisfeita **desde que `core/`
   não seja importado pelos consumidores externos** — ver §8.
 
@@ -364,8 +364,8 @@ que realmente importam e são verificáveis:
 
 ## 7. Censo de arquivos de teste
 
-22 `_test.go` na raiz. Todos em `package wa-noise` exceto `client_test.go`
-(`package wa-noise_test`).
+22 `_test.go` na raiz. Todos em `package noise` exceto `client_test.go`
+(`package core_test`).
 
 | Teste | `.go` pareado | Viaja com |
 |---|---|---|
@@ -406,11 +406,11 @@ junto por construção.
 
 ## 8. Risco maior da Fase H: a superfície pública da raiz
 
-`internal/wa-noise` (`package wa-noise`) é importado por **30 arquivos** fora
-do fork, em `pkg/infra/wa-noise/*` e `pkg/infra/history/`:
+`internal/noise` (`package noise`) é importado por **30 arquivos** fora
+do fork, em `pkg/infra/noise/*` e `pkg/infra/history/`:
 
 ```
-pkg/infra/wa-noise/{waclient,registry,group,user,chat,profile,misc}/…
+pkg/infra/noise/{waclient,registry,group,user,chat,profile,misc}/…
 pkg/infra/history/sync.go
 ```
 
@@ -456,14 +456,14 @@ pacote só por causa de `socketLock`; mover esse pacote inteiro de `.` para
 Diretórios criados, vazios, sem nenhum `.go`:
 
 ```
-internal/wa-noise/core/
-internal/wa-noise/capabilities/
-internal/wa-noise/protocol/
-internal/wa-noise/security/
-internal/wa-noise/persistence/
-internal/wa-noise/runtime/
-internal/wa-noise/observability/
-internal/wa-noise/docs/          (contém este arquivo)
+internal/noise/core/
+internal/noise/capabilities/
+internal/noise/protocol/
+internal/noise/security/
+internal/noise/persistence/
+internal/noise/runtime/
+internal/noise/observability/
+internal/noise/docs/          (contém este arquivo)
 ```
 
 Nenhum destes é um pacote Go — são agrupadores de sistema de arquivos.

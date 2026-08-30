@@ -27,11 +27,11 @@ const (
 )
 
 // Proxy e' a assinatura de http.Transport.Proxy. A raiz reexporta este tipo
-// como wa-noise.Proxy.
+// como noise.Proxy.
 type Proxy = func(*http.Request) (*url.URL, error)
 
 // Options diz em quais dos tres http.Client o transport entra. A raiz reexporta
-// este tipo como wa-noise.SetProxyOptions — e' API que consumidores em
+// este tipo como noise.SetProxyOptions — e' API que consumidores em
 // pkg/infra usam pelo nome antigo, entao o alias la' e' obrigatorio.
 type Options struct {
 	// If NoWebsocket is true, the proxy won't be used for the websocket

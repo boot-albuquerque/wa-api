@@ -42,11 +42,11 @@ func TestDisconnectorSatisfazOControladorInteiro(t *testing.T) {
 // gatilho de TestSessionStatusDetidaMasIlegivelNaoAdivinha (cfgFor aponta
 // para um binário inexistente — o mesmo caso de "página inalcançável" que
 // um Chrome real produziria). Logout tem de recusar com o MESMO código que
-// pkg/infra/wa-noise/runtime/session/guard.go já usa para a condição
+// pkg/infra/noise/runtime/session/guard.go já usa para a condição
 // idêntica (`!client.IsConnected()`): apperr.CodeSessionNotConnected, 409
 // — é o código que LogoutUseCase.Execute verifica para chamar
 // detacher.Detach mesmo em falha (F80), então divergir aqui quebraria essa
-// limpeza de estado local para wa_headless especificamente.
+// limpeza de estado local para headless especificamente.
 func TestLogout_EvaluatorInalcancavelDevolveSessionNotConnected(t *testing.T) {
 	reg := registry.New(1)
 	d := NewDisconnector(adapter.NewSessions(reg, cfgFor))
@@ -125,10 +125,10 @@ func TestClassifyIdentity_IdentidadePresenteMarcaEReportaPareada(t *testing.T) {
 }
 
 // TestClassifyIdentity_PareouEDeslogouRemotoReportaDesconectada é o achado
-// da F378: o usuário conectou no wa_headless, desconectou pelo APARELHO
+// da F378: o usuário conectou no headless, desconectou pelo APARELHO
 // (desvincular no celular), e o painel mostrou "conectada, não
 // autenticada" em vez de "desconectada" — o MESMO evento físico que no
-// wa_noise produz "desconectada" (client.IsConnected() cai). MEDIDO ao
+// noise produz "desconectada" (client.IsConnected() cai). MEDIDO ao
 // vivo: a página se recupera sozinha para um QR novo e funcional
 // (GET /session/pair/qr respondeu code_age_seconds=0 imediatamente), então
 // RefreshOwnIdentity falhando (ou devolvendo ausente) é EXATAMENTE a mesma

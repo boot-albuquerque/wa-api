@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types/events"
 )
 
-// O dominio de enquete vive em internal/wa-noise/message/ desde a Fase F/G
+// O dominio de enquete vive em internal/noise/message/ desde a Fase F/G
 // lote 9. Os metodos abaixo sao API publica do pacote e continuam na raiz.
 
 // DecryptPollVote decrypts a poll update message. The vote itself includes SHA-256 hashes of the selected options.

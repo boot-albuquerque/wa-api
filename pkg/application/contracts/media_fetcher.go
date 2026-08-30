@@ -7,7 +7,7 @@ import "context"
 //
 // Porta separada de MediaMessenger de propósito: buscar (rede HTTP
 // arbitrária, sujeita a SSRF e a limite de tamanho) e enviar (upload +
-// protocolo wa-noise) falham por motivos diferentes e são substituíveis
+// protocolo noise) falham por motivos diferentes e são substituíveis
 // independentemente — mesma disciplina de portas estreitas que
 // TextMessenger e LinkPreviewFetcher já seguem (CAP-01/CAP-01.1).
 type MediaFetcher interface {

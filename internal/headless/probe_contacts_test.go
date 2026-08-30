@@ -71,7 +71,7 @@ func TestProbeContactShape(t *testing.T) {
 			const Chats = window.require('WAWebChatCollection').ChatCollection;
 			for (const c of Chats.getModelsArray()) {
 				if (c.id && c.id.server === 'g.us' && typeof c.formattedTitle === 'string'
-					&& c.formattedTitle.indexOf('wa-headless-lab') === 0) {
+					&& c.formattedTitle.indexOf('headless-lab') === 0) {
 					const md = c.groupMetadata;
 					out.metadataMethods = md ? Object.getOwnPropertyNames(Object.getPrototypeOf(md)).slice(0, 30).join(',') : 'none';
 					out.participantsMethods = (md && md.participants)

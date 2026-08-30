@@ -11,7 +11,7 @@ import (
 // AccountKind is this package's own answer to "is this account Business or
 // personal", kept separate from pkg/domain.AccountType so that internal/
 // never imports pkg/ (the fork stays a library that does not know about the
-// application built on top of it — see internal/wa-noise/PATCHES.md).
+// application built on top of it — see internal/noise/PATCHES.md).
 //
 // # THE SIGNAL, AND WHY IT IS RELIABLE
 //

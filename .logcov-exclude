@@ -14,26 +14,26 @@ cmd/
 # real. justificativa: dublê de teste nao e' codigo de producao a instrumentar.
 pkg/application/contracts/contractsfake/
 
-# internal/wa-noise/ — modulo wa-api/internal/wa-noise vendorizado por completo
+# internal/noise/ — modulo wa-api/internal/noise vendorizado por completo
 # (ADR-0002/0003), cópia fiel de codigo de terceiros sob MPL-2.0, nao codigo
 # nosso a instrumentar. `packages.Visit` do proprio cmd/logcov inclui
 # qualquer pacote transitivamente importado cujo PkgPath comece com o path
-# do modulo (`wa-api/`) — antes do vendoring, todo o wa-noise ficava fora
-# do denominador por ser `wa-api/internal/wa-noise/...` (path externo); depois de
-# vendorizado sob `wa-api/internal/wa-noise/...`, o mesmo filtro passaria a
+# do modulo (`wa-api/`) — antes do vendoring, todo o noise ficava fora
+# do denominador por ser `wa-api/internal/noise/...` (path externo); depois de
+# vendorizado sob `wa-api/internal/noise/...`, o mesmo filtro passaria a
 # incluir as ~124k linhas de terceiros sem essa exclusao explicita.
-internal/wa-noise/
+internal/noise/
 
-# pkg/infra/wa-noise/client/testkit/ — mesmo caso de contractsfake: e'
+# pkg/infra/noise/client/testkit/ — mesmo caso de contractsfake: e'
 # o dublê de waclient.Client (e do ContactStore) compartilhado pelos testes de
-# todos os subpacotes de pkg/infra/wa-noise/. Era codigo _test.go ate' a quebra
+# todos os subpacotes de pkg/infra/noise/. Era codigo _test.go ate' a quebra
 # do pacote em subpacotes, quando deixou de ser alcancavel de fora do pacote
 # original e virou um pacote de apoio exportado. Continua sendo dublê de teste,
 # nao codigo de producao a instrumentar; contar seus ~45 metodos triviais no
 # denominador so diluiria o percentual.
-pkg/infra/wa-noise/client/testkit/
+pkg/infra/noise/client/testkit/
 
-# pkg/infra/wa-noise/adapters/ — DECISÃO DE ARQUITETURA (2026-08-21, F193),
+# pkg/infra/noise/adapters/ — DECISÃO DE ARQUITETURA (2026-08-21, F193),
 # não conveniência de métrica. A camada de adaptador NÃO é ponto de
 # instrumentação neste projeto: ela resolve sessão, converte tipos e delega à
 # fachada, e quem regista a falha é o USE CASE, que tem o nome da operação e o
@@ -56,9 +56,9 @@ pkg/infra/wa-noise/client/testkit/
 # são dublês de teste e código de terceiros vendorizado, que não PODEM logar.
 # Este é código de produção nosso que ESCOLHEMOS não instrumentar. Se essa
 # escolha de layering mudar, esta linha sai e o piso é recalculado.
-pkg/infra/wa-noise/adapters/
+pkg/infra/noise/adapters/
 
-# pkg/infra/wa-noise/client/ — MESMA DECISÃO DE ARQUITETURA que a dos
+# pkg/infra/noise/client/ — MESMA DECISÃO DE ARQUITETURA que a dos
 # adaptadores acima (2026-08-21, F204), e pela mesma razão: a fachada não é
 # ponto de instrumentação. Ela delega ao SDK e traduz a recusa; quem regista a
 # falha é o use case, que tem o nome da operação e o utilizador.
@@ -77,11 +77,11 @@ pkg/infra/wa-noise/adapters/
 # fazer. Mantê-las no denominador faria o gate punir a correção da F204.
 #
 # O QUE NÃO É EXCLUÍDO, e é o ponto: `ClassifyIQ` mudou-se para
-# `pkg/infra/wa-noise/errmap/` justamente para CONTINUAR medida. Ela tem lógica
+# `pkg/infra/noise/errmap/` justamente para CONTINUAR medida. Ela tem lógica
 # — decide categoria e regista a decisão — e é o oposto de delegação. A
 # exclusão por pacote não distingue ficheiros, então a separação teve de ser
 # feita no layout. Se um dia entrar lógica em `client/`, esta linha sai.
-pkg/infra/wa-noise/client/
+pkg/infra/noise/client/
 
 # pkg/presentation/http/contracttest/ — mesmo caso de contractsfake e de
 # testkit: e' o pacote de ASSERCOES de contrato partilhado pelos testes das

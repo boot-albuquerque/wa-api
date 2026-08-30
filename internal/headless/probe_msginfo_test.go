@@ -81,7 +81,7 @@ func TestProbeMessageInfo(t *testing.T) {
 	if gjid == "" {
 		t.Skip("lab group not found; per-participant info needs a group")
 	}
-	sent, err := send.Text(ctx, runner, eval, gjid, "wa-headless msginfo probe", "probe/msginfo")
+	sent, err := send.Text(ctx, runner, eval, gjid, "headless msginfo probe", "probe/msginfo")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}

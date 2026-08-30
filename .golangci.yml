@@ -32,7 +32,7 @@ linters:
             - "**/pkg/application/usecase/user/*.go"
             - "**/pkg/application/contracts/*.go"
           deny:
-            - pkg: wa-api/internal/wa-noise
+            - pkg: wa-api/internal/noise
               desc: >-
                 a camada de aplicacao nao conhece o modulo de protocolo
                 concreto; consuma uma porta de capacidade de

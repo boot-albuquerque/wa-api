@@ -11,8 +11,8 @@ import (
 
 // ReqCreateGroup contains the request data for CreateGroup.
 //
-// A definicao vive em internal/wa-noise/group; aqui fica um apelido, que e' o
-// mesmo tipo — chamadores externos (pkg/infra/wa-noise/group, entre outros)
+// A definicao vive em internal/noise/group; aqui fica um apelido, que e' o
+// mesmo tipo — chamadores externos (pkg/infra/noise/group, entre outros)
 // continuam compilando sem conversao.
 type ReqCreateGroup = group.ReqCreate
 

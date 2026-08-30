@@ -44,7 +44,7 @@ const (
 // tlsSkipVerify informa se as entregas de webhook devem pular a verificação
 // do certificado TLS. Espelha o webhookTLSSkipVerify de
 // pkg/bootstrap/lifecycle.go (mesma env var, mesma semântica de opt-in
-// inseguro) — duplicado aqui em vez de importado porque pkg/infra/wa-noise
+// inseguro) — duplicado aqui em vez de importado porque pkg/infra/noise
 // não pode depender de pkg/bootstrap.
 var tlsSkipVerify = sync.OnceValue(func() bool {
 	v := strings.ToLower(os.Getenv(EnvTLSSkipVerify))

@@ -20,7 +20,7 @@ import (
 // capabilities, qual TIPO de sub-mensagem protobuf tem de chegar a
 // Client.Download. Uma cópia trocada (sticker montando ImageMessage, por
 // exemplo) muda o MediaType que o SDK deriva por tipo
-// (internal/wa-noise/capabilities/media, GetType) e, com ele, a chave HKDF de
+// (internal/noise/capabilities/media, GetType) e, com ele, a chave HKDF de
 // decifragem — falha que só apareceria contra o servidor real.
 
 // downloadKindCase liga capability, rota, kind e o tipo protobuf esperado.

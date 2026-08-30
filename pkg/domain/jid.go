@@ -36,7 +36,7 @@ func (j JID) IsPN() bool { return hasSuffix(string(j), ServerPN) }
 // the suffix is the ONLY signal that separates a channel from a person or a
 // group, so a divergent literal makes the distinction fail silently. The
 // vendored protocol spells the bare server without the "@"
-// (internal/wa-noise/protocol/types/jid.go:24, NewsletterServer = "newsletter");
+// (internal/noise/protocol/types/jid.go:24, NewsletterServer = "newsletter");
 // this constant carries the "@" because the domain compares whole suffixes.
 const ServerNewsletter = "@newsletter"
 
@@ -78,7 +78,7 @@ func (j JID) IsUserJID() bool {
 
 // StatusBroadcastJID is the well-known destination for ephemeral status
 // stories (image, video, audio). Sending a message to this JID triggers
-// the broadcast-list resolution inside wa-noise (core/broadcast.go),
+// the broadcast-list resolution inside noise (core/broadcast.go),
 // which fans the message out to contacts according to privacy settings.
 const StatusBroadcastJID JID = "status@broadcast"
 

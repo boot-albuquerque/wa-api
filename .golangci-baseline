@@ -41,7 +41,7 @@
 #
 # A contagem de 263 -> 341 e' INFORMATIVA por desenho (ver o cabecalho deste
 # ficheiro) e e' acumulada do dia inteiro, sobretudo de testes novos. Medida por
-# diretorio: internal/wa-noise/core 52, pkg/bootstrap 27,
+# diretorio: internal/noise/core 52, pkg/bootstrap 27,
 # pkg/presentation/http/handlers 24. O ficheiro novo contribui com UM.
 #
 # feature/engine-session-ownership (2026-08-26): max_complexity 50 -> 51.
@@ -57,13 +57,13 @@
 # funcao ja' cresceu de 220 para 226 linhas exatamente em
 # feature/engine-session-ownership, nenhuma outra branch da onda 2 ou 3 tocou
 # nela.
-# vendor-wa-noise-native-fork (2026-08-06): 105->87. golangci-lint fmt
+# vendor-noise-native-fork (2026-08-06): 105->87. golangci-lint fmt
 # (goimports) reagrupou os imports nos 45 arquivos consumidores após a
-# troca mecânica de import path pra internal/wa-noise/ — não é código
+# troca mecânica de import path pra internal/noise/ — não é código
 # novo, é reformatação de import block. max_complexity inalterado (56).
 # Quebra de ClientManager em sub-registries (2026-08-07): 283 -> 261.
 # max_complexity inalterado (56) — a quebra nao tocou a funcao mais complexa
-# do repo, que vive em internal/wa-noise/. A queda de 22 issues vem de
+# do repo, que vive em internal/noise/. A queda de 22 issues vem de
 # reescrever os cinco arquivos de metodos de ClientManager como quatro
 # pacotes com estado proprio: sumiram os acessos diretos a mapa compartilhado
 # que o lint sinalizava.
@@ -136,7 +136,14 @@ max_complexity=51
 # Duas funções de teste subiram de complexidade sem mudar a contagem, porque já
 # estavam na lista: TestUseCases_SemSessao_PropagamACausa 11 -> 12 (o ramo que
 # escolhe a mensagem de recusa esperada do GetQR).
-count=635
+count=643
+# remocao do prefixo wa fora do modulo wa-api (2026-08-29, HOUSEKEEP
+# F382-F386): count 635 -> 643 (+8, INFORMATIVO). max_complexity
+# inalterado (51) — nenhuma funcao mudou de forma, so' de nome. Nao
+# investigado issue a issue, mesmo padrao da entrada anterior (fusao
+# feature/wa-noise): sao issues pre-existentes cujo texto (variavel,
+# caminho de arquivo citado no comentario) mudou com a renomeacao de
+# identificadores/diretorios, sem mudanca de comportamento.
 # fusao com feature/wa-noise (Passo 6, 2026-08-28): count 613 -> 635 (+22,
 # INFORMATIVO). max_complexity inalterado (51). Issues novas vem sobretudo
 # de codigo que so' existia do lado de feature/wa-noise e chegou por fusao
@@ -144,7 +151,7 @@ count=635
 # nao investigado issue a issue por serem informativas, nao trava.
 
 # f17-vet-lint (2026-08-07): 83->284. Ratchet de CONTAGEM apenas — a trava
-# real (max_complexity) nao mudou. internal/wa-noise/ entrou em VET_TARGETS e
+# real (max_complexity) nao mudou. internal/noise/ entrou em VET_TARGETS e
 # LINT_TARGETS (F17 em HOUSEKEEP.md). A premissa registrada na F17 era que o
 # gocyclo maximo do modulo estaria muito acima do baseline; medido, ele e' 46
 # contra os 56 do repo, entao o gate aguenta sem afrouxar nada. `go vet` no

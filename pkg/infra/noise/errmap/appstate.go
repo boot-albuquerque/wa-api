@@ -27,7 +27,7 @@ const CodeAppStateConflict = "app_state_conflict"
 // errors, and non-conflict server refusals pass through unchanged — turning
 // them into 409 would trade one lie for another.
 //
-// The match is on the error TEXT because the fork (internal/wa-noise) does not
+// The match is on the error TEXT because the fork (internal/noise) does not
 // export a typed error or sentinel for the conflict specifically — ErrUpdate
 // (= ErrAppStateUpdate) covers ALL server-side app-state failures. The matched
 // substring `code="409"` comes from waBinary.Node.XMLString() as embedded by

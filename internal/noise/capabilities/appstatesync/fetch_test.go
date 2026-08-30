@@ -17,7 +17,7 @@ import (
 )
 
 // syncTransport monta um Transport com os sub-stores de app state e um
-// Processor real (o de internal/wa-noise/appstate) — patches vazios atravessam
+// Processor real (o de internal/noise/appstate) — patches vazios atravessam
 // a decodificacao sem erro, o que basta para exercitar o laco de Fetch.
 func syncTransport() (*fakeTransport, *fakeAppStateStore) {
 	tp := newFakeTransport()

@@ -6,7 +6,7 @@ import (
 	"wa-api/internal/noise/capabilities/media"
 )
 
-// A implementacao vive em internal/wa-noise/media/conn.go; aqui ficam so' os
+// A implementacao vive em internal/noise/media/conn.go; aqui ficam so' os
 // apelidos de tipo e os metodos finos de *Client (ADR-0004, Fase F/G lote 1).
 
 // MediaConnHost represents a single host to download media from.

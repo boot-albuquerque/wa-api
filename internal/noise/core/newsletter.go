@@ -10,7 +10,7 @@ import (
 )
 
 // Fachada do dominio de canais (newsletters). A logica vive em
-// internal/wa-noise/newsletter e opera sobre newsletter.Transport; aqui ficam
+// internal/noise/newsletter e opera sobre newsletter.Transport; aqui ficam
 // so' os metodos de *Client que delegam, mais os apelidos de tipo que preservam
 // a API historica do pacote.
 //
@@ -30,7 +30,7 @@ const NewsletterLinkPrefix = newsletter.LinkPrefix
 
 // CreateNewsletterParams sao os parametros de CreateNewsletter.
 //
-// A definicao vive em internal/wa-noise/newsletter; aqui fica um apelido, que e'
+// A definicao vive em internal/noise/newsletter; aqui fica um apelido, que e'
 // o mesmo tipo — chamadores externos continuam compilando sem conversao.
 type CreateNewsletterParams = newsletter.CreateParams
 
@@ -63,7 +63,7 @@ func (cli *Client) NewsletterMarkViewed(ctx context.Context, jid types.JID, serv
 // NewsletterSendReaction sends a reaction to a channel message.
 // To remove a reaction sent earlier, set reaction to an empty string.
 //
-// The last parameter is the message ID of the reaction itself. It can be left empty to let wa-noise generate a random one.
+// The last parameter is the message ID of the reaction itself. It can be left empty to let noise generate a random one.
 func (cli *Client) NewsletterSendReaction(ctx context.Context, jid types.JID, serverID types.MessageServerID, reaction string, messageID types.MessageID) error {
 	if cli == nil {
 		return ErrClientIsNil

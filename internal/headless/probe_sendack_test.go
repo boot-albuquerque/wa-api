@@ -52,7 +52,7 @@ func TestProbeSendAckLatency(t *testing.T) {
 
 	sent := time.Now()
 	res, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer,
-		fmt.Sprintf("wa-headless ack probe %d", sent.Unix()), "probe/ack")
+		fmt.Sprintf("headless ack probe %d", sent.Unix()), "probe/ack")
 	if err != nil {
 		t.Fatalf("Text: %v", err)
 	}

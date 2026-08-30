@@ -27,7 +27,7 @@ var (
 )
 
 // keepAliveTransport adapta *Client a keepalive.Transport. Existe para que o
-// pacote internal/wa-noise/runtime/keepalive possa operar sobre uma interface estreita
+// pacote internal/noise/runtime/keepalive possa operar sobre uma interface estreita
 // sem importar o pacote raiz (o que fecharia um ciclo).
 //
 // Ver ADR-0004 e PATCHES.md, "Fase F/G — lote 10".

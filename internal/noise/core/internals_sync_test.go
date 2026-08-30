@@ -108,7 +108,7 @@ func TestInternalsGeradoCobreTodoMetodoElegivel(t *testing.T) {
 	}
 	if len(faltando) > 0 {
 		t.Errorf("%d metodo(s) elegivel(is) sem wrapper em internals.go: %v\n"+
-			"Rode `go generate ./internal/wa-noise/core/` e commite o resultado.\n"+
+			"Rode `go generate ./internal/noise/core/` e commite o resultado.\n"+
 			"Ver F29 em HOUSEKEEP.md para o historico deste gate.",
 			len(faltando), faltando)
 	}
@@ -132,7 +132,7 @@ func TestInternalsGeradoNaoTemWrapperOrfao(t *testing.T) {
 	}
 	if len(orfaos) > 0 {
 		t.Errorf("%d wrapper(s) em internals.go sem metodo correspondente: %v\n"+
-			"Rode `go generate ./internal/wa-noise/core/` e commite o resultado.",
+			"Rode `go generate ./internal/noise/core/` e commite o resultado.",
 			len(orfaos), orfaos)
 	}
 }

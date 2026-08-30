@@ -1,7 +1,7 @@
-// Package pairing adapts the wa_headless transport to the pairing surface
+// Package pairing adapts the headless transport to the pairing surface
 // (appport.SessionStarter, appport.PairingQRReader — pairphone is not here
-// yet, see HOUSEKEEP F370 phase 2) — the wa_headless side of the same
-// contract pkg/infra/wa-noise/adapters/pairing already serves for wa_noise.
+// yet, see HOUSEKEEP F370 phase 2) — the headless side of the same
+// contract pkg/infra/noise/adapters/pairing already serves for noise.
 package pairing
 
 import (
@@ -88,7 +88,7 @@ func (r *QRReader) EnsureSession(ctx context.Context, txtID string) error {
 // PairingQR returns the raw pairing code currently on offer for txtID.
 //
 // RAW, deliberately: the route this feeds — GET /session/pair/qr — is
-// documented to answer a PNG data URI, but wa_noise's adapter returns one
+// documented to answer a PNG data URI, but noise's adapter returns one
 // already (users.qrcode holds the rendered image) while this one has only
 // the string the page produced. Normalising the two INSIDE each adapter is
 // what the port looked like until F373, and it is how the two drifted apart
@@ -100,9 +100,9 @@ func (r *QRReader) EnsureSession(ctx context.Context, txtID string) error {
 
 // Not held (nobody called StartSession for this txtID, or it was released)
 // answers ("", nil) without booting anything — the same "not connecting yet"
-// shape GET /session/qr already tolerates for wa_noise. Held resolves the
+// shape GET /session/qr already tolerates for noise. Held resolves the
 // (already-booted, or reused) pairing session and reads the live QR string —
-// see internal/wa-headless/capabilities/qr's own doc comment for where the
+// see internal/headless/capabilities/qr's own doc comment for where the
 // construction comes from and what was measured; that package also nudges
 // WAWebLaunchSocketUtils.refreshQR() on this call whenever Conn.ref is
 // empty OR the page's own code has been on offer for qr.StaleRefreshAfter
@@ -131,7 +131,7 @@ func (r *QRReader) PairingQR(ctx context.Context, txtID string) (string, error) 
 	eval, err := r.sessions.EvaluatorForPairing(ctx, txtID)
 	if err != nil {
 		log.Warn().Err(err).Str("txt_id", txtID).
-			Msg("wa_headless: pairing evaluator unavailable for QR read")
+			Msg("headless: pairing evaluator unavailable for QR read")
 		return "", err
 	}
 	code, refreshed, err := qr.New(r.sessions.Runner(), eval).Read(ctx, qrLabel, r.staleHint(txtID))
@@ -143,7 +143,7 @@ func (r *QRReader) PairingQR(ctx context.Context, txtID string) (string, error) 
 		return code, nil
 	}
 	if refreshed {
-		log.Info().Str("txt_id", txtID).Msg("wa_headless: nudged refreshQR, no code yet")
+		log.Info().Str("txt_id", txtID).Msg("headless: nudged refreshQR, no code yet")
 	}
 	// Empty means either "not ready yet" or "just paired" — staleness is
 	// meaningless in both, and a later pairing attempt for the same txtID
@@ -167,10 +167,10 @@ func (r *QRReader) promoteIfPaired(ctx context.Context, txtID string, eval headl
 	}
 	if err := r.sessions.Promote(txtID); err != nil {
 		log.Warn().Err(err).Str("txt_id", txtID).
-			Msg("wa_headless: pairing succeeded but promotion to operational failed")
+			Msg("headless: pairing succeeded but promotion to operational failed")
 		return
 	}
-	log.Info().Str("txt_id", txtID).Msg("wa_headless: pairing succeeded, promoted to operational")
+	log.Info().Str("txt_id", txtID).Msg("headless: pairing succeeded, promoted to operational")
 }
 
 var _ appport.PairingQRReader = (*QRReader)(nil)

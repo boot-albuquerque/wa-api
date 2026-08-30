@@ -27,7 +27,7 @@ import (
 // Esta é a FRONTEIRA do guarda-opções, e ela fica aqui — na infra, ao lado
 // da montagem do protobuf — de propósito. O motivo de guardar é puramente de
 // wire: o voto chega como SHA-256 do texto da opção
-// (internal/wa-noise/capabilities/message/poll.go:38), então quem recebe o
+// (internal/noise/capabilities/message/poll.go:38), então quem recebe o
 // webhook precisa do texto para casar hash com significado
 // (pkg/bootstrap/eventhandler_message.go:130). Isso não é regra de negócio, e
 // o use case não pode conhecer o ClientManager.
@@ -965,7 +965,7 @@ func (a *ChatMessengerAdapter) SendTemplate(ctx context.Context, txtID string, t
 //
 // O sender passado a BuildRevoke é types.EmptyJID de propósito: é o que
 // marca a revogação como sendo de mensagem PRÓPRIA (ver
-// internal/wa-noise/capabilities/message/builders.go:29 — com sender vazio
+// internal/noise/capabilities/message/builders.go:29 — com sender vazio
 // a MessageKey sai com FromMe=true e sem Participant). Trocá-lo por
 // qualquer outro JID muda a operação para "revogar mensagem de terceiro
 // como admin de grupo", que esta API nunca expôs. É a mesma montagem do

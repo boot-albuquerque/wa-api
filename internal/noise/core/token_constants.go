@@ -36,7 +36,7 @@ const (
 )
 
 // A constante do atributo "type" do no <token> de trusted contact foi para
-// internal/wa-noise/tctoken/ na Fase F/G lote 4, junto com o resto do dominio.
+// internal/noise/tctoken/ na Fase F/G lote 4, junto com o resto do dominio.
 
 // pushMsgIDEncKeyLength e o tamanho da chave que cifra os message IDs nas
 // notificacoes push da APNs.

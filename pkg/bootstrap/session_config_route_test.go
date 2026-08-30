@@ -78,7 +78,7 @@ func (c contadorDeRevalidacao) HistoryLimit(ctx context.Context, userID string) 
 
 // statusDeSessao implementa appport.SessionStatusReader lendo um ponteiro que
 // o teste controla. Imita a regra REAL do adapter de producao
-// (pkg/infra/wa-noise/runtime/session/guard.go:72): o PRIMEIRO valor e'
+// (pkg/infra/noise/runtime/session/guard.go:72): o PRIMEIRO valor e'
 // client.IsConnected(), e e' esse que a guarda historica consultava.
 type statusDeSessao struct{ conectado *bool }
 

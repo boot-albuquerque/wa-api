@@ -15,7 +15,7 @@ import (
 	"wa-api/internal/noise/protocol/types/events"
 )
 
-// A logica de retry vive em internal/wa-noise/retry (Fase F/G, lote 5) e e'
+// A logica de retry vive em internal/noise/retry (Fase F/G, lote 5) e e'
 // testada la', com cobertura de 98,1%. O que a raiz precisa travar e' a
 // tradução que o adaptador faz e as guardas de receptor nil.
 

@@ -1,4 +1,4 @@
-# Perfil de laboratorio da conta de TESTE do wa-headless.
+# Perfil de laboratorio da conta de TESTE do headless.
 #
 # Segue a convencao do scripts/chromium-study/.gitignore, que ignora
 # wa-session/ pelo mesmo motivo: um perfil de browser pareado contem a

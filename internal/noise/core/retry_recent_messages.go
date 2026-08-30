@@ -11,7 +11,7 @@ import (
 )
 
 // Fachadas do cache de mensagens recentes. A logica e o estado vivem em
-// internal/wa-noise/retry (Fase F/G, lote 5).
+// internal/noise/retry (Fase F/G, lote 5).
 
 // RecentMessage e recentMessageKey sao APELIDOS de tipo, e nao tipos novos,
 // porque internals.go (gerado, F29, fora do escopo) cita RecentMessage na

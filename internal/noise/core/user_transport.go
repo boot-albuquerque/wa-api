@@ -11,7 +11,7 @@ import (
 )
 
 // userTransport adapta *Client a user.Transport. Existe para que o pacote
-// internal/wa-noise/user possa operar sobre uma interface estreita sem importar
+// internal/noise/user possa operar sobre uma interface estreita sem importar
 // o pacote raiz (o que fecharia um ciclo) e sem que *Client precise ganhar
 // metodos exportados novos so' para satisfazer a interface.
 //

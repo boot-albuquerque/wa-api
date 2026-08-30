@@ -3,7 +3,7 @@ package liveness
 // resetAck is what the page answers when the reconnect was CALLED. It is a
 // distinct string rather than a boolean so that an empty answer — which is what
 // an interrupted evaluation produces — cannot read as success.
-const resetAck = "wa-headless/socket-reset"
+const resetAck = "headless/socket-reset"
 
 // resetScript calls Socket.reconnect().
 //

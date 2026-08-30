@@ -8,7 +8,7 @@ import (
 
 // AccountTypeDetector asks the transport whether the session's own account is
 // personal or Business, USING WHATEVER REAL SIGNAL that transport has —
-// wa-noise reads a protocol-level verified-name certificate, wa-headless
+// noise reads a protocol-level verified-name certificate, headless
 // reads a getter off the SPA's own connection model. See each adapter for its
 // source.
 //

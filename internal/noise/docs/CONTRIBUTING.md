@@ -1,4 +1,4 @@
-# Como mexer em `internal/wa-noise/`
+# Como mexer em `internal/noise/`
 
 Onze regras. Cada uma existe porque a Fase F/G (10 lotes) ou a Fase H (7 etapas)
 pagou o preço de descobri-la. Onde uma regra tem exceção, a exceção está aqui —
@@ -26,15 +26,15 @@ declara **a sua própria** `Transport` no seu próprio pacote, listando só os
 métodos que ela usa de fato:
 
 ```
-internal/wa-noise/capabilities/notification/transport.go:27  → 2 métodos
-internal/wa-noise/capabilities/media/transport.go:44         → 3 métodos
-internal/wa-noise/capabilities/message/transport.go:111      → 36 métodos
+internal/noise/capabilities/notification/transport.go:27  → 2 métodos
+internal/noise/capabilities/media/transport.go:44         → 3 métodos
+internal/noise/capabilities/message/transport.go:111      → 36 métodos
 ```
 
 O doc comment de `notification/transport.go` diz por quê, e é o teste que
 importa:
 
-> Deliberadamente não expõe nada do `*wa-noise.Client` além disso: é o que
+> Deliberadamente não expõe nada do `*noise.Client` além disso: é o que
 > permite que este pacote não importe o pacote raiz e que os testes usem um
 > dublê em vez de um cliente com socket e sessão Noise.
 
@@ -62,13 +62,13 @@ Sem exceção. É a invariante A de `DEPENDENCIES.md`, e é **travada por gate**
 `Client`, adicione o método à `Transport` da sua capacidade — não importe `core`.
 
 Corolário para consumidores **fora** do fork: importe
-`wa-api/internal/wa-noise` (a fachada `main.go`). Se o símbolo não está lá,
+`wa-api/internal/noise` (a fachada `main.go`). Se o símbolo não está lá,
 adicione o alias na fachada. Nunca contorne por baixo.
 
 ## 5. Não existe uma `Transport` gigante compartilhada
 
 Treze interfaces estreitas, não uma com 100 métodos. A contagem atual
-(`grep -rn "type Transport interface" internal/wa-noise/capabilities/*/`):
+(`grep -rn "type Transport interface" internal/noise/capabilities/*/`):
 notification 2, media 3, prekeys 4, tctoken 5, keepalive 8, group 9,
 newsletter 10, user 10, appstatesync 13, pairing 14, retry 21, send 33,
 message 36.
@@ -192,6 +192,6 @@ Se você moveu diretório, atualize também: `DIRS` em
 `scripts/waclient-filesize-check.sh`, `WACLIENT_TEST_PKGS` no `Makefile`, e
 regenere `cmd/logcov/testdata/eligible.golden`
 (`go run ./cmd/logcov -golden > cmd/logcov/testdata/eligible.golden`).
-`.logcov-exclude` já cobre `internal/wa-noise/` por prefixo.
+`.logcov-exclude` já cobre `internal/noise/` por prefixo.
 
 Achado fora do escopo da sua tarefa vai para `HOUSEKEEP.md`, não para o diff.

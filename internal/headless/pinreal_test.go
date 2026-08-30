@@ -29,7 +29,7 @@ func TestRealSPAPinsAndUnpinsAMessageAcrossSessions(t *testing.T) {
 	// nothing is pinned; the entry carries both enums, the duration and the
 	// caller's shape so the next attempt does not re-measure them.
 	if os.Getenv("WA_HEADLESS_PIN_TEST") == "" {
-		t.Skip("set WA_HEADLESS_PIN_TEST=1; NOT PROVEN — see H81, this currently fails")
+		t.Skip("set HEADLESS_PIN_TEST=1; NOT PROVEN — see H81, this currently fails")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -84,7 +84,7 @@ func TestRealSPAPinsAndUnpinsAMessageAcrossSessions(t *testing.T) {
 		t.Logf("MEASURED: the lab chat starts with %d pinned message(s)", before)
 
 		sent, err := send.Text(ctx, runner, eval, peer,
-			fmt.Sprintf("wa-headless pin probe %d", time.Now().UnixNano()), "test/pin-send")
+			fmt.Sprintf("headless pin probe %d", time.Now().UnixNano()), "test/pin-send")
 		if err != nil {
 			t.Fatalf("send: %v", err)
 		}

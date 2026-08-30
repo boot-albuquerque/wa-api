@@ -29,7 +29,7 @@ import (
 func TestRealSPAEditsAMessageItJustSent(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_EDIT_TEST") == "" {
-		t.Skip("set WA_HEADLESS_EDIT_TEST=1; this sends a message to the peer lab account and edits it")
+		t.Skip("set HEADLESS_EDIT_TEST=1; this sends a message to the peer lab account and edits it")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -52,7 +52,7 @@ func TestRealSPAEditsAMessageItJustSent(t *testing.T) {
 
 	// Two texts of DIFFERENT lengths, so the postcondition cannot pass by
 	// comparing a body against itself.
-	before := fmt.Sprintf("wa-headless edit probe %d", time.Now().UnixNano())
+	before := fmt.Sprintf("headless edit probe %d", time.Now().UnixNano())
 	after := before + " (edited)"
 
 	sent, err := send.Text(ctx, runner, sess.Tab().Evaluate, peer, before, "test/edit-send")

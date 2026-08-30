@@ -10,7 +10,7 @@ import (
 )
 
 // A gravacao de segredos de mensagem e de mapeamentos LID/PN vive em
-// internal/wa-noise/message/ desde a Fase F/G lote 9. As fachadas abaixo
+// internal/noise/message/ desde a Fase F/G lote 9. As fachadas abaixo
 // existem porque internals.go (gerado) cita os cinco nomes minusculos.
 
 func (cli *Client) storeMessageSecret(ctx context.Context, info *types.MessageInfo, msg *waE2E.Message) {

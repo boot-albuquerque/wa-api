@@ -1,5 +1,5 @@
 // Package registry keeps track of which headless sessions this process holds,
-// mirroring pkg/infra/wa-noise/registry.
+// mirroring pkg/infra/noise/registry.
 //
 // It is the point where ADR-0005 D2 (ownership by lease) meets this stack: the
 // registry is what the process consults to answer "do I own this session, and

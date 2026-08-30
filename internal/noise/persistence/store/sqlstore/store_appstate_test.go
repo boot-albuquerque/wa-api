@@ -23,8 +23,8 @@ func testMAC(fill byte) []byte {
 	return bytes.Repeat([]byte{fill}, 32)
 }
 
-// wa-noise_app_state_mutation_macs tem FK (jid, name) para
-// wa-noise_app_state_version: nao da' para gravar MAC de mutacao de uma
+// wanoise_app_state_mutation_macs tem FK (jid, name) para
+// wanoise_app_state_version: nao da' para gravar MAC de mutacao de uma
 // colecao cuja versao ainda nao foi persistida.
 func seedAppStateVersion(t *testing.T, s *SQLStore, name string) {
 	t.Helper()

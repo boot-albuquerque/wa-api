@@ -152,10 +152,10 @@ func (f *Fake) BuildUnavailableMessageRequest(chat, sender types.JID, id string)
 // defeito. Este método imita uma REGRA — a de que sender vazio marca a
 // revogação como sendo de mensagem PRÓPRIA (FromMe=true, sem Participant)
 // e sender de terceiro a marca como de outro — então delega para a regra
-// REAL, em internal/wa-noise/capabilities/message/builders.go:39
+// REAL, em internal/noise/capabilities/message/builders.go:39
 // (BuildRevoke) e :23 (BuildKey), que é exatamente para onde
 // (*core.Client).BuildRevoke delega em
-// internal/wa-noise/core/message_builders.go:34.
+// internal/noise/core/message_builders.go:34.
 //
 // ownID/ownLID entram vazios porque o fake não tem sessão pareada; o eixo
 // que os testes medem é o sender, e com ownID vazio a discriminação de
@@ -169,9 +169,9 @@ func (f *Fake) BuildRevoke(chat, sender types.JID, id types.MessageID) *waE2E.Me
 }
 
 // BuildEdit monta a MESMA mensagem que o cliente real monta, delegando para
-// internal/wa-noise/capabilities/message/builders.go:101 — para onde
+// internal/noise/capabilities/message/builders.go:101 — para onde
 // (*core.Client).BuildEdit delega em
-// internal/wa-noise/core/message_builders.go:75. Mesma disciplina de
+// internal/noise/core/message_builders.go:75. Mesma disciplina de
 // BuildRevoke quanto a não inventar uma montagem própria.
 func (f *Fake) BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.Message) *waE2E.Message {
 	if f.BuildEditFn != nil {
@@ -181,9 +181,9 @@ func (f *Fake) BuildEdit(chat types.JID, id types.MessageID, newContent *waE2E.M
 }
 
 // BuildPollCreation monta a MESMA mensagem que o cliente real monta,
-// delegando para internal/wa-noise/capabilities/message/poll.go:65 — para
+// delegando para internal/noise/capabilities/message/poll.go:65 — para
 // onde (*core.Client).BuildPollCreation delega em
-// internal/wa-noise/core/msgsecret_poll.go:65. Mesma disciplina de
+// internal/noise/core/msgsecret_poll.go:65. Mesma disciplina de
 // BuildRevoke e BuildEdit quanto a nao inventar uma montagem propria.
 //
 // ARMADILHA 1 deste repo: duble mais permissivo que a producao esconde o
@@ -203,8 +203,8 @@ func (f *Fake) BuildPollCreation(name string, optionNames []string, selectableOp
 // discipline as BuildPollCreation. The default produces a message with a
 // PollUpdateMessage carrying the encrypted vote hashes — the same path
 // (*core.Client).BuildPollVote takes in
-// internal/wa-noise/core/msgsecret_poll.go:54, which delegates to
-// internal/wa-noise/capabilities/message/poll.go:53.
+// internal/noise/core/msgsecret_poll.go:54, which delegates to
+// internal/noise/capabilities/message/poll.go:53.
 //
 // The fake transport has no Signal session, so the encryption will fail and
 // return an error alongside a non-nil *waE2E.Message with PollUpdateMessage

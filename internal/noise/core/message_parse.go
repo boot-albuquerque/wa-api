@@ -6,7 +6,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// O parsing de stanza <message> vive em internal/wa-noise/message/ desde a Fase
+// O parsing de stanza <message> vive em internal/noise/message/ desde a Fase
 // F/G lote 9. As fachadas abaixo existem porque internals.go (gerado) cita os
 // quatro nomes minusculos e porque presence.go e receipt.go chamam
 // parseMessageSource.

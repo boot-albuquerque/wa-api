@@ -35,8 +35,8 @@ type CheckUserResponse struct {
 // UserInfoResponse is one contact's metadata, as served.
 //
 // Fields the engine could not answer come back at their zero value rather than
-// missing: the wa-headless build knows names and identities and no status, and
-// wa-noise the reverse. A client that has to branch on which engine served it
+// missing: the headless build knows names and identities and no status, and
+// noise the reverse. A client that has to branch on which engine served it
 // would need to know which engine served it, which it does not.
 type UserInfoResponse struct {
 	JID string `json:"jid"`

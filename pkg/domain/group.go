@@ -20,7 +20,7 @@ type ListGroupsRequest struct{}
 // ListGroupsResult is every group this session belongs to.
 //
 // TYPED, and no longer `any`: with `any` it was the session's ENGINE that
-// decided the JSON a client received — the wa-noise protocol struct on one
+// decided the JSON a client received — the noise protocol struct on one
 // session, the headless conversation struct on another — and neither shape was
 // declared anywhere. Same reasoning as GetGroupInfoResult (see group_info.go).
 type ListGroupsResult struct {
@@ -72,7 +72,7 @@ type GetGroupInviteInfoRequest struct {
 // GetGroupInviteInfoResult is what a link says about a group WITHOUT joining it.
 //
 // It reuses GroupInfo instead of declaring a second, narrower type: both
-// engines answer with group metadata (wa-noise with the full protocol struct,
+// engines answer with group metadata (noise with the full protocol struct,
 // headless with jid/subject/size/approval), and what an engine cannot observe
 // stays at its zero value — exactly the rule GroupInfo already documents.
 type GetGroupInviteInfoResult struct {
@@ -96,7 +96,7 @@ type CreateGroupOpts struct {
 // not CREATE: the headless capability is `Ensure`, and a group with the same
 // name that already exists is returned instead of duplicated. Flattening that
 // would make two identical calls look like they made two groups when they made
-// one. The wa-noise transport always creates, and reports true.
+// one. The noise transport always creates, and reports true.
 type CreatedGroup struct {
 	Group   *GroupInfo
 	Created bool
@@ -150,7 +150,7 @@ const (
 // ELE não conseguiu confirmar — o que hoje não tem onde ser dito.
 type ParticipantsUpdate struct {
 	// Participants is the roster the transport read back, when it can read one.
-	// TYPED, and no longer `any`: the wa-noise transport answers with the
+	// TYPED, and no longer `any`: the noise transport answers with the
 	// resulting participant list on the same call, and that list used to reach
 	// the wire as the protocol struct's Go field names. The headless transport
 	// observes nothing here and leaves it empty — which is what Confirmed and
@@ -177,7 +177,7 @@ func (u ParticipantsUpdate) Valida() error {
 
 // GroupJoinRequest is one pending request to join a group.
 //
-// The union of what the two engines see: wa-noise reports the requester and
+// The union of what the two engines see: noise reports the requester and
 // when the request was made; the headless page also reports who tried to add
 // them and by which method. What an engine does not observe stays zero.
 type GroupJoinRequest struct {

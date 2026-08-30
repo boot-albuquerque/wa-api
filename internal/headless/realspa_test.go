@@ -19,10 +19,10 @@ package headless
 // profile, and phase 4C measured that repeated boots are how a paired session
 // degrades. Opt in explicitly:
 //
-//	WA_HEADLESS_REAL_SPA=1 go test -tags= -run TestRealSPA ./internal/wa-headless/ -v
+//	HEADLESS_REAL_SPA=1 go test -tags= -run TestRealSPA ./internal/headless/ -v
 //
 // The observation probes default to the disposable lab profile and can be
-// pointed at another one with WA_HEADLESS_PROFILE_DIR, which is how a profile
+// pointed at another one with HEADLESS_PROFILE_DIR, which is how a profile
 // of unknown paired state gets looked at by an instrument already proven to
 // work. That override reaches the READ-ONLY path only: pairing mutates the
 // profile it opens and stays bound to the lab one.
@@ -74,7 +74,7 @@ const (
 	// realSPAURL is the target.
 	realSPAURL = "https://web.whatsapp.com/"
 	// labProfileDir is the throwaway profile of the TEST account, gitignored
-	// via internal/wa-headless/.gitignore. It is never the study's paired
+	// via internal/headless/.gitignore. It is never the study's paired
 	// profile: that one belongs to another phase and is not disposable.
 	labProfileDir = ".lab/test-account-profile"
 	// labProfileRoot e' a raiz DESCARTAVEL: so' o que esta' aqui dentro pode ser
@@ -1141,7 +1141,7 @@ const (
 // the session cannot identify its owner, or the probe reads the wrong place.
 //
 // It is ONE instrument meant to be run against BOTH profiles — the paired one
-// via WA_HEADLESS_PROFILE_DIR, the unpaired lab one by default. That is the
+// via HEADLESS_PROFILE_DIR, the unpaired lab one by default. That is the
 // point, and it is what B1.4a could not do: a signal is only a
 // discriminator if it was measured false on one and true on the other, and one
 // instrument on two profiles is what makes that comparison mean something.
@@ -2667,7 +2667,7 @@ func minOf(ds []time.Duration) time.Duration {
 // detection at 31.1-42.3s and C is 3.03s, so 90s leaves ample margin without
 // repeating M8's hour-long run to prove the same transition again.
 //
-// This does not introduce new E2E infrastructure. WA_HEADLESS_REAL_SPA gates
+// This does not introduce new E2E infrastructure. HEADLESS_REAL_SPA gates
 // this exactly like the nine real-SPA tests already in this file, and every
 // sampler, cut mechanism and clean-stop registration below is reused, not
 // reinvented — parity with approved practice (packet §100.6), not a new
@@ -3179,7 +3179,7 @@ func describeLockTarget(target string) string {
 }
 
 // TestSingletonLockProbeOutputCannotCarryTheHost is the guard for the mechanism
-// above, and it is NOT gated behind WA_HEADLESS_REAL_SPA on purpose: a
+// above, and it is NOT gated behind HEADLESS_REAL_SPA on purpose: a
 // redaction that only runs when someone opts into a browser run is a redaction
 // nobody checks. It opens no browser and touches no profile.
 //
@@ -3258,7 +3258,7 @@ func assertKeepsAll(t *testing.T, what, got string, wants ...string) {
 // FAIL depends on the machine: with a hostname like "buildbox" the first hyphen
 // IS the last one, so a strings.LastIndex -> strings.Index mutation reads the
 // target identically and the probe passes while verifying nothing. On a host
-// like "wa-headless-pod-7" the same mutation makes the target unparseable and
+// like "headless-pod-7" the same mutation makes the target unparseable and
 // the probe fails.
 //
 // That dependency used to be nowhere: not asserted, not even written down. It
@@ -4519,8 +4519,8 @@ func TestRealSPAModuleInventoryAgainstProduction(t *testing.T) {
 // not to "try once more" against a profile whose state is no longer
 // understood.
 //
-// Requires BOTH toggles: WA_HEADLESS_REAL_SPA=1 (touches the real target at
-// all) and WA_HEADLESS_PROFILE_DIR=<the paired profile> (this test refuses
+// Requires BOTH toggles: HEADLESS_REAL_SPA=1 (touches the real target at
+// all) and HEADLESS_PROFILE_DIR=<the paired profile> (this test refuses
 // to run against the disposable lab profile, which is unpaired and would
 // show a QR on every cycle — see the skip below).
 const (
@@ -5182,7 +5182,7 @@ func TestSamplingLoopAlwaysProbesAtLeastOnce(t *testing.T) {
 }
 
 // qrDemoEnv gates TestRealSPACaptureQRCode. It is separate from
-// WA_HEADLESS_REAL_SPA on purpose: this test is a manual demonstration, not an
+// HEADLESS_REAL_SPA on purpose: this test is a manual demonstration, not an
 // observation, and it should never ride along on a normal gated run.
 const qrDemoEnv = "WA_HEADLESS_QR_DEMO"
 
@@ -5248,7 +5248,7 @@ func TestRealSPACaptureQRCode(t *testing.T) {
 		t.Fatalf("capturing the screenshot: %v", err)
 	}
 
-	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
+	out := filepath.Join(os.TempDir(), "headless-qr.png")
 	if err := os.WriteFile(out, png, 0o600); err != nil {
 		t.Fatalf("writing %s: %v", out, err)
 	}
@@ -5345,7 +5345,7 @@ func TestRealSPALiveQR(t *testing.T) {
 		}
 	}
 
-	out := filepath.Join(os.TempDir(), "wa-headless-qr.png")
+	out := filepath.Join(os.TempDir(), "headless-qr.png")
 	if v := os.Getenv(qrLiveOutEnv); v != "" {
 		out = v
 	}
@@ -6996,7 +6996,7 @@ func TestRealSPALinkByPhoneNumber(t *testing.T) {
 		// checked; a screenshot and the visible controls say what is actually
 		// there.
 		if png, sErr := tab.Screenshot(runner, "link/diag"); sErr == nil {
-			out := filepath.Join(os.TempDir(), "wa-headless-link-diag.png")
+			out := filepath.Join(os.TempDir(), "headless-link-diag.png")
 			if wErr := os.WriteFile(out, png, 0o600); wErr == nil {
 				t.Logf("DIAGNÓSTICO: %s", out)
 			}

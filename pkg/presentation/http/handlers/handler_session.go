@@ -67,7 +67,7 @@ type ConnectHandler struct {
 // NewConnectHandler builds the handler over the pairing provider registry.
 //
 // Until 2026-08-27 it took two injected closures (StartSession, CheckOwnership)
-// wired straight to the wa-noise orchestrator, with no engine in sight. Both
+// wired straight to the noise orchestrator, with no engine in sight. Both
 // now come from the provider the registry resolves for the engine the REQUEST
 // names and the TARGET session records. See pkg/pairing and HOUSEKEEP F273.
 func NewConnectHandler(uc *session.ConnectUseCase, reg *pairing.Registry) *ConnectHandler {
@@ -225,7 +225,7 @@ func NewGetQRHandler(l appport.Logger, reg *pairing.Registry) *GetQRHandler {
 // A changed or empty code also DROPS the tracked entry, so a later pairing
 // attempt for the same txtID starts its own clock instead of inheriting one
 // from an unrelated earlier pairing screen — same reasoning as
-// pkg/infra/wa-headless/pairing.QRReader.forgetCode (F374), independent
+// pkg/infra/headless/pairing.QRReader.forgetCode (F374), independent
 // tracker, same shape.
 func (h *GetQRHandler) trackCodeAge(txtID, code string) int {
 	h.mu.Lock()
@@ -304,7 +304,7 @@ type PairPhoneHandler struct {
 
 // NewPairPhoneHandler builds the handler over the pairing provider registry.
 // Same reason as GetQR: the use case is built per request from the resolved
-// port, because the wiring-time adapter was hardcoded to wa-noise (F273).
+// port, because the wiring-time adapter was hardcoded to noise (F273).
 func NewPairPhoneHandler(l appport.Logger, reg *pairing.Registry) *PairPhoneHandler {
 	return &PairPhoneHandler{logger: l, pairing: reg}
 }

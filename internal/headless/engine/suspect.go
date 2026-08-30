@@ -33,7 +33,7 @@ import (
 // a profile restored onto another host, or into a container, carries its own
 // doubt with it. A marker in a sidecar directory would be left behind by exactly
 // the copy that most needs it.
-const suspectMarker = ".wa-headless-session-suspect"
+const suspectMarker = ".headless-session-suspect"
 
 // suspectFilePerm matches the profile's own 0o600 family: the marker names no
 // secret, but it sits among files that do.

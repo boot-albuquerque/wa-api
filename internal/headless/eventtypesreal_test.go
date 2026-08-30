@@ -31,7 +31,7 @@ import (
 func TestRealSPAEachEventTypeCanBeMadeToHappen(t *testing.T) {
 	requireRealSPA(t)
 	if os.Getenv("WA_HEADLESS_EVENTS_TEST") == "" {
-		t.Skip("set WA_HEADLESS_EVENTS_TEST=1; this sends, edits and deletes messages to the peer lab account")
+		t.Skip("set HEADLESS_EVENTS_TEST=1; this sends, edits and deletes messages to the peer lab account")
 	}
 	profile := os.Getenv("WA_SEND_FROM_PROFILE")
 	peer := os.Getenv("WA_SEND_TO_JID")
@@ -97,7 +97,7 @@ func TestRealSPAEachEventTypeCanBeMadeToHappen(t *testing.T) {
 
 	// message.added and message.ack — sending one message produces both.
 	sent, err := send.Text(ctx, runner, eval, peer,
-		fmt.Sprintf("wa-headless types probe %d", time.Now().UnixNano()), "types/send")
+		fmt.Sprintf("headless types probe %d", time.Now().UnixNano()), "types/send")
 	if err != nil {
 		t.Fatalf("send: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestRealSPAEachEventTypeCanBeMadeToHappen(t *testing.T) {
 
 	// message.edited
 	if _, err := edit.New(runner, eval).Text(ctx, sent.ID.ID,
-		fmt.Sprintf("wa-headless types probe %d (edited)", time.Now().UnixNano()), "types/edit"); err != nil {
+		fmt.Sprintf("headless types probe %d (edited)", time.Now().UnixNano()), "types/edit"); err != nil {
 		t.Fatalf("edit: %v", err)
 	}
 	if !fired(events.MessageEdited, 20*time.Second) {

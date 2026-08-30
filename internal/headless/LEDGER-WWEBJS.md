@@ -54,7 +54,7 @@ página) e `resetState` (a transição de ~450ms não é observável pelo Go) s�
 
 ## Client
 
-| upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
+| upstream | headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `inject` | spa.VerifyInventory | `INTENTIONAL_DIFFERENCE` | sim | sim | sim | não injetamos ExposeStore; verificamos o inventário de módulos no boot |
 | `initialize` | core.StartSession + runtime.Holder | `PROVEN` | sim | sim | sim | — |
@@ -250,7 +250,7 @@ Uma diferença real: `Chat.mute`/`unmute` atualizam `isMuted`/`muteExpiration` n
 objeto em memória depois da chamada. Não temos esse cache, então toda leitura
 nossa é fresca — não há campo velho para consertar.
 
-| upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
+| upstream | headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `sendMessage` | send.Text / send.SendMedia / send.PollTo | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendMessage` (Chat.js:102); herda a linha dele, ENQUETE INCLUSA no que não sai |
 | `sendSeen` | chats.MarkRead | `PARTIAL` | sim | sim | sim | delegação literal para `Client.sendSeen` (Chat.js:110); herda a linha dele — que na H160 deixou de ser "pós-condição duvidosa" e passou a ser "reconhecimento local provado, recibo ao remetente não observado" |
@@ -285,7 +285,7 @@ nossa é fresca — não há campo velho para consertar.
 
 ## Contact
 
-| upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
+| upstream | headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `getProfilePicUrl` | capabilities/avatar | `PROVEN` | sim | sim | sim | H118: delegação literal para `Client.getProfilePicUrl` (Contact.js:119) |
 | `getFormattedNumber` | phone.Lookup (.Formatted) | `PROVEN` | sim | sim | sim | delegação literal para o `Client` (Contact.js:128 e :136); H111: a página NÃO recusa lixo — `findCC("notaphone")` devolve `"not"`, medido. Guardamos dos dois lados: a entrada tem de ser dígitos e a RESPOSTA também, e as duas guardas foram provadas independentes por controle negativo |
@@ -299,7 +299,7 @@ nossa é fresca — não há campo velho para consertar.
 
 ## GroupChat
 
-| upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
+| upstream | headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `owner` | group.Metadata | `PROVEN` | sim | sim | sim | provado no grupo de laboratório; o participante que é super admin também é admin — as duas flags são distintas, não a mesma lida duas vezes (H105) |
 | `createdAt` | group.Metadata | `PROVEN` | sim | sim | sim | `md.creation`, em segundos; zero fica zero em vez de virar a época (H105) |
@@ -347,7 +347,7 @@ código — é falta de dado.
 
 ## Message
 
-| upstream | wa-headless | estado | unitário | SPA real | ctrl. neg. | nota |
+| upstream | headless | estado | unitário | SPA real | ctrl. neg. | nota |
 |---|---|---|---|---|---|---|
 | `reload` | message.CurrentOf | `PROVEN` | sim | sim | sim | H108: 32 mensagens re-lidas ao vivo deram 11 estados distintos; `hasAck` separa "ack 0" de "sem ack", medido em 5 de 395 |
 | `rawData` | message.ShapeOf | `INTENTIONAL_DIFFERENCE` | sim | sim | sim | H107: devolvemos os NOMES dos campos, nunca os valores — a medição achou 598 nomes no modelo cru, entre eles `body` e `caption`; devolver rawData como é derrubaria a invariante 12 em vez de entregar funcionalidade |
@@ -430,7 +430,7 @@ O ciclo de vida chega ao barramento por uma **porta**, não por dependência:
 porta e não conhece `core`; `runtime` é o único lugar que conhece os dois lados
 (H88).
 
-| upstream | wa-headless | estado | nota |
+| upstream | headless | estado | nota |
 |---|---|---|---|
 | `AUTHENTICATED` | — | `BLOCKED` | H140: reclassificado (decisão 60) — sem observável neste build: o boot chega a APP_READY verificado ou falha, sem degrau intermediário (H88) |
 | `AUTHENTICATION_FAILURE` | events.SessionBootFailed | `PROVEN` | **H168: a classe da página passou a VIAJAR no evento.** A objeção era exata — o estágio sozinho não distingue um boot que morre em `not_ready` contra uma tela de pareamento de um que morre contra página quebrada, e a classe vivia só na mensagem de erro, que não entra no barramento (H88). Agora `BootFailure` → `LifecycleFact` → `Event.PageClass` carregam vocabulário FECHADO do `spa`. Provado com boot real de perfil NÃO PAREADO: `stage=not_ready class=PAIRING_LOADING`, contra `REDIRECT` de uma página em branco — se as duas dessem o mesmo, o campo não separaria nada. Quatro controles negativos, dois deles atravessando `core → runtime → barramento` |

@@ -13,7 +13,7 @@ import (
 )
 
 // compressStaleRefreshAfter shrinks qr.StaleRefreshAfter for the duration of
-// a test — same convention as internal/wa-headless/capabilities/qr's own
+// a test — same convention as internal/headless/capabilities/qr's own
 // compressBudgets, so a staleness test runs in milliseconds instead of
 // waiting out the real 90s.
 func compressStaleRefreshAfter(t *testing.T) {
@@ -39,8 +39,8 @@ func TestQRReaderSatisfazAPorta(t *testing.T) {
 // TestPairingQR_NaoDetidaDevolveVazioSemErro: sem sessão detida (StartSession
 // nunca foi chamado, ou já foi liberada), PairingQR devolve string vazia sem
 // erro e SEM tentar subir um browser — a mesma semântica de "QR rotates,
-// vazio não é erro" que o adapter wa_noise já documenta
-// (pkg/infra/wa-noise/adapters/pairing/qr.go).
+// vazio não é erro" que o adapter noise já documenta
+// (pkg/infra/noise/adapters/pairing/qr.go).
 func TestPairingQR_NaoDetidaDevolveVazioSemErro(t *testing.T) {
 	r := NewQRReader(adapter.NewSessions(registry.New(1), cfgFor))
 	code, err := r.PairingQR(context.Background(), "sessao-nao-iniciada")
@@ -72,7 +72,7 @@ func TestStaleHint_SemHistoricoDevolveFalso(t *testing.T) {
 
 // TestStaleHint_TornaVerdadeiroAposOLimiar é o achado que motivou F374:
 // MEDIDO (TestProbeQRRetryPattern, 2026-08-29) que a rotação do QR do
-// wa_headless tem gaps reais de até 60s, e sem este relógio o adapter
+// headless tem gaps reais de até 60s, e sem este relógio o adapter
 // devolveria o MESMO código indefinidamente durante um gap desses. Aqui,
 // com qr.StaleRefreshAfter comprimido, o mesmo código rastreado por
 // trackCode deve virar "stale" assim que o limiar passa — e NÃO antes.

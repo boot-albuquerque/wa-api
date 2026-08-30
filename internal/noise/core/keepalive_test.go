@@ -7,7 +7,7 @@ import (
 )
 
 // Os testes do sorteio de intervalo e do laco em si mudaram para
-// internal/wa-noise/runtime/keepalive no lote 10 da Fase F/G, junto com o codigo. O que
+// internal/noise/runtime/keepalive no lote 10 da Fase F/G, junto com o codigo. O que
 // fica aqui e' a fiacao: que a fachada da raiz repassa as quatro variaveis
 // exportadas e os tres metodos de ciclo de vida da conexao.
 

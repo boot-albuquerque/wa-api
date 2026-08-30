@@ -9,7 +9,7 @@ import (
 	waBinary "wa-api/internal/noise/protocol/binary"
 )
 
-// handleBlocklist e' fachada: a logica vive em internal/wa-noise/notification
+// handleBlocklist e' fachada: a logica vive em internal/noise/notification
 // (Fase F/G, lote 5).
 func (cli *Client) handleBlocklist(ctx context.Context, node *waBinary.Node) {
 	if cli == nil {

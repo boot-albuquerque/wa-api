@@ -48,7 +48,7 @@ func TestProbeDescriptionAcrossSessions(t *testing.T) {
 	}
 	t.Logf("BEFORE (conta-B): descLen=%d source=%q", len(beforeB.Description), beforeB.DescriptionSource)
 
-	const want = "wa-headless cross-session description probe"
+	const want = "headless cross-session description probe"
 	set, err := gA.SetDescription(ctx, gjid, want, "probe/descdual/set")
 	// O ERRO NAO ENCERRA A MEDICAO. A pos-condicao do SetDescription le do lado
 	// que a H162 mostrou ser cego; falhar ali e' compativel com "nao fez" E com

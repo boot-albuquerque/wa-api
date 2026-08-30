@@ -1,6 +1,6 @@
-# HOUSEKEEP — wa-noise (biblioteca vendorizada)
+# HOUSEKEEP — noise (biblioteca vendorizada)
 
-Achados do módulo de protocolo em `internal/wa-noise/`, o fork vendorizado.
+Achados do módulo de protocolo em `internal/noise/`, o fork vendorizado.
 
 Achados da aplicação moram na raiz: `HOUSEKEEP.md`. A separação não é
 organizacional — o que está aqui acompanha o upstream e é candidato a virar
@@ -13,7 +13,7 @@ O formato de cada entrada, e a política anti-regressão que rege a passagem
 para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
 
 > **Nota de procedência (2026-08-08):** este arquivo nasceu da divisão do
-> antigo `internal/wa-noise/HOUSEKEEP.md`, que registrava o repositório
+> antigo `internal/noise/HOUSEKEEP.md`, que registrava o repositório
 > inteiro. O índice que ele mantinha no topo foi descartado na divisão — ele
 > já trazia uma correção admitindo estar desatualizado em relação às próprias
 > entradas, e um índice que mente é pior que a ausência dele. As entradas
@@ -35,7 +35,7 @@ O formato de cada entrada, e a política anti-regressão que rege a passagem
 para "corrigido", estão em `CLAUDE.md` / `AGENTS.md`.
 
 > **Nota de procedência (2026-08-08):** este arquivo nasceu da divisão do
-> antigo `internal/wa-noise/HOUSEKEEP.md`, que registrava o repositório
+> antigo `internal/noise/HOUSEKEEP.md`, que registrava o repositório
 > inteiro. O índice que ele mantinha no topo foi descartado na divisão — ele
 > já trazia uma correção admitindo estar desatualizado em relação às próprias
 > entradas, e um índice que mente é pior que a ausência dele. As entradas
@@ -129,10 +129,10 @@ devolver o literal `null` como se fosse sucesso.
 
 **Status**: **CORRIGIDO** — na verdade já havia sido, num lote posterior da
 Fase F/G, e só o status aqui ficou desatualizado. O código de hoje
-(`internal/wa-noise/capabilities/newsletter/mex.go:88-91`) faz
+(`internal/noise/capabilities/newsletter/mex.go:88-91`) faz
 `t.Log().Errorf(...)` seguido de `return nil, fmt.Errorf(...)`: sai pelo logger
 do cliente e devolve erro, sem `os.Exit`. Verificado em 2026-08-07 com
-`grep -rn "log.Fatalf" internal/wa-noise/` — nenhuma ocorrência em código,
+`grep -rn "log.Fatalf" internal/noise/` — nenhuma ocorrência em código,
 só citações históricas em `PATCHES.md`. Texto original preservado abaixo
 como registro de por que era grave. (Restante da entrada original: deixar
 para a fase que tratar erros de
@@ -162,7 +162,7 @@ Medido nesta sessão, com os splits já aplicados:
 - `golangci-lint run ./internal/waclient/` → **92 issues**, distribuídas em
   `gocyclo: 69`, `staticcheck: 19`, `ineffassign: 2`, `errcheck: 1`,
   `goimports: 1`. **Nenhuma** vem dos arquivos criados nesta fase — são
-  todas do estilo do wa-noise upstream (ex:
+  todas do estilo do noise upstream (ex:
   `download-to-file.go:185` errcheck em `resp.Body.Close`;
   `message_decrypt.go:282` ST1012 em `EventAlreadyProcessed`;
   `client_test.go:16` goimports, arquivo não tocado).
@@ -181,7 +181,7 @@ Medido nesta sessão, com os splits já aplicados:
    `internal/waclient/...` já — vet está limpo hoje.
 3. `LINT_TARGETS`: incluir só depois de um baseline próprio para o
    diretório (o gate de lint hoje trava por `max_complexity`, e o
-   `gocyclo` máximo do wa-noise é muito acima do baseline do repo).
+   `gocyclo` máximo do noise é muito acima do baseline do repo).
 4. `COVER_PKGS`/`TEST_PKGS`: só quando houver testes reais, por
    subdiretório, à medida que as Fases B/C do ADR-0004 forem cobrindo.
 
@@ -189,9 +189,9 @@ Medido nesta sessão, com os splits já aplicados:
 registrada aqui estava **errada**.
 
 A entrada supunha que incluir o módulo quebraria o gate de lint, porque "o
-`gocyclo` máximo do wa-noise é muito acima do baseline do repo". Medido:
-a maior função de `internal/wa-noise/` tem complexidade **46**, contra os **56**
-do baseline. O gate aguenta sem afrouxar nada. E `go vet ./internal/wa-noise/...`
+`gocyclo` máximo do noise é muito acima do baseline do repo". Medido:
+a maior função de `internal/noise/` tem complexidade **46**, contra os **56**
+do baseline. O gate aguenta sem afrouxar nada. E `go vet ./internal/noise/...`
 já saía limpo (exit 0).
 
 Então:
@@ -213,7 +213,7 @@ Então:
 **Data**: 2026-08-06
 **Contexto**: Fase A do ADR-0004, metade `internal/waclient/socket/`. Achado ao
 escrever o primeiro teste de remontagem de frame do pacote — o bug é do
-wa-noise upstream, não introduzido por nós.
+noise upstream, não introduzido por nós.
 
 **Onde**: `internal/waclient/socket/framesocket.go:161-200`
 (`(*FrameSocket).processData`), especificamente a linha 170:
@@ -277,47 +277,47 @@ fs.receivedLength = len(msg)
 
 E, no mesmo commit, remover o `t.Skip` de `TestProcessDataSplitPayload`, que
 passa a ser a prova da correção. Vale também mandar o patch para o upstream
-(`wa-api/internal/wa-noise`), já que o bug não é nosso.
+(`wa-api/internal/noise`), já que o bug não é nosso.
 
 **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" que existia
 aqui era texto obsoleto de uma versão anterior desta entrada, escrito antes de
 o lote C aplicar a correção acima — nunca removido quando o fix entrou. O
 arquivo também mudou de `internal/waclient/socket/framesocket.go` para
-`internal/wa-noise/protocol/socket/framesocket.go` na Fase H; as referências de
+`internal/noise/protocol/socket/framesocket.go` na Fase H; as referências de
 caminho neste registro foram atualizadas. Evidência reverificada:
-`internal/wa-noise/protocol/socket/framesocket.go:180-193` mostra
+`internal/noise/protocol/socket/framesocket.go:180-193` mostra
 `receivedLength` contado após o descarte do cabeçalho; `go test -run
 'TestProcessDataSplitPayload|TestProcessDataSplitPayloadEmTodosOsPontosDeCorte|TestProcessDataPartialHeader'
--v ./internal/wa-noise/protocol/socket/` — 3/3 PASS, nenhum skip.
+-v ./internal/noise/protocol/socket/` — 3/3 PASS, nenhum skip.
 
 ---
 
 ## F19 — cortes de MAC em `appstate/` dão panic com blob mais curto que 32 bytes
 
 **Data**: 2026-08-06
-**Contexto**: Fase B do ADR-0004, metade `internal/wa-noise/appstate/`. Achado
+**Contexto**: Fase B do ADR-0004, metade `internal/noise/appstate/`. Achado
 na leitura linha a linha para a auditoria de magic numbers; o código é do
-wa-noise upstream, não introduzido por nós.
+noise upstream, não introduzido por nós.
 
 **Onde**: quatro cortes que assumem, sem checar, que o blob tem pelo menos
 `macLength` (32) bytes:
 
-- `internal/wa-noise/appstate/decode_mutation.go:60` (`Processor.decodeMutation`)
+- `internal/noise/appstate/decode_mutation.go:60` (`Processor.decodeMutation`)
 
   ```go
   content := bytes.Clone(mutation.GetRecord().GetValue().GetBlob())
   content, valueMAC = content[:len(content)-macLength], content[len(content)-macLength:]
   ```
 
-- `internal/wa-noise/appstate/hash.go:46` (`HashState.updateHash`)
+- `internal/noise/appstate/hash.go:46` (`HashState.updateHash`)
 
   ```go
   value := mutation.GetRecord().GetValue().GetBlob()
   added = append(added, value[len(value)-macLength:])
   ```
 
-- `internal/wa-noise/appstate/hash.go:90` (`generatePatchMAC`)
-- `internal/wa-noise/appstate/decode.go:100` (callback de `validatePatch`)
+- `internal/noise/appstate/hash.go:90` (`generatePatchMAC`)
+- `internal/noise/appstate/decode.go:100` (callback de `validatePatch`)
 
 **Problema**: `len(blob)` menor que 32 faz `len(blob)-macLength` ficar negativo
 e o slice dar panic (`slice bounds out of range`). O blob vem direto de um
@@ -350,11 +350,11 @@ O mesmo teto vale para `updateHash`/`generatePatchMAC`, que rodam **antes** de
 `decodeMutation` no fluxo de `validatePatch` — então a validação precisa
 acontecer nos dois lugares, ou `validatePatch` precisa varrer as mutações uma
 vez antes de chamar `updateHash`. Vale mandar o patch para o upstream
-(`wa-api/internal/wa-noise`), já que o bug não é nosso.
+(`wa-api/internal/noise`), já que o bug não é nosso.
 
 **Status**: **CORRIGIDO** (lote A da leva de saneamento, 2026-08-07). Os
 quatro cortes passam agora por `trailingValueMAC`/`splitValueMAC` em
-`internal/wa-noise/protocol/appstate/mutation_blob.go`, que devolvem
+`internal/noise/protocol/appstate/mutation_blob.go`, que devolvem
 `ErrShortMutationBlob` com o índice da mutação na mensagem.
 `generatePatchMAC` mudou de assinatura para `([]byte, error)` (dois chamadores
 ajustados). `splitValueMAC` exige `macLength+cbcIVLength`, não só o MAC: quem
@@ -369,11 +369,11 @@ mudaria o panic de lugar. Travado por `TestSplitValueMACExigeIVEMac`,
 ## F20 — `fakeIndexesToRemove` é sempre nil: ramo morto em `decodeMutations`
 
 **Data**: 2026-08-06
-**Contexto**: Fase B do ADR-0004, metade `internal/wa-noise/appstate/`. Mesmo
+**Contexto**: Fase B do ADR-0004, metade `internal/noise/appstate/`. Mesmo
 racional de F19: código do upstream, achado na leitura para a auditoria.
 
-**Onde**: `internal/wa-noise/appstate/decode.go:48` e
-`internal/wa-noise/appstate/decode.go:155` — as duas declarações:
+**Onde**: `internal/noise/appstate/decode.go:48` e
+`internal/noise/appstate/decode.go:155` — as duas declarações:
 
 ```go
 var fakeIndexesToRemove map[[macLength]byte][]byte
@@ -382,7 +382,7 @@ var fakeIndexesToRemove map[[macLength]byte][]byte
 O mapa é declarado e passado a `Processor.decodeMutations` sem nunca ser
 inicializado nem populado, nos dois chamadores (`decodeSnapshot` e o laço de
 `DecodePatches`). Consumidor em
-`internal/wa-noise/appstate/decode_mutation.go:118`:
+`internal/noise/appstate/decode_mutation.go:118`:
 
 ```go
 altIndexMAC, ok := fakeIndexesToRemove[indexMACToArray(indexMAC)]
@@ -400,7 +400,7 @@ uma limpeza de estado que simplesmente não acontece, e o app state acumula MACs
 órfãos no banco.
 
 **Correção sugerida**: nenhuma imediata — antes é preciso descobrir a intenção
-no upstream (`git log`/issues de `wa-api/internal/wa-noise` em torno de
+no upstream (`git log`/issues de `wa-api/internal/noise` em torno de
 `fakeIndexesToRemove`). Dois desfechos possíveis: (a) a feature nunca foi
 ligada e o parâmetro deve ser removido das três assinaturas, simplificando;
 (b) deveria estar populado, e aí é bug de verdade no upstream. Não dá para
@@ -423,10 +423,10 @@ reintroduz com um chamador de verdade.
 ## F21 — `SQLStore.DeleteIdentity` usa a query de `LIKE`, não a de igualdade
 
 **Data**: 2026-08-06. **Contexto**: segunda metade da Fase B do ADR-0004
-(refactor de `internal/wa-noise/store/` + `store/sqlstore/`), mesmo racional de
+(refactor de `internal/noise/store/` + `store/sqlstore/`), mesmo racional de
 F18/F19/F20: código do upstream, achado na leitura para dividir o arquivo.
 
-**Onde**: `internal/wa-noise/store/sqlstore/store_identity.go:36` (era
+**Onde**: `internal/noise/store/sqlstore/store_identity.go:36` (era
 `store.go:92` antes da divisão desta fase):
 
 ```go
@@ -440,7 +440,7 @@ func (s *SQLStore) DeleteIdentity(ctx context.Context, address string) error {
 A query de igualdade existe logo acima, declarada e **sem nenhum uso**:
 
 ```go
-deleteIdentityQuery = `DELETE FROM wa-noise_identity_keys WHERE our_jid=$1 AND their_id=$2`
+deleteIdentityQuery = `DELETE FROM wanoise_identity_keys WHERE our_jid=$1 AND their_id=$2`
 ```
 
 **Problema**: `DeleteIdentity` recebe um endereço Signal completo
@@ -481,8 +481,8 @@ _, err := s.db.Exec(ctx, deleteIdentityQuery, s.JID, address)
 **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
 texto obsoleto — escrito antes de o próprio lote C (citado no `Status:
 CORRIGIDO` acima) aplicar a troca para `deleteIdentityQuery`. Evidência
-reverificada: `internal/wa-noise/store/sqlstore/store_identity.go:38-39` usa a
-query de igualdade; `go test ./internal/wa-noise/store/sqlstore/... -run
+reverificada: `internal/noise/store/sqlstore/store_identity.go:38-39` usa a
+query de igualdade; `go test ./internal/noise/store/sqlstore/... -run
 'TestDeleteIdentityRemovesOnlyThatAddress|TestDeleteIdentityNaoTrataCuringaDeLike'
 -v` — 2/2 PASS.
 
@@ -491,16 +491,16 @@ query de igualdade; `go test ./internal/wa-noise/store/sqlstore/... -run
 ## F22 — `record.Session` recém-criado dá panic em `Serialize()`
 
 **Data**: 2026-08-06. **Contexto**: escrita dos testes de
-`internal/wa-noise/store/sessioncache.go` e `signal.go` na Fase B do ADR-0004.
+`internal/noise/store/sessioncache.go` e `signal.go` na Fase B do ADR-0004.
 
 **Onde**: não é código nosso — é `go.mau.fi/libsignal@v0.2.1`,
 `state/record/SessionState.go:517` (`State.structure()`), alcançado por
 `record.Session.Serialize()`. O caminho no nosso código:
 
-- `internal/wa-noise/store/signal.go:96` e `signal.go:115`
+- `internal/noise/store/signal.go:96` e `signal.go:115`
   (`LoadSession` devolve `record.NewSession(...)` quando não há sessão; e
   `StoreSession` chama `record.Serialize()`).
-- `internal/wa-noise/store/sessioncache.go:87` e `sessioncache.go:113`
+- `internal/noise/store/sessioncache.go:87` e `sessioncache.go:113`
   (`WithCachedSessions` cria o mesmo record vazio; `PutCachedSessions` serializa
   as entradas `Dirty`).
 
@@ -567,11 +567,11 @@ usava.
 
 **Onde**: os três pontos que ramificam por dialeto:
 
-- `internal/wa-noise/store/sqlstore/store_session.go:66`
+- `internal/noise/store/sqlstore/store_session.go:66`
   (`GetManySessions`, ramo `PostgresArrayWrapper != nil`)
-- `internal/wa-noise/store/sqlstore/store_appstate.go:106`
+- `internal/noise/store/sqlstore/store_appstate.go:106`
   (`DeleteAppStateMutationMACs`, mesmo ramo)
-- `internal/wa-noise/store/sqlstore/lidmap.go:171`
+- `internal/noise/store/sqlstore/lidmap.go:171`
   (`GetManyLIDsForPNs`, mesmo ramo)
 
 **Problema**: os testes rodam sobre `modernc.org/sqlite` (sem CGO, sem Docker,
@@ -602,7 +602,7 @@ executável em CI ou na máquina de quem estiver mexendo nessas queries:
 
 ```
 WA_TEST_POSTGRES_DSN='postgres://user:pass@host:5432/wa_test?sslmode=disable' \
-  go test ./internal/wa-noise/persistence/store/sqlstore/ -run Postgres -v
+  go test ./internal/noise/persistence/store/sqlstore/ -run Postgres -v
 ```
 
 **Os testes foram executados de verdade** contra `postgres:16-alpine` antes de
@@ -619,14 +619,14 @@ como o esperado.
 ## F24 — `binary/` dá panic com bytes da rede em três type assertions sem checagem
 
 **Data**: 2026-08-06. **Contexto**: Fase C do ADR-0004 (cobertura de
-`internal/wa-noise/binary/`). Apareceu ao escrever os testes de frame
+`internal/noise/binary/`). Apareceu ao escrever os testes de frame
 malformado, não por relato de produção.
 
 **Onde**:
 
-- `internal/wa-noise/binary/decoder_node.go:137` — `ret.Tag = rawDesc.(string)`
-- `internal/wa-noise/binary/jid.go:113` — `types.NewADJID(user.(string), ...)`
-- `internal/wa-noise/binary/jid.go:82` e `:99` — `User: user.(string)` em
+- `internal/noise/binary/decoder_node.go:137` — `ret.Tag = rawDesc.(string)`
+- `internal/noise/binary/jid.go:113` — `types.NewADJID(user.(string), ...)`
+- `internal/noise/binary/jid.go:82` e `:99` — `User: user.(string)` em
   `readInteropJID` e `readFBJID`
 
 **Problema**: `read()` devolve `interface{}` e pode legitimamente devolver
@@ -667,7 +667,7 @@ dois testes que travavam o panic foram reescritos como prova do erro:
 
 **Data**: 2026-08-06. **Contexto**: mesmo da F24.
 
-**Onde**: `internal/wa-noise/binary/unpack.go:22`
+**Onde**: `internal/noise/binary/unpack.go:22`
 
 ```go
 dataType, data := data[0], data[1:]
@@ -691,7 +691,7 @@ no topo. `Unpack` já devolve erro, então nenhum chamador muda.
 
 **Data**: 2026-08-06. **Contexto**: mesmo da F24.
 
-**Onde**: `internal/wa-noise/binary/node.go` — `GetOptionalChildByTag` e
+**Onde**: `internal/noise/binary/node.go` — `GetOptionalChildByTag` e
 `GetChildByTag`.
 
 **Problema**: `GetOptionalChildByTag` usa retorno nomeado (`val Node, ok bool`),
@@ -706,7 +706,7 @@ n.GetChildByTag("ausente").Tag   // devolve "iq", não ""
 
 Quem checar o resultado por `.Tag != ""` para saber se achou está checando
 algo que é sempre verdadeiro. O padrão correto é `GetOptionalChildByTag` com
-o `ok`, e o resto do wa-noise em geral faz isso — mas a armadilha não está
+o `ok`, e o resto do noise em geral faz isso — mas a armadilha não está
 escrita em lugar nenhum.
 
 **Correção sugerida**: nenhuma no código. É API pública do upstream e mudar o
@@ -738,7 +738,7 @@ Os outros 63 call sites de `GetChildByTag` passaram sem alteração.
 
 **Data**: 2026-08-06. **Contexto**: mesmo da F24.
 
-**Onde**: `internal/wa-noise/binary/xml.go`, ramo `case []byte` de
+**Onde**: `internal/noise/binary/xml.go`, ramo `case []byte` de
 `contentString`.
 
 **Problema**: o ramo só é alcançado quando `printable(content)` devolve
@@ -770,9 +770,9 @@ de o ramo removido nunca executar.
 ## F28 — `errors.Is` não funciona com `types.GraphQLError` como alvo
 
 **Data**: 2026-08-06. **Contexto**: Fase C do ADR-0004, cobertura de
-`internal/wa-noise/types/`.
+`internal/noise/types/`.
 
-**Onde**: `internal/wa-noise/types/newsletter.go` — `GraphQLError` e
+**Onde**: `internal/noise/types/newsletter.go` — `GraphQLError` e
 `GraphQLErrors.Unwrap`.
 
 **Problema**: `GraphQLErrors` implementa `Unwrap() []error` justamente para
@@ -809,11 +809,11 @@ justamente no caso que ele existe para atender. Travado por
 ## F29 — `internals_generate.go` tem lista de arquivos hardcoded: `go generate` hoje derruba 96 dos 178 wrappers de `DangerousInternals`
 
 **Data**: 2026-08-06. **Contexto**: avaliação do pedido de reorganizar a raiz
-de `internal/wa-noise/` em subpacotes (resolução da decisão que a Fase C
+de `internal/noise/` em subpacotes (resolução da decisão que a Fase C
 deixou pendente em `PATCHES.md`). O achado apareceu ao verificar por que a
 raiz é sensível a movimentação de arquivos.
 
-**Onde**: `internal/wa-noise/internals_generate.go:101-110` — o `main()` não
+**Onde**: `internal/noise/internals_generate.go:101-110` — o `main()` não
 escaneia o diretório, ele carrega uma lista literal de 32 nomes de arquivo:
 
 ```go
@@ -838,7 +838,7 @@ alcança. Rodar `go generate` **agora** regenera um `internals.go` menor e
 derruba 96 wrappers em silêncio — sem erro de compilação, porque
 `DangerousInternals` não tem consumidor no repo.
 
-Evidência (reproduzível, sem tocar no repo — copiar `internal/wa-noise/*.go`
+Evidência (reproduzível, sem tocar no repo — copiar `internal/noise/*.go`
 para um diretório temporário com um `go.mod` mínimo requerendo
 `go.mau.fi/util v0.9.9` e rodar o gerador lá):
 
@@ -873,7 +873,7 @@ abaixo e um terceiro bug que só apareceu depois do fix.
    **todos** os arquivos processados (dedup por caminho, alias preservado) em
    vez de copiar só os de `files[0]` — é o que resolve o adendo do `msgattrs`.
    Confirmado: o `internals.go` regenerado traz
-   `"wa-api/internal/wa-noise/protocol/msgattrs"` e compila.
+   `"wa-api/internal/noise/protocol/msgattrs"` e compila.
 3. **Bug novo, exposto pelo fix**: o gerador copiava os nomes de parâmetro
    verbatim nos dois lugares onde eles aparecem. Para um parâmetro chamado `_`
    a assinatura fica válida, mas a chamada vira `int.c.decryptBotMessage(_, ...)`,
@@ -896,17 +896,17 @@ voltar a passar.
 ### Adendo ao F29 — a Fase D acrescentou uma segunda dependência ao fix, 2026-08-06
 
 **Contexto**: extração de `msgpad/`, `paircrypto/` e `msgattrs/` da raiz de
-`internal/wa-noise/` (commit `d904e78`, documentada em `PATCHES.md` como
+`internal/noise/` (commit `d904e78`, documentada em `PATCHES.md` como
 Fase D).
 
 Aquela mudança **editou `internals.go` à mão**, que é arquivo gerado. Três
 assinaturas passaram a referenciar o tipo movido:
 
 ```
-internal/wa-noise/internals.go:19    "wa-api/internal/wa-noise/msgattrs"
-internal/wa-noise/internals.go:647   SendGroupV3(..., msgAttrs msgattrs.MessageAttrs, ...)
-internal/wa-noise/internals.go:651   SendDMV3(..., msgAttrs msgattrs.MessageAttrs, ...)
-internal/wa-noise/internals.go:655   PrepareMessageNodeV3(..., msgAttrs msgattrs.MessageAttrs, ...)
+internal/noise/internals.go:19    "wa-api/internal/noise/msgattrs"
+internal/noise/internals.go:647   SendGroupV3(..., msgAttrs msgattrs.MessageAttrs, ...)
+internal/noise/internals.go:651   SendDMV3(..., msgAttrs msgattrs.MessageAttrs, ...)
+internal/noise/internals.go:655   PrepareMessageNodeV3(..., msgAttrs msgattrs.MessageAttrs, ...)
 ```
 
 **Por que isto importa para quem for corrigir o F29**: a correção sugerida
@@ -943,15 +943,15 @@ chegou.
 
 ### Adendo ao F29 — a Fase H moveu o par para `core/` e **não** piorou o bug, 2026-08-07
 
-**Contexto**: Fase H etapa 5 (reorganização estrutural de `internal/wa-noise/`),
+**Contexto**: Fase H etapa 5 (reorganização estrutural de `internal/noise/`),
 que moveu os 114 `.go` da raiz para `core/`. O inventário da etapa 1
-(`internal/wa-noise/docs/FASE_H_INVENTORY.md` §3) pediu explicitamente que o
+(`internal/noise/docs/FASE_H_INVENTORY.md` §3) pediu explicitamente que o
 impacto sobre o F29 fosse registrado aqui ao executar a etapa de `core/`. Este
 adendo fecha esse pedido — ele estava documentado em `PATCHES.md` (etapa 5,
 seção "Impacto no bug F29") mas nunca replicado neste bloco.
 
-**Onde**: `internal/wa-noise/core/internals.go` e
-`internal/wa-noise/core/internals_generate.go` (antes na raiz do fork).
+**Onde**: `internal/noise/core/internals.go` e
+`internal/noise/core/internals_generate.go` (antes na raiz do fork).
 
 **Constatação**: os dois arquivos foram movidos por `git mv` **sem uma única
 edição de conteúdo**. O `//go:generate` roda a partir de `core/`, e os 32 nomes
@@ -982,13 +982,13 @@ ao escrever teste para os três ramos de `getSize`.
 **Onde**:
 
 ```go
-// internal/wa-noise/download_types.go:82-85
+// internal/noise/download_types.go:82-85
 type downloadableMessageWithSizeBytes interface {
 	DownloadableMessage
 	GetFileSizeBytes() uint64
 }
 
-// internal/wa-noise/download_types.go:121-130
+// internal/noise/download_types.go:121-130
 func getSize(msg DownloadableMessage) int {
 	switch sized := msg.(type) {
 	case downloadableMessageWithLength:
@@ -1002,7 +1002,7 @@ func getSize(msg DownloadableMessage) int {
 ```
 
 ```go
-// internal/wa-noise/types/sticker.go:51
+// internal/noise/types/sticker.go:51
 func (spi *StickerPackItem) GetFileSizeBytes() int64 {
 ```
 
@@ -1014,7 +1014,7 @@ diferentes, logo a interface **não é satisfeita por nenhum tipo de produção*
 validação de tamanho do download (`ErrFileLengthMismatch`) fica desligada
 justamente para esse tipo, silenciosamente.
 
-Verificação: `grep -rn "GetFileSizeBytes" internal/wa-noise` devolve só a
+Verificação: `grep -rn "GetFileSizeBytes" internal/noise` devolve só a
 declaração da interface, o uso em `getSize` e o método `int64` de
 `sticker.go` — nenhum outro implementador. O ramo é inalcançável.
 
@@ -1038,7 +1038,7 @@ tamanho em vez de cair no `default` — que era exatamente o defeito.
 
 **Data / contexto**: 2026-08-07, Fase E lote 2 (newsletter) do ADR-0004.
 
-**Onde**: `internal/wa-noise/newsletter_mex.go:71`
+**Onde**: `internal/noise/newsletter_mex.go:71`
 
 ```go
 if payload := cli.Store.GetClientPayload(); payload.GetUserAgent().Platform == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
@@ -1051,7 +1051,7 @@ falso**. Na prática a escolha entre as query IDs web e as de desktop depende
 exclusivamente de `payload.GetWebInfo() == nil`.
 
 Verificação: `TestConvertQueryIDPlatformMacOSNaoDecideSozinho`
-(`internal/wa-noise/newsletter_mex_test.go`) põe
+(`internal/noise/newsletter_mex_test.go`) põe
 `store.BaseClientPayload.UserAgent.Platform = MACOS.Enum()` mantendo o
 `WebInfo` presente e observa que `convertQueryID` continua devolvendo a ID
 web.
@@ -1076,7 +1076,7 @@ registro no índice.
 
 **Data / contexto**: 2026-08-07, Fase E lote 2 (newsletter) do ADR-0004.
 
-**Onde**: `internal/wa-noise/newsletter_mex.go:47,50`
+**Onde**: `internal/noise/newsletter_mex.go:47,50`
 
 ```go
 mutationUnfollowNewsletterDesktop  = "8782612271820087"
@@ -1099,10 +1099,10 @@ querySubscribedNewslettersDesktop  = "8621797084555037" // mesmo valor
 Verificação: `TestQueryIDsDesktopTemWireTypeArgo` cobre as outras nove;
 `TestQueryIDUnfollowDesktopSemWireTypeArgo` e
 `TestQueryIDsDesktopDuplicadaConhecida`
-(`internal/wa-noise/newsletter_mex_test.go`) travam as duas anomalias.
+(`internal/noise/newsletter_mex_test.go`) travam as duas anomalias.
 
 **Correção sugerida**: capturar as IDs corretas de um cliente desktop real
-(ou de uma versão mais nova do wa-noise upstream) e substituir as duas
+(ou de uma versão mais nova do noise upstream) e substituir as duas
 constantes. Não há como derivar os valores corretos a partir do que está
 vendorizado.
 
@@ -1148,7 +1148,7 @@ Não foi mexido: é caminho vivo e mudar exige evidência, não comparação.
 **Data / contexto**: 2026-08-07, Fase E lote 4 (pareamento/prekeys/tokens/misc)
 do ADR-0004.
 
-**Onde**: `internal/wa-noise/qrchan.go:144`
+**Onde**: `internal/noise/qrchan.go:144`
 
 ```go
 func (qrc *qrChannel) handleEvent(rawEvt interface{}) {
@@ -1200,13 +1200,13 @@ operações num caminho concorrente — precisa de decisão consciente.
 **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
 texto obsoleto — o `close(qrc.stopQRs)` dentro do CAS já estava em produção
 (lote B, citado no `Status: CORRIGIDO` acima; código atual em
-`internal/wa-noise/core/qrchan.go:146-147`, com comentário inline citando esta
+`internal/noise/core/qrchan.go:146-147`, com comentário inline citando esta
 entrada). O que faltava de fato era o **teste de regressão**: nenhum
 `qrchan_test.go` existia (`grep -rln "F33" --include="*_test.go"
-internal/wa-noise/` não devolvia nada). Isso foi corrigido agora, não apenas
+internal/noise/` não devolvia nada). Isso foi corrigido agora, não apenas
 documentado:
 
-- Criado `internal/wa-noise/core/qrchan_test.go`, com
+- Criado `internal/noise/core/qrchan_test.go`, com
   `TestQRChannelHandleEventConcurrentTerminalEventsNaoFechaCanalDuasVezes`:
   50 goroutines concorrentes chamando `qrc.handleEvent` com eventos terminais
   alternados (`*events.PairError` / `*events.Disconnected` — a sequência real
@@ -1214,7 +1214,7 @@ documentado:
   transformar panic em falha de asserção legível.
 - `go test -race -run
   TestQRChannelHandleEventConcurrentTerminalEventsNaoFechaCanalDuasVezes -v
-  ./internal/wa-noise/core/` — PASS contra o código corrigido.
+  ./internal/noise/core/` — PASS contra o código corrigido.
 - **Controle negativo executado**: reintroduzido temporariamente o
   `close(qrc.stopQRs)` fora do CAS (a forma pré-fix, exata do trecho citado no
   topo desta entrada). O mesmo teste falhou de verdade:
@@ -1226,9 +1226,9 @@ documentado:
   --- FAIL: TestQRChannelHandleEventConcurrentTerminalEventsNaoFechaCanalDuasVezes (0.00s)
   ```
 
-  A mutação foi revertida em seguida; `git diff internal/wa-noise/core/qrchan.go`
+  A mutação foi revertida em seguida; `git diff internal/noise/core/qrchan.go`
   ficou vazio (só o arquivo de teste é novo).
-- `go vet ./internal/wa-noise/core/...` e `go build ./...` limpos.
+- `go vet ./internal/noise/core/...` e `go build ./...` limpos.
 
 **Status final: CORRIGIDO**, agora com teste que trava a causa (exclusão
 ausente entre `close` e o CAS), não só o sintoma.
@@ -1237,7 +1237,7 @@ ausente entre `close` e o CAS), não só o sintoma.
 
 **Data / contexto**: 2026-08-07, Fase E lote 4 do ADR-0004.
 
-**Onde**: `internal/wa-noise/armadillomessage.go:88-111`
+**Onde**: `internal/noise/armadillomessage.go:88-111`
 
 ```go
 var protoMsg proto.Message
@@ -1277,7 +1277,7 @@ a divergência de reconciliação sem ganho funcional. Fica para decisão.
 
 **Data / contexto**: 2026-08-07, Fase E lote 4 do ADR-0004.
 
-**Onde**: `internal/wa-noise/cstoken.go:17` e `internal/wa-noise/tctoken.go:50`
+**Onde**: `internal/noise/cstoken.go:17` e `internal/noise/tctoken.go:50`
 
 As duas funções têm corpo byte a byte idêntico:
 
@@ -1317,9 +1317,9 @@ acidental aparece como falha de teste.
 
 **Onde**:
 
-- `internal/wa-noise/retry.go:110-113` — `cli.incomingRetryRequestCounter`,
+- `internal/noise/retry.go:110-113` — `cli.incomingRetryRequestCounter`,
   `map[incomingRetryKey]int` com `incomingRetryKey{jid, messageID}`.
-- `internal/wa-noise/retry_receipt_send.go:29-37` — `cli.messageRetries`,
+- `internal/noise/retry_receipt_send.go:29-37` — `cli.messageRetries`,
   `map[string]int` chaveado pelo ID da mensagem.
 
 ```go
@@ -1330,7 +1330,7 @@ cli.incomingRetryRequestCounter[retryKey]++
 ```
 
 **Problema**: nenhum dos dois mapas é limpo em lugar nenhum do pacote
-(`grep -rn "incomingRetryRequestCounter\|messageRetries" internal/wa-noise/*.go`
+(`grep -rn "incomingRetryRequestCounter\|messageRetries" internal/noise/*.go`
 só acha a criação em `client.go:233,239` e os incrementos acima). As chaves
 são o remetente e o ID da mensagem — **os dois vêm do servidor**. Uma sessão
 longa acumula uma entrada por mensagem que já precisou de retry, para sempre;
@@ -1350,7 +1350,7 @@ mínimo esvaziar ambos em `Disconnect`/`ResetConnection`.
 
 **Status**: **CORRIGIDO** (lote I, 2026-08-07). A política escolhida combina as
 duas primeiras sugestões da entrada: `counterMap` (em
-`internal/wa-noise/capabilities/retry/counters.go`) guarda um `time.Time` junto
+`internal/noise/capabilities/retry/counters.go`) guarda um `time.Time` junto
 do contador e varre entradas paradas há mais de `counterTTL`, com
 `counterTTL = 1h` — exatamente o teto de `recreateSessionTimeout` que a entrada
 apontava como natural.
@@ -1378,9 +1378,9 @@ voltar a explodir.
 ## F37 — `GetUserDevices` grava o cache numa chave que pode nunca ser consultada
 
 **Data / contexto**: 2026-08-07, Fase E lote 7 (usuário, raiz de
-`internal/wa-noise/`).
+`internal/noise/`).
 
-**Onde**: `internal/wa-noise/user_devices.go:34` e `:60`.
+**Onde**: `internal/noise/user_devices.go:34` e `:60`.
 
 ```go
 cached, ok := cli.userDevicesCache[jid]        // :34 — lookup pelo JID de ENTRADA
@@ -1429,7 +1429,7 @@ Travado por `TestDeviceCacheEntradaExpiraNaLeitura`,
 
 **Data / contexto**: 2026-08-07, Fase E lote 7.
 
-**Onde**: `internal/wa-noise/user_devices.go:22-24`.
+**Onde**: `internal/noise/user_devices.go:22-24`.
 
 > The local device will not be included in the output even if the user's JID is
 > included in the input.
@@ -1457,7 +1457,7 @@ documentado é o desejado seria palpite num caminho de criptografia.
 
 **Data / contexto**: 2026-08-07, Fase E lote 7.
 
-**Onde**: `internal/wa-noise/user_business.go:121-123`.
+**Onde**: `internal/noise/user_business.go:121-123`.
 
 ```go
 _, _, err = cli.Store.Contacts.PutBusinessName(ctx, userAlt, name)
@@ -1487,7 +1487,7 @@ de qualidade estrutural por contrato. Pendente de decisão — trivial de aplica
 
 **Data / contexto**: 2026-08-07, Fase E lote 8 (envio de mensagem).
 
-**Onde**: `internal/wa-noise/group.go:185-196` e `group.go:144`.
+**Onde**: `internal/noise/group.go:185-196` e `group.go:144`.
 
 ```go
 // group.go:144 — grava sob a chave que o SERVIDOR devolveu
@@ -1539,7 +1539,7 @@ novo. `TestGetOrFetchReturnsNilNilOnEchoedDifferentID` foi reescrito como
 
 **Data / contexto**: 2026-08-07, Fase E lote 8.
 
-**Onde**: `internal/wa-noise/send_node_build.go:225-229`.
+**Onde**: `internal/noise/send_node_build.go:225-229`.
 
 ```go
 deviceIdentity, err := proto.Marshal(cli.Store.Account)
@@ -1580,8 +1580,8 @@ Travado por `TestMakeDeviceIdentityNodeSemContaDevolveErro` e
 
 **Data / contexto**: 2026-08-07, Fase E lote 8.
 
-**Onde**: `internal/wa-noise/sendfb_encrypt.go:158` vs
-`internal/wa-noise/send_encrypt.go:180` e `sendfb_transport.go:107`.
+**Onde**: `internal/noise/sendfb_encrypt.go:158` vs
+`internal/noise/send_encrypt.go:180` e `sendfb_transport.go:107`.
 
 ```go
 // sendfb_encrypt.go — int
@@ -1635,9 +1635,9 @@ uniformizar é barato e sem risco; se for, precisa de captura antes.
 
 **Data / contexto**: 2026-08-07, Fase E lote 8.
 
-**Onde**: `internal/wa-noise/msgattrs/message.go:32-40` (produz `"reaction"`,
+**Onde**: `internal/noise/msgattrs/message.go:32-40` (produz `"reaction"`,
 `"poll"`, `"media"`, `"text"` como literais) e
-`internal/wa-noise/send_constants.go` (`msgTypeText`, `msgTypePoll`,
+`internal/noise/send_constants.go` (`msgTypeText`, `msgTypePoll`,
 `msgTypeReaction`, que comparam contra esses valores).
 
 **Problema**: a taxonomia de tipo de mensagem tem duas fontes — `msgattrs`
@@ -1664,8 +1664,8 @@ mesmas palavras, e ficaram intocadas.
 
 **Data / contexto**: 2026-08-07, Fase E lote 9 (recepção/decriptação).
 
-**Onde**: `internal/wa-noise/message.go:26-32`, com o canal declarado em
-`internal/wa-noise/client.go:81` e criado em `client.go:241`.
+**Onde**: `internal/noise/message.go:26-32`, com o canal declarado em
+`internal/noise/client.go:81` e criado em `client.go:241`.
 
 ```go
 if !cli.ManualHistorySyncDownload {
@@ -1769,7 +1769,7 @@ buffer 32 + goroutine consumidora), não é inerente ao protocolo.
 
 **Data / contexto**: 2026-08-07, Fase E lote 9.
 
-**Onde**: `internal/wa-noise/message_secrets_store.go:182`.
+**Onde**: `internal/noise/message_secrets_store.go:182`.
 
 **Problema**: quando **todos** os pares do history sync falham no
 `types.ParseJID` (os dois `continue` logo acima), `lidPairs` fica vazia e
@@ -1787,8 +1787,8 @@ antes da gravação, como `storeHistoricalMessageSecrets` já fazia.
 
 **Data / contexto**: 2026-08-07, Fase E lote 10 (núcleo do client/conexão).
 
-**Onde**: `internal/wa-noise/connectionevents.go:160-161` (escrita) e
-`internal/wa-noise/client_connection.go:194,196` (leitura e escrita).
+**Onde**: `internal/noise/connectionevents.go:160-161` (escrita) e
+`internal/noise/client_connection.go:194,196` (leitura e escrita).
 
 ```go
 // connectionevents.go, handleConnectSuccess — goroutine do handler de nó
@@ -1818,7 +1818,7 @@ vivo).
 **Status**: **CORRIGIDO** (lote B, 2026-08-07). O bloqueio registrado aqui
 deixou de valer: não há mais upstream contra o qual manter compatibilidade, e
 `grep -rn "AutoReconnectErrors\|LastSuccessfulConnect"` mostra que **nenhum**
-consumidor fora de `internal/wa-noise/core/` lia os dois campos — o módulo está
+consumidor fora de `internal/noise/core/` lia os dois campos — o módulo está
 sob `internal/`, então "API pública" aqui nunca passou dos limites deste repo.
 
 Os campos viraram `lastSuccessfulConnectUnixNano atomic.Int64` e
@@ -1835,11 +1835,11 @@ a contagem, agora sem corrida. Travado por
 ## F47 — `UploadNewsletterReader` engole o erro de `io.Copy`
 
 **Data / contexto**: 2026-08-07, durante a Fase F/G lote 1 do ADR-0004
-(extração de `internal/wa-noise/media/`). Achado ao mover o arquivo, não ao
+(extração de `internal/noise/media/`). Achado ao mover o arquivo, não ao
 procurar bugs.
 
-**Onde**: `internal/wa-noise/media/upload_newsletter.go:35-44` (era
-`internal/wa-noise/upload_newsletter.go:60-72` antes da extração).
+**Onde**: `internal/noise/media/upload_newsletter.go:35-44` (era
+`internal/noise/upload_newsletter.go:60-72` antes da extração).
 
 ```go
 hasher := sha256.New()
@@ -1900,10 +1900,10 @@ sobre corrigir agora ou depois.
 ## F48 — `ConvertQueryID` acessa `.Platform` em vez de `GetPlatform()`
 
 - **Data / contexto**: 2026-08-07, durante a extração do subpacote
-  `internal/wa-noise/newsletter/` (Fase F/G, lote 2). O bug apareceu quando o
+  `internal/noise/newsletter/` (Fase F/G, lote 2). O bug apareceu quando o
   duble de teste montou um `*waWa6.ClientPayload` sem `UserAgent`.
-- **Onde**: `internal/wa-noise/newsletter/queryids.go:50` (era
-  `internal/wa-noise/newsletter_mex.go:71` antes da extração).
+- **Onde**: `internal/noise/newsletter/queryids.go:50` (era
+  `internal/noise/newsletter_mex.go:71` antes da extração).
 
   ```go
   if payload.GetUserAgent().Platform == waWa6.ClientPayload_UserAgent_MACOS.Enum() || payload.GetWebInfo() == nil {
@@ -1936,9 +1936,9 @@ sobre corrigir agora ou depois.
 ## F49 — `EncodePatch` escreve em `MutationInfo.Value` sem checar nil
 
 - **Data / contexto**: 2026-08-07, durante a extração do subpacote
-  `internal/wa-noise/appstatesync/` (Fase F/G, lote 3). Apareceu quando um teste
+  `internal/noise/appstatesync/` (Fase F/G, lote 3). Apareceu quando um teste
   do envio montou um `appstate.PatchInfo` com `Mutations[i].Value` nil.
-- **Onde**: `internal/wa-noise/appstate/encode.go:50`.
+- **Onde**: `internal/noise/appstate/encode.go:50`.
 
   ```go
   for _, mutationInfo := range patchInfo.Mutations {
@@ -1951,8 +1951,8 @@ sobre corrigir agora ou depois.
 
   ```
   panic: runtime error: invalid memory address or nil pointer dereference
-  wa-api/internal/wa-noise/appstate.(*Processor).EncodePatch(...)
-      internal/wa-noise/appstate/encode.go:50
+  wa-api/internal/noise/appstate.(*Processor).EncodePatch(...)
+      internal/noise/appstate/encode.go:50
   ```
 
   Em produção os patches vêm dos construtores `appstate.Build*`
@@ -1972,28 +1972,28 @@ sobre corrigir agora ou depois.
 - **Nota de reconciliação (2026-08-12)**: o parágrafo "não corrigido" acima era
   texto obsoleto — escrito para o escopo restrito do lote 3, superado pelo
   próprio lote C (citado no `Status: CORRIGIDO` acima), que cobriu
-  `appstate/`. Evidência reverificada: `internal/wa-noise/appstate/encode.go:54-55`
+  `appstate/`. Evidência reverificada: `internal/noise/appstate/encode.go:54-55`
   tem o `nil` check retornando `ErrNilMutationValue`; `go test
-  ./internal/wa-noise/appstate/... -run TestEncodePatchRejeitaMutacaoSemValor
+  ./internal/noise/appstate/... -run TestEncodePatchRejeitaMutacaoSemValor
   -v` — PASS.
 
 ## F50 — `phoneLinkingCache` é lido e escrito de goroutines diferentes sem sincronização
 
 - **Data**: 2026-08-07.
-- **Contexto**: Fase F/G lote 4, ao extrair `internal/wa-noise/pairing/`. O
+- **Contexto**: Fase F/G lote 4, ao extrair `internal/noise/pairing/`. O
   achado é do código ORIGINAL (upstream), não da extração.
-- **Onde**: no `HEAD` anterior ao lote, `internal/wa-noise/client.go:168`
+- **Onde**: no `HEAD` anterior ao lote, `internal/noise/client.go:168`
   (campo `phoneLinkingCache *phoneLinkingCache`), com escrita em
   `pair-code.go:137` (`PairPhone`) e leitura em `pair-code.go:161`
   (`handleCodePairNotification`). Hoje o mesmo estado vive em
-  `internal/wa-noise/pairing/state.go` (`State.linking`), com o mesmo desenho.
+  `internal/noise/pairing/state.go` (`State.linking`), com o mesmo desenho.
 - **Problema**: `PairPhone` é chamado pela aplicação; `handleCodePairNotification`
   roda a partir de um handler de notificação, em **outra goroutine**. O campo é
   um ponteiro comum — sem mutex, sem atômico, sem canal. É corrida de dados pelo
   modelo de memória de Go: sem happens-before entre a escrita e a leitura, a
   goroutine de notificação pode enxergar `nil` (e devolver "received code pair
   notification without a pending pairing") ou, em tese, um `*LinkingCache`
-  parcialmente publicado. `git grep -n phoneLinkingCache HEAD -- 'internal/wa-noise/*.go'`
+  parcialmente publicado. `git grep -n phoneLinkingCache HEAD -- 'internal/noise/*.go'`
   devolve exatamente quatro ocorrências (declaração do campo, declaração do tipo,
   a escrita e a leitura) — nenhuma perto de um lock. Confirmado por revisor
   independente durante o lote 4.
@@ -2017,18 +2017,18 @@ sobre corrigir agora ou depois.
   texto obsoleto do racional do lote 4 (extração pura, sem tocar sincronização),
   superado pelo próprio lote B (citado no `Status: CORRIGIDO` acima), que
   trocou `State.linking` por `atomic.Pointer[LinkingCache]`. Evidência
-  reverificada: `internal/wa-noise/pairing/state.go:38,42,45` — `linking
+  reverificada: `internal/noise/pairing/state.go:38,42,45` — `linking
   atomic.Pointer[LinkingCache]`, `Linking()`/`SetLinking()` usam
-  `Load()`/`Store()`; `go test ./internal/wa-noise/pairing/... -run
+  `Load()`/`Store()`; `go test ./internal/noise/pairing/... -run
   'TestStateLinkingSuportaLeituraEEscritaConcorrentes|TestStateZeroValueTemLinkingNil'
   -race -v` — 2/2 PASS sob `-race`.
 
 ## F51 — `prekeys.Upload` indexa `preKeys[len(preKeys)-1]` sem checar lista vazia
 
 - **Data**: 2026-08-07.
-- **Contexto**: Fase F/G lote 4, ao extrair `internal/wa-noise/prekeys/`. Achado
+- **Contexto**: Fase F/G lote 4, ao extrair `internal/noise/prekeys/`. Achado
   do código ORIGINAL.
-- **Onde**: `internal/wa-noise/prekeys/upload.go`, no fim de `Upload`:
+- **Onde**: `internal/noise/prekeys/upload.go`, no fim de `Upload`:
 
   ```go
   preKeys, err := t.Store().PreKeys.GetOrGenPreKeys(ctx, uint32(wantedCount))
@@ -2037,7 +2037,7 @@ sobre corrigir agora ou depois.
   err = t.Store().PreKeys.MarkPreKeysAsUploaded(ctx, preKeys[len(preKeys)-1].KeyID)
   ```
 
-  Era `internal/wa-noise/prekeys.go:89` antes da extração, com o mesmo corpo.
+  Era `internal/noise/prekeys.go:89` antes da extração, com o mesmo corpo.
 
 - **Problema**: se `GetOrGenPreKeys` devolver slice vazia com `err == nil`, a
   indexação `preKeys[len(preKeys)-1]` é `preKeys[-1]` e entra em pânico. O
@@ -2062,10 +2062,10 @@ sobre corrigir agora ou depois.
 (notificação/retry/recibo). Achado ao mover o campo para `retry.State`, quando
 o compilador não acusou nenhum ponto de escrita.
 
-**Onde**: antes da extração, `internal/wa-noise/client.go:143` (declaração do
-campo) e `internal/wa-noise/retry_recent_messages.go:59` (a única leitura).
-Hoje, `internal/wa-noise/retry/state.go` (campo `lastStoreClear`) e
-`internal/wa-noise/retry/recent.go` (a leitura, dentro de `AddRecent`).
+**Onde**: antes da extração, `internal/noise/client.go:143` (declaração do
+campo) e `internal/noise/retry_recent_messages.go:59` (a única leitura).
+Hoje, `internal/noise/retry/state.go` (campo `lastStoreClear`) e
+`internal/noise/retry/recent.go` (a leitura, dentro de `AddRecent`).
 
 ```go
 // retry_recent_messages.go:59, no HEAD anterior ao lote
@@ -2075,7 +2075,7 @@ if time.Since(cli.lastRetryStoreClear) > retryStoreClearInterval {
 }
 ```
 
-**Problema**: `git grep -n "lastRetryStoreClear" internal/wa-noise/` no HEAD
+**Problema**: `git grep -n "lastRetryStoreClear" internal/noise/` no HEAD
 anterior devolve exatamente duas linhas — a declaração e a leitura acima.
 **Nenhuma atribuição, em lugar nenhum.** O campo fica permanentemente no zero
 de `time.Time`, `time.Since(zero)` é da ordem de dois mil anos, e a comparação
@@ -2084,7 +2084,7 @@ observada: `DeleteOldOutgoingEvents` roda a **cada** mensagem enviada com
 `UseRetryMessageStore` ligado, e não uma vez a cada 12 horas.
 
 Evidência empírica produzida nesta sessão:
-`TestAddRecentWithStore` (`internal/wa-noise/retry/recent_test.go`) afirma
+`TestAddRecentWithStore` (`internal/noise/retry/recent_test.go`) afirma
 `deleteOldCalls == 1` depois da primeira gravação e `== 2` depois da segunda —
 duas gravações consecutivas, dois expurgos, sem qualquer espera.
 
@@ -2132,14 +2132,14 @@ consciente. Pendente de decisão.
 
 F36 (os dois contadores de retry que crescem sem limite) continua **em
 aberto**. O lote 5 **moveu** os dois mapas de `*Client` para
-`internal/wa-noise/retry.State` — `incomingRetryRequestCounter` virou
+`internal/noise/retry.State` — `incomingRetryRequestCounter` virou
 `State.incomingCounter` e `messageRetries` virou `State.messageRetries` — e
 **não** implementou política de despejo nenhuma.
 
 A movimentação não resolve nem atenua o problema: as chaves continuam vindo do
 servidor, nada esvazia os mapas, e não há reset no `Disconnect`. O que mudou é
 onde a dívida está documentada — o doc do tipo `retry.State`
-(`internal/wa-noise/retry/state.go`) traz o aviso por extenso, e os dois campos
+(`internal/noise/retry/state.go`) traz o aviso por extenso, e os dois campos
 carregam a referência a F36 individualmente.
 
 Os endereços de código citados no corpo de F36 acima (`retry.go:110-113`,
@@ -2153,22 +2153,22 @@ ao lote 5 e não existem mais nessa forma; os pontos equivalentes hoje são
 ## F53 — `*groupMetaCache` escapa do lock e é lido sem sincronização pelo caminho de envio
 
 **Data / contexto**: 2026-08-07, durante a Fase F/G lote 6 (extração de
-`internal/wa-noise/group/`). Achado pela revisão de concorrência independente do
+`internal/noise/group/`). Achado pela revisão de concorrência independente do
 lote, ao auditar o cache de grupo. **Não faz parte do escopo do lote** — é
 pré-existente, herdado do upstream, e idêntico no HEAD anterior à extração.
 
 **Onde** (endereços de hoje, pós-lote 6):
 
-- `internal/wa-noise/group/info.go:200-212` — `GetOrFetch` toma o lock do cache,
+- `internal/noise/group/info.go:200-212` — `GetOrFetch` toma o lock do cache,
   obtém o `*Meta` da entrada **viva** do mapa e o devolve ao chamador; o
   `defer cache.Unlock()` roda no return, ou seja, o ponteiro sai da seção
   crítica.
-- `internal/wa-noise/send_prepare.go:176-195` — lê `cachedData.AddressingMode`,
+- `internal/noise/send_prepare.go:176-195` — lê `cachedData.AddressingMode`,
   `cachedData.CommunityAnnouncementGroup` e devolve `cachedData.Members`, tudo
   **sem lock**.
-- `internal/wa-noise/sendfb_transport.go:41-101` — mesma coisa com
+- `internal/noise/sendfb_transport.go:41-101` — mesma coisa com
   `groupMeta.Members`, passado adiante a `prepareMessageNodeV3`.
-- `internal/wa-noise/group/notification.go:198-224` — `UpdateParticipantCache`
+- `internal/noise/group/notification.go:198-224` — `UpdateParticipantCache`
   muta `cached.Members` **no lugar** (append nas entradas, swap-remove nas
   saídas), sob o lock.
 
@@ -2181,7 +2181,7 @@ rasgado, ou uma lista de membros parcialmente atualizada. É uma corrida de dado
 no sentido do modelo de memória de Go, não só uma inconsistência lógica.
 
 Evidência de que é pré-existente, e não introduzido pela extração:
-`git show HEAD:internal/wa-noise/group.go` (linhas 185-196) mostra o
+`git show HEAD:internal/noise/group.go` (linhas 185-196) mostra o
 `getCachedGroupData` original devolvendo o mesmo `*groupMetaCache` vivo, de
 dentro do mesmo `defer cli.groupCacheLock.Unlock()`, para os mesmos dois
 chamadores. A extração preservou a estrutura bit a bit.
@@ -2208,7 +2208,7 @@ mas precisa de decisão.
 **Status**: **CORRIGIDO** (lote G, 2026-08-07) pela opção 1, depois de **fazer
 a medição que a entrada pedia**.
 
-`internal/wa-noise/capabilities/group/cache_bench_test.go` compara devolver o
+`internal/noise/capabilities/group/cache_bench_test.go` compara devolver o
 ponteiro vivo com devolver uma cópia, em tamanhos de 2 a 4096 membros. No teto
 real do WhatsApp (1024 membros): **~5,5 µs e UMA alocação de 41 KB** por envio
 de grupo com cache quente. O mesmo envio faz criptografia Signal por dispositivo
@@ -2228,18 +2228,18 @@ nenhum alcança o outro.
 ## F54 — `DangerousInternalClient.GetFBIDDevices` escreve no cache de dispositivos sem tomar o lock
 
 **Data / contexto**: 2026-08-07, durante a Fase F/G lote 7 (extração de
-`internal/wa-noise/user/`). Achado pela revisão independente de concorrência do
+`internal/noise/user/`). Achado pela revisão independente de concorrência do
 lote, e confirmado por leitura direta do HEAD pré-refactor.
 
 **Onde**:
 
-- Antes: `internal/wa-noise/user_devices.go:149-167` (`getFBIDDevices`), que faz
+- Antes: `internal/noise/user_devices.go:149-167` (`getFBIDDevices`), que faz
   `cli.userDevicesCache[jid] = userDevices` na linha 162 **sem** tomar
   `userDevicesCacheLock`.
-- Depois: `internal/wa-noise/user/devices.go:176` (`user.GetFBIDDevices`, via
+- Depois: `internal/noise/user/devices.go:176` (`user.GetFBIDDevices`, via
   `cache.SetLocked`), alcançado pela fachada `cli.getFBIDDevices`
-  (`internal/wa-noise/user.go:126`).
-- Exposição pública: `internal/wa-noise/internals.go:739`,
+  (`internal/noise/user.go:126`).
+- Exposição pública: `internal/noise/internals.go:739`,
   `DangerousInternalClient.GetFBIDDevices`.
 
 **Problema**: `getFBIDDevices` é seguro pelo seu único chamador de produção,
@@ -2288,11 +2288,11 @@ pré-existente fora do escopo da tarefa. Registrado para decisão do usuário.
 ## F55 — `SetMediaHTTPClient(nil)` (e irmaos) transforma qualquer chamada de proxy posterior em panic
 
 **Data / contexto**: 2026-08-07, durante a Fase F/G lote 10 (extracao de
-`client_proxy.go` para `internal/wa-noise/proxyconf/`). Achado ao decidir se a
+`client_proxy.go` para `internal/noise/proxyconf/`). Achado ao decidir se a
 funcao extraida deveria ganhar guarda de nil.
 
-**Onde**: `internal/wa-noise/client_proxy.go:96-110` (os tres setters) e
-`internal/wa-noise/proxyconf/proxyconf.go:150-160` (`Apply`, que e' o antigo
+**Onde**: `internal/noise/client_proxy.go:96-110` (os tres setters) e
+`internal/noise/proxyconf/proxyconf.go:150-160` (`Apply`, que e' o antigo
 `setTransport`).
 
 ```go
@@ -2315,7 +2315,7 @@ proibido, e passar nil e' a forma intuitiva de "voltar ao padrao".
 Reproducao (nao adicionada a suite, por ser fora do escopo):
 
 ```go
-cli := wa-noise.NewClient(store, nil)
+cli := noise.NewClient(store, nil)
 cli.SetMediaHTTPClient(nil)
 cli.SetProxy(nil)  // panic: runtime error: invalid memory address
 ```
@@ -2360,9 +2360,9 @@ sao nil" que `proxyconf.Apply` e `unlockedConnect` assumem. Travado por
 concorrência independente da extração do handshake (item C1 do relatório), ao
 mapear os goroutines que `nh.Finish` dispara.
 
-**Onde**: `internal/wa-noise/socket/noisesocket.go:48-50` (escrita) e
-`internal/wa-noise/socket/framesocket.go:85-87` (leitura), com o goroutine leitor
-iniciado em `internal/wa-noise/socket/framesocket.go:112`.
+**Onde**: `internal/noise/socket/noisesocket.go:48-50` (escrita) e
+`internal/noise/socket/framesocket.go:85-87` (leitura), com o goroutine leitor
+iniciado em `internal/noise/socket/framesocket.go:112`.
 
 ```go
 // noisesocket.go:48 — escrita, sem lock
@@ -2399,7 +2399,7 @@ faltava. Os dois pontos de escrita (`newNoiseSocket` e `NoiseSocket.Stop`, este
 `TestSetOnDisconnectEConcorrenteComClose`.
 
 **Pré-existente, não introduzido pelo lote 10**: `git status` mostra que nada sob
-`internal/wa-noise/socket/` foi tocado por este lote. A ordem
+`internal/noise/socket/` foi tocado por este lote. A ordem
 `Connect` → `readPump` → `Finish` → escrita de `OnDisconnect` é a do upstream.
 
 **Correção sugerida**: mover a atribuição de `fs.OnDisconnect` para dentro de
@@ -2416,12 +2416,12 @@ texto obsoleto de uma versão anterior desta entrada — escrito quando o achado
 ainda estava fora de escopo do lote 10, antes de o lote B efetivamente aplicar
 a correção descrita no `Status: CORRIGIDO` logo acima. Nunca removido quando o
 fix entrou. Caminhos também desatualizados: `socket/` virou
-`internal/wa-noise/protocol/socket/` na Fase H. Evidência reverificada:
-`internal/wa-noise/protocol/socket/framesocket.go:37` — campo privado
+`internal/noise/protocol/socket/` na Fase H. Evidência reverificada:
+`internal/noise/protocol/socket/framesocket.go:37` — campo privado
 `onDisconnect`, mutado só via `SetOnDisconnect` (linha 97), que toma `fs.lock`;
-`internal/wa-noise/protocol/socket/noisesocket.go:42,77` — os dois pontos de
+`internal/noise/protocol/socket/noisesocket.go:42,77` — os dois pontos de
 escrita usam o setter. `go test -run TestSetOnDisconnectEConcorrenteComClose
--race -v ./internal/wa-noise/protocol/socket/` — PASS, 200 rounds concorrentes
+-race -v ./internal/noise/protocol/socket/` — PASS, 200 rounds concorrentes
 de `SetOnDisconnect`/`Close` sob `-race`, exercitando o mesmo `fs.lock` que
 `Close` usa — teste causal, não só de sintoma.
 
@@ -2432,10 +2432,10 @@ de `SetOnDisconnect`/`Close` sob `-race`, exercitando o mesmo `fs.lock` que
 **Data / contexto**: 2026-08-07, Fase F/G lote 10. Achado pela revisão de
 concorrência independente (item C2 do relatório).
 
-**Onde**: escrita em `internal/wa-noise/proxyconf/proxyconf.go:150-160`
+**Onde**: escrita em `internal/noise/proxyconf/proxyconf.go:150-160`
 (`Apply`, chamado por `Client.setTransport` em
-`internal/wa-noise/client_proxy.go:84-90`); leitura em
-`internal/wa-noise/client_connection.go:118-121`.
+`internal/noise/client_proxy.go:84-90`); leitura em
+`internal/noise/client_connection.go:118-121`.
 
 ```go
 // client_connection.go:118-121 — leitura, sob socketLock
@@ -2492,11 +2492,11 @@ segurado: os únicos chamadores são os setters públicos e o wrapper gerado em
 ## F58 — `messageSendLock` é declarado em `core` e emprestado por ponteiro para `capabilities/send`: única violação de "estado e lock viajam juntos" no fork
 
 **Data**: 2026-08-07. **Contexto**: Fase H etapa 7 (final), ao escrever
-`internal/wa-noise/docs/LOCKS.md` — o documento que torna verificável a regra
+`internal/noise/docs/LOCKS.md` — o documento que torna verificável a regra
 "estado compartilhado e o mutex que o protege moram no mesmo pacote, na mesma
 struct". Ao inventariar os locks por inspeção do código, este é o único que não
 satisfaz a regra. O achado não é novo: o inventário da etapa 1
-(`internal/wa-noise/docs/FASE_H_INVENTORY.md`, seção "O único par estado/lock já
+(`internal/noise/docs/FASE_H_INVENTORY.md`, seção "O único par estado/lock já
 separado: `messageSendLock`") já o havia identificado e pedido explicitamente que
 fosse registrado aqui e citado em `docs/LOCKS.md`. A citação foi feita; **o
 registro neste arquivo nunca tinha sido feito**. Esta entrada fecha a pendência.
@@ -2504,16 +2504,16 @@ registro neste arquivo nunca tinha sido feito**. Esta entrada fecha a pendência
 **Onde** (caminhos pós-Fase H, verificados no HEAD):
 
 ```go
-// internal/wa-noise/core/client.go:117 — o mutex é campo de *Client
+// internal/noise/core/client.go:117 — o mutex é campo de *Client
 	messageSendLock sync.Mutex
 
-// internal/wa-noise/core/send_adapter.go:68 — core empresta o ponteiro
+// internal/noise/core/send_adapter.go:68 — core empresta o ponteiro
 func (t sendTransport) SendLock() *sync.Mutex { return &t.cli.messageSendLock }
 
-// internal/wa-noise/capabilities/send/transport.go:141 — send declara a porta
+// internal/noise/capabilities/send/transport.go:141 — send declara a porta
 	SendLock() *sync.Mutex
 
-// internal/wa-noise/capabilities/send/message.go:80 e fb_message.go:129 — uso
+// internal/noise/capabilities/send/message.go:80 e fb_message.go:129 — uso
 	lock := t.SendLock()
 	lock.Lock()
 	resp.DebugTimings.Queue = time.Since(start)
@@ -2554,7 +2554,7 @@ pacote. Concretamente: `send` passa a possuir um `State` (como `retry.State`,
 O que precisa ser verificado antes: se algum caminho **fora** de `send/` adquire
 o mesmo mutex. Pela inspeção desta etapa não adquire — os únicos dois call sites
 de `SendLock()` são `send/message.go:80` e `send/fb_message.go:129`, e
-`grep -rn "messageSendLock" internal/wa-noise` só devolve a declaração e o
+`grep -rn "messageSendLock" internal/noise` só devolve a declaração e o
 adaptador. Se isso se confirmar sob revisão, a correção é local e barata.
 
 **Status**: **CORRIGIDO** (lote E, 2026-08-07) pelo caminho que a própria
@@ -2572,9 +2572,9 @@ o que ele serializa, e quem lê `send/` vendo um lock sem dono aparente.
 reorganização de diretórios; isto é mudança de design de API (a interface
 `send.Transport` perde um método e o `Client` perde um campo). Além disso é
 mudança em código crítico de concorrência, e a regra 10 de
-`internal/wa-noise/docs/CONTRIBUTING.md` exige revisão independente para esse
+`internal/noise/docs/CONTRIBUTING.md` exige revisão independente para esse
 tipo de mexida — revisão que não cabe no fechamento desta etapa. Está citado
-como exceção conhecida na tabela de `internal/wa-noise/docs/LOCKS.md` e na regra
+como exceção conhecida na tabela de `internal/noise/docs/LOCKS.md` e na regra
 6 do `CONTRIBUTING.md`. Registrado para decisão do usuário.
 
 ## F62 — cifragem que falha para TODOS os dispositivos devolvia sucesso, e o stanza ia sem destinatário
@@ -2584,9 +2584,9 @@ como exceção conhecida na tabela de `internal/wa-noise/docs/LOCKS.md` e na reg
 (`send/encrypt.go:93` e `send/fb_encrypt.go:74`) dizia: *"return these errors
 if it's a fatal one (like context cancellation or database)"*.
 
-**Onde**: `internal/wa-noise/capabilities/send/encrypt.go` (`EncryptForDevices`),
-`internal/wa-noise/capabilities/send/fb_encrypt.go` (`EncryptForDevicesV3`) e o
-consumidor em `internal/wa-noise/capabilities/send/node_build.go:197`.
+**Onde**: `internal/noise/capabilities/send/encrypt.go` (`EncryptForDevices`),
+`internal/noise/capabilities/send/fb_encrypt.go` (`EncryptForDevicesV3`) e o
+consumidor em `internal/noise/capabilities/send/node_build.go:197`.
 
 **Problema**: o laço de cifragem por dispositivo tolerava qualquer falha com
 `continue`. Tolerar falha *parcial* está certo — um device sem sessão Signal é
@@ -2642,7 +2642,7 @@ que o erro novo cita.
 
 **Data**: 2026-08-07. **Contexto**: mesma varredura de `// TODO`.
 
-**Onde**: `internal/wa-noise/core/request.go:235`, que trazia um FIXME:
+**Onde**: `internal/noise/core/request.go:235`, que trazia um FIXME:
 *"this error isn't technically correct (but works for now - the timeout param
 is only used from sendIQ)"*.
 
@@ -2681,7 +2681,7 @@ observando o atributo `data-ref` de `div[data-testid="link-device-qr-code"]`.
 - Depois disso os intervalos ficam irregulares (`45, 1, 61, 21, 64`) — é o
   comportamento pós-expiração, sob demanda.
 
-**Nosso** (`internal/wa-noise/core/pair_constants.go:13-18`,
+**Nosso** (`internal/noise/core/pair_constants.go:13-18`,
 `core/qrchan.go:70-73`):
 
 ```go
@@ -2712,7 +2712,7 @@ qrCodeFirstBatchSize = 6
    determinou o desenho do retry na página.
 
 **Erro de documentação encontrado junto**: o comentário em
-`orchestrator.go:263-265` afirma que "wa-noise emite 20s para os 5 primeiros
+`orchestrator.go:263-265` afirma que "noise emite 20s para os 5 primeiros
 e 60s para o último". É o **inverso** do código: `qrchan.go:72` aplica
 `qrCodeFirstTimeout` quando ainda restam `qrCodeFirstBatchSize` códigos, ou
 seja, no **primeiro**. Quem programar um cliente a partir desse comentário
@@ -2768,13 +2768,13 @@ consciente do wa-api nem do upstream documentada em algum lugar — são apenas
 o valor original nunca revisitado. Diante disso, e como QR de pareamento é
 credencial (quem vir a tela pode vincular um aparelho), a decisão foi
 **divergir do upstream conscientemente**: `qrCodeFirstTimeout` passou a valer
-`qrCodeTimeout` (20s) em `internal/wa-noise/core/pair_constants.go:23`, em
+`qrCodeTimeout` (20s) em `internal/noise/core/pair_constants.go:23`, em
 vez de `60 * time.Second`. Não há custo funcional: o canal já rotaciona
 automaticamente para o próximo código, então o efeito é só o primeiro código
 trocar um pouco mais cedo — igual ao cliente oficial.
 
 **Teste de regressão**: `TestEmitQRsFirstCodeTimeoutMatchesOfficial`
-(`internal/wa-noise/core/qrchan_test.go`) chama `emitQRs` com um lote de
+(`internal/noise/core/qrchan_test.go`) chama `emitQRs` com um lote de
 `qrCodeFirstBatchSize` códigos e verifica que o primeiro item emitido tem
 `Timeout == qrCodeTimeout` (20s). Controle negativo executado: com
 `qrCodeFirstTimeout` revertido para `60 * time.Second`, o teste falha com
@@ -2798,7 +2798,7 @@ a próxima iniciativa.
 
 ### F70 — `send/ack.go`: invalidação de cache incompleta para grupo e broadcast
 
-**Onde**: `internal/wa-noise/capabilities/send/ack.go:84` (`TODO also
+**Onde**: `internal/noise/capabilities/send/ack.go:84` (`TODO also
 invalidate device list caches`, ramo `types.GroupServer`) e `ack.go:87` (`TODO
 do something`, ramo `types.BroadcastServer`, corpo vazio).
 
@@ -2822,7 +2822,7 @@ o comportamento correto de invalidação para broadcast primeiro.
 
 ### F71 — `send/encrypt.go`: LID não resolvido para participantes sem entrada de sessão
 
-**Onde**: `internal/wa-noise/capabilities/send/encrypt.go:57` (`TODO query LID
+**Onde**: `internal/noise/capabilities/send/encrypt.go:57` (`TODO query LID
 from server for missing entries`).
 
 **Problema**: ao cifrar para múltiplos dispositivos, participantes sem LID
@@ -2838,7 +2838,7 @@ quando ausente, com teste que force o caminho de "LID desconhecido localmente".
 
 ### F72 — `send/message.go`: lógica duplicada com `sendNewsletter`
 
-**Onde**: `internal/wa-noise/capabilities/send/message.go:46` (`TODO somehow
+**Onde**: `internal/noise/capabilities/send/message.go:46` (`TODO somehow
 deduplicate this with the code in sendNewsletter?`).
 
 **Problema**: duplicação de código entre o caminho de envio normal e o de
@@ -2853,7 +2853,7 @@ bug, é duplicação).
 
 ### F73 — `send/node_build.go`: resolução de PN para grupos de anúncio é heurística não documentada
 
-**Onde**: `internal/wa-noise/capabilities/send/node_build.go:177` (`TODO this
+**Onde**: `internal/noise/capabilities/send/node_build.go:177` (`TODO this
 is a very hacky hack for announcement group messages, why is it pn anyway?`).
 
 **Problema**: o próprio autor upstream marca a lógica como incerta — usa PN
@@ -2871,7 +2871,7 @@ de causa.
 
 ### F74 — `send/prepare.go`: heurística para escolher identidade de envio sem critério documentado
 
-**Onde**: `internal/wa-noise/capabilities/send/prepare.go:162` (`TODO this is
+**Onde**: `internal/noise/capabilities/send/prepare.go:162` (`TODO this is
 fairly hacky, is there a proper way to determine which identity the message is
 sent with?`).
 
@@ -2887,7 +2887,7 @@ de mudar comportamento.
 
 ### F75 — `appstatesync/send.go`: não é possível criar nova chave de app state
 
-**Onde**: `internal/wa-noise/capabilities/appstatesync/send.go:33` (`TODO
+**Onde**: `internal/noise/capabilities/appstatesync/send.go:33` (`TODO
 create new key instead of reusing the primary client's keys`).
 
 **Problema**: **não é falha silenciosa** — a linha seguinte já retorna erro
@@ -2903,7 +2903,7 @@ silenciosa (erro já é explícito).
 
 ### F76 — `appstatesync/mutation.go`: significado do índice 2 do mutation index não documentado
 
-**Onde**: `internal/wa-noise/capabilities/appstatesync/mutation.go:86` (`TODO
+**Onde**: `internal/noise/capabilities/appstatesync/mutation.go:86` (`TODO
 what's index 2 here?`).
 
 **Problema**: comentário de incerteza sobre o protocolo binário do app state
@@ -2918,7 +2918,7 @@ para não perder o contexto.
 
 ### F77 — `message/decrypt_loop.go`: ACK enviado após falha de descriptografia pode confirmar recebimento indevidamente
 
-**Onde**: `internal/wa-noise/capabilities/message/decrypt_loop.go:139-141`:
+**Onde**: `internal/noise/capabilities/message/decrypt_loop.go:139-141`:
 
 ```go
 t.SendRetryReceipt(ctx, node, info, isUnavailable)
@@ -2951,7 +2951,7 @@ demais são lacunas de funcionalidade ou documentação sem indício de bug.
 
 ### F78 — `message/decrypt.go`: nó `<meta msg_edit_t>` de edição de mensagem não tratado
 
-**Onde**: `internal/wa-noise/capabilities/message/decrypt.go:50` (`TODO edits
+**Onde**: `internal/noise/capabilities/message/decrypt.go:50` (`TODO edits
 have an additional <meta msg_edit_t="..." original_msg_t="..."/> node`).
 
 **Problema**: metadados de edição de mensagem (timestamp da edição e da
@@ -2966,7 +2966,7 @@ futura declarada.
 
 ### F79 — `message/parse.go`: nós `franking`/`trace` ignorados e `IsFromMe` não setado para newsletter
 
-**Onde**: `internal/wa-noise/capabilities/message/parse.go:68` (`TODO
+**Onde**: `internal/noise/capabilities/message/parse.go:68` (`TODO
 IsFromMe?`, ramo `types.NewsletterServer`), `:222` e `:224` (`TODO` vazio,
 ramos `"franking"` e `"trace"` do switch de filhos do nó de mensagem).
 
@@ -2984,7 +2984,7 @@ hoje; registrado para não perder o contexto.
 
 ### F80 — `media/download_transport.go`: sem User-Agent nas requisições de download de mídia
 
-**Onde**: `internal/wa-noise/capabilities/media/download_transport.go:123`
+**Onde**: `internal/noise/capabilities/media/download_transport.go:123`
 (`TODO user agent for whatsapp downloads?`).
 
 **Problema**: requisições HTTP de download de mídia não setam um `User-Agent`
@@ -3002,8 +3002,8 @@ atual.
 
 ### F81 — `media/download.go` e `media/download_file.go`: critério para omitir hash de mídia não encriptada é incerto
 
-**Onde**: `internal/wa-noise/capabilities/media/download.go:143` e
-`internal/wa-noise/capabilities/media/download_file.go:89`, ambos `TODO omit
+**Onde**: `internal/noise/capabilities/media/download.go:143` e
+`internal/noise/capabilities/media/download_file.go:89`, ambos `TODO omit
 hash for unencrypted media?` — mesma incerteza duplicada em dois pontos.
 
 **Problema**: incerteza do autor upstream sobre se a checagem de hash deveria
@@ -3019,7 +3019,7 @@ a mesma dúvida duplicada.
 
 ### F82 — `media/upload.go`: persistência de payload de backfill não-on-demand incerta
 
-**Onde**: `internal/wa-noise/capabilities/media/upload.go:224` (`TODO
+**Onde**: `internal/noise/capabilities/media/upload.go:224` (`TODO
 non-on-demand backfills may require this? it's in the initial bootstrap
 payload and may need to be persisted`).
 
@@ -3130,7 +3130,7 @@ da raiz, porque quem consome (ou deixa de consumir) os eventos somos nós.
 `/users/unblock` ❌ na bateria de campo). Referência cruzada em `HOUSEKEEP.md`
 da raiz (F278), porque o adaptador da aplicação agrava o defeito.
 
-**Onde**: `internal/wa-noise/capabilities/user/blocklist.go:50-65`
+**Onde**: `internal/noise/capabilities/user/blocklist.go:50-65`
 
 ```go
 Content: []waBinary.Node{{
@@ -3180,14 +3180,14 @@ negativo EXECUTADO repondo `"jid": jid` — com a saída da falha colada aqui.
 
 **Status**: CORRIGIDO em 2026-08-28 (mesma sessão que confirmou o defeito
 ao vivo pela manhã). `UpdateBlocklist`
-(`internal/wa-noise/capabilities/user/blocklist.go`) ganhou o parâmetro
+(`internal/noise/capabilities/user/blocklist.go`) ganhou o parâmetro
 `pnJID types.JID`: quando `action` é `block` e `pnJID` não é vazio, o
 `<item>` passa a levar `pn_jid`, exatamente como `8d023aa973` (whatsmeow)
 e `8ca9316a10` (Baileys) fazem. `unblock` continua sem o atributo — a
 regra é assimétrica por desenho, não um esquecimento.
 
 A resolução do PN (de onde vem `pnJID`) fica do lado da aplicação, não
-aqui: `pkg/infra/wa-noise/adapters/user/blocklist.go`
+aqui: `pkg/infra/noise/adapters/user/blocklist.go`
 (`resolveBlocklistPN`, nova) resolve o PN do alvo — direto, se o pedido já
 veio em PN, ou via mapeamento LID→PN em cache, se veio em LID — e passa
 esse valor a `UpdateBlocklist`. Sem mapeamento em cache, `resolveBlocklistPN`
@@ -3195,7 +3195,7 @@ devolve o JID zero, e esta biblioteca OMITE o atributo em vez de enviar um
 `pn_jid` inventado — pior que a forma completa, nunca pior que antes da
 correção.
 
-**Testes** (`internal/wa-noise/capabilities/user/blocklist_test.go`):
+**Testes** (`internal/noise/capabilities/user/blocklist_test.go`):
 `TestUpdateBlocklistBlockCarriesPNJID` (block carrega `pn_jid`),
 `TestUpdateBlocklistUnblockOmitsPNJID` (unblock nunca carrega, mesmo com
 `pnJID` preenchido), `TestUpdateBlocklistBlockWithZeroPNJIDOmitsAttribute`
@@ -3219,7 +3219,7 @@ testes do adaptador).
 **Data/contexto**: 2026-08-26, investigação da F265 (`/newsletters/updates` ❌,
 `500` ao fim de 30,0 s).
 
-**Onde**: `internal/wa-noise/capabilities/newsletter/messages.go:89-97`
+**Onde**: `internal/noise/capabilities/newsletter/messages.go:89-97`
 
 ```go
 resp, err := t.SendIQ(ctx, IQ{
@@ -3286,7 +3286,7 @@ COMPILA e falha com mensagem.
 
 **Status**: CORRIGIDO em 2026-08-28 (mesma sessão que confirmou o
 sintoma exato num canal com conteúdo real). `GetMessageUpdates`
-(`internal/wa-noise/capabilities/newsletter/messages.go`) foi reescrito
+(`internal/noise/capabilities/newsletter/messages.go`) foi reescrito
 para reaproveitar o mesmo construtor de atributos e a mesma tag
 (`messagesAttrs`/`messagesTag`) que `GetMessages` já usava com sucesso —
 `To: types.ServerJID` no lugar de `To: jid`, filho `<messages type='jid'
@@ -3300,7 +3300,7 @@ entende `before` (cursor por ID de mensagem, já existia como `After` em
 preenchesse `Since` passa a receber a página mais recente, sem filtro,
 em vez de um erro — decisão deliberada, não um esquecimento.
 
-**Testes** (`internal/wa-noise/capabilities/newsletter/messages_test.go`):
+**Testes** (`internal/noise/capabilities/newsletter/messages_test.go`):
 `TestGetMessageUpdatesEnviaParaOServidorComStanzaDeMessages` (destino,
 tag, `count`/`before`), `TestGetMessageUpdatesSinceEIgnorado` (`since`
 não vaza para o fio). Controlo negativo EXECUTADO: revertido `To:
@@ -3325,7 +3325,7 @@ wa-api (`OBSERVADORES-AMBAR.md` §4). A pergunta era: `POST /newsletters/mark-vi
 devolve `200` com `data: null` — existe algum sinal do servidor que confirme a
 marcação?
 
-**Onde**: `internal/wa-noise/capabilities/newsletter/actions.go:51-74`.
+**Onde**: `internal/noise/capabilities/newsletter/actions.go:51-74`.
 
 ```go
 reqID := t.GenerateRequestID()
@@ -3347,7 +3347,7 @@ response?` é do upstream e está por resolver.
 O custo não é teórico: este é o único sinal que o servidor devolve para a
 operação. A documentação do próprio fork diz que `NewsletterMarkViewed`
 "marks a channel message as viewed, **incrementing the view counter**"
-(`internal/wa-noise/core/newsletter.go:52-53`), e o contador só se lê pela via
+(`internal/noise/core/newsletter.go:52-53`), e o contador só se lê pela via
 `GetNewsletterMessageUpdates` / `NewsletterSubscribeLiveUpdates`
 (`core/newsletter.go:206-208`) — que no wa-api está exposta como
 `POST /newsletters/updates` e **está inoperante** (achado F265 do `HOUSEKEEP.md`

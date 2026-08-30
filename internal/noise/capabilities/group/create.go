@@ -9,7 +9,7 @@ import (
 )
 
 // ReqCreate contains the request data for Create. A raiz reexporta este tipo
-// como wa-noise.ReqCreateGroup (apelido, mesmo tipo).
+// como noise.ReqCreateGroup (apelido, mesmo tipo).
 type ReqCreate struct {
 	// Group names are limited to 25 characters. A longer group name will cause a 406 not acceptable error.
 	Name string

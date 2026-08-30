@@ -9,7 +9,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// Fachada do dominio de grupos. A logica vive em internal/wa-noise/group e
+// Fachada do dominio de grupos. A logica vive em internal/noise/group e
 // opera sobre group.Transport; aqui ficam so' os metodos de *Client que
 // delegam, mais os apelidos de tipo que preservam a API historica do pacote.
 //

@@ -17,7 +17,7 @@ import (
 // domain.DownloadResult{} vazio e passam a baixar de verdade pela porta
 // port.MediaDownloader. Este arquivo cobre o use case; a rota registrada é
 // coberta em pkg/presentation/http/handlers/handler_download_test.go, e a
-// montagem protobuf em pkg/infra/wa-noise/adapters/chat/downloader_test.go.
+// montagem protobuf em pkg/infra/noise/adapters/chat/downloader_test.go.
 //
 // A tabela é ENUMERADA nome por nome (capability + kind esperado), não um
 // laço sobre uma lista anônima: o defeito que CAP-09B corrigiu foi

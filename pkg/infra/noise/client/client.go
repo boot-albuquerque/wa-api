@@ -47,7 +47,7 @@ type Client interface {
 	// /chat/delete, /chat/delete/message e /chat/send/edit deixaram de so'
 	// validar e passaram a mutar de verdade.
 	//
-	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// Nao alarga a FACHADA do fork: internal/noise/main.go ja' exporta
 	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
 	// portanto BuildRevoke e BuildEdit). O que se alarga aqui e' o seam
 	// local de wa-api.
@@ -60,10 +60,10 @@ type Client interface {
 	// /chat/send/poll deixou de so' validar e passou a criar enquete de
 	// verdade.
 	//
-	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// Nao alarga a FACHADA do fork: internal/noise/main.go ja' exporta
 	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
 	// portanto BuildPollCreation, definido em
-	// internal/wa-noise/core/msgsecret_poll.go:65). O que se alarga aqui
+	// internal/noise/core/msgsecret_poll.go:65). O que se alarga aqui
 	// e' o seam local de wa-api.
 	BuildPollCreation(name string, optionNames []string, selectableOptionCount int) *waE2E.Message
 
@@ -72,10 +72,10 @@ type Client interface {
 	// este metodo a interface estreita (ADR-001) porque /chat/send/pollvote
 	// precisa de construir e enviar o voto de verdade.
 	//
-	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// Nao alarga a FACHADA do fork: internal/noise/main.go ja' exporta
 	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
 	// portanto BuildPollVote, definido em
-	// internal/wa-noise/core/msgsecret_poll.go:54). O que se alarga aqui
+	// internal/noise/core/msgsecret_poll.go:54). O que se alarga aqui
 	// e' o seam local de wa-api.
 	BuildPollVote(ctx context.Context, pollInfo *types.MessageInfo, optionNames []string) (*waE2E.Message, error)
 
@@ -92,7 +92,7 @@ type Client interface {
 	// estreita (ADR-001) porque as cinco rotas /chat/download* deixaram de
 	// so' validar e passaram a baixar de verdade.
 	//
-	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// Nao alarga a FACHADA do fork: internal/noise/main.go ja' exporta
 	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
 	// portanto Download) e `DownloadableMessage = core.DownloadableMessage`.
 	// O que se alarga aqui e' o seam local de wa-api — a mesma superficie
@@ -120,7 +120,7 @@ type Client interface {
 
 	// Community operations — CAP-F237: the library already has these
 	// primitives; the narrow interface lacked them because they had zero
-	// callers in pkg/. Does not widen the facade: internal/wa-noise/main.go
+	// callers in pkg/. Does not widen the facade: internal/noise/main.go
 	// exports `Client = core.Client` (type alias, full method set), so
 	// *noise.Client satisfies these signatures already.
 	GetSubGroups(ctx context.Context, community types.JID) ([]*types.GroupLinkTarget, error)
@@ -204,15 +204,15 @@ type Client interface {
 	// (ADR-001) porque POST /session/pairphone deixou de so' validar e
 	// passou a devolver codigo de verdade (F152).
 	//
-	// Nao alarga a FACHADA do fork: internal/wa-noise/main.go ja' exporta
+	// Nao alarga a FACHADA do fork: internal/noise/main.go ja' exporta
 	// `Client = core.Client` (alias de tipo, method set inteiro incluso, e
 	// portanto PairPhone, definido em
-	// internal/wa-noise/core/pair-code.go:50). O que se alarga aqui e' o
+	// internal/noise/core/pair-code.go:50). O que se alarga aqui e' o
 	// seam local de wa-api.
 	//
 	// O tipo do clientType e' wapairing.ClientType, e nao um nome da
 	// fachada: `PairClientType` da raiz e' um APELIDO de tipo para
-	// pairing.ClientType (internal/wa-noise/core/pair-code.go:15), logo os
+	// pairing.ClientType (internal/noise/core/pair-code.go:15), logo os
 	// dois sao o MESMO tipo e *noise.Client satisfaz esta assinatura sem
 	// que main.go precise reexportar nada.
 	PairPhone(ctx context.Context, phone string, showPushNotification bool, clientType wapairing.ClientType, clientDisplayName string) (string, error)

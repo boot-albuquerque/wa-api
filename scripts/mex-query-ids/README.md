@@ -23,7 +23,7 @@ cifrado por Noise. O bundle é servido em claro, e é de lá que o Baileys e o
 whatsmeow também os tiram.
 
 Os valores vão para
-`internal/wa-noise/capabilities/newsletter/queryids.go`.
+`internal/noise/capabilities/newsletter/queryids.go`.
 
 ## Três coisas que esta sessão ensinou (2026-08-25, F233)
 

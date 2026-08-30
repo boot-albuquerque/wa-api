@@ -115,7 +115,7 @@ func TestFalhaDaCapabilityPropaga(t *testing.T) {
 // introduziu: até ele existir, este adaptador ENTREGAVA channel.DirectoryEntry
 // ao codificador JSON, e como esse tipo não tem etiqueta `json` nenhuma, uma
 // sessão headless servia `{"JID":…,"Subscribers":…,"Membership":…}` na mesma
-// rota em que uma sessão wa-noise servia `{"id":…,"thread_metadata":{…}}`.
+// rota em que uma sessão noise servia `{"id":…,"thread_metadata":{…}}`.
 //
 // O que ele afirma, campo a campo, é que o dado da PÁGINA chega ao domínio; o
 // nome no fio é afirmado pelo teste de contrato da rota.

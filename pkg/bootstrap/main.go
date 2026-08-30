@@ -87,7 +87,7 @@ func resolveLogLevel(raw string) (zerolog.Level, bool) {
 	return lvl, true
 }
 
-// openStoreDB returns a *sqlx.DB handle to the wa-noise store database and an
+// openStoreDB returns a *sqlx.DB handle to the noise store database and an
 // optional closer. For Postgres the store lives in the same database as the
 // app, so the existing handle is reused (no closer). For SQLite the store is a
 // separate file (main.db), so a dedicated connection is opened.
@@ -420,7 +420,7 @@ func Main() {
 	s.SessionOrchestrator = newSessionOrchestrator(s)
 	// setupEngineSelection ANTES de initCustomHandlers: initCustomHandlers lê
 	// s.Headless.ChromePath (wiring_handlers.go) para decidir se constrói o
-	// Disconnector/QRReader/Starter de wa_headless. Até esta correção a ordem
+	// Disconnector/QRReader/Starter de headless. Até esta correção a ordem
 	// era invertida — initCustomHandlers via' sempre o s.Headless ZERO, então
 	// TODO adapter de sessão headless (F370/H145) nunca era ligado, mesmo com
 	// WA_API_HEADLESS_CHROME configurado. Medido ao vivo (Claude in Chrome

@@ -7,7 +7,7 @@ import (
 	"wa-api/internal/noise/protocol/types"
 )
 
-// Os construtores de mensagem vivem em internal/wa-noise/message/ desde a Fase
+// Os construtores de mensagem vivem em internal/noise/message/ desde a Fase
 // F/G lote 9. Os metodos abaixo continuam na raiz porque sao API PUBLICA do
 // pacote (chamadores externos usam `cli.BuildRevoke(...)`) e porque a versao
 // livre precisa dos dois JIDs da sessao, que so' a raiz sabe consultar.
